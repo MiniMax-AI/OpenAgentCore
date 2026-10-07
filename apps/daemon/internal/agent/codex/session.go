@@ -40,9 +40,8 @@ func defaultSessionConfig() sessionConfig {
 }
 
 // Factory implements agent.Factory for agent_kind="codex". Spawns one
-// codex app-server child per prompt. The run stream closes when the turn
-// completes; the router retains the child until the conversation's idle
-// window expires or cancellation shuts it down sooner.
+// codex app-server child for one Turn. The run stream closes when the turn
+// completes; the child remains until the caller cancels the Session.
 func Factory(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 	return newSession(ctx, req, out, defaultSessionConfig())
 }
@@ -73,11 +72,10 @@ type Session struct {
 	functions                 *functionCalls
 	observeMessages           bool
 
-	observeToolObservations bool
-	runID                   string
-	cfg                     sessionConfig
-	out                     chan<- proto.Envelope
-	rpc                     *JSONRPCClient
+	runID string
+	cfg   sessionConfig
+	out   chan<- proto.Envelope
+	rpc   *JSONRPCClient
 
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc

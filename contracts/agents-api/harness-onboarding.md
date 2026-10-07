@@ -248,7 +248,7 @@ The agent-host image uses the same contract. `deploy/distribution/AgentHost.Dock
 
 ## Native process ownership
 
-The daemon's `clirunner` offers opt-in Unix process-group ownership for adapters whose SDK launches a native child; unsupported hosts reject this mode before launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
+The daemon's `clirunner` starts every native child in its own Unix process group (a Job object on Windows); other hosts reject the launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
 
 Owned output pipes stay readable after the leader exits. Consumers drain stdout and stderr before calling `Wait`, which joins the cached process result and closes the readers. `Done` reports leader reaping and group cleanup signals; it is not a native execution receipt or proof of persisted history. SDK adapters settle each Turn and drain its observations before publishing completion, and Executor close also closes the query and awaits the native child. Process groups are lifecycle supervision, not isolation or containment of descendants that leave the group.
 
@@ -338,7 +338,7 @@ A stdio binding runs in the sandbox under its alias. The binding at index `i` of
 
 ### Launch
 
-`ViewSession.Launch` replaces `clirunner.Start`. Each call builds one view and runs `Binary` in it, and at most one view per Session is live at a time. `Dir` is a path in the sandbox, `OwnProcessGroup` is true and `Env` is the complete environment. The returned `clirunner.Process` follows [Native process ownership](#native-process-ownership):
+`ViewSession.Launch` replaces `clirunner.Start`. Each call builds one view and runs `Binary` in it, and at most one view per Session is live at a time. `Dir` is a path in the sandbox and `Env` is the complete environment. The returned `clirunner.Process` follows [Native process ownership](#native-process-ownership):
 
 - Cancel sends TERM to every process in the view and closes the view after `KillTimeout`. A Cancel that finds the Harness exited leaves its exit as it was, even while the processes it left still end.
 - When the Harness exits while other processes remain, the view sends them TERM unless Cancel already did, and ends once they exit or `KillTimeout` passes from the first TERM.

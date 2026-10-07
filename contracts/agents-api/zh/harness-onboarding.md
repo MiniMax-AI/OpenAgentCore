@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a936fab8c8a3c52387de4acdc16c76a6287beb894aae1002ef34e0b6264f3636
+source_hash: c200a17fe8d1dedb944dda7e4309999ff82da04f4bf76172a29b31b4b5751e3e
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -250,7 +250,7 @@ agent-host 镜像使用同一契约。`deploy/distribution/AgentHost.Dockerfile`
 
 ## 原生进程所有权 {#native-process-ownership}
 
-daemon 的 `clirunner` 为 SDK 会启动原生子进程的适配器提供可选的 Unix 进程组所有权；不支持的主机会在启动前拒绝此模式。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
+daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启动（Windows 上为 Job 对象）；其他主机会拒绝启动。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
 
 所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
 
@@ -340,7 +340,7 @@ stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 
 
 ### 启动 {#launch}
 
-`ViewSession.Launch` 取代 `clirunner.Start`。每次调用构建一个视图并在其中运行 `Binary`，每个 Session 同一时间至多有一个活动视图。`Dir` 是沙箱中的路径，`OwnProcessGroup` 为 true，`Env` 是完整环境。返回的 `clirunner.Process` 遵循[原生进程所有权](#native-process-ownership)：
+`ViewSession.Launch` 取代 `clirunner.Start`。每次调用构建一个视图并在其中运行 `Binary`，每个 Session 同一时间至多有一个活动视图。`Dir` 是沙箱中的路径，`Env` 是完整环境。返回的 `clirunner.Process` 遵循[原生进程所有权](#native-process-ownership)：
 
 - Cancel 向视图中的每个进程发送 TERM，并在 `KillTimeout` 后关闭视图。如果 Cancel 发现 Harness 已退出，即使它遗留的进程仍在结束中，也保持其退出结果不变。
 - Harness 退出而仍有其他进程时，除非 Cancel 已发送过 TERM，视图会向它们发送 TERM，并在它们退出或自首次 TERM 起经过 `KillTimeout` 后结束。

@@ -54,7 +54,7 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 	defer executor.Close(ctx)
 	request := <-requests
 
-	if !slices.Contains(view.LocalExec, launched.Binary) || !slices.Equal(launched.Args, []string{agent.ViewPrivateRoot + "/claude-sdk/dist/main.js"}) || launched.Dir != "/workspace" || !launched.OwnProcessGroup {
+	if !slices.Contains(view.LocalExec, launched.Binary) || !slices.Equal(launched.Args, []string{agent.ViewPrivateRoot + "/claude-sdk/dist/main.js"}) || launched.Dir != "/workspace" {
 		t.Fatalf("launch = %+v, want the closure's node running the bridge in the workspace", launched)
 	}
 	env := map[string]string{}

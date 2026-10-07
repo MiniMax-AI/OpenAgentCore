@@ -77,14 +77,11 @@ func newPreparedHandoff(p *preparationState, target agent.Executor) *preparedHan
 // preparedOperationLocked admits one mutation at the same linearization point
 // used by release. The returned function must run after the native call, replay
 // bookkeeping and receipt send have all finished. Router.mu must be held.
-func (r *Router) preparedOperationLocked(state *sessionState) (agent.Session, func(), bool) {
+func (r *Router) preparedOperationLocked(state *sessionState) (agent.Turn, func(), bool) {
 	if state == nil || state.session == nil || state.steeringClosed {
 		return nil, nil, false
 	}
 	handoff := state.preparedHandoff
-	if handoff == nil {
-		return state.session, func() {}, true
-	}
 	if handoff.release != nil {
 		return nil, nil, false
 	}
@@ -93,13 +90,7 @@ func (r *Router) preparedOperationLocked(state *sessionState) (agent.Session, fu
 }
 
 func (r *Router) interactionRouteOpenLocked(state *sessionState) bool {
-	if state == nil || r.closed || state.ctx.Err() != nil || state.steeringClosed {
-		return false
-	}
-	if handoff := state.preparedHandoff; handoff != nil {
-		return handoff.release == nil
-	}
-	return state.session != nil
+	return state != nil && !r.closed && state.ctx.Err() == nil && !state.steeringClosed && state.preparedHandoff.release == nil
 }
 
 // claimPreparedReleaseLocked closes admission permanently and returns the
@@ -111,7 +102,6 @@ func (r *Router) claimPreparedReleaseLocked(state *sessionState, abort bool, fai
 	if release == nil {
 		release = &preparedRelease{abort: make(chan struct{}), failure: failure, settled: make(chan struct{})}
 		handoff.release = release
-		state.retain = false
 		state.steeringClosed = true
 		state.session = nil
 		r.clearInteractionRoutesLocked(state)

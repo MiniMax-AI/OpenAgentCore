@@ -80,7 +80,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(proof, "executor-evidence.json"), raw, 0600)
 	}
 	defer persist()
-	request := proto.PromptRequestPayload{StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: model, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
+	request := proto.PromptRequestPayload{DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: model, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
 	factory := NewExecutorFactory(config)
 	prepared := time.Now()
 	owner, err := factory(ctx, request)

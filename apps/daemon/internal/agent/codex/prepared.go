@@ -17,7 +17,6 @@ type Prepared struct {
 	session                      *Session
 	plan                         SessionPlan
 	resumeID                     string
-	strictResume                 bool
 	requireExistingNativeSession bool
 	claimed                      bool
 	closed                       bool
@@ -60,7 +59,7 @@ func (p *Prepared) start(ctx context.Context, runID string, prompt proto.Message
 	p.started = true
 	close(p.transferred)
 	transferred = true
-	req := proto.PromptRequestPayload{RunID: runID, Input: prompt, AgentSessionID: p.resumeID, StrictResume: p.strictResume, RequireExistingNativeSession: p.requireExistingNativeSession}
+	req := proto.PromptRequestPayload{RunID: runID, Input: prompt, AgentSessionID: p.resumeID, RequireExistingNativeSession: p.requireExistingNativeSession}
 	go s.run(p.plan, req)
 	return s, nil
 }

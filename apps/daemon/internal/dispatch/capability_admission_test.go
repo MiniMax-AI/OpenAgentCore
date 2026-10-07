@@ -9,7 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 func TestSteeringUsesAdmittedDeclarationAndDoesNotReplayUnsupportedImplementation(t *testing.T) {
@@ -18,20 +17,18 @@ func TestSteeringUsesAdmittedDeclarationAndDoesNotReplayUnsupportedImplementatio
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			var calls atomic.Int32
-			factory := func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			factory := sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				return &steeringSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}, steer: func(context.Context, proto.PromptSteerPayload) error {
 					calls.Add(1)
 					return fmt.Errorf("%w: fixture has no active input", agent.ErrUnsupportedOperation)
 				}}, nil
-			}
-			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilityFromBool(supported)})}
-			h.reg.RegisterKind(info, harnessconfig.Configuration{}, factory)
-			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "fixture"})); err != nil {
-				t.Fatal(err)
-			}
+			})
+			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilityFromBool(supported)})}
+			registerExecutorKind(h.reg, info, factory)
+			startRun(t, h.router, h.sender, "run", proto.PromptRequestPayload{AgentKind: "fixture"})
 			// A new registration cannot rewrite the already admitted owner's contract.
 			info.Capabilities.Steering = proto.CapabilityFromBool(!supported)
-			h.reg.RegisterKind(info, harnessconfig.Configuration{}, factory)
+			registerExecutorKind(h.reg, info, factory)
 			for range 2 {
 				if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("hello")})); err != nil {
 					t.Fatal(err)
@@ -63,14 +60,12 @@ func TestInteractionDeclarationPrecedesResponderMethods(t *testing.T) {
 				h := newHarness(t)
 				defer h.router.Shutdown(context.Background())
 				var session *fakeSession
-				info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Permissions: proto.CapabilityFromBool(supported)})}
-				h.reg.RegisterKind(info, harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+				info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Permissions: proto.CapabilityFromBool(supported)})}
+				registerExecutorKind(h.reg, info, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 					session = &fakeSession{out: out, closeOutOnCancel: true, submitErr: agent.ErrUnsupportedOperation, askErr: agent.ErrUnsupportedOperation}
 					return session, nil
-				})
-				if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "fixture"})); err != nil {
-					t.Fatal(err)
-				}
+				}))
+				startRun(t, h.router, h.sender, "run", proto.PromptRequestPayload{AgentKind: "fixture"})
 				event := mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "interaction", Tool: "fixture"})
 				decision := mustEnv(t, proto.TypePermissionDecision, "interaction", proto.PermissionDecisionPayload{DeliveryID: "decision", Approved: true})
 				if ask {
@@ -78,7 +73,7 @@ func TestInteractionDeclarationPrecedesResponderMethods(t *testing.T) {
 					decision = mustEnv(t, proto.TypePromptForUserChoiceDecision, "interaction", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "decision"})
 				}
 				session.out <- event
-				waitFor(t, func() bool { return len(h.sender.snapshot()) > 0 }, "interaction indexed")
+				waitFor(t, func() bool { return hasFrame(h.sender, event.Type, "run") }, "interaction indexed")
 				if err := h.router.Handle(t.Context(), decision); err != nil {
 					t.Fatal(err)
 				}

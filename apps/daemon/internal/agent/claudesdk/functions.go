@@ -84,13 +84,11 @@ func (s *session) receiveFunction(event bridgeEvent, start startRequest, emit fu
 	if err != nil {
 		return err
 	}
-	if start.observeFunctions {
-		id, stage := event.CallID, "after"
-		if call != nil {
-			id, stage = call.CallID, "before"
-		}
-		emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: observation.Name, Stage: stage, Observation: observation})
+	id, stage := event.CallID, "after"
+	if call != nil {
+		id, stage = call.CallID, "before"
 	}
+	emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: observation.Name, Stage: stage, Observation: observation})
 	if call != nil {
 		emit(proto.TypeFunctionCall, call)
 	} else {

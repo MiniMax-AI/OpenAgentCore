@@ -19,17 +19,15 @@ import (
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"),
+	return proto.PromptRequestPayload{RunID: "run-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"),
 		Model: "fixture", SystemPrompt: "Current instructions",
-		ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "fixture-key", ContextWindow: 64000, MaxOutputTokens: 4096}}
+		ModelProvider:               &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "fixture-key", ContextWindow: 64000, MaxOutputTokens: 4096},
+		DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 }
 
 func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan proto.Envelope) {
 	t.Helper()
 	req := testRequest(t)
-	if scenario == "strict-cancel" {
-		req = executionRequest(t)
-	}
 	if resume {
 		req.AgentSessionID = "native-1"
 	}
@@ -273,7 +271,7 @@ func TestMCodeProcess(t *testing.T) {
 				Prompt []map[string]string `json:"prompt"`
 			}
 			_ = json.Unmarshal(frame.Params, &input)
-			if strict := scenario == "strict-cancel" || (strings.HasPrefix(scenario, "prepared") || strings.HasPrefix(scenario, "executor")); (strict && len(input.Prompt) != 2) || (!strict && len(input.Prompt) != 1) {
+			if len(input.Prompt) != 2 {
 				os.Exit(9)
 			}
 			if strings.HasPrefix(scenario, "executor") {
@@ -287,7 +285,7 @@ func TestMCodeProcess(t *testing.T) {
 					continue
 				}
 				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": input.Prompt[0]["text"]}})
-				update("tool_call", map[string]any{"toolCallId": "repeated-call", "name": "Read", "status": "in_progress", "rawInput": map[string]any{}})
+				update("tool_call", map[string]any{"toolCallId": "repeated-call", "name": "mcp__oac_workspace__workspace_bash", "status": "in_progress", "rawInput": map[string]any{"command": "true"}})
 				update("tool_call_update", map[string]any{"toolCallId": "repeated-call", "status": "completed"})
 				raw, _ := json.Marshal(map[string]string{"stopReason": "end_turn"})
 				send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Result: raw})
@@ -303,7 +301,7 @@ func TestMCodeProcess(t *testing.T) {
 				update("tool_call", map[string]any{"toolCallId": "native-call", "name": "mcp__proof_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
 				continue
 			}
-			if scenario == "steering" || scenario == "steer-rejected" || scenario == "steer-lost" || scenario == "strict-cancel" {
+			if scenario == "steering" || scenario == "steer-rejected" || scenario == "steer-lost" || scenario == "cancel-wait" {
 				promptID = frame.ID
 				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "ready"}})
 				continue
@@ -326,7 +324,7 @@ func TestMCodeProcess(t *testing.T) {
 			}
 			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "Hello "}})
 			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "world"}})
-			update("tool_call", map[string]any{"toolCallId": "tool-1", "name": "Read", "status": "in_progress", "rawInput": map[string]any{"path": "fixture.txt"}})
+			update("tool_call", map[string]any{"toolCallId": "tool-1", "name": "mcp__oac_workspace__workspace_bash", "status": "in_progress", "rawInput": map[string]any{"command": "cat fixture.txt"}})
 			for range 2 {
 				update("tool_call_update", map[string]any{"toolCallId": "tool-1", "status": "completed", "rawOutput": "fixture"})
 			}

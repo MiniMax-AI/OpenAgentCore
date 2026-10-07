@@ -85,7 +85,6 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"relative workspace":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
 		"no model provider":                  {"viewed", func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }, []error{ErrUnsupported}},
 		// The typed rejections that hold whatever the view declares.
-		"no strict resume":        {"supporting", func(r *proto.PromptRequestPayload) { r.StrictResume = false }, unsupported},
 		"restricted network":      {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, unsupported},
 		"allowed domains only":    {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, unsupported},
 		"unprepared Capabilities": {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, unsupported},

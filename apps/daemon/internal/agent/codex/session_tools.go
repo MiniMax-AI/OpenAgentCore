@@ -10,13 +10,11 @@ func (s *Session) sendItemEvents(events []proto.Envelope, notification json.RawM
 	var native struct {
 		Item json.RawMessage `json:"item"`
 	}
-	if s.observeToolObservations {
-		if err := json.Unmarshal(notification, &native); err != nil {
-			return
-		}
+	if err := json.Unmarshal(notification, &native); err != nil {
+		return
 	}
 	for _, event := range events {
-		if (s.observeToolObservations) && event.Type == proto.TypeToolCall {
+		if event.Type == proto.TypeToolCall {
 			var tool proto.ToolCallPayload
 			if err := event.DecodePayload(&tool); err != nil {
 				return

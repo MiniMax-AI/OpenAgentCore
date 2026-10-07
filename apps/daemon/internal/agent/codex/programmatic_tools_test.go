@@ -3,7 +3,6 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -12,16 +11,12 @@ import (
 )
 
 func TestProgrammaticToolsExplicitDisableOverridesNativeOptions(t *testing.T) {
-	plan := SessionPlan{EnableFeatures: []string{"code_mode", "unrelated", "code_mode_only", "code_mode_prewarm"}, ExtraConfig: [][2]string{{"features.code_mode", "true"}}}
-	before := slices.Clone(plan.EnableFeatures)
+	plan := SessionPlan{ExtraConfig: [][2]string{{"features.code_mode", "true"}}}
 	disableProgrammaticTools(&plan, nil)
-	if !reflect.DeepEqual(plan.EnableFeatures, before) {
+	if len(plan.DisableFeatures) != 0 || len(plan.ExtraConfig) != 1 {
 		t.Fatal("omission changed native configuration")
 	}
 	disableProgrammaticTools(&plan, &proto.ExecutionControls{DisableProgrammaticToolCalling: true})
-	if !slices.Equal(plan.EnableFeatures, []string{"unrelated"}) {
-		t.Fatal(plan.EnableFeatures)
-	}
 	for _, feature := range programmaticFeatures {
 		if !slices.Contains(plan.DisableFeatures, feature) {
 			t.Fatal("missing disable", feature)

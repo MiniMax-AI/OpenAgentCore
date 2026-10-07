@@ -144,7 +144,7 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	if (req.LocalEnvironment == nil) != req.DisableExecutionEnvironment || !path.IsAbs(cwd) {
 		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
-	if _, err := runtimePermissionProfile(req); err != nil {
+	if err := validatePermissionProfile(req); err != nil {
 		return SessionPlan{}, err
 	}
 	// The Harness runs each stdio alias without arguments, which the native

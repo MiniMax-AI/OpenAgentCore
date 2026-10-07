@@ -238,10 +238,7 @@ type TurnStartParams struct {
 
 type CollaborationModeKind string
 
-const (
-	CollaborationModePlan    CollaborationModeKind = "plan"
-	CollaborationModeDefault CollaborationModeKind = "default"
-)
+const CollaborationModeDefault CollaborationModeKind = "default"
 
 type CollaborationMode struct {
 	Mode     CollaborationModeKind     `json:"mode"`

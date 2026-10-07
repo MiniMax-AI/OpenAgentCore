@@ -15,16 +15,12 @@ func configureSubagentObservations(plan *SessionPlan, req proto.PromptRequestPay
 		return nil
 	}
 	for _, feature := range []string{"hooks", "plugins", "code_mode", "code_mode_only", "code_mode_prewarm", "multi_agent_v2"} {
-		plan.EnableFeatures = slices.DeleteFunc(plan.EnableFeatures, func(value string) bool { return value == feature })
 		if !slices.Contains(plan.DisableFeatures, feature) {
 			plan.DisableFeatures = append(plan.DisableFeatures, feature)
 		}
 		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"features." + feature, "false"})
 	}
-	plan.DisableFeatures = slices.DeleteFunc(plan.DisableFeatures, func(value string) bool { return value == "multi_agent" })
-	if !slices.Contains(plan.EnableFeatures, "multi_agent") {
-		plan.EnableFeatures = append(plan.EnableFeatures, "multi_agent")
-	}
+	plan.EnableFeatures = append(plan.EnableFeatures, "multi_agent")
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"features.multi_agent", "true"}, [2]string{"agents.max_depth", "64"})
 	if req.MaxConcurrentSubagents != nil {
 		if *req.MaxConcurrentSubagents < 1 {

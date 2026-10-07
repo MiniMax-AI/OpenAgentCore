@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"testing"
@@ -20,14 +18,12 @@ func TestOptionalInteractionResponders(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			var output chan<- proto.Envelope
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "minimal", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "minimal", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				output = out
 				s := &fakeSession{out: out, closeOutOnCancel: true}
 				return lifecycleOnly{Session: s}, nil
-			})
-			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "minimal"})); err != nil {
-				t.Fatal(err)
-			}
+			}))
+			startRun(t, h.router, h.sender, "run", proto.PromptRequestPayload{AgentKind: "minimal"})
 			event := mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "interaction", Tool: "fixture"})
 			decision := mustEnv(t, proto.TypePermissionDecision, "interaction", proto.PermissionDecisionPayload{DeliveryID: "decision", Approved: true})
 			if ask {
@@ -37,7 +33,7 @@ func TestOptionalInteractionResponders(t *testing.T) {
 			// An inconsistent adapter emitted an interaction it cannot answer: reject it,
 			// never acknowledge application or call a fabricated responder.
 			output <- event
-			waitFor(t, func() bool { return len(h.sender.snapshot()) > 0 }, "interaction indexed")
+			waitFor(t, func() bool { return hasFrame(h.sender, event.Type, "run") }, "interaction indexed")
 			if err := h.router.Handle(t.Context(), decision); err != nil {
 				t.Fatal(err)
 			}

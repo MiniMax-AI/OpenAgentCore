@@ -13,8 +13,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err := validateNativeTransportEnvironment(); err != nil {
 		return SessionPlan{}, nil, err
 	}
-	_, err := runtimePermissionProfile(req)
-	if err != nil {
+	if err := validatePermissionProfile(req); err != nil {
 		return SessionPlan{}, nil, err
 	}
 	mcpServers, mcpEnv, err := runtimeMCPServers(req)
@@ -35,7 +34,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		plan.Sandbox = "danger-full-access"
 		plan.Permissions = ""
 		plan.ApprovalPolicy = AskForApproval{String: "never"}
-	} else if req.DisableExecutionEnvironment {
+	} else {
 		// environment:none has no workspace; the Session's private home is its cwd.
 		plan.Cwd = plan.home.View
 	}

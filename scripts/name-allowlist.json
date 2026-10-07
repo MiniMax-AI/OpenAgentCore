@@ -225,6 +225,16 @@
     "reason": "The test prepares executions through dispatch, whose admission requires the existing Core Session state-key prefix."
   },
   {
+    "path": "apps/daemon/internal/cli/claude_sdk_live_linux_test.go",
+    "regex": "\"agents-api-registered-acceptance\"",
+    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
+  },
+  {
+    "path": "services/core/internal/runtimegateway/mcp_bearer_live_linux_test.go",
+    "regex": "\"agents-api-mcp-bearer-acceptance\"",
+    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
+  },
+  {
     "path": "apps/daemon/internal/localworkspace/capabilities.go",
     "regex": "\"agents-api-\"",
     "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."

@@ -84,7 +84,7 @@ func TestBlockedSteeringWriteEndsRunWithTerminalFrames(t *testing.T) {
 	defer cancel()
 	out := make(chan proto.Envelope, 8)
 	s := &Session{
-		runID: "run", rpc: client.JSONRPCClient, cancelCtx: ctx, out: out,
+		runID: "run", rpc: client.JSONRPCClient, cancelCtx: ctx, out: out, resolvedModel: "synthetic",
 		cfg: sessionConfig{logger: obslog.Bg()}, waitDone: make(chan struct{}), cleanup: func() {},
 		bufs: NewItemBuffers(), interactions: newPendingCodexInteractions(),
 	}

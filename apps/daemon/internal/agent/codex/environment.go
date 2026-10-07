@@ -38,8 +38,8 @@ func nativeEnvironmentStatus(ctx context.Context, rpc *JSONRPCClient, id string)
 }
 
 // Native still recognizes the retired transport variables. Reject them before
-// setup so an inherited environment cannot select a separate executor. The
-// explicit none selector remains part of native execution isolation.
+// setup so the inherited environment cannot select a separate executor.
+// The explicit none selector remains part of native execution isolation.
 func validateNativeTransportEnvironment() error {
 	for _, entry := range os.Environ() {
 		key, value, _ := strings.Cut(entry, "=")

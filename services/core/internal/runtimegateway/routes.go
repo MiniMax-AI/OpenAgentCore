@@ -11,8 +11,8 @@ import (
 //	POST /agent-daemon/bootstrap     — daemon first-call to fetch wsUrl + heartbeat cadence
 //	GET  /agent-daemon/device-status — daemon self-check
 //
-// All three accept the daemon credential that
-// contracts/agents-api/machine-api.md describes.
+// All three accept the daemon credential described in
+// contracts/agents-api/machine-api.md.
 func RegisterRoutes(r chi.Router, h *Handler) {
 	if h == nil {
 		panic("agentdaemon gateway: RegisterRoutes called with nil handler")

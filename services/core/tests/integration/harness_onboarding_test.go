@@ -117,7 +117,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"hold"}]}]}]}`, 202)
 	next := awaitOnboardingPrompt(t, started)
-	if next.RunID == first.RunID || next.AgentSessionID != bound.NativeSessionID || !next.StrictResume {
+	if next.RunID == first.RunID || next.AgentSessionID != bound.NativeSessionID {
 		t.Fatal(next)
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 202)
@@ -262,7 +262,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 					return
 				}
 				request := p.Configuration
-				request.RunID, request.ConversationID, request.Input = start.RunID, p.SessionID, start.Input
+				request.RunID, request.Input = start.RunID, start.Input
 				started <- request
 			}
 			if e.Type == proto.TypeExecutionRelease {

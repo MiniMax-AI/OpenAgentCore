@@ -28,7 +28,7 @@ func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
 		Metadata: agentskill.Metadata{Name: "proof", Description: "Read a marker"},
 	}}
 	for range 2 {
-		opts, err := prepareWorkspaceOptions(t.Context(), c, req)
+		opts, err := prepareWorkspaceOptions(c, req)
 		if err != nil {
 			t.Fatal(err)
 		}

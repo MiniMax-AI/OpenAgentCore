@@ -24,7 +24,7 @@ type DialOptions struct {
 	// WSURL is the absolute ws://... or wss://... URL.
 	WSURL string
 
-	// DeviceID is the runtime row id issued with the credential. Sent as
+	// DeviceID is the runtime row id from the daemon credential. Sent as
 	// device_id query param; the gateway uses it as the session key.
 	DeviceID string
 

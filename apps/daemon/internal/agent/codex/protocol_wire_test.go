@@ -106,13 +106,13 @@ func TestThreadStartParams_ModelProviderIsCamelCaseField(t *testing.T) {
 	}
 }
 
-func TestTurnStartParams_CollaborationModeUsesPlanWireShape(t *testing.T) {
+func TestTurnStartParams_CollaborationModeWireShape(t *testing.T) {
 	developerInstructions := "stay within the configured workspace"
 	params := TurnStartParams{
 		ThreadID: "thread-1",
 		Input:    []UserInput{{Type: UserInputText, Text: "ask me a question"}},
 		CollaborationMode: &CollaborationMode{
-			Mode: CollaborationModePlan,
+			Mode: CollaborationModeDefault,
 			Settings: CollaborationModeSettings{
 				Model:                 "MiniMax-M3",
 				DeveloperInstructions: &developerInstructions,
@@ -124,7 +124,7 @@ func TestTurnStartParams_CollaborationModeUsesPlanWireShape(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	body := string(raw)
-	if !strings.Contains(body, `"collaborationMode":{"mode":"plan","settings":{"model":"MiniMax-M3","developer_instructions":"stay within the configured workspace"}}`) {
+	if !strings.Contains(body, `"collaborationMode":{"mode":"default","settings":{"model":"MiniMax-M3","developer_instructions":"stay within the configured workspace"}}`) {
 		t.Fatalf("collaboration mode missing or malformed: %s", body)
 	}
 	if strings.Contains(body, `"collaboration_mode"`) {

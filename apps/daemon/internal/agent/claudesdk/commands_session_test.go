@@ -16,73 +16,55 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestWorkspaceCommandsRequirePackagedFeatureOnlyWhenRequested(t *testing.T) {
-	for _, observed := range []bool{false, true} {
-		config := preparationFixture(t, "old-command-runtime")
-		req := preparationRequest()
-		req.ObserveToolObservations = observed
-		resource, err := NewExecutorFactory(config)(t.Context(), req)
-		if observed {
-			if err == nil || !strings.Contains(err.Error(), "workspace command observations") {
-				t.Fatal("old bridge accepted requested command observations", err)
-			}
-			if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
-				t.Fatal("old bridge started execution before rejection")
-			}
-		} else {
-			if err != nil {
-				t.Fatal("old bridge changed opt-out behavior", err)
-			}
-			if err := resource.Close(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-		}
+func TestWorkspaceCommandsRequirePackagedFeature(t *testing.T) {
+	config := preparationFixture(t, "old-command-runtime")
+	if _, err := NewExecutorFactory(config)(t.Context(), preparationRequest()); err == nil || !strings.Contains(err.Error(), "workspace preparation is unavailable") {
+		t.Fatal("old bridge accepted command observations", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
+		t.Fatal("old bridge started execution before rejection")
 	}
 }
 
 func TestWorkspaceCommandFramesKeepStartIdentityAndObservedOutput(t *testing.T) {
-	for _, observed := range []bool{false, true} {
-		config := preparationFixture(t, "commands-success")
-		req := preparationRequest()
-		req.ObserveToolObservations = observed
-		resource, err := NewExecutorFactory(config)(t.Context(), req)
-		if err != nil {
-			t.Fatal(err)
+	config := preparationFixture(t, "commands-success")
+	resource, err := NewExecutorFactory(config)(t.Context(), preparationRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resource.Close(context.Background())
+	if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
+		t.Fatal("preparation submitted a command")
+	}
+	out := make(chan proto.Envelope, 16)
+	s, err := resource.StartTurn(t.Context(), "actual-command-run", proto.TextInput("hello"), out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Cancel(context.Background())
+	var frames []proto.ToolCallPayload
+	done := 0
+	for event := range out {
+		if event.ID != "actual-command-run" || event.Type == proto.TypeError || event.Type == proto.TypeCommandOutput {
+			t.Fatal("execution identity or final-only command behavior changed", event.Type)
 		}
-		defer resource.Close(context.Background())
-		if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
-			t.Fatal("preparation submitted a command")
-		}
-		out := make(chan proto.Envelope, 16)
-		s, err := resource.StartTurn(t.Context(), "actual-command-run", proto.TextInput("hello"), out)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer s.Cancel(context.Background())
-		var frames []proto.ToolCallPayload
-		done := 0
-		for event := range out {
-			if event.ID != "actual-command-run" || event.Type == proto.TypeError || event.Type == proto.TypeCommandOutput {
-				t.Fatal("execution identity or final-only command behavior changed", event.Type)
+		if event.Type == proto.TypeToolCall {
+			var payload proto.ToolCallPayload
+			if err := event.DecodePayload(&payload); err != nil {
+				t.Fatal(err)
 			}
-			if event.Type == proto.TypeToolCall {
-				var payload proto.ToolCallPayload
-				if err := event.DecodePayload(&payload); err != nil {
-					t.Fatal(err)
-				}
-				frames = append(frames, payload)
-			}
-			if event.Type == proto.TypeDone {
-				done++
-			}
+			frames = append(frames, payload)
 		}
-		if done != 1 || observed && len(frames) != 2 || !observed && len(frames) != 0 {
-			t.Fatal("completion or observation opt-in changed", done, frames)
+		if event.Type == proto.TypeDone {
+			done++
 		}
-		if observed && (frames[0].ID != "observed" || frames[1].ID != "observed" || frames[1].Observation.Status != "failed" ||
-			string(frames[1].Observation.Output) != `"Exit code 7\nretained"`) {
-			t.Fatal("native failure output was not retained", frames)
-		}
+	}
+	if done != 1 || len(frames) != 2 {
+		t.Fatal("completion or observation changed", done, frames)
+	}
+	if frames[0].ID != "observed" || frames[1].ID != "observed" || frames[1].Observation.Status != "failed" ||
+		string(frames[1].Observation.Output) != `"Exit code 7\nretained"` {
+		t.Fatal("native failure output was not retained", frames)
 	}
 }
 
@@ -93,7 +75,7 @@ func TestWorkspaceCommandCancellationAndBridgeFailuresCloseOnlyPendingCalls(t *t
 			defer cancel()
 			config := preparationFixture(t, mode)
 			req := workspaceRequest()
-			req.AgentSessionID, req.ObserveToolObservations = "native-session", true
+			req.AgentSessionID = "native-session"
 			out := make(chan proto.Envelope, 32)
 			s, err := NewFactory(config)(ctx, req, out)
 			if err != nil {
