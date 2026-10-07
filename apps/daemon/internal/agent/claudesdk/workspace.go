@@ -6,10 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
 // WorkspaceConfig binds one trusted private placement. It does not create an
@@ -39,15 +38,12 @@ type workspaceProfile struct {
 	AllowedDomains []string                           `json:"allowed_domains,omitempty"`
 }
 
-func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspaceProfile, []string, error) {
+func prepareWorkspace(config Config, req agent.PrepareRequest) (*workspaceProfile, []string, error) {
 	if req.DisableExecutionEnvironment {
 		return nil, nil, fmt.Errorf("claudesdk: workspace profile does not support the requested execution combination")
 	}
-	if req.LocalEnvironment != nil && req.LocalEnvironment.WorkspaceRoot != config.Workspace.Directory {
+	if req.LocalEnvironment != nil && req.WorkspaceRoot != config.Workspace.Directory {
 		return nil, nil, fmt.Errorf("claudesdk: workspace root conflicts with the trusted workspace binding")
-	}
-	if req.LocalEnvironment != nil && !(agentnetwork.Policy{Access: config.Workspace.NetworkAccess, AllowedDomains: config.Workspace.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) {
-		return nil, nil, fmt.Errorf("claudesdk: local Runtime network policy mismatch")
 	}
 	profile, env, err := workspaceEnvironment(config)
 	if err != nil {
@@ -61,8 +57,8 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	}
 
 	if req.LocalEnvironment != nil {
-		profile.Skills = req.LocalEnvironment.Skills
-		profile.CapabilityRoot = req.LocalEnvironment.CapabilityRoot
+		profile.Skills = req.Skills
+		profile.CapabilityRoot = req.CapabilityRoot
 	}
 	servers, credentials, err := prepareRuntimeMCP(req)
 	if err != nil {

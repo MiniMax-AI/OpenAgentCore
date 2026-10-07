@@ -56,12 +56,12 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 			return nil, errors.New("recorded")
 		},
 	}
-	req := proto.PromptRequestPayload{
-		AgentStateKey:    "state",
+	req := prepared(t, "state", proto.PromptRequestPayload{
 		Model:            "m",
 		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled"},
-	}
+		LocalEnvironment: &proto.LocalEnvironment{},
+	})
+	req.WorkspaceRoot = "/workspace"
 	if _, err := view.Executor(t.Context(), req, session); err == nil || len(launched) != 1 {
 		t.Fatalf("launches %d, err %v", len(launched), err)
 	}
@@ -123,7 +123,7 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 		t.Fatalf("outside file changed: %q, %v", body, err)
 	}
 
-	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
 	req.LocalEnvironment, req.DisableExecutionEnvironment = nil, true
 	if _, err := view.Executor(t.Context(), req, session); err == nil || len(launched) != 2 {
@@ -147,7 +147,7 @@ func TestViewHandsCodexTheInstalledSkillAndMCP(t *testing.T) {
 	session := agent.ViewSession{
 		Home:  agent.ViewDir{Host: home, View: agent.ViewPrivateRoot + "/" + agent.ViewHomeName},
 		Proxy: "http://127.0.0.1:17100",
-		MCP: []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+		MCP: []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 			Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}},
 		// The fake Codex runs on the host, outside the view.
 		Launch: func(opts clirunner.StartOptions) (*clirunner.Process, error) {
@@ -160,10 +160,11 @@ func TestViewHandsCodexTheInstalledSkillAndMCP(t *testing.T) {
 	writeMCPHTTPConfigResponse(t, config, map[string]any{"config": map[string]any{"mcp_servers": map[string]any{"local": server},
 		"features": map[string]any{"plugins": false, "apps": false}, "mcp_oauth_credentials_store": "file"}})
 	t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", config)
-	req := proto.PromptRequestPayload{AgentStateKey: "state", Model: "m",
-		ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled", CapabilityRoot: agentcapabilities.Directory,
-			Skills: []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}}}
+	req := prepared(t, "state", proto.PromptRequestPayload{Model: "m",
+		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder},
+		LocalEnvironment: &proto.LocalEnvironment{}})
+	req.WorkspaceRoot, req.CapabilityRoot = "/workspace", agentcapabilities.Directory
+	req.Skills = []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
 	e, err := declared.Executor(t.Context(), req, session)
 	if err != nil {
 		t.Fatal(err)

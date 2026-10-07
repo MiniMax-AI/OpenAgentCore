@@ -12,12 +12,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// startSingleTurn prepares an Executor for one Turn and closes it once that
-// Turn settles, so each test observes the complete native lifecycle.
-func startSingleTurn(ctx context.Context, config Config, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Turn, error) {
-	run, input := req.RunID, req.Input
-	req.RunID, req.Input = "", nil
-	resource, err := NewExecutorFactory(config)(ctx, req)
+// startSingleTurn prepares an Executor as the registry does, starts one Turn
+// and closes the Executor once that Turn settles, so each test observes the
+// complete native lifecycle.
+func startSingleTurn(ctx context.Context, config Config, req proto.PromptRequestPayload, run string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+	configuration, err := Declaration.Configuration.Prepare(req)
+	if err != nil {
+		return nil, err
+	}
+	resource, err := NewExecutorFactory(config)(ctx, agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration})
 	if err != nil {
 		return nil, err
 	}

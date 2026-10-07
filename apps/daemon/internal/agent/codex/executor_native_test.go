@@ -49,13 +49,13 @@ func TestExecutorNativeReuse(t *testing.T) {
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
 	cfg.logger = slog.New(slog.DiscardHandler)
-	req := proto.PromptRequestPayload{
-		AgentKind: "codex", AgentStateKey: "executor-native",
+	req := prepared(t, "executor-native", proto.PromptRequestPayload{
+		AgentKind:                   "codex",
 		DisableExecutionEnvironment: true, DisableSubagents: true,
 		Model:         model,
 		ModelProvider: &modelprovider.Provider{BaseURL: endpoint, Protocol: modelprovider.Responses, APIKey: strings.TrimSpace(string(key))},
 		FunctionTools: []proto.FunctionTool{{Name: "hold", Description: "Wait until the host supplies a result.", Parameters: json.RawMessage("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")}},
-	}
+	})
 	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
 	defer cancel()
 	began := time.Now()

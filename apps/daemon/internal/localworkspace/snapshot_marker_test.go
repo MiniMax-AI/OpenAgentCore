@@ -8,24 +8,24 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/google/uuid"
 )
 
-func markerBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
+func markerBinding(t *testing.T) (*Binding, agent.PrepareRequest) {
 	t.Helper()
 	b, request := testBinding(t)
 	// This host's inherited ACL gives TempDir group permissions unless cleared.
 	if err := os.Chmod(os.Getenv("OAC_RUNTIME_HOME"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	configured, err := b.Configure(request)
-	if err != nil {
+	if err := b.Configure(request.PromptRequestPayload); err != nil {
 		t.Fatal(err)
 	}
-	return b, configured
+	return b, request
 }
 func markerPath(b *Binding) string {
 	identity := b.capabilityIdentity()
@@ -78,7 +78,6 @@ func TestCompletedSnapshotLossNeverRecapturesSources(t *testing.T) {
 				source := t.TempDir()
 				if populated {
 					writeSourceSkill(t, source, "first")
-					request.LocalEnvironment.Capabilities = true
 					request.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source}}
 				}
 				if _, err := b.Prepare(t.Context(), request); err != nil {
@@ -134,7 +133,6 @@ func TestSnapshotMarkerBackfillsOnlyVerifiedManifest(t *testing.T) {
 	if err := os.RemoveAll(source); err != nil {
 		t.Fatal(err)
 	}
-	request.LocalEnvironment.Capabilities = true
 	request.LocalEnvironment.CapabilitySources = &input
 	if _, err := b.Prepare(t.Context(), request); err != nil {
 		t.Fatal("valid manifest was not recovered without sources", err)

@@ -32,7 +32,7 @@ var errFactory = errors.New("factory reached")
 // no view.
 type viewFixture struct {
 	cfg     Config
-	req     proto.PromptRequestPayload
+	req     agent.PrepareRequest
 	session agent.ViewSession
 	homeSet bool
 }
@@ -46,7 +46,7 @@ func newViewFixture(t *testing.T) *viewFixture {
 		Closure:   []agent.ViewMount{{Name: "harness", HostDir: t.TempDir()}},
 		LocalExec: []string{"/.oac/harness/harness"},
 		Proxy:     agent.ViewProxyEnv,
-		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
+		Executor: func(_ context.Context, req agent.PrepareRequest, s agent.ViewSession) (agent.Executor, error) {
 			f.req, f.session = req, s
 			info, err := os.Stat(s.Home.Host)
 			f.homeSet = err == nil && info.IsDir()
@@ -70,29 +70,25 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 	unsupported := []error{ErrUnsupported, agent.ErrUnsupportedOperation}
 	for name, c := range map[string]struct {
 		kind   string
-		change func(*proto.PromptRequestPayload)
+		change func(*agent.PrepareRequest)
 		want   []error
 	}{
-		"kind without a view":                {"plain", func(*proto.PromptRequestPayload) {}, unsupported},
-		"view meeting the agent host's /etc": {"masked", func(*proto.PromptRequestPayload) {}, []error{ErrUnsupported, agent.ErrInvalidView}},
-		"incomplete binding":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment = nil }, []error{ErrInvalidSession}},
-		"shim name without PATH":             {"shimmed", func(*proto.PromptRequestPayload) {}, []error{ErrInvalidSession}},
-		"relative workspace":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
-		"no model provider":                  {"viewed", func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }, []error{ErrUnsupported}},
-		"restricted network":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, unsupported},
-		"allowed domains only":               {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, unsupported},
-		"unprepared Capabilities":            {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, unsupported},
-		"credentialed stdio MCP": {"viewed", func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
+		"kind without a view":                {"plain", func(*agent.PrepareRequest) {}, unsupported},
+		"view meeting the agent host's /etc": {"masked", func(*agent.PrepareRequest) {}, []error{ErrUnsupported, agent.ErrInvalidView}},
+		"incomplete binding":                 {"viewed", func(r *agent.PrepareRequest) { r.LocalEnvironment = nil }, []error{ErrInvalidSession}},
+		"shim name without PATH":             {"shimmed", func(*agent.PrepareRequest) {}, []error{ErrInvalidSession}},
+		"relative workspace":                 {"viewed", func(r *agent.PrepareRequest) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
+		"credentialed stdio MCP": {"viewed", func(r *agent.PrepareRequest) {
+			r.MCP = []agent.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
 		}, []error{ErrUnsupported, agent.ErrViewHandoff}},
-		"stdio MCP without an absolute directory": {"viewed", func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/tools"}}}
+		"stdio MCP without an absolute directory": {"viewed", func(r *agent.PrepareRequest) {
+			r.MCP = []agent.EnvironmentMCP{{PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/tools"}}}
 		}, []error{ErrInvalidSession}},
-		"stdio MCP name without PATH": {"viewed", func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
+		"stdio MCP name without PATH": {"viewed", func(r *agent.PrepareRequest) {
+			r.MCP = []agent.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
 		}, []error{ErrInvalidSession}},
 	} {
-		req := request(c.kind, "/workspace", "https://model.test", "sk-test")
+		req := prepared(request(c.kind, "/workspace", "https://model.test", "sk-test"))
 		c.change(&req)
 		var dials atomic.Int32
 		e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
@@ -117,7 +113,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		b := newBinding(newResource())
 		change(&b)
 		var dials atomic.Int32
-		e, err := open(context.Background(), f.cfg, request("viewed", "/workspace", "https://model.test", "sk-test"), bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
+		e, err := open(context.Background(), f.cfg, prepared(request("viewed", "/workspace", "https://model.test", "sk-test")), bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
 		if e != nil || !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
 			t.Errorf("%s: open = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
 		}
@@ -135,8 +131,8 @@ func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := request("viewed", "/workspace", "https://model.test", "sk-test")
-	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{
+	req := prepared(request("viewed", "/workspace", "https://model.test", "sk-test"))
+	req.MCP = []agent.EnvironmentMCP{
 		{Server: agentplugin.MCPServer{Name: "docs", Type: "http", URL: "https://mcp.test/docs"}},
 		{InstallationRoot: "/capabilities", PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "bin/tools", Args: []string{"--stdio"}, CWD: "run"}},
 	}
@@ -145,7 +141,7 @@ func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	alias := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(1)}}
+	alias := agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(1)}}
 	if len(p.mcp) != 2 || p.mcp[1].Stdio == nil || !reflect.DeepEqual(*p.mcp[1].Stdio, alias) || len(p.gateway.MCP) != 1 || p.gateway.MCP[0].ServerLabel != "docs" {
 		t.Errorf("ViewSession.MCP %+v and gateway MCP %+v; want the stdio binding under its alias and only HTTP at the gateway", p.mcp, p.gateway.MCP)
 	}
@@ -173,24 +169,24 @@ func TestRegistryRunsKindsWithViews(t *testing.T) {
 func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	f := newViewFixture(t)
 	bearer := "mcp-secret"
-	req := request("viewed", "/workspace", "https://model.test", "sk-test")
+	req := prepared(request("viewed", "/workspace", "https://model.test", "sk-test"))
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
 	skills := []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
-	req.LocalEnvironment.Capabilities, req.LocalEnvironment.CapabilityRoot, req.LocalEnvironment.Skills = true, agentcapabilities.Directory, skills
+	req.CapabilityRoot, req.Skills = agentcapabilities.Directory, skills
 	original := *req.ModelProvider
 	var dials atomic.Int32
 	e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
 	if !errors.Is(err, errFactory) {
 		t.Fatalf("open = %v, want the factory's error", err)
 	}
-	if provider := f.req.ModelProvider; provider == nil || provider.BaseURL != "http://127.0.0.1:17101" || provider.APIKey != modelprovider.Placeholder || provider.Protocol != modelprovider.Anthropic {
+	if provider := f.req.ModelProvider; provider == nil || *provider != f.req.Prepared.Provider || provider.BaseURL != "http://127.0.0.1:17101" || provider.APIKey != modelprovider.Placeholder || provider.Protocol != modelprovider.Anthropic {
 		t.Errorf("model provider %+v; want the gateway with the placeholder", provider)
 	}
-	if *req.ModelProvider != original {
+	if *req.ModelProvider != original || req.Prepared.Provider != original {
 		t.Error("the Session's request changed")
 	}
-	if local := f.req.LocalEnvironment; f.req.MCPHTTPServers != nil || local == nil || local.MCP != nil || local.WorkspaceRoot != "/workspace" ||
-		local.CapabilityRoot != agentcapabilities.Directory || !reflect.DeepEqual(local.Skills, skills) {
+	if f.req.MCPHTTPServers != nil || f.req.MCP != nil || f.req.WorkspaceRoot != "/workspace" ||
+		f.req.CapabilityRoot != agentcapabilities.Directory || !reflect.DeepEqual(f.req.Skills, skills) {
 		t.Error("the request still carries MCP, does not run in the Environment's workspace or lost its installed Skills")
 	}
 	mcp := f.session.MCP

@@ -37,22 +37,19 @@ type harness struct {
 	history map[string]string
 }
 
-func (h *harness) prepare(_ context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-	if req.RunID != "" || len(req.Input) != 0 {
-		return nil, errors.New("preparation submitted fixture input")
-	}
+func (h *harness) prepare(_ context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 	if !req.DisableExecutionEnvironment || !req.DisableSubagents || len(req.FunctionTools) > 0 || req.MCPHTTPServers != nil {
 		return nil, errors.New("unsupported fixture operation")
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	previous := h.history[req.AgentStateKey]
+	previous := h.history[req.StateKey]
 	if req.AgentSessionID != previous || (req.RequireExistingNativeSession && previous == "") {
 		return nil, errors.New("native history mismatch")
 	}
 	if previous == "" {
-		previous = "fixture-" + req.AgentStateKey
-		h.history[req.AgentStateKey] = previous
+		previous = "fixture-" + req.StateKey
+		h.history[req.StateKey] = previous
 	}
 	return &executor{native: previous}, nil
 }

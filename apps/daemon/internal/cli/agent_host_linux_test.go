@@ -101,7 +101,7 @@ func TestAgentHostReportsItsDeclarations(t *testing.T) {
 				return &agent.Runtime{Info: info, View: view}
 			}}
 	}
-	view := &agent.View{Proxy: agent.ViewProxyEnv, Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
+	view := &agent.View{Proxy: agent.ViewProxyEnv, Executor: func(context.Context, agent.PrepareRequest, agent.ViewSession) (agent.Executor, error) {
 		return nil, errors.New("no Executor")
 	}}
 	// The image may install no Harness: the agent host still connects and

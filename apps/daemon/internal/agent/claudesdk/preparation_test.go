@@ -24,7 +24,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	result := make(chan agent.Executor, 1)
 	failed := make(chan error, 1)
 	go func() {
-		e, err := NewExecutorFactory(config)(ctx, req)
+		e, err := NewExecutorFactory(config)(ctx, prepared(t, req))
 		if err != nil {
 			failed <- err
 			return
@@ -96,18 +96,12 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	}
 }
 
-func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T) {
-	for _, name := range []string{"run", "prompt", "attachments", "subagents", "none", "functions", "mcp", "old-runtime"} {
+func TestPreparationRejectsUnavailableProfilesBeforeLaunch(t *testing.T) {
+	for _, name := range []string{"subagents", "none", "functions", "mcp", "old-runtime"} {
 		t.Run(name, func(t *testing.T) {
 			config := preparationFixture(t, name)
 			req := preparationRequest()
 			switch name {
-			case "run":
-				req.RunID = "unexpected"
-			case "prompt":
-				req.Input = proto.TextInput("unexpected")
-			case "attachments":
-				req.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 			case "subagents":
 				req.ObserveSubagentIdentities = true
 			case "none":
@@ -117,7 +111,7 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			}
-			if _, err := NewExecutorFactory(config)(t.Context(), req); err == nil {
+			if _, err := NewExecutorFactory(config)(t.Context(), prepared(t, req)); err == nil {
 				t.Fatal("invalid preparation was accepted")
 			}
 			if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
@@ -133,7 +127,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 			config := preparationFixture(t, mode)
 			owner, stop := context.WithCancel(t.Context())
 			defer stop()
-			resource, err := NewExecutorFactory(config)(owner, preparationRequest())
+			resource, err := NewExecutorFactory(config)(owner, prepared(t, preparationRequest()))
 			if mode == "history-missing" || mode == "invalid-receipt" {
 				if err == nil || mode == "history-missing" && !strings.Contains(err.Error(), "history_unavailable") {
 					t.Fatal("preparation failure was lost", err)

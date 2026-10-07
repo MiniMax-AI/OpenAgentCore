@@ -152,7 +152,7 @@ func awaitExecutorTurn(t *testing.T, turn agent.Turn, out <-chan proto.Envelope,
 func TestExecutorRetainsProcessAcrossTurnsAndCancellation(t *testing.T) {
 	config, req := persistentConfig(t, "")
 	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example/anthropic", APIKey: "fixture-key"}
-	owner, err := NewExecutorFactory(config)(t.Context(), req)
+	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestExecutorRetainsProcessAcrossTurnsAndCancellation(t *testing.T) {
 }
 func TestExecutorLateTurnEventInvalidatesWithoutRetargeting(t *testing.T) {
 	config, req := persistentConfig(t, "late")
-	owner, err := NewExecutorFactory(config)(t.Context(), req)
+	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestExecutorCachesReadinessUntilInstalledArtifactChanges(t *testing.T) {
 	config, req := persistentConfig(t, "")
 	factory := NewExecutorFactory(config)
 	for range 2 {
-		owner, err := factory(t.Context(), req)
+		owner, err := factory(t.Context(), prepared(t, req))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +232,7 @@ func TestExecutorCachesReadinessUntilInstalledArtifactChanges(t *testing.T) {
 	if err := os.WriteFile(config.Entrypoint, []byte("version-two-changed"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	owner, err := factory(t.Context(), req)
+	owner, err := factory(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestExecutorCachesReadinessUntilInstalledArtifactChanges(t *testing.T) {
 
 func TestExecutorSeparatesPreInputRejectionFromUnknownWrite(t *testing.T) {
 	config, req := persistentConfig(t, "block")
-	owner, err := NewExecutorFactory(config)(t.Context(), req)
+	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestExecutorSeparatesPreInputRejectionFromUnknownWrite(t *testing.T) {
 
 func TestExecutorCancellationDeadlineInterruptsBlockedTransport(t *testing.T) {
 	config, req := persistentConfig(t, "block")
-	owner, err := NewExecutorFactory(config)(t.Context(), req)
+	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestExecutorCancellationDeadlineInterruptsBlockedTransport(t *testing.T) {
 
 func TestSharedTextLifecycle(t *testing.T) {
 	config, req := persistentConfig(t, "text_contract")
-	owner, err := NewExecutorFactory(config)(t.Context(), req)
+	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}

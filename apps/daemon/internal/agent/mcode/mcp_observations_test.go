@@ -16,10 +16,9 @@ func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 	t.Helper()
 	out := make(chan proto.Envelope, 16)
 	s := &Session{ctx: context.Background(), outputContext: context.Background(), opts: launchOptions{DataDir: t.TempDir()},
-		req: proto.PromptRequestPayload{RunID: "run",
-			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
+		req: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}}, runID: "run",
 		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, completedMessages: map[string]bool{}, active: true, sessionID: "native-session"}
-	resolveTestBindings(s)
+	s.opts.bindings, _ = agent.ResolveMCPBindings(agent.PrepareRequest{PromptRequestPayload: s.req, MCP: []agent.EnvironmentMCP{environmentMCPFixture()}})
 	if err := writeMCPRegistry(s.opts.DataDir, mcpRegistryEntry("proof.server", "proof_server_2", "read.status", "read_status_2")); err != nil {
 		t.Fatal(err)
 	}
@@ -198,16 +197,10 @@ func TestEnvironmentMCPNativeJSONRetainsIntegerPrecision(t *testing.T) {
 
 // Both declaration sources must produce the same native observation semantics.
 func usePublicMCP(s *Session) {
-	s.req.LocalEnvironment.MCP = nil
 	s.req.MCPHTTPServers = &[]proto.MCPHTTPServer{{
 		ConnectionOrigin: "environment", ServerLabel: "proof.server", ServerURL: "https://mcp.example.test",
 	}}
-	resolveTestBindings(s)
-}
-
-// resolveTestBindings records the request's bindings as preparation does.
-func resolveTestBindings(s *Session) {
-	s.opts.bindings, _ = agent.ResolveMCPBindings(s.req)
+	s.opts.bindings, _ = agent.ResolveMCPBindings(agent.PrepareRequest{PromptRequestPayload: s.req})
 }
 
 func TestResumedMessageFailsTheTurn(t *testing.T) {

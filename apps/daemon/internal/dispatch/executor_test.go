@@ -70,7 +70,7 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 // noEnvironmentPreparation prepares config for session without an execution
 // environment, with the fixture model and provider.
 func noEnvironmentPreparation(session string, config proto.PromptRequestPayload) proto.ExecutionPreparePayload {
-	config.AgentStateKey, config.DisableExecutionEnvironment = stateKey(session), true
+	config.DisableExecutionEnvironment = true
 	return proto.ExecutionPreparePayload{SessionID: session, Configuration: prototest.WithModel(config)}
 }
 func executorRequest() proto.ExecutionPreparePayload {
@@ -86,7 +86,7 @@ func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})
@@ -247,14 +247,13 @@ func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, 
 func poolRequest(id string) proto.ExecutionPreparePayload {
 	req := executorRequest()
 	req.SessionID = id
-	req.Configuration.AgentStateKey = "agents-api-" + id
 	return req
 }
 
 func TestExecutorIdleAndActiveCapacitiesAreIndependent(t *testing.T) {
 	var mu sync.Mutex
 	var owners []*reusableExecutor
-	r, s := poolRouter(t, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	r, s := poolRouter(t, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		e := &reusableExecutor{}
 		mu.Lock()
 		owners = append(owners, e)

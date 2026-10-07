@@ -34,7 +34,7 @@ func (s *cancelReceiptSession) Cancel(ctx context.Context) error {
 }
 
 func registerCancelReceiptKind(h *harness, sess *cancelReceiptSession) {
-	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ fixtureRun, out chan<- proto.Envelope) (fixtureSession, error) {
 		sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
 		return sess, nil
 	})

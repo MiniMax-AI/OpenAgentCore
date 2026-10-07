@@ -102,7 +102,7 @@ func TestAssignmentReleaseWaitsForRacingPreparation(t *testing.T) {
 		replyBeforeClose.Store(hasFrame(sender, proto.TypeAssignmentStatus, "release"))
 	}}
 	entered, cancelled, unblock := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	r, sender := poolRouter(t, func(ctx context.Context, _ proto.PromptRequestPayload) (agent.Executor, error) {
+	r, sender := poolRouter(t, func(ctx context.Context, _ agent.PrepareRequest) (agent.Executor, error) {
 		calls.Add(1)
 		close(entered)
 		<-ctx.Done()

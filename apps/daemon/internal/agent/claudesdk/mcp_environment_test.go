@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
@@ -16,15 +17,18 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 	req := workspaceRequest()
 	token := "selected-user-token"
 	t.Setenv("MCP_TOKEN", "unselected-native-token")
-	req.LocalEnvironment = &proto.LocalEnvironment{CapabilityRoot: "/private/runtime/capabilities", NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.Directory, MCP: []proto.EnvironmentMCP{
+	req.LocalEnvironment = &proto.LocalEnvironment{}
+	bound := prepared(t, req)
+	bound.CapabilityRoot, bound.WorkspaceRoot = "/private/runtime/capabilities", config.Workspace.Directory
+	bound.MCP = []agent.EnvironmentMCP{
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/local", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "untrusted-package-command", Args: []string{"package-argument"}, EnvVars: []string{"MCP_TOKEN"}}},
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", BearerTokenEnvVar: "MCP_TOKEN"}, BearerToken: &token},
-	}}
-	start, env, err := prepareConfiguration(config, req)
+	}
+	start, env, err := prepareConfiguration(config, bound)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if start.MCPHTTPServers != nil || len(start.Workspace.MCP) != 2 || start.Workspace.CapabilityRoot != req.LocalEnvironment.CapabilityRoot {
+	if start.MCPHTTPServers != nil || len(start.Workspace.MCP) != 2 || start.Workspace.CapabilityRoot != bound.CapabilityRoot {
 		t.Fatal("environment declarations changed authority")
 	}
 	stdio := start.Workspace.MCP[0]
@@ -51,21 +55,20 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 }
 
 func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
-	for _, mutate := range []func(*proto.LocalEnvironment){
-		func(e *proto.LocalEnvironment) { e.NetworkAccess = "restricted" },
-		func(e *proto.LocalEnvironment) { e.MCP = append(e.MCP, e.MCP[0]) },
-		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Type = "sse" },
-		func(e *proto.LocalEnvironment) { e.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "literal"} },
-		func(e *proto.LocalEnvironment) { e.MCP[0].Server.BearerTokenEnvVar = "MISSING" },
-		func(e *proto.LocalEnvironment) {
+	for _, mutate := range []func(*agent.PrepareRequest){
+		func(r *agent.PrepareRequest) { r.MCP = append(r.MCP, r.MCP[0]) },
+		func(r *agent.PrepareRequest) { r.MCP[0].Server.Type = "sse" },
+		func(r *agent.PrepareRequest) { r.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "literal"} },
+		func(r *agent.PrepareRequest) { r.MCP[0].Server.BearerTokenEnvVar = "MISSING" },
+		func(r *agent.PrepareRequest) {
 			token := "token"
-			e.MCP[0].BearerToken = &token
-			e.MCP[0].Server.URL = "http://example.invalid/mcp"
+			r.MCP[0].BearerToken = &token
+			r.MCP[0].Server.URL = "http://example.invalid/mcp"
 		},
 	} {
-		environment := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
-		mutate(environment)
-		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
+		req := agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}}, MCP: []agent.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
+		mutate(&req)
+		if _, _, err := prepareRuntimeMCP(req); err == nil {
 			t.Fatal("unsupported declaration accepted")
 		}
 	}

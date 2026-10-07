@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
@@ -29,7 +29,7 @@ func TestEnvironmentMCPCredentialsNeverFallBackToNativeEnv(t *testing.T) {
 }
 
 func TestMCPStdioLauncherContainsOnlyInstalledIdentity(t *testing.T) {
-	server := proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
+	server := agent.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
 		Name: "package_tool", Type: "stdio", Command: "untrusted-command", Args: []string{"private-argument"},
 	}}
 	command, args := MCPStdioCommand(server)

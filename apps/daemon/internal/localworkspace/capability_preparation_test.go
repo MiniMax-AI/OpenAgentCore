@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
@@ -26,17 +27,16 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 	b, req := testBinding(t)
 	source := t.TempDir()
 	writeSourceSkill(t, source, "first")
-	req.LocalEnvironment.Capabilities = true
 	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source}}
-	configured, err := b.Configure(req)
+	err := b.Configure(req.PromptRequestPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = os.Stat(filepath.Join(b.capabilityRoot, agentcapabilities.ManifestName)); !os.IsNotExist(err) {
 		t.Fatal("binding installed before asynchronous admission")
 	}
-	first, err := b.Prepare(t.Context(), configured)
-	if err != nil || len(first.LocalEnvironment.Skills) != 1 {
+	first, err := b.Prepare(t.Context(), req)
+	if err != nil || len(first.Skills) != 1 {
 		t.Fatalf("first preparation: %v", err)
 	}
 	writeSourceSkill(t, source, "second")
@@ -45,22 +45,20 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	reconnect.networkAccess = b.networkAccess
-	again, err := reconnect.Prepare(t.Context(), configured)
-	if err != nil || len(again.LocalEnvironment.Skills) != 1 {
+	again, err := reconnect.Prepare(t.Context(), req)
+	if err != nil || len(again.Skills) != 1 {
 		t.Fatalf("reconnection: %v", err)
 	}
-	frozen, err := os.ReadFile(filepath.Join(b.capabilityRoot, again.LocalEnvironment.Skills[0].RelativeRoot, "SKILL.md"))
+	frozen, err := os.ReadFile(filepath.Join(b.capabilityRoot, again.Skills[0].RelativeRoot, "SKILL.md"))
 	if err != nil || string(frozen[len(frozen)-5:]) != "first" {
 		t.Fatal("reconnection recaptured source", err)
 	}
 	next, nextReq := testBinding(t)
-	nextReq.LocalEnvironment.Capabilities = true
 	nextReq.LocalEnvironment.CapabilitySources = req.LocalEnvironment.CapabilitySources
-	nextConfigured, err := next.Configure(nextReq)
-	if err != nil {
+	if err := next.Configure(nextReq.PromptRequestPayload); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = next.Prepare(t.Context(), nextConfigured); err != nil {
+	if _, err = next.Prepare(t.Context(), nextReq); err != nil {
 		t.Fatal(err)
 	}
 	fresh, err := os.ReadFile(filepath.Join(next.capabilityRoot, "directories/0/SKILL.md"))
@@ -68,14 +66,12 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 		t.Fatal("new Session did not capture new source", err)
 	}
 	// Reusing a snapshot under another identity or selection cannot start native work.
-	reconnect.stateKey = "agents-api-" + uuid.NewString()
-	changed := configured
-	changed.AgentStateKey = reconnect.stateKey
-	if _, err = reconnect.Prepare(t.Context(), changed); err == nil {
+	reconnect.session = uuid.NewString()
+	if _, err = reconnect.Prepare(t.Context(), req); err == nil {
 		t.Fatal("foreign snapshot accepted")
 	}
-	changed = configured
-	local := *configured.LocalEnvironment
+	changed := req
+	local := *req.LocalEnvironment
 	local.CapabilitySources = &agentcapabilities.Input{}
 	changed.LocalEnvironment = &local
 	if _, err = b.Prepare(t.Context(), changed); err == nil {
@@ -104,38 +100,37 @@ func TestPreparationUsesOperatorSourcesAndLeavesFailuresInert(t *testing.T) {
 		t.Fatal("logical workspace source rejected", err)
 	}
 	root.Close()
-	req.LocalEnvironment.Capabilities = true
 	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source, t.TempDir()}}
-	configured, err := b.Configure(req)
+	err = b.Configure(req.PromptRequestPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = b.Prepare(t.Context(), configured); err == nil {
+	if _, err = b.Prepare(t.Context(), req); err == nil {
 		t.Fatal("invalid second source accepted")
 	}
 	if _, err = os.Stat(filepath.Join(b.capabilityRoot, agentcapabilities.ManifestName)); !os.IsNotExist(err) {
 		t.Fatal("partial snapshot ready")
 	}
-	if _, err = b.Prepare(t.Context(), configured); err == nil {
+	if _, err = b.Prepare(t.Context(), req); err == nil {
 		t.Fatal("partial snapshot silently replayed")
 	}
 }
 
 func TestPreparationEmptySelectionAndCancellation(t *testing.T) {
 	b, req := testBinding(t)
-	configured, err := b.Configure(req)
+	err := b.Configure(req.PromptRequestPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err = b.Prepare(ctx, configured); err == nil {
+	if _, err = b.Prepare(ctx, req); err == nil {
 		t.Fatal("cancelled preparation started")
 	}
-	if _, err = b.Prepare(t.Context(), configured); err != nil {
+	if _, err = b.Prepare(t.Context(), req); err != nil {
 		t.Fatal(err)
 	}
-	read := proto.PromptRequestPayload{WorkspaceReadOnly: true}
+	read := agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{WorkspaceReadOnly: true}}
 	if _, err = b.Prepare(t.Context(), read); err != nil {
 		t.Fatal("Files required capability installation", err)
 	}
@@ -146,11 +141,11 @@ func TestRuntimePreparationRejectsMissingRequiredToolEnvironment(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_INITIALIZATION_DIRECTORY", t.TempDir())
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", "")
 	req.LocalEnvironment.ToolEnvironment = true
-	configured, err := b.Configure(req)
+	err := b.Configure(req.PromptRequestPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = b.Prepare(t.Context(), configured); err == nil {
+	if _, err = b.Prepare(t.Context(), req); err == nil {
 		t.Fatal("missing required tool environment admitted")
 	}
 	directory, err := InitializationDirectory()
@@ -160,14 +155,14 @@ func TestRuntimePreparationRejectsMissingRequiredToolEnvironment(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(directory, "tool-env.json"), []byte(`{"READY":"yes"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = b.Prepare(t.Context(), configured); err != nil {
+	if _, err = b.Prepare(t.Context(), req); err != nil {
 		t.Fatal("prepared tool environment rejected", err)
 	}
 	if err = os.Remove(filepath.Join(directory, "tool-env.json")); err != nil {
 		t.Fatal(err)
 	}
-	configured.LocalEnvironment.ToolEnvironment = false
-	if _, err = b.Prepare(t.Context(), configured); err == nil {
+	req.LocalEnvironment.ToolEnvironment = false
+	if _, err = b.Prepare(t.Context(), req); err == nil {
 		t.Fatal("deleted prepared tool environment was silently recreated")
 	}
 }
@@ -195,11 +190,10 @@ func TestPreparationFreezesToolOnlyEnvironmentAcrossReconnect(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			configured, err := b.Configure(req)
-			if err != nil {
+			if err := b.Configure(req.PromptRequestPayload); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := b.Prepare(t.Context(), configured); err != nil {
+			if _, err := b.Prepare(t.Context(), req); err != nil {
 				t.Fatal(err)
 			}
 			if err := os.WriteFile(source, []byte(`{"LOCAL_ONLY":"changed"}`), 0600); err != nil {
@@ -210,7 +204,7 @@ func TestPreparationFreezesToolOnlyEnvironmentAcrossReconnect(t *testing.T) {
 				t.Fatal(err)
 			}
 			reconnect.networkAccess = b.networkAccess
-			if _, err := reconnect.Prepare(t.Context(), configured); err != nil {
+			if _, err := reconnect.Prepare(t.Context(), req); err != nil {
 				t.Fatal(err)
 			}
 			values, err := ReadOptionalToolEnvironment()

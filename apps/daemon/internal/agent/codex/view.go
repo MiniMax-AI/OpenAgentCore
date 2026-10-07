@@ -13,7 +13,6 @@ import (
 	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -86,7 +85,7 @@ func newView(binary string, codeModeHost bool) agent.View {
 		ShimPaths:  []string{"/bin/bash"},
 		ForwardEnv: slices.Clone(viewForwardEnv),
 		Proxy:      agent.ViewProxyEnv,
-		Executor: func(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
+		Executor: func(ctx context.Context, req agent.PrepareRequest, session agent.ViewSession) (agent.Executor, error) {
 			cfg := defaultSessionConfig()
 			cfg.codexBinary = binary
 			cfg.view = &viewLaunch{ViewSession: session, binary: launch}
@@ -124,24 +123,21 @@ func staticELF(name string) bool {
 // workspace as cwd, or the work directory with environment none, CODEX_HOME
 // and TMPDIR in the Session home, MCP only from the Session, and a closed
 // environment.
-func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, error) {
+func prepareViewPlan(ctx context.Context, req agent.PrepareRequest, cfg sessionConfig) (SessionPlan, error) {
 	view := cfg.view
 	if !filepath.IsAbs(view.Home.Host) || !path.IsAbs(view.Home.View) {
 		return SessionPlan{}, errors.New("codex: view home must be absolute")
 	}
 	cwd := path.Join(view.Home.View, agent.ViewWorkName)
-	if local := req.LocalEnvironment; local != nil {
-		cwd = local.WorkspaceRoot
+	if req.LocalEnvironment != nil {
+		cwd = req.WorkspaceRoot
 	}
 	if (req.LocalEnvironment == nil) != req.DisableExecutionEnvironment || !path.IsAbs(cwd) {
 		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
-	if err := validatePermissionProfile(req); err != nil {
-		return SessionPlan{}, err
-	}
 	// The Harness runs each stdio alias without arguments, which the native
 	// configuration reports as an empty list.
-	servers, _, err := mcpServersFromBindings(view.MCP, func(stdio proto.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
+	servers, _, err := mcpServersFromBindings(view.MCP, func(stdio agent.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
 	if err != nil {
 		return SessionPlan{}, err
 	}
@@ -149,7 +145,7 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	if err != nil {
 		return SessionPlan{}, fmt.Errorf("codex: build session plan: %w", err)
 	}
-	if err := configureSubagentObservations(&plan, req); err != nil {
+	if err := configureSubagentObservations(&plan, req.PromptRequestPayload); err != nil {
 		plan.Cleanup()
 		return SessionPlan{}, err
 	}
@@ -176,8 +172,7 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	// project trust and records its own on thread/start.
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"allow_login_shell", "false"}, [2]string{"project_root_markers", "[]"})
 	if req.ExecutionControls != nil {
-		// buildSessionPlan admitted the request's provider.
-		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, *req.ModelProvider); err != nil {
+		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, req.Prepared.Provider); err != nil {
 			plan.Cleanup()
 			return SessionPlan{}, err
 		}

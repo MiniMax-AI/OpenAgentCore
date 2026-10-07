@@ -70,19 +70,18 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil {
 		return run, err
 	}
-	req.Assignment = bound.Device.Assignment
 	if err := d.configurePreparedEnvironment(session, environment, bound.Device, &req); err != nil {
 		return run, err
 	}
-	if err := peer.Bind(owner, req.Assignment, bound.Device.EnvironmentID); err != nil {
+	if err := peer.Bind(owner, bound.Device.Assignment, bound.Device.EnvironmentID); err != nil {
 		return run, err
 	}
-	prepared, err := newPreparedStart(peer, req.Assignment)
+	prepared, err := newPreparedStart(peer, bound.Device.Assignment)
 	if err != nil {
 		return run, err
 	}
 	defer prepared.close()
-	if err = send(owner, peer, req.Assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: sessionID, Configuration: req}); err != nil {
+	if err = send(owner, peer, prepared.assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: sessionID, Configuration: req}); err != nil {
 		return run, err
 	}
 	run.Reservation, err = d.awaitPreparation(owner, tenantID, sessionID, run.Reservation, prepared)

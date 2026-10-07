@@ -13,12 +13,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload, string) {
+func workspaceFixture(t *testing.T) (WorkspaceConfig, agent.PrepareRequest, string) {
 	t.Helper()
 	r := testRequest(t)
-	r.RunID, r.Input = "", nil
 	r.DisableExecutionEnvironment = false
-	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
+	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment"}
+	req := prepared(t, r)
+	req.WorkspaceRoot = t.TempDir()
 	record := filepath.Join(t.TempDir(), "calls")
 	exe, err := os.Executable()
 	if err != nil {
@@ -30,7 +31,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.LocalEnvironment.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, r, record
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: req.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, req, record
 }
 
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
@@ -47,8 +48,7 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 	if workspace {
 		factory = NewExecutorFactory(&config)
 	} else {
-		req = testRequest(t)
-		req.RunID, req.Input = "", nil
+		req = prepared(t, testRequest(t))
 		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)
 		factory = NewExecutorFactory(nil)
 	}

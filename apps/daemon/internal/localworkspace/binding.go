@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
 // Binding freezes operator-owned identity and paths for one Runtime lifetime.
@@ -19,7 +18,7 @@ type Binding struct {
 	environment    string
 	networkAccess  string
 	allowedDomains []string
-	stateKey       string
+	session        string
 	workspace      string
 	writer         *fileWriter
 	capabilityMu   sync.Mutex
@@ -55,36 +54,20 @@ func Load() (*Binding, error) {
 	return b, nil
 }
 
-// Configure validates the reference before supplying the immutable local cwd.
-func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
-	if r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
-		r.DisableExecutionEnvironment {
-		return r, errors.New("request does not match the dedicated local Environment")
+// Configure checks the request against the bound Environment and workspace.
+func (b *Binding) Configure(r proto.PromptRequestPayload) error {
+	local := r.LocalEnvironment
+	switch {
+	case local == nil || local.ID != b.environment || r.DisableExecutionEnvironment:
+		return errors.New("request does not match the dedicated local Environment")
+	case r.WorkspaceReadOnly:
+		return nil
+	case local.WorkspaceDirectory != "/workspace" && local.WorkspaceDirectory != b.workspace:
+		return errors.New("request does not match the local workspace selection")
+	case local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil:
+		return agentcapabilities.ErrInvalid
 	}
-	if !r.WorkspaceReadOnly || r.LocalEnvironment.NetworkAccess != "" || len(r.LocalEnvironment.AllowedDomains) > 0 {
-		requested := agentnetwork.Policy{Access: r.LocalEnvironment.NetworkAccess, AllowedDomains: r.LocalEnvironment.AllowedDomains}
-		if !b.NetworkPolicy().Equal(requested) {
-			return r, errors.New("request does not match the local Runtime network policy")
-		}
-	}
-	if !r.WorkspaceReadOnly {
-		local := *r.LocalEnvironment
-		if local.WorkspaceDirectory != "/workspace" && local.WorkspaceDirectory != b.workspace {
-			return r, errors.New("request does not match the local workspace selection")
-		}
-		if local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil {
-			return r, agentcapabilities.ErrInvalid
-		}
-		sources := *local.CapabilitySources
-		present := len(sources.Skills)+len(sources.Plugins)+len(sources.Directories) > 0
-		if present != local.Capabilities {
-			return r, agentcapabilities.ErrInvalid
-		}
-		local.Skills, local.MCP, local.CapabilityRoot = nil, nil, ""
-		local.WorkspaceRoot = b.workspace
-		r.LocalEnvironment = &local
-	}
-	return r, nil
+	return nil
 }
 
 // Resolve is the Session's Environment owner: b for the one Session it is
@@ -103,7 +86,7 @@ func (b *Binding) Support() agent.EnvironmentSupport {
 }
 
 func (b *Binding) Matches(environment, session string) bool {
-	return b != nil && b.environment == environment && b.stateKey == "agents-api-"+session
+	return b != nil && b.environment == environment && b.session == session
 }
 
 // Close keeps the workspace, which outlives each assignment of its Session.

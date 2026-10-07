@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "conv-1/agent-1/codex"})
+	plan, err := BuildSessionPlan(prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
 }
 
 func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "conv-1/agent-1/codex"})
+	plan, err := BuildSessionPlan(prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -48,11 +48,11 @@ func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
 
 func TestBuildSessionPlan_StableCodexHomeByStateKey(t *testing.T) {
 	stateKey := "conv-stable/agent-stable/codex"
-	planA, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), RunID: "run-a", AgentStateKey: stateKey})
+	planA, err := BuildSessionPlan(prepared(t, stateKey, proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
 		t.Fatalf("BuildSessionPlan A: %v", err)
 	}
-	planB, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), RunID: "run-b", AgentStateKey: stateKey})
+	planB, err := BuildSessionPlan(prepared(t, stateKey, proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
 		t.Fatalf("BuildSessionPlan B: %v", err)
 	}
@@ -72,7 +72,7 @@ func codexHomeFromEnv(env []string) string {
 
 func TestBuildSessionPlan_CarriesModelAndSystemPrompt(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentStateKey: "conv/agent/codex", Model: "MiniMax-M3", SystemPrompt: "current reference"})
+	plan, err := BuildSessionPlan(prepared(t, "conv/agent/codex", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "MiniMax-M3", SystemPrompt: "current reference"}))
 	if err != nil {
 		t.Fatal(err)
 	}

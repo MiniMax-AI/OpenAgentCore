@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/url"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -17,12 +18,12 @@ import (
 // an owner declares none of these operations, and the Router rejects each with
 // its typed unsupported code. docs/runtime-protocol.md defines the semantics.
 type Environment interface {
-	// Configure checks an execution configuration against the Environment and
-	// returns it with the Environment's workspace root. It has no effects.
-	Configure(proto.PromptRequestPayload) (proto.PromptRequestPayload, error)
-	// Prepare fills the configured execution's installed capabilities before
-	// the Executor factory runs.
-	Prepare(context.Context, proto.PromptRequestPayload) (proto.PromptRequestPayload, error)
+	// Configure checks an execution configuration against the Environment. It
+	// has no effects.
+	Configure(proto.PromptRequestPayload) error
+	// Prepare fills the Executor's workspace root and installed capabilities
+	// before the Executor factory runs.
+	Prepare(context.Context, agent.PrepareRequest) (agent.PrepareRequest, error)
 	// ApplyRuntimePreparation applies one complete runtime_prepare transfer,
 	// whose envelope ID is transfer, and returns only after its mutations
 	// stop. Core never sends a transfer ID twice, so transfer may name the

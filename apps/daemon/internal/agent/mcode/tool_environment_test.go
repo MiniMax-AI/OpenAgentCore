@@ -39,9 +39,8 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
 	t.Setenv("OAC_RUNTIME_NETWORK_ACCESS", "enabled")
 	t.Setenv("OAC_RUNTIME_ALLOWED_DOMAINS", "")
-	req.AgentStateKey = "agents-api-" + session
+	req.StateKey = "agents-api-" + session
 	req.LocalEnvironment.ID, req.LocalEnvironment.WorkspaceDirectory = environment, config.Directory
-	req.LocalEnvironment.Capabilities = true
 	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{plugin}}
 	for _, resume := range []bool{false, true} {
 		if resume {
@@ -52,15 +51,14 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		configured, err := binding.Configure(req)
+		if err := binding.Configure(req.PromptRequestPayload); err != nil {
+			t.Fatal(err)
+		}
+		bound, err := binding.Prepare(t.Context(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		prepared, err := binding.Prepare(t.Context(), configured)
-		if err != nil {
-			t.Fatal(err)
-		}
-		opts, err := prepareWorkspaceOptions(config, prepared)
+		opts, err := prepareWorkspaceOptions(config, bound)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,11 +106,10 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	configured, err := binding.Configure(req)
-	if err != nil {
+	if err := binding.Configure(req.PromptRequestPayload); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := binding.Prepare(t.Context(), configured); err == nil {
+	if _, err := binding.Prepare(t.Context(), req); err == nil {
 		t.Fatal("missing frozen credential source was recreated or fell back to anonymous")
 	}
 }

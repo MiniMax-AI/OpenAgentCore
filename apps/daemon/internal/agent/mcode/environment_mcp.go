@@ -7,10 +7,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, []agent.MCPBinding, error) {
+func runtimeMCP(req agent.PrepareRequest) ([]map[string]any, []agent.MCPBinding, error) {
 	bindings, err := agent.ResolveMCPBindings(req)
 	if err != nil {
 		return nil, nil, err
@@ -21,7 +20,7 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, []agent.MCPBi
 
 // workspaceMCP renders the Session's MCP bindings as ACP servers, each stdio
 // binding with the command and arguments stdio gives it.
-func workspaceMCP(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (string, []string)) ([]map[string]any, error) {
+func workspaceMCP(bindings []agent.MCPBinding, stdio func(agent.EnvironmentMCP) (string, []string)) ([]map[string]any, error) {
 	var servers []map[string]any
 	for _, binding := range bindings {
 		if binding.Transport != "http" {

@@ -8,29 +8,21 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestHarnessConfigAppliedWithoutChangingProvider(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{
-		RunID: "run", AgentStateKey: "native-config", Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"model_reasoning_effort":"high"}`),
+	plan, err := BuildSessionPlan(prepared(t, "native-config", proto.PromptRequestPayload{
+		Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"model_reasoning_effort":"high"}`),
 		ModelProvider: &modelprovider.Provider{BaseURL: "https://provider.invalid/v1", Protocol: modelprovider.Responses, APIKey: "test-key"},
-	})
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
 	if plan.Model != "fixture" || plan.ModelProvider != oacProviderSlug || !slices.Contains(plan.ExtraConfig, [2]string{"model_reasoning_effort", `"high"`}) {
 		t.Fatalf("native configuration not applied: %+v", plan.ExtraConfig)
-	}
-}
-
-func TestHarnessConfigConflictFailsBeforePreparation(t *testing.T) {
-	_, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), RunID: "run", HarnessConfig: proto.HarnessConfig(`{"model_provider":"bypass"}`)})
-	if err != harnessconfig.ErrHarnessConfig {
-		t.Fatalf("configuration must fail before filesystem preparation: %v", err)
 	}
 }
 
@@ -41,6 +33,7 @@ func TestHarnessConfigReachesEveryNativeTurn(t *testing.T) {
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
 			req.AgentSessionID = resumeID
 			req.HarnessConfig = proto.HarnessConfig(`{"model_reasoning_effort":"high"}`)
+			req = prepared(t, req.StateKey, req.PromptRequestPayload)
 			ownerCtx, cancelOwner := context.WithCancel(context.Background())
 			t.Cleanup(cancelOwner)
 			e, err := newExecutor(ownerCtx, req, cfg)

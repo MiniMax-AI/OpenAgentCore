@@ -41,12 +41,12 @@ func TestNativeMCodeACP(t *testing.T) {
 	defer model.Close()
 	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: model.URL, APIKey: "fixture-only", ContextWindow: 64000, MaxOutputTokens: 4096}
 	req.SystemPrompt = "SP-MCODE-672: reply concisely."
-	req.Input = proto.TextInput("Reply OAC-MCODE-OK.")
+	runID, input := "run-1", proto.TextInput("Reply OAC-MCODE-OK.")
 	run := func() proto.DonePayload {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		t.Cleanup(cancel)
 		out := make(chan proto.Envelope, 64)
-		if _, err := startTurn(t, ctx, req, out); err != nil {
+		if _, err := startTurn(t, ctx, req, runID, input, out); err != nil {
 			t.Fatal(err)
 		}
 		var done proto.DonePayload
@@ -77,11 +77,11 @@ func TestNativeMCodeACP(t *testing.T) {
 	if !strings.Contains(firstRequests, "SP-MCODE-672") {
 		t.Fatal("native instructions missing")
 	}
-	req.RunID = "run-2"
+	runID = "run-2"
 	req.AgentSessionID = done.Metadata[proto.DoneMetaAgentSessionID].(string)
 	req.SystemPrompt = "SP-MCODE-NEW: reply concisely."
 	req.Model = "fixture-new"
-	req.Input = proto.TextInput("Now reply OAC-MCODE-OK.")
+	input = proto.TextInput("Now reply OAC-MCODE-OK.")
 	run()
 	mu.Lock()
 	resumed := strings.Join(requests, "\n")

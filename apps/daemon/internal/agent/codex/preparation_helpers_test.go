@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -21,7 +22,7 @@ type preparationFrame struct {
 	Params json.RawMessage `json:"params"`
 }
 
-func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig, string) {
+func preparationFixture(t *testing.T) (agent.PrepareRequest, sessionConfig, string) {
 	t.Helper()
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
@@ -40,15 +41,25 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	}
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
-	req := proto.PromptRequestPayload{
-		AgentKind: "codex", AgentStateKey: "prepared-session",
+	req := prepared(t, "prepared-session", proto.PromptRequestPayload{
+		AgentKind:                   "codex",
 		Model:                       "fixture-model",
 		ModelProvider:               fixtureProvider(),
 		ExecutionControls:           &proto.ExecutionControls{TextVerbosity: "medium"},
 		DisableExecutionEnvironment: true,
 		FunctionTools:               []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
-	}
+	})
 	return req, cfg, root
+}
+
+// prepared is req as the registry and dispatch hand it to a Codex factory.
+func prepared(t testing.TB, stateKey string, req proto.PromptRequestPayload) agent.PrepareRequest {
+	t.Helper()
+	configuration, err := Declaration.Configuration.Prepare(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration, StateKey: stateKey}
 }
 
 func fixtureProvider() *modelprovider.Provider {
@@ -222,6 +233,8 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			if allowed == nil {
 				_ = os.WriteFile(os.Getenv("OAC_TEST_PREPARATION_FRAMES")+".terminated", nil, 0600)
 			}
+		case "turn/steer":
+			result = map[string]any{"turnId": currentTurn}
 		case "turn/interrupt":
 			if executorMode == "interrupt-error" {
 				_ = output.Encode(map[string]any{"id": frame.ID, "error": map[string]any{"code": -32603, "message": "interrupt rejected"}})
@@ -254,10 +267,14 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			if frame.Method == "turn/interrupt" && executorMode == "interrupt-no-terminal" {
 				continue
 			}
+			held := strings.Contains(string(frame.Params), "hold")
 			if frame.Method == "turn/start" {
 				_ = output.Encode(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": "fixture-native-thread", "turn": map[string]string{"id": currentTurn}}})
+				if held {
+					_ = output.Encode(map[string]any{"method": "item/agentMessage/delta", "params": map[string]any{"threadId": "fixture-native-thread", "turnId": currentTurn, "itemId": "held-message", "delta": "holding"}})
+				}
 			}
-			if frame.Method == "turn/interrupt" || !strings.Contains(string(frame.Params), "hold") {
+			if frame.Method == "turn/interrupt" || !held {
 				status := "completed"
 				if frame.Method == "turn/interrupt" {
 					status = "interrupted"

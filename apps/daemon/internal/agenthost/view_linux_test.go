@@ -107,11 +107,11 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		ShimPaths:  []string{"/bin/sh"},
 		ForwardEnv: []string{"KEEP"},
 		Proxy:      agent.ViewProxyEnv,
-		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
+		Executor: func(_ context.Context, req agent.PrepareRequest, s agent.ViewSession) (agent.Executor, error) {
 			e := &testExecutor{session: s, dir: workDir,
-				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir, proxyEnv + "=" + s.Proxy}}
+				env: []string{harnessEnv + "=1", modelEnv + "=" + req.Prepared.Provider.BaseURL, caEnv + "=" + cfg.CADir, proxyEnv + "=" + s.Proxy}}
 			if req.LocalEnvironment != nil {
-				e.dir = req.LocalEnvironment.WorkspaceRoot
+				e.dir = req.WorkspaceRoot
 			}
 			for _, b := range s.MCP {
 				e.env = append(e.env, aliasEnv+"="+b.Stdio.Server.Command)
@@ -237,7 +237,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		if err := os.Mkdir(pkg, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		d.mcp = []proto.EnvironmentMCP{{InstallationRoot: workspace, PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/sh",
+		d.mcp = []agent.EnvironmentMCP{{InstallationRoot: workspace, PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/sh",
 			Args: []string{"-c", `printf '%s %s %s %s\n' "$0" "$#" "$(pwd -P)" "${KEEP-unset}"; exec /bin/sleep 1000`, "frozen"}}}}
 		// The Harness exits while the alias's process runs on.
 		if r := d.turn(t, b, req, "alias"); r.Stdout != "frozen 0 "+pkg+" unset\n" || r.Exit != "" {

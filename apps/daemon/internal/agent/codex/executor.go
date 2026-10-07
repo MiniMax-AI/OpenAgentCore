@@ -25,7 +25,7 @@ type Executor struct {
 	closeMu                      sync.Mutex
 }
 
-func PrepareExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+func PrepareExecutor(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 	e, err := newExecutor(ctx, req, defaultSessionConfig())
 	if e == nil {
 		return nil, err

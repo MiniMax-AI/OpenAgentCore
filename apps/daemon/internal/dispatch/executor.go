@@ -16,16 +16,16 @@ import (
 const executorIdleCapacity = 16
 
 type executorState struct {
-	declaration                            proto.Declaration
-	id, sessionID, environmentID, stateKey string
-	fingerprint                            [32]byte
-	native                                 agent.Executor
-	nativeID                               string
-	ctx                                    context.Context
-	cancel                                 context.CancelFunc
-	admission                              *preparationState
-	run                                    *sessionState
-	preparing                              bool
+	declaration                  proto.Declaration
+	id, sessionID, environmentID string
+	fingerprint                  [32]byte
+	native                       agent.Executor
+	nativeID                     string
+	ctx                          context.Context
+	cancel                       context.CancelFunc
+	admission                    *preparationState
+	run                          *sessionState
+	preparing                    bool
 	// prepared closes once the native preparation returns.
 	prepared    chan struct{}
 	invalid     bool
@@ -37,7 +37,6 @@ type executorState struct {
 }
 
 func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
-	req.RunID, req.Input = "", nil
 	req.AgentSessionID = ""
 	req.RequireExistingNativeSession = false
 	data, err := json.Marshal(req)
@@ -46,7 +45,7 @@ func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
 
 func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, input proto.ExecutionPreparePayload) error {
 	req := input.Configuration
-	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.AgentStateKey != "agents-api-"+input.SessionID {
+	if strings.TrimSpace(input.SessionID) == "" {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	declaration, available := r.registry.Declaration(req.AgentKind)
@@ -62,7 +61,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, code)
 	}
 	if environment != nil {
-		req, err = environment.Configure(req)
+		err = environment.Configure(req)
 	} else if req.LocalEnvironment != nil {
 		err = errors.New("the Session has no Environment owner")
 	}
@@ -81,7 +80,6 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	requestFingerprint := sha256.Sum256(encoded)
-	req.Assignment = env.Assignment
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
@@ -110,12 +108,6 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	active := 0
-	for _, candidate := range r.executors {
-		if candidate.sessionID != input.SessionID && candidate.stateKey == req.AgentStateKey {
-			r.mu.Unlock()
-			return r.rejectPreparation(env, "session_binding_conflict")
-		}
-	}
 	for _, owner := range r.executors {
 		if owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid {
 			active++
@@ -155,7 +147,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 			return r.rejectPreparation(env, "executor_capacity")
 		}
 		ownerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		owner = &executorState{declaration: declaration, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, prepared: make(chan struct{}), nativeID: req.AgentSessionID}
+		owner = &executorState{declaration: declaration, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, prepared: make(chan struct{}), nativeID: req.AgentSessionID}
 		r.executors[input.SessionID] = owner
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
@@ -182,7 +174,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	return nil
 }
 
-func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPayload, factory agent.ExecutorFactory, environment Environment) {
+func (r *Router) prepareExecutor(p *preparationState, configuration proto.PromptRequestPayload, factory agent.ExecutorFactory, environment Environment) {
 	defer r.shutdownWG.Done()
 	owner := p.executor
 	started := time.Now()
@@ -194,9 +186,19 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	}
 	var native agent.Executor
 	var err error
+	req := agent.PrepareRequest{PromptRequestPayload: configuration, StateKey: "agents-api-" + owner.sessionID, Assignment: p.request.Assignment}
 	if owner.ctx.Err() == nil {
 		if environment != nil {
 			req, err = environment.Prepare(owner.ctx, req)
+		}
+		if err == nil && len(req.MCP) > 0 {
+			// The owner resolves the Environment's installed MCP servers only
+			// now, so the kind's declaration checks them before the factory.
+			selection := req.Selection()
+			for _, installed := range req.MCP {
+				selection.MCP = append(selection.MCP, proto.SelectedMCP{Origin: "environment", Label: installed.Server.Name, Installed: true})
+			}
+			err = proto.ValidateSelection(owner.declaration, selection)
 		}
 		if err == nil && owner.ctx.Err() == nil {
 			native, err = factory(owner.ctx, req)

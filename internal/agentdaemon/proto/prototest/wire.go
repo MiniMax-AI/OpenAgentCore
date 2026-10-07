@@ -27,7 +27,6 @@ const (
 // Correlation values the scenarios use.
 const (
 	SessionID        = "session"
-	StateKey         = "agents-api-session"
 	AssignmentID     = "assignment"
 	BindID           = "bind"
 	PreparationID    = "prepare"
@@ -116,7 +115,7 @@ func WireScenarios() []WireScenario {
 	}
 	prepare := send(Core, proto.TypeExecutionPrepare, PreparationID, proto.ExecutionPreparePayload{
 		SessionID:     SessionID,
-		Configuration: WithModel(proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, DisableExecutionEnvironment: true}),
+		Configuration: WithModel(proto.PromptRequestPayload{AgentKind: HarnessKind, DisableExecutionEnvironment: true}),
 	})
 	// Core binds the Session before its first Session-scoped frame.
 	bind := []Step{

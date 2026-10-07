@@ -3,7 +3,6 @@ package execution
 import (
 	"bytes"
 	"encoding/json"
-	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -16,7 +15,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
 	var request proto.PromptRequestPayload
 	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &request)
-	if err != nil || request.LocalEnvironment == nil || !request.LocalEnvironment.Capabilities || len(request.LocalEnvironment.Skills) != 0 {
+	if err != nil || request.LocalEnvironment == nil {
 		t.Fatal("resolved Skill did not use the common installation descriptor", err)
 	}
 	raw, err := json.Marshal(request.LocalEnvironment)
@@ -56,23 +55,6 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 			}
 		} else if err == nil || req.LocalEnvironment != nil {
 			t.Fatal("unscoped or foreign authority accepted")
-		}
-	}
-}
-
-func TestNetworkPolicySurvivesPreparedBinding(t *testing.T) {
-	session := sessions.Session{ID: "session", TenantID: "tenant"}
-	for _, network := range []string{`{"access":"disabled"}`, `{"access":"restricted","allowed_domains":["Example.com","api.example.com"]}`} {
-		environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
-			Configuration: []byte(`{"type":"openai_hosted","network":` + network + `}`)}
-		placement, err := parseEnvironmentPlacement(environment.Configuration)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var req proto.PromptRequestPayload
-		err = (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &req)
-		if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.NetworkAccess != placement.NetworkAccess || !slices.Equal(req.LocalEnvironment.AllowedDomains, placement.AllowedDomains) {
-			t.Fatal("prepared binding lost policy", req.LocalEnvironment, err)
 		}
 	}
 }

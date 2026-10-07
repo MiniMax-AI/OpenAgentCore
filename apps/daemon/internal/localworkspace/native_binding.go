@@ -25,7 +25,7 @@ func newNativeBinding(environment, session, workspace, capabilities string) (*Bi
 	if err != nil || !info.IsDir() {
 		return nil, errors.New("local workspace root must be an existing directory")
 	}
-	return &Binding{environment: environment, stateKey: "agents-api-" + session, workspace: workspace, capabilityRoot: capabilities, writer: &fileWriter{}}, nil
+	return &Binding{environment: environment, session: session, workspace: workspace, capabilityRoot: capabilities, writer: &fileWriter{}}, nil
 }
 
 // ReadToolEnvironment reads explicit initialization values for this installation.

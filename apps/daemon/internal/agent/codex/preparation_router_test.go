@@ -53,13 +53,12 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req.AgentStateKey = "agents-api-" + session
 			req.DisableExecutionEnvironment = false
-			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}}
+			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}
 			registry := agent.NewRegistry()
 			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfiguration.Configuration())
 			prepared := make(chan *Executor, 1)
-			registry.RegisterExecutor("codex", func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+			registry.RegisterExecutor("codex", func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 				e, err := newExecutor(ctx, req, cfg)
 				if err != nil {
 					return nil, err
@@ -114,7 +113,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 					}
 				}
 			}
-			send(proto.TypeExecutionPrepare, "prepare-request", proto.ExecutionPreparePayload{SessionID: session, Configuration: req})
+			send(proto.TypeExecutionPrepare, "prepare-request", proto.ExecutionPreparePayload{SessionID: session, Configuration: req.PromptRequestPayload})
 			ready := await("ready")
 			p := <-prepared
 			assertPreparationOnly(t, root)

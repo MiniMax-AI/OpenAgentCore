@@ -149,7 +149,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 		t.Run(environment, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.RequireExistingNativeSession = true
-			cwd, err := allocCodexHome(req.AgentStateKey)
+			cwd, err := allocCodexHome(req.StateKey)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -159,7 +159,8 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 					t.Fatal(err)
 				}
 				req.DisableExecutionEnvironment = false
-				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: cwd}
+				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}
+				req.WorkspaceRoot = cwd
 			}
 			e, err := testExecutor(t, "complete", req, cfg)
 			if err != nil {
@@ -198,7 +199,7 @@ func TestRecoveryRequiresWritableAgentState(t *testing.T) {
 			req.RequireExistingNativeSession = true
 			switch mode {
 			case "no-state":
-				req.AgentStateKey = ""
+				req.StateKey = ""
 			case "read-only":
 				req.WorkspaceReadOnly = true
 			}

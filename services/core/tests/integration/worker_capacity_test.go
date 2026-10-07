@@ -56,8 +56,8 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 		switch frame.Type {
 		case proto.TypeExecutionPrepare:
 			var prepare proto.ExecutionPreparePayload
-			if frame.DecodePayload(&prepare) != nil || turns[prepare.SessionID] == "" || len(prepare.Configuration.Input) != 0 || prepare.Configuration.RunID != "" {
-				t.Fatal("invalid input-free preparation", prepare)
+			if frame.DecodePayload(&prepare) != nil || turns[prepare.SessionID] == "" {
+				t.Fatal("invalid preparation", prepare)
 			}
 			if blocked == "" && len(admissions) == 4 {
 				blocked = prepare.SessionID

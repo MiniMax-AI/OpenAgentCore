@@ -18,7 +18,7 @@ func TestSelfHostedCapabilitySourcesAreFrozenAndStrict(t *testing.T) {
 		t.Fatal(err)
 	}
 	local := request.LocalEnvironment
-	if local.WorkspaceDirectory != "/home/user/project" || !local.Capabilities || local.ToolEnvironment || len(local.Skills) != 0 ||
+	if local.WorkspaceDirectory != "/home/user/project" || local.ToolEnvironment ||
 		local.CapabilitySources == nil || !slices.Equal(local.CapabilitySources.Directories, []string{"/home/user/skills", "/opt/plugins"}) {
 		t.Fatal("frozen source selections lost", local)
 	}

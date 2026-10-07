@@ -150,7 +150,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 
 	configuration := proto.PromptRequestPayload{AgentKind: kind, DisableSubagents: true,
 		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"},
-		LocalEnvironment: &proto.LocalEnvironment{ID: uuid.UUID(sb.resource.EnvironmentID).String(), WorkspaceDirectory: workspace, NetworkAccess: "enabled",
+		LocalEnvironment: &proto.LocalEnvironment{ID: uuid.UUID(sb.resource.EnvironmentID).String(), WorkspaceDirectory: workspace,
 			CapabilitySources: &agentcapabilities.Input{}}}
 	if caps.FunctionTools.IsSupported() {
 		configuration.FunctionTools = []proto.FunctionTool{lookupTicket}
@@ -210,7 +210,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		word, code := strings.ToLower(rand.Text()[:12]), strings.ToLower(rand.Text()[:12])
 		installed, local := configuration, *configuration.LocalEnvironment
 		installed.FunctionTools, installed.ToolSearch = nil, false
-		local.Capabilities, local.CapabilitySources = true, &agentcapabilities.Input{Plugins: []agentplugin.Metadata{qualifyPlugin}}
+		local.CapabilitySources = &agentcapabilities.Input{Plugins: []agentplugin.Metadata{qualifyPlugin}}
 		installed.LocalEnvironment = &local
 		sb.reset(t, cfg)
 		s := sb.session(h, cfg, installed)
@@ -332,7 +332,6 @@ type session struct {
 func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, configuration proto.PromptRequestPayload) *session {
 	s := &session{h: h, cfg: cfg, binding: sb.binding(), configuration: configuration}
 	s.id = uuid.UUID(s.binding.SessionID).String()
-	s.configuration.AgentStateKey = "agents-api-" + s.id
 	sb.grant(s.binding, cfg.RuntimeID)
 	return s
 }
@@ -341,7 +340,6 @@ func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, configuratio
 func (s *session) with(configuration proto.PromptRequestPayload) *session {
 	next := *s
 	next.configuration = configuration
-	next.configuration.AgentStateKey = s.configuration.AgentStateKey
 	return &next
 }
 

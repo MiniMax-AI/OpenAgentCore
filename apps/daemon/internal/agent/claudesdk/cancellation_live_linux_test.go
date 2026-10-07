@@ -66,8 +66,8 @@ func TestLiveClaudeSDKCancelResume(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 		out := make(chan proto.Envelope, 64)
-		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Follow the user's requested format. Preserve the exact verification value in conversation history. Use no tools."}
-		running, err := startSingleTurn(ctx, config, request, out)
+		request := proto.PromptRequestPayload{AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Follow the user's requested format. Preserve the exact verification value in conversation history. Use no tools."}
+		running, err := startSingleTurn(ctx, config, request, uuid.NewString(), proto.TextInput(prompt), out)
 		if err != nil {
 			t.Fatal(err)
 		}

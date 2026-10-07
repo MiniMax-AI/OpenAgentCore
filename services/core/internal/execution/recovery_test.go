@@ -20,7 +20,7 @@ func TestExistingSessionRecoveryRequiresVerifiedCapability(t *testing.T) {
 						}
 						continue
 					}
-					if err != nil || req.RequireExistingNativeSession != wantRecovery || req.AgentSessionID != nativeID || req.AgentStateKey != "agents-api-session" {
+					if err != nil || req.RequireExistingNativeSession != wantRecovery || req.AgentSessionID != nativeID {
 						t.Fatalf("engine=%s started=%v id=%s capability=%v request=%+v err=%v", engine, started, nativeID, capable, req, err)
 					}
 				}

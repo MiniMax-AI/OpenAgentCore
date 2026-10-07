@@ -27,7 +27,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	defer cancel()
 	// A stopped consumer must not prevent native output draining or cancellation.
 	out := make(chan proto.Envelope)
-	running, err := startSingleTurn(ctx, config, cancellationRequest(), out)
+	running, err := startSingleTurn(ctx, config, cancellationRequest(), "run", proto.TextInput("hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 8)
-			running, err := startSingleTurn(ctx, cancellationConfig(root, mode), cancellationRequest(), out)
+			running, err := startSingleTurn(ctx, cancellationConfig(root, mode), cancellationRequest(), "run", proto.TextInput("hello"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -125,7 +125,7 @@ func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 16)
-	running, err := startSingleTurn(ctx, config, cancellationRequest(), out)
+	running, err := startSingleTurn(ctx, config, cancellationRequest(), "run", proto.TextInput("hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func cancellationConfig(root, mode string) Config {
 }
 
 func cancellationRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 }
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {

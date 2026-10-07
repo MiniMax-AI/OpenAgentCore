@@ -9,8 +9,11 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/google/uuid"
 )
 
@@ -34,7 +37,7 @@ func TestNoEnvironmentRejectsOtherEngineBeforeFactory(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	var called atomic.Bool
-	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		called.Store(true)
 		return nil, errors.New("controlled factory stop")
 	})
@@ -53,7 +56,7 @@ func TestNoEnvironmentUsesAvailableCapability(t *testing.T) {
 		h := newHarness(t)
 		defer h.router.Shutdown(context.Background())
 		var called atomic.Bool
-		registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 			called.Store(true)
 			return nil, errors.New("controlled factory stop")
 		})
@@ -74,7 +77,7 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 			var called atomic.Bool
 			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: mode != "unavailable",
 				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(mode != "unsupported")})},
-				func(_ context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+				func(_ context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 					called.Store(true)
 					if req.LocalEnvironment == nil || req.LocalEnvironment.ID != preparationEnvironmentID {
 						t.Error("local descriptor lost before factory")
@@ -96,18 +99,67 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 	}
 }
 
+// installingOwner is the bound workspace with one installed MCP server
+// labelled label.
+type installingOwner struct {
+	*localworkspace.Binding
+	label string
+}
+
+func (o installingOwner) Prepare(ctx context.Context, req agent.PrepareRequest) (agent.PrepareRequest, error) {
+	req, err := o.Binding.Prepare(ctx, req)
+	req.MCP = append(req.MCP, agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: o.label, Type: "http", URL: "https://mcp.example"}})
+	return req, err
+}
+
+// The owner resolves installed MCP servers during preparation, and the kind's
+// declaration checks them before the factory sees them.
+func TestInstalledMCPIsCheckedBeforeTheFactory(t *testing.T) {
+	for label, admitted := range map[string]bool{"reserved": false, "installed": true} {
+		t.Run(label, func(t *testing.T) {
+			h := newHarness(t)
+			if err := h.router.Shutdown(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			owner := installingOwner{preparationWorkspace(t), label}
+			var err error
+			h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: func(proto.AssignmentRef, proto.AssignmentBindPayload) dispatch.Environment { return owner }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer h.router.Shutdown(context.Background())
+			assign(t, h.router, preparationSessionID, preparationEnvironmentID)
+			configuration := prototest.ModelConfiguration()
+			configuration.Declaration.ReservedMCPLabels = []string{"reserved"}
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, configuration)
+			var called atomic.Bool
+			h.reg.RegisterExecutor("prepared", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
+				called.Store(true)
+				return nil, errors.New("controlled factory stop")
+			})
+			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "installed", preparationRequest())); err != nil {
+				t.Fatal(err)
+			}
+			assertPreparationOutcome(t, h.sender, "installed", true)
+			if called.Load() != admitted {
+				t.Fatalf("factory called=%t, want %t", called.Load(), admitted)
+			}
+		})
+	}
+}
+
 // A Session whose assignment resolves no Environment owner declares no
 // Environment operation: each gets its typed rejection before any effect.
 func TestSessionWithoutOwnerRejectsEnvironmentOperations(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	var called atomic.Bool
-	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "local", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "local", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		called.Store(true)
 		return nil, errors.New("controlled factory stop")
 	})
 	assign(t, h.router, preparationSessionID, preparationEnvironmentID)
-	execution := proto.PromptRequestPayload{AgentKind: "local", AgentStateKey: stateKey(preparationSessionID), LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID}}
+	execution := proto.PromptRequestPayload{AgentKind: "local", LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID}}
 	read := execution
 	read.WorkspaceReadOnly = true
 	for id, test := range map[string]struct {

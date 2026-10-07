@@ -19,7 +19,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "second", ServerURL: "https://second.example/mcp", BearerToken: &tokens[1]},
 		{ConnectionOrigin: "service", ServerLabel: "public", ServerURL: "http://public.example/mcp"},
 	}
-	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "retained-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
+	req := prepared(t, "retained-mcp", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers})
 	seen := map[string]bool{}
 	for range 2 {
 		plan, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
@@ -57,7 +57,7 @@ func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	for _, token := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
 		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
-		req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "invalid-bearer", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
+		req := prepared(t, "invalid-bearer", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers})
 		if _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer value accepted or unsafe error returned")
 		}
@@ -80,8 +80,8 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 	}
 	token := "synthetic-catalog-secret"
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
-	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentStateKey: "catalog", DisableExecutionEnvironment: true, MCPHTTPServers: &servers,
-		Model: "fixture-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
+	req := prepared(t, "catalog", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers,
+		Model: "fixture-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}})
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
 	plan, err := prepareSessionPlan(t.Context(), req, cfg)

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
@@ -49,19 +49,19 @@ func ConfigureLocal(binary, node, bridge, root, workspace string, network agentn
 	return c, nil
 }
 
-func prepareWorkspaceOptions(c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
+func prepareWorkspaceOptions(c WorkspaceConfig, req agent.PrepareRequest) (launchOptions, error) {
 	if c.Network != "enabled" || len(c.AllowedDomains) != 0 {
 		return launchOptions{}, fmt.Errorf("mcode: Runtime does not implement network isolation")
 	}
-	if req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
+	if req.LocalEnvironment == nil || req.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
 	servers, bindings, err := runtimeMCP(req)
 	if err != nil {
 		return launchOptions{}, err
 	}
-	tools := workspaceTools{node: c.Node, bridge: c.Bridge, profile: map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.LocalEnvironment.Skills) > 0},
-		skills: req.LocalEnvironment.Skills}
+	tools := workspaceTools{node: c.Node, bridge: c.Bridge, profile: map[string]any{"capabilityRoot": req.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.Skills) > 0},
+		skills: req.Skills}
 	file, err := localworkspace.ToolEnvironmentFile()
 	if err != nil {
 		return launchOptions{}, err

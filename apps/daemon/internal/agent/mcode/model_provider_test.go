@@ -18,7 +18,7 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 			req := testRequest(t)
 			req.ModelProvider.Protocol = modelprovider.Protocol(tc.protocol)
 			req.Model = "chosen-model"
-			opts, err := prepareOptions(req)
+			opts, err := prepareOptions(prepared(t, req))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -42,33 +42,5 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 				t.Fatal("native provider configuration did not preserve the upstream bundle and selected model")
 			}
 		})
-	}
-}
-
-func TestOptionsRejectInvalidProvider(t *testing.T) {
-	for name, edit := range map[string]func(*modelprovider.Provider){
-		"unknown protocol": func(p *modelprovider.Provider) { p.Protocol = "unknown" },
-		"protocol alias":   func(p *modelprovider.Provider) { p.Protocol = "chat-completions" },
-		"remote HTTP":      func(p *modelprovider.Provider) { p.BaseURL = "http://provider.example" },
-		"empty key":        func(p *modelprovider.Provider) { p.APIKey = "" },
-		"missing context":  func(p *modelprovider.Provider) { p.ContextWindow = 0 },
-		"missing output":   func(p *modelprovider.Provider) { p.MaxOutputTokens = 0 },
-		"excess output":    func(p *modelprovider.Provider) { p.MaxOutputTokens = 64001 },
-	} {
-		t.Run(name, func(t *testing.T) {
-			req := testRequest(t)
-			edit(req.ModelProvider)
-			if _, err := prepareOptions(req); err == nil {
-				t.Fatal("invalid model provider accepted")
-			}
-		})
-	}
-}
-
-func TestOptionsAllowLoopbackProviderFixture(t *testing.T) {
-	req := testRequest(t)
-	req.ModelProvider.BaseURL = "http://127.0.0.1:4321"
-	if _, err := prepareOptions(req); err != nil {
-		t.Fatal(err)
 	}
 }

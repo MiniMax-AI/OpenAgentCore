@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -30,7 +29,7 @@ type plan struct {
 	view    agent.View
 	gateway gateway.Config
 	// request is the request the view Executor factory receives.
-	request proto.PromptRequestPayload
+	request agent.PrepareRequest
 	// mcp and proxy are ViewSession.MCP and ViewSession.Proxy.
 	mcp   []agent.MCPBinding
 	proxy string
@@ -92,7 +91,7 @@ func loadRoots(dir string) (*x509.CertPool, error) {
 // admit checks req and derives its plan without touching anything. env is
 // the Session's Environment, and openNetwork its Network dial for the
 // gateway, which a Session with environment none never uses.
-func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env Environment, openNetwork func(context.Context) (sandboxlink.Stream, error)) (*plan, error) {
+func admit(cfg Config, roots *x509.CertPool, req agent.PrepareRequest, env Environment, openNetwork func(context.Context) (sandboxlink.Stream, error)) (*plan, error) {
 	view, err := cfg.Harnesses.ResolveView(req.AgentKind)
 	if err != nil {
 		return nil, fmt.Errorf("%w: admit: %w", ErrUnsupported, err)
@@ -103,17 +102,10 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		return nil, invalidSession("a Session with neither a workspace nor environment none is an incomplete binding")
 	case local != nil && !isViewPath(local.WorkspaceDirectory):
 		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
-	case local != nil && local.Capabilities && local.CapabilityRoot == "":
-		return nil, unsupported("installed Capabilities that no preparation resolved")
-	case local != nil && (local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0):
-		return nil, unsupported("a restricted workspace network")
 	case !none && len(view.Shims) > 0 && !hasPATH(env):
 		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}
-	if req.ModelProvider == nil {
-		return nil, unsupported("a Session without a frozen model provider")
-	}
-	provider := *req.ModelProvider
+	provider := req.Prepared.Provider
 	if err := provider.Validate(false); err != nil {
 		return nil, invalidSession("model provider: %v", err)
 	}
@@ -121,7 +113,7 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 	if err != nil {
 		return nil, invalidSession("MCP: %v", err)
 	}
-	gw := gateway.Config{Model: provider, Prompt: req, RootCAs: roots, Proxy: view.Proxy == agent.ViewProxyEnv}
+	gw := gateway.Config{Model: provider, Prompt: req.PromptRequestPayload, RootCAs: roots, Proxy: view.Proxy == agent.ViewProxyEnv}
 	table := processbroker.Executables{Aliases: map[string]processbroker.Command{}}
 	if !none {
 		gw.OpenNetwork, table.Names, table.Paths = openNetwork, identity(view.Shims), identity(view.ShimPaths)
@@ -158,7 +150,7 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		if b.Stdio != nil {
 			// The Harness runs the binding under its alias, which the process
 			// broker maps to the frozen command.
-			b.Stdio = &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: b.ServerLabel, Type: "stdio", Command: agent.ViewAlias(i)}}
+			b.Stdio = &agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: b.ServerLabel, Type: "stdio", Command: agent.ViewAlias(i)}}
 		}
 		b.ServerURL, b.BearerToken, b.HTTPHeaders = endpoints.MCP[b.ServerLabel], nil, nil
 		if b.AllowedTools != nil {
@@ -171,18 +163,12 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 }
 
 // handoff rewrites the request as a view Executor receives it: the model
-// provider is the gateway's listener with the placeholder key, MCP is only in
-// ViewSession.MCP, and the workspace, if any, is the Environment's declared
-// directory, which the view shows from the sandbox.
-func handoff(req proto.PromptRequestPayload, provider modelprovider.Provider, endpoints gateway.Endpoints) proto.PromptRequestPayload {
+// provider is the gateway's listener with the placeholder key, and MCP is only
+// in ViewSession.MCP.
+func handoff(req agent.PrepareRequest, provider modelprovider.Provider, endpoints gateway.Endpoints) agent.PrepareRequest {
 	provider.BaseURL, provider.APIKey = endpoints.Model, modelprovider.Placeholder
-	req.ModelProvider = &provider
-	req.MCPHTTPServers = nil
-	if req.LocalEnvironment != nil {
-		local := *req.LocalEnvironment
-		local.MCP, local.WorkspaceRoot = nil, local.WorkspaceDirectory
-		req.LocalEnvironment = &local
-	}
+	req.ModelProvider, req.Prepared.Provider = &provider, provider
+	req.MCPHTTPServers, req.MCP = nil, nil
 	return req
 }
 

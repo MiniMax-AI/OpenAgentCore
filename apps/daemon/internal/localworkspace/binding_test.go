@@ -1,17 +1,17 @@
 package localworkspace
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
 
-func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
+func testBinding(t *testing.T) (*Binding, agent.PrepareRequest) {
 	t.Helper()
 	private := t.TempDir()
 	if err := os.Chmod(private, 0700); err != nil {
@@ -24,28 +24,26 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.networkAccess = "disabled"
-	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: "agents-api-" + session}
+	return b, agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
 }
 
 func TestBindingRejectsScopeOverrides(t *testing.T) {
-	b, valid := testBinding(t)
-	configured, err := b.Configure(valid)
-	if err != nil || configured.LocalEnvironment.WorkspaceRoot != b.workspace {
-		t.Fatalf("frozen cwd: %+v %v", configured, err)
+	b, prepared := testBinding(t)
+	valid := prepared.PromptRequestPayload
+	if err := b.Configure(valid); err != nil {
+		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*proto.PromptRequestPayload){
 		"missing reference": func(r *proto.PromptRequestPayload) { r.LocalEnvironment = nil },
 		"other Environment": func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString()}
 		},
-		"other Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
-		"none":          func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
+		"none": func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := valid
 			mutate(&r)
-			if _, err := b.Configure(r); err == nil {
+			if err := b.Configure(r); err == nil {
 				t.Fatal("unsafe request accepted")
 			}
 		})
@@ -62,29 +60,6 @@ func TestDirectoryValidatesRelativePaths(t *testing.T) {
 		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 2); err == nil {
 			t.Fatalf("invalid path accepted: %q", path)
 		}
-	}
-}
-
-func TestBindingPrepareRejectsOtherWorkspaceRoot(t *testing.T) {
-	b, req := testBinding(t)
-	configured, err := b.Configure(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, root := range []string{"", t.TempDir()} {
-		local := *configured.LocalEnvironment
-		local.WorkspaceRoot = root
-		other := configured
-		other.LocalEnvironment = &local
-		if _, err := b.Prepare(t.Context(), other); !errors.Is(err, agentcapabilities.ErrInvalid) {
-			t.Fatalf("workspace root %q: %v", root, err)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(b.capabilityRoot, agentcapabilities.ManifestName)); !os.IsNotExist(err) {
-		t.Fatal("rejected preparation installed capabilities")
-	}
-	if _, err := b.Prepare(t.Context(), configured); err != nil {
-		t.Fatal("bound workspace root rejected", err)
 	}
 }
 

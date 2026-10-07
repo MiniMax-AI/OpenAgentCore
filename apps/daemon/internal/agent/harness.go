@@ -24,7 +24,7 @@
 // narrowed declaration admits. Requests, events and capability descriptors
 // use the existing internal/agentdaemon/proto types. An Environment execution
 // request carries the Runtime's bound workspace directory in
-// LocalEnvironment.WorkspaceRoot; the native Harness runs there.
+// PrepareRequest.WorkspaceRoot; the native Harness runs there.
 package agent
 
 import (
@@ -42,6 +42,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -276,9 +277,8 @@ const (
 // ViewExecutorFactory prepares the Session's Executor in its view. The agent
 // host has already pointed the request's model provider at the Session's
 // gateway, with the placeholder in place of the key, and moved its MCP into
-// ViewSession.MCP: the request carries neither MCPHTTPServers nor
-// LocalEnvironment.MCP.
-type ViewExecutorFactory func(context.Context, proto.PromptRequestPayload, ViewSession) (Executor, error)
+// ViewSession.MCP: the request carries neither MCPHTTPServers nor MCP.
+type ViewExecutorFactory func(context.Context, PrepareRequest, ViewSession) (Executor, error)
 
 // ViewSession is what the agent host gives a view Executor factory.
 type ViewSession struct {
@@ -332,15 +332,15 @@ type ViewSession struct {
 // reaches the network only through the Session's gateway: the model provider
 // is the gateway with the placeholder key, and MCP arrives only in session.MCP,
 // without credentials and with stdio only under its alias.
-func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, session ViewSession) error {
-	if provider := prepared.Provider; provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
+func checkViewHandoff(req PrepareRequest, session ViewSession) error {
+	if provider := req.Prepared.Provider; provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
 		return fmt.Errorf("%w: the model provider is not the Session's gateway", ErrViewHandoff)
 	}
-	if req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) > 0) {
+	if req.MCPHTTPServers != nil || len(req.MCP) > 0 {
 		return fmt.Errorf("%w: MCP outside ViewSession.MCP", ErrViewHandoff)
 	}
 	for i, binding := range session.MCP {
-		alias := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: binding.ServerLabel, Type: "stdio", Command: ViewAlias(i)}}
+		alias := EnvironmentMCP{Server: agentplugin.MCPServer{Name: binding.ServerLabel, Type: "stdio", Command: ViewAlias(i)}}
 		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL, true)) ||
 			(binding.Transport == "stdio" && (binding.Stdio == nil || !reflect.DeepEqual(*binding.Stdio, alias))) {
 			return fmt.Errorf("%w: MCP binding %q is not a credential-free gateway endpoint or alias", ErrViewHandoff, binding.ServerLabel)
@@ -474,26 +474,21 @@ func isWithin(p, dir string) bool {
 }
 
 // RegisterView validates and installs the kind's agent-host view after
-// RegisterKind. Its Executor factory validates the model configuration like
-// RegisterExecutor and then checks the request against the view's gateway rule.
+// RegisterKind. Its Executor factory takes the request the agent host's
+// RegisterExecutor prepared and checks it against the view's gateway rule.
 func (r *Registry) RegisterView(kind string, view View) {
 	if err := view.Validate(); err != nil {
 		panic(err)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	configuration, declared := r.configurations[kind]
-	if !declared {
+	if _, declared := r.configurations[kind]; !declared {
 		panic("agent.Registry.RegisterView: registered kind required")
 	}
 	view = view.clone()
 	factory := view.Executor
-	view.Executor = func(ctx context.Context, req proto.PromptRequestPayload, session ViewSession) (Executor, error) {
-		prepared, err := configuration.Prepare(req)
-		if err != nil {
-			return nil, err
-		}
-		if err := checkViewHandoff(req, prepared, session); err != nil {
+	view.Executor = func(ctx context.Context, req PrepareRequest, session ViewSession) (Executor, error) {
+		if err := checkViewHandoff(req, session); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req, session)
@@ -532,7 +527,32 @@ func (r *Registry) ResolveView(kind string) (View, error) {
 
 // ExecutorFactory prepares without model input. A failed factory retains any
 // unconfirmed cleanup in its non-nil Executor.
-type ExecutorFactory func(context.Context, proto.PromptRequestPayload) (Executor, error)
+type ExecutorFactory func(context.Context, PrepareRequest) (Executor, error)
+
+// PrepareRequest is what an Executor is prepared from: the Session's
+// execution configuration as execution_prepare carries it, and what the
+// Runtime resolved for it. Dispatch builds it once per Executor, the
+// Session's Environment owner fills the Environment fields, and the Registry
+// sets Prepared. A Turn's run ID and input arrive in Executor.StartTurn.
+type PrepareRequest struct {
+	proto.PromptRequestPayload
+	// Prepared is the model configuration, validated against the kind's
+	// declaration. An adapter takes its model, provider and native parameters
+	// only from here.
+	Prepared harnessconfig.PreparedConfiguration
+	// StateKey names the Session's native state on this Runtime.
+	StateKey string
+	// Assignment is the assignment the Runtime admitted the preparation under.
+	Assignment proto.AssignmentRef
+	// WorkspaceRoot is the Environment's workspace, where the Harness runs.
+	// It is empty with environment none.
+	WorkspaceRoot string
+	// CapabilityRoot, Skills and MCP are the Environment's installed
+	// Capabilities. Never log MCP: its headers and bearer may be confidential.
+	CapabilityRoot string
+	Skills         []agentcapabilities.InstalledSkill
+	MCP            []EnvironmentMCP
+}
 
 // Executor retains a fixed native configuration across independently owned Turns.
 type Executor interface {
@@ -620,10 +640,12 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	if !declared {
 		panic("agent.Registry.RegisterExecutor: configuration required")
 	}
-	r.executors[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Executor, error) {
-		if _, err := configuration.Prepare(req); err != nil {
+	r.executors[kind] = func(ctx context.Context, req PrepareRequest) (Executor, error) {
+		prepared, err := configuration.Prepare(req.PromptRequestPayload)
+		if err != nil {
 			return nil, err
 		}
+		req.Prepared = prepared
 		return factory(ctx, req)
 	}
 }

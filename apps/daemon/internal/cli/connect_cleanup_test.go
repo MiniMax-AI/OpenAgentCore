@@ -116,7 +116,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	registry := agent.NewRegistry()
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	var factories atomic.Int32
-	registry.RegisterExecutor("cleanup", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registry.RegisterExecutor("cleanup", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		factories.Add(1)
 		return owner, nil
 	})
@@ -148,7 +148,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 		t.Fatalf("bind = %+v", got)
 	}
 	env, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: "cleanup",
-		Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", DisableExecutionEnvironment: true})})
+		Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "cleanup", DisableExecutionEnvironment: true})})
 	if err != nil {
 		t.Fatal(err)
 	}

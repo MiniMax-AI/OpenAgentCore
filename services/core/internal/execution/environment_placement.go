@@ -95,14 +95,7 @@ func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, envi
 		}
 		sources.Skills = append(sources.Skills, (environmentconfig.Skill{Metadata: metadata}).InstallationMetadata())
 	}
-	req.LocalEnvironment = &proto.LocalEnvironment{
-		ID: environment.ID, WorkspaceDirectory: placement.WorkspaceDirectory,
-		CapabilitySources: sources,
-		Capabilities:      len(sources.Skills)+len(sources.Plugins)+len(sources.Directories) > 0,
-		ToolEnvironment:   placement.ToolEnvironment,
-	}
-	req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
-	req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, WorkspaceDirectory: placement.WorkspaceDirectory, CapabilitySources: sources, ToolEnvironment: placement.ToolEnvironment}
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/contracttest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -27,7 +29,7 @@ func executorFixture(t *testing.T, mode string) (*Executor, string) {
 }
 
 // testExecutor prepares through the production factory and closes the owner at cleanup.
-func testExecutor(t *testing.T, mode string, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
+func testExecutor(t *testing.T, mode string, req agent.PrepareRequest, cfg sessionConfig) (*Executor, error) {
 	t.Helper()
 	t.Setenv("OAC_TEST_EXECUTOR_MODE", mode)
 	ownerCtx, cancelOwner := context.WithCancel(context.Background())
@@ -371,4 +373,14 @@ func TestExecutorCloseTerminatesAfterMissingCancellationTerminal(t *testing.T) {
 	case <-retry.Done():
 		t.Fatal("original cancellation waiter was abandoned")
 	}
+}
+
+func TestSharedTextLifecycle(t *testing.T) {
+	e, _ := executorFixture(t, "complete")
+	contracttest.TextLifecycle(t, contracttest.TextFixture{
+		Executor:      e,
+		CompleteInput: proto.TextInput("answer"), ActiveInput: proto.TextInput("hold"), SteeringInput: proto.TextInput("continue"),
+		Ready:       func(e proto.Envelope) bool { return e.Type == proto.TypeDelta },
+		NativeOwner: func() string { return fmt.Sprint(e.base.rpc.process.Cmd.Process.Pid) },
+	})
 }

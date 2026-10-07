@@ -60,7 +60,7 @@ func TestRegistryRegisterPanicsOnEmptyKind(t *testing.T) {
 
 func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
 	info := proto.SupportedAgentKind{Kind: "k", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}
-	executor := func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil }
+	executor := func(context.Context, agent.PrepareRequest) (agent.Executor, error) { return nil, nil }
 	registry := agent.NewRegistry()
 	defer func() {
 		if recover() == nil {
@@ -115,12 +115,12 @@ func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 		t.Fatal("kind registration implied reusable execution")
 	}
 	expected := errors.New("executor factory")
-	registry.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, expected })
+	registry.RegisterExecutor("native", func(context.Context, agent.PrepareRequest) (agent.Executor, error) { return nil, expected })
 	factory, err := registry.ResolveExecutor("native")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := factory(t.Context(), prototest.WithModel(proto.PromptRequestPayload{})); !errors.Is(err, expected) {
+	if _, err := factory(t.Context(), agent.PrepareRequest{PromptRequestPayload: prototest.WithModel(proto.PromptRequestPayload{})}); !errors.Is(err, expected) {
 		t.Fatal(err)
 	}
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration())
@@ -136,7 +136,7 @@ func TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement(t *testing.T) {
 			registry := agent.NewRegistry()
 			original := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: valid}
 			registry.RegisterKind(original, prototest.ModelConfiguration())
-			registry.RegisterExecutor("fixture", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil })
+			registry.RegisterExecutor("fixture", func(context.Context, agent.PrepareRequest) (agent.Executor, error) { return nil, nil })
 			missing := valid
 			reflect.ValueOf(&missing).Elem().Field(i).Set(reflect.ValueOf(proto.CapabilityUnspecified))
 			func() {

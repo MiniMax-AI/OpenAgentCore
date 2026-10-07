@@ -10,8 +10,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -66,27 +64,24 @@ type SessionPlan struct {
 	Cleanup func()
 }
 
-// BuildSessionPlan derives a SessionPlan from the request's frozen model
+// BuildSessionPlan derives a SessionPlan from the request's prepared model
 // configuration and ExecutionControls. The codex binary is resolved via PATH.
-func BuildSessionPlan(req proto.PromptRequestPayload) (SessionPlan, error) {
+func BuildSessionPlan(req agent.PrepareRequest) (SessionPlan, error) {
 	return buildSessionPlan(req, func() (agent.ViewDir, error) {
-		home, err := allocCodexHome(req.AgentStateKey)
+		home, err := allocCodexHome(req.StateKey)
 		return agent.ViewDir{Host: home, View: home}, err
 	})
 }
 
 // buildSessionPlan derives the plan with CODEX_HOME from allocHome, which runs
 // only after the request validates.
-func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
+func buildSessionPlan(req agent.PrepareRequest, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
 	plan := SessionPlan{
 		// Harnesses run unattended: Codex never offers its ask-the-user tool.
 		ExtraConfig: [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
 		Cleanup:     func() {},
 	}
-	prepared, err := harnessconfiguration.Configuration().Prepare(req)
-	if err != nil {
-		return plan, err
-	}
+	prepared := req.Prepared
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv("disabled")})
 	if controls := req.ExecutionControls; controls != nil {
 		switch controls.TextVerbosity {

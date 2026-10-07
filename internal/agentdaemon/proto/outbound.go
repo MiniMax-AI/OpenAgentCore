@@ -22,13 +22,6 @@ type PromptRequestPayload struct {
 	// dispatches to.
 	AgentKind string `json:"agent_kind"`
 
-	// RunID and Input are empty in an execution_prepare configuration.
-	// Adapters set them from execution_start when they start a Turn.
-	RunID string `json:"run_id"`
-
-	// Input preserves ordered user messages and content.
-	Input MessageInput `json:"input,omitempty"`
-
 	// Model, SystemPrompt, ModelProvider and HarnessConfig are the Session's
 	// frozen model configuration. internal/harnessconfig validates them
 	// against the selected Harness before any native effect.
@@ -48,22 +41,14 @@ type PromptRequestPayload struct {
 	// AgentSessionID is the upstream engine session id to resume.
 	AgentSessionID string `json:"agent_session_id,omitempty"`
 
-	// AgentStateKey is the stable daemon-side state directory key.
 	// WorkspaceReadOnly prepares temporary native state that cannot start a Run.
 	WorkspaceReadOnly            bool           `json:"workspace_read_only,omitempty"`
-	AgentStateKey                string         `json:"agent_state_key,omitempty"`
 	RequireExistingNativeSession bool           `json:"require_existing_native_session,omitempty"`
 	ObserveSubagentIdentities    bool           `json:"observe_subagent_identities,omitempty"`
 	FunctionTools                []FunctionTool `json:"function_tools,omitempty"`
 	ToolSearch                   bool           `json:"tool_search,omitempty"`
 	DisableExecutionEnvironment  bool           `json:"disable_execution_environment,omitempty"`
 	DisableSubagents             bool           `json:"disable_subagents,omitempty"`
-
-	// Assignment is the assignment the request runs under: Core sends its
-	// frames under it, and the Runtime records the Envelope.Assignment it
-	// admitted the request under for the Executor factory. It is never
-	// encoded.
-	Assignment AssignmentRef `json:"-"`
 }
 
 // PromptCancelPayload optionally requests an application receipt; identity is on Envelope.ID.

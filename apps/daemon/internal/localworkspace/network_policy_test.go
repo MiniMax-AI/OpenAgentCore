@@ -1,56 +1,6 @@
 package localworkspace
 
-import (
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
-	"testing"
-)
-
-func TestRuntimeNetworkPolicyMustMatchExecutionButNotReadOnly(t *testing.T) {
-	for _, deployed := range []string{"", "enabled", "disabled"} {
-		for _, requested := range []string{"", "enabled", "disabled", "restricted"} {
-			b, req := testBinding(t)
-			b.networkAccess = deployed
-			req.LocalEnvironment.NetworkAccess = requested
-			_, err := b.Configure(req)
-			if (err == nil) != (deployed != "" && deployed == requested) {
-				t.Fatalf("execution policy %q/%q: %v", deployed, requested, err)
-			}
-			req.WorkspaceReadOnly = true
-			req.LocalEnvironment = &proto.LocalEnvironment{ID: b.environment}
-			if _, err := b.Configure(req); err != nil {
-				t.Fatal("read-only operation requires unrelated execution policy", err)
-			}
-		}
-	}
-}
-
-func TestRestrictedPolicyBindingCannotBeChangedByARequest(t *testing.T) {
-	b, req := testBinding(t)
-	b.networkAccess, b.allowedDomains = "restricted", []string{"example.com", "api.example.com"}
-	for _, domains := range [][]string{{"api.example.com", "EXAMPLE.com", "example.com"}, {"example.com"}, {"other.example.com"}, nil} {
-		req.LocalEnvironment.NetworkAccess = "restricted"
-		req.LocalEnvironment.AllowedDomains = domains
-		_, err := b.Configure(req)
-		if (err == nil) != (len(domains) == 3) {
-			t.Fatalf("binding changed by domains %v: %v", domains, err)
-		}
-	}
-	copy := b.NetworkPolicy()
-	copy.AllowedDomains[0] = "other.example.com"
-	if !b.NetworkPolicy().Equal(agentnetwork.Policy{Access: "restricted", AllowedDomains: []string{"example.com", "api.example.com"}}) {
-		t.Fatal("caller mutated frozen policy")
-	}
-	req.WorkspaceReadOnly = true
-	req.LocalEnvironment = &proto.LocalEnvironment{ID: b.environment}
-	if _, err := b.Configure(req); err != nil {
-		t.Fatal("read requires execution network", err)
-	}
-	req.LocalEnvironment.AllowedDomains = []string{"other.example.com"}
-	if _, err := b.Configure(req); err == nil {
-		t.Fatal("read accepted a conflicting supplied policy")
-	}
-}
+import "testing"
 
 func TestRuntimeNetworkPolicyRejectsMalformedDeploymentInput(t *testing.T) {
 	for _, tc := range []struct {

@@ -13,12 +13,12 @@ import (
 // prepareTurnExecutor reserves one admission on the Runtime-owned Executor.
 // Core does not cache native ownership. A replacement requires the Runtime to
 // confirm cleanup and recover the exact Session history before returning ready.
-func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegateway.Session, tenant, session, turn string, request proto.PromptRequestPayload, expectedStatus string) (*preparedStart, error) {
-	prepared, err := newPreparedStart(peer, request.Assignment)
+func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegateway.Session, assignment proto.AssignmentRef, tenant, session, turn string, request proto.PromptRequestPayload, expectedStatus string) (*preparedStart, error) {
+	prepared, err := newPreparedStart(peer, assignment)
 	if err != nil {
 		return nil, err
 	}
-	if err = send(ctx, peer, request.Assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session, Configuration: request}); err == nil {
+	if err = send(ctx, peer, assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session, Configuration: request}); err == nil {
 		err = d.awaitTurnExecutor(ctx, tenant, session, turn, expectedStatus, prepared)
 	}
 	if err != nil {

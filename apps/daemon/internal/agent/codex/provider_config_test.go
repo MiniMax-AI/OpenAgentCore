@@ -118,10 +118,10 @@ func TestWriteCodexProviderConfig_AppendsAlongsideMCP(t *testing.T) {
 }
 
 func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{
-		RunID: "run-x", AgentStateKey: "conv-1/agent-1/codex", Model: "fixture-model",
+	plan, err := BuildSessionPlan(prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{
+		Model:         "fixture-model",
 		ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://x/v1", APIKey: "sk-x"},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 func TestOptionsRefreshManagedState(t *testing.T) {
 	t.Setenv("MINIMAX_DATA_DIR", "/wrong")
 	req := testRequest(t)
-	opts, err := prepareOptions(req)
+	opts, err := prepareOptions(prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	}
 	req.SystemPrompt = ""
 	req.AgentSessionID = "native-1"
-	refreshed, err := prepareOptions(req)
+	refreshed, err := prepareOptions(prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,14 +68,12 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		edit func(*proto.PromptRequestPayload)
 	}{
 		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.SystemPrompt = strings.Repeat("x", 32*1024+1) }},
-		{"missing model", func(r *proto.PromptRequestPayload) { r.Model = "" }},
-		{"missing provider", func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := testRequest(t)
 			tt.edit(&req)
-			if _, err := prepareOptions(req); err == nil {
+			if _, err := prepareOptions(prepared(t, req)); err == nil {
 				t.Fatal("expected validation failure")
 			}
 		})
@@ -86,11 +84,11 @@ func TestDataDirectoryRequiresAgentState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", home)
 	for _, key := range []string{"", " ", "../.."} {
-		if _, err := dataDirectory(proto.PromptRequestPayload{AgentStateKey: key, RunID: "ignored"}); err == nil {
+		if _, err := dataDirectory(key); err == nil {
 			t.Fatalf("state key %q accepted", key)
 		}
 	}
-	got, err := dataDirectory(proto.PromptRequestPayload{AgentStateKey: "../session-1/a b"})
+	got, err := dataDirectory("../session-1/a b")
 	if want := filepath.Join(home, "runtime", "mcode", "state", "session-1", "a_b"); err != nil || got != want {
 		t.Fatalf("data directory = %q, %v; want %q", got, err, want)
 	}

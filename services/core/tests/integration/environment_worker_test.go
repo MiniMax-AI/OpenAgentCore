@@ -2,7 +2,6 @@ package integration
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
@@ -69,7 +68,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	if second.DecodePayload(&prepare) != nil {
 		t.Fatal("invalid Prepare")
 	}
-	waiting := pending[strings.TrimPrefix(prepare.Configuration.AgentStateKey, "agents-api-")]
+	waiting := pending[prepare.SessionID]
 	if waiting.ID == "" {
 		t.Fatal("wrong waiting Session")
 	}

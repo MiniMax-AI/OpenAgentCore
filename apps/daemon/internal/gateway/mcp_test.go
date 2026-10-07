@@ -28,7 +28,7 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 			BearerToken: &token, HTTPHeaders: map[string]string{"x-tenant": " tenant-secret "}}
 	}
 	service := proto.PromptRequestPayload{DisableExecutionEnvironment: true}
-	environment := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled"}}
+	environment := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}}
 
 	for _, c := range []struct {
 		origin string

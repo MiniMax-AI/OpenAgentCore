@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 6cbb3db01de6635b1e68f8639a6d8ce3b8fb022ad551a834d80c5a341b86437d
+source_hash: 9ec9470b3e5cd72b1a81f83fc739a61afe2e2abd424aa646dfa366c067be1148
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -59,7 +59,7 @@ heartbeat 只能收窄 Harness 的静态声明。某个 kind 没有内置声明�
 | `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
-| `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
+| `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory`。请求不携带网络策略，因为 Core 只准入[启用的网络](../../contracts/agents-api/zh/environments.md#restricted-network) |
 | `require_existing_native_session` | 需要恢复原生 Session 时设置 |
 
 执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
@@ -132,7 +132,7 @@ Runtime 对无法路由的 Core frame 回复 `protocol_error`，回显请求 ID�
 4. 消费 Run 事件，直到原生终结结果或观测丢失。执行 error 后跟随 `done`，关闭流；之前的 error 仍属于结果的一部分。
 5. start 前放弃时发送 `execution_release`。所有权转给 Run 后使用 `prompt_cancel`；释放旧 handle 不能取消后继 Turn。
 
-preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明确 Session 身份和不可变配置，不包含模型输入或 Run ID。新请求返回连接本地 handle 与所属 Executor ID；复用健康 Executor 时直接返回 `ready`，无需原生 preparation。每个 handle 的 revision 决定 status 观测顺序：忽略旧的或重复的 revision，不将 status 应用于其他 handle。典型状态转移为 `preparing → ready → starting → started`，或由 `released`、`expired`、`failed` 终止。`rejected` 控制操作携带 `operation` 和 error code，不替代 handle 的当前 revision。释放 admission 仅放弃该 admission；不关闭 Session 的空闲 Executor，也不取消后续 Turn。
+preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明确 Session 身份和不可变配置，不包含模型输入或 Run ID；Runtime 从该身份推导 Session 的原生状态键。新请求返回连接本地 handle 与所属 Executor ID；复用健康 Executor 时直接返回 `ready`，无需原生 preparation。每个 handle 的 revision 决定 status 观测顺序：忽略旧的或重复的 revision，不将 status 应用于其他 handle。典型状态转移为 `preparing → ready → starting → started`，或由 `released`、`expired`、`failed` 终止。`rejected` 控制操作携带 `operation` 和 error code，不替代 handle 的当前 revision。释放 admission 仅放弃该 admission；不关闭 Session 的空闲 Executor，也不取消后续 Turn。
 
 preparation 和 start 在 receive loop 与 router lock 之外运行。admission 在授予五分钟后到期，重试不延长截止时间；到期不解除 Runtime 完成清理结算的义务。Runtime 分别限制活动 preparation、execution 和保留的空闲资源，关闭中或不确定资源持续计入限制，直到清理成功。明确的 `execution_prepare` 拒绝若为 `preparation_capacity`，会让排队 Turn 保持未领取，供 Worker 重试，包括清理占用容量的情况；其他错误或不确定交付都不授权重放。Runtime 最多保留 64 条 admission 记录，旧 handle 不会消耗替代项的 admission。这些记录仅属于连接，不是持久化输入重放。
 

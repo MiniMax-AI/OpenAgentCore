@@ -25,7 +25,7 @@ const viewRealKey = "sk-view-real-key-sentinel"
 
 // viewFixture registers a view over a fake install and returns it with a
 // request as the agent host hands it over.
-func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayload) {
+func viewFixture(t *testing.T) (viewInstall, agent.View, agent.PrepareRequest) {
 	t.Helper()
 	harness, bin, libs := t.TempDir(), t.TempDir(), t.TempDir()
 	for _, file := range []string{"bridge.mjs", "native/cli.js", "native/assets/skills/.keep", "native/assets/agents/.keep", filepath.Join(bin, "node")} {
@@ -59,11 +59,12 @@ func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayl
 	t.Setenv("OAC_TEST_VIEW_SENTINEL", "daemon-only")
 	t.Setenv("ANTHROPIC_API_KEY", viewRealKey)
 	req := testRequest(t)
-	req.RunID, req.Input = "", nil
 	req.DisableExecutionEnvironment = false
-	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled"}
+	req.LocalEnvironment = &proto.LocalEnvironment{}
 	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "http://127.0.0.1:4101", APIKey: modelprovider.Placeholder, ContextWindow: 64000, MaxOutputTokens: 4096}
-	return install, view, req
+	bound := prepared(t, req)
+	bound.WorkspaceRoot = "/workspace"
+	return install, view, bound
 }
 
 func viewSession(launched *clirunner.StartOptions) agent.ViewSession {
@@ -129,15 +130,15 @@ func TestViewRunsEnvironmentNoneStdioAliasesAndSkills(t *testing.T) {
 	install, _, req := viewFixture(t)
 	session := agent.ViewSession{Home: agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}}
 	none := req
-	none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
+	none.LocalEnvironment, none.DisableExecutionEnvironment, none.WorkspaceRoot = nil, true, ""
 	opts, err := install.prepare(none, session)
 	if err != nil || opts.Dir != "/.oac/home/work" || opts.MCP == nil || len(opts.MCP) != 0 {
 		t.Fatalf("environment none runs in %q with MCP %v: %v", opts.Dir, opts.MCP, err)
 	}
 
-	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
-	req.LocalEnvironment.CapabilityRoot, req.LocalEnvironment.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
+	req.CapabilityRoot, req.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
 		Metadata: agentskill.Metadata{Type: "inline", Name: "review", Description: "Review."}, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
 	if opts, err = install.prepare(req, session); err != nil || len(opts.MCP) != 2 || opts.MCP[0]["name"] != "oac_workspace" || opts.MCP[1]["command"] != agent.ViewAlias(0) {
 		t.Fatalf("stdio MCP = %v: %v", opts.MCP, err)

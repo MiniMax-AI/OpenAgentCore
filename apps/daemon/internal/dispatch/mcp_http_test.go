@@ -61,7 +61,7 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 			}
 			var called atomic.Bool
 			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: req.AgentKind, Available: mode != "unavailable", Capabilities: caps},
-				func(_ context.Context, got proto.PromptRequestPayload) (agent.Executor, error) {
+				func(_ context.Context, got agent.PrepareRequest) (agent.Executor, error) {
 					called.Store(true)
 					if mode == "required" && !(*got.MCPHTTPServers)[0].Required {
 						t.Error("required initialization lost before adapter")
@@ -95,7 +95,6 @@ func TestLocalMCPOriginAndCapabilityAdmission(t *testing.T) {
 			req.Configuration.MCPHTTPServers = &servers
 			if strings.HasPrefix(mode, "environment") {
 				servers[0].ConnectionOrigin = "environment"
-				req.Configuration.LocalEnvironment.NetworkAccess = "enabled"
 			}
 			if strings.Contains(mode, "bearer") {
 				token := "synthetic-private-token"
@@ -112,7 +111,7 @@ func TestLocalMCPOriginAndCapabilityAdmission(t *testing.T) {
 			}
 			entered := make(chan struct{}, 1)
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(mode != "environment missing capability"), MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported})}, prototest.ModelConfiguration())
-			h.reg.RegisterExecutor("prepared", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+			h.reg.RegisterExecutor("prepared", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 				entered <- struct{}{}
 				return nil, errors.New("controlled stop")
 			})

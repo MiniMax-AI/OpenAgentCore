@@ -59,11 +59,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if environment == nil || !declaration.Capabilities.LocalEnvironment.IsSupported() || !proto.ValidWorkspaceReadPreparation(req) {
 		return r.rejectPreparation(env, "unsupported_read_preparation")
 	}
-	req, err := environment.Configure(req)
-	if err != nil {
-		return r.rejectPreparation(env, "invalid_configuration")
-	}
-	if req.RunID != "" || len(req.Input) != 0 || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" {
+	if environment.Configure(req) != nil || req.EnvironmentID() == "" {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req) != nil || proto.ValidateSelection(declaration, req.Selection()) != nil {

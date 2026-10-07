@@ -23,6 +23,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -88,8 +89,18 @@ func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 		AgentKind:        kind,
 		Model:            "m",
 		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: baseURL, APIKey: key},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}},
+		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, CapabilitySources: &agentcapabilities.Input{}},
 	}
+}
+
+// prepared is req as the registry and the Environment owner hand it to the
+// agent host's factory.
+func prepared(req proto.PromptRequestPayload) agent.PrepareRequest {
+	p := agent.PrepareRequest{PromptRequestPayload: req, Prepared: harnessconfig.PreparedConfiguration{Model: req.Model, Provider: *req.ModelProvider}}
+	if req.LocalEnvironment != nil {
+		p.WorkspaceRoot = req.LocalEnvironment.WorkspaceDirectory
+	}
+	return p
 }
 
 // newBinding returns the binding of a new Session on resource.
@@ -99,8 +110,8 @@ func newBinding(resource sandboxlink.ResourceRef) Binding {
 }
 
 // bindTo binds every request to b.
-func bindTo(b Binding) func(proto.PromptRequestPayload) (Binding, Environment, error) {
-	return func(proto.PromptRequestPayload) (Binding, Environment, error) { return b, Environment{}, nil }
+func bindTo(b Binding) func(agent.PrepareRequest) (Binding, Environment, error) {
+	return func(agent.PrepareRequest) (Binding, Environment, error) { return b, Environment{}, nil }
 }
 
 func newResource() sandboxlink.ResourceRef {
@@ -147,7 +158,7 @@ type daemon struct {
 	router *dispatch.Router
 	// mcp is the installed MCP that the Environment's preparation resolves
 	// into each request; the wire does not carry it.
-	mcp    []proto.EnvironmentMCP
+	mcp    []agent.EnvironmentMCP
 	mu     sync.Mutex
 	frames map[string]chan proto.Envelope // by envelope ID
 	opened map[string]*session            // by Session ID
@@ -156,16 +167,14 @@ type daemon struct {
 func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 	t.Helper()
 	dm := &daemon{host: &Host{cfg: cfg, owners: owners{d: d}}}
-	dm.route(t, registry(cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+	dm.route(t, registry(cfg.Harnesses, func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 		if dm.mcp != nil {
-			local := *req.LocalEnvironment
-			local.MCP = dm.mcp
-			req.LocalEnvironment = &local
+			req.MCP = dm.mcp
 		}
 		e, err := dm.host.openExecutor(ctx, req)
 		if s, ok := e.(*session); ok {
 			dm.mu.Lock()
-			dm.opened[strings.TrimPrefix(req.AgentStateKey, stateKeyPrefix)] = s
+			dm.opened[req.Assignment.SessionID] = s
 			dm.mu.Unlock()
 		}
 		return e, err
@@ -184,9 +193,6 @@ func (dm *daemon) route(t *testing.T, reg *agent.Registry) {
 	}
 	t.Cleanup(func() { dm.shutdown() })
 }
-
-// stateKeyPrefix and the Session ID make the state key dispatch requires.
-const stateKeyPrefix = "agents-api-"
 
 // ref is the reference of b's assignment.
 func ref(b Binding) proto.AssignmentRef {
@@ -288,7 +294,6 @@ func (dm *daemon) prepare(t *testing.T, b Binding, req proto.PromptRequestPayloa
 		local.ID = environmentID(b)
 		req.LocalEnvironment = &local
 	}
-	req.AgentStateKey = stateKeyPrefix + session
 	id := sandboxwire.NewID().String()
 	dm.handle(t, ref(b), proto.TypeExecutionPrepare, id, proto.ExecutionPreparePayload{SessionID: session, Configuration: req})
 	for {

@@ -35,8 +35,8 @@ func (h *Host) Registry() *agent.Registry {
 	return registry(h.cfg.Harnesses, h.openExecutor)
 }
 
-func (h *Host) openExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-	return open(ctx, h.cfg, req, func(r proto.PromptRequestPayload) (Binding, Environment, error) { return h.executor(ctx, r) }, h.owners.d)
+func (h *Host) openExecutor(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
+	return open(ctx, h.cfg, req, func(r agent.PrepareRequest) (Binding, Environment, error) { return h.executor(ctx, r) }, h.owners.d)
 }
 
 // registry registers each kind in harnesses that declares a view, with
@@ -93,7 +93,7 @@ type session struct {
 // Executor's uid, prepares the Session directory and calls the view's
 // Executor factory. Once it has an effect, it returns the session even when
 // it fails, and the session's Close releases what it holds.
-func open(ctx context.Context, cfg Config, req proto.PromptRequestPayload, bind func(proto.PromptRequestPayload) (Binding, Environment, error), d deps) (agent.Executor, error) {
+func open(ctx context.Context, cfg Config, req agent.PrepareRequest, bind func(agent.PrepareRequest) (Binding, Environment, error), d deps) (agent.Executor, error) {
 	roots, err := checkConfig(cfg)
 	if err != nil {
 		return nil, err

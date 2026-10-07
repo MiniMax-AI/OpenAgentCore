@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: f5d10dc8f734dae33713d262079a0a0906fd881ca059b769390fc817086273c0
+source_hash: ea2a7a759e262188cab16966a558f866075544fb84724cd95ab4d5c78e96b6f3
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -61,6 +61,8 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 
 [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ExecutorFactory`、`Executor`、`Turn` 和 `TurnSettlement`。`Turn` 是一个接口：`Cancel`、`CancellationOutcome`、`SteerWithReceipt`、`SubmitFunctionResult` 和 `AwaitSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。适配器不支持的操作返回 Unsupported，由能力声明而不是方法决定 Runtime 是否调用它。所有接口都使用中立协议类型。
 
+两个工厂，`ExecutorFactory` 和视图的 `ViewExecutorFactory`，都接收一个 `agent.PrepareRequest`：`execution_prepare` 携带的 Session 配置、Registry 按 kind 的声明一次性准备好的模型配置（`Prepared`）、Session 的原生状态键（`StateKey`），以及由 Environment owner 填写的 Environment 工作区和已安装 Capabilities（`WorkspaceRoot`、`CapabilityRoot`、`Skills`、`MCP`）。适配器只从 `Prepared` 获取模型、提供商和原生参数，从不自行解析 `model` 或 `model_provider`。Turn 的 Run ID 和输入通过 `Executor.StartTurn` 传入。
+
 例如，Codex 适配器保留其 app-server 和 thread，Claude 适配器保留一个流式 Query，MiniMax 适配器保留其 ACP 连接和原生 session。它们都公开相同的 Executor 和 Turn 契约。原生回调和资源保留在适配器内部；Runtime 负责准入、空闲过期和替换。取消通过 `Turn.Cancel` 精确定位到目标 Turn，适配器则向 Runtime 提供原生完成证据。
 
 | 接口或契约 | 必需处理 | 义务 |
@@ -83,7 +85,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 原因必须是固定的安全字符串，绝不能是已提交内容、凭据或原始原生诊断信息。Unsupported 保证不会产生原生副作用，也不表示操作成功且为空。安装不可用、未知调用 ID、原生失败和不确定结果应保留各自的错误和所有权。nil `Turn` 仍表示没有提交任何输入，并且输出归调用方所有；绝不能将其用作 Unsupported 标记。
 
-线协议请求不携带工作目录。Runtime 将 `local_environment.workspace_directory` 与其绑定进行核对，并通过 `LocalEnvironment.WorkspaceRoot` 向 Harness 提供其绑定的工作区目录；必须在该目录中运行原生 Harness。
+线协议请求不携带工作目录。Runtime 将 `local_environment.workspace_directory` 与其绑定进行核对，并通过 `PrepareRequest.WorkspaceRoot` 向 Harness 提供其绑定的工作区目录；必须在该目录中运行原生 Harness。
 
 工作区读取、写入、输出导出和只读 preparation 属于 Session 的 [Environment owner](../../../docs/zh/runtime-protocol.md#session-assignments)，不属于 adapter。adapter 不实现其中任何操作。其声明中的 `LocalEnvironment` 和 `EnvironmentNone` 表示其 Executor 能运行的内容，`agent.Registry.Register` 将二者与 Runtime 的 owner 所提供的内容（`agent.EnvironmentSupport`）组合一次，仅在 owner 提供时保留。组合后的 `LocalEnvironment` 同时准入 owner 的工作区读取、只读 preparation 和输出导出。一份声明适用于该安装的每个 Executor，包括其[视图](#run-in-an-agent-host-view)。
 
@@ -155,8 +157,8 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 | 顺序 | 方法 | 注册内容 |
 | --- | --- | --- |
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration)` | Kind、可用性、版本、`AgentKindCapabilities` 和模型配置；它将模型配置的声明收窄到这些能力，遇到扩大时 panic。它会重置其他注册项，因此必须首先调用。 |
-| 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期。其工厂只为收窄后的声明所准入的请求运行。 |
-| 3 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
+| 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期。其工厂只为收窄后的声明所准入、且模型配置能够准备的请求运行，并收到已设置 `Prepared` 的请求。 |
+| 3 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂接收 agent host 的 `RegisterExecutor` 已准备好的请求，并执行[网关规则](#endpoints-and-proxy)。 |
 
 `Runtime.View` 声明 Harness 如何在 agent-host Session 视图中运行，详见[在 agent-host 视图中运行](#run-in-an-agent-host-view)。每个适配器都显式设置它；`View: nil` 表示 agent host 拒绝该 kind，`Registry.ResolveView` 返回包装 `ErrUnsupportedOperation` 的错误。`TestPublicHarnessContractDeclarations` 要求每个声明都包含该字段。
 
@@ -172,7 +174,7 @@ Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/har
 
 `internal/harnessconfig/<kind>` 中 `Configuration()` 的 `Declaration` 就是 Harness 的支持范围：一个 `proto.Declaration`，包含其 `AgentKindCapabilities`、消息、图像、MCP 和输出 schema 限制，以及 `Conflicts` 中它能单独支持但不能同时支持的功能对。它说明适配器的最大支持范围，并且是唯一来源：Core 通过 `builtin.Registry()` 读取它，适配器的 Runtime 描述符也从它开始。发现过程和 Environment owner 只能清除支持，Core 拒绝扩大该声明的心跳。只声明 Harness 之间的真实差异；对每个 Harness 都成立的规则属于 `proto.ValidateSelection` 中的通用检查。
 
-`proto.ValidateSelection` 是对声明的唯一检查。Core 在创建或更新已保存 Harness 的 Agent、创建 Session 以及准入输入和函数结果时应用静态声明，在设备选择和认领 Turn 之前应用 Runtime 收窄后的声明。Runtime 在准入 `execution_prepare` 时应用它，早于任何 Executor 工厂运行。拒绝返回 400 `unsupported_or_invalid_configuration`，并以配置路径作为 `param`。Runtime 事实（例如缺少二进制、原生历史或文件系统就绪状态）仍是适配器准备失败。
+`proto.ValidateSelection` 是对声明的唯一检查。Core 在创建或更新已保存 Harness 的 Agent、创建 Session 以及准入输入和函数结果时应用静态声明，在设备选择和认领 Turn 之前应用 Runtime 收窄后的声明。Runtime 在准入 `execution_prepare` 时应用它，并在 Environment owner 解析出 Environment 已安装的 MCP 服务器后连同它们再次应用，均早于任何 Executor 工厂运行。拒绝返回 400 `unsupported_or_invalid_configuration`，并以配置路径作为 `param`。Runtime 事实（例如缺少二进制、原生历史或文件系统就绪状态）仍是适配器准备失败。
 
 每个 Runtime 声明都引用同一个 `internal/harnessconfig/<kind>.Configuration()`，并负责其原生工厂和探测。目录不能声明某台机器的可用性，也不存在动态插件加载器。
 
@@ -266,7 +268,7 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 
 ### 能力 {#capabilities}
 
-视图运行该 kind 的声明所准入的每个请求，因此 adapter 只声明其本地 Executor 和视图都能运行的内容，dispatch 按该声明检查每个请求。agent host 提供本地 Environment 和 environment none，且每个视图都运行 Environment 已安装的 Skills 和 [stdio MCP](#stdio-mcp)。Environment owner 以沙箱路径填写 `LocalEnvironment.Skills` 和 `CapabilityRoot`，adapter 像本地 Executor 那样把它们交给 Harness；只有 Harness 通过视图读取它们，adapter 不在 agent host 上打开其中任何路径。无论 kind 如何声明，agent host 都以 `ErrUnsupportedOperation` 拒绝已安装的 Capabilities 未经任何准备解析的请求，以及带受限网络的请求，因为只有 Provider 的工作负载网络边界才能约束进程自己的 socket。它以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
+视图运行该 kind 的声明所准入的每个请求，因此 adapter 只声明其本地 Executor 和视图都能运行的内容，dispatch 按该声明检查每个请求。agent host 提供本地 Environment 和 environment none，且每个视图都运行 Environment 已安装的 Skills 和 [stdio MCP](#stdio-mcp)。Environment owner 以沙箱路径填写 `PrepareRequest.Skills` 和 `CapabilityRoot`，adapter 像本地 Executor 那样把它们交给 Harness；只有 Harness 通过视图读取它们，adapter 不在 agent host 上打开其中任何路径。agent host 以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
 
 ### Environment none {#environment-none}
 
@@ -288,9 +290,9 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 
 ### 端点与代理 {#endpoints-and-proxy}
 
-调用工厂之前，agent host 将请求的 `model_provider` 指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。只有 HTTP 绑定进入网关：每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header，网关添加声明的凭据和 header。stdio 绑定在其[别名](#stdio-mcp)下运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
+调用工厂之前，agent host 将请求的模型提供商，即 `model_provider` 和 `Prepared.Provider`，指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。只有 HTTP 绑定进入网关：每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header，网关添加声明的凭据和 header。stdio 绑定在其[别名](#stdio-mcp)下运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
 
-Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：模型提供商缺失或不是带占位凭据的网关、请求在 `ViewSession.MCP` 之外携带 MCP、HTTP 绑定不是不含凭据的 loopback 端点，或 stdio 绑定不是其别名。
+Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：准备好的模型提供商不是带占位凭据的网关、请求在 `ViewSession.MCP` 之外携带 MCP、HTTP 绑定不是不含凭据的 loopback 端点，或 stdio 绑定不是其别名。
 
 使用 `ViewProxyEnv` 时，`ViewSession.Proxy` 是网关的代理 URL。适配器将 `HTTPS_PROXY` 和 `HTTP_PROXY` 设为该值，将 `NO_PROXY` 设为 `127.0.0.1,localhost`，每个变量都设置大写和小写两种形式。只有在确认 Harness 在本地发出的每个请求都遵循这些变量之后，才声明 `ViewProxyEnv`。忽略这些变量的请求会连接失败，因为视图没有出站路由。
 

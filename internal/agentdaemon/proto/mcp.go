@@ -23,8 +23,8 @@ func (server MCPHTTPServer) ValidateConnectionOrigin(req PromptRequestPayload) e
 			return errors.New("service-origin MCP requires a service execution host")
 		}
 	case "environment":
-		if req.DisableExecutionEnvironment || req.LocalEnvironment == nil || req.LocalEnvironment.NetworkAccess != "enabled" {
-			return errors.New("environment MCP requires an enabled workspace network")
+		if req.DisableExecutionEnvironment || req.LocalEnvironment == nil {
+			return errors.New("environment MCP requires a workspace")
 		}
 	default:
 		return errors.New("MCP requires an explicit connection origin")

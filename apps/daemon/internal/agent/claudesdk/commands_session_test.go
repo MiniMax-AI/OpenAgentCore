@@ -18,7 +18,7 @@ import (
 
 func TestWorkspaceCommandsRequirePackagedFeature(t *testing.T) {
 	config := preparationFixture(t, "old-command-runtime")
-	if _, err := NewExecutorFactory(config)(t.Context(), preparationRequest()); err == nil || !strings.Contains(err.Error(), "workspace preparation is unavailable") {
+	if _, err := NewExecutorFactory(config)(t.Context(), prepared(t, preparationRequest())); err == nil || !strings.Contains(err.Error(), "workspace preparation is unavailable") {
 		t.Fatal("old bridge accepted command observations", err)
 	}
 	if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
@@ -28,7 +28,7 @@ func TestWorkspaceCommandsRequirePackagedFeature(t *testing.T) {
 
 func TestWorkspaceCommandFramesKeepStartIdentityAndObservedOutput(t *testing.T) {
 	config := preparationFixture(t, "commands-success")
-	resource, err := NewExecutorFactory(config)(t.Context(), preparationRequest())
+	resource, err := NewExecutorFactory(config)(t.Context(), prepared(t, preparationRequest()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestWorkspaceCommandCancellationAndBridgeFailuresCloseOnlyPendingCalls(t *t
 			req := workspaceRequest()
 			req.AgentSessionID = "native-session"
 			out := make(chan proto.Envelope, 32)
-			s, err := startSingleTurn(ctx, config, req, out)
+			s, err := startSingleTurn(ctx, config, req, "run", proto.TextInput("hello"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -85,7 +85,7 @@ func TestWorkspaceCommandCancellationAndBridgeFailuresCloseOnlyPendingCalls(t *t
 			frames := map[string][]proto.ToolCallPayload{}
 			failed, done := false, 0
 			for event := range out {
-				if event.ID != req.RunID || event.Type == proto.TypeCommandOutput {
+				if event.ID != "run" || event.Type == proto.TypeCommandOutput {
 					t.Fatal("command frame changed execution identity or fabricated deltas")
 				}
 				switch event.Type {

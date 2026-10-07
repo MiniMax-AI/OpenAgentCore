@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -18,8 +19,7 @@ import (
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	return proto.PromptRequestPayload{RunID: "run-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"),
-		Model: "fixture", SystemPrompt: "Current instructions",
+	return proto.PromptRequestPayload{Model: "fixture", SystemPrompt: "Current instructions",
 		ModelProvider:               &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "fixture-key", ContextWindow: 64000, MaxOutputTokens: 4096},
 		DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 }
@@ -45,12 +45,21 @@ func helperRequest(t *testing.T, scenario string, resume bool) proto.PromptReque
 	return req
 }
 
-// prepareExecutor prepares req without its Turn input; cleanup closes the
-// Executor and reaps its CLI.
+// prepared is req as the registry hands it to the factory, with the state key
+// of one Session.
+func prepared(t testing.TB, req proto.PromptRequestPayload) agent.PrepareRequest {
+	t.Helper()
+	configuration, err := Declaration.Configuration.Prepare(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration, StateKey: "session-state"}
+}
+
+// prepareExecutor prepares req; cleanup closes the Executor and reaps its CLI.
 func prepareExecutor(t *testing.T, ctx context.Context, req proto.PromptRequestPayload) (*executor, error) {
 	t.Helper()
-	req.RunID, req.Input = "", nil
-	value, err := NewExecutorFactory(nil)(ctx, req)
+	value, err := NewExecutorFactory(nil)(ctx, prepared(t, req))
 	if value == nil {
 		return nil, err
 	}
@@ -65,14 +74,14 @@ func prepareExecutor(t *testing.T, ctx context.Context, req proto.PromptRequestP
 	return e, err
 }
 
-// startTurn prepares an Executor for req and starts req.Input as its Turn.
-func startTurn(t *testing.T, ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (*Session, error) {
+// startTurn prepares an Executor for req and starts input as its Turn run.
+func startTurn(t *testing.T, ctx context.Context, req proto.PromptRequestPayload, run string, input proto.MessageInput, out chan<- proto.Envelope) (*Session, error) {
 	t.Helper()
 	e, err := prepareExecutor(t, ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	turn, err := e.StartTurn(ctx, req.RunID, req.Input, out)
+	turn, err := e.StartTurn(ctx, run, input, out)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +94,7 @@ func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 	out := make(chan proto.Envelope, 32)
-	session, err := startTurn(t, ctx, req, out)
+	session, err := startTurn(t, ctx, req, "run-1", proto.TextInput("Hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}

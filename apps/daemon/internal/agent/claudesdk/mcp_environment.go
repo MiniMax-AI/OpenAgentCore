@@ -16,7 +16,7 @@ type environmentMCPServer struct {
 	Args    []string `json:"args,omitempty"`
 }
 
-func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, []string, error) {
+func prepareRuntimeMCP(req agent.PrepareRequest) ([]environmentMCPServer, []string, error) {
 	bindings, err := agent.ResolveMCPBindings(req)
 	if err != nil {
 		return nil, nil, err
@@ -27,7 +27,7 @@ func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, 
 // mcpServers renders resolved bindings, each stdio binding with the command
 // and arguments stdio gives it and each credential in a private environment
 // variable.
-func mcpServers(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (string, []string)) ([]environmentMCPServer, []string, error) {
+func mcpServers(bindings []agent.MCPBinding, stdio func(agent.EnvironmentMCP) (string, []string)) ([]environmentMCPServer, []string, error) {
 	var servers []environmentMCPServer
 	var env []string
 	for _, binding := range bindings {
