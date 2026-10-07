@@ -76,7 +76,7 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 	if runtime.Info.Kind != declaration.Info.Kind {
 		panic("agent.Registry.Register: discovery kind differs from declaration")
 	}
-	if !runtime.Info.Available && (runtime.Executor != nil || runtime.View != nil) {
+	if !runtime.Info.Available && runtime.Executor != nil {
 		panic("agent.Registry.Register: unavailable runtime has factories")
 	}
 	r.RegisterKind(runtime.Info, declaration.Configuration)

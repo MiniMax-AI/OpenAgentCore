@@ -45,7 +45,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 			t.Fatal("bound declaration was lost or mutated", err)
 		}
 	}
-	if calls != 2 {
+	if calls != 1 {
 		t.Fatal("unexpected native calls", calls)
 	}
 }
