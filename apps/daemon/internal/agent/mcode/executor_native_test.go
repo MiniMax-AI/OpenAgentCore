@@ -73,12 +73,15 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 			switch event.Type {
 			case proto.TypeError:
 				t.Fatal("native Turn reported an error")
-			case proto.TypeDone:
-				var done proto.DonePayload
-				if json.Unmarshal(event.Payload, &done) != nil {
-					t.Fatal("invalid completion")
+			case proto.TypeOutputMessage:
+				var message proto.OutputMessagePayload
+				if json.Unmarshal(event.Payload, &message) != nil {
+					t.Fatal("invalid message")
 				}
-				content = done.Content
+				if message.Text != nil {
+					content += *message.Text
+				}
+			case proto.TypeDone:
 				doneCount++
 			}
 		}

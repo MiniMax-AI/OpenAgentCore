@@ -108,7 +108,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				} else if len(prompt.FunctionTools) != 1 || prompt.FunctionTools[0].Name != "lookup_ticket" {
 					t.Fatal(prompt)
 				}
-				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
+				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{})
 				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}

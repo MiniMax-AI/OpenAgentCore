@@ -175,5 +175,5 @@ func runCommandsHelper(request startRequest, mode string, scanner *bufio.Scanner
 		return
 	}
 	emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
-	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "completed"})
+	emit(bridgeEvent{Type: "result", SessionID: request.Resume})
 }

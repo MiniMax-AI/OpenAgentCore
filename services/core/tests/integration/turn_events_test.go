@@ -28,7 +28,7 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	batch := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"部分内容","sequence":1}`)}, {Kind: "usage", Payload: json.RawMessage(`{"input_tokens":10}`)}}
+	batch := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"部分内容","sequence":1}`)}, {Kind: "usage", Payload: json.RawMessage(`{"input_tokens":10}`)}}
 	var wg sync.WaitGroup
 	errs := make(chan error, 8)
 	for range 8 {
@@ -45,7 +45,7 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	conflict := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"changed"}`)}}
+	conflict := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"changed"}`)}}
 	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, conflict); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatal("terminal event survived rollback")
 	}
-	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":""}}`), "", input.Sequence); err != nil {
+	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{}}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
@@ -106,7 +106,7 @@ func TestEventLimitStillAllowsTerminalFailure(t *testing.T) {
 	if _, err := pool.Exec(ctx, "UPDATE turns SET event_bytes=33554432 WHERE id=$1", input.TurnID); err != nil {
 		t.Fatal(err)
 	}
-	events := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"more"}`)}}
+	events := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"more"}`)}}
 	if err = h.owner().Sessions.AppendTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 1, events); !errors.Is(err, sessions.ErrEventLimit) {
 		t.Fatal(err)
 	}

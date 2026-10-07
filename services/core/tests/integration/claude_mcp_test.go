@@ -82,7 +82,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				if server.ServerURL != endpoint || (token != "" && (server.BearerToken == nil || *server.BearerToken != token)) || (token == "" && server.BearerToken != nil) {
 					t.Fatal("dispatch lost scoped authentication or authenticated an anonymous server")
 				}
-				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
+				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{})
 				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}

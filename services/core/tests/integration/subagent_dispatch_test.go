@@ -49,7 +49,7 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			childTurn.Status, childTurn.CompletedAtMS = sessions.TurnCompleted, &completed
 			h.write(input.TurnID, proto.TypeSubagentTurn, childTurn)
 			h.write(input.TurnID, proto.TypeSubagentLifecycle, proto.SubagentLifecyclePayload{NativeID: "child", EffectID: "native-close", Status: "closed", OccurredAtMS: 102000})
-			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "root result", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "root"}})
+			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "root"}})
 			h.finished(running, sessions.TurnCompleted)
 			saved, err := h.s.GetSubagentIdentity(ctx, h.tenant, h.session.ID, "child")
 			if err != nil || saved.NativeID != "child" || saved.ParentNativeID != "root" || saved.FirstTurnID != input.TurnID {

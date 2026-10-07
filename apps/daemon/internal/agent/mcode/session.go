@@ -42,7 +42,8 @@ type Session struct {
 	steeringTurn         string
 	sequence             uint64
 	active               bool
-	content              strings.Builder
+	message              string
+	messageText          strings.Builder
 	tools                map[string]toolUpdate
 	completedTools       map[string]bool
 	previousNativeTurns  map[string]bool
@@ -149,6 +150,7 @@ func (s *Session) executePrompt(prompt string) error {
 	if result.StopReason != "end_turn" {
 		return fmt.Errorf("mcode: prompt stopped (%s)", result.StopReason)
 	}
+	s.completeMessage()
 	return nil
 }
 

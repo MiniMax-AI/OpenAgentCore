@@ -101,7 +101,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 			case <-time.After(2 * time.Second):
 				t.Fatal("mutation receipt did not block")
 			}
-			session.out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{Content: "complete"})
+			session.out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 			waitFor(t, func() bool { return r.SteeringClosedForTest("run") }, "release admission closure")
 			switch operation {
 			case "function":
@@ -237,7 +237,7 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 	p := &controlledPreparation{closed: make(chan struct{})}
 	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
-		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{Content: "complete"})
+		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 		close(emitted)
 		select {
 		case <-allowReturn:

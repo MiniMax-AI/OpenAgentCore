@@ -124,7 +124,7 @@ func runFunctionHelper(request startRequest, mode string, scanner *bufio.Scanner
 		results[value.CallID] = value
 	}
 	if mode == "functions-cancel" {
-		emit(bridgeEvent{Type: "delta", Delta: "waiting for confirmation"})
+		emit(bridgeEvent{Type: "delta", ItemID: "message", Delta: "waiting for confirmation"})
 		if scanner.Scan() {
 			emit(bridgeEvent{Type: "error", Code: "cancelled"})
 		}
@@ -140,5 +140,5 @@ func runFunctionHelper(request startRequest, mode string, scanner *bufio.Scanner
 		}
 		emit(bridgeEvent{Type: "function_applied", CallID: id, DeliveryID: delivery})
 	}
-	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "done"})
+	emit(bridgeEvent{Type: "result", SessionID: request.Resume})
 }

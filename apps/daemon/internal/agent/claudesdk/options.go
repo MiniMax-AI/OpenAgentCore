@@ -33,7 +33,6 @@ type startRequest struct {
 	SystemPrompt       string               `json:"system_prompt"`
 	Cwd                string               `json:"cwd"`
 	Resume             string               `json:"resume,omitempty"`
-	ObserveMessages    bool                 `json:"observe_messages,omitempty"`
 	Functions          []proto.FunctionTool `json:"functions,omitempty"`
 	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
 	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
@@ -97,7 +96,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 // an agent-host view takes from its Session rather than the request.
 func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []string, error) {
 	skills := req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) != 0
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools}
+	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, Functions: req.FunctionTools}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
@@ -125,8 +124,8 @@ func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []s
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || mcp || skills {
-			return fail("structured output requires the qualified message-observing single-agent function profile")
+		if format.Type != "json_schema" || !req.DisableSubagents || mcp || skills {
+			return fail("structured output requires the qualified single-agent function profile")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
 			return startRequest{}, nil, err

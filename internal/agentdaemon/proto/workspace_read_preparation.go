@@ -8,6 +8,6 @@ func ValidWorkspaceReadPreparation(r PromptRequestPayload) bool {
 		!r.RequireExistingNativeSession && !r.DisableExecutionEnvironment &&
 		r.Model == "" && r.SystemPrompt == "" && r.ModelProvider == nil && len(r.HarnessConfig) == 0 &&
 		r.ExecutionControls == nil && r.MCPHTTPServers == nil &&
-		len(r.FunctionTools) == 0 && !r.ToolSearch && !r.ObserveMessages &&
+		len(r.FunctionTools) == 0 && !r.ToolSearch &&
 		!r.ObserveSubagentIdentities
 }

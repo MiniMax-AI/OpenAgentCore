@@ -39,7 +39,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"mcp","stage":"after","observation":{"status":"completed","kind":"mcp","server":"reference","name":"lookup","arguments":{},"output":{"structuredContent":{"number":9007199254740993}}}}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"partial","delta":"unfinished"}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"waiting","stage":"before","observation":{"status":"in_progress","kind":"command","command":"sleep 10"}}`)},
-		{Kind: "done", Payload: json.RawMessage(`{"content":"corrected answer","metadata":{"agent_session_id":"PRIVATE"}}`)},
+		{Kind: "done", Payload: json.RawMessage(`{"metadata":{"agent_session_id":"PRIVATE"}}`)},
 	}
 	for range 2 {
 		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
@@ -116,12 +116,12 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	}
 }
 
-func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T) {
+func TestItemProjectionFailureRollsBackJournal(t *testing.T) {
 	ctx := context.Background()
 	s, _ := testStore(t)
 	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
-	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
+	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "rollback"})
 	input, err := sendMessage(ctx, s, tenant, session.ID, "input", messageText("test"))
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"must roll back"}`)}, {Kind: "tool_call", Payload: json.RawMessage(`{"id":"mismatch","stage":"after","observation":{"status":"completed","kind":"invalid"}}`)}}
+	bad := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"must roll back"}`)}, {Kind: "tool_call", Payload: json.RawMessage(`{"id":"mismatch","stage":"after","observation":{"status":"completed","kind":"invalid"}}`)}}
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, bad); err == nil {
 		t.Fatal("invalid snapshot accepted")
 	}
@@ -142,49 +142,9 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
-	_, err = transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"legacy answer","metadata":{"private":"SECRET"}}}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	current, err := sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
-	if err != nil || len(current.Items) != 2 || *current.Items[1].Content[0].Text != "legacy answer" {
-		t.Fatal(current, err)
-	}
 }
 
-func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
-	ctx := context.Background()
-	s, _ := testStore(t)
-	journal := executionOwner(t, s).Sessions
-	tenant := uuid.NewString()
-	for _, receiptOnly := range []bool{true, false} {
-		session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
-		input, err := sendMessage(ctx, s, tenant, session.ID, "first", messageText("test"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if receiptOnly {
-			err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: json.RawMessage(`{"applied":true,"outcome":{"content":"retained cancellation text"}}`)}})
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		_, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":"retained cancellation text"}}`), "", input.Sequence)
-		if err != nil {
-			t.Fatal(err)
-		}
-		page, err := sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
-		if err != nil || len(page.Items) != 2 || page.Items[1].Status != "incomplete" || *page.Items[1].Content[0].Text != "retained cancellation text" {
-			t.Fatal(page, err)
-		}
-	}
-}
-
-func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
+func TestFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, _ := testStore(t)
 	journal := executionOwner(t, s).Sessions
@@ -202,16 +162,16 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	batch := []sessions.ExecutionEvent{
-		{Kind: "delta", Payload: json.RawMessage(`{"delta":"partial answer"}`)},
+		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"partial answer"}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"open","stage":"after","observation":{"status":"completed","kind":"web_search","action":{"type":"open_page","url":"https://example.com"}}}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"find","stage":"after","observation":{"status":"completed","kind":"web_search","action":{"type":"find_in_page","url":"https://example.com","pattern":"needle"}}}`)},
 		{Kind: "error", Payload: json.RawMessage(`{"error":"provider failure"}`)},
-		{Kind: "done", Payload: json.RawMessage(`{"content":"provider failure"}`)},
+		{Kind: "done", Payload: json.RawMessage(`{}`)},
 	}
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 		t.Fatal(err)
 	}
-	_, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"done":{"content":"provider failure"},"error_code":"engine_failed"}`), "", input.Sequence)
+	_, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"done":{},"error_code":"engine_failed"}`), "", input.Sequence)
 	if err != nil {
 		t.Fatal(err)
 	}

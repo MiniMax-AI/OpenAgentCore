@@ -56,7 +56,7 @@ func (t *reusableTurn) finish() {
 }
 func (t *reusableTurn) Cancel(context.Context) error { t.cancels.Add(1); t.finish(); return nil }
 func (t *reusableTurn) CancellationOutcome() proto.DonePayload {
-	return proto.DonePayload{Content: t.id, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
+	return proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
 }
 func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {
 	select {

@@ -98,7 +98,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 		t.Fatal("later input bypassed ordinary steering", steer)
 	}
 	h.write(start.RunID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: steer.InputID, Accepted: true})
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "answer", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "retained-prepared-native"}})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "retained-prepared-native"}})
 	completeEmptyArtifactExport(t, h)
 	got := awaitPreparedDispatch(t, result)
 	if got.err != nil || got.run.Turn.Status != sessions.TurnCompleted || len(got.run.Reservation.Receipts) != 2 || got.run.Reservation.Receipts[0].Replayed || got.run.Reservation.Receipts[1].Sequence >= late.Sequence {
@@ -132,7 +132,7 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 		t.Fatal("admitted execution lost its owner to the pending-input deadline", err)
 	}
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "completed after the reservation deadline"})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 	completeEmptyArtifactExport(t, h)
 	got := awaitPreparedDispatch(t, result)
 	if got.err != nil || got.run.Turn.Status != sessions.TurnCompleted {

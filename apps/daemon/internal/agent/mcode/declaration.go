@@ -14,7 +14,6 @@ import (
 var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode", Capabilities: proto.AgentKindCapabilities{
 	SubagentObservations:           proto.CapabilityUnsupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	MessageItems:                   proto.CapabilityUnsupported,
 	EnvironmentNone:                proto.CapabilityUnsupported,
 	LocalEnvironment:               proto.CapabilityUnsupported,
 	WorkspaceReadPreparation:       proto.CapabilityUnsupported,

@@ -105,7 +105,7 @@ type WireScenario struct {
 
 // CancellationOutcome is the continuity snapshot a cancelled Turn reports.
 func CancellationOutcome() proto.DonePayload {
-	return proto.DonePayload{Content: "partial", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
+	return proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
 }
 
 // WireScenarios returns every shared exchange.

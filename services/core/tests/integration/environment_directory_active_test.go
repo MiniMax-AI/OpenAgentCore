@@ -34,7 +34,7 @@ func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	if got := awaitDirectoryResult(t, result); got.err != nil || len(got.value.Entries) != 1 {
 		t.Fatal("active read", got.err)
 	}
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "finished"})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
 	if run.Turn.Status != sessions.TurnCompleted {

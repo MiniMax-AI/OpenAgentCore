@@ -218,7 +218,7 @@ func TestSession_DispatchDeliversToSubscriber(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	env, _ := proto.NewEnvelope(proto.TypeDelta, "run-1", proto.DeltaPayload{Delta: "hi", Sequence: 1})
+	env, _ := proto.NewEnvelope(proto.TypeDelta, "run-1", proto.DeltaPayload{ItemID: "message", Delta: "hi", Sequence: 1})
 	raw, _ := jsonMarshal(env)
 	conn.Feed(raw)
 
@@ -241,7 +241,7 @@ func TestSession_DoneFrameAutoUnsubscribes(t *testing.T) {
 
 	sub, _ := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
-	env, _ := proto.NewEnvelope(proto.TypeDone, "run-1", proto.DonePayload{Content: "ok"})
+	env, _ := proto.NewEnvelope(proto.TypeDone, "run-1", proto.DonePayload{})
 	raw, _ := jsonMarshal(env)
 	conn.Feed(raw)
 
@@ -336,7 +336,7 @@ func TestSession_HeartbeatTouchesRuntimeAndAdmitsDeclarations(t *testing.T) {
 	defer sess.Close("test done")
 
 	kinds := []proto.SupportedAgentKind{
-		{Kind: "fake_beta", Available: false, Version: "missing", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MessageItems: proto.CapabilitySupported})},
+		{Kind: "fake_beta", Available: false, Version: "missing", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})},
 		{Kind: "codex", Available: true, Version: "1.2.3", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported})},
 	}
 	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: kinds})

@@ -66,7 +66,7 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 
 // The declaration must retain the complete baseline capability descriptor.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"MessageItems": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "SubagentControl": true, "FunctionTools": true}
+	expected := map[string]bool{"EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "SubagentControl": true, "FunctionTools": true}
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {
 		name := value.Type().Field(i).Name

@@ -192,7 +192,7 @@ func TestSubagentFactsPrecedeFrozenRootTerminal(t *testing.T) {
 
 func TestSubagentRootFirstRetainsChildUntilTerminal(t *testing.T) {
 	s, f, out := observationSession(t, "inProgress")
-	s.emitDoneAt("frozen", nil, nil)
+	s.emitDoneAt(nil, nil)
 	for i := 0; i < 4; i++ {
 		select {
 		case e := <-out:

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"strings"
 	"time"
 )
 
@@ -46,7 +45,6 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 			s.invalidate()
 		}
 	}
-	var content strings.Builder
 	var result *bridgeEvent
 	var classifiedFailure error
 	var engineCode, failedResultID string
@@ -98,17 +96,17 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 				s.invalidate()
 			}
 		case "delta":
-			if start.ObserveMessages && event.ItemID == "" || !start.ObserveMessages && event.ItemID != "" {
-				failure = fmt.Errorf("claudesdk: invalid message delta identity")
+			sequence++
+			delta := proto.DeltaPayload{ItemID: event.ItemID, Delta: event.Delta, Sequence: sequence}
+			if err := delta.Validate(); err != nil {
+				failure = fmt.Errorf("claudesdk: %w", err)
 				s.invalidate()
 				break
 			}
-			content.WriteString(event.Delta)
-			sequence++
-			emit(proto.TypeDelta, proto.DeltaPayload{ItemID: event.ItemID, Delta: event.Delta, Sequence: sequence})
+			emit(proto.TypeDelta, delta)
 		case "output_message":
 			message := event.Message
-			if !start.ObserveMessages || message == nil || message.ID == "" ||
+			if message == nil || message.ID == "" ||
 				(message.Status != "in_progress" && message.Status != "completed") ||
 				(message.Status == "completed") != (message.Text != nil) {
 				failure = fmt.Errorf("claudesdk: invalid message observation")
@@ -205,11 +203,9 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 		metadata[proto.DoneMetaAgentSessionID] = id
 	}
 	if failure == nil {
-		content.Reset()
-		content.WriteString(result.Text)
 		metadata[proto.DoneMetaAgentSessionID] = result.SessionID
 	}
-	s.outcome = proto.DonePayload{Content: content.String(), Usage: usage, Metadata: metadata}
+	s.outcome = proto.DonePayload{Usage: usage, Metadata: metadata}
 	// Publish the observed cancellation outcome before terminal delivery.
 	if s.settlementErr != nil || !settlementReceived || !settlementConfirmed || !reusable || outputLost || s.process.Context().Err() != nil {
 		s.owner.retire()

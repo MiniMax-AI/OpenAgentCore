@@ -42,8 +42,9 @@ type toolUpdate struct {
 type sessionUpdate struct {
 	SessionID string `json:"sessionId"`
 	Update    struct {
-		Kind    string `json:"sessionUpdate"`
-		Content struct {
+		Kind      string `json:"sessionUpdate"`
+		MessageID string `json:"messageId"`
+		Content   struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`

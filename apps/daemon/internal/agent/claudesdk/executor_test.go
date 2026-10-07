@@ -63,7 +63,7 @@ func runPersistentExecutorHelper() {
 		if cancel {
 			encode(bridgeEvent{Type: "error", TurnID: active, Code: "cancelled"})
 		} else {
-			encode(bridgeEvent{Type: "result", TurnID: active, SessionID: "native-persistent", Text: active})
+			encode(bridgeEvent{Type: "result", TurnID: active, SessionID: "native-persistent"})
 		}
 		confirmed, reusable, reason := true, true, ""
 		switch os.Getenv("SDK_EXECUTOR_MODE") {
@@ -96,12 +96,12 @@ func runPersistentExecutorHelper() {
 			}
 			active = command.TurnID
 			if os.Getenv("SDK_EXECUTOR_MODE") == "late" && old != "" {
-				encode(bridgeEvent{Type: "delta", TurnID: old, Delta: "late"})
+				encode(bridgeEvent{Type: "delta", TurnID: old, ItemID: "message", Delta: "late"})
 				continue
 			}
 			encode(bridgeEvent{Type: "turn_started", TurnID: active})
 			encode(bridgeEvent{Type: "input_ready", TurnID: active, SessionID: "native-persistent"})
-			encode(bridgeEvent{Type: "delta", TurnID: active, Delta: "partial"})
+			encode(bridgeEvent{Type: "delta", TurnID: active, ItemID: "message", Delta: "partial"})
 			if strings.HasPrefix(os.Getenv("SDK_EXECUTOR_MODE"), "pending_function") {
 				encode(bridgeEvent{Type: "function_call", TurnID: active, Call: &proto.FunctionCallPayload{CallID: "call", Name: "lookup", Arguments: json.RawMessage("{}")}})
 			}
@@ -115,7 +115,7 @@ func runPersistentExecutorHelper() {
 				continue
 			}
 			// A full bridge write has happened, but no native input receipt exists.
-			encode(bridgeEvent{Type: "delta", TurnID: active, Delta: "steer-written"})
+			encode(bridgeEvent{Type: "delta", TurnID: active, ItemID: "message", Delta: "steer-written"})
 		case "turn_cancel":
 			if active == command.TurnID {
 				settle(true)

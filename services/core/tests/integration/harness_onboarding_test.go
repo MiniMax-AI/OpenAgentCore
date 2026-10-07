@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -108,8 +109,14 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if inputErr != nil || len(inputs) != 2 {
 		t.Fatal(inputs, inputErr)
 	}
-	if err = json.Unmarshal(turn.Outcome, &result); err != nil || result.AppliedThrough != inputs[1].Sequence || result.Done.Content != "readyfinish" {
+	if err = json.Unmarshal(turn.Outcome, &result); err != nil || result.AppliedThrough != inputs[1].Sequence {
 		t.Fatal(string(turn.Outcome), err)
+	}
+	page, err := sessionAdapter(h.s).ListItems(ctx, h.tenant, created.ID, "", 100, true)
+	if err != nil || !slices.ContainsFunc(page.Items, func(item v1.Item) bool {
+		return item.Role == "assistant" && item.Status == "completed" && len(item.Content) == 1 && item.Content[0].Text != nil && *item.Content[0].Text == "readyfinish"
+	}) {
+		t.Fatal("the answer is not a completed message Item", page, err)
 	}
 	bound, err := sessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, created.ID)
 	if err != nil || bound.NativeSessionID == "" {

@@ -92,7 +92,7 @@ func runClassifiedFailureHelper(request startRequest, mode string, encode func(b
 		os.Exit(7)
 	}
 	if mode == "after-terminal" {
-		fmt.Fprintln(os.Stdout, `{"type":"delta","delta":"late"}`)
+		fmt.Fprintln(os.Stdout, `{"type":"delta","item_id":"message","delta":"late"}`)
 	}
 	if mode == "scanner-error" {
 		fmt.Fprintln(os.Stdout, strings.Repeat("x", 2*1024*1024))

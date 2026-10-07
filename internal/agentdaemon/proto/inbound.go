@@ -1,5 +1,7 @@
 package proto
 
+import "errors"
+
 // This package lives at the repo-root module so both the server-side
 // gateway/connector AND apps/daemon can import it. That rules out
 // importing server/internal/... (Go's internal-package rule), so wire
@@ -11,12 +13,11 @@ package proto
 // connector.PromptEvent.Type 1:1 so the gateway can translate without
 // a per-event lookup table.
 const (
-	// TypeDelta carries an incremental text fragment. Daemon
-	// accumulates these so the matching done frame can carry the
-	// full Final.Content.
+	// TypeDelta carries an incremental text fragment of one assistant message.
 	TypeDelta = "delta"
 
-	// TypeOutputMessage carries opt-in native message boundaries and completion snapshots.
+	// TypeOutputMessage carries an assistant message's start and its
+	// completion snapshot.
 	TypeOutputMessage = "output_message"
 
 	// TypeThinking carries an internal-thinking fragment. Gateway
@@ -50,11 +51,20 @@ const (
 	TypeHeartbeat = "heartbeat"
 )
 
-// DeltaPayload carries an incremental text fragment from the agent.
+// DeltaPayload carries an incremental text fragment of the assistant message
+// ItemID names.
 type DeltaPayload struct {
-	ItemID   string `json:"item_id,omitempty"`
+	ItemID   string `json:"item_id"`
 	Delta    string `json:"delta"`
 	Sequence uint64 `json:"sequence"`
+}
+
+// Validate requires the message identity of a delta.
+func (p DeltaPayload) Validate() error {
+	if p.ItemID == "" {
+		return errors.New("delta requires item_id")
+	}
+	return nil
 }
 
 // OutputMessagePayload describes a native assistant message; Text is a completion snapshot.
@@ -137,7 +147,6 @@ type ErrorPayload struct {
 type DonePayload struct {
 	// SourceCompletedAtMS freezes the native root completion before child settlement.
 	SourceCompletedAtMS *int64         `json:"source_completed_at_ms,omitempty"`
-	Content             string         `json:"content"`
 	Transcript          string         `json:"transcript,omitempty"`
 	Usage               Usage          `json:"usage,omitzero"`
 	Metadata            map[string]any `json:"metadata,omitempty"`
@@ -156,7 +165,6 @@ const (
 type AgentKindCapabilities struct {
 	SubagentObservations  CapabilitySupport `json:"subagent_observations"`
 	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`
-	MessageItems          CapabilitySupport `json:"message_items"`
 
 	EnvironmentNone                CapabilitySupport `json:"environment_none"`
 	LocalEnvironment               CapabilitySupport `json:"local_environment"`

@@ -89,7 +89,6 @@ func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 		out := make(chan proto.Envelope, 64)
 		req := workspaceRequest()
 		req.RunID, req.Input, req.AgentSessionID = uuid.NewString(), proto.TextInput(prompt), resume
-		req.ObserveMessages = true
 		req.Model, req.SystemPrompt = "MiniMax-M3", "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."
 		proof := evidence{RunID: req.RunID}
 		running, err := startSingleTurn(ctx, config, req, out)
@@ -197,8 +196,8 @@ func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 	liveWorkspaceCommands(t, second.RunID, second.Events, nil)
 	final, err := os.ReadFile(artifact)
 	if err != nil || string(final) != strings.TrimSpace(string(original))+"-resumed\n" || second.Failure != "" ||
-		second.Done.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(second.Done.Content, nonce) ||
-		!strings.Contains(second.Done.Content, strings.TrimSpace(string(original))) || first.BridgePID == second.BridgePID {
+		second.Done.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(messageText(second.Events), nonce) ||
+		!strings.Contains(messageText(second.Events), strings.TrimSpace(string(original))) || first.BridgePID == second.BridgePID {
 		t.Fatal("fresh-process native workspace/history continuation failed")
 	}
 	retained := config.StateDir + "-retained"

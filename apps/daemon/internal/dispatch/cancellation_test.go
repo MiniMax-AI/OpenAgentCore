@@ -46,7 +46,7 @@ func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
 	sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{})}
 	registerCancelReceiptKind(h, sess)
 	startRun(t, h.router, h.sender, "codex", "release")
-	sess.out <- mustEnv(t, proto.TypeDone, "release", proto.DonePayload{Content: "Finished"})
+	sess.out <- mustEnv(t, proto.TypeDone, "release", proto.DonePayload{})
 	<-sess.entered
 	if len(h.sender.typesFor("release")) != 0 {
 		t.Fatal("completion acknowledged before native writer was released")
@@ -59,7 +59,7 @@ func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
 }
 
 func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
-	observed := proto.DonePayload{Content: "partial output", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-cancelled"}}
+	observed := proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-cancelled"}}
 	for _, test := range []struct {
 		name    string
 		outcome proto.DonePayload

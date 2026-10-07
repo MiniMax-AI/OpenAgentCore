@@ -114,7 +114,7 @@ func TestJournalDrainRetainsTerminalContinuityAndUsageOnFailure(t *testing.T) {
 		env, _ := proto.NewEnvelope(proto.TypeDelta, "run", proto.DeltaPayload{Delta: "partial", Sequence: uint64(i + 1)})
 		upstream <- env
 	}
-	done, _ := proto.NewEnvelope(proto.TypeDone, "run", proto.DonePayload{Content: "Final", Usage: proto.Usage{InputTokens: 10, OutputTokens: 4}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread"}})
+	done, _ := proto.NewEnvelope(proto.TypeDone, "run", proto.DonePayload{Usage: proto.Usage{InputTokens: 10, OutputTokens: 4}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread"}})
 	upstream <- done
 	close(upstream)
 	result := Result{ErrorCode: "event_persistence_failed"}

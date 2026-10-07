@@ -46,7 +46,6 @@ type bridgeEvent struct {
 	Type        string                      `json:"type"`
 	Delta       string                      `json:"delta"`
 	SessionID   string                      `json:"session_id"`
-	Text        string                      `json:"text"`
 	Code        string                      `json:"code"`
 	ItemID      string                      `json:"item_id"`
 	Message     *proto.OutputMessagePayload `json:"message"`

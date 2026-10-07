@@ -35,10 +35,10 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 				case <-time.After(31 * time.Second):
 				}
 				h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Accepted: true})
-				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "completed"})
+				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 				status = sessions.TurnCompleted
 			case "missing-at-done":
-				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "unconfirmed input"})
+				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			case "retry-after-write":
 				h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, ErrorCode: "not_ready"})
 			case "cancel-unknown-first":
@@ -55,7 +55,7 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 					t.Fatalf("input preempted cancellation: %+v", got)
 				case <-time.After(300 * time.Millisecond):
 				}
-				h.write(first.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Content: "partial"}})
+				h.write(first.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
 				status = sessions.TurnCancelled
 			}
 			done := h.finished(result, status)

@@ -68,7 +68,6 @@ func newExecutor(parent context.Context, req proto.PromptRequestPayload, cfg ses
 	s := &Session{
 		nativeHome:                plan.home,
 		functions:                 functions,
-		observeMessages:           req.ObserveMessages,
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,
 		rpc:                       rpc,

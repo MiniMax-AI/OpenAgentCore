@@ -65,7 +65,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 		}
 		check(rolledBack.Usage, 20)
 		// Completion without usage retains the last persisted measurement.
-		completed, err := journal.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, status, json.RawMessage(`{"done":{"content":"partial"}}`), "", admission.Sequence)
+		completed, err := journal.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, status, json.RawMessage(`{"done":{}}`), "", admission.Sequence)
 		if err != nil {
 			t.Fatal(err)
 		}

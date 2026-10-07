@@ -60,7 +60,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	h.session = publicSession(t, h, "unrelated")
 	next := h.message("next", "Unrelated work")
 	h.read(testExecutionRequest)
-	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "unaffected"})
+	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})
 	waitTurn(t, h, next.TurnID, sessions.TurnCompleted)
 }
 
@@ -156,6 +156,6 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	h.session = publicSession(t, h, "unrelated")
 	next := h.message("next", "Unrelated work")
 	h.read(testExecutionRequest)
-	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "unaffected"})
+	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})
 	waitTurn(t, h, next.TurnID, sessions.TurnCompleted)
 }

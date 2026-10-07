@@ -41,7 +41,7 @@ func TestTextTurnAcceptsRestrictiveCapabilities(t *testing.T) {
 				}
 				if event.Type == proto.TypeDone {
 					var payload proto.DonePayload
-					if err := event.DecodePayload(&payload); err != nil || payload.Content != "final" || payload.Metadata[proto.DoneMetaAgentSessionID] != "native-session" {
+					if err := event.DecodePayload(&payload); err != nil || payload.Metadata[proto.DoneMetaAgentSessionID] != "native-session" {
 						t.Fatal(payload, err)
 					}
 					done = true

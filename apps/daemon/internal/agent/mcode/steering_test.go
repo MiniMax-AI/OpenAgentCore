@@ -19,7 +19,7 @@ func TestNativeSteeringReceipt(t *testing.T) {
 			defer cancel()
 			select {
 			case event := <-out:
-				if event.Type != proto.TypeDelta {
+				if event.Type != proto.TypeOutputMessage {
 					t.Fatalf("first event %s", event.Type)
 				}
 			case <-ctx.Done():
@@ -67,16 +67,20 @@ func TestNativeSteeringReceipt(t *testing.T) {
 
 func TestTerminalFollowsAllNativeFrames(t *testing.T) {
 	_, out := helperSession(t, "many-frames", false)
-	count := 0
+	count, completed := 0, 0
 	for e := range out {
 		switch e.Type {
 		case proto.TypeDelta:
 			count++
+		case proto.TypeOutputMessage:
+			var message proto.OutputMessagePayload
+			_ = json.Unmarshal(e.Payload, &message)
+			if message.Text != nil {
+				completed = len(*message.Text)
+			}
 		case proto.TypeDone:
-			var done proto.DonePayload
-			_ = json.Unmarshal(e.Payload, &done)
-			if count != 100 || len(done.Content) != 100 {
-				t.Fatalf("terminal overtook frames: %d/%d", count, len(done.Content))
+			if count != 100 || completed != 100 {
+				t.Fatalf("terminal overtook frames: %d/%d", count, completed)
 			}
 		case proto.TypeError:
 			t.Fatalf("unexpected error %s", e.Payload)

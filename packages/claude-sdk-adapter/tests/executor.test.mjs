@@ -78,7 +78,7 @@ async function launch(t,mode="normal") {
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
  const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
  send({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",
- ...(mode==="features" || mode.startsWith("pending-function") ? {observe_messages:true,functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
+ ...(mode==="features" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
  await wait(()=>events.some(event=>event.type==="executor_ready"));
  assert.equal(observations.filter(event=>event.type==="input").length,0);
  return {child,events,observations,closed,wait,send,start};

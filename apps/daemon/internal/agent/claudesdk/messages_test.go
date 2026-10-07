@@ -15,12 +15,12 @@ import (
 )
 
 func TestMessageObservations(t *testing.T) {
-	for _, mode := range []string{"messages-success", "messages-partial", "messages-unrequested", "messages-missing-id", "messages-invalid-snapshot"} {
+	for _, mode := range []string{"messages-success", "messages-partial", "messages-missing-id", "messages-invalid-snapshot"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), ObserveMessages: mode != "messages-unrequested", AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
@@ -50,17 +50,17 @@ func TestMessageObservations(t *testing.T) {
 			switch mode {
 			case "messages-success":
 				verifyMessageEvents(t, events, "partialfinal")
-				if done.Content != "partialfinal" || done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" {
+				if done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" {
 					t.Fatalf("bad Done: %+v", done)
 				}
 			case "messages-partial":
-				if done.Content != "partial" || done.Metadata[proto.DoneMetaAgentSessionID] != nil {
+				if done.Metadata[proto.DoneMetaAgentSessionID] != nil {
 					t.Fatalf("bad partial Done: %+v", done)
 				}
 				if len(events) != 4 || events[0].Type != proto.TypeOutputMessage || events[1].Type != proto.TypeDelta {
 					t.Fatalf("lost partial output: %+v", events)
 				}
-			case "messages-unrequested", "messages-missing-id":
+			case "messages-missing-id":
 				if len(events) != 2 {
 					t.Fatalf("invalid bridge observation escaped: %+v", events)
 				}
@@ -77,13 +77,7 @@ func runMessageHelper(request startRequest, mode string, emit func(bridgeEvent))
 		emit(bridgeEvent{Type: "delta", Delta: "unidentified"})
 		return
 	}
-	if mode != "messages-unrequested" && !request.ObserveMessages {
-		os.Exit(4)
-	}
 	message("message-1", "in_progress", nil)
-	if mode == "messages-unrequested" {
-		return
-	}
 	emit(bridgeEvent{Type: "delta", ItemID: "message-1", Delta: "partial"})
 	if mode == "messages-partial" {
 		emit(bridgeEvent{Type: "error", Code: "execution_failed"})
@@ -100,7 +94,7 @@ func runMessageHelper(request startRequest, mode string, emit func(bridgeEvent))
 	emit(bridgeEvent{Type: "delta", ItemID: "message-2", Delta: "nal"})
 	text = "final"
 	message("message-2", "completed", &text)
-	emit(bridgeEvent{Type: "result", Text: "partialfinal", SessionID: request.Resume})
+	emit(bridgeEvent{Type: "result", SessionID: request.Resume})
 }
 
 func verifyMessageEvents(t *testing.T, events []proto.Envelope, want string) {
@@ -158,4 +152,16 @@ func verifyMessageEvents(t *testing.T, events []proto.Envelope, want string) {
 			t.Fatalf("message %s did not complete", id)
 		}
 	}
+}
+
+// messageText joins the assistant message text a Turn's deltas carried.
+func messageText(events []proto.Envelope) string {
+	var text strings.Builder
+	for _, event := range events {
+		var delta proto.DeltaPayload
+		if event.Type == proto.TypeDelta && event.DecodePayload(&delta) == nil {
+			text.WriteString(delta.Delta)
+		}
+	}
+	return text.String()
 }

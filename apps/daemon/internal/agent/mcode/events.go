@@ -42,10 +42,18 @@ func (s *Session) handle(frame rpcFrame) error {
 		if event.Update.Content.Type != "text" {
 			return fmt.Errorf("mcode: unsupported response content")
 		}
+		if event.Update.MessageID == "" {
+			return fmt.Errorf("mcode: ACP message chunk has no message identity")
+		}
+		if event.Update.MessageID != s.message {
+			s.completeMessage()
+			s.message = event.Update.MessageID
+			s.emit(proto.TypeOutputMessage, proto.OutputMessagePayload{ID: s.message, Status: "in_progress"})
+		}
 		text := event.Update.Content.Text
-		s.content.WriteString(text)
+		s.messageText.WriteString(text)
 		s.sequence++
-		s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: text, Sequence: s.sequence})
+		s.emit(proto.TypeDelta, proto.DeltaPayload{ItemID: s.message, Delta: text, Sequence: s.sequence})
 	case "agent_thought_chunk":
 		s.sequence++
 		s.emit(proto.TypeThinking, proto.ThinkingPayload{Text: event.Update.Content.Text, Sequence: s.sequence})
@@ -53,6 +61,18 @@ func (s *Session) handle(frame rpcFrame) error {
 		return s.emitTool(event.Update.toolUpdate)
 	}
 	return nil
+}
+
+// completeMessage completes the open assistant message with its text. ACP
+// marks no message end: the next message or the end of the Turn ends it.
+func (s *Session) completeMessage() {
+	if s.message == "" {
+		return
+	}
+	text := s.messageText.String()
+	s.emit(proto.TypeOutputMessage, proto.OutputMessagePayload{ID: s.message, Status: "completed", Text: &text})
+	s.message = ""
+	s.messageText.Reset()
 }
 
 func (s *Session) emitTool(update toolUpdate) error {

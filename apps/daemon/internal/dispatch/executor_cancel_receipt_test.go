@@ -99,7 +99,7 @@ func (t *receiptCancelTurn) AwaitSettlement(ctx context.Context) (agent.TurnSett
 	}
 }
 func (t *receiptCancelTurn) CancellationOutcome() proto.DonePayload {
-	return proto.DonePayload{Content: "observed", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
+	return proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
 }
 func (t *receiptCancelTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
 	return agent.ErrUnknownFunctionCall

@@ -81,7 +81,7 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
-	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), ObserveMessages: true, DisableSubagents: true, Model: "model", SystemPrompt: "Original instructions.", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
+	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableSubagents: true, Model: "model", SystemPrompt: "Original instructions.", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
 	start, _, err := prepareConfiguration(config, request)
 	if err != nil {
 		t.Fatal(err)

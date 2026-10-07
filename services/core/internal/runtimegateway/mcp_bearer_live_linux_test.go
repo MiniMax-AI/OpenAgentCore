@@ -23,6 +23,7 @@ import (
 type mcpBearerTurn struct {
 	Events                     []proto.Envelope  `json:"events"`
 	Done                       proto.DonePayload `json:"done"`
+	Text                       string            `json:"text"`
 	NativeLaunches             int               `json:"native_launches"`
 	BearerEnvironmentReference string            `json:"bearer_environment_reference"`
 }
@@ -113,7 +114,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
 		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-" + assignment.SessionID, AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://api.minimax.cn/v1", APIKey: provider}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-" + assignment.SessionID, AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://api.minimax.cn/v1", APIKey: provider}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 		sub, err := peer.SubscribeDurable(runID, assignment)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")
@@ -129,11 +130,11 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	}
 	first := run("Call private_mcp remember exactly once with tag first. Also call anonymous_mcp ping exactly once with tag first. Reply with the exact remembered value and the ping result. Do not use any other tool.", "", map[string]string{"remember": fixture.memory, "ping": "ANONYMOUS_OK"})
 	nativeID, _ := first.Done.Metadata[proto.DoneMetaAgentSessionID].(string)
-	if nativeID == "" || !strings.Contains(first.Done.Content, fixture.memory) {
+	if nativeID == "" || !strings.Contains(first.Text, fixture.memory) {
 		t.Fatal("first real model Turn did not return its native identity and unpredictable tool result")
 	}
 	second := run("Recall the exact remembered value from the preceding tool result. Call private_mcp fail exactly once with tag cold-followup. It intentionally reports an ordinary tool error; do not retry. Reply with the earlier remembered value and the exact error text. Do not call remember, ping or any other tool.", nativeID, map[string]string{"fail": "INTENTIONAL_MCP_TOOL_ERROR:cold-followup"})
-	if second.Done.Metadata[proto.DoneMetaAgentSessionID] != nativeID || !strings.Contains(second.Done.Content, fixture.memory) || !strings.Contains(second.Done.Content, "INTENTIONAL_MCP_TOOL_ERROR:cold-followup") {
+	if second.Done.Metadata[proto.DoneMetaAgentSessionID] != nativeID || !strings.Contains(second.Text, fixture.memory) || !strings.Contains(second.Text, "INTENTIONAL_MCP_TOOL_ERROR:cold-followup") {
 		t.Fatal("cold native continuation lost history, identity or ordinary error output")
 	}
 	if second.NativeLaunches <= first.NativeLaunches || second.BearerEnvironmentReference == first.BearerEnvironmentReference {
@@ -229,6 +230,12 @@ func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, 
 		switch event.Type {
 		case proto.TypeError:
 			t.Fatal("unexpected execution failure during private MCP acceptance")
+		case proto.TypeDelta:
+			var delta proto.DeltaPayload
+			if event.DecodePayload(&delta) != nil {
+				t.Fatal("invalid native message delta")
+			}
+			turn.Text += delta.Delta
 		case proto.TypeToolCall:
 			var call proto.ToolCallPayload
 			if event.DecodePayload(&call) != nil || call.Observation == nil {
@@ -259,7 +266,7 @@ func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, 
 			}
 			after[obs.Name]++
 		case proto.TypeDone:
-			if event.DecodePayload(&turn.Done) != nil || sub.Err() != nil || turn.Done.Content == "" || turn.Done.Metadata[proto.DoneMetaAgentSessionType] != "codex_thread" {
+			if event.DecodePayload(&turn.Done) != nil || sub.Err() != nil || turn.Text == "" || turn.Done.Metadata[proto.DoneMetaAgentSessionType] != "codex_thread" {
 				t.Fatal("invalid native Done or incomplete gateway delivery")
 			}
 			for name := range expected {

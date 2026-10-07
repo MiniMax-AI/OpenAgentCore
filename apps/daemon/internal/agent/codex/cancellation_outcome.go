@@ -39,9 +39,6 @@ func (s *Session) CancellationOutcome() proto.DonePayload {
 		outcome.Metadata[proto.DoneMetaAgentSessionID] = id
 		outcome.Metadata[proto.DoneMetaAgentSessionType] = "codex_thread"
 	}
-	s.finalTextMu.Lock()
-	outcome.Content = s.finalText
-	s.finalTextMu.Unlock()
 	s.usageMu.Lock()
 	if usage := s.latestUsage; usage != nil {
 		outcome.Usage = s.usagePayload(*usage)

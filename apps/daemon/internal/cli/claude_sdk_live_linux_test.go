@@ -64,6 +64,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 	}
 	type execution struct {
 		Outcome        proto.DonePayload `json:"outcome"`
+		Text           string            `json:"text"`
 		Events         []proto.Envelope  `json:"events"`
 		FunctionCalls  int               `json:"function_calls"`
 		AppliedResults int               `json:"applied_results"`
@@ -90,7 +91,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
 		id := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider}
+		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}
@@ -169,6 +170,11 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 					cancelAck = true
 				}
 			case proto.TypeDelta:
+				var delta proto.DeltaPayload
+				if err := event.DecodePayload(&delta); err != nil {
+					t.Fatal(err)
+				}
+				proof.Text += delta.Delta
 				if cancelOnText && !proof.Cancelled {
 					proof.Cancelled = true
 					handle(proto.TypePromptCancel, proto.PromptCancelPayload{DeliveryID: "cancel"})
@@ -184,14 +190,14 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 				}
 			}
 		}
-		if proof.Outcome.Content == "" || proof.Cancelled != cancelOnText {
+		if proof.Text == "" || proof.Cancelled != cancelOnText {
 			t.Fatal("missing registered text/cancellation outcome")
 		}
 		return proof
 	}
 	first := run(1, "Call lookup exactly once with id 42 as a string. Reply with its exact returned verification value.", "", true, false)
 	id, _ := first.Outcome.Metadata[proto.DoneMetaAgentSessionID].(string)
-	if id == "" || !strings.Contains(first.Outcome.Content, nonce) || first.FunctionCalls != 1 || first.AppliedResults != 1 {
+	if id == "" || !strings.Contains(first.Text, nonce) || first.FunctionCalls != 1 || first.AppliedResults != 1 {
 		t.Fatal("registered function flow failed")
 	}
 	second := run(2, "First repeat the verification value from the lookup result, then write two hundred numbered sentences about trees. Use no tools.", id, false, true)
@@ -199,7 +205,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		t.Fatal("registered cancellation lost native identity")
 	}
 	third := run(3, "Return only the exact registered-function verification value from the earlier lookup result. Ignore the prior tree request.", id, false, false)
-	if third.Outcome.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(third.Outcome.Content, nonce) {
+	if third.Outcome.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(third.Text, nonce) {
 		t.Fatal("registered cold continuation lost identity or history")
 	}
 	data, _ := json.MarshalIndent(map[string]any{"scope": "SDK-only readiness and production registration -> daemon router -> pinned SDK/native -> real MiniMax; function receipt, cancellation and cold continuation; public API admission remains separate", "descriptor": discovery[0].runtime.Info, "entrypoint": entrypoint, "verification_value": nonce, "executions": []execution{first, second, third}}, "", "  ")

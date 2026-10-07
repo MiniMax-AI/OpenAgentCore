@@ -373,9 +373,6 @@ func (r *Result) mergeDone(raw json.RawMessage) error {
 	if done.Usage.Model == "" {
 		done.Usage.Model = r.Done.Usage.Model
 	}
-	if done.Content == "" {
-		done.Content = r.Done.Content
-	}
 	if done.Metadata == nil {
 		done.Metadata = r.Done.Metadata
 	}

@@ -42,7 +42,6 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		Model: snapshot.Agent.Model, SystemPrompt: instructions, ModelProvider: provider, HarnessConfig: harnessConfig,
 		ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
 		AgentSessionID: bound.NativeSessionID, RequireExistingNativeSession: recoverNativeSession,
-		ObserveMessages:           caps.MessageItems.IsSupported(),
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}

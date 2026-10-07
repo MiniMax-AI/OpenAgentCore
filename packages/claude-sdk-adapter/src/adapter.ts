@@ -29,8 +29,7 @@ export type Event =
   | CommandEvent
   | { type: "prepared" }
   | { type: "usage"; session_id: string; result_id: string; usage: NativeUsage }
-  | { type: "delta"; delta: string }
-  | { type: "result"; session_id: string; text: string }
+  | { type: "result"; session_id: string }
   | { type: "error"; code: "invalid_request" | "history_unavailable" | "execution_failed" | "cancelled"; engine_error_code?: string; session_id?: string; result_id?: string };
 
 export async function execute(request: Start | Prepare | ExecutorPrepare, emit: (event: Event) => Promise<void>, abort: AbortController, functions = new FunctionBridge(emit), inputs = new Inputs(immediateInput(request)), turns?: ExecutorTurns): Promise<void> {
@@ -73,7 +72,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   let failed = false;
   let cancellationFactsFailed = false;
   let structured = request.output_format ? new StructuredOutput() : undefined;
-  let messages = request.observe_messages ? new MessageObserver() : undefined;
+  let messages = new MessageObserver();
   let stream: ReturnType<typeof query> | undefined;
   let warm: WarmQuery | undefined;
   let nativeAlive = false;
@@ -138,7 +137,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         turns.configure(stream,(input,output)=>{
           inputs=new Inputs(input);
           functions=new FunctionBridge(output);
-          messages=request.observe_messages ? new MessageObserver() : undefined;
+          messages=new MessageObserver();
           structured=request.output_format ? new StructuredOutput() : undefined;
           commands=workspace ? new CommandObserver() : undefined;
           mcp=profile ? new MCPObserver(profile.identities) : undefined;
@@ -171,7 +170,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       await functions.consume(message, nativeID, turns?.cancelled);
       if (mcp) for (const event of mcp.consume(message, nativeID)) await emit(event);
       if (commands) for (const event of commands.consume(message, nativeID, inputs.hasInput)) await emit(event);
-      if (messages) for (const event of messages.consume(message)) await emit(event);
+      for (const event of messages.consume(message)) await emit(event);
       if (message.type === "system" && message.subtype === "init") {
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
@@ -184,9 +183,6 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         }
         turns?.identify(nativeID);
         if(!turns || turns.id) for (const event of inputs.start(nativeID)) await emit(event);
-      } else if (!messages && message.type === "stream_event" && message.parent_tool_use_id === null &&
-                 message.event.type === "content_block_delta" && message.event.delta.type === "text_delta") {
-        await emit({ type: "delta", delta: message.event.delta.text });
       } else if (message.type === "result") {
         if (!message.uuid || resultIDs.has(message.uuid) || !nativeID || message.session_id !== nativeID) throw new Error("invalid native result identity");
         resultIDs.add(message.uuid);
@@ -197,7 +193,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           throw nativeResultFailure;
         }
         if (structured && !turns?.cancelled) await emit(structured.complete(message));
-        result = { type: "result", session_id: nativeID, text: message.subtype === "success" ? message.result : "" };
+        result = { type: "result", session_id: nativeID };
         if(turns?.cancelled && !inputs.complete) throw new Error("unconfirmed cancelled inputs");
       }
       if (message.type !== "result" && (!turns || turns.id)) for (const event of inputs.consume(message)) await emit(event);

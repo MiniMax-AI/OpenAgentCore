@@ -250,7 +250,7 @@ func TestPreparationSingleTransferAndReleaseDoesNotCancelRun(t *testing.T) {
 		t.Fatal("transferred preparation closed")
 	default:
 	}
-	session.out <- mustEnv(t, proto.TypeDone, "real-run", proto.DonePayload{Content: "complete"})
+	session.out <- mustEnv(t, proto.TypeDone, "real-run", proto.DonePayload{})
 	deadline := time.Now().Add(time.Second)
 	for r.ActiveRuns() != 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)

@@ -57,23 +57,6 @@ func (q *Queries) GetSessionItem(ctx context.Context, arg GetSessionItemParams) 
 	return i, err
 }
 
-const hasNativeMessageItem = `-- name: HasNativeMessageItem :one
-SELECT EXISTS(SELECT 1 FROM session_items WHERE turn_id = $1
-    AND payload->>'role' = 'assistant' AND id <> $2)
-`
-
-type HasNativeMessageItemParams struct {
-	TurnID pgtype.UUID `json:"turn_id"`
-	ID     pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) HasNativeMessageItem(ctx context.Context, arg HasNativeMessageItemParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasNativeMessageItem, arg.TurnID, arg.ID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const itemEventSources = `-- name: ItemEventSources :many
 SELECT session_id, turn_id, ordinal, kind, payload, created_at FROM turn_events WHERE session_id = $1 AND turn_id = $2 AND ordinal >= $3 ORDER BY ordinal
 `

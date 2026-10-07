@@ -127,10 +127,6 @@ func TestItemsTakePositionsAndOutputIndexes(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(stored, items.Stored{Item: answer}) {
 			t.Fatalf("stored %+v, %v", stored, err)
 		}
-		legacy, err := bound.LoadItem(t.Context(), turnID, items.Update{Item: v1.Item{ID: uuid.NewString()}, LegacyFinal: true})
-		if err != nil || !legacy.NativeMessage || legacy.Item.ID != "" {
-			t.Fatalf("legacy aggregate %+v, %v", legacy, err)
-		}
 		return nil
 	})
 }

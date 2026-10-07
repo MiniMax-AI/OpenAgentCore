@@ -88,7 +88,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 			}
 		}
 	}
-	if done.Content != "completed" || done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || done.Usage.Raw["claude_sdk_result"] == nil {
+	if done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || done.Usage.Raw["claude_sdk_result"] == nil {
 		t.Fatal("prepared execution lost ordinary output or frozen resume", done)
 	}
 	if _, err := os.Stat(filepath.Join(config.StateDir, "released")); err != nil {

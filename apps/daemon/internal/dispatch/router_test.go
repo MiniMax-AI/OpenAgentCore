@@ -215,7 +215,7 @@ func TestExecutionStartRunsInputAndForwardsOutput(t *testing.T) {
 
 	// Session emits a delta + done; both should reach the sender.
 	sess.out <- mustEnv(t, proto.TypeDelta, "run_1", proto.DeltaPayload{Delta: "hello", Sequence: 1})
-	sess.out <- mustEnv(t, proto.TypeDone, "run_1", proto.DonePayload{Content: "hello"})
+	sess.out <- mustEnv(t, proto.TypeDone, "run_1", proto.DonePayload{})
 
 	waitForTypes(t, h.sender, "run_1", []string{proto.TypeDelta, proto.TypeDone})
 
