@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 0865682fa439d9a1d5b80562f4ec66763e4d1489b163be01d0ad8ad890f329c0
+source_hash: f63789e0f3982b9f6633381d3c93441e5185b04398541b95c3e1d0505de588eb
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -24,7 +24,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web |
 | `docker compose down` | 移除容器。数据保留；要删除数据，请[卸载](#uninstall) |
 
-第二个安装使用自己的目录，例如 `~/.oac/second`。
+示例使用默认安装目录。Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用管理命令，后接相同参数。使用自定义安装目录时，替换各命令中的路径。
 
 ## 服务健康状态 {#service-health}
 

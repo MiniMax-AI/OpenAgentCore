@@ -22,7 +22,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `oac rotate-core-key` | Replaces the Core key and restarts Core and Web |
 | `docker compose down` | Removes the containers. Data is kept; to delete it, [uninstall](#uninstall) |
 
-For a second installation, use its directory, such as `~/.oac/second`.
+The examples use the default installation directory. On Windows, invoke the management command with `& "$HOME/.oac/core/oac.exe"` followed by the same arguments. For a custom installation directory, replace the path in each command.
 
 ## Service health
 

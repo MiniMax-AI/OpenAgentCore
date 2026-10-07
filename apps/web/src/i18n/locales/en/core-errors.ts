@@ -1,5 +1,5 @@
 export const coreErrors = {
-  "invalid_admin_key": "The console's Core key was rejected. Run oac rotate-core-key on the Core host, then sign in again.",
+  "invalid_admin_key": "The console's Core key was rejected. Rotate it on the Core host, then sign in again.",
   "console_sign_in_required": "Sign in to the console again.",
   "console_origin_rejected": "Open the console at its configured address.",
   "console_request_invalid": "The console request was rejected. Reload the page.",
