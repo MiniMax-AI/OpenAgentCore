@@ -78,7 +78,7 @@ func (l *launcher) run() error {
 	if err := loopbackUp(); err != nil {
 		return &Error{Kind: ErrNetwork, Op: "loopback", Err: err}
 	}
-	if err := l.mountWorld(spec.Staging); err != nil {
+	if err := l.mountRoot(spec); err != nil {
 		return err
 	}
 	<-l.proceed
@@ -371,22 +371,35 @@ func exitOf(ws unix.WaitStatus) (Exit, int) {
 	return Exit{Code: ws.ExitStatus()}, ws.ExitStatus()
 }
 
-func (l *launcher) mountWorld(staging string) error {
-	dev, err := unix.Open("/dev/fuse", unix.O_RDWR|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return &Error{Kind: ErrNoFUSE, Op: "open", Path: "/dev/fuse", Err: err}
-	}
-	defer unix.Close(dev)
-	opts := strings.Join(append([]string{fmt.Sprintf("fd=%d", dev)}, fuseOptions...), ",")
-	if err := unix.Mount("oac-world", staging, "fuse", fuseMountFlags, opts); err != nil {
-		return mountError("mount", staging, err)
+// mountRoot mounts the view's root at the staging directory, the world over a new /dev/fuse connection or an empty root, and reports it with that connection and the network namespace.
+func (l *launcher) mountRoot(spec *launchSpec) error {
+	var fds []int
+	defer func() {
+		for _, fd := range fds {
+			unix.Close(fd)
+		}
+	}()
+	if spec.EmptyRoot != nil {
+		if err := emptyRoot(spec.Staging, spec.EmptyRoot); err != nil {
+			return err
+		}
+	} else {
+		dev, err := unix.Open("/dev/fuse", unix.O_RDWR|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return &Error{Kind: ErrNoFUSE, Op: "open", Path: "/dev/fuse", Err: err}
+		}
+		fds = append(fds, dev)
+		opts := strings.Join(append([]string{fmt.Sprintf("fd=%d", dev)}, fuseOptions...), ",")
+		if err := unix.Mount("oac-world", spec.Staging, "fuse", fuseMountFlags, opts); err != nil {
+			return mountError("mount", spec.Staging, err)
+		}
 	}
 	netns, err := unix.Open("/proc/self/ns/net", unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return &Error{Kind: ErrNetwork, Op: "open", Path: "/proc/self/ns/net", Err: err}
 	}
-	defer unix.Close(netns)
-	if err := l.ctl.send(context.Background(), message{Kind: msgMounted}, dev, netns); err != nil {
+	fds = append(fds, netns)
+	if err := l.ctl.send(context.Background(), message{Kind: msgMounted}, fds...); err != nil {
 		return &Error{Kind: ErrLauncher, Op: "report mount", Err: err}
 	}
 	return nil

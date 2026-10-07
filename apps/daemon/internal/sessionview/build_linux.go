@@ -110,6 +110,46 @@ func (b *builder) build(spec *launchSpec) error {
 	return b.dev()
 }
 
+// emptyRoot mounts at staging a read-only, noexec tmpfs that holds only the mountpoints and their parent directories.
+func emptyRoot(staging string, mps []Mountpoint) error {
+	mnt, err := newFS("tmpfs", [][2]string{{"mode", "0755"}, {"size", "64k"}}, attrNoSuid|attrNoDev|attrNoExec)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(mnt)
+	mkdir := func(rel string) error {
+		if err := unix.Mkdirat(mnt, rel, 0o755); err != nil && err != unix.EEXIST {
+			return &Error{Kind: ErrLauncher, Op: "mkdir", Path: "/" + rel, Err: err}
+		}
+		return nil
+	}
+	for _, m := range mps {
+		rel := strings.TrimPrefix(m.Path, "/")
+		for i, c := range rel {
+			if c == '/' {
+				if err := mkdir(rel[:i]); err != nil {
+					return err
+				}
+			}
+		}
+		if m.Dir {
+			err = mkdir(rel)
+		} else {
+			err = createFile(mnt, rel, m.Path)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if err := readOnly(mnt, "/"); err != nil {
+		return err
+	}
+	if err := unix.MoveMount(mnt, "", unix.AT_FDCWD, staging, unix.MOVE_MOUNT_F_EMPTY_PATH); err != nil {
+		return mountError("move_mount", "/", err)
+	}
+	return nil
+}
+
 // at returns where the world presents the mountpoint at view path p.
 func (b *builder) at(p string) (string, error) {
 	if t, ok := b.targets[p]; ok {
