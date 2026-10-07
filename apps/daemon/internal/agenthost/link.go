@@ -51,8 +51,11 @@ type linkOwner struct {
 	// opened records that an Open was sent, so the attachment may exist.
 	opened  bool
 	closing bool
-	renewer chan struct{} // closed when the renewal loop returns; nil before it starts
-	stop    context.CancelFunc
+	// released records that close closed the attachment, or that none was
+	// opened.
+	released bool
+	renewer  chan struct{} // closed when the renewal loop returns; nil before it starts
+	stop     context.CancelFunc
 }
 
 func newLinkOwner(dial dialFunc, b Binding, attachment sandboxwire.ID, fail func(error)) *linkOwner {
@@ -219,10 +222,12 @@ func (l *linkOwner) renewOnce(ctx context.Context) (sandboxlink.AttachmentRenewe
 }
 
 // close stops renewal, closes the attachment when an Open may have created
-// it, and closes the link. Later opens fail, and later closes do nothing.
+// it, and closes the link. Later opens fail. It fails when the relay did not
+// confirm the attachment's close; a later close then tries again, and one
+// after a success does nothing. The Executor's Close serializes the calls.
 func (l *linkOwner) close() error {
 	l.mu.Lock()
-	if l.closing {
+	if l.released {
 		l.mu.Unlock()
 		return nil
 	}
@@ -249,7 +254,7 @@ func (l *linkOwner) close() error {
 	}
 	l.mu.Lock()
 	link := l.link
-	l.link = nil
+	l.link, l.released = nil, err == nil
 	l.mu.Unlock()
 	if link != nil {
 		link.Close()

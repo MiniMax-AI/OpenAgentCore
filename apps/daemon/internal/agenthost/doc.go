@@ -65,7 +65,9 @@
 // and private. Its home holds the Harness's native history and persists
 // across the Session's Executors and the agent host's restarts until
 // Host.RemoveHome removes it. Its other entries are transient: each Executor
-// creates them, and one Executor of a Session runs at a time.
+// creates them. The Host claims a Session in memory from an Executor's open
+// until its Close succeeds, and while RemoveHome runs, so one of them at a
+// time uses the directory.
 //
 // Each Executor owns its own Link attachment: it opens each stream with the
 // Session's binding, renews the lease and fails the Session when the relay
@@ -78,13 +80,15 @@
 // clirunner.Process reports it: the gateway and the process broker have
 // stopped, the world's end is recorded and the view slot is free.
 // Executor.Close releases, in order, the view Executor, the views with their
-// process brokers, the Link attachment, the transient entries and the uid.
-// When the view Executor's Close fails, Close ends the views, which kills
-// their processes, and retries it once. If it fails again, Close returns
-// ErrTeardown and keeps the transient entries and the uid until a later Close
-// succeeds. A view whose teardown did not finish may leave processes that use
-// the Session directory, so every Close then returns ErrTeardown and the uid
-// stays in use until the agent host exits.
+// process brokers, the Link attachment, the transient entries, and the uid
+// with the Session's claim. When the view Executor's Close fails, Close ends
+// the views, which kills their processes, and retries it once. If the view
+// Executor still fails, or the relay does not confirm the attachment's close,
+// Close returns ErrTeardown and keeps the transient entries, the uid and the
+// claim until a later Close succeeds. A view whose teardown did not finish
+// may leave processes that use the Session directory, so every Close then
+// returns ErrTeardown and the uid and the claim stay until the agent host
+// exits.
 //
 // The Harness view protocol is in contracts/agents-api/harness-onboarding.md
 // and the gateway's in contracts/agents-api/model-execution.md.

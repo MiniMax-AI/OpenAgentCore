@@ -69,14 +69,15 @@ func viewInfo(info proto.SupportedAgentKind) proto.SupportedAgentKind {
 }
 
 // session is an Executor of a Session on the agent host: the view Executor
-// with the views, the Link attachment, the uid and the transient entries that
-// Close releases.
+// with the views, the Link attachment, the transient entries, the uid and the
+// Session's claim that Close releases.
 type session struct {
 	cfg  Config
 	env  Environment
 	plan *plan
 	link *linkOwner
 	log  *slog.Logger
+	id   sandboxwire.ID // the Session's
 	uid  uint32
 	dir  sessionDir
 	// exec is the view Executor; nil when its factory returned none.
@@ -95,15 +96,16 @@ type session struct {
 	// views counts launches and their views until each is torn down.
 	views sync.WaitGroup
 
-	closeMu  sync.Mutex
-	released bool // a Close released everything
+	closeMu    sync.Mutex
+	execClosed bool // a Close closed the view Executor
+	released   bool // a Close released everything
 }
 
 // open prepares an Executor of the Session that bind binds req to. It admits
-// the request before any effect, then allocates the Executor's uid, prepares
-// the Session directory and calls the view's Executor factory. Once it has an
-// effect, it returns the session even when it fails, and the session's Close
-// releases what it holds.
+// the request before any effect, then claims the Session, allocates the
+// Executor's uid, prepares the Session directory and calls the view's
+// Executor factory. Once it has an effect, it returns the session even when
+// it fails, and the session's Close releases what it holds.
 func open(ctx context.Context, cfg Config, req proto.PromptRequestPayload, bind func(proto.PromptRequestPayload) (Binding, Environment, error), d deps) (agent.Executor, error) {
 	roots, err := checkConfig(cfg)
 	if err != nil {
@@ -124,11 +126,17 @@ func open(ctx context.Context, cfg Config, req proto.PromptRequestPayload, bind 
 	if s.plan, err = admit(cfg, roots, req, env, s.openNetwork); err != nil {
 		return nil, err
 	}
+	if !claimSession(b.SessionID) {
+		return nil, fmt.Errorf("%w: an Executor of the Session has not closed, or its home is being removed", ErrSessionExists)
+	}
+	s.id = b.SessionID
 	if s.uid, err = allocUID(cfg.UIDs, d.tasks); err != nil {
+		releaseSession(s.id)
 		return nil, err
 	}
-	if s.dir, err = openSessionDir(cfg.StateDir, b.SessionID, s.uid); err != nil {
+	if s.dir, err = openSessionDir(cfg.StateDir, s.id, s.uid); err != nil {
 		freeUID(s.uid)
+		releaseSession(s.id)
 		return nil, err
 	}
 	s.ctx, s.cancel = context.WithCancel(ctx)
@@ -159,13 +167,14 @@ func (s *session) StartTurn(ctx context.Context, runID string, input proto.Messa
 }
 
 // Close tears the Executor down in order: the view Executor, the views with
-// their process brokers, the Link attachment, the transient entries and the
-// uid. When the view Executor's Close fails, Close ends the views, which
-// kills their processes, and retries it once. If that fails too, or the
-// transient entries remain, Close returns ErrTeardown and keeps them and the
-// uid, and a later Close retries. A view whose teardown did not finish may
-// leave processes that use the Session directory: then every Close returns
-// ErrTeardown, and the uid stays in use until the agent host exits.
+// their process brokers, the Link attachment, the transient entries, and the
+// uid with the Session's claim. When the view Executor's Close fails, Close
+// ends the views, which kills their processes, and retries it once. If the
+// view Executor, the attachment or the transient entries still remain, Close
+// returns ErrTeardown and keeps them, the uid and the claim, and a later
+// Close retries what remains. A view whose teardown did not finish may leave
+// processes that use the Session directory: then every Close returns
+// ErrTeardown, and the uid and the claim stay until the agent host exits.
 func (s *session) Close(ctx context.Context) error {
 	s.closeMu.Lock()
 	defer s.closeMu.Unlock()
@@ -173,7 +182,7 @@ func (s *session) Close(ctx context.Context) error {
 		return nil
 	}
 	var err error
-	if s.exec != nil {
+	if s.exec != nil && !s.execClosed {
 		err = s.exec.Close(ctx)
 	}
 	// Ending the Session closes the live view and refuses new launches. Under
@@ -185,23 +194,25 @@ func (s *session) Close(ctx context.Context) error {
 	if err != nil {
 		err = s.exec.Close(ctx)
 	}
-	// The attachment's lease ends it in the relay; none of its streams remain.
-	if lerr := s.link.close(); lerr != nil {
-		s.log.Error("agent host attachment not closed", "error", lerr)
+	if err != nil {
+		err = fmt.Errorf("%w: close executor: %w", ErrTeardown, err)
+	} else {
+		s.execClosed = true
 	}
+	// Until the relay confirms that the attachment is closed, what the
+	// Session's processes started in the sandbox may still run.
+	err = errors.Join(err, s.link.close())
 	s.failMu.Lock()
-	left := s.left
+	err = errors.Join(s.left, err)
 	s.failMu.Unlock()
-	switch {
-	case left != nil:
-		return errors.Join(left, err)
-	case err != nil:
-		return fmt.Errorf("%w: close executor: %w", ErrTeardown, err)
+	if err != nil {
+		return err
 	}
 	if err := s.dir.clear(); err != nil {
 		return fmt.Errorf("%w: remove transient entries: %w", ErrTeardown, err)
 	}
 	freeUID(s.uid)
+	releaseSession(s.id)
 	s.released = true
 	return nil
 }

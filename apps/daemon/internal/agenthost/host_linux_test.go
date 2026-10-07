@@ -3,6 +3,7 @@
 package agenthost
 
 import (
+	"context"
 	"crypto/x509"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 
@@ -170,23 +172,60 @@ func plantSession(t *testing.T, cfg Config, id sandboxwire.ID) sessionDir {
 	return dir
 }
 
+// TestRemoveHome checks that RemoveHome refuses a Session while an Executor
+// of it opens and until that Executor has closed, that no Executor opens
+// while a removal holds the Session, and that removal is idempotent.
 func TestRemoveHome(t *testing.T) {
-	cfg := newConfig(t, agent.NewRegistry(), testCA())
-	h, id := &Host{cfg: cfg}, sandboxwire.NewID()
-	dir := plantSession(t, cfg, id)
-	if err := h.RemoveHome(id); !errors.Is(err, ErrSessionExists) {
-		t.Fatalf("RemoveHome beside the transient entries = %v, want ErrSessionExists", err)
+	f := newViewFixture(t)
+	h, b := &Host{cfg: f.cfg}, newBinding(newResource())
+	req := request("viewed", "/workspace", "https://model.test", "sk-test")
+	var dials atomic.Int32
+	// The open stops once it has claimed the Session, before its uid.
+	claimed, proceed := make(chan struct{}), make(chan struct{})
+	tasks := func() ([][4]uint32, error) {
+		close(claimed)
+		<-proceed
+		return nil, nil
 	}
-	if err := dir.clear(); err != nil {
+	opened := make(chan agent.Executor, 1)
+	go func() {
+		e, _ := open(context.Background(), f.cfg, req, bindTo(b), deps{dial: countingDial(&dials), tasks: tasks})
+		opened <- e
+	}()
+	<-claimed
+	if err := h.RemoveHome(b.SessionID); !errors.Is(err, ErrSessionExists) {
+		t.Fatalf("RemoveHome during an open = %v, want ErrSessionExists", err)
+	}
+	close(proceed)
+	e := <-opened
+	if e == nil {
+		t.Fatal("open returned no Executor to close")
+	}
+	if err := h.RemoveHome(b.SessionID); !errors.Is(err, ErrSessionExists) {
+		t.Errorf("RemoveHome before the Executor closed = %v, want ErrSessionExists", err)
+	}
+	if _, err := os.Stat(f.session.Home.Host); err != nil {
+		t.Errorf("the home: %v", err)
+	}
+	if err := e.Close(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+	// A removal in progress holds the Session as RemoveHome does.
+	if !claimSession(b.SessionID) {
+		t.Fatal("the closed Executor still holds the Session")
+	}
+	e, err := open(context.Background(), f.cfg, req, bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
+	releaseSession(b.SessionID)
+	if e != nil || !errors.Is(err, ErrSessionExists) {
+		t.Errorf("open during a removal = %v, want ErrSessionExists and no Executor", err)
 	}
 	// Removal is idempotent: an absent home is removed.
 	for range 2 {
-		if err := h.RemoveHome(id); err != nil {
+		if err := h.RemoveHome(b.SessionID); err != nil {
 			t.Fatalf("RemoveHome = %v", err)
 		}
 	}
-	if _, err := os.Stat(string(dir)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Dir(f.session.Home.Host)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the Session directory remains: %v", err)
 	}
 }

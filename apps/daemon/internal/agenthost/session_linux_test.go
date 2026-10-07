@@ -7,9 +7,11 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -20,6 +22,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
@@ -188,9 +193,9 @@ func TestFailedCloseKeepsTheTransientEntriesAndUID(t *testing.T) {
 			t.Helper()
 			_, entriesErr := os.Stat(s.dir.entry(etcEntry))
 			_, homeErr := os.Stat(s.dir.entry(homeEntry))
-			uids.Lock()
-			used := uids.used[uid]
-			uids.Unlock()
+			owned.Lock()
+			used := owned.uids[uid]
+			owned.Unlock()
 			if exec.closes != closes || homeErr != nil || released == (entriesErr == nil) || released == used ||
 				!released && (!errors.Is(err, ErrTeardown) || !errors.Is(err, errStuck)) || released && err != nil {
 				t.Errorf("%s, %s: Close = %v after %d view Executor Closes; home %v, transient entries kept %v, uid in use %v",
@@ -205,6 +210,61 @@ func TestFailedCloseKeepsTheTransientEntriesAndUID(t *testing.T) {
 			check("later Close", err, 3, true)
 		}
 	}
+}
+
+// TestUnconfirmedAttachmentCloseKeepsTheUID checks that every Close fails
+// while the relay has not confirmed the attachment's close, keeping the
+// transient entries, the uid and the Session's claim, and that a Close once
+// the Link recovers releases them.
+func TestUnconfirmedAttachmentCloseKeepsTheUID(t *testing.T) {
+	auth := sandboxlinktest.NewAuthority()
+	rl := relay.New(auth)
+	srv := httptest.NewServer(rl)
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { rl.Close() })
+	cfg := Config{RelayURL: "ws://" + strings.TrimPrefix(srv.URL, "http://"), RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential")}
+	auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
+	var down atomic.Bool
+	down.Store(true)
+	dial := func(ctx context.Context, onClosed func(sandboxlink.AttachmentClosed)) (*sandboxlink.AttachLink, error) {
+		if down.Load() {
+			// Not retryable, so the close gives up at once, as at its bound.
+			return nil, sandboxlink.Fail(sandboxlink.PermissionDenied)
+		}
+		return relayDial(cfg)(ctx, onClosed)
+	}
+	s, _ := newOwnerSession(t)
+	s.id = sandboxwire.NewID()
+	s.link = newLinkOwner(dial, newBinding(newResource()), sandboxwire.NewID(), s.fail)
+	s.link.opened = true // an Open was sent, so the attachment may exist
+	uid, err := allocUID(UIDRange{First: 72100, Count: 1}, noTasks)
+	if err != nil || !claimSession(s.id) {
+		t.Fatalf("allocUID = %v, or the Session is claimed", err)
+	}
+	t.Cleanup(func() {
+		freeUID(uid)
+		releaseSession(s.id)
+	})
+	s.uid = uid
+	if s.dir, err = openSessionDir(t.TempDir(), s.id, uid); err != nil {
+		t.Fatal(err)
+	}
+	check := func(when string, err error, released bool) {
+		t.Helper()
+		_, entriesErr := os.Stat(s.dir.entry(etcEntry))
+		owned.Lock()
+		used, claimed := owned.uids[uid], owned.sessions[s.id]
+		owned.Unlock()
+		if released != (err == nil) || !released && !errors.Is(err, ErrTeardown) || released == (entriesErr == nil) || released == used || released == claimed {
+			t.Errorf("%s: Close = %v; transient entries kept %v, uid in use %v, Session claimed %v", when, err, entriesErr == nil, used, claimed)
+		}
+	}
+	// A retry while the Link is still down tries the attachment's close again.
+	for _, when := range []string{"while the Link is down", "a retry while the Link is down"} {
+		check(when, within(t, func() error { return s.Close(context.Background()) }), false)
+	}
+	down.Store(false)
+	check("once the Link recovers", within(t, func() error { return s.Close(context.Background()) }), true)
 }
 
 // newOwnerSession is a Session with no directory, uid or link, and what it

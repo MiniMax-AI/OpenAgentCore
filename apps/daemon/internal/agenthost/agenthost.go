@@ -93,8 +93,8 @@ var (
 	ErrInvalidSession = errors.New("agenthost: invalid session")
 	// ErrCapacity means every Session uid is in use.
 	ErrCapacity = errors.New("agenthost: no free session uid")
-	// ErrSessionExists means an Executor of the Session runs, or one whose
-	// teardown did not finish left the Session's transient entries.
+	// ErrSessionExists means an Executor of the Session has not closed, or
+	// Host.RemoveHome is removing the Session's directory.
 	ErrSessionExists = errors.New("agenthost: session in use")
 	// ErrExecutor is a view Executor factory that failed.
 	ErrExecutor = errors.New("agenthost: view executor failed")
