@@ -631,7 +631,7 @@ func TestForegroundGroupAfterLeaderExit(t *testing.T) {
 }
 
 // Revocation that finds an operation still starting cancels it when the
-// launch completes, and the attachment starts nothing more.
+// launch completes.
 func TestRevokeWhileStarting(t *testing.T) {
 	h := newHarness(t, DefaultConfig())
 	spec := pipeSpec("sleep", "30")
@@ -651,7 +651,85 @@ func TestRevokeWhileStarting(t *testing.T) {
 	if exit := op.inspect().Exit; exit.Signal != 15 {
 		t.Fatalf("exit %+v", exit)
 	}
-	_, _, err := h.connect().Start(context.Background(), h.svc.instance, sandboxwire.NewID(), pipeSpec("true"))
+}
+
+// waitDropped waits until the service's bookkeeping is back at a new
+// service's: no records, owner-loss graces, stale attachments or active
+// operations.
+func (h *harness) waitDropped() {
+	h.t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(time.Millisecond) {
+		h.svc.mu.Lock()
+		ops, owners, stale := len(h.svc.ops), len(h.svc.owners), len(h.svc.stale)
+		h.svc.mu.Unlock()
+		active := h.svc.active.Load()
+		if ops+owners+stale == 0 && active == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			h.t.Fatalf("%d records, %d graces, %d stale attachments, %d active operations remain", ops, owners, stale, active)
+		}
+	}
+}
+
+// Closed attachments leave nothing behind once their operations settle: the
+// first is closed while its operation runs, the second after its operation
+// ended, and the rest never started one.
+func TestClosedAttachmentsAreDropped(t *testing.T) {
+	h := newHarness(t, DefaultConfig())
+	for i := range 64 {
+		a := &harness{t: t, svc: h.svc, att: sandboxwire.NewID()}
+		if i < 2 {
+			c := a.connect()
+			if i == 0 {
+				a.start(c, pipeSpec("sleep", "30"))
+			} else {
+				events(t, a.start(c, pipeSpec("true")), sp.EventScopeClosed)
+			}
+			c.Close()
+		}
+		h.svc.AttachmentLost(a.att)
+		h.svc.AttachmentRevoked(a.att)
+	}
+	h.waitDropped()
+}
+
+// connOf hands over each stream's Conn when the stream calls Describe.
+type connOf struct {
+	*Service
+	conns chan *sp.Conn
+}
+
+func (c connOf) Describe(ctx context.Context, conn *sp.Conn, req sp.DescribeRequest) (sp.DescribeResponse, error) {
+	c.conns <- conn
+	return c.Service.Describe(ctx, conn, req)
+}
+
+// A request still running on a closed attachment's stream starts nothing,
+// even once the attachment's entry is gone: the Link ends the stream's
+// context before it reports the close.
+func TestClosedAttachmentStartsNothing(t *testing.T) {
+	h := newHarness(t, DefaultConfig())
+	server, client := net.Pipe()
+	ctx, closeAttachment := context.WithCancel(context.Background())
+	conns, served := make(chan *sp.Conn, 1), make(chan struct{})
+	go func() {
+		defer close(served)
+		sp.Serve(ctx, server, sp.Attachment{ID: h.att}, connOf{h.svc, conns})
+	}()
+	c := sp.NewClient(client)
+	t.Cleanup(func() {
+		c.Close()
+		<-served
+	})
+	if _, err := c.Describe(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	conn := <-conns
+	closeAttachment()
+	h.svc.AttachmentRevoked(h.att)
+	h.waitDropped()
+	_, err := h.svc.Start(context.Background(), conn, sp.StartRequest{OperationRef: sp.OperationRef{ServerInstanceID: h.svc.instance, OperationID: sandboxwire.NewID()}, Spec: pipeSpec("true")})
 	wantCode(t, err, sp.CodeStaleAttachment)
 }
 

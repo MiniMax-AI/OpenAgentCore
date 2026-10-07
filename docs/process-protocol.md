@@ -32,7 +32,7 @@ A service must:
 
 - generate a new `ServerInstanceID` whenever its operation records are lost, and answer requests for any other incarnation with `InstanceChanged`;
 - advertise only what it enforces, and reject anything else in a spec or signal request with `Unsupported`;
-- keep every operation record for the whole incarnation, as described in [Deduplication and tombstones](#deduplication-and-tombstones);
+- keep every operation record while its attachment is open, as described in [Deduplication and tombstones](#deduplication-and-tombstones);
 - never drop an event it has not been told was delivered, as described in [Output, replay and flow control](#output-replay-and-flow-control);
 - treat the loss of a stream as nothing more than the loss of an observer, as described in [Ownership](#ownership).
 
@@ -114,8 +114,9 @@ Launch failures map the OS error: a missing file or directory is `NotFound`, a p
 
 - Operation IDs are scoped to `(AttachmentID, ServerInstanceID, OperationID)`.
 - `Start` reserves the ID before launching and keeps the SHA-256 digest of the encoded spec. The same ID with the same spec returns `Existing`, including for concurrent requests; a different spec returns `OperationConflict`.
-- Records last for the whole incarnation. `Release` keeps a tombstone with the digest, the state and the results; a `Start` for a released ID returns `Released`.
-- Records are never evicted. When `MaxOperationRecords` or `MaxActiveOperations` is reached, `Start` fails with `ResourceExhausted`.
+- Records last while their attachment is open. `Release` keeps a tombstone with the digest, the state and the results; a `Start` for a released ID returns `Released`.
+- An open attachment's records are never evicted. When `MaxOperationRecords` or `MaxActiveOperations` is reached, `Start` fails with `ResourceExhausted`.
+- Once an attachment has closed and its operations have settled, the service drops their records; no stream can name them any more.
 
 ### Stdin offsets
 
@@ -164,7 +165,7 @@ Losing a stream only loses the observer; the operation continues and any stream 
 | `MaxStartBytes` | The largest encoded `Start` payload |
 | `MaxDataBytes` | The largest stdin write and output chunk, at most 64 KiB |
 | `MaxActiveOperations` | Operations not yet settled |
-| `MaxOperationRecords` | All records of the incarnation, tombstones included |
+| `MaxOperationRecords` | All records the service keeps, tombstones included |
 | `MaxReplayBytesPerOperation` | Unacknowledged output retained per operation |
 | `OwnerLossGraceMillis` | How long operations survive lapsed ownership |
 | `CancelGraceLimitMillis` | The longest `Cancel` grace, and the grace of ownership cleanup |

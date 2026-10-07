@@ -1,7 +1,7 @@
 ---
 title: "进程协议"
 source: docs/process-protocol.md
-source_hash: 54e89ca5388590b37f572190dd4e1e74412c373735b64268bd2621097b06d975
+source_hash: bf8d41ab0290aebae678c07371ea4ebae2084d0f2ea45da3a338c7929ec2c9a3
 ---
 
 进程协议定义 agent host 如何在沙箱中启动和控制进程。沙箱内的 Sandbox I/O 服务提供该协议，agent host 的 broker 是其客户端。协议依据明确的 spec 启动进程，以有序事件流式传输其输出，在精确 offset 处接受 stdin，并将 leader 退出、输出结束和进程 scope 结束作为独立事实报告。
@@ -34,7 +34,7 @@ Go 客户端为 `sandboxprocess.NewClient(stream)`。`Start` 和 `Attach` 返回
 
 - 每当丢失 operation 记录时生成新的 `ServerInstanceID`，并对指向其他 incarnation 的请求返回 `InstanceChanged`；
 - 仅声明自己强制执行的内容，并以 `Unsupported` 拒绝 spec 或信号请求中的其他任何内容；
-- 在整个 incarnation 内保留每条 operation 记录，见[去重与 tombstone](#deduplication-and-tombstones)；
+- 在 attachment 打开期间保留其每条 operation 记录，见[去重与 tombstone](#deduplication-and-tombstones)；
 - 绝不丢弃未被告知已交付的事件，见[输出、重放与流量控制](#output-replay-and-flow-control)；
 - 将 stream 丢失仅视为 observer 丢失，见[所有权](#ownership)。
 
@@ -116,8 +116,9 @@ operation 在启动失败时，或在其退出已被观测或已丢失、所有�
 
 - Operation ID 的作用域为 `(AttachmentID, ServerInstanceID, OperationID)`。
 - `Start` 在启动前预留 ID，并保存编码后 spec 的 SHA-256 digest。相同 ID 和相同 spec 返回 `Existing`，并发请求也是如此；spec 不同则返回 `OperationConflict`。
-- 记录在整个 incarnation 内保留。`Release` 保留包含 digest、状态和结果的 tombstone；对已释放 ID 的 `Start` 返回 `Released`。
-- 记录从不被淘汰。达到 `MaxOperationRecords` 或 `MaxActiveOperations` 时，`Start` 以 `ResourceExhausted` 失败。
+- 记录在其 attachment 打开期间保留。`Release` 保留包含 digest、状态和结果的 tombstone；对已释放 ID 的 `Start` 返回 `Released`。
+- 打开的 attachment 的记录从不被淘汰。达到 `MaxOperationRecords` 或 `MaxActiveOperations` 时，`Start` 以 `ResourceExhausted` 失败。
+- attachment 关闭且其 operation 均已结算后，服务丢弃这些记录；此后没有 stream 能再指向它们。
 
 ### Stdin offset {#stdin-offsets}
 
@@ -166,7 +167,7 @@ stdin offset 从 0 开始，计算服务已接受的字节数。`WriteStdin` 和
 | `MaxStartBytes` | 编码后 `Start` payload 的最大大小 |
 | `MaxDataBytes` | 单次 stdin 写入和输出 chunk 的最大大小，不超过 64 KiB |
 | `MaxActiveOperations` | 尚未结算的 operation 数 |
-| `MaxOperationRecords` | incarnation 的全部记录数，包括 tombstone |
+| `MaxOperationRecords` | 服务保留的全部记录数，包括 tombstone |
 | `MaxReplayBytesPerOperation` | 每个 operation 保留的未确认输出 |
 | `OwnerLossGraceMillis` | 所有权失效后 operation 的存活时长 |
 | `CancelGraceLimitMillis` | `Cancel` 的最长宽限期，也是所有权清理的宽限期 |

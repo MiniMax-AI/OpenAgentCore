@@ -126,6 +126,7 @@ func (op *operation) settleLocked() {
 	}
 	op.settled = true
 	op.s.active.Add(-1)
+	op.cond.Broadcast()
 	// No process remains to read pipe stdin.
 	if op.pty == nil && op.stdin != nil && !op.stdinClosed {
 		op.stdinClosed = true
