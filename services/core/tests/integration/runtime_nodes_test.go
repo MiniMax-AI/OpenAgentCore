@@ -246,7 +246,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retained, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: first.Environment.ID}, next.InstallationID, runtimedevice.HashCredential("runtime"))
+	retained, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: first.Environment.ID}, next.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

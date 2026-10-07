@@ -32,7 +32,7 @@ func (regionalConfiguration) ReplacesCredential() bool { return false }
 type regionalCodec struct{}
 
 func (regionalCodec) Requirements() sandbox.ConfigurationRequirements {
-	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, PublicOrigin: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
+	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
 }
 func (regionalCodec) WithCredential(sandbox.Configuration, sandbox.Configuration) (sandbox.Configuration, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "WithCredential", Reason: "credentials_not_required"}

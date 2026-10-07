@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"net/netip"
 	"time"
@@ -58,8 +57,8 @@ func (l *LinkAuthority) AuthenticateServe(ctx context.Context, hello sandboxlink
 	if err != nil {
 		return sandboxlink.ServePeer{}, err
 	}
-	digest := sha256.Sum256(hello.Credential)
-	if !found || subtle.ConstantTimeCompare([]byte(hex.EncodeToString(digest[:])), []byte(authority.CredentialHash)) != 1 {
+	presented := runtimedevice.HashCredential(string(hello.Credential))
+	if !found || subtle.ConstantTimeCompare([]byte(presented), []byte(authority.CredentialHash)) != 1 {
 		return sandboxlink.ServePeer{}, sandboxlink.Fail(sandboxlink.AuthenticationFailed)
 	}
 	current := authority.Resource.Ref()

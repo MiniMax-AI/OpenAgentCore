@@ -217,6 +217,7 @@ func (t *reservationTx) InsertAllocation(a deployment.NewAllocation) (deployment
 	row, err := t.q.CreateRuntimeAllocation(t.ctx, sqlc.CreateRuntimeAllocationParams{
 		ID: id, EnvironmentID: t.environment, DeviceID: device, ProviderKey: provider, NodeID: node,
 		DeploymentGeneration: pgtype.Int8{Int64: int64(a.Generation), Valid: true},
+		ServeCredentialHash:  pgtype.Text{String: a.ServeCredentialHash, Valid: true},
 	})
 	if err != nil {
 		return deployment.Allocation{}, err

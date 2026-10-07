@@ -46,16 +46,6 @@ func (r *Registry) UsesCredential(kind string) (bool, error) {
 	}
 	return required(a.Configuration.Requirements().Credential)
 }
-func (r *Registry) RequiresPublicOrigin(kind string) (bool, error) {
-	a, err := r.Lookup(kind)
-	if err != nil {
-		return false, err
-	}
-	if a.Configuration == nil {
-		return false, providercontract.ErrContract
-	}
-	return required(a.Configuration.Requirements().PublicOrigin)
-}
 func required(value sandbox.Requirement) (bool, error) {
 	switch value {
 	case sandbox.Required:
@@ -123,7 +113,7 @@ type nodeConfigurationAdapter struct {
 }
 
 func (nodeConfigurationAdapter) Requirements() sandbox.ConfigurationRequirements {
-	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, PublicOrigin: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
+	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
 }
 func (nodeConfigurationAdapter) DecodeInput(public, secret json.RawMessage) (sandbox.Configuration, error) {
 	if len(secret) > 0 || sandbox.DecodeConfigurationObject(public, &struct{}{}) != nil {

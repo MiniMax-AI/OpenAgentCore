@@ -11,7 +11,7 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
  * Fixture state options: `fresh` is a new install (no project, Session or Runtime),
  * `sandbox` the sandbox deployment, `nodes: "none"` a deployment no node has joined, and
  * `installation` how config.json's public_url is set: "public" (HTTPS, the default), "local"
- * (loopback: only the Core machine reaches the API, and E2B is rejected) or "stale" (public,
+ * (loopback: only the Core machine reaches the API, and every sandbox selection is rejected) or "stale" (public,
  * with a node enrolled with an earlier address), `credentials: "none"` a Core without a
  * credential encryption key, which cannot store a model provider's key, and
  * `installers: "none"` a console without its node installation payload, so it serves neither

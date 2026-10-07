@@ -5,11 +5,15 @@ package contracttest
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 type Fault string
@@ -36,6 +40,13 @@ type Fixture struct {
 	WantCalls []string
 }
 
+// Bootstrap returns a valid Create input for r.
+func Bootstrap(r sandbox.Reference) sandbox.Bootstrap {
+	return sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled",
+		SandboxIO: sandboxbootstrap.Input{Version: sandboxbootstrap.Version, LinkURL: "wss://core.example/api/v1/sandbox-link", Credential: "synthetic-serve",
+			Resource: sandboxbootstrap.Resource{TenantID: r.TenantID, EnvironmentID: r.EnvironmentID, Kind: "allocation", ID: r.AllocationID, Generation: 1}}}
+}
+
 // Factory configures native responses. Invoke cancel only after dispatch begins.
 type Factory func(t *testing.T, scenario Scenario, cancel context.CancelFunc) Fixture
 
@@ -55,6 +66,9 @@ func RunFailures(t *testing.T, factory Factory) {
 				f := factory(t, Scenario{operation, fault}, cancel)
 				if err := sandbox.ValidateProvider(f.Provider); err != nil {
 					t.Fatal(err)
+				}
+				if err := f.Bootstrap.Validate(); err != nil {
+					t.Fatal("fixture Bootstrap is not a valid Create input", err)
 				}
 				var info sandbox.Info
 				var err error

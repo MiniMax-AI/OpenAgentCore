@@ -53,17 +53,24 @@ def initialize():
                        OAC_RUNTIME_ALLOWED_DOMAINS=json.dumps(payload['AllowedDomains'] or []))
     connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
     shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
+    serve = connection.with_name('sandbox-io-bootstrap.json')
+    shared.write_private(serve, payload['SandboxIO'], owner=1000)
     source.unlink()
-    with (shared.PROFILE / 'daemon.log').open('xb') as stream:
-        os.fchmod(stream.fileno(), 0o600)
-        os.fchown(stream.fileno(), 1000, 1000)
-        child = subprocess.Popen(['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default',
-                                  '--bootstrap-file', str(connection)],
-                                 cwd='/environment/workspace', env=environment, user=1000, group=1000,
-                                 extra_groups=[], start_new_session=True, stdin=subprocess.DEVNULL,
-                                 stdout=stream, stderr=subprocess.STDOUT, umask=0o077)
+    # The Sandbox I/O service runs beside the daemon, as the same account; its
+    # file is its only input.
+    pids = []
+    for log, command, env in [
+            (shared.PROFILE / 'daemon.log', ['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default',
+                                             '--bootstrap-file', str(connection)], environment),
+            (connection.with_name('sandbox-io.log'), ['/usr/local/bin/oac-sandbox-io', '--bootstrap-file', str(serve)], {})]:
+        with log.open('xb') as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            os.fchown(stream.fileno(), 1000, 1000)
+            pids.append(subprocess.Popen(command, cwd='/environment/workspace', env=env, user=1000, group=1000,
+                                         extra_groups=[], start_new_session=True, stdin=subprocess.DEVNULL,
+                                         stdout=stream, stderr=subprocess.STDOUT, umask=0o077).pid)
     shared.write_private(root / 'managed-ready.tmp',
-                         {'identity': binding, 'status': 'daemon_started', 'daemon_pid': child.pid})
+                         {'identity': binding, 'status': 'daemon_started', 'daemon_pid': pids[0]})
     os.replace(root / 'managed-ready.tmp', root / 'managed-ready.json')
     shared.sync_directory(root)
 

@@ -40,7 +40,7 @@ func lifecycleTestSession(t *testing.T, s *Store, node string) (string, sessions
 func lifecycleTestAllocation(t *testing.T, s, w *Store, d deployment.ProcessDeployment, node string) deployment.Allocation {
 	t.Helper()
 	tenant, session := lifecycleTestSession(t, s, node)
-	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	if _, err := deploymentService(t, w).LifecycleNode(t.Context(), uuid.NewString(), environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("tenant boundary", err)
 	}
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}, d.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

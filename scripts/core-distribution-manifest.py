@@ -185,10 +185,10 @@ def control_archive(bundle, stage, revision, architecture):
     target.with_name(target.name + ".sha256").write_text(sha256(target) + "  " + target.name + "\n")
 
 
-def verify_runtime(image, daemon, source):
+def verify_runtime(image, daemon, sandbox_io, source):
     details = verify_image(image)
     source = pathlib.Path(source)
-    files = {"/usr/local/bin/oac-daemon": pathlib.Path(daemon)}
+    files = {"/usr/local/bin/oac-daemon": pathlib.Path(daemon), "/usr/local/bin/oac-sandbox-io": pathlib.Path(sandbox_io)}
     environment = dict(value.split("=", 1) for value in details["Config"]["Env"] if "=" in value)
     if "OAC_RUNTIME_MCODE_BIN" in environment:
         for name in ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json"):

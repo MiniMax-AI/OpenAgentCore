@@ -292,21 +292,21 @@ func TestReserveAllocationReplaysBeforeAdmission(t *testing.T) {
 	existing := Allocation{ID: uuid.NewString(), EnvironmentID: key.EnvironmentID, ProviderKey: installation}
 	tx := &fakeReservationTx{t: t, loadEnvironment: hostedEnvironment(key.EnvironmentID),
 		findAllocation: func() (Allocation, bool, error) { return existing, true, nil }}
-	replayed, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash())
+	replayed, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash())
 	if err != nil || !replayed.Replayed || replayed.ID != existing.ID {
 		t.Fatal("reservation did not replay", replayed, err)
 	}
-	if _, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), testCredentialHash()); !errors.Is(err, ErrAllocationConflict) {
+	if _, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), testCredentialHash(), testCredentialHash()); !errors.Is(err, ErrAllocationConflict) {
 		t.Fatal("another installation replayed the allocation", err)
 	}
 	deleted := &fakeReservationTx{t: t}
-	if _, err := allocationOperations(t, deleted, sessions.LockedSession{Deleted: true}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := allocationOperations(t, deleted, sessions.LockedSession{Deleted: true}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("a deleted Session reserved an allocation", err)
 	}
 	selfHosted := &fakeReservationTx{t: t, loadEnvironment: func() (sessions.Environment, error) {
 		return sessions.Environment{ID: key.EnvironmentID, Configuration: json.RawMessage(`{"type":"self_hosted"}`)}, nil
 	}}
-	if _, err := allocationOperations(t, selfHosted, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, ErrInvalidInput) {
+	if _, err := allocationOperations(t, selfHosted, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("a self-hosted Environment reserved an allocation", err)
 	}
 }
@@ -328,14 +328,14 @@ func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 		d.AdmissionPaused = true
 		return d, nil
 	}
-	if _, err := allocationOperations(t, paused, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, placement.ErrAdmissionClosed) {
+	if _, err := allocationOperations(t, paused, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("paused admission reserved an allocation", err)
 	}
 	released := fresh()
 	released.loadReserved = func() (placement.Reserved, error) {
 		return placement.Reserved{NodeID: node, Generation: 5, Released: true, Available: true}, nil
 	}
-	if _, err := allocationOperations(t, released, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, placement.ErrNodeUnavailable) {
+	if _, err := allocationOperations(t, released, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("a released placement reserved an allocation", err)
 	}
 	var device sessions.ExecutionDevice
@@ -356,8 +356,9 @@ func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 		inserted = a
 		return Allocation{ID: a.ID, DeviceID: a.DeviceID, NodeID: a.NodeID}, nil
 	}
-	result, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash())
-	if err != nil || result.Replayed || inserted.NodeID != node || inserted.Generation != 5 || inserted.ProviderKey != installation || inserted.DeviceID != device.ID || device.EnvironmentID != key.EnvironmentID {
+	serveHash := testCredentialHash()
+	result, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), serveHash)
+	if err != nil || result.Replayed || inserted.NodeID != node || inserted.Generation != 5 || inserted.ProviderKey != installation || inserted.DeviceID != device.ID || device.EnvironmentID != key.EnvironmentID || inserted.ServeCredentialHash != serveHash {
 		t.Fatal("reservation", result, inserted, device, err)
 	}
 }
@@ -425,10 +426,12 @@ func TestSetComputeValidatesBeforeStorage(t *testing.T) {
 
 // A malformed credential digest is deployment's invalid input and never
 // reaches storage.
-func TestReserveAllocationValidatesTheCredentialDigest(t *testing.T) {
+func TestReserveAllocationValidatesTheCredentialDigests(t *testing.T) {
 	key := AllocationKey{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString()}
-	if _, err := allocationOperations(t, nil, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), "not-a-digest"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatal("a malformed digest reserved an allocation", err)
+	for _, digests := range [][2]string{{"not-a-digest", testCredentialHash()}, {testCredentialHash(), "not-a-digest"}} {
+		if _, err := allocationOperations(t, nil, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), digests[0], digests[1]); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal("a malformed digest reserved an allocation", err)
+		}
 	}
 }
 

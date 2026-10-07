@@ -31,7 +31,7 @@ Use `docker compose ps` to check the services. See [stop and restart](./getting-
 
 `OAC_PUBLIC_URL` is the one origin that applications, nodes, sandboxes and self-hosted executors use. Core derives the daemon WebSocket URL, the sandbox Link URL, the self-hosted `remote_url` and each sandbox's connection address from it. It is an http or https origin: the address browsers and nodes use. The installation serves Web over HTTP on `OAC_WEB_PORT`; a reverse proxy or hosting platform terminates HTTPS when you put one in front.
 
-Sandboxes and agent hosts dial the [sandbox Link](./sandbox-link-protocol.md) at `wss://<origin>/api/v1/sandbox-link` when the origin is https. An http origin on `localhost` or a loopback address gives `ws://<origin>/api/v1/sandbox-link`, which only peers in Core's own network namespace can reach. An http origin on any other host gives no Link URL: nothing can use the Link until the origin is https.
+Sandboxes and agent hosts dial the [sandbox Link](./sandbox-link-protocol.md) at `wss://<origin>/api/v1/sandbox-link` when the origin is https. An http origin on `localhost` or a loopback address gives `ws://<origin>/api/v1/sandbox-link`, which only peers in Core's own network namespace, such as a colocated agent host, can reach. An http origin on any other host gives no Link URL. Hosted sandboxes run outside Core's network namespace, so Core selects and admits them only while the origin is https on a host that is not loopback.
 
 To change it, point the reverse proxy at the new address first, then edit `OAC_PUBLIC_URL` and run `oac apply`. Afterwards:
 

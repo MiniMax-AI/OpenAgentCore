@@ -54,11 +54,6 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 			r.Credential = "private-token"
 			a.Configuration = registrationConfiguration{requirements: r}
 		}},
-		{"invalid public origin requirement", func(a *Adapter) {
-			r := a.Configuration.Requirements()
-			r.PublicOrigin = "private-token"
-			a.Configuration = registrationConfiguration{requirements: r}
-		}},
 
 		{"missing operations", func(a *Adapter) { a.Operations = nil }},
 		{"incomplete operations", func(a *Adapter) { a.Operations = func() providercontract.Operations { return nil } }},
@@ -81,7 +76,6 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 			}{
 				{"lookup", func() error { _, err := registry.Lookup(kind); return err }},
 				{"credential requirement", func() error { _, err := registry.UsesCredential(kind); return err }},
-				{"public origin requirement", func() error { _, err := registry.RequiresPublicOrigin(kind); return err }},
 				{"normalize", func() error { _, err := registry.Normalize(selection); return err }},
 				{"specification", func() error { return registry.ValidateSpecification(kind, selection.DeploymentSpec) }},
 				{"resources", func() error { return registry.ValidateResources(kind, selection.Resources) }},

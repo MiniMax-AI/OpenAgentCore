@@ -49,12 +49,12 @@ func validateConfigurationDiscoveryInterface(discovery reflect.Type) error {
 // Check field names as well as values so new requirements cannot bypass the
 // gate. This owns only configuration requirements, not resource operations.
 func validateConfigurationRequirements(value reflect.Value) error {
-	if value.Kind() != reflect.Struct || value.NumField() != 3 {
+	if value.Kind() != reflect.Struct || value.NumField() != 2 {
 		return configurationRegistrationError()
 	}
 	for i := 0; i < value.NumField(); i++ {
 		switch value.Type().Field(i).Name {
-		case "Credential", "PublicOrigin":
+		case "Credential":
 			requirement, ok := value.Field(i).Interface().(sandbox.Requirement)
 			if !ok || (requirement != sandbox.Required && requirement != sandbox.NotRequired) {
 				return configurationRegistrationError()

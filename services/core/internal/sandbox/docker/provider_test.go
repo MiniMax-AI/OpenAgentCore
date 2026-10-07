@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
@@ -36,24 +37,9 @@ func TestProviderRejectsUnsafeOperatorConfiguration(t *testing.T) {
 	}
 }
 
-func TestBootstrapRequiresCompleteNetworkPolicyBeforeDockerEffects(t *testing.T) {
-	p := &Provider{}
-	for _, policy := range []sandbox.Bootstrap{
-		{}, {NetworkAccess: "restricted"},
-		{NetworkAccess: "restricted", AllowedDomains: []string{"*.example.com"}},
-		{NetworkAccess: "enabled", AllowedDomains: []string{"example.com"}},
-	} {
-		policy.Reference = sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
-		policy.SessionID, policy.DeviceID = uuid.NewString(), uuid.NewString()
-		policy.CoreURL, policy.Credential = "http://core.invalid/api/v1", "synthetic"
-		if _, err := p.Create(t.Context(), policy); !errors.Is(err, sandbox.ErrInvalid) {
-			t.Fatal("invalid bootstrap reached Docker", err)
-		}
-	}
-}
-
-// This optional Docker mechanism test uses a pinned fixture image whose entrypoint
-// is sleep. It is not native/model acceptance; the real Runtime has separate checks.
+// This optional Docker mechanism test uses a pinned fixture image whose
+// oac-daemon only sleeps. It is not native/model acceptance; the real Runtime
+// has separate checks.
 func TestDockerProviderLifecycle(t *testing.T) {
 	image := os.Getenv("AGENTS_RUNTIME_DOCKER_TEST_IMAGE")
 	if image == "" {
@@ -76,7 +62,9 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	bootstrap := func() sandbox.Bootstrap {
-		return sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-test-credential", NetworkAccess: "enabled"}
+		b := contracttest.Bootstrap(sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()})
+		b.Credential, b.SandboxIO.Credential = "synthetic-test-credential", "synthetic-serve-credential"
+		return b
 	}
 	b := bootstrap()
 	b.NetworkAccess, b.AllowedDomains = "restricted", []string{"Example.com", "api.example.com"}
@@ -120,7 +108,7 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if strings.Contains(string(inspected.Raw), b.Credential) || inspected.Container.Config.User != "1000:1000" || !inspected.Container.HostConfig.ReadonlyRootfs || inspected.Container.HostConfig.Privileged {
+	if strings.Contains(string(inspected.Raw), b.Credential) || strings.Contains(string(inspected.Raw), b.SandboxIO.Credential) || inspected.Container.Config.User != "1000:1000" || !inspected.Container.HostConfig.ReadonlyRootfs || inspected.Container.HostConfig.Privileged {
 		t.Fatal("unsafe Docker configuration")
 	}
 	for _, value := range []string{"OAC_RUNTIME_NETWORK_ACCESS=restricted", `OAC_RUNTIME_ALLOWED_DOMAINS=["api.example.com","example.com"]`} {
@@ -144,6 +132,10 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	auth, decodeErr := runtimebootstrap.Decode([]byte(r.Stdout))
 	if decodeErr != nil || auth.Credential != b.Credential || auth.DeviceID != b.DeviceID {
 		t.Fatal("bootstrap changed or malformed")
+	}
+	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/sandbox-io-bootstrap.json"}})
+	if serve, decodeErr := sandboxbootstrap.Decode([]byte(r.Stdout)); e != nil || decodeErr != nil || serve != b.SandboxIO {
+		t.Fatal("Sandbox I/O bootstrap changed or malformed", e)
 	}
 	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"sh", "-c", "printf retained > /environment/workspace/history; printf failed >&2; exit 7"}})
 	if e != nil || r.ExitCode != 7 || r.Stderr != "failed" {

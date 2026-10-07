@@ -35,6 +35,7 @@ type RuntimeProvider struct {
 	LocalCredentialSHA256            string
 	LocalMaxActive, LocalMaxRetained int
 	CoreURL                          string
+	SandboxLink                      string
 	InstallationID                   string
 	BackendFingerprint               string
 	Provider                         sandbox.SandboxProvider
@@ -181,6 +182,9 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if providerKey != r.config.InstallationID {
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
+	if r.config.SandboxLink == "" {
+		return deployment.Allocation{}, deployment.ErrNoLink
+	}
 	environmentValue, err := r.sessions.GetEnvironment(ctx, tenant, environment)
 	if err != nil {
 		return deployment.Allocation{}, err
@@ -209,12 +213,13 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	} else if err != nil {
 		return deployment.Allocation{}, err
 	}
-	secret := make([]byte, 32)
+	secret := make([]byte, 64)
 	if _, err := rand.Read(secret); err != nil {
 		return deployment.Allocation{}, err
 	}
-	token := hex.EncodeToString(secret)
-	owner, err := r.deployment.ReserveAllocation(ctx, key, providerKey, runtimedevice.HashCredential(token))
+	// The device and Serve credentials; only their digests are stored.
+	token, serve := hex.EncodeToString(secret[:32]), hex.EncodeToString(secret[32:])
+	owner, err := r.deployment.ReserveAllocation(ctx, key, providerKey, runtimedevice.HashCredential(token), runtimedevice.HashCredential(serve))
 	if err != nil {
 		return owner, err
 	}
@@ -227,10 +232,16 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
-	info, err := provider.Create(ctx, sandbox.Bootstrap{
+	bootstrap := sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
 		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
-	})
+		SandboxIO: sandboxbootstrap.Input{Version: sandboxbootstrap.Version, LinkURL: r.config.SandboxLink, Credential: serve, Resource: serveResource(owner)},
+	}
+	// An invalid input creates nothing: release the allocation as settled absent.
+	info := sandbox.Info{Reference: bootstrap.Reference, State: "absent", CreateSettled: true}
+	if err = bootstrap.Validate(); err == nil {
+		info, err = provider.Create(ctx, bootstrap)
+	}
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
 		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		released, releaseErr := r.deployment.ReleaseAbsentCreation(record, owner)
@@ -434,9 +445,13 @@ func (r *runtimeLifecycle) requestCleanup(ctx context.Context, owner deployment.
 	if err != nil {
 		return pending, err
 	}
-	r.links.RevokeResource(sandboxbootstrap.Resource{TenantID: pending.TenantID, EnvironmentID: pending.EnvironmentID,
-		Kind: "allocation", ID: pending.ID, Generation: pending.ServeGeneration}.Ref())
+	r.links.RevokeResource(serveResource(pending).Ref())
 	return pending, nil
+}
+
+// serveResource is the allocation's Link resource.
+func serveResource(owner deployment.Allocation) sandboxbootstrap.Resource {
+	return sandboxbootstrap.Resource{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID, Kind: "allocation", ID: owner.ID, Generation: owner.ServeGeneration}
 }
 
 // Environment identity owns connectivity; preparation has an independent owner.

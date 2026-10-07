@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 282d54e2c234a8e0d1d3161cf9f2bb6f0946fd60c2878d5a1c4eaf67bd6955a0
+source_hash: 4a340f0b9ebaf1c1477373c0a4279fcd3548340b2cdbef3b43d233e5872cef44
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -77,7 +77,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 ## 配置公开地址 {#configure-the-domain-and-https}
 
-应用、节点和沙箱通过同一个地址访问 Core，即公开 URL。局域网上用 HTTP 即可。对外暴露时，在前面放反向代理，并把公开 URL 设为它提供的 HTTPS 源地址。E2B 客户机从互联网访问 Core，因此需要非回环的公开 URL。
+应用、节点和沙箱通过同一个地址访问 Core，即公开 URL。局域网上的应用和节点用 HTTP 即可。托管沙箱需要非回环主机上的 HTTPS 公开 URL：在前面放反向代理，并把公开 URL 设为它提供的 HTTPS 源地址。
 
 1. 把反向代理指向 Web。
 2. 把 `OAC_PUBLIC_URL` 设为反向代理提供的 HTTPS 源地址，然后运行 `oac apply`。见[修改公开 URL](../configuration.md#changing-the-public-url)。

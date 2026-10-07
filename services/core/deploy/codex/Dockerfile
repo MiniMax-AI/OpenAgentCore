@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /environment/workspace /workspace /home/runtime
-COPY --chmod=0555 oac-daemon codex /usr/local/bin/
+COPY --chmod=0555 oac-daemon oac-sandbox-io codex /usr/local/bin/
 COPY codex-resources /usr/local/codex-resources
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex \

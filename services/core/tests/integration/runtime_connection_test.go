@@ -33,10 +33,18 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	server.Config.Handler = handler
 	server.Start()
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+	origin, err := deployment.NewPublicOrigin(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := origin.SandboxLink()
+	if err != nil {
+		t.Fatal(err)
+	}
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	key := uuid.NewString()
 	start := func() *execution.Worker {
-		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: server.URL + "/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
+		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: origin.RuntimeAPI(), SandboxLink: link, InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
 		return w
 	}
 	stop := func(w *execution.Worker) {

@@ -18,6 +18,9 @@ def payload():
                                           'AllocationID', 'SessionID', 'DeviceID']}
     return dict(value, RuntimeBootstrap={'version': 1, 'core_url': 'https://core.example/api/v1',
                 'device_id': value['DeviceID'], 'credential': 'private-managed-token'},
+                SandboxIO={'version': 1, 'link_url': 'wss://core.example/api/v1/sandbox-link', 'credential': 'private-serve-token',
+                           'resource': {'tenant_id': value['TenantID'], 'environment_id': value['EnvironmentID'],
+                                        'kind': 'allocation', 'id': value['AllocationID'], 'generation': 1}},
                 NetworkAccess='restricted', AllowedDomains=['example.com'])
 
 
@@ -76,23 +79,35 @@ class ManagedStartupTest(unittest.TestCase):
                 connection_file = Path(temporary) / 'runtime-bootstrap.json'
                 self.assertEqual(json.loads(connection_file.read_text()), data['RuntimeBootstrap'])
                 self.assertEqual(connection_file.stat().st_mode & 0o777, 0o600)
+                serve_file = Path(temporary) / 'sandbox-io-bootstrap.json'
+                self.assertEqual(json.loads(serve_file.read_text()), data['SandboxIO'])
+                self.assertEqual(serve_file.stat().st_mode & 0o777, 0o600)
                 self.assertFalse((profile / 'auth.json').exists())
-                self.assertEqual(process.call_args.args[0][-2:], ['--bootstrap-file', str(connection_file)])
                 self.assertFalse(source.exists())
-                self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(process.call_args.args))
-                self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(process.call_args.kwargs['env']))
-                self.assertEqual(process.call_args.kwargs['env']['OAC_RUNTIME_ENVIRONMENT_ID'], data['EnvironmentID'])
-                self.assertEqual(process.call_args.kwargs['user'], 1000)
+                daemon = process.call_args_list[0]
+                self.assertEqual(daemon.args[0][-2:], ['--bootstrap-file', str(connection_file)])
+                self.assertEqual(daemon.kwargs['env']['OAC_RUNTIME_ENVIRONMENT_ID'], data['EnvironmentID'])
+                if not failed:
+                    serve = process.call_args_list[1]
+                    self.assertEqual(serve.args[0], ['/usr/local/bin/oac-sandbox-io', '--bootstrap-file', str(serve_file)])
+                    self.assertEqual(serve.kwargs['env'], {})
+                for call in process.call_args_list:
+                    self.assertEqual(call.kwargs['user'], 1000)
+                    for credential in (data['RuntimeBootstrap']['credential'], data['SandboxIO']['credential']):
+                        self.assertNotIn(credential, json.dumps(call.args))
+                        self.assertNotIn(credential, json.dumps(call.kwargs['env']))
                 if failed:
                     self.assertFalse((root / 'managed-ready.json').exists())
                 else:
                     receipt = json.loads((root / 'managed-ready.json').read_text())
                     self.assertEqual(receipt['identity'], managed_init.identity(data))
                     self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(receipt))
+                    self.assertEqual(receipt['daemon_pid'], 456)
+                calls = process.call_count
                 source.write_text(json.dumps(data))
                 with self.assertRaises(RuntimeError):
                     managed_init.initialize()
-                process.assert_called_once()
+                self.assertEqual(process.call_count, calls)
 
     def test_managed_credentials_and_environment(self):
         self.exercise()

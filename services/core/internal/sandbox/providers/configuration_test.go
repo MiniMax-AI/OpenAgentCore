@@ -40,16 +40,14 @@ func TestNodeConfigurationExplicitUnsupportedAndStrictEmptyInput(t *testing.T) {
 
 func TestConfigurationRequirementsDoNotTurnLookupFailuresIntoFalse(t *testing.T) {
 	registry := Builtin()
-	for _, check := range []func(string) (bool, error){registry.UsesCredential, registry.RequiresPublicOrigin} {
-		if _, err := check("missing-configuration-provider"); err == nil {
-			t.Fatal("unknown provider treated as not required")
-		}
-		if yes, err := check("docker"); err != nil || yes {
-			t.Fatal("explicit not-required rejected", err)
-		}
-		if yes, err := check("e2b"); err != nil || !yes {
-			t.Fatal("explicit required lost", err)
-		}
+	if _, err := registry.UsesCredential("missing-configuration-provider"); err == nil {
+		t.Fatal("unknown provider treated as not required")
+	}
+	if yes, err := registry.UsesCredential("docker"); err != nil || yes {
+		t.Fatal("explicit not-required rejected", err)
+	}
+	if yes, err := registry.UsesCredential("e2b"); err != nil || !yes {
+		t.Fatal("explicit required lost", err)
 	}
 	if _, err := required(""); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal("missing requirement treated as false", err)

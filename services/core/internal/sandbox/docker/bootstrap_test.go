@@ -9,13 +9,16 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
+	"github.com/google/uuid"
 	"github.com/moby/moby/client"
 )
 
-func TestBootstrapDeliversOnlyPublicConnectionInput(t *testing.T) {
-	b := sandbox.Bootstrap{CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-secret"}
-	found := false
+func TestBootstrapDeliversOnlyPublicLaunchInputs(t *testing.T) {
+	b := contracttest.Bootstrap(sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()})
+	found := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "PUT" || !strings.HasSuffix(r.URL.Path, "/containers/test/archive") {
 			t.Errorf("unexpected Docker operation %s", r.URL.Path)
@@ -33,16 +36,23 @@ func TestBootstrapDeliversOnlyPublicConnectionInput(t *testing.T) {
 			if strings.Contains(h.Name, "auth.json") {
 				t.Error("provider wrote Runtime private storage")
 			}
+			if h.Name != "runtime/runtime-bootstrap.json" && h.Name != "runtime/sandbox-io-bootstrap.json" {
+				continue
+			}
+			found[h.Name] = true
+			raw, err := io.ReadAll(tr)
+			if err != nil {
+				t.Error(err)
+			}
+			if h.Mode != 0600 || h.Uid != 1000 || h.Gid != 1000 {
+				t.Error("launch input permissions", h.Name)
+			}
 			if h.Name == "runtime/runtime-bootstrap.json" {
-				found = true
-				raw, err := io.ReadAll(tr)
-				if err != nil {
-					t.Error(err)
+				if c, err := runtimebootstrap.Decode(raw); err != nil || c != b.RuntimeConnection() {
+					t.Error("invalid Runtime launch input")
 				}
-				c, err := runtimebootstrap.Decode(raw)
-				if err != nil || c != b.RuntimeConnection() || h.Mode != 0600 || h.Uid != 1000 || h.Gid != 1000 {
-					t.Error("invalid launch input or permissions")
-				}
+			} else if in, err := sandboxbootstrap.Decode(raw); err != nil || in != b.SandboxIO {
+				t.Error("invalid Sandbox I/O launch input")
 			}
 		}
 		w.WriteHeader(200)
@@ -56,7 +66,7 @@ func TestBootstrapDeliversOnlyPublicConnectionInput(t *testing.T) {
 	if err := (&Provider{client: c}).bootstrap(t.Context(), "test", b); err != nil {
 		t.Fatal(err)
 	}
-	if !found {
-		t.Fatal("missing Runtime input")
+	if len(found) != 2 {
+		t.Fatal("missing launch input", found)
 	}
 }

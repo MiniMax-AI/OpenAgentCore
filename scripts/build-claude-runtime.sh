@@ -19,7 +19,7 @@ node "$repo_root/scripts/check-claude-sdk-runtime.mjs" "$context/claude-sdk"
 (
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/oac-daemon" ./apps/daemon/cmd/oac-daemon
+    -o "$context/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
 )
 cp "$repo_root/services/core/deploy/claude/Dockerfile" "$context/Dockerfile"
 mkdir -p "$output_dir"

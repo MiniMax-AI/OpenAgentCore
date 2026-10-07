@@ -254,7 +254,7 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 	s, w, process := managerFixture(t, 10, 10)
 	// Reuse the real placement fixture, then adopt its selection as Web-managed.
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_deployment SET web_managed=true,local_node_id=NULL`)
-	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET deployment_generation=1,specification_digest=$1`, SandboxDeploymentTestSpec("docker").Digest("docker"))
+	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET deployment_generation=1,specification_digest=$1,core_url=$2`, SandboxDeploymentTestSpec("docker").Digest("docker"), s.placement.PublicURL())
 	_, pending := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	tenant, suspended := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	allocation := archiveAllocation(t, w, tenant, suspended, process.InstallationID)

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -23,8 +24,8 @@ var (
 	// admit: paused for maintenance, without a valid specification, or for
 	// another installation.
 	ErrAdmissionClosed = errors.New("environment is no longer available")
-	// ErrPublicURLUnreachable rejects selection and admission when the provider
-	// requires a reachable public origin and the installation is loopback.
+	// ErrPublicURLUnreachable rejects hosted selection and admission while the
+	// installation public URL is loopback or not https.
 	ErrPublicURLUnreachable = errors.New("This sandbox provider needs a reachable HTTPS public URL before they can connect to Core.")
 	// ErrNodesPreparing rejects placement while no node serves the target
 	// generation and at least one is preparing it.
@@ -37,9 +38,6 @@ var (
 // Declarations are the provider declarations placement reads.
 // *providers.Registry satisfies it.
 type Declarations interface {
-	// RequiresPublicOrigin reports whether the provider's guests must reach
-	// Core at a public origin.
-	RequiresPublicOrigin(provider string) (bool, error)
 	// ValidateSpecification rejects a specification the provider cannot run.
 	ValidateSpecification(provider string, spec sandbox.DeploymentSpec) error
 }
@@ -116,14 +114,12 @@ type Restore struct {
 	GenerationReady bool
 }
 
-// CheckPublicOrigin rejects a provider that requires a reachable public
-// origin while the installation public URL is loopback.
-func (r *Rules) CheckPublicOrigin(provider string) error {
-	required, err := r.declarations.RequiresPublicOrigin(provider)
-	if err != nil {
-		return err
-	}
-	if required && LoopbackOrigin(r.publicURL) {
+// CheckPublicOrigin rejects hosted sandboxes while the installation public URL
+// is loopback or not https. Every hosted sandbox runs outside Core's network
+// namespace and dials the sandbox Link: a loopback host names the sandbox's
+// own namespace, and an http origin elsewhere has no Link.
+func (r *Rules) CheckPublicOrigin() error {
+	if !strings.HasPrefix(r.publicURL, "https://") || LoopbackOrigin(r.publicURL) {
 		return ErrPublicURLUnreachable
 	}
 	return nil
@@ -163,10 +159,10 @@ func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) 
 	if d.Resetting {
 		return nil, ErrResetAdmission
 	}
-	// A changed installation address cannot admit guests that require a
-	// public origin. Existing owned resources remain available for cleanup.
+	// A changed installation address cannot admit hosted sandboxes. Existing
+	// owned resources remain available for cleanup.
 	if d.Provider != "" {
-		if err := r.CheckPublicOrigin(d.Provider); err != nil {
+		if err := r.CheckPublicOrigin(); err != nil {
 			return nil, err
 		}
 	}

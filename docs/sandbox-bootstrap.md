@@ -9,7 +9,7 @@ A Sandbox Provider starts the Sandbox I/O service by handing it one bootstrap fi
 Deliver one JSON object in a regular file that only the service's account and trusted provisioning processes can read (mode 0600 on Linux), and pass its absolute path:
 
 ```sh
-oac-sandbox-io --bootstrap-file /home/sandbox/sandbox-io-bootstrap.json
+oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json
 ```
 
 The command takes no other argument and reads no environment variable or configuration file.

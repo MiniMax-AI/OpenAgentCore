@@ -146,8 +146,6 @@ func unavailable(string) (string, error) { return "", credentialcrypto.ErrUnavai
 // declarations accept every provider and specification.
 type declarations struct{}
 
-func (declarations) RequiresPublicOrigin(string) (bool, error) { return false, nil }
-
 func (declarations) ValidateSpecification(string, sandbox.DeploymentSpec) error { return nil }
 
 var (

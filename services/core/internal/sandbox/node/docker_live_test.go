@@ -10,15 +10,16 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	sandboxdocker "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
-	"github.com/google/uuid"
 	"github.com/moby/moby/client"
 )
 
-// This uses the same pinned sleep-entrypoint image as the Docker mechanism
-// tests. It exercises real Docker resources through the node transport, not a
-// native harness/model workflow. No provider credentials are required.
+// This uses the same pinned fixture image, whose oac-daemon only sleeps, as
+// the Docker mechanism tests. It exercises real Docker resources through the
+// node transport, not a native harness/model workflow. No provider
+// credentials are required.
 func TestDockerNodeTransportLifecycle(t *testing.T) {
 	image := os.Getenv("AGENTS_RUNTIME_DOCKER_TEST_IMAGE")
 	if image == "" {
@@ -87,7 +88,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-node-transport-credential", NetworkAccess: "enabled"}
+	b := contracttest.Bootstrap(r)
 	callCtx, callCancel := context.WithTimeout(ctx, 25*time.Second)
 	info, err := proxy.Create(callCtx, b)
 	callCancel()

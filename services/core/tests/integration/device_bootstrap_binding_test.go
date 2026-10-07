@@ -36,7 +36,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			allocation, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, d.InstallationID, runtimedevice.HashCredential(bearer))
+			allocation, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, d.InstallationID, runtimedevice.HashCredential(bearer), runtimedevice.HashCredential(bearer))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +66,7 @@ func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing
 		t.Fatal(err)
 	}
 	_, environment := localEnvironment(t, s, tenant)
-	allocation, err := deploymentExecution(t, executionWriter(t, s)).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
+	allocation, err := deploymentExecution(t, executionWriter(t, s)).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential("allocation-token"), runtimedevice.HashCredential("allocation-token"))
 	if err != nil {
 		t.Fatal(err)
 	}

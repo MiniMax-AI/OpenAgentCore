@@ -402,7 +402,7 @@ export class SandboxAdminClient {
       // This code has one fixed Core meaning. Never forward its raw message or
       // param: an omitted key cannot be used to detect a reflected stored key.
       if (error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error") {
-        throw new AgentCoreError("E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", 409, "sandbox_configuration_error", null);
+        throw new AgentCoreError("Sandboxes reach Core from outside its host. Set an HTTPS public URL that is not loopback.", 409, "sandbox_configuration_error", null);
       }
       // Any other credential-bearing rejection may reflect the key in any error field.
       throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, sandboxConfigurationUnconfirmed);

@@ -1,7 +1,7 @@
 ---
 title: "沙箱引导"
 source: docs/sandbox-bootstrap.md
-source_hash: 593dea87f35a7df92253a7053e99326cababc16cae7e0cc811fc9ae6bfc166d7
+source_hash: 1e2f61c5a7bafae47a72cfd66c9e604a5aa3b7120ca29b11e700241d892c5ada
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动 Sandbox I/O 服务。本文负责 Provider 到该服务的启动输入。类型与验证器位于 [`internal/sandboxbootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxbootstrap/bootstrap.go)。服务凭此输入以 [沙箱 Link 协议](./sandbox-link-protocol.md)的 serve peer 身份连接 relay。
@@ -11,7 +11,7 @@ Sandbox Provider 通过交付一个引导文件来启动 Sandbox I/O 服务。�
 将一个 JSON 对象交付到普通文件中，该文件仅允许服务账户和可信资源供应进程读取（Linux 上权限为 0600），并传入其绝对路径：
 
 ```sh
-oac-sandbox-io --bootstrap-file /home/sandbox/sandbox-io-bootstrap.json
+oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json
 ```
 
 该命令不接受其他参数，也不读取环境变量或配置文件。

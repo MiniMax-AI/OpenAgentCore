@@ -28,7 +28,7 @@ trap 'rm -rf "$context"' EXIT
 (
   cd "$repo_root"
   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/oac-daemon" ./apps/daemon/cmd/oac-daemon
+    -o "$context/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
 )
 cp "$native_dir/bin/codex" "$native_dir/bin/codex-code-mode-host" "$context/"
 cp -R "$native_dir/codex-resources" "$context/codex-resources"

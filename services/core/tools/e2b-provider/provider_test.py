@@ -28,7 +28,12 @@ class ProviderTest(unittest.TestCase):
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret',
-                                          NetworkAccess='enabled', AllowedDomains=[])}
+                                          NetworkAccess='enabled', AllowedDomains=[],
+                                          SandboxIO={'version': 1, 'link_url': 'wss://core.example/api/v1/sandbox-link',
+                                                     'credential': 'private-serve-secret',
+                                                     'resource': {'tenant_id': self.reference['TenantID'],
+                                                                  'environment_id': self.reference['EnvironmentID'], 'kind': 'allocation',
+                                                                  'id': self.reference['AllocationID'], 'generation': 1}})}
         self.request['RuntimeBootstrap'] = {
             'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
@@ -68,6 +73,7 @@ class ProviderTest(unittest.TestCase):
         self.assertTrue(result['Info']['CreateSettled'])
         startup = json.loads(self.cloud.files.write.call_args.args[1])
         self.assertEqual(startup['RuntimeBootstrap'], self.request['RuntimeBootstrap'])
+        self.assertEqual(startup['SandboxIO'], self.request['Bootstrap']['SandboxIO'])
         self.assertNotIn('CoreURL', startup)
         self.assertNotIn('Credential', startup)
         self.assertEqual(self.call('create')['ErrorCode'], 'exists')
@@ -80,6 +86,7 @@ class ProviderTest(unittest.TestCase):
         serialized = json.dumps(self.record())
         self.assertNotIn(self.config['APIKey'], serialized)
         self.assertNotIn(self.request['Bootstrap']['Credential'], serialized)
+        self.assertNotIn(self.request['Bootstrap']['SandboxIO']['credential'], serialized)
         self.assertEqual(self.record()['connection']['envd_access_token'], 'private-envd-secret')
         self.api.connect.assert_not_called()
 

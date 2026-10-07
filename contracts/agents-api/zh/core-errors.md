@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 50b9624c14d3d600f991fcc9da741b6c4c4722831568c28e849a574bb34a4b06
+source_hash: 56fd21c7a7be2ddbc7a3c4163473d03fd6d72de05ba79f57d0389ae768f5d534
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -88,7 +88,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 409 | `executor_credential_exists` | 该执行器凭证 ID 已存在；要替换密钥，请轮换它 |
 | 409 | `sandbox_not_configured` | 沙箱部署尚未配置 |
 | 409 或 503 | `sandbox_reset_in_progress` | 沙箱正在重置 |
-| 409 | `sandbox_configuration_error` | 当前安装无法支持所选提供商，例如公开 URL 为 loopback 时选择 E2B |
+| 409 | `sandbox_configuration_error` | 当前安装无法支持所选提供商，例如公开 URL 为 loopback 或不是 https 时的任何提供商 |
 | 409 | `sandbox_deployment_conflict` | 沙箱部署在当前状态下无法更改 |
 | 409 | `sandbox_specification_mismatch` | 已保存的部署规格对其提供商不再有效 |
 | 409 | `runtime_node_in_use` | 节点仍有资源分配、快照、预留资源或待清理项 |

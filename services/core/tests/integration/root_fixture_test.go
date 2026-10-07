@@ -31,8 +31,8 @@ type Store struct {
 }
 
 // defaultPlacement is the placement rules cmd/server builds on the built-in
-// providers and an unset public URL.
-var defaultPlacement, _ = placement.NewRules(providers.Builtin(), "")
+// providers and an HTTPS public URL.
+var defaultPlacement, _ = placement.NewRules(providers.Builtin(), "https://core.example")
 
 // New is the fixture on pool without a credential key, under defaultPlacement.
 func New(pool *pgxpool.Pool) *Store {

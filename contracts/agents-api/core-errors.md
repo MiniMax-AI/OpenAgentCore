@@ -86,7 +86,7 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 | 409 | `executor_credential_exists` | The executor credential ID already exists; rotate it to replace the secret |
 | 409 | `sandbox_not_configured` | The sandbox deployment is not configured |
 | 409 or 503 | `sandbox_reset_in_progress` | A sandbox reset is in progress |
-| 409 | `sandbox_configuration_error` | The installation cannot serve the selected provider, such as E2B while the public URL is loopback |
+| 409 | `sandbox_configuration_error` | The installation cannot serve the selected provider, such as any provider while the public URL is loopback or not https |
 | 409 | `sandbox_deployment_conflict` | The sandbox deployment cannot change in its current state |
 | 409 | `sandbox_specification_mismatch` | The saved deployment specification is no longer valid for its provider |
 | 409 | `runtime_node_in_use` | The node still holds allocations, snapshots, reservations or pending cleanup |

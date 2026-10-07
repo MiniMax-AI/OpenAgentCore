@@ -146,7 +146,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [dockerConfirmed, setDockerConfirmed] = useState(current?.provider === "docker");
   const [confirmingDocker, setConfirmingDocker] = useState(false);
   const keepMicrosandbox = useRef<HTMLButtonElement>(null);
-  // Core's reason for rejecting the saved configuration, such as E2B with a loopback public_url.
+  // Core's reason for rejecting the saved configuration, such as a loopback public_url.
   const [rejection, setRejection] = useState<string | null>(null);
   const [fieldRejection, setFieldRejection] = useState<unknown>(null);
   const fieldError = (param: string) => coreFieldError(fieldRejection, param, tCommon);
@@ -379,7 +379,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             <dd>
               {address ? <code>{address}</code> : "—"}
               <span className="wizard-review-sub">{t("Managed in System")}</span>
-              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Set a public address before connecting remote nodes; E2B sandboxes need an HTTPS one.")}</span> : null}
+              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Set an HTTPS public address before saving; sandboxes and remote nodes can't reach this one.")}</span> : null}
             </dd>
           </div>
         </dl>

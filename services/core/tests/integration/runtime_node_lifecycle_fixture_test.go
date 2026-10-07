@@ -128,7 +128,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
 	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
-	f.worker = startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
+	f.worker = startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
 	spec := SandboxDeploymentTestSpec("microsandbox")
 	raw, _ := json.Marshal(spec)
 	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification=$1", raw); err != nil {
@@ -150,7 +150,7 @@ func (f *nodeIsolationFixture) enroll(id string) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	_, err = f.nodes.Enroll(f.t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64)})
+	_, err = f.nodes.Enroll(f.t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: f.store.placement.PublicURL()})
 	if err != nil {
 		f.t.Fatal(err)
 	}

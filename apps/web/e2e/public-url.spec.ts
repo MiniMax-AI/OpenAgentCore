@@ -28,10 +28,10 @@ test("explains an E2B rejection in the wizard, with a link to domain setup", asy
   await selectFixtureE2BBuild(page);
   await page.getByRole("button", { name: "Next" }).click();
   const address = page.getByRole("definition").filter({ hasText: "http://127.0.0.1:8091" });
-  await expect(address).toContainText("Set a public address before connecting remote nodes");
+  await expect(address).toContainText("Set an HTTPS public address before saving");
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
-  await expect(rejection).toContainText("E2B sandboxes need a public HTTPS address.");
+  await expect(rejection).toContainText("Sandboxes need an HTTPS public address that is not loopback.");
   await expect(rejection.getByRole("button", { name: "Managed in System" })).toBeVisible();
   // Nothing was saved and nothing is uncertain: no dialog, and the wizard stays on its review.
   await expect(page.getByRole("dialog")).toHaveCount(0);

@@ -17,14 +17,20 @@ type entry struct {
 }
 
 func (p *Provider) bootstrap(ctx context.Context, id string, b sandbox.Bootstrap) error {
-	// Deliver the Runtime-owned connection contract before native work can start.
+	// Deliver the daemon's and the Sandbox I/O service's launch inputs before
+	// native work can start.
 	auth, e := b.RuntimeConnection().Marshal()
+	if e != nil {
+		return e
+	}
+	serve, e := b.SandboxIO.Marshal()
 	if e != nil {
 		return e
 	}
 	if e = copyRuntimeFiles(ctx, p.client, id, "/home", []entry{
 		{name: "runtime", directory: true}, {name: "runtime/.oac", directory: true},
 		{name: "runtime/runtime-bootstrap.json", content: auth},
+		{name: "runtime/sandbox-io-bootstrap.json", content: serve},
 	}); e != nil {
 		return e
 	}

@@ -269,7 +269,7 @@ describe("hosted provider configuration", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
   it("projects public-URL rejection to fixed copy even when the upstream message reflects a key", async () => {
-    const rejection = { message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
+    const rejection = { message: "Sandboxes reach Core from outside its host. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(response({ error: rejection }, 409))
       .mockResolvedValueOnce(response({ error: { ...rejection, message: rejection.message + e2b.api_key } }, 409));
@@ -381,7 +381,7 @@ it("keeps omitted-key public-URL errors actionable without reflecting a stored k
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_configuration_error", message: `arbitrary upstream ${secret}`, param: secret, details: { credential: secret } } }, 409));
   const client = new SandboxAdminClient({ fetch });
   const error = await client.updateDeployment({ provider: "e2b", expected_generation: 1, configuration: { template: e2bDeployment.configuration.template } }).catch(error => error);
-  expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback." });
+  expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "Sandboxes reach Core from outside its host. Set an HTTPS public URL that is not loopback." });
   expect(JSON.stringify(error)).not.toContain(secret);
   expect(error.message).not.toContain(secret);
   expect(error.details).toBeUndefined();

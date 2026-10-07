@@ -35,13 +35,13 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &execution.RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}, nil
+		return &execution.RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p}, nil
 	}, func(ctx context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		preparations.Add(1)
 		if fail.Load() {
 			return execution.PreparedRuntimeDeployment{}, errors.New("fixture provider unavailable")
 		}
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
+		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
 	})
 	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 	ctx, cancel := context.WithCancel(t.Context())
@@ -75,7 +75,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker")}
+	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), CoreURL: s.placement.PublicURL()}
 	if _, err := deployments.Enroll(t.Context(), enrollment, node); err != nil {
 		t.Fatal(err)
 	}

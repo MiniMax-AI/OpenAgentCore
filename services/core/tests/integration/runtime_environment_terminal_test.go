@@ -26,7 +26,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			writer := executionWriter(t, s)
-			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,7 +121,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := executionWriter(t, s)
-	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
