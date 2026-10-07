@@ -61,6 +61,9 @@ func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 				t.Fatal("initial connection missing")
 			}
 			defer first.Close()
+			if got := sendAssignment(t, first, proto.TypeAssignmentBind, lifecycleRef, proto.AssignmentBindPayload{EnvironmentID: "env"}); got.State != proto.AssignmentBound {
+				t.Fatalf("bind = %+v", got)
+			}
 			request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "planned"}
 			sendLifecycleFrame(t, first, proto.TypeEnvironmentQuiesce, request)
 			result := readLifecycleResult(t, first, proto.TypeEnvironmentQuiesced)
@@ -104,6 +107,15 @@ func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 				}
 				if scenario == "wrong_operation" {
 					request.SuspendID = "stale"
+				}
+				if scenario == "resume" {
+					// Core may release the Session before it resumes; the reply
+					// arrives on the new connection.
+					released := lifecycleRef
+					released.Epoch++
+					if got := sendAssignment(t, second, proto.TypeAssignmentRelease, released, proto.AssignmentReleasePayload{}); got.State != proto.AssignmentReleased {
+						t.Fatalf("release during suspension = %+v", got)
+					}
 				}
 				sendLifecycleFrame(t, second, proto.TypeEnvironmentResume, request)
 				if scenario == "resume" || scenario == "rollback" || scenario == "reconnect" {
@@ -153,16 +165,21 @@ func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 	}
 }
 
+// lifecycleRef is the assignment of the Session whose Environment suspends.
+var lifecycleRef = proto.AssignmentRef{SessionID: "session", AssignmentID: "assignment", Epoch: 1}
+
 func sendLifecycleFrame(t *testing.T, peer *websocket.Conn, kind string, payload proto.EnvironmentSuspendPayload) {
 	t.Helper()
 	env, err := proto.NewEnvelope(kind, "operation", payload)
 	if err != nil {
 		t.Fatal(err)
 	}
+	env.Assignment = lifecycleRef
 	if err := peer.WriteJSON(env); err != nil {
 		t.Fatal(err)
 	}
 }
+
 func readLifecycleResult(t *testing.T, peer *websocket.Conn, kind string) proto.EnvironmentSuspendResultPayload {
 	t.Helper()
 	_ = peer.SetReadDeadline(time.Now().Add(3 * time.Second))
@@ -238,10 +255,11 @@ func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var attempts atomic.Int32
-			peers := make(chan *websocket.Conn, 2)
+			peers := make(chan *websocket.Conn, 3)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				attempt := attempts.Add(1)
-				if scenario == "revoked" && attempt > 1 {
+				// The first connection binds and quiesces the Router.
+				if scenario == "revoked" && attempt > 2 {
 					http.Error(w, "revoked", http.StatusUnauthorized)
 					return
 				}
@@ -254,15 +272,30 @@ func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 			dial := func(ctx context.Context) (*transport.Conn, error) {
 				return transport.Dial(ctx, transport.DialOptions{WSURL: "ws" + strings.TrimPrefix(server.URL, "http"), DeviceID: "device", Credential: "credential", DaemonVersion: proto.Version})
 			}
-			state, err := newSuspendedRouter(nil, agent.NewRegistry())
+			conn, err := dial(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			setup := <-peers
+			defer setup.Close()
+			state, err := newSuspendedRouter(conn, agent.NewRegistry())
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer state.shutdown()
-			request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "pending-confirmation"}
-			if err := state.router.Quiesce(t.Context(), request); err != nil {
+			bind, err := proto.NewEnvelope(proto.TypeAssignmentBind, "bind", proto.AssignmentBindPayload{EnvironmentID: "env"})
+			if err != nil {
 				t.Fatal(err)
 			}
+			bind.Assignment = lifecycleRef
+			if err := state.router.Handle(t.Context(), bind); err != nil {
+				t.Fatal(err)
+			}
+			request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "pending-confirmation"}
+			if err := state.router.Quiesce(t.Context(), lifecycleRef, request); err != nil {
+				t.Fatal(err)
+			}
+			_ = conn.Close()
 			control := &suspendControl{path: filepath.Join(t.TempDir(), "control.json"), identity: suspendIdentity{EnvironmentID: "env"}, signal: make(chan os.Signal, 1)}
 			if err := control.Arm(request); err != nil {
 				t.Fatal(err)

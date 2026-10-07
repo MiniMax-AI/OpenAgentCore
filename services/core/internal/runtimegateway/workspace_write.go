@@ -13,7 +13,7 @@ import (
 
 // WriteWorkspaceFile sends an already durably owned mutation once. A transport
 // error is not a rejection and must retain the caller's unknown-outcome gate.
-func (s *Session) WriteWorkspaceFile(ctx context.Context, id string, request proto.WorkspaceWritePayload, data []byte) (proto.WorkspaceWriteResultPayload, error) {
+func (s *Session) WriteWorkspaceFile(ctx context.Context, id string, ref proto.AssignmentRef, request proto.WorkspaceWritePayload, data []byte) (proto.WorkspaceWriteResultPayload, error) {
 	var empty proto.WorkspaceWriteResultPayload
 	parsed, err := uuid.Parse(id)
 	if err != nil || parsed == uuid.Nil || parsed.String() != id || len(data) > proto.WorkspaceWriteMaxBytes {
@@ -44,6 +44,7 @@ func (s *Session) WriteWorkspaceFile(ctx context.Context, id string, request pro
 		if err != nil || len(env.Payload) > proto.WorkspaceWriteMaxFrameBytes {
 			return empty, errors.New("agentdaemon gateway: invalid write frame")
 		}
+		env.Assignment = ref
 		reply, err := s.exchangeChunkFrame(ctx, env, replies)
 		if err != nil {
 			return empty, err

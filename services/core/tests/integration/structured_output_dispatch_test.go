@@ -31,7 +31,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 		t.Fatal(err)
 	}
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture_harness", Available: true, Capabilities: caps}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture_harness", Available: true, Capabilities: caps}}})
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	for deadline := time.Now().Add(3 * time.Second); ; {
 		info, found, known := peer.AgentKindStatus("fixture_harness")

@@ -14,6 +14,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
+// testAssignment is the assignment the Session operations under test name.
+var testAssignment = proto.AssignmentRef{SessionID: "session", AssignmentID: "assignment", Epoch: 1}
+
 // fakeConn is the WSConn implementation used by session + registry
 // tests. Concurrency-safe.
 type fakeConn struct {
@@ -342,11 +345,7 @@ func TestSession_SendWritesToWire(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{
-		AgentKind: "fake_alpha",
-		RunID:     "run-1",
-		Input:     proto.TextInput("hello"),
-	})
+	env, _ := proto.NewEnvelope(proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "1", Input: proto.TextInput("hello")})
 	if err := sess.Send(context.Background(), env); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -371,7 +370,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{
+	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported,
 		Timestamp:      1710000000,
 		ActiveRequests: 2,
 		DaemonVersion:  "0.2.0-test",
@@ -445,7 +444,7 @@ func TestSession_HeartbeatDoesNotInferCapabilities(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	conn.Feed([]byte(`{"type":"heartbeat","payload":{"ts":1710000100,"claude_available":true}}`))
+	conn.Feed([]byte(`{"type":"heartbeat","payload":{"ts":1710000100,"claude_available":true,"home_removal":false}}`))
 	got := heartbeat.waitDaemonHeartbeat(t)
 	if len(got.SupportedAgentKinds) != 0 {
 		t.Fatalf("undeclared capabilities inferred: %#v", got.SupportedAgentKinds)

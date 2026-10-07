@@ -33,6 +33,7 @@ func (t *durableOnlyTurn) SteerWithReceipt(_ context.Context, _ proto.PromptStee
 func TestPublicTextSteeringDoesNotRequireOptionalSteerer(t *testing.T) {
 	owner := &durableOnlyExecutor{reusableExecutor: &reusableExecutor{starts: make(chan *reusableTurn, 1)}}
 	router, sender := poolRouter(t, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return owner, nil })
+	assign(t, router, preparationSessionID, "")
 	admission := executorAdmission(t, router, sender, "prepare", executorRequest())
 	startExecutorTurn(t, router, sender, "prepare", "run", admission)
 	turn := <-owner.starts

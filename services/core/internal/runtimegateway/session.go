@@ -97,6 +97,13 @@ type Session struct {
 	kindsMu        sync.RWMutex
 	kindsSeen      bool
 	supportedKinds []runtimedevice.SupportedAgentKind
+	homeRemoval    proto.CapabilitySupport
+
+	// assignments holds each Session's reference the Runtime acknowledged
+	// bound on this connection.
+	assignmentMu      sync.Mutex
+	assignments       map[string]proto.AssignmentRef
+	assignmentReplies map[string]chan proto.Envelope
 
 	// Subscribers keyed by runID. The read loop only sends on these
 	// channels; Unsubscribe is the only place that closes them.
@@ -146,19 +153,21 @@ func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *R
 	}
 	now := time.Now()
 	return &Session{
-		DeviceID:      deviceID,
-		WorkspaceID:   workspaceID,
-		DaemonVersion: daemonVersion,
-		ConnectedAt:   now,
-		conn:          conn,
-		log:           log,
-		reg:           reg,
-		lastSeenAt:    now,
-		subs:          map[string]*Subscription{},
-		preparations:  map[string]*preparationSubscription{},
-		ackWaiters:    map[string]chan proto.InteractionDecisionAckPayload{},
-		sendCh:        make(chan proto.Envelope, 64),
-		closed:        make(chan struct{}),
+		DeviceID:          deviceID,
+		WorkspaceID:       workspaceID,
+		DaemonVersion:     daemonVersion,
+		ConnectedAt:       now,
+		conn:              conn,
+		log:               log,
+		reg:               reg,
+		lastSeenAt:        now,
+		subs:              map[string]*Subscription{},
+		assignments:       map[string]proto.AssignmentRef{},
+		assignmentReplies: map[string]chan proto.Envelope{},
+		preparations:      map[string]*preparationSubscription{},
+		ackWaiters:        map[string]chan proto.InteractionDecisionAckPayload{},
+		sendCh:            make(chan proto.Envelope, 64),
+		closed:            make(chan struct{}),
 	}
 }
 
@@ -215,12 +224,13 @@ func (s *Session) AgentKindStatus(kind string) (info runtimedevice.SupportedAgen
 	return runtimedevice.SupportedAgentKind{}, false, true
 }
 
-func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) {
+func (s *Session) setDeclarations(kinds []runtimedevice.SupportedAgentKind, homeRemoval proto.CapabilitySupport) {
 	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
 	s.kindsMu.Lock()
 	s.kindsSeen = true
 	s.supportedKinds = copyKinds
+	s.homeRemoval = homeRemoval
 	s.kindsMu.Unlock()
 }
 
@@ -247,6 +257,7 @@ func (s *Session) Close(reason string) {
 		s.closeWorkspaceWrites()
 		s.closeCapabilities()
 		s.closeWorkspaceExports()
+		s.closeAssignmentReplies()
 	})
 }
 
@@ -395,14 +406,14 @@ func (s *Session) markSeen() {
 
 func (s *Session) handleHeartbeat(env proto.Envelope) {
 	var p proto.HeartbeatPayload
-	if err := env.DecodePayload(&p); err != nil {
+	if err := env.DecodePayload(&p); err != nil || p.HomeRemoval == proto.CapabilityUnspecified {
 		s.log("agentdaemon gateway: invalid heartbeat declaration device=%s", s.DeviceID)
-		s.setSupportedAgentKinds(nil)
+		s.setDeclarations(nil, proto.CapabilityUnspecified)
 		s.Close("invalid heartbeat declaration")
 		return
 	}
 	kinds := deviceKindsFromHeartbeat(p)
-	s.setSupportedAgentKinds(kinds)
+	s.setDeclarations(kinds, p.HomeRemoval)
 	if s.heartbeat == nil {
 		return
 	}
@@ -502,6 +513,14 @@ func (s *Session) dispatch(env proto.Envelope) {
 		return
 	case proto.TypeHeartbeat:
 		s.handleHeartbeat(env)
+		return
+	case proto.TypeAssignmentStatus:
+		s.dispatchAssignmentStatus(env)
+		return
+	case proto.TypeProtocolError:
+		var p proto.ProtocolErrorPayload
+		_ = env.DecodePayload(&p)
+		s.log("agentdaemon gateway: Runtime rejected %s request=%s device=%s: %s", p.Type, env.ID, s.DeviceID, p.ErrorCode)
 		return
 	case proto.TypePermissionRequest:
 		var p proto.PermissionRequestPayload

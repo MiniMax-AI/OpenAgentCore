@@ -12,14 +12,18 @@
 // a lookup table.
 //
 // Envelope.ID correlation:
-//   - prompt_request / prompt_cancel: ID = RunID.
+//   - prompt_cancel / prompt_steer / function_result: ID = RunID.
 //   - delta / tool_call / usage / error / done: ID = originating RunID.
 //   - permission_request: ID = RunID; payload.request_id is the interaction ID.
 //   - permission_decision / permission_cancel: ID = interaction ID.
 //   - execution_prepare / execution_start / execution_release and
 //     preparation_status: ID = preparation request ID, never RunID.
 //   - runtime_prepare / runtime_prepare_result: ID = connection-local transfer ID.
+//   - assignment_bind / assignment_release / assignment_status: ID = request ID.
 //   - heartbeats carry no ID.
+//
+// Envelope.Assignment names the Session's assignment on every frame of a
+// Session or Environment operation and on the Runtime's replies to it.
 package proto
 
 import (
@@ -51,6 +55,10 @@ type Envelope struct {
 	// Receivers MUST tolerate missing/unparseable values — both mean
 	// "mint a fresh trace locally", never reject.
 	Trace string `json:"trace,omitempty"`
+
+	// Assignment is the only location of a frame's assignment reference.
+	// Heartbeats carry none.
+	Assignment AssignmentRef `json:"assignment,omitzero"`
 }
 
 // NewEnvelope marshals payload into an Envelope. A nil payload yields
@@ -79,6 +87,17 @@ func NewEnvelopeWithTrace(typ string, id string, payload any, traceparent string
 	}
 	env.Trace = traceparent
 	return env, nil
+}
+
+// Reply builds the Runtime's reply to the request e. It carries the request's
+// ID, trace and assignment.
+func (e Envelope) Reply(typ string, payload any) (Envelope, error) {
+	reply, err := NewEnvelopeWithTrace(typ, e.ID, payload, e.Trace)
+	if err != nil {
+		return Envelope{}, err
+	}
+	reply.Assignment = e.Assignment
+	return reply, nil
 }
 
 // DecodePayload unpacks Envelope.Payload into out. An empty Payload is

@@ -25,11 +25,11 @@ func (q *Queries) CoreDatabaseSize(ctx context.Context) (int64, error) {
 const coreExecutionSnapshot = `-- name: CoreExecutionSnapshot :one
 SELECT count(*) FILTER (WHERE t.status = 'queued')::bigint AS queued_turns,
     count(*) FILTER (WHERE t.status = 'queued' AND
-        (b.device_id IS NULL OR NOT (b.device_id = ANY($1::uuid[]))))::bigint AS waiting_for_daemon,
+        (b.runtime_id IS NULL OR NOT (b.runtime_id = ANY($1::uuid[]))))::bigint AS waiting_for_daemon,
     count(*) FILTER (WHERE t.status = 'in_progress')::bigint AS in_progress_turns,
     COALESCE(GREATEST(0, extract(epoch FROM ($2::timestamptz -
         min(t.created_at) FILTER (WHERE t.status = 'queued')))), 0)::double precision AS oldest_queued_seconds
-FROM turns t LEFT JOIN session_devices b ON b.session_id = t.session_id
+FROM turns t LEFT JOIN session_runtime_assignments b ON b.session_id = t.session_id
 WHERE t.status IN ('queued', 'in_progress')
 `
 

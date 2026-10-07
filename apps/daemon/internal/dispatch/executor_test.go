@@ -68,7 +68,7 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 }
 
 func executorRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true})}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-" + preparationSessionID, StrictResume: true, DisableExecutionEnvironment: true})}
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
 	t.Helper()
@@ -86,6 +86,7 @@ func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (
 	if err != nil {
 		t.Fatal(err)
 	}
+	assign(t, router, preparationSessionID, "")
 	t.Cleanup(func() {
 		owner.mu.Lock()
 		owner.closeErr = nil
@@ -100,7 +101,7 @@ func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (
 }
 func executorAdmission(t *testing.T, r *dispatch.Router, s *recSender, key string, req proto.ExecutionPreparePayload) proto.PreparationStatusPayload {
 	t.Helper()
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, key, req)); err != nil {
+	if err := r.Handle(t.Context(), scoped(t, req.SessionID, proto.TypeExecutionPrepare, key, req)); err != nil {
 		t.Fatal(err)
 	}
 	return waitPreparationStatus(t, s, key, "ready", "")
@@ -255,8 +256,9 @@ func TestExecutorIdleAndActiveCapacitiesAreIndependent(t *testing.T) {
 	})
 	for i := 0; i < 17; i++ {
 		id := fmt.Sprint("idle-", i)
+		assign(t, r, id, "")
 		ready := executorAdmission(t, r, s, id, poolRequest(id))
-		if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionRelease, id, proto.ExecutionReleasePayload{Handle: ready.Handle})); err != nil {
+		if err := r.Handle(t.Context(), scoped(t, id, proto.TypeExecutionRelease, id, proto.ExecutionReleasePayload{Handle: ready.Handle})); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -271,9 +273,11 @@ func TestExecutorIdleAndActiveCapacitiesAreIndependent(t *testing.T) {
 	}, "idle capacity eviction")
 	for i := 0; i < 4; i++ {
 		id := fmt.Sprint("active-", i)
+		assign(t, r, id, "")
 		executorAdmission(t, r, s, id, poolRequest(id))
 	}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "overflow", poolRequest("overflow"))); err == nil {
+	assign(t, r, "overflow", "")
+	if err := r.Handle(t.Context(), scoped(t, "overflow", proto.TypeExecutionPrepare, "overflow", poolRequest("overflow"))); err == nil {
 		t.Fatal("active capacity exceeded")
 	}
 }

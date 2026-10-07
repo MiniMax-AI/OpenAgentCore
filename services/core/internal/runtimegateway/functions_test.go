@@ -8,9 +8,9 @@ import (
 
 func TestFunctionCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 	for _, supported := range []bool{false, true} {
-		kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilityFromBool(supported), FunctionResultImages: proto.CapabilityFromBool(supported)})}}})
+		kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilityFromBool(supported), FunctionResultImages: proto.CapabilityFromBool(supported)})}}})
 		s := &Session{}
-		s.setSupportedAgentKinds(kinds)
+		s.setDeclarations(kinds, proto.CapabilityUnsupported)
 		info, found, known := s.AgentKindStatus("codex")
 		if !found || !known || info.Capabilities.FunctionTools != supported || info.Capabilities.FunctionResultImages != supported {
 			t.Fatal(info, found, known)

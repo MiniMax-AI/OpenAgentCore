@@ -24,7 +24,7 @@ func coreMetricsSession(t *testing.T, pool *pgxpool.Pool, deleted bool) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		for _, query := range []string{`DELETE FROM turns WHERE session_id=$1`, `DELETE FROM session_devices WHERE session_id=$1`, `DELETE FROM sessions WHERE id=$1`} {
+		for _, query := range []string{`DELETE FROM turns WHERE session_id=$1`, `DELETE FROM session_runtime_assignments WHERE session_id=$1`, `DELETE FROM sessions WHERE id=$1`} {
 			if _, err := pool.Exec(context.Background(), query, id); err != nil {
 				t.Error(err)
 			}
@@ -63,7 +63,7 @@ func TestCoreMetricsSnapshot(t *testing.T) {
 		session := coreMetricsSession(t, pool, false)
 		coreMetricsTurn(t, pool, session, status, "", oldest.Add(time.Duration(i)*time.Second), nil, nil)
 		if i == 0 {
-			if _, err := pool.Exec(t.Context(), `INSERT INTO session_devices(session_id,device_id) VALUES($1,$2)`, session, connected); err != nil {
+			if _, err := pool.Exec(t.Context(), `INSERT INTO session_runtime_assignments(session_id,runtime_id) VALUES($1,$2)`, session, connected); err != nil {
 				t.Fatal(err)
 			}
 		}

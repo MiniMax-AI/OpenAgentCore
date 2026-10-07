@@ -45,7 +45,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			// A late malformed frame cannot report rejection of an earlier commit.
 			return errors.New("dispatch: malformed pending Runtime preparation frame")
 		}
-		return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("invalid_request"))
+		return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("invalid_request"))
 	}
 	r.mu.Lock()
 	if r.closed || r.suspension != nil {
@@ -59,11 +59,15 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			if duplicate {
 				return errors.New("dispatch: Runtime preparation already admitted")
 			}
-			return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("runtime_preparation_capacity"))
+			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("runtime_preparation_capacity"))
+		}
+		if code := r.admitLocked(env.Assignment, request.SessionID, request.EnvironmentID); code != "" {
+			r.mu.Unlock()
+			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation(code))
 		}
 		if r.localWorkspace == nil || !r.localWorkspace.Matches(request.EnvironmentID, request.SessionID) || r.runtimePreparationResourcesBusyLocked() {
 			r.mu.Unlock()
-			return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("resource_unavailable"))
+			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("resource_unavailable"))
 		}
 		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimePreparationTimeout)
 		u := &runtimePreparationTransfer{
@@ -74,16 +78,16 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
 		go r.runRuntimePreparationTransfer(owner, u, r.localWorkspace.ApplyRuntimePreparation)
-		if err := r.sendRuntimePrepareResult(ctx, env.ID, proto.RuntimePrepareResultPayload{Outcome: "ready"}); err != nil {
+		if err := r.sendRuntimePrepareResult(ctx, env, proto.RuntimePrepareResultPayload{Outcome: "ready"}); err != nil {
 			cancel()
 			return err
 		}
 		return nil
 	}
 	u := r.runtimePreparation
-	if u == nil || u.envelope.ID != env.ID {
+	if u == nil || u.envelope.ID != env.ID || u.envelope.Assignment != env.Assignment {
 		r.mu.Unlock()
-		return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("resource_unavailable"))
+		return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("resource_unavailable"))
 	}
 	if u.finished {
 		r.mu.Unlock()
@@ -93,7 +97,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		u.data = append(u.data, request.Data...)
 		offset := len(u.data)
 		r.mu.Unlock()
-		if err := r.sendRuntimePrepareResult(ctx, env.ID, proto.RuntimePrepareResultPayload{Outcome: "received", Offset: offset}); err != nil {
+		if err := r.sendRuntimePrepareResult(ctx, env, proto.RuntimePrepareResultPayload{Outcome: "received", Offset: offset}); err != nil {
 			u.cancel()
 			return err
 		}
@@ -114,7 +118,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 }
 
 func (r *Router) runtimePreparationResourcesBusyLocked() bool {
-	if r.workspaceWrite != nil || r.workspaceExport != nil || len(r.workspaceReads) != 0 || len(r.sessions) != 0 || len(r.idle) != 0 || len(r.executors) != 0 {
+	if r.workspaceWrite != nil || r.workspaceExport != nil || len(r.workspaceReads) != 0 || len(r.sessions) != 0 || len(r.executors) != 0 {
 		return true
 	}
 	for _, p := range r.preparations {
@@ -159,7 +163,7 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 	}
 	r.mu.Unlock()
 	// The result has a separate send budget, independent of an installation timeout.
-	_ = r.sendRuntimePrepareResult(context.WithoutCancel(ctx), u.envelope.ID, result)
+	_ = r.sendRuntimePrepareResult(context.WithoutCancel(ctx), u.envelope, result)
 }
 
 func rejectedRuntimePreparation(code string) proto.RuntimePrepareResultPayload {
@@ -186,12 +190,6 @@ func runtimePreparationResult(err error, size int) proto.RuntimePrepareResultPay
 	return proto.RuntimePrepareResultPayload{Outcome: "unknown", ErrorCode: "runtime_preparation_unconfirmed"}
 }
 
-func (r *Router) sendRuntimePrepareResult(ctx context.Context, id string, result proto.RuntimePrepareResultPayload) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	env, err := proto.NewEnvelope(proto.TypeRuntimePrepareResult, id, result)
-	if err != nil {
-		return err
-	}
-	return r.sender.Send(ctx, env)
+func (r *Router) sendRuntimePrepareResult(ctx context.Context, request proto.Envelope, result proto.RuntimePrepareResultPayload) error {
+	return r.reply(ctx, request, proto.TypeRuntimePrepareResult, result)
 }

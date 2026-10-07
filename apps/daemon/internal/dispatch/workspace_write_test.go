@@ -19,7 +19,7 @@ import (
 func localWriterRouter(t *testing.T) (*dispatch.Router, *recSender, proto.WorkspaceWritePayload, string) {
 	t.Helper()
 	workspace := t.TempDir()
-	environment, session := uuid.NewString(), uuid.NewString()
+	environment, session := uuid.NewString(), preparationSessionID
 	binding, err := localworkspace.New(environment, session, workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +34,7 @@ func localWriterRouter(t *testing.T) (*dispatch.Router, *recSender, proto.Worksp
 		defer cancel()
 		_ = r.Shutdown(ctx)
 	})
+	assign(t, r, session, environment)
 	digest := sha256.Sum256([]byte("abc"))
 	return r, sender, proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, SessionID: session, Path: "file", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])}, workspace
 }

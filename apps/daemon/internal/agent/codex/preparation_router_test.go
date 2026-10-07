@@ -88,10 +88,12 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				env.Assignment = proto.AssignmentRef{SessionID: session, AssignmentID: "assignment", Epoch: 1}
 				if err = r.Handle(t.Context(), env); err != nil {
 					t.Fatal(err)
 				}
 			}
+			send(proto.TypeAssignmentBind, "bind", proto.AssignmentBindPayload{EnvironmentID: environment})
 			await := func(state string) proto.PreparationStatusPayload {
 				t.Helper()
 				timer := time.NewTimer(4 * time.Second)

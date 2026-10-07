@@ -22,7 +22,7 @@ func TestWorkspaceReadCorrelatesOneBoundedResult(t *testing.T) {
 	done := make(chan error, 1)
 	data := bytes.Repeat([]byte{0, 127, 255, 3}, proto.WorkspaceReadMaxBytes/4)
 	go func() {
-		result, err := s.ReadWorkspaceFile(t.Context(), workspaceReadRequest())
+		result, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
 		if err == nil && (!bytes.Equal(result.Data, data) || !result.Truncated || !result.CloseAcknowledged) {
 			err = errors.New("read data or acknowledgment differs")
 		}
@@ -56,7 +56,10 @@ func TestWorkspaceReadRejectsIncompleteOrContradictoryReplies(t *testing.T) {
 	} {
 		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
-		go func() { _, err := s.ReadWorkspaceFile(t.Context(), workspaceReadRequest()); done <- err }()
+		go func() {
+			_, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
+			done <- err
+		}()
 		request := <-s.sendCh
 		reply, _ := proto.NewEnvelope(proto.TypeWorkspaceReadResult, request.ID, result)
 		s.dispatch(reply)
@@ -87,9 +90,9 @@ func TestWorkspaceDirectoryAcceptsNotDirectoryOnlyForDirectoryReads(t *testing.T
 		go func() {
 			var err error
 			if test.directory {
-				_, err = s.ListWorkspaceDirectory(t.Context(), directory)
+				_, err = s.ListWorkspaceDirectory(t.Context(), testAssignment, directory)
 			} else {
-				_, err = s.ReadWorkspaceFile(t.Context(), workspaceReadRequest())
+				_, err = s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
 			}
 			done <- err
 		}()
@@ -108,7 +111,7 @@ func TestWorkspaceReadObserverCancellationDoesNotSendCancelOrRetry(t *testing.T)
 	defer s.Close("test")
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	go func() { _, err := s.ReadWorkspaceFile(ctx, workspaceReadRequest()); done <- err }()
+	go func() { _, err := s.ReadWorkspaceFile(ctx, testAssignment, workspaceReadRequest()); done <- err }()
 	request := <-s.sendCh
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
@@ -133,14 +136,17 @@ func TestWorkspaceReadCapacityAndConnectionLoss(t *testing.T) {
 	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	done := make(chan error, 4)
 	for i := 0; i < 4; i++ {
-		go func() { _, err := s.ReadWorkspaceFile(t.Context(), workspaceReadRequest()); done <- err }()
+		go func() {
+			_, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
+			done <- err
+		}()
 		select {
 		case <-s.sendCh:
 		case <-time.After(time.Second):
 			t.Fatal("read not sent")
 		}
 	}
-	if _, err := s.ReadWorkspaceFile(t.Context(), workspaceReadRequest()); err == nil {
+	if _, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest()); err == nil {
 		t.Fatal("capacity bypassed")
 	}
 	s.Close("connection lost")
@@ -170,7 +176,7 @@ func TestWorkspaceReadRejectsOversizedRequestsBeforeQueueing(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
-			if _, err := s.ReadWorkspaceFile(ctx, request); err == nil || errors.Is(err, context.DeadlineExceeded) {
+			if _, err := s.ReadWorkspaceFile(ctx, testAssignment, request); err == nil || errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("oversized request not rejected before send", err)
 			}
 			select {

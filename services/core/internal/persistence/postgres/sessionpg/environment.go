@@ -63,7 +63,8 @@ func (s *Store) ListEnvironmentInitializations(ctx context.Context, after string
 	for _, row := range rows {
 		result = append(result, sessions.EnvironmentInitialization{
 			EnvironmentID: optionalID(row.ID), SessionID: optionalID(row.SessionID), TenantID: optionalID(row.TenantID),
-			DeviceID: optionalID(row.DeviceID), State: row.Initialization, Engine: row.Engine,
+			DeviceID: optionalID(row.RuntimeID), State: row.Initialization, Engine: row.Engine,
+			Assignment: assignmentRef(row.SessionID, row.AssignmentID, row.Epoch.Int64),
 		})
 	}
 	return result, nil

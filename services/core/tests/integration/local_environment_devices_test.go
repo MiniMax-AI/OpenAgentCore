@@ -53,7 +53,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 	}
 	reopened, _ := testStore(t)
 	got, err := sessionAdapter(reopened).GetSessionDevice(t.Context(), tenant, session.ID)
-	if err != nil || got != bound {
+	if err != nil || got.ID != bound.ID || got.EnvironmentID != bound.EnvironmentID || got.Assignment.SessionID != session.ID || got.Assignment.Epoch != 1 || !got.Assignment.Valid() {
 		t.Fatalf("durable exact binding: %+v %v", got, err)
 	}
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), bound.ID); err != nil || !ok {

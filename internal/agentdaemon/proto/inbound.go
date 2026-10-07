@@ -266,9 +266,11 @@ type SupportedAgentKind struct {
 
 // HeartbeatPayload advertises only explicit engine descriptors. Missing
 // supported_agent_kinds establishes no engine availability or capabilities.
+// HomeRemoval declares whether assignment_release accepts RemoveHome.
 type HeartbeatPayload struct {
 	Timestamp           int64                `json:"ts"`
 	ActiveRequests      int                  `json:"active_requests"`
 	DaemonVersion       string               `json:"daemon_version,omitempty"`
 	SupportedAgentKinds []SupportedAgentKind `json:"supported_agent_kinds,omitempty"`
+	HomeRemoval         CapabilitySupport    `json:"home_removal"`
 }

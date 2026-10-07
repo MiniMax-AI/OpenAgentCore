@@ -121,7 +121,7 @@ func TestSubagentProjectionStoresTheSessionRows(t *testing.T) {
 		VALUES ($1, $2, 'codex', 'key', 'hash', '{"agent":{"id":"agent_root"}}')`, session, tenant)
 	exec(t, pool, `INSERT INTO turns(id, session_id, status) VALUES ($1, $2, 'in_progress')`, turn, session)
 	exec(t, pool, `INSERT INTO devices(id, tenant_id, name, credential_hash) VALUES ($1, $2, 'device', repeat('a', 64))`, device, tenant)
-	exec(t, pool, `INSERT INTO session_devices(session_id, device_id, native_session_id) VALUES ($1, $2, 'root')`, session, device)
+	exec(t, pool, `INSERT INTO session_runtime_assignments(session_id, runtime_id, native_session_id) VALUES ($1, $2, 'root')`, session, device)
 	encode := func(kind string, value any) sessions.ExecutionEvent {
 		raw, err := json.Marshal(value)
 		if err != nil {

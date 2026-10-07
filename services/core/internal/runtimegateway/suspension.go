@@ -9,7 +9,8 @@ import (
 
 // SuspendControl correlates one lifecycle operation on this authenticated socket.
 // A closed socket is not an acknowledgement; callers retain their durable intent.
-func (s *Session) SuspendControl(ctx context.Context, kind string, request proto.EnvironmentSuspendPayload) (proto.EnvironmentSuspendResultPayload, error) {
+// The reference names the Session's assignment.
+func (s *Session) SuspendControl(ctx context.Context, kind string, ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload) (proto.EnvironmentSuspendResultPayload, error) {
 	var result proto.EnvironmentSuspendResultPayload
 	expected := proto.TypeEnvironmentQuiesced
 	if kind == proto.TypeEnvironmentResume {
@@ -25,6 +26,7 @@ func (s *Session) SuspendControl(ctx context.Context, kind string, request proto
 	if err != nil {
 		return result, err
 	}
+	envelope.Assignment = ref
 	s.suspendMu.Lock()
 	if s.IsClosed() {
 		s.suspendMu.Unlock()

@@ -24,15 +24,13 @@ func TestSteeringUsesAdmittedDeclarationAndDoesNotReplayUnsupportedImplementatio
 				}}, nil
 			}
 			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilityFromBool(supported)})}
-			h.reg.RegisterKind(info, prototest.ModelConfiguration(), factory)
-			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fixture"}))); err != nil {
-				t.Fatal(err)
-			}
+			registerSession(h.reg, info, factory)
+			startRun(t, h.router, h.sender, "fixture", "run")
 			// A new registration cannot rewrite the already admitted owner's contract.
 			info.Capabilities.Steering = proto.CapabilityFromBool(!supported)
-			h.reg.RegisterKind(info, prototest.ModelConfiguration(), factory)
+			registerSession(h.reg, info, factory)
 			for range 2 {
-				if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("hello")})); err != nil {
+				if err := handleSteeringAndWait(t, h, scoped(t, "run", proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("hello")})); err != nil {
 					t.Fatal(err)
 				}
 				ack := lastSteeringAck(t, h.sender, "run", "input")
@@ -63,21 +61,19 @@ func TestInteractionDeclarationPrecedesResponderMethods(t *testing.T) {
 				defer h.router.Shutdown(context.Background())
 				var session *fakeSession
 				info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Permissions: proto.CapabilityFromBool(supported)})}
-				h.reg.RegisterKind(info, prototest.ModelConfiguration(), func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+				registerSession(h.reg, info, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 					session = &fakeSession{out: out, closeOutOnCancel: true, submitErr: agent.ErrUnsupportedOperation, askErr: agent.ErrUnsupportedOperation}
 					return session, nil
 				})
-				if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fixture"}))); err != nil {
-					t.Fatal(err)
-				}
+				startRun(t, h.router, h.sender, "fixture", "run")
 				event := mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "interaction", Tool: "fixture"})
-				decision := mustEnv(t, proto.TypePermissionDecision, "interaction", proto.PermissionDecisionPayload{DeliveryID: "decision", Approved: true})
+				decision := scoped(t, "run", proto.TypePermissionDecision, "interaction", proto.PermissionDecisionPayload{DeliveryID: "decision", Approved: true})
 				if ask {
 					event = mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "interaction"})
-					decision = mustEnv(t, proto.TypePromptForUserChoiceDecision, "interaction", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "decision"})
+					decision = scoped(t, "run", proto.TypePromptForUserChoiceDecision, "interaction", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "decision"})
 				}
 				session.out <- event
-				waitFor(t, func() bool { return len(h.sender.snapshot()) > 0 }, "interaction indexed")
+				waitFor(t, func() bool { return hasFrame(h.sender, event.Type, "run") }, "interaction indexed")
 				if err := h.router.Handle(t.Context(), decision); err != nil {
 					t.Fatal(err)
 				}

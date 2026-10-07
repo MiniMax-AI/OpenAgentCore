@@ -20,7 +20,7 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 			defer h.router.Shutdown(context.Background())
 			token := "synthetic-private-token"
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
-			req := prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex", DisableExecutionEnvironment: true, MCPHTTPServers: &servers})
+			req := prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: stateKey(preparationSessionID), StrictResume: true, DisableExecutionEnvironment: true, MCPHTTPServers: &servers})
 			caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})
 			switch mode {
 			case "claude", "claude old peer", "claude local":
@@ -54,24 +54,33 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 			}
 			called := false
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: req.AgentKind, Available: mode != "unavailable", Capabilities: caps},
-				prototest.ModelConfiguration(), func(_ context.Context, got proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
-					called = true
-					if mode == "required" && !(*got.MCPHTTPServers)[0].Required {
-						t.Error("required initialization lost before adapter")
-					}
-					if (mode == "supported" || mode == "claude") && (got.MCPHTTPServers == nil || (*got.MCPHTTPServers)[0].BearerToken == nil || *(*got.MCPHTTPServers)[0].BearerToken != token) {
-						t.Error("token lost before adapter")
-					}
-					return nil, errors.New("controlled factory stop")
+				prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+					return nil, errors.New("ordinary factory is forbidden")
 				})
-			err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "mcp-bearer", req))
-			if called != (mode == "supported" || mode == "claude" || mode == "other engine" || mode == "credential-free" || mode == "product" || mode == "required" || mode == "optional old peer") {
-				t.Fatal("wrong factory admission")
+			h.reg.RegisterExecutor(req.AgentKind, func(_ context.Context, got proto.PromptRequestPayload) (agent.Executor, error) {
+				called = true
+				if mode == "required" && !(*got.MCPHTTPServers)[0].Required {
+					t.Error("required initialization lost before adapter")
+				}
+				if (mode == "supported" || mode == "claude") && (got.MCPHTTPServers == nil || (*got.MCPHTTPServers)[0].BearerToken == nil || *(*got.MCPHTTPServers)[0].BearerToken != token) {
+					t.Error("token lost before adapter")
+				}
+				return nil, errors.New("controlled factory stop")
+			})
+			assign(t, h.router, preparationSessionID, "")
+			err := h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "mcp-bearer", proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: req}))
+			admitted := mode == "supported" || mode == "claude" || mode == "other engine" || mode == "credential-free" || mode == "product" || mode == "required" || mode == "optional old peer"
+			state := "rejected"
+			if admitted {
+				state = "failed"
 			}
-			frames := h.sender.snapshot()
-			raw, _ := json.Marshal(frames)
-			if err == nil || strings.Contains(err.Error(), token) || strings.Contains(string(raw), token) || len(frames) != 2 || frames[0].Type != proto.TypeError || frames[1].Type != proto.TypeDone {
-				t.Fatal("terminal rejection missing or exposed credential")
+			waitPreparationStatus(t, h.sender, "mcp-bearer", state, "")
+			if called != admitted || (err == nil) != admitted {
+				t.Fatal("wrong factory admission", err)
+			}
+			raw, _ := json.Marshal(h.sender.snapshot())
+			if err != nil && strings.Contains(err.Error(), token) || strings.Contains(string(raw), token) {
+				t.Fatal("rejection exposed the credential")
 			}
 		})
 	}

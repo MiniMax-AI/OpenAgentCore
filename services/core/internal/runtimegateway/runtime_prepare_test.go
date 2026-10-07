@@ -29,7 +29,10 @@ type capabilityOutcome struct {
 
 func beginCapabilities(s *Session, ctx context.Context, id string, request proto.RuntimePreparePayload, data []byte) <-chan capabilityOutcome {
 	done := make(chan capabilityOutcome, 1)
-	go func() { r, err := s.PrepareRuntime(ctx, id, request, data); done <- capabilityOutcome{r, err} }()
+	go func() {
+		r, err := s.PrepareRuntime(ctx, id, testAssignment, request, data)
+		done <- capabilityOutcome{r, err}
+	}()
 	return done
 }
 func nextCapabilityFrame(t *testing.T, s *Session) proto.Envelope {
@@ -145,7 +148,7 @@ func TestCapabilitiesRefusesConflictingArchiveBeforeSending(t *testing.T) {
 	} {
 		request := skillPreparation()
 		mutate(&request)
-		if result, err := s.PrepareRuntime(t.Context(), uuid.NewString(), request, []byte("data")); err == nil || result.Outcome != "unknown" {
+		if result, err := s.PrepareRuntime(t.Context(), uuid.NewString(), testAssignment, request, []byte("data")); err == nil || result.Outcome != "unknown" {
 			t.Fatal("conflict admitted", result, err)
 		}
 		noCapabilityFrame(t, s)
@@ -206,7 +209,7 @@ func TestCapabilitiesConnectionOwnershipAndUnknownInterruption(t *testing.T) {
 			defer cancel()
 			done := beginCapabilities(s, ctx, uuid.NewString(), skillPreparation(), []byte("data"))
 			nextCapabilityFrame(t, s)
-			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), skillPreparation(), []byte("second")); err == nil {
+			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), testAssignment, skillPreparation(), []byte("second")); err == nil {
 				t.Fatal("concurrent transfer admitted")
 			}
 			if closeConnection {
@@ -290,7 +293,7 @@ func TestRuntimeInitializationNoDataAndExitReceipt(t *testing.T) {
 			s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 			defer s.Close("test")
 			request := proto.RuntimePreparePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: "echo test"}}
-			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), request, []byte("forbidden")); err == nil {
+			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), testAssignment, request, []byte("forbidden")); err == nil {
 				t.Fatal("initialization body accepted")
 			}
 			noCapabilityFrame(t, s)

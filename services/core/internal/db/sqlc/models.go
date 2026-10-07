@@ -394,12 +394,6 @@ type SessionArtifact struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
-type SessionDevice struct {
-	SessionID       pgtype.UUID `json:"session_id"`
-	DeviceID        pgtype.UUID `json:"device_id"`
-	NativeSessionID string      `json:"native_session_id"`
-}
-
 type SessionEvent struct {
 	SessionID    pgtype.UUID `json:"session_id"`
 	Sequence     int64       `json:"sequence"`
@@ -427,6 +421,17 @@ type SessionItem struct {
 type SessionModelExecution struct {
 	SessionID       pgtype.UUID `json:"session_id"`
 	EncryptedConfig []byte      `json:"encrypted_config"`
+}
+
+type SessionRuntimeAssignment struct {
+	SessionID       pgtype.UUID `json:"session_id"`
+	RuntimeID       pgtype.UUID `json:"runtime_id"`
+	NativeSessionID string      `json:"native_session_id"`
+	AssignmentID    pgtype.UUID `json:"assignment_id"`
+	Epoch           int64       `json:"epoch"`
+	DesiredState    string      `json:"desired_state"`
+	RemoveHome      bool        `json:"remove_home"`
+	AppliedEpoch    int64       `json:"applied_epoch"`
 }
 
 type Skill struct {

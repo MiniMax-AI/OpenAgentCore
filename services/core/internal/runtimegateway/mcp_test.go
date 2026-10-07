@@ -11,7 +11,7 @@ import (
 
 func TestMCPHTTPBearerCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 	for _, supported := range []bool{false, true} {
-		heartbeat := proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true,
+		heartbeat := proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true,
 			Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilityFromBool(supported)})}}}
 		raw, err := json.Marshal(heartbeat)
 		if err != nil || strings.Contains(string(raw), `"mcp_http_bearer_auth":true`) != supported {
@@ -22,7 +22,7 @@ func TestMCPHTTPBearerCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := &Session{}
-		s.setSupportedAgentKinds(deviceKindsFromHeartbeat(decoded))
+		s.setDeclarations(deviceKindsFromHeartbeat(decoded), proto.CapabilityUnsupported)
 		info, found, known := s.AgentKindStatus("codex")
 		if !found || !known || !info.Capabilities.MCPHTTPTools || info.Capabilities.MCPHTTPBearerAuth != supported {
 			t.Fatal("bearer capability was lost or inferred from credential-free MCP")
@@ -32,7 +32,7 @@ func TestMCPHTTPBearerCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 
 func TestMCPRequiredCapabilityIsExplicit(t *testing.T) {
 	for _, supported := range []bool{false, true} {
-		heartbeat := proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilityFromBool(supported)})}}}
+		heartbeat := proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilityFromBool(supported)})}}}
 		raw, err := json.Marshal(heartbeat)
 		if err != nil || strings.Contains(string(raw), `"mcp_http_required":true`) != supported {
 			t.Fatal("wire capability differs", err)
@@ -42,7 +42,7 @@ func TestMCPRequiredCapabilityIsExplicit(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := &Session{}
-		s.setSupportedAgentKinds(deviceKindsFromHeartbeat(decoded))
+		s.setDeclarations(deviceKindsFromHeartbeat(decoded), proto.CapabilityUnsupported)
 		info, found, known := s.AgentKindStatus("codex")
 		if !found || !known || info.Capabilities.MCPHTTPRequired != supported {
 			t.Fatal("combination capability lost or inferred")

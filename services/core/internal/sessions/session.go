@@ -101,9 +101,10 @@ type SessionDeletionTx interface {
 	// reservation that no Turn has admitted or superseded, nil when there is
 	// none.
 	LoadEnvironmentInput(ctx context.Context) (*EnvironmentInputState, error)
-	// ApplyDeletion deletes the Session's Artifacts, releases the node
-	// placement of its Environments that have no allocation and removes the
-	// Session from public access. Its row stays so that execution can settle.
+	// ApplyDeletion releases the Session's Runtime assignment with home
+	// removal, deletes the Session's Artifacts, releases the node placement of
+	// its Environments that have no allocation and removes the Session from
+	// public access. Its row stays so that execution can settle.
 	ApplyDeletion(ctx context.Context) error
 	// RecordDeletionAudit records the write audit of the deletion.
 	RecordDeletionAudit(ctx context.Context) error

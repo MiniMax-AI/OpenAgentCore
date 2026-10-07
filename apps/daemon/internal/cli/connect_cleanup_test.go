@@ -145,11 +145,16 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 		t.Fatal("initial connection missing")
 	}
 	defer peer.Close()
+	ref := proto.AssignmentRef{SessionID: "cleanup", AssignmentID: "assignment", Epoch: 1}
+	if got := sendAssignment(t, peer, proto.TypeAssignmentBind, ref, proto.AssignmentBindPayload{}); got.State != proto.AssignmentBound {
+		t.Fatalf("bind = %+v", got)
+	}
 	env, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: "cleanup",
 		Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", StrictResume: true, DisableExecutionEnvironment: true})})
 	if err != nil {
 		t.Fatal(err)
 	}
+	env.Assignment = ref
 	if err := peer.WriteJSON(env); err != nil {
 		t.Fatal(err)
 	}
@@ -193,5 +198,28 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	}
 	if factories.Load() != 1 || owner.closes.Load() != 2 {
 		t.Fatalf("factory=%d close=%d", factories.Load(), owner.closes.Load())
+	}
+}
+
+func sendAssignment(t *testing.T, peer *websocket.Conn, kind string, ref proto.AssignmentRef, payload any) proto.AssignmentStatusPayload {
+	t.Helper()
+	env, err := proto.NewEnvelope(kind, kind, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.Assignment = ref
+	if err := peer.WriteJSON(env); err != nil {
+		t.Fatal(err)
+	}
+	_ = peer.SetReadDeadline(time.Now().Add(3 * time.Second))
+	for {
+		var reply proto.Envelope
+		if err := peer.ReadJSON(&reply); err != nil {
+			t.Fatal(err)
+		}
+		var status proto.AssignmentStatusPayload
+		if reply.Type == proto.TypeAssignmentStatus && reply.ID == kind && reply.Assignment == ref && reply.DecodePayload(&status) == nil {
+			return status
+		}
 	}
 }

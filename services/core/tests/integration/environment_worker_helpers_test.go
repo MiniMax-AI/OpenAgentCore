@@ -15,7 +15,7 @@ import (
 
 func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) {
 	t.Helper()
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: workerEnvironmentCapabilities()}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: workerEnvironmentCapabilities()}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "worker preparation capability", func() bool {
 		peer, err := h.registry.LookupDevice(h.device.ID)
 		if err != nil {
@@ -63,6 +63,9 @@ func workerFrames(t *testing.T, runtimes ...*dispatchHarness) <-chan proto.Envel
 				var env proto.Envelope
 				if h.conn.ReadJSON(&env) != nil {
 					return
+				}
+				if h.assignmentFrame(env) {
+					continue
 				}
 				var keep bool
 				env, keep = h.executionFrame(env)

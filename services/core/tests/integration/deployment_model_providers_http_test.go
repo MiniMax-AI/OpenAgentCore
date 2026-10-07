@@ -292,7 +292,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 		if executor.conn.ReadJSON(&frame) != nil {
 			break
 		}
-		if frame.Type == proto.TypeExecutionPrepare || frame.Type == proto.TypePromptRequest {
+		if frame.Type == proto.TypeExecutionPrepare {
 			t.Fatal("provider-free work reached the executor", frame.Type)
 		}
 	}

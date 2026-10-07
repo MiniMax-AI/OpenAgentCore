@@ -69,6 +69,9 @@ func (t *archiveTx) RequestArchiveCleanup(current deployment.Allocation) error {
 	if err != nil {
 		return err
 	}
+	if err := t.ReleaseAssignment(t.ctx, false); err != nil {
+		return err
+	}
 	if _, err := t.q.RevokeArchivedRuntimeDevice(t.ctx, sqlc.RevokeArchivedRuntimeDeviceParams{TenantID: t.tenant, DeviceID: device, SessionID: t.session}); err != nil {
 		return err
 	}

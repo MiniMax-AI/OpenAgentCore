@@ -31,7 +31,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			calls, starts := 0, 0
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				starts++
 				return &steeringSession{
 					fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
@@ -43,7 +43,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 						if input.InputID != "input-1" || *input.Input[0].Content[0].Text != "additional text" {
 							t.Errorf("input lost: %+v", input)
 						}
-						if len(h.sender.snapshot()) != 0 {
+						if hasFrame(h.sender, proto.TypePromptSteerAck, "run-1") {
 							t.Error("ack sent before engine accepted input")
 						}
 						return engineError
@@ -51,11 +51,9 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 				}, nil
 			})
 			ctx := context.Background()
-			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
-				t.Fatal(err)
-			}
+			startRun(t, h.router, h.sender, "codex", "run-1")
 			input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("additional text")}
-			env := mustEnv(t, proto.TypePromptSteer, "run-1", input)
+			env := scoped(t, "run-1", proto.TypePromptSteer, "run-1", input)
 			// An ack transport failure must not cause another native invocation.
 			h.sender.failNow = true
 			if err := h.router.Handle(ctx, env); err != nil {
@@ -75,7 +73,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 				}
 			}
 			input.Input = proto.TextInput("changed text")
-			if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", input)); err != nil {
+			if err := handleSteeringAndWait(t, h, scoped(t, "run-1", proto.TypePromptSteer, "run-1", input)); err != nil {
 				t.Fatal(err)
 			}
 			if ack := lastSteeringAck(t, h.sender, "run-1", "input-1"); ack.ErrorCode != "input_conflict" {
@@ -92,7 +90,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	calls := 0
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
 			steer: func(context.Context, proto.PromptSteerPayload) error {
@@ -105,11 +103,9 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 		}, nil
 	})
 	ctx := context.Background()
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
-		t.Fatal(err)
-	}
+	startRun(t, h.router, h.sender, "codex", "run-1")
 	input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("extra")}
-	env := mustEnv(t, proto.TypePromptSteer, "run-1", input)
+	env := scoped(t, "run-1", proto.TypePromptSteer, "run-1", input)
 	for _, expected := range []string{"not_ready", ""} {
 		if err := handleSteeringAndWait(t, h, env); err != nil {
 			t.Fatal(err)
@@ -119,7 +115,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 		}
 		if expected == "not_ready" {
 			changed := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("different during startup")}
-			if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", changed)); err != nil {
+			if err := handleSteeringAndWait(t, h, scoped(t, "run-1", proto.TypePromptSteer, "run-1", changed)); err != nil {
 				t.Fatal(err)
 			}
 			if ack := lastSteeringAck(t, h.sender, "run-1", "input-1"); ack.ErrorCode != "input_conflict" {
@@ -127,7 +123,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 			}
 		}
 	}
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptCancel, "run-1", nil)); err != nil {
+	if err := h.router.Handle(ctx, scoped(t, "run-1", proto.TypePromptCancel, "run-1", nil)); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "cancel cleanup")
@@ -137,19 +133,15 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if ack := lastSteeringAck(t, h.sender, "run-1", "input-1"); ack.ErrorCode != "run_inactive" {
 		t.Fatalf("inactive: %+v", ack)
 	}
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-2", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))); err != nil {
-		t.Fatal(err)
-	}
-	session := <-h.gotSess
-	defer close(session.out)
-	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-2", input)); err != nil {
+	startRun(t, h.router, h.sender, "fake_alpha", "run-2")
+	if err := handleSteeringAndWait(t, h, scoped(t, "run-2", proto.TypePromptSteer, "run-2", input)); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-1"); ack.ErrorCode != "unsupported" {
 		t.Fatalf("unsupported: %+v", ack)
 	}
 	input.Input = proto.TextInput("")
-	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-2", input)); err != nil {
+	if err := handleSteeringAndWait(t, h, scoped(t, "run-2", proto.TypePromptSteer, "run-2", input)); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-1"); ack.ErrorCode != "invalid_input" {
@@ -157,7 +149,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	}
 	// Whitespace-only text is content: dispatch forwards it like any other text.
 	input.InputID, input.Input = "input-2", proto.TextInput(" \n ")
-	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-2", input)); err != nil {
+	if err := handleSteeringAndWait(t, h, scoped(t, "run-2", proto.TypePromptSteer, "run-2", input)); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, h.sender, "run-2", "input-2"); ack.ErrorCode != "unsupported" {
@@ -170,7 +162,7 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 	defer h.router.Shutdown(context.Background())
 	entered, release := make(chan struct{}), make(chan struct{})
 	defer close(release)
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
 			steer: func(context.Context, proto.PromptSteerPayload) error {
@@ -182,15 +174,12 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 	})
 	ctx := context.Background()
 	for _, run := range []struct{ id, engine string }{{"run-1", "codex"}, {"run-2", "fake_alpha"}} {
-		if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, run.id, prototest.WithModel(proto.PromptRequestPayload{AgentKind: run.engine}))); err != nil {
-			t.Fatal(err)
-		}
+		startRun(t, h.router, h.sender, run.engine, run.id)
 	}
 	other := <-h.gotSess
-	other.closeOutOnCancel = true
 	returned := make(chan error, 1)
 	go func() {
-		returned <- h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "slow", Input: proto.TextInput("extra")}))
+		returned <- h.router.Handle(ctx, scoped(t, "run-1", proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "slow", Input: proto.TextInput("extra")}))
 	}()
 	select {
 	case err := <-returned:
@@ -201,12 +190,10 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 		t.Fatal("steering blocked dispatch")
 	}
 	<-entered
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptCancel, "run-2", nil)); err != nil {
+	if err := h.router.Handle(ctx, scoped(t, "run-2", proto.TypePromptCancel, "run-2", nil)); err != nil {
 		t.Fatal(err)
 	}
-	if other.cancels() != 1 {
-		t.Fatal("other run cancellation blocked")
-	}
+	waitFor(t, func() bool { return other.cancels() == 1 }, "other run cancellation")
 }
 
 func lastSteeringAck(t *testing.T, sender *recSender, runID, inputID string) proto.PromptSteerAckPayload {
@@ -233,7 +220,7 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	calls := 0
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
 			steer: func(context.Context, proto.PromptSteerPayload) error {
@@ -242,13 +229,10 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 			},
 		}, nil
 	})
-	ctx := context.Background()
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
-		t.Fatal(err)
-	}
+	startRun(t, h.router, h.sender, "codex", "run-1")
 	for i := range 257 {
 		input := proto.PromptSteerPayload{InputID: fmt.Sprintf("input-%d", i), Input: proto.TextInput("extra")}
-		if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", input)); err != nil {
+		if err := handleSteeringAndWait(t, h, scoped(t, "run-1", proto.TypePromptSteer, "run-1", input)); err != nil {
 			t.Fatal(err)
 		}
 		ack := lastSteeringAck(t, h.sender, "run-1", input.InputID)
@@ -256,7 +240,7 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 			t.Fatalf("input %d: %+v", i, ack)
 		}
 	}
-	if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "input-0", Input: proto.TextInput("extra")})); err != nil {
+	if err := handleSteeringAndWait(t, h, scoped(t, "run-1", proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "input-0", Input: proto.TextInput("extra")})); err != nil {
 		t.Fatal(err)
 	}
 	if ack := lastSteeringAck(t, h.sender, "run-1", "input-0"); !ack.Accepted || calls != 256 {

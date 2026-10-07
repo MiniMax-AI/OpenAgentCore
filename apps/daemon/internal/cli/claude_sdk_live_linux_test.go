@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/google/uuid"
 )
 
@@ -68,6 +69,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		Cancelled      bool              `json:"cancelled"`
 	}
 	nonce := "registered-function-" + uuid.NewString()
+	ref := proto.AssignmentRef{SessionID: prototest.SessionID, AssignmentID: "registered-acceptance", Epoch: 1}
 	run := func(index int, prompt, resume string, callFunction, cancelOnText bool) execution {
 		t.Helper()
 		reg := agent.NewRegistry()
@@ -87,21 +89,24 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
 		id := uuid.NewString()
-		request := proto.PromptRequestPayload{RunID: id, AgentKind: "claude_sdk", Input: proto.TextInput(prompt), AgentStateKey: "registered-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3"}
+		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, RequireExistingNativeSession: resume != "", StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3"}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}
-		handle := func(kind string, payload any) {
+		send := func(kind, envID string, payload any) {
 			t.Helper()
-			env, err := proto.NewEnvelope(kind, id, payload)
+			env, err := proto.NewEnvelope(kind, envID, payload)
 			if err != nil {
 				t.Fatal(err)
 			}
+			env.Assignment = ref
 			if err := router.Handle(ctx, env); err != nil {
 				t.Fatal("registered router request failed", err)
 			}
 		}
-		handle(proto.TypePromptRequest, request)
+		handle := func(kind string, payload any) { t.Helper(); send(kind, id, payload) }
+		send(proto.TypeAssignmentBind, "bind", proto.AssignmentBindPayload{})
+		send(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: ref.SessionID, Configuration: request})
 		proof := execution{}
 		defer func() {
 			data, _ := json.MarshalIndent(proof, "", "  ")
@@ -116,6 +121,23 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 			case event = <-sender:
 			case <-ctx.Done():
 				t.Fatal("registered execution timed out", ctx.Err())
+			}
+			if event.Type == proto.TypeAssignmentStatus {
+				continue
+			}
+			if event.Type == proto.TypePreparationStatus {
+				var status proto.PreparationStatusPayload
+				if err := event.DecodePayload(&status); err != nil {
+					t.Fatal(err)
+				}
+				switch status.State {
+				case "ready":
+					send(proto.TypeExecutionStart, "prepare", proto.ExecutionStartPayload{Handle: status.Handle, ExecutorID: status.ExecutorID, RunID: id, Input: proto.TextInput(prompt)})
+				case "started":
+				default:
+					t.Fatal("registered preparation failed", status)
+				}
+				continue
 			}
 			if event.ID != id {
 				t.Fatal("event identity changed")

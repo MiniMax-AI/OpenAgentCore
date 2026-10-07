@@ -36,6 +36,9 @@ type deletionTx struct {
 }
 
 func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
+	if err := t.ReleaseAssignment(ctx, true); err != nil {
+		return err
+	}
 	if err := t.q.DeleteSessionArtifacts(ctx, t.session); err != nil {
 		return err
 	}

@@ -32,7 +32,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
 		caps.SubagentControl, caps.ToolObservations = proto.CapabilitySupported, proto.CapabilitySupported
 	}
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "local capability", func() bool {
 		peer, err := h.registry.LookupDevice(h.device.ID)
 		if err != nil {
@@ -120,6 +120,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		if h.conn.ReadJSON(&frame) != nil {
 			t.Fatal("local reservation was not scheduled")
 		}
+		h.assignmentFrame(frame)
 	}
 	var prepare proto.ExecutionPreparePayload
 	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {

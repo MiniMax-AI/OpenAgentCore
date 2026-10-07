@@ -6,7 +6,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -71,6 +73,46 @@ func (e *Execution) ListEnvironmentConnections(ctx context.Context, after string
 		keys = append(keys, sessions.EnvironmentKey{TenantID: optionalID(row.TenantID), EnvironmentID: optionalID(row.ID)})
 	}
 	return keys, nil
+}
+
+func (e *Execution) ListAssignmentReleases(ctx context.Context, runtimes []string) ([]sessions.AssignmentRelease, error) {
+	ids := make([]pgtype.UUID, 0, len(runtimes))
+	for _, runtime := range runtimes {
+		id, err := parseID(runtime)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	var rows []sqlc.ListPendingAssignmentReleasesRow
+	err := e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		rows, err = sqlc.New(tx).ListPendingAssignmentReleases(ctx, ids)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	releases := make([]sessions.AssignmentRelease, 0, len(rows))
+	for _, row := range rows {
+		releases = append(releases, sessions.AssignmentRelease{RuntimeID: optionalID(row.RuntimeID), Assignment: assignmentRef(row.SessionID, row.AssignmentID, row.Epoch), RemoveHome: row.RemoveHome})
+	}
+	return releases, nil
+}
+
+func (e *Execution) AcknowledgeAssignmentRelease(ctx context.Context, assignment proto.AssignmentRef) error {
+	session, err := parseID(assignment.SessionID)
+	if err != nil {
+		return err
+	}
+	id, err := parseID(assignment.AssignmentID)
+	if err != nil {
+		return err
+	}
+	return e.lease.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		_, err := sqlc.New(tx).AcknowledgeAssignmentRelease(ctx, sqlc.AcknowledgeAssignmentReleaseParams{SessionID: session, AssignmentID: id, Epoch: int64(assignment.Epoch)})
+		return err
+	})
 }
 
 // environmentTx is the Session's Environment inside the Session transaction

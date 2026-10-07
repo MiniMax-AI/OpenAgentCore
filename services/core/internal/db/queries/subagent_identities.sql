@@ -3,9 +3,9 @@ INSERT INTO subagent_identities (
     id, session_id, device_id, engine, native_id, parent_native_id, native_created_at,
     first_turn_id, first_event_ordinal
 )
-SELECT sqlc.arg(id), s.id, b.device_id, s.engine, sqlc.arg(native_id),
+SELECT sqlc.arg(id), s.id, b.runtime_id, s.engine, sqlc.arg(native_id),
     sqlc.arg(parent_native_id), sqlc.arg(native_created_at), sqlc.arg(first_turn_id), sqlc.arg(first_event_ordinal)
-FROM sessions s JOIN session_devices b ON b.session_id = s.id
+FROM sessions s JOIN session_runtime_assignments b ON b.session_id = s.id
 WHERE s.id = sqlc.arg(session_id)
   AND (b.native_session_id = sqlc.arg(parent_native_id)
        OR EXISTS (SELECT 1 FROM subagent_identities p

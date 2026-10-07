@@ -20,7 +20,7 @@ func TestWorkspaceWriteChunksAndCorrelatesReceipt(t *testing.T) {
 	request := proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Path: "file"}
 	done := make(chan error, 1)
 	go func() {
-		result, err := s.WriteWorkspaceFile(t.Context(), id, request, data)
+		result, err := s.WriteWorkspaceFile(t.Context(), id, testAssignment, request, data)
 		if err == nil && (result.Outcome != "completed" || result.SizeBytes != len(data)) {
 			err = errors.New("missing commit")
 		}
@@ -72,7 +72,7 @@ func TestWorkspaceWriteDoesNotCommitAfterLostObservation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.WriteWorkspaceFile(ctx, uuid.NewString(), proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Path: "file"}, []byte("value"))
+		_, err := s.WriteWorkspaceFile(ctx, uuid.NewString(), testAssignment, proto.WorkspaceWritePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Path: "file"}, []byte("value"))
 		done <- err
 	}()
 	<-s.sendCh

@@ -111,7 +111,7 @@ func assertNoRuntimeAllocation(t *testing.T, h *dispatchHarness) {
 
 func awaitFixtureCapabilities(t *testing.T, h *dispatchHarness, caps proto.AgentKindCapabilities) {
 	t.Helper()
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "updated Runtime capabilities", func() bool {
 		peer, err := h.registry.LookupDevice(h.device.ID)
 		if err != nil {

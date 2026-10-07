@@ -12,7 +12,7 @@ func TestSuspendAcknowledgementSurvivesImmediateConnectionClose(t *testing.T) {
 		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
-			result, err := s.SuspendControl(t.Context(), proto.TypeEnvironmentQuiesce, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
+			result, err := s.SuspendControl(t.Context(), proto.TypeEnvironmentQuiesce, testAssignment, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
 			if err == nil && !result.Accepted {
 				err = errors.New("ack lost")
 			}
@@ -36,7 +36,7 @@ func TestSuspendControlRejectsForeignIdentityAndDoesNotReplay(t *testing.T) {
 		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
-			_, err := s.SuspendControl(t.Context(), proto.TypeEnvironmentResume, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
+			_, err := s.SuspendControl(t.Context(), proto.TypeEnvironmentResume, testAssignment, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
 			done <- err
 		}()
 		request := <-s.sendCh
@@ -59,7 +59,7 @@ func TestSuspendObserverCancellationRetainsUnknownOutcome(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.SuspendControl(ctx, proto.TypeEnvironmentQuiesce, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
+		_, err := s.SuspendControl(ctx, proto.TypeEnvironmentQuiesce, testAssignment, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
 		done <- err
 	}()
 	<-s.sendCh

@@ -3,7 +3,6 @@ package dispatch_test
 import (
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -18,8 +17,7 @@ import (
 // test doubles
 // ---------------------------------------------------------------------
 
-// recSender records every Envelope. failNow makes the next Send fail
-// (used to exercise the pump's error path).
+// recSender records every Envelope. failNow makes the next Send fail.
 type recSender struct {
 	mu      sync.Mutex
 	frames  []proto.Envelope
@@ -131,9 +129,7 @@ func (s *fakeSession) submissions() []permCall {
 // helpers
 // ---------------------------------------------------------------------
 
-// newHarness builds a Router whose registry exposes a single
-// fake_alpha factory that records inputs and exposes the in-flight
-// session.
+// harness is a Router whose fake_alpha kind runs each Turn as a fakeSession.
 type harness struct {
 	router  *dispatch.Router
 	sender  *recSender
@@ -143,10 +139,6 @@ type harness struct {
 }
 
 func newHarness(t *testing.T) *harness {
-	return newHarnessWithIdleTimeout(t, time.Hour)
-}
-
-func newHarnessWithIdleTimeout(t *testing.T, idleTimeout time.Duration) *harness {
 	t.Helper()
 	h := &harness{
 		sender:  &recSender{},
@@ -154,13 +146,13 @@ func newHarnessWithIdleTimeout(t *testing.T, idleTimeout time.Duration) *harness
 		gotReq:  make(chan proto.PromptRequestPayload, 16),
 		gotSess: make(chan *fakeSession, 16),
 	}
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Permissions: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-		sess := &fakeSession{out: out, ctx: ctx}
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Permissions: proto.CapabilitySupported})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+		sess := &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}
 		h.gotReq <- req
 		h.gotSess <- sess
 		return sess, nil
 	})
-	r, err := dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, IdleTimeout: idleTimeout})
+	r, err := dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender})
 	if err != nil {
 		t.Fatalf("dispatch.New: %v", err)
 	}
@@ -168,170 +160,69 @@ func newHarnessWithIdleTimeout(t *testing.T, idleTimeout time.Duration) *harness
 	return h
 }
 
-func TestCompletedSessionCancelsAfterIdleTimeout(t *testing.T) {
-	h := newHarnessWithIdleTimeout(t, 40*time.Millisecond)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_idle", prototest.WithModel(proto.PromptRequestPayload{
-		AgentKind: "fake_alpha", ConversationID: "conv-idle", AgentStateKey: "conv-idle/agent/fake_alpha",
+// registerSession declares info, without an Environment, and starts each
+// Turn of the kind with factory.
+func registerSession(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.Factory) {
+	info.Capabilities.EnvironmentNone = proto.CapabilitySupported
+	reg.RegisterKind(info, prototest.ModelConfiguration(), factory)
+	reg.RegisterExecutor(info.Kind, preparationExecutorFixture(func(_ context.Context, req proto.PromptRequestPayload) (preparedFixture, error) {
+		return &controlledPreparation{start: func(ctx context.Context, id string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			req.RunID, req.Input = id, input
+			return factory(ctx, req, out)
+		}}, nil
 	}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("Handle prompt_request: %v", err)
-	}
-	sess := <-h.gotSess
-	close(sess.out)
-	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "active run cleanup")
-
-	select {
-	case <-sess.ctx.Done():
-		t.Fatal("completed session cancelled before idle timeout")
-	case <-time.After(15 * time.Millisecond):
-	}
-	waitFor(t, func() bool { return sess.cancels() == 1 }, "idle session cancellation")
 }
 
-func TestNewPromptResetsCompletedSessionIdleTimeout(t *testing.T) {
-	h := newHarnessWithIdleTimeout(t, 80*time.Millisecond)
-	defer h.router.Shutdown(context.Background())
-
-	stateKey := "conv-renew/agent/fake_alpha"
-	first := mustEnv(t, proto.TypePromptRequest, "run_first", prototest.WithModel(proto.PromptRequestPayload{
-		AgentKind: "fake_alpha", ConversationID: "conv-renew", AgentStateKey: stateKey,
-	}))
-	if err := h.router.Handle(context.Background(), first); err != nil {
-		t.Fatalf("Handle first prompt: %v", err)
+// startRun binds the Session run to r, prepares its Executor of kind and
+// starts run. sender records r's frames.
+func startRun(t *testing.T, r *dispatch.Router, sender *recSender, kind, run string) {
+	t.Helper()
+	assign(t, r, run, "")
+	prepare := scoped(t, run, proto.TypeExecutionPrepare, "prepare-"+run, proto.ExecutionPreparePayload{SessionID: run, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: kind, AgentStateKey: stateKey(run), StrictResume: true, DisableExecutionEnvironment: true})})
+	if err := r.Handle(t.Context(), prepare); err != nil {
+		t.Fatalf("execution_prepare: %v", err)
 	}
-	firstSession := <-h.gotSess
-	close(firstSession.out)
-	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "first run cleanup")
-	time.Sleep(50 * time.Millisecond)
-
-	second := mustEnv(t, proto.TypePromptRequest, "run_second", prototest.WithModel(proto.PromptRequestPayload{
-		AgentKind: "fake_alpha", ConversationID: "conv-renew", AgentStateKey: stateKey,
-	}))
-	if err := h.router.Handle(context.Background(), second); err != nil {
-		t.Fatalf("Handle second prompt: %v", err)
+	ready := waitPreparationStatus(t, sender, prepare.ID, "ready", "")
+	if err := r.Handle(t.Context(), scoped(t, run, proto.TypeExecutionStart, prepare.ID, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: run, Input: proto.TextInput("input")})); err != nil {
+		t.Fatalf("execution_start: %v", err)
 	}
-	secondSession := <-h.gotSess
-
-	time.Sleep(45 * time.Millisecond)
-	if firstSession.cancels() != 0 {
-		t.Fatal("new prompt did not renew the completed session idle timeout")
-	}
-	close(secondSession.out)
-	waitFor(t, func() bool { return firstSession.cancels() == 1 }, "renewed idle session cancellation")
+	waitPreparationStatus(t, sender, prepare.ID, "started", "")
 }
 
-func mustEnv(t *testing.T, typ, id string, payload any) proto.Envelope {
+// ref is the assignment the tests bind session to.
+func ref(session string) proto.AssignmentRef {
+	return proto.AssignmentRef{SessionID: session, AssignmentID: "assignment-" + session, Epoch: 1}
+}
+
+// assign binds session to r in environment.
+func assign(t *testing.T, r *dispatch.Router, session, environment string) {
+	t.Helper()
+	if err := r.Handle(t.Context(), scoped(t, session, proto.TypeAssignmentBind, "bind-"+session, proto.AssignmentBindPayload{EnvironmentID: environment})); err != nil {
+		t.Fatalf("assignment_bind: %v", err)
+	}
+}
+
+// scoped is a frame of session's work under its assignment.
+func scoped(t *testing.T, session, typ, id string, payload any) proto.Envelope {
 	t.Helper()
 	env, err := proto.NewEnvelope(typ, id, payload)
 	if err != nil {
 		t.Fatalf("NewEnvelope %s: %v", typ, err)
 	}
+	env.Assignment = ref(session)
 	return env
+}
+
+// mustEnv is a frame of preparationSessionID's work, the Session most tests
+// run.
+func mustEnv(t *testing.T, typ, id string, payload any) proto.Envelope {
+	t.Helper()
+	return scoped(t, preparationSessionID, typ, id, payload)
 }
 
 // ---------------------------------------------------------------------
 // tests
 // ---------------------------------------------------------------------
-
-func TestHandlePromptRequestInvokesFactoryAndForwardsOutput(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_1", prototest.WithModel(proto.PromptRequestPayload{
-		AgentKind: "fake_alpha", Input: proto.TextInput("hi"), ConversationID: "c1",
-	}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("Handle prompt_request: %v", err)
-	}
-
-	req := <-h.gotReq
-	if req.RunID != "run_1" || req.AgentKind != "fake_alpha" || *req.Input[0].Content[0].Text != "hi" {
-		t.Errorf("factory got %+v, want run_1/fake_alpha/hi", req)
-	}
-	sess := <-h.gotSess
-
-	// Session emits a delta + done; both should reach the sender.
-	sess.out <- mustEnv(t, proto.TypeDelta, "run_1", proto.DeltaPayload{Delta: "hello", Sequence: 1})
-	sess.out <- mustEnv(t, proto.TypeDone, "run_1", proto.DonePayload{Content: "hello"})
-	close(sess.out)
-
-	waitForTypes(t, h.sender, "run_1", []string{proto.TypeDelta, proto.TypeDone})
-
-	// Pump should have removed the session.
-	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "active runs to drop to 0")
-}
-
-func TestHandlePromptRequestRejectsDuplicateRunID(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_dup", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("first Handle: %v", err)
-	}
-	<-h.gotReq // drain first
-	sess := <-h.gotSess
-
-	// Second prompt_request with same RunID should NOT spin up a second factory call.
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("duplicate Handle: %v", err)
-	}
-
-	select {
-	case extra := <-h.gotReq:
-		t.Fatalf("factory invoked twice for duplicate run, second req=%+v", extra)
-	case <-time.After(50 * time.Millisecond):
-	}
-	close(sess.out)
-}
-
-func TestHandlePromptRequestUnsupportedKindEmitsErrorDone(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_x", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_beta"}))
-	err := h.router.Handle(context.Background(), env)
-	if !errors.Is(err, agent.ErrUnsupportedKind) {
-		t.Errorf("Handle unsupported = %v, want ErrUnsupportedKind", err)
-	}
-	got := h.sender.typesFor("run_x")
-	want := []string{proto.TypeError, proto.TypeDone}
-	if !slices.Equal(got, want) {
-		t.Errorf("sender frames for run_x = %v, want %v", got, want)
-	}
-}
-
-func TestHandlePromptRequestMissingRunIDIsError(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err == nil {
-		t.Fatal("expected error on missing run id")
-	}
-}
-
-func TestHandlePromptCancelInvokesSessionCancel(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_2", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("prompt_request: %v", err)
-	}
-	<-h.gotReq
-	sess := <-h.gotSess
-	sess.closeOutOnCancel = true
-
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptCancel, "run_2", nil)); err != nil {
-		t.Fatalf("prompt_cancel: %v", err)
-	}
-
-	waitFor(t, func() bool { return sess.cancels() == 1 }, "session.Cancel to fire once")
-	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "session to be cleaned up")
-}
 
 func TestHandlePromptCancelUnknownRunIsNoop(t *testing.T) {
 	h := newHarness(t)
@@ -346,22 +237,17 @@ func TestPermissionRequestIsIndexedAndDecisionRoutes(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 
-	env := mustEnv(t, proto.TypePromptRequest, "run_p", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("prompt_request: %v", err)
-	}
+	startRun(t, h.router, h.sender, "fake_alpha", "run_p")
 	<-h.gotReq
 	sess := <-h.gotSess
 
-	// Session emits a permission_request; pump should index it.
-	permEnv := mustEnv(t, proto.TypePermissionRequest, "run_p", proto.PermissionRequestPayload{
+	// Session emits a permission_request; the Router indexes it before it forwards it.
+	sess.out <- mustEnv(t, proto.TypePermissionRequest, "run_p", proto.PermissionRequestPayload{
 		RequestID: "perm_abcd1234", Tool: "Bash", Title: "rm -rf /",
 	})
-	sess.out <- permEnv
-	// Wait until sender records — indexing happens before send.
-	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "permission_request to be forwarded")
+	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePermissionRequest, "run_p") }, "permission_request to be forwarded")
 
-	dec := mustEnv(t, proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-1", Approved: true})
+	dec := scoped(t, "run_p", proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-1", Approved: true})
 	if err := h.router.Handle(context.Background(), dec); err != nil {
 		t.Fatalf("permission_decision: %v", err)
 	}
@@ -370,7 +256,7 @@ func TestPermissionRequestIsIndexedAndDecisionRoutes(t *testing.T) {
 		t.Errorf("submissions = %+v, want one approved perm_abcd1234", calls)
 	}
 	assertDecisionAck(t, h.sender, "delivery-perm-1", true, "")
-	retry := mustEnv(t, proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-2", Approved: true})
+	retry := scoped(t, "run_p", proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-2", Approved: true})
 	if err := h.router.Handle(context.Background(), retry); err != nil {
 		t.Fatalf("idempotent permission replay: %v", err)
 	}
@@ -378,39 +264,11 @@ func TestPermissionRequestIsIndexedAndDecisionRoutes(t *testing.T) {
 		t.Fatalf("idempotent replay reached agent twice: %+v", calls)
 	}
 	assertDecisionAck(t, h.sender, "delivery-perm-2", true, "")
-	conflict := mustEnv(t, proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-3", Approved: false})
+	conflict := scoped(t, "run_p", proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-3", Approved: false})
 	if err := h.router.Handle(context.Background(), conflict); err != nil {
 		t.Fatalf("conflicting permission replay: %v", err)
 	}
 	assertDecisionAck(t, h.sender, "delivery-perm-3", false, "decision_conflict")
-
-	close(sess.out)
-}
-
-func TestPermissionCancelDeindexes(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_p2", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	_ = h.router.Handle(context.Background(), env)
-	<-h.gotReq
-	sess := <-h.gotSess
-
-	sess.out <- mustEnv(t, proto.TypePermissionRequest, "run_p2", proto.PermissionRequestPayload{RequestID: "perm_xx", Tool: "Bash"})
-	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "perm forwarded")
-	sess.out <- mustEnv(t, proto.TypePermissionCancel, "perm_xx", nil)
-	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 2 }, "perm_cancel forwarded")
-
-	// A decision for the cancelled perm should be a no-op (session never sees it).
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePermissionDecision, "perm_xx", proto.PermissionDecisionPayload{DeliveryID: "delivery-cancelled"})); err != nil {
-		t.Fatalf("decision: %v", err)
-	}
-	if calls := sess.submissions(); len(calls) != 0 {
-		t.Errorf("expected zero submissions after cancel, got %+v", calls)
-	}
-	assertDecisionAck(t, h.sender, "delivery-cancelled", false, "not_pending")
-
-	close(sess.out)
 }
 
 func TestPermissionDecisionUnknownPermIsNoop(t *testing.T) {
@@ -423,84 +281,27 @@ func TestPermissionDecisionUnknownPermIsNoop(t *testing.T) {
 	assertDecisionAck(t, h.sender, "delivery-unknown-perm", false, "not_pending")
 }
 
-func TestPromptForUserChoiceDecisionRoutesToSession(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	env := mustEnv(t, proto.TypePromptRequest, "run_ask", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("prompt_request: %v", err)
-	}
-	<-h.gotReq
-	sess := <-h.gotSess
-
-	// Envelope.ID is the run id (server-side dispatch fans on it); the
-	// ask id rides on the payload. Daemon's indexPermissionFrame reads
-	// payload.AskID to seed askIndex.
-	askEnv := mustEnv(t, proto.TypePromptForUserChoice, "run_ask", proto.PromptForUserChoicePayload{
-		AskID:     "ask_abcd1234",
-		Questions: []proto.PromptForUserChoiceQuestion{{Question: "?", Options: []proto.PromptForUserChoiceOption{{Label: "yes"}, {Label: "no"}}}},
-		ToolUseID: "toolu_42",
-	})
-	sess.out <- askEnv
-	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "prompt_for_user_choice forwarded")
-
-	dec := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_abcd1234", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-1", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
-	})
-	if err := h.router.Handle(context.Background(), dec); err != nil {
-		t.Fatalf("prompt_for_user_choice_decision: %v", err)
-	}
-
-	sess.askMu.Lock()
-	calls := append([]askCall(nil), sess.askCalls...)
-	sess.askMu.Unlock()
-	if len(calls) != 1 || calls[0].id != "ask_abcd1234" {
-		t.Fatalf("askCalls = %+v, want one ask_abcd1234", calls)
-	}
-	if len(calls[0].decision.QuestionAnswers[0].Answers) != 1 || calls[0].decision.QuestionAnswers[0].Answers[0] != "yes" {
-		t.Errorf("answer payload mismatch: %+v", calls[0].decision)
-	}
-	assertDecisionAck(t, h.sender, "delivery-ask-1", true, "")
-
-	// Cleanup contract: a successful decision drops the ask from both
-	// the router-level index and the session's pendingAsks set, so a
-	// stale retry short-circuits as "run gone".
-	if got := h.router.AskIndexLenForTest(); got != 0 {
-		t.Errorf("askIndex len = %d, want 0 after decision", got)
-	}
-	if got := h.router.PendingAsksLenForTest("run_ask"); got != 0 {
-		t.Errorf("pendingAsks len = %d, want 0 after decision", got)
-	}
-
-	close(sess.out)
-}
-
 // TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown locks in the
-// other cleanup branch: when the session returns ErrUnknownAsk (timer
-// already consumed the entry), the router still drops the index so a
-// retry doesn't loop into Submit again.
+// cleanup branch: when the session returns ErrUnknownAsk (timer already
+// consumed the entry), the router still drops the index so a retry doesn't
+// loop into Submit again.
 func TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 
-	env := mustEnv(t, proto.TypePromptRequest, "run_ask_u", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("prompt_request: %v", err)
-	}
+	startRun(t, h.router, h.sender, "fake_alpha", "run_ask_u")
 	<-h.gotReq
 	sess := <-h.gotSess
 	sess.askErr = agent.ErrUnknownAsk
 
-	askEnv := mustEnv(t, proto.TypePromptForUserChoice, "run_ask_u", proto.PromptForUserChoicePayload{
+	sess.out <- mustEnv(t, proto.TypePromptForUserChoice, "run_ask_u", proto.PromptForUserChoicePayload{
 		AskID:     "ask_xxxxxxxx",
 		Questions: []proto.PromptForUserChoiceQuestion{{Question: "?", Options: []proto.PromptForUserChoiceOption{{Label: "yes"}}}},
 		ToolUseID: "toolu_y",
 	})
-	sess.out <- askEnv
-	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "prompt_for_user_choice forwarded")
+	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePromptForUserChoice, "run_ask_u") }, "prompt_for_user_choice forwarded")
 
-	dec := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_xxxxxxxx", proto.PromptForUserChoiceDecisionPayload{
+	dec := scoped(t, "run_ask_u", proto.TypePromptForUserChoiceDecision, "ask_xxxxxxxx", proto.PromptForUserChoiceDecisionPayload{
 		DeliveryID: "delivery-ask-gone", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
 	})
 	if err := h.router.Handle(context.Background(), dec); err != nil {
@@ -514,18 +315,13 @@ func TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown(t *testing.T) {
 		t.Errorf("pendingAsks len = %d, want 0 after ErrUnknownAsk", got)
 	}
 	assertDecisionAck(t, h.sender, "delivery-ask-gone", false, "not_pending")
-
-	close(sess.out)
 }
 
 func TestPromptForUserChoiceDecisionKeepsIndexOnTransientAgentError(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 
-	env := mustEnv(t, proto.TypePromptRequest, "run_ask_retry", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
-	if err := h.router.Handle(context.Background(), env); err != nil {
-		t.Fatalf("prompt_request: %v", err)
-	}
+	startRun(t, h.router, h.sender, "fake_alpha", "run_ask_retry")
 	<-h.gotReq
 	sess := <-h.gotSess
 	sess.askErr = errors.New("temporary stdin failure")
@@ -533,9 +329,9 @@ func TestPromptForUserChoiceDecisionKeepsIndexOnTransientAgentError(t *testing.T
 	sess.out <- mustEnv(t, proto.TypePromptForUserChoice, "run_ask_retry", proto.PromptForUserChoicePayload{
 		AskID: "ask_retry", Questions: []proto.PromptForUserChoiceQuestion{{ID: "q0", Question: "Retry?"}},
 	})
-	waitFor(t, func() bool { return len(h.sender.snapshot()) >= 1 }, "prompt_for_user_choice forwarded")
+	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePromptForUserChoice, "run_ask_retry") }, "prompt_for_user_choice forwarded")
 
-	decision := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_retry", proto.PromptForUserChoiceDecisionPayload{
+	decision := scoped(t, "run_ask_retry", proto.TypePromptForUserChoiceDecision, "ask_retry", proto.PromptForUserChoiceDecisionPayload{
 		DeliveryID: "delivery-ask-retry", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
 	})
 	if err := h.router.Handle(context.Background(), decision); err != nil {
@@ -549,7 +345,9 @@ func TestPromptForUserChoiceDecisionKeepsIndexOnTransientAgentError(t *testing.T
 		t.Fatalf("pendingAsks len = %d, want 1 after transient error", got)
 	}
 
+	sess.askMu.Lock()
 	sess.askErr = nil
+	sess.askMu.Unlock()
 	if err := h.router.Handle(context.Background(), decision); err != nil {
 		t.Fatalf("retry decision: %v", err)
 	}
@@ -557,7 +355,6 @@ func TestPromptForUserChoiceDecisionKeepsIndexOnTransientAgentError(t *testing.T
 	if got := h.router.AskIndexLenForTest(); got != 0 {
 		t.Fatalf("askIndex len = %d, want 0 after successful retry", got)
 	}
-	close(sess.out)
 }
 
 func TestPromptForUserChoiceDecisionUnknownAskIsNoop(t *testing.T) {
@@ -591,69 +388,20 @@ func assertDecisionAck(t *testing.T, sender *recSender, deliveryID string, appli
 	t.Fatalf("no decision ack for delivery %q in %+v", deliveryID, frames)
 }
 
-func TestHandleUnknownTypeIsNoop(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	if err := h.router.Handle(context.Background(), proto.Envelope{Type: "fancy_new_event"}); err != nil {
-		t.Errorf("unknown type Handle = %v, want nil", err)
-	}
-}
-
 func TestHandleAfterShutdownReturnsErrRouterClosed(t *testing.T) {
 	h := newHarness(t)
 	if err := h.router.Shutdown(context.Background()); err != nil {
 		t.Fatalf("Shutdown: %v", err)
 	}
-	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "r", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"})))
+	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypeExecutionPrepare, "r", proto.ExecutionPreparePayload{}))
 	if !errors.Is(err, dispatch.ErrRouterClosed) {
 		t.Errorf("post-shutdown Handle = %v, want ErrRouterClosed", err)
-	}
-}
-
-func TestShutdownWaitsForPumpDrain(t *testing.T) {
-	h := newHarness(t)
-
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "rs", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))); err != nil {
-		t.Fatalf("prompt_request: %v", err)
-	}
-	<-h.gotReq
-	sess := <-h.gotSess
-
-	// Background: emit one frame then close out shortly after
-	// shutdown is asked for.
-	go func() {
-		sess.out <- mustEnv(t, proto.TypeDelta, "rs", proto.DeltaPayload{Delta: "x"})
-		time.Sleep(20 * time.Millisecond)
-		close(sess.out)
-	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := h.router.Shutdown(ctx); err != nil {
-		t.Fatalf("Shutdown returned %v before pump drained", err)
-	}
-	if h.router.ActiveRuns() != 0 {
-		t.Errorf("ActiveRuns after Shutdown = %d, want 0", h.router.ActiveRuns())
 	}
 }
 
 // ---------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------
-
-func waitForTypes(t *testing.T, s *recSender, runID string, want []string) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		got := s.typesFor(runID)
-		if slices.Equal(got, want) {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("never observed types %v for run %s; got %v", want, runID, s.typesFor(runID))
-}
 
 func waitFor(t *testing.T, cond func() bool, what string) {
 	t.Helper()

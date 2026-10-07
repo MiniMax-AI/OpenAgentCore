@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 const (
@@ -82,10 +84,12 @@ type ExecutionEvent struct {
 type ExecutionWork struct{ TenantID, SessionID, TurnID, Status string }
 
 // ExecutionDevice contains safe identity only, never a device credential.
+// Assignment is the Session's bound assignment to the device.
 type ExecutionDevice struct {
 	ID            string
 	Name          string
 	EnvironmentID string
+	Assignment    proto.AssignmentRef
 }
 
 // ExecutionBinding identifies the Runtime and native history selected for one API Session.

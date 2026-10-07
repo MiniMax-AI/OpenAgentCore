@@ -44,7 +44,7 @@ func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 		return err
 	}
 	p.t.Cleanup(func() { _ = c.Close() })
-	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: !p.unavailable, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
+	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: !p.unavailable, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
 	if err := c.WriteJSON(heartbeat); err != nil {
 		return err
 	}
@@ -55,6 +55,12 @@ func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 			var env proto.Envelope
 			if c.ReadJSON(&env) != nil {
 				return
+			}
+			if reply, ok := assignmentReply(env); ok {
+				if c.WriteJSON(reply) != nil {
+					return
+				}
+				continue
 			}
 			if env.Type != proto.TypeRuntimePrepare {
 				continue

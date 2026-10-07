@@ -35,3 +35,20 @@ func authorizedRuntimePeer(ctx context.Context, devices sessions.DeviceReader, r
 func (d *Dispatcher) authorizedPeer(ctx context.Context, id string) (*runtimegateway.Session, error) {
 	return authorizedRuntimePeer(ctx, d.SessionsReader, d.Registry, id)
 }
+
+// assignedRuntimePeer returns the authorized peer of the Session's bound
+// Runtime after the Runtime acknowledged the Session's assignment.
+func assignedRuntimePeer(ctx context.Context, devices sessions.DeviceReader, registry *runtimegateway.Registry, bound sessions.ExecutionDevice) (*runtimegateway.Session, error) {
+	peer, err := authorizedRuntimePeer(ctx, devices, registry, bound.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := peer.Bind(ctx, bound.Assignment, bound.EnvironmentID); err != nil {
+		return nil, err
+	}
+	return peer, nil
+}
+
+func (d *Dispatcher) assignedPeer(ctx context.Context, bound sessions.ExecutionDevice) (*runtimegateway.Session, error) {
+	return assignedRuntimePeer(ctx, d.SessionsReader, d.Registry, bound)
+}

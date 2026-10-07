@@ -107,11 +107,15 @@ func localPreparationHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assign(t, h.router, preparationSessionID, preparationEnvironmentID)
 	return h
 }
 
+// stateKey is the AgentStateKey Core derives for the Session.
+func stateKey(session string) string { return "agents-api-" + session }
+
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, StrictResume: true, ReleaseOnCompletion: true, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}})}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: stateKey(preparationSessionID), StrictResume: true, ReleaseOnCompletion: true, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}})}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory) *dispatch.Router {
@@ -125,6 +129,7 @@ func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Durati
 	if err != nil {
 		t.Fatal(err)
 	}
+	assign(t, r, preparationSessionID, preparationEnvironmentID)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()

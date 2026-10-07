@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -16,13 +14,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/google/uuid"
 )
 
 func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing.T) {
 	workspace := t.TempDir()
 
-	environment, session := uuid.NewString(), uuid.NewString()
+	environment, session := uuid.NewString(), preparationSessionID
 	binding, err := localworkspace.New(environment, session, workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -43,8 +42,9 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
+	assign(t, r, session, environment)
 	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{SessionID: session, Configuration: request})); err != nil {
 		t.Fatal(err)
 	}
 	ready := waitPreparationStatus(t, sender, "idle", "ready", "")
@@ -71,7 +71,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	}
 	bad := request
 	bad.AgentStateKey = "agents-api-" + uuid.NewString()
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "wrong-session", proto.ExecutionPreparePayload{Configuration: bad})); err == nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "wrong-session", proto.ExecutionPreparePayload{SessionID: session, Configuration: bad})); err == nil {
 		t.Fatal("wrong Session accepted")
 	}
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionRelease, "idle", proto.ExecutionReleasePayload{Handle: ready.Handle}))
@@ -105,7 +105,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workspace, "file"), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	environment, session := uuid.NewString(), uuid.NewString()
+	environment, session := uuid.NewString(), preparationSessionID
 	binding, err := localworkspace.New(environment, session, workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -123,8 +123,9 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
+	assign(t, r, session, environment)
 	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{SessionID: session, Configuration: request})); err != nil {
 		t.Fatal(err)
 	}
 	ready := waitPreparationStatus(t, sender, "idle", "ready", "")

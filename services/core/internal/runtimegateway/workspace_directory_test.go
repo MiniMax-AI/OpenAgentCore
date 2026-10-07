@@ -15,7 +15,7 @@ func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
 	request := proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: proto.WorkspaceDirectoryMaxEntries}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.ListWorkspaceDirectory(t.Context(), request)
+		_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, request)
 		done <- err
 	}()
 	message := <-s.sendCh
@@ -79,7 +79,7 @@ func TestWorkspaceDirectoryRequiresExplicitWireTruncation(t *testing.T) {
 			defer s.Close("test")
 			done := make(chan error, 1)
 			go func() {
-				_, err := s.ListWorkspaceDirectory(t.Context(), proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: 1})
+				_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: 1})
 				done <- err
 			}()
 			request := <-s.sendCh

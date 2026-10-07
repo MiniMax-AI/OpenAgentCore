@@ -1,0 +1,164 @@
+package dispatch
+
+import (
+	"context"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+)
+
+// assignmentState is the Router's record of one Session's assignment. Router.mu
+// protects it. A released assignment stays recorded, so its frames stay fenced.
+type assignmentState struct {
+	ref           proto.AssignmentRef
+	environmentID string
+	released      bool
+}
+
+// admitLocked returns why ref admits no new work of sessionID in
+// environmentID, or "". Router.mu must be held.
+func (r *Router) admitLocked(ref proto.AssignmentRef, sessionID, environmentID string) string {
+	a := r.assignments[ref.SessionID]
+	switch {
+	case !ref.Valid() || a == nil || a.ref.AssignmentID != ref.AssignmentID:
+		return proto.AssignmentConflict
+	case ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released:
+		return proto.AssignmentStale
+	case ref.Epoch != a.ref.Epoch || sessionID != ref.SessionID || environmentID != a.environmentID:
+		return proto.AssignmentConflict
+	}
+	return ""
+}
+
+// admitRunLocked admits a frame for the run, which ref must have started.
+// Router.mu must be held.
+func (r *Router) admitRunLocked(ref proto.AssignmentRef, state *sessionState) string {
+	if state.assignment != ref {
+		return proto.AssignmentConflict
+	}
+	return r.admitLocked(ref, ref.SessionID, state.environmentID)
+}
+
+func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) error {
+	var input proto.AssignmentBindPayload
+	ref, code := env.Assignment, ""
+	if env.ID == "" || env.DecodeRequest(&input) != nil || !ref.Valid() {
+		code = "invalid_request"
+	} else {
+		r.mu.Lock()
+		a := r.assignments[ref.SessionID]
+		switch {
+		case a == nil:
+			r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID}
+		case a.ref.AssignmentID == ref.AssignmentID && (ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released):
+			code = proto.AssignmentStale
+		case a.ref != ref || a.environmentID != input.EnvironmentID:
+			code = proto.AssignmentConflict
+		}
+		r.mu.Unlock()
+	}
+	return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus(proto.AssignmentBound, code))
+}
+
+// handleAssignmentRelease fences the assignment, then settles the Session's
+// Executor and removes its home before it replies. A retry at the same epoch
+// repeats the cleanup.
+func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope) error {
+	var input proto.AssignmentReleasePayload
+	ref, code := env.Assignment, ""
+	if env.ID == "" || env.DecodeRequest(&input) != nil || !ref.Valid() {
+		code = "invalid_request"
+	} else if input.RemoveHome && r.removeHome == nil {
+		code = proto.UnsupportedOperation
+	}
+	if code != "" {
+		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus("", code))
+	}
+	r.mu.Lock()
+	a := r.assignments[ref.SessionID]
+	switch {
+	case a == nil:
+		r.assignments[ref.SessionID] = &assignmentState{ref: ref, released: true}
+	case a.ref.AssignmentID != ref.AssignmentID || ref.Epoch == a.ref.Epoch && !a.released:
+		code = proto.AssignmentConflict
+	case ref.Epoch < a.ref.Epoch:
+		code = proto.AssignmentStale
+	default:
+		a.ref, a.released = ref, true
+	}
+	if code != "" {
+		r.mu.Unlock()
+		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus("", code))
+	}
+	r.shutdownWG.Add(1)
+	r.mu.Unlock()
+	go func() {
+		defer r.shutdownWG.Done()
+		state, code := proto.AssignmentReleased, ""
+		err := r.closeSessionExecutor(ref.SessionID)
+		if err == nil && input.RemoveHome {
+			state, err = proto.AssignmentHomeRemoved, r.removeHome(ref.SessionID)
+		}
+		if err != nil {
+			r.log.Warn("assignment release cleanup unconfirmed", "session_id", ref.SessionID, "err", err)
+			code = proto.CleanupUnconfirmed
+		}
+		sendCtx, stop := r.shutdownContext(context.WithoutCancel(ctx))
+		defer stop()
+		_ = r.reply(sendCtx, env, proto.TypeAssignmentStatus, assignmentStatus(state, code))
+	}()
+	return nil
+}
+
+// closeSessionExecutor ends the Session's Executor: it abandons a pending
+// admission, releases a Turn, waits for a native preparation and closes the
+// Executor. The released assignment admits no new preparation meanwhile.
+func (r *Router) closeSessionExecutor(sessionID string) error {
+	r.mu.Lock()
+	owner := r.executors[sessionID]
+	if owner == nil {
+		r.mu.Unlock()
+		return nil
+	}
+	owner.invalid = true
+	owner.closeReason = "assignment_released"
+	if owner.preparing {
+		owner.cancel()
+	}
+	var release *preparedRelease
+	var attempt *preparedReleaseAttempt
+	admission := owner.admission
+	if owner.run != nil {
+		release, attempt = r.claimPreparedReleaseLocked(owner.run, true, "", true)
+		admission = nil
+	}
+	r.mu.Unlock()
+	if admission != nil {
+		r.abandonExecutorAdmission(admission, "failed", proto.AssignmentStale, true)
+	}
+	if release != nil {
+		if err := r.awaitPreparedNativeRelease(context.Background(), release, attempt); err != nil {
+			return err
+		}
+	}
+	<-owner.prepared
+	return r.closeExecutor(owner)
+}
+
+func assignmentStatus(state, code string) proto.AssignmentStatusPayload {
+	if code != "" {
+		state = proto.AssignmentFailed
+	}
+	return proto.AssignmentStatusPayload{State: state, ErrorCode: code}
+}
+
+// reply sends the reply to the request env within the send budget.
+func (r *Router) reply(ctx context.Context, env proto.Envelope, typ string, payload any) error {
+	reply, err := env.Reply(typ, payload)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return r.sender.Send(ctx, reply)
+}

@@ -19,7 +19,7 @@ func TestCapabilityProjectionCoversEveryField(t *testing.T) {
 		t.Run(field.Name, func(t *testing.T) {
 			caps := declaration
 			reflect.ValueOf(&caps).Elem().Field(i).Set(reflect.ValueOf(proto.CapabilitySupported))
-			kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: caps}}})
+			kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: caps}}})
 			actual := reflect.ValueOf(kinds[0].Capabilities)
 			for j := 0; j < deviceType.NumField(); j++ {
 				if actual.Field(j).Bool() != (deviceType.Field(j).Name == field.Name) {
@@ -32,7 +32,7 @@ func TestCapabilityProjectionCoversEveryField(t *testing.T) {
 
 func TestInvalidHeartbeatDiscardsPreviousDeclarationAndClosesTransport(t *testing.T) {
 	session := NewSession(newFakeConn(), "runtime", "workspace", proto.Version, NewRegistry(), nil)
-	valid, err := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
+	valid, err := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
 	if err != nil {
 		t.Fatal(err)
 	}

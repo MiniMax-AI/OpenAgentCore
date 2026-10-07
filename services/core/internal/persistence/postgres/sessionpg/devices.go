@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -43,7 +44,8 @@ func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session 
 		return sessions.ExecutionBinding{}, err
 	}
 	return sessions.ExecutionBinding{
-		Device:          sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID)},
+		Device: sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID),
+			Assignment: assignmentRef(lookup.ID, row.AssignmentID, row.Epoch)},
 		NativeSessionID: row.NativeSessionID,
 		HasStartedTurn:  row.HasStartedTurn,
 	}, nil
@@ -98,7 +100,17 @@ func loadSessionDevice(ctx context.Context, q *sqlc.Queries, tenant, session pgt
 	if err != nil {
 		return sessions.ExecutionDevice{}, false, err
 	}
-	return sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID)}, true, nil
+	return sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID),
+		Assignment: assignmentRef(session, row.AssignmentID, row.Epoch)}, true, nil
+}
+
+// assignmentRef is the reference of a Session's assignment; an absent
+// assignment is the zero reference.
+func assignmentRef(session, assignment pgtype.UUID, epoch int64) proto.AssignmentRef {
+	if !assignment.Valid {
+		return proto.AssignmentRef{}
+	}
+	return proto.AssignmentRef{SessionID: optionalID(session), AssignmentID: optionalID(assignment), Epoch: uint64(epoch)}
 }
 
 // GetDeviceCredential reads a device's credential for the Runtime gateway. A
@@ -279,8 +291,16 @@ func (t *SessionTx) LoadDevice(ctx context.Context, device string) (bool, error)
 	return err == nil, err
 }
 
+// ReleaseAssignment records that the Session's Runtime assignment is
+// released, with home removal if removeHome, and advances its epoch unless
+// that release is already recorded. A Session without an assignment has
+// nothing to release.
+func (t *SessionTx) ReleaseAssignment(ctx context.Context, removeHome bool) error {
+	return t.q.ReleaseSessionAssignment(ctx, sqlc.ReleaseSessionAssignmentParams{SessionID: t.session, RemoveHome: removeHome})
+}
+
 // BindDevice binds the device to the Session; a Session bound to another
-// device is sessions.ErrDeviceBindingConflict.
+// device, or a released assignment, is sessions.ErrDeviceBindingConflict.
 func (t *SessionTx) BindDevice(ctx context.Context, device string) error {
 	id, err := parseID(device)
 	if err != nil {

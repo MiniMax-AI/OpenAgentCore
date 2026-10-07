@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -122,6 +123,17 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	}
 }
 
+// allocationAssignment reads the assignment of the Session whose Environment
+// the allocation runs; it is ErrNotFound unless the allocation's Runtime holds
+// it.
+func (r *runtimeLifecycle) allocationAssignment(ctx context.Context, owner deployment.Allocation) (sessions.ExecutionDevice, error) {
+	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
+	if err == nil && bound.ID != owner.DeviceID {
+		err = sessions.ErrNotFound
+	}
+	return bound, err
+}
+
 func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
 	if err != nil {
@@ -130,7 +142,11 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	if compute.Status != "running" || !compute.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
+	bound, err := r.allocationAssignment(ctx, owner)
+	if err != nil {
+		return err
+	}
+	peer, err := assignedRuntimePeer(ctx, r.sessions, r.registry, bound)
 	if err != nil {
 		return err
 	}
@@ -155,7 +171,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	if err != nil {
 		return err
 	}
-	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentQuiesce, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID})
+	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentQuiesce, bound.Assignment, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID})
 	if err != nil {
 		return err
 	}

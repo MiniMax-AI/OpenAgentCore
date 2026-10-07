@@ -157,7 +157,7 @@ func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, 
 			caps := &kinds[i].Capabilities
 			caps.WorkspaceOutputExport = proto.CapabilityFromBool(s.local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
 		}
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: kinds}
+		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: kinds, HomeRemoval: proto.CapabilityUnsupported}
 	}, obslog.Bg())
 }
 
@@ -176,7 +176,7 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 			if env.Type == proto.TypeEnvironmentResume {
 				request := rejectedResumeRequest(env)
 				code := "not_suspended"
-				valid := env.ID != "" && len(env.ID) <= 128 && request.EnvironmentID == control.identity.EnvironmentID && request.SuspendID != "" && len(request.SuspendID) <= 128
+				valid := env.ID != "" && len(env.ID) <= 128 && env.Assignment.Valid() && request.EnvironmentID == control.identity.EnvironmentID && request.SuspendID != "" && len(request.SuspendID) <= 128
 				if valid && ((control.lastResumed != nil && control.lastResumed.SameSuspension(request)) || request.Rollback) {
 					code = ""
 					control.lastResumed = &request
@@ -195,10 +195,15 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 					continue
 				}
 				quiet, cancel := context.WithTimeout(ctx, 5*time.Second)
-				err := s.router.Quiesce(quiet, request)
+				err := s.router.Quiesce(quiet, env.Assignment, request)
 				cancel()
 				if err != nil {
-					if sendErr := sendSuspendResult(ctx, conn, env, proto.TypeEnvironmentQuiesced, request, "resource_busy"); sendErr != nil {
+					code := "resource_busy"
+					var rejected dispatch.AssignmentError
+					if errors.As(err, &rejected) {
+						code = string(rejected)
+					}
+					if sendErr := sendSuspendResult(ctx, conn, env, proto.TypeEnvironmentQuiesced, request, code); sendErr != nil {
 						return nil, sendErr
 					}
 					if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -221,37 +226,48 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 	}
 }
 
+// resume waits for Core to confirm the suspension on conn. The quiesced Router
+// replies on conn from the start, because Core may release an assignment
+// before it resumes.
 func (s *suspendedRouter) resume(ctx context.Context, conn *transport.Conn, request proto.EnvironmentSuspendPayload, control *suspendControl) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-conn.Done():
-		if err := conn.Err(); err != nil {
-			return err
-		}
-		return transport.ErrConnClosed
-	case env, ok := <-conn.Recv():
-		if !ok {
+	s.sender.replace(conn)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-conn.Done():
 			if err := conn.Err(); err != nil {
 				return err
 			}
 			return transport.ErrConnClosed
+		case env, ok := <-conn.Recv():
+			if !ok {
+				if err := conn.Err(); err != nil {
+					return err
+				}
+				return transport.ErrConnClosed
+			}
+			if env.Type == proto.TypeAssignmentRelease {
+				if err := s.router.Handle(ctx, env); err != nil {
+					obslog.Bg().Error("router.Handle failed", "type", env.Type, "err", err)
+				}
+				continue
+			}
+			var echoed proto.EnvironmentSuspendPayload
+			if env.Type != proto.TypeEnvironmentResume || env.ID == "" || env.DecodeRequest(&echoed) != nil || !echoed.SameSuspension(request) {
+				return errors.Join(transport.ErrPermanent, errors.New("connect: expected authenticated suspension resume"))
+			}
+			if err := s.router.Resume(env.Assignment, echoed, s.sender); err != nil {
+				return errors.Join(transport.ErrPermanent, err)
+			}
+			control.lastResumed = &request
+			return sendSuspendResult(ctx, conn, env, proto.TypeEnvironmentResumed, request, "")
 		}
-		var echoed proto.EnvironmentSuspendPayload
-		if env.Type != proto.TypeEnvironmentResume || env.ID == "" || env.DecodeRequest(&echoed) != nil || !echoed.SameSuspension(request) {
-			return errors.Join(transport.ErrPermanent, errors.New("connect: expected authenticated suspension resume"))
-		}
-		s.sender.replace(conn)
-		if err := s.router.Resume(echoed, s.sender); err != nil {
-			return errors.Join(transport.ErrPermanent, err)
-		}
-		control.lastResumed = &request
-		return sendSuspendResult(ctx, conn, env, proto.TypeEnvironmentResumed, request, "")
 	}
 }
 
 func sendSuspendResult(ctx context.Context, conn *transport.Conn, env proto.Envelope, kind string, request proto.EnvironmentSuspendPayload, code string) error {
-	result, err := proto.NewEnvelope(kind, env.ID, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: code == "", ErrorCode: code})
+	result, err := env.Reply(kind, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: code == "", ErrorCode: code})
 	if err != nil {
 		return err
 	}

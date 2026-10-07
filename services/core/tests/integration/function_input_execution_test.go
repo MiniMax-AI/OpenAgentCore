@@ -33,6 +33,9 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 		if err := h.conn.ReadJSON(&env); err != nil {
 			t.Fatal(err)
 		}
+		if h.assignmentFrame(env) {
+			continue
+		}
 		switch env.Type {
 		case proto.TypeFunctionResult:
 			var result proto.FunctionResultPayload

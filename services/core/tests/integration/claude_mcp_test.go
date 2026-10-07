@@ -29,7 +29,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				claudeSession(t, h, configuration, prebound)
 				// Base MCP support does not imply authentication or required initialization.
 				caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(authenticated || required), Preparation: proto.CapabilitySupported})
-				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
+				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 				awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "Claude MCP heartbeat", func() bool {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
 					info, found, known := peer.AgentKindStatus("claude_sdk")
@@ -66,7 +66,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}
 				caps.MCPHTTPTools, caps.MCPHTTPBearerAuth = proto.CapabilitySupported, proto.CapabilityFromBool(authenticated)
 				caps.MCPHTTPRequired = proto.CapabilityFromBool(required)
-				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
+				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 				var prompt proto.PromptRequestPayload
 				if h.read(testExecutionRequest).DecodePayload(&prompt) != nil || prompt.AgentKind != "claude_sdk" || prompt.MCPHTTPServers == nil || len(*prompt.MCPHTTPServers) != 1 {
 					t.Fatal("missing typed MCP dispatch")
@@ -105,7 +105,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 			if profile == "missing required capability" {
 				caps.MCPHTTPRequired = proto.CapabilityUnsupported
 			}
-			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
+			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 			deadline := time.Now().Add(3 * time.Second)
 			for {
 				peer, _ := h.registry.LookupDevice(h.device.ID)

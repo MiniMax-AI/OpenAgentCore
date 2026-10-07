@@ -11,16 +11,35 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acknowledgeAssignmentRelease = `-- name: AcknowledgeAssignmentRelease :execrows
+UPDATE session_runtime_assignments SET applied_epoch = epoch
+WHERE session_id = $1 AND assignment_id = $2 AND epoch = $3 AND desired_state = 'released'
+`
+
+type AcknowledgeAssignmentReleaseParams struct {
+	SessionID    pgtype.UUID `json:"session_id"`
+	AssignmentID pgtype.UUID `json:"assignment_id"`
+	Epoch        int64       `json:"epoch"`
+}
+
+func (q *Queries) AcknowledgeAssignmentRelease(ctx context.Context, arg AcknowledgeAssignmentReleaseParams) (int64, error) {
+	result, err := q.db.Exec(ctx, acknowledgeAssignmentRelease, arg.SessionID, arg.AssignmentID, arg.Epoch)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const bindSessionDevice = `-- name: BindSessionDevice :one
-INSERT INTO session_devices (session_id, device_id)
+INSERT INTO session_runtime_assignments (session_id, runtime_id)
 SELECT s.id, d.id FROM sessions s JOIN devices d ON d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.id = $3 AND d.revoked_at IS NULL
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
 ))
-ON CONFLICT (session_id) DO UPDATE SET device_id = session_devices.device_id
-WHERE session_devices.device_id = EXCLUDED.device_id
-RETURNING device_id
+ON CONFLICT (session_id) DO UPDATE SET runtime_id = session_runtime_assignments.runtime_id
+WHERE session_runtime_assignments.runtime_id = EXCLUDED.runtime_id AND session_runtime_assignments.desired_state = 'bound'
+RETURNING runtime_id
 `
 
 type BindSessionDeviceParams struct {
@@ -31,9 +50,9 @@ type BindSessionDeviceParams struct {
 
 func (q *Queries) BindSessionDevice(ctx context.Context, arg BindSessionDeviceParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, bindSessionDevice, arg.TenantID, arg.ID, arg.ID_2)
-	var device_id pgtype.UUID
-	err := row.Scan(&device_id)
-	return device_id, err
+	var runtime_id pgtype.UUID
+	err := row.Scan(&runtime_id)
+	return runtime_id, err
 }
 
 const createDevice = `-- name: CreateDevice :one
@@ -110,10 +129,10 @@ func (q *Queries) GetDeviceCredential(ctx context.Context, id pgtype.UUID) (GetD
 }
 
 const getSessionDevice = `-- name: GetSessionDevice :one
-SELECT d.id, d.name, d.environment_id FROM session_devices b
+SELECT d.id, d.name, d.environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
-WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
+JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
@@ -129,22 +148,30 @@ type GetSessionDeviceRow struct {
 	ID            pgtype.UUID `json:"id"`
 	Name          string      `json:"name"`
 	EnvironmentID pgtype.UUID `json:"environment_id"`
+	AssignmentID  pgtype.UUID `json:"assignment_id"`
+	Epoch         int64       `json:"epoch"`
 }
 
 func (q *Queries) GetSessionDevice(ctx context.Context, arg GetSessionDeviceParams) (GetSessionDeviceRow, error) {
 	row := q.db.QueryRow(ctx, getSessionDevice, arg.TenantID, arg.ID)
 	var i GetSessionDeviceRow
-	err := row.Scan(&i.ID, &i.Name, &i.EnvironmentID)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.AssignmentID,
+		&i.Epoch,
+	)
 	return i, err
 }
 
 const getSessionExecutionBinding = `-- name: GetSessionExecutionBinding :one
-SELECT d.id, d.name, b.native_session_id, d.environment_id,
+SELECT d.id, d.name, b.native_session_id, d.environment_id, b.assignment_id, b.epoch,
     EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.started_at IS NOT NULL) AS has_started_turn
-FROM session_devices b
+FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
-WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
+JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
@@ -161,6 +188,8 @@ type GetSessionExecutionBindingRow struct {
 	Name            string      `json:"name"`
 	NativeSessionID string      `json:"native_session_id"`
 	EnvironmentID   pgtype.UUID `json:"environment_id"`
+	AssignmentID    pgtype.UUID `json:"assignment_id"`
+	Epoch           int64       `json:"epoch"`
 	HasStartedTurn  bool        `json:"has_started_turn"`
 }
 
@@ -172,13 +201,73 @@ func (q *Queries) GetSessionExecutionBinding(ctx context.Context, arg GetSession
 		&i.Name,
 		&i.NativeSessionID,
 		&i.EnvironmentID,
+		&i.AssignmentID,
+		&i.Epoch,
 		&i.HasStartedTurn,
 	)
 	return i, err
 }
 
+const listPendingAssignmentReleases = `-- name: ListPendingAssignmentReleases :many
+SELECT session_id, runtime_id, assignment_id, epoch, remove_home FROM session_runtime_assignments
+WHERE desired_state = 'released' AND applied_epoch < epoch AND runtime_id = ANY($1::uuid[])
+ORDER BY runtime_id, session_id
+`
+
+type ListPendingAssignmentReleasesRow struct {
+	SessionID    pgtype.UUID `json:"session_id"`
+	RuntimeID    pgtype.UUID `json:"runtime_id"`
+	AssignmentID pgtype.UUID `json:"assignment_id"`
+	Epoch        int64       `json:"epoch"`
+	RemoveHome   bool        `json:"remove_home"`
+}
+
+func (q *Queries) ListPendingAssignmentReleases(ctx context.Context, runtimeIds []pgtype.UUID) ([]ListPendingAssignmentReleasesRow, error) {
+	rows, err := q.db.Query(ctx, listPendingAssignmentReleases, runtimeIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingAssignmentReleasesRow{}
+	for rows.Next() {
+		var i ListPendingAssignmentReleasesRow
+		if err := rows.Scan(
+			&i.SessionID,
+			&i.RuntimeID,
+			&i.AssignmentID,
+			&i.Epoch,
+			&i.RemoveHome,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const releaseSessionAssignment = `-- name: ReleaseSessionAssignment :exec
+UPDATE session_runtime_assignments
+SET desired_state = 'released', epoch = epoch + 1, remove_home = remove_home OR $1::boolean
+WHERE session_id = $2 AND (desired_state = 'bound' OR ($1::boolean AND NOT remove_home))
+`
+
+type ReleaseSessionAssignmentParams struct {
+	RemoveHome bool        `json:"remove_home"`
+	SessionID  pgtype.UUID `json:"session_id"`
+}
+
+// An identical release keeps its epoch; a release that adds home removal
+// advances it.
+func (q *Queries) ReleaseSessionAssignment(ctx context.Context, arg ReleaseSessionAssignmentParams) error {
+	_, err := q.db.Exec(ctx, releaseSessionAssignment, arg.RemoveHome, arg.SessionID)
+	return err
+}
+
 const rememberNativeSession = `-- name: RememberNativeSession :execrows
-UPDATE session_devices SET native_session_id = $2 WHERE session_id = $1
+UPDATE session_runtime_assignments SET native_session_id = $2 WHERE session_id = $1
 `
 
 type RememberNativeSessionParams struct {

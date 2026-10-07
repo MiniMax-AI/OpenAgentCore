@@ -27,7 +27,7 @@ func TestWorkspaceExportPullsOnlyAfterConsumedAndRequiresCompletion(t *testing.T
 	done := make(chan error, 1)
 	body := bytes.Repeat([]byte{0, 255, 7}, 100)
 	go func() {
-		done <- s.ExportWorkspaceOutputs(t.Context(), proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error {
+		done <- s.ExportWorkspaceOutputs(t.Context(), testAssignment, proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error {
 			got := make([]byte, len(body))
 			if _, err := io.ReadFull(r, got); err != nil {
 				return err
@@ -77,7 +77,7 @@ func TestWorkspaceExportRejectsInvalidChunksAndNativeFailure(t *testing.T) {
 		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
-			done <- s.ExportWorkspaceOutputs(t.Context(), proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error { _, err := io.Copy(io.Discard, r); return err })
+			done <- s.ExportWorkspaceOutputs(t.Context(), testAssignment, proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error { _, err := io.Copy(io.Discard, r); return err })
 		}()
 		first := <-s.sendCh
 		exportReply(t, s, first.ID, result)
@@ -99,7 +99,7 @@ func TestWorkspaceExportDisconnectAndCancellationSettleRead(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
 		go func() {
-			done <- s.ExportWorkspaceOutputs(ctx, proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error { _, err := io.Copy(io.Discard, r); return err })
+			done <- s.ExportWorkspaceOutputs(ctx, testAssignment, proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error { _, err := io.Copy(io.Discard, r); return err })
 		}()
 		<-s.sendCh
 		if disconnect {
