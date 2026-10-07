@@ -16,18 +16,18 @@ import (
 func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) {
 	t.Helper()
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: workerEnvironmentCapabilities()}}})
-	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "worker preparation capability", func() bool {
+	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "worker capabilities", func() bool {
 		peer, err := h.registry.LookupDevice(h.device.ID)
 		if err != nil {
 			return false
 		}
 		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.Preparation && info.Capabilities.EnvironmentNone
+		return info.Capabilities == workerEnvironmentCapabilities()
 	})
 }
 
 func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
-	return prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, WorkspaceOutputExport: proto.CapabilitySupported})
+	return prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, WorkspaceOutputExport: proto.CapabilitySupported})
 }
 
 func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessions.EnvironmentInputReservation {

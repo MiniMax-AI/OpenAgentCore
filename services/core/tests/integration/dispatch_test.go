@@ -102,7 +102,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		t.Fatal("device connection failed")
 	}
 	t.Cleanup(func() { h.conn.Close() })
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, e := h.registry.LookupDevice(h.device.ID)
@@ -428,25 +428,21 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 
 func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 	for _, tc := range []struct{ missing, message string }{
-		{"durable_turns", "device must advertise streaming, steering and durable turns for this engine"},
-		{"durable_input_receipts", "device must advertise streaming, steering and durable turns for this engine"},
-		{"preparation", "device must advertise executor preparation"},
-		{"execution_controls", "device must advertise execution_controls"},
 		{"web_search_control", "device must advertise web_search_control"},
 		{"text_verbosity", "device must advertise text_verbosity"},
-		{"tool_observations", "device must advertise tool_observations"},
 		{"subagent_control", "device must advertise subagent_control"},
 		{"environment_none", "device must advertise environment_none"},
 	} {
 		missing := tc.missing
 		t.Run(missing, func(t *testing.T) {
 			h := newDispatchHarness(t)
-			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilityFromBool(missing != "durable_turns"), DurableInputReceipts: proto.CapabilityFromBool(missing != "durable_input_receipts"), Preparation: proto.CapabilityFromBool(missing != "preparation"), WebSearchControl: proto.CapabilityFromBool(missing != "web_search_control"), TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), ExecutionControls: proto.CapabilityFromBool(missing != "execution_controls"), SubagentControl: proto.CapabilityFromBool(missing != "subagent_control"), ToolObservations: proto.CapabilityFromBool(missing != "tool_observations"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})}}})
+			caps := prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilityFromBool(missing != "web_search_control"), TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), SubagentControl: proto.CapabilityFromBool(missing != "subagent_control"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})
+			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 			deadline := time.Now().Add(3 * time.Second)
 			for {
 				peer, _ := h.registry.LookupDevice(h.device.ID)
 				info, _, _ := peer.AgentKindStatus("codex")
-				if info.Capabilities.DurableInputReceipts == (missing != "durable_input_receipts") && info.Capabilities.Preparation == (missing != "preparation") && info.Capabilities.ExecutionControls == (missing != "execution_controls") && info.Capabilities.DurableTurns == (missing != "durable_turns") && info.Capabilities.WebSearchControl == (missing != "web_search_control") && info.Capabilities.TextVerbosity == (missing != "text_verbosity") && info.Capabilities.SubagentControl == (missing != "subagent_control") && info.Capabilities.ToolObservations == (missing != "tool_observations") && info.Capabilities.EnvironmentNone == (missing != "environment_none") {
+				if info.Capabilities == caps {
 					break
 				}
 				if time.Now().After(deadline) {

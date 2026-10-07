@@ -24,7 +24,7 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 	}
 	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 	h.finished(result, sessions.TurnCompleted)
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, err := h.registry.LookupDevice(h.device.ID)
@@ -32,7 +32,7 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 			t.Fatal(err)
 		}
 		info, _, _ := peer.AgentKindStatus("codex")
-		if info.Capabilities.MessageItems {
+		if info.Capabilities.MessageItems.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

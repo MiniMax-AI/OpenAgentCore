@@ -66,7 +66,7 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 
 // The declaration must retain the complete baseline capability descriptor.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"Streaming": true, "Usage": true, "Resume": true, "Steering": true, "MessageItems": true, "ToolObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "ExecutionControls": true, "SubagentControl": true, "DurableInputReceipts": true, "DurableTurns": true, "FunctionTools": true}
+	expected := map[string]bool{"MessageItems": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "SubagentControl": true, "FunctionTools": true}
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {
 		name := value.Type().Field(i).Name
@@ -118,12 +118,6 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 			}
 			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || runtime.Info.Capabilities.LocalEnvironment.IsSupported() {
 				t.Fatalf("runtime: %+v", runtime)
-			}
-			registry := agent.NewRegistry()
-			registry.Register(Declaration, *runtime)
-			info := registry.SupportedAgentKinds()[0]
-			if info.Capabilities.Preparation.IsSupported() != ready {
-				t.Fatal(info)
 			}
 		}
 	}

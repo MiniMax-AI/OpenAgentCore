@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 58f0ccc44daf024d3f8079e0f09b78dfefb2e55e558f5663c2add01ee153061a
+source_hash: 667a4f20a030e5af7787a4240c14dc648ec622c3de01c7f965813fbefac55f6d
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -32,13 +32,12 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 
 每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。Runtime 根据其 [Environment owner](#session-assignments) 声明 `workspace_read_preparation` 和 `workspace_output_export`，从不由 Harness adapter 声明。
 
-新增字段要求每个生产声明都作出明确决定。契约测试为注册、wire 往返和持久化 boolean 投影逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)负责各声明的 adapter 侧规则。
+新增字段要求每个生产声明都作出明确决定。契约测试为注册和 wire 往返逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)负责各声明的 adapter 侧规则。
 
-声明描述 Runtime 能做什么。Core 仅在 Harness 的 engine profile 也通过资格验证时准入公开功能，并在设备选择及领取 Turn 前的最终检查中检查选定设备的声明：
+声明描述 Runtime 能做什么。Core 仅在 Harness 的 engine profile 也通过资格验证时准入公开功能。在设备选择及领取 Turn 前的最终检查中，Core 要求选定设备报告该 Harness 为 `available`，并检查其声明：
 
 | 能力 | Core 何时要求 |
 | --- | --- |
-| `streaming`, `steering`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | 始终要求，适用于该 Harness 上每次执行（`available` 为 true） |
 | `environment_none` | Environment 类型为 `none` |
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | Environment 类型为 `openai_hosted` 或 `self_hosted` |
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
@@ -53,7 +52,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
-Core 对 `usage` 和 `resume` 没有准入规则。
+流式输出、带持久输入回执的 steering、持久 Turn、preparation、执行控制和工具观测不作声明：每个可用 Harness 都实现它们，该义务由 [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md#register-the-adapter)负责。
 
 `execution_prepare` 的配置携带 Session 的模型配置和 Core 为各 Run 设置的显式启用项：
 

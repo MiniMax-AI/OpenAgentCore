@@ -98,7 +98,7 @@ type Session struct {
 	// sending execution_prepare so unsupported engines fail on the server.
 	kindsMu        sync.RWMutex
 	kindsSeen      bool
-	supportedKinds []runtimedevice.SupportedAgentKind
+	supportedKinds []proto.SupportedAgentKind
 	homeRemoval    proto.CapabilitySupport
 
 	// assignments holds each Session's reference the Runtime acknowledged
@@ -205,29 +205,29 @@ func (s *Session) LastSeen() time.Time {
 // AgentKindStatus returns the latest advertised descriptor for kind.
 // found=false means the daemon has not advertised that kind; snapshotKnown
 // distinguishes "no heartbeat yet" from "heartbeat arrived and omitted it".
-func (s *Session) AgentKindStatus(kind string) (info runtimedevice.SupportedAgentKind, found bool, snapshotKnown bool) {
+func (s *Session) AgentKindStatus(kind string) (info proto.SupportedAgentKind, found bool, snapshotKnown bool) {
 	kind = strings.TrimSpace(kind)
 	if kind == "" {
-		return runtimedevice.SupportedAgentKind{}, false, false
+		return proto.SupportedAgentKind{}, false, false
 	}
 	s.kindsMu.RLock()
 	seen := s.kindsSeen
-	kinds := make([]runtimedevice.SupportedAgentKind, len(s.supportedKinds))
+	kinds := make([]proto.SupportedAgentKind, len(s.supportedKinds))
 	copy(kinds, s.supportedKinds)
 	s.kindsMu.RUnlock()
 	if !seen {
-		return runtimedevice.SupportedAgentKind{}, false, false
+		return proto.SupportedAgentKind{}, false, false
 	}
 	for _, candidate := range kinds {
 		if candidate.Kind == kind {
 			return candidate, true, true
 		}
 	}
-	return runtimedevice.SupportedAgentKind{}, false, true
+	return proto.SupportedAgentKind{}, false, true
 }
 
-func (s *Session) setDeclarations(kinds []runtimedevice.SupportedAgentKind, homeRemoval proto.CapabilitySupport) {
-	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
+func (s *Session) setDeclarations(kinds []proto.SupportedAgentKind, homeRemoval proto.CapabilitySupport) {
+	copyKinds := make([]proto.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
 	s.kindsMu.Lock()
 	s.kindsSeen = true
@@ -407,22 +407,14 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		s.Close("invalid heartbeat declaration")
 		return
 	}
-	kinds := deviceKindsFromHeartbeat(p)
-	s.setDeclarations(kinds, p.HomeRemoval)
+	s.setDeclarations(p.SupportedAgentKinds, p.HomeRemoval)
 	if s.heartbeat == nil {
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	status, err := s.heartbeat.TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{
-		RuntimeID:           s.DeviceID,
-		CredentialHash:      s.credentialHash,
-		DaemonVersion:       p.DaemonVersion,
-		ActiveRequests:      p.ActiveRequests,
-		HeartbeatTimestamp:  p.Timestamp,
-		SupportedAgentKinds: kinds,
-	})
+	status, err := s.heartbeat.TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{RuntimeID: s.DeviceID, CredentialHash: s.credentialHash})
 	if err != nil {
 		s.log("agentdaemon gateway: persist heartbeat device=%s: %v", s.DeviceID, err)
 		return
@@ -439,49 +431,6 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		// the current owner.
 		s.CloseWithCode(CloseRuntimeDeleted, "runtime retired")
 	}
-}
-
-func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.SupportedAgentKind {
-	out := make([]runtimedevice.SupportedAgentKind, 0, len(p.SupportedAgentKinds))
-	for _, info := range p.SupportedAgentKinds {
-		out = append(out, runtimedevice.SupportedAgentKind{
-			Kind:      info.Kind,
-			Available: info.Available,
-			Version:   info.Version,
-			Capabilities: runtimedevice.KindCapabilities{
-				Streaming:             info.Capabilities.Streaming.IsSupported(),
-				Usage:                 info.Capabilities.Usage.IsSupported(),
-				Resume:                info.Capabilities.Resume.IsSupported(),
-				Steering:              info.Capabilities.Steering.IsSupported(),
-				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
-				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
-				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),
-				MessageItems:          info.Capabilities.MessageItems.IsSupported(),
-
-				ToolObservations:               info.Capabilities.ToolObservations.IsSupported(),
-				EnvironmentNone:                info.Capabilities.EnvironmentNone.IsSupported(),
-				LocalEnvironment:               info.Capabilities.LocalEnvironment.IsSupported(),
-				Preparation:                    info.Capabilities.Preparation.IsSupported(),
-				WorkspaceReadPreparation:       info.Capabilities.WorkspaceReadPreparation.IsSupported(),
-				WorkspaceOutputExport:          info.Capabilities.WorkspaceOutputExport.IsSupported(),
-				WebSearchControl:               info.Capabilities.WebSearchControl.IsSupported(),
-				ProgrammaticToolCallingDisable: info.Capabilities.ProgrammaticToolCallingDisable.IsSupported(),
-				TextVerbosity:                  info.Capabilities.TextVerbosity.IsSupported(),
-				StructuredOutput:               info.Capabilities.StructuredOutput.IsSupported(),
-				ToolSearch:                     info.Capabilities.ToolSearch.IsSupported(),
-				MessageImages:                  info.Capabilities.MessageImages.IsSupported(),
-				FunctionResultImages:           info.Capabilities.FunctionResultImages.IsSupported(),
-				ExecutionControls:              info.Capabilities.ExecutionControls.IsSupported(),
-				SubagentControl:                info.Capabilities.SubagentControl.IsSupported(),
-				SubagentObservations:           info.Capabilities.SubagentObservations.IsSupported(),
-				FunctionTools:                  info.Capabilities.FunctionTools.IsSupported(),
-				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools.IsSupported(),
-				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired.IsSupported(),
-				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
-			},
-		})
-	}
-	return out
 }
 
 func (s *Session) dispatch(env proto.Envelope) {

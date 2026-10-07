@@ -30,13 +30,13 @@ func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebo
 
 func claudeHeartbeat(t *testing.T, h *dispatchHarness, ready bool) {
 	t.Helper()
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(ready), ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: ready, Capabilities: caps}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, _ := h.registry.LookupDevice(h.device.ID)
 		info, found, known := peer.AgentKindStatus("claude_sdk")
-		if known && found && info.Capabilities.DurableInputReceipts == ready {
+		if known && found && info.Available == ready {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -79,7 +79,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			}
 			queued() // A fully capable Codex descriptor cannot execute a Claude Session.
 			claudeHeartbeat(t, h, false)
-			queued() // Durable application receipts are required for this engine too.
+			queued() // An unavailable Claude descriptor cannot execute it either.
 			claudeHeartbeat(t, h, true)
 			var prompt proto.PromptRequestPayload
 			if h.read(testExecutionRequest).DecodePayload(&prompt) != nil {

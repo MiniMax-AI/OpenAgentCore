@@ -54,7 +54,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
 	factory, err := r.registry.ResolveExecutor(req.AgentKind)
-	if err != nil || !caps.Preparation.IsSupported() {
+	if err != nil {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
 	environment, code := r.admittedEnvironment(env.Assignment, input.SessionID)

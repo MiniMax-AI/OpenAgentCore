@@ -315,7 +315,7 @@ func TestSession_SendWritesToWire(t *testing.T) {
 	}
 }
 
-func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
+func TestSession_HeartbeatTouchesRuntimeAndAdmitsDeclarations(t *testing.T) {
 	reg := NewRegistry()
 	conn := newFakeConn()
 	heartbeat := newFakeHeartbeatStore()
@@ -324,67 +324,21 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported,
-		Timestamp:      1710000000,
-		ActiveRequests: 2,
-		DaemonVersion:  "0.2.0-test",
-		SupportedAgentKinds: []proto.SupportedAgentKind{
-			{
-				Kind:      "fake_beta",
-				Available: false,
-				Version:   "missing",
-				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-					Streaming: proto.CapabilitySupported,
-				}),
-			},
-			{
-				Kind:      "fake_alpha",
-				Available: true,
-				Version:   "1.2.3",
-				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-					Streaming: proto.CapabilitySupported,
-					Usage:     proto.CapabilitySupported,
-					Resume:    proto.CapabilitySupported,
-				}),
-			},
-			{
-				Kind:         "codex",
-				Available:    true,
-				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported}),
-			},
-		},
-	})
+	kinds := []proto.SupportedAgentKind{
+		{Kind: "fake_beta", Available: false, Version: "missing", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MessageItems: proto.CapabilitySupported})},
+		{Kind: "codex", Available: true, Version: "1.2.3", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported})},
+	}
+	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: kinds})
 	raw, _ := jsonMarshal(env)
 	conn.Feed(raw)
 
-	got := heartbeat.waitDaemonHeartbeat(t)
-	if got.RuntimeID != "dev-1" || got.DaemonVersion != "0.2.0-test" || got.ActiveRequests != 2 || got.HeartbeatTimestamp != 1710000000 {
-		t.Fatalf("heartbeat metadata not preserved: %+v", got)
+	if got := heartbeat.waitDaemonHeartbeat(t); got.RuntimeID != "dev-1" {
+		t.Fatalf("heartbeat touched %+v", got)
 	}
-	if len(got.SupportedAgentKinds) != 3 {
-		t.Fatalf("SupportedAgentKinds len = %d, want 3: %#v", len(got.SupportedAgentKinds), got.SupportedAgentKinds)
-	}
-	byKind := map[string]runtimedevice.SupportedAgentKind{}
-	for _, info := range got.SupportedAgentKinds {
-		byKind[info.Kind] = info
-	}
-	claude := byKind["fake_alpha"]
-	if !claude.Available || claude.Version != "1.2.3" || !claude.Capabilities.Streaming || !claude.Capabilities.Usage || !claude.Capabilities.Resume {
-		t.Fatalf("fake_alpha descriptor not converted: %#v", claude)
-	}
-	fake_beta := byKind["fake_beta"]
-	if fake_beta.Available || fake_beta.Version != "missing" || !fake_beta.Capabilities.Streaming {
-		t.Fatalf("fake_beta descriptor not converted: %#v", fake_beta)
-	}
-	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || fake_beta.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || fake_beta.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || fake_beta.Capabilities.SubagentControl || !byKind["codex"].Capabilities.TextVerbosity || claude.Capabilities.TextVerbosity || fake_beta.Capabilities.TextVerbosity || !byKind["codex"].Capabilities.WebSearchControl || claude.Capabilities.WebSearchControl || fake_beta.Capabilities.WebSearchControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || fake_beta.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems || !byKind["codex"].Capabilities.Steering || claude.Capabilities.Steering || fake_beta.Capabilities.Steering {
-		t.Fatalf("steering capability not preserved: %#v", byKind)
-	}
-	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || fake_beta.Capabilities.MCPHTTPTools {
-		t.Fatalf("HTTP MCP capability not preserved: %#v", byKind)
-	}
-	codex, found, known := sess.AgentKindStatus("codex")
-	if !found || !known || !codex.Capabilities.Steering || !codex.Capabilities.MCPHTTPTools {
-		t.Fatalf("steering capability absent from live session: %#v", codex)
+	for _, want := range kinds {
+		if got, found, known := sess.AgentKindStatus(want.Kind); !found || !known || got != want {
+			t.Fatalf("live declaration %#v, want %#v", got, want)
+		}
 	}
 }
 
@@ -398,9 +352,9 @@ func TestSession_HeartbeatDoesNotInferCapabilities(t *testing.T) {
 	defer sess.Close("test done")
 
 	conn.Feed([]byte(`{"type":"heartbeat","payload":{"ts":1710000100,"claude_available":true,"home_removal":false}}`))
-	got := heartbeat.waitDaemonHeartbeat(t)
-	if len(got.SupportedAgentKinds) != 0 {
-		t.Fatalf("undeclared capabilities inferred: %#v", got.SupportedAgentKinds)
+	heartbeat.waitDaemonHeartbeat(t)
+	if info, found, known := sess.AgentKindStatus("claude_sdk"); found || !known {
+		t.Fatalf("undeclared capabilities inferred: %#v", info)
 	}
 }
 

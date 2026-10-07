@@ -18,7 +18,7 @@ import (
 )
 
 func TestWorkerWaitsForToolCapabilities(t *testing.T) {
-	for _, missing := range []string{"preparation", "durable_input_receipts", "execution_controls", "function_tools", "tool_observations", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"} {
+	for _, missing := range []string{"function_tools", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"} {
 		for _, prebound := range []bool{false, true} {
 			t.Run(missing+"/"+map[bool]string{false: "select", true: "bound"}[prebound], func(t *testing.T) {
 				h := newFunctionHarness(t)
@@ -46,7 +46,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				caps := prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilityFromBool(missing != "preparation"), Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(missing != "durable_input_receipts"), EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilityFromBool(missing != "execution_controls"), SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilityFromBool(missing != "tool_observations"), MCPHTTPTools: proto.CapabilityFromBool(missing != "mcp_http_tools"), MCPHTTPRequired: proto.CapabilityFromBool(missing != "mcp_http_required"), MCPHTTPBearerAuth: proto.CapabilityFromBool(missing != "mcp_http_bearer_auth"), FunctionTools: proto.CapabilityFromBool(missing != "function_tools" && !isMCP)})
+				caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(missing != "mcp_http_tools"), MCPHTTPRequired: proto.CapabilityFromBool(missing != "mcp_http_required"), MCPHTTPBearerAuth: proto.CapabilityFromBool(missing != "mcp_http_bearer_auth"), FunctionTools: proto.CapabilityFromBool(missing != "function_tools" && !isMCP)})
 				heartbeat := func() {
 					h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 				}
@@ -55,7 +55,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				for {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
 					info, _, _ := peer.AgentKindStatus("codex")
-					if info.Capabilities.Preparation == caps.Preparation.IsSupported() && info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts.IsSupported() && info.Capabilities.ExecutionControls == caps.ExecutionControls.IsSupported() && info.Capabilities.FunctionTools == caps.FunctionTools.IsSupported() && info.Capabilities.ToolObservations == caps.ToolObservations.IsSupported() && info.Capabilities.MCPHTTPTools == caps.MCPHTTPTools.IsSupported() && info.Capabilities.MCPHTTPBearerAuth == caps.MCPHTTPBearerAuth.IsSupported() && info.Capabilities.MCPHTTPRequired == caps.MCPHTTPRequired.IsSupported() {
+					if info.Capabilities == caps {
 						break
 					}
 					if time.Now().After(deadline) {
@@ -87,8 +87,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
-				caps.Preparation, caps.DurableInputReceipts, caps.ExecutionControls, caps.ToolObservations, caps.MCPHTTPTools = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
-				caps.MCPHTTPBearerAuth, caps.FunctionTools, caps.MCPHTTPRequired = proto.CapabilitySupported, proto.CapabilityFromBool(!isMCP), proto.CapabilitySupported
+				caps.MCPHTTPTools, caps.MCPHTTPBearerAuth, caps.FunctionTools, caps.MCPHTTPRequired = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilityFromBool(!isMCP), proto.CapabilitySupported
 				heartbeat()
 				request := h.read(testExecutionRequest)
 				var prompt proto.PromptRequestPayload

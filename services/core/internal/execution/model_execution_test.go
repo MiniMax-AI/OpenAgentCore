@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -33,13 +33,13 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	reader, _ := testSessions(t, pgtest.Open(t), nil)
 	d := Dispatcher{SessionsReader: reader}
 	session := sessions.Session{TenantID: uuid.NewString(), ID: uuid.NewString(), Engine: "codex"}
-	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
 	// No Runtime has model configuration of its own.
 	for _, environment := range []string{"openai_hosted", "self_hosted", "none"} {
 		snapshot := Snapshot{Agent: v1.Agent{Model: "m"}, Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
+		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
 			t.Fatal("provider-free Session dispatched", environment, err)
 		}
 	}

@@ -150,40 +150,30 @@ const (
 
 // AgentKindCapabilities describes what a daemon-side agent_kind can
 // do inside one prompt session. Every field requires an explicit support
-// decision, including for unavailable engines. Runtime lifecycle requirements
-// are mandatory independently of these optional operations.
+// decision, including for unavailable engines. The Runtime lifecycle
+// (streaming, durable Turns and input receipts, preparation) is mandatory for
+// every Harness and is not declared.
 type AgentKindCapabilities struct {
 	SubagentObservations  CapabilitySupport `json:"subagent_observations"`
-	Streaming             CapabilitySupport `json:"streaming"`
-	Usage                 CapabilitySupport `json:"usage"`
-	Resume                CapabilitySupport `json:"resume"`
 	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`
-	Steering              CapabilitySupport `json:"steering"`
 	MessageItems          CapabilitySupport `json:"message_items"`
 
-	ToolObservations               CapabilitySupport `json:"tool_observations"`
 	EnvironmentNone                CapabilitySupport `json:"environment_none"`
 	LocalEnvironment               CapabilitySupport `json:"local_environment"`
-	Preparation                    CapabilitySupport `json:"preparation"`
 	WorkspaceReadPreparation       CapabilitySupport `json:"workspace_read_preparation"`
 	WorkspaceOutputExport          CapabilitySupport `json:"workspace_output_export"`
 	ProgrammaticToolCallingDisable CapabilitySupport `json:"programmatic_tool_calling_disable"`
 	WebSearchControl               CapabilitySupport `json:"web_search_control"`
-	// ExecutionControls supports typed search and verbosity controls.
-	ExecutionControls    CapabilitySupport `json:"execution_controls"`
-	TextVerbosity        CapabilitySupport `json:"text_verbosity"`
-	StructuredOutput     CapabilitySupport `json:"structured_output"`
-	ToolSearch           CapabilitySupport `json:"tool_search"`
-	MessageImages        CapabilitySupport `json:"message_images"`
-	FunctionResultImages CapabilitySupport `json:"function_result_images"`
-	SubagentControl      CapabilitySupport `json:"subagent_control"`
-	DurableInputReceipts CapabilitySupport `json:"durable_input_receipts"`
-	// DurableTurns includes strict resume, completion release and cancellation snapshots.
-	DurableTurns      CapabilitySupport `json:"durable_turns"`
-	FunctionTools     CapabilitySupport `json:"function_tools"`
-	MCPHTTPTools      CapabilitySupport `json:"mcp_http_tools"`
-	MCPHTTPRequired   CapabilitySupport `json:"mcp_http_required"`
-	MCPHTTPBearerAuth CapabilitySupport `json:"mcp_http_bearer_auth"`
+	TextVerbosity                  CapabilitySupport `json:"text_verbosity"`
+	StructuredOutput               CapabilitySupport `json:"structured_output"`
+	ToolSearch                     CapabilitySupport `json:"tool_search"`
+	MessageImages                  CapabilitySupport `json:"message_images"`
+	FunctionResultImages           CapabilitySupport `json:"function_result_images"`
+	SubagentControl                CapabilitySupport `json:"subagent_control"`
+	FunctionTools                  CapabilitySupport `json:"function_tools"`
+	MCPHTTPTools                   CapabilitySupport `json:"mcp_http_tools"`
+	MCPHTTPRequired                CapabilitySupport `json:"mcp_http_required"`
+	MCPHTTPBearerAuth              CapabilitySupport `json:"mcp_http_bearer_auth"`
 }
 
 // SupportedAgentKind is one daemon-advertised agent engine. Daemons

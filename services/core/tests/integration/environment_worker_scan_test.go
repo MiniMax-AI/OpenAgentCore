@@ -14,7 +14,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	pending := workerEnvironmentReservation(t, h)
 	runtime := h.environments[pending.SessionID]
 	caps := workerEnvironmentCapabilities()
-	caps.Preparation = proto.CapabilityUnsupported
+	caps.WorkspaceReadPreparation = proto.CapabilityUnsupported
 	awaitFixtureCapabilities(t, runtime, caps)
 	frames := workerFrames(t, h, runtime)
 

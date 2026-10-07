@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 146f98f62e43880478349005b7dcb8dd91d03f26579b38ef3f025f158b722a1c
+source_hash: 749d48c7bcdf5dfbf2f01d21b4524ff8c7fd45943252d0ce5f2ca5ba9efae8eb
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -155,14 +155,14 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 | 顺序 | 方法 | 注册内容 |
 | --- | --- | --- |
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration)` | Kind、可用性、版本、`AgentKindCapabilities` 和模型配置声明。它会重置其他注册项，因此必须首先调用。 |
-| 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期；据此派生 `Preparation` 能力 |
+| 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期 |
 | 3 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
 
 `Runtime.View` 声明 Harness 如何在 agent-host Session 视图中运行，详见[在 agent-host 视图中运行](#run-in-an-agent-host-view)。每个适配器都显式设置它；`View: nil` 表示 agent host 拒绝该 kind，`Registry.ResolveView` 返回包装 `ErrUnsupportedOperation` 的错误。`TestPublicHarnessContractDeclarations` 要求每个声明都包含该字段。
 
 每个 `proto.AgentKindCapabilities` 字段都必须显式设为 `proto.CapabilitySupported` 或 `proto.CapabilityUnsupported`，即使 Harness 不可用也是如此。`proto.CapabilityUnspecified` 无效：零值和省略字段绝不表示 Unsupported。安装探测可以使用 `proto.CapabilityFromBool` 设置单个字段；但不得填充未提及字段或未来字段。可用性通过 `SupportedAgentKind.Available` 单独表示。注册会在更改 registry 之前验证完整声明；线协议会为每个字段携带显式布尔值，因此省略字段和 null 字段均无效。添加新字段时，每个生产声明都必须作出决定。Runtime 使用者应调用 `IsSupported()`，并在原生操作前拒绝不受支持的请求；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致；[Core–Runtime protocol](../../../docs/zh/runtime-protocol.md#capability-declarations) 负责声明的传输方式和冻结方式。
 
-准入映射是显式的。`Steering` 控制非持久化 `Steerer` 输入。`DurableInputReceipts` 控制 `DurableSteerer` 输入，并且还要求 Turn 结算契约；二者互不隐含，而且 Core 的公共文本 profile 要求同时具备二者。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`，由 Environment owner 就绪并提供读取，不调用 Executor 工厂。Runtime 注册不会授予 Core 资格；服务 profile 才会授予。
+每个可用 Harness 都无需声明即实现共享 Turn 生命周期（包括 `DurableSteerer` 输入和由 `contracttest.TextLifecycle` 检查的 Turn 结算契约）、类型化的 `execution_controls` 和工具观测。在某个平台上无法满足这些要求的 Harness 在该平台报告 `Available` 为 false。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`，由 Environment owner 就绪并提供读取，不调用 Executor 工厂。Runtime 注册不会授予 Core 资格；服务 profile 才会授予。
 
 可运行的仅测试示例 [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) 会以 `mcode` 类型注册一个仅支持文本的合成 Harness，因为 Core 只接纳[目录](harness-catalog.md)中的 Harness。它展示 Session 所有的 Executor、全新的 Turn、持久化引导、取消和历史绑定，并且绝不会发布。
 

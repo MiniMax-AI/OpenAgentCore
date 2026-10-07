@@ -12,58 +12,10 @@ type HeartbeatStatus struct {
 	Deleted bool
 }
 
-// KindCapabilities mirrors the daemon heartbeat capability
-// shape after gateway-level normalization. Persistence stays separate from wire protocol structs.
-type KindCapabilities struct {
-	SubagentObservations  bool `json:"subagent_observations,omitempty"`
-	Streaming             bool `json:"streaming,omitempty"`
-	Usage                 bool `json:"usage,omitempty"`
-	Resume                bool `json:"resume,omitempty"`
-	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`
-	Steering              bool `json:"steering,omitempty"`
-	MessageItems          bool `json:"message_items,omitempty"`
-
-	ToolObservations               bool `json:"tool_observations,omitempty"`
-	EnvironmentNone                bool `json:"environment_none,omitempty"`
-	LocalEnvironment               bool `json:"local_environment,omitempty"`
-	Preparation                    bool `json:"preparation,omitempty"`
-	WorkspaceReadPreparation       bool `json:"workspace_read_preparation,omitempty"`
-	WorkspaceOutputExport          bool `json:"workspace_output_export,omitempty"`
-	ProgrammaticToolCallingDisable bool `json:"programmatic_tool_calling_disable,omitempty"`
-	WebSearchControl               bool `json:"web_search_control,omitempty"`
-	// ExecutionControls supports typed search and verbosity controls.
-	ExecutionControls    bool `json:"execution_controls,omitempty"`
-	TextVerbosity        bool `json:"text_verbosity,omitempty"`
-	StructuredOutput     bool `json:"structured_output,omitempty"`
-	ToolSearch           bool `json:"tool_search,omitempty"`
-	MessageImages        bool `json:"message_images,omitempty"`
-	FunctionResultImages bool `json:"function_result_images,omitempty"`
-	SubagentControl      bool `json:"subagent_control,omitempty"`
-	FunctionTools        bool `json:"function_tools,omitempty"`
-	MCPHTTPTools         bool `json:"mcp_http_tools,omitempty"`
-	MCPHTTPRequired      bool `json:"mcp_http_required,omitempty"`
-	MCPHTTPBearerAuth    bool `json:"mcp_http_bearer_auth,omitempty"`
-	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
-	DurableTurns         bool `json:"durable_turns,omitempty"`
-}
-
-// SupportedAgentKind is the sanitized runtime.config view
-// of one daemon-side agent_kind.
-type SupportedAgentKind struct {
-	Kind         string           `json:"kind"`
-	Available    bool             `json:"available"`
-	Version      string           `json:"version,omitempty"`
-	Capabilities KindCapabilities `json:"capabilities,omitempty"`
-}
-
-// Heartbeat is the WebSocket daemon heartbeat
-// payload after gateway normalization.
+// Heartbeat names the authenticated Runtime connection a daemon heartbeat
+// refreshes.
 type Heartbeat struct {
 	RuntimeID string
 	// CredentialHash comes from gateway authentication, never a daemon frame.
-	CredentialHash      string
-	DaemonVersion       string
-	ActiveRequests      int
-	HeartbeatTimestamp  int64
-	SupportedAgentKinds []SupportedAgentKind
+	CredentialHash string
 }

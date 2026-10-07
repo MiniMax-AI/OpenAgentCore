@@ -50,9 +50,6 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if !available {
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
-	if !caps.Preparation.IsSupported() {
-		return r.rejectPreparation(env, "unsupported_preparation")
-	}
 	// The Session's owner declares read-only preparation for a kind that
 	// supports a local Environment.
 	environment, code := r.admittedEnvironment(env.Assignment, input.SessionID)

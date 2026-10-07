@@ -192,7 +192,7 @@ func requireFunctionResultImages(peer *runtimegateway.Session, kind string, resu
 		return nil
 	}
 	info, found, known := peer.AgentKindStatus(kind)
-	if !found || !known || !info.Available || !info.Capabilities.FunctionResultImages {
+	if !found || !known || !info.Available || !info.Capabilities.FunctionResultImages.IsSupported() {
 		return errors.New("Runtime does not support function result images")
 	}
 	return nil

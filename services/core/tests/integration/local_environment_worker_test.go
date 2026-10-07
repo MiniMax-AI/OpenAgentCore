@@ -25,12 +25,10 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})
 	if execute {
 		caps.WorkspaceOutputExport = proto.CapabilitySupported
-		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
-		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
-		caps.SubagentControl, caps.ToolObservations = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.WebSearchControl, caps.TextVerbosity, caps.SubagentControl = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "local capability", func() bool {
@@ -39,7 +37,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 			return false
 		}
 		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.LocalEnvironment
+		return info.Capabilities.LocalEnvironment.IsSupported()
 	})
 	w := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
