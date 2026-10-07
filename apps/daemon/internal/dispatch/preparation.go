@@ -53,10 +53,16 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
-	if !caps.WorkspaceReadPreparation.IsSupported() || !proto.ValidWorkspaceReadPreparation(req) {
+	// The Session's owner declares read-only preparation for a kind that
+	// supports a local Environment.
+	environment, code := r.admittedEnvironment(env.Assignment, input.SessionID)
+	if code != "" {
+		return r.rejectPreparation(env, code)
+	}
+	if environment == nil || !caps.LocalEnvironment.IsSupported() || !proto.ValidWorkspaceReadPreparation(req) {
 		return r.rejectPreparation(env, "unsupported_read_preparation")
 	}
-	req, err := r.localWorkspace.Configure(req)
+	req, err := environment.Configure(req)
 	if err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}

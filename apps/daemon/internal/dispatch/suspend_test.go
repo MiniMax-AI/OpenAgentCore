@@ -20,7 +20,11 @@ var suspendRef = proto.AssignmentRef{SessionID: "session", AssignmentID: "assign
 // bindAssignment records ref as bound in environmentID, as assignment_bind does.
 func bindAssignment(r *Router, ref proto.AssignmentRef, environmentID string) {
 	r.mu.Lock()
-	r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: environmentID}
+	a := &assignmentState{ref: ref, environmentID: environmentID}
+	if r.environments != nil {
+		a.environment = r.environments(ref, proto.AssignmentBindPayload{EnvironmentID: environmentID})
+	}
+	r.assignments[ref.SessionID] = a
 	r.mu.Unlock()
 }
 

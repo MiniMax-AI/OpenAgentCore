@@ -56,7 +56,7 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 		t.Fatal(err)
 	}
 	sender := exportSender{make(chan proto.Envelope, 8)}
-	r, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, LocalWorkspace: binding})
+	r, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: LocalEnvironments(binding)})
 	if err != nil {
 		t.Fatal(err)
 	}

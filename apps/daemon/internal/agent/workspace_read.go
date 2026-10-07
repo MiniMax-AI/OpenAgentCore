@@ -1,14 +1,9 @@
 package agent
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
 var (
-	ErrWorkspaceReadUnsupported = fmt.Errorf("%w: workspace read", ErrUnsupportedOperation)
 	ErrWorkspaceReadUnavailable = errors.New("workspace read unavailable")
-	ErrWorkspaceReadBusy        = errors.New("workspace read busy")
 	ErrWorkspaceReadInvalid     = errors.New("workspace read invalid")
 	ErrWorkspaceReadUncertain   = errors.New("workspace read outcome uncertain")
 	// ErrWorkspaceNotDirectory reports that a directory request's own path is

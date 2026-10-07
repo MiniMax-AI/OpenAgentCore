@@ -1,6 +1,7 @@
 package localworkspace
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -55,10 +56,7 @@ func Load() (*Binding, error) {
 
 // Configure validates the reference before supplying the immutable local cwd.
 func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
-	if b == nil && r.LocalEnvironment == nil {
-		return r, nil
-	}
-	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
+	if r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
 		r.DisableExecutionEnvironment {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}
@@ -91,3 +89,6 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 func (b *Binding) Matches(environment, session string) bool {
 	return b != nil && b.environment == environment && b.stateKey == "agents-api-"+session
 }
+
+// Close keeps the workspace, which outlives each assignment of its Session.
+func (b *Binding) Close(context.Context) error { return nil }

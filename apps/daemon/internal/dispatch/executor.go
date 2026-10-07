@@ -57,10 +57,17 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
-	if !r.sessionEnvironments {
-		if req, err = r.localWorkspace.Configure(req); err != nil {
-			return r.rejectPreparation(env, "invalid_configuration")
-		}
+	environment, code := r.admittedEnvironment(env.Assignment, input.SessionID)
+	if code != "" {
+		return r.rejectPreparation(env, code)
+	}
+	if environment != nil {
+		req, err = environment.Configure(req)
+	} else if req.LocalEnvironment != nil && !r.sessionEnvironments {
+		err = errors.New("the Session has no Environment owner")
+	}
+	if err != nil {
+		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_configuration")
@@ -170,12 +177,12 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if reused {
 		r.publishPreparation(p, status)
 	} else {
-		go r.prepareExecutor(p, req, factory)
+		go r.prepareExecutor(p, req, factory, environment)
 	}
 	return nil
 }
 
-func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPayload, factory agent.ExecutorFactory) {
+func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPayload, factory agent.ExecutorFactory, environment Environment) {
 	defer r.shutdownWG.Done()
 	owner := p.executor
 	started := time.Now()
@@ -188,8 +195,8 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	var native agent.Executor
 	var err error
 	if owner.ctx.Err() == nil {
-		if !r.sessionEnvironments {
-			req, err = r.localWorkspace.Prepare(owner.ctx, req)
+		if environment != nil {
+			req, err = environment.Prepare(owner.ctx, req)
 		}
 		if err == nil && owner.ctx.Err() == nil {
 			native, err = factory(owner.ctx, req)

@@ -10,19 +10,3 @@ import (
 func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
 	return fmt.Errorf("%w: native public function tools are not qualified", agent.ErrUnsupportedOperation)
 }
-
-func (s *executor) ListWorkspaceDirectory(context.Context, string, int) (agent.WorkspaceDirectoryResult, error) {
-	return agent.WorkspaceDirectoryResult{}, agent.ErrWorkspaceReadUnsupported
-}
-
-func (s *executor) WriteWorkspaceFile(context.Context, string, []byte) (agent.WorkspaceWriteResult, error) {
-	return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteUnsupported
-}
-
-func (s *Session) ListWorkspaceDirectory(context.Context, string, int) (agent.WorkspaceDirectoryResult, error) {
-	return agent.WorkspaceDirectoryResult{}, agent.ErrWorkspaceReadUnsupported
-}
-
-func (s *Session) WriteWorkspaceFile(context.Context, string, []byte) (agent.WorkspaceWriteResult, error) {
-	return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteUnsupported
-}

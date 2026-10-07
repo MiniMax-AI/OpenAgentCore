@@ -28,13 +28,13 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	}
 	var harnessCalls atomic.Int32
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	reg.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		harnessCalls.Add(1)
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, LocalWorkspace: binding})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: dispatch.LocalEnvironments(binding)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,12 +100,12 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	reg.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, LocalWorkspace: binding})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: dispatch.LocalEnvironments(binding)})
 	if err != nil {
 		t.Fatal(err)
 	}

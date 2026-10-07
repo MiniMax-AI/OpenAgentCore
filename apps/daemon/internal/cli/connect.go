@@ -315,6 +315,33 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	}
 }
 
+// localEnvironments resolves the dedicated local workspace as the Environment
+// owner of the one Session it serves.
+func localEnvironments(local *localworkspace.Binding) func(proto.AssignmentRef, proto.AssignmentBindPayload) dispatch.Environment {
+	if local == nil {
+		return nil
+	}
+	return func(ref proto.AssignmentRef, bind proto.AssignmentBindPayload) dispatch.Environment {
+		if !local.Matches(bind.EnvironmentID, ref.SessionID) {
+			return nil
+		}
+		return local
+	}
+}
+
+// localEnvironmentKinds declares, for each kind that supports a local
+// Environment, the read-only preparation and output export that the local
+// workspace owner serves.
+func localEnvironmentKinds(registry *agent.Registry, local *localworkspace.Binding) []proto.SupportedAgentKind {
+	kinds := registry.SupportedAgentKinds()
+	for i := range kinds {
+		caps := &kinds[i].Capabilities
+		caps.WorkspaceReadPreparation = proto.CapabilityFromBool(local != nil && caps.LocalEnvironment.IsSupported())
+		caps.WorkspaceOutputExport = caps.WorkspaceReadPreparation
+	}
+	return kinds
+}
+
 // pumpConn runs the per-connection workload: a dispatch.Router fed by
 // conn.Recv(), heartbeats every boot.HeartbeatInterval(), and a
 // confirmed router.Shutdown before returning ownership to the reconnect loop.
@@ -325,10 +352,10 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 		return err
 	}
 	router, err := dispatch.New(dispatch.Config{
-		Registry:       registry,
-		Sender:         conn,
-		Log:            obslog.Bg(),
-		LocalWorkspace: local,
+		Registry:     registry,
+		Sender:       conn,
+		Log:          obslog.Bg(),
+		Environments: localEnvironments(local),
 	})
 	if err != nil {
 		return fmt.Errorf("router init: %w", err)
@@ -339,16 +366,11 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 	}()
 
 	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
-		kinds := registry.SupportedAgentKinds()
-		for i := range kinds {
-			caps := &kinds[i].Capabilities
-			caps.WorkspaceOutputExport = proto.CapabilityFromBool(local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
-		}
 		return proto.HeartbeatPayload{
 			Timestamp:           time.Now().Unix(),
 			ActiveRequests:      router.ActiveRuns(),
 			DaemonVersion:       Version,
-			SupportedAgentKinds: kinds,
+			SupportedAgentKinds: localEnvironmentKinds(registry, local),
 			HomeRemoval:         proto.CapabilityUnsupported,
 		}
 	}, obslog.Bg().With("component", "heartbeat"))

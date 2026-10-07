@@ -4,7 +4,6 @@ import { StructuredOutput } from "./structured_output.js";
 import { toolSearchEnvironment } from "./tool_search.js";
 import { Subagents } from "./subagents.js";
 import type { Fact } from "./subagent_history.js";
-import { WorkspaceDirectories, type WorkspaceDirectoryEvent } from "./workspace_directories.js";
 import { getSessionInfo, query, startup, type McpServerConfig, type Options, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
 import { Inputs, type InputEvent } from "./inputs.js";
 import { executorResultUsage, resultUsage, type NativeUsage } from "./usage.js";
@@ -23,7 +22,6 @@ export { parseStart, type Start } from "./request.js";
 export type Event =
   | ExecutorEvent
   | Fact
-  | WorkspaceDirectoryEvent
   | MessageEvent
   | InputEvent
   | FunctionEvent
@@ -35,7 +33,7 @@ export type Event =
   | { type: "result"; session_id: string; text: string }
   | { type: "error"; code: "invalid_request" | "history_unavailable" | "execution_failed" | "cancelled"; engine_error_code?: string; session_id?: string; result_id?: string };
 
-export async function execute(request: Start | Prepare | ExecutorPrepare, emit: (event: Event) => Promise<void>, abort: AbortController, functions = new FunctionBridge(emit), inputs = new Inputs(immediateInput(request)), directories = new WorkspaceDirectories(emit, abort), turns?: ExecutorTurns): Promise<void> {
+export async function execute(request: Start | Prepare | ExecutorPrepare, emit: (event: Event) => Promise<void>, abort: AbortController, functions = new FunctionBridge(emit), inputs = new Inputs(immediateInput(request)), turns?: ExecutorTurns): Promise<void> {
  const ownerEmit=emit;
  if(turns) emit=event=>turns.emit(event);
   const nativeFailure = new NativeFailure();
@@ -135,7 +133,6 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if ((hooksRequested && initialized.hooks_applied !== true) || children.length !== 1 || !nativeAlive || abort.signal.aborted) {
         throw new Error("preparation unavailable");
       }
-      if (workspace && process.platform === "linux") await directories.bind(request.cwd);
       if (declarations?.some(server => "required" in server && server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
       if(turns) {
         turns.configure(stream,(input,output)=>{
@@ -227,7 +224,6 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
     inputs.close();
     turns?.close();
     functions.close();
-    try { await directories.close(); } catch { failed = true; classifiedFailure = undefined; }
     stream?.close();
     warm?.close();
     abort.signal.removeEventListener("abort", closeInputs);

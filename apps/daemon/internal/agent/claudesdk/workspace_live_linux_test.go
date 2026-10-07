@@ -59,7 +59,6 @@ func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	liveWorkspaceDirectoryFixtures(t, config.Workspace.Directory)
 	heartbeat := filepath.Join(config.Workspace.Directory, "heartbeat.txt")
 	artifact := filepath.Join(config.Workspace.Directory, "value.txt")
 	type evidence struct {
@@ -105,7 +104,6 @@ func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 		s := running.(*session)
 		defer s.Cancel(context.Background())
 		proof.BridgePID = s.process.Cmd.Process.Pid
-		liveWorkspaceDirectories(t, ctx, s, config.Workspace.Directory, "active")
 		ticker := time.NewTicker(80 * time.Millisecond)
 		defer ticker.Stop()
 		for out != nil {
@@ -115,7 +113,6 @@ func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 			case <-ticker.C:
 				value, _ := os.ReadFile(heartbeat)
 				if cancelOnEffect && !proof.Cancelled && len(value) > 0 && string(value) != "0" && string(value) != "1" {
-					liveWorkspaceDirectories(t, ctx, s, config.Workspace.Directory, "effect")
 					started := time.Now()
 					if err := s.Cancel(ctx); err != nil {
 						t.Fatal("factory cancellation failed", err)

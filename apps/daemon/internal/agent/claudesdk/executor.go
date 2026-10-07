@@ -1,6 +1,7 @@
 package claudesdk
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -69,7 +70,6 @@ func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config
 	if err != nil {
 		return nil, err
 	}
-	base.directories.supported = slices.Contains(info.Features, "workspace_directory")
 	e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume}
 	go e.read()
 	if err = e.write(start); err == nil {
@@ -136,7 +136,8 @@ func (e *executor) write(value any) error {
 func (e *executor) read() {
 	stderrDone := make(chan struct{})
 	go func() { _, _ = io.Copy(io.Discard, e.base.process.Stderr); close(stderrDone) }()
-	scanner := e.base.bridgeOutput()
+	scanner := bufio.NewScanner(e.base.process.Stdout)
+	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
 	ready := false
 	readyFailure := errors.New("claudesdk: Executor readiness failed")
 	for scanner.Scan() {
@@ -179,7 +180,6 @@ func (e *executor) read() {
 	}
 	<-stderrDone
 	_ = e.base.process.Wait()
-	e.base.stopWorkspaceDirectories()
 	e.mu.Lock()
 	e.invalid = true
 	if e.active != nil {
@@ -316,8 +316,4 @@ func (s *session) invalidate() {
 		s.owner.invalid = true
 		s.process.Cancel()
 	}
-}
-
-func (e *executor) ListWorkspaceDirectory(ctx context.Context, path string, maxEntries int) (agent.WorkspaceDirectoryResult, error) {
-	return e.base.ListWorkspaceDirectory(ctx, path, maxEntries)
 }

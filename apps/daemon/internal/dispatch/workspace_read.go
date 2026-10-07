@@ -36,7 +36,7 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		r.mu.Unlock()
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead("read_capacity"))
 	}
-	lister, code := r.workspaceResourceLocked(env.Assignment, request)
+	environment, code := r.workspaceResourceLocked(env.Assignment, request)
 	if code != "" {
 		r.mu.Unlock()
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead(code))
@@ -55,45 +55,40 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		// Observer loss does not discard an admitted native wait or replay it.
 		operation, cancel := context.WithTimeout(context.WithoutCancel(ctx), 12*time.Second)
 		defer cancel()
-		result := listWorkspaceDirectory(operation, lister, request)
+		result := listWorkspaceDirectory(operation, environment, request)
 		_ = r.sendWorkspaceRead(context.WithoutCancel(ctx), env, result)
 	}()
 	return nil
 }
 
-// workspaceResourceLocked returns what lists ref's directory: the local
-// workspace, or without one the Harness Session of the Run ref admitted.
-// Only the local workspace serves a preparation handle; a read-only
-// preparation needs it.
-func (r *Router) workspaceResourceLocked(ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (agent.WorkspaceDirectoryLister, string) {
+// workspaceResourceLocked returns the Environment owner of ref's Session once
+// ref admits the read's ready preparation handle or open Run.
+func (r *Router) workspaceResourceLocked(ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (Environment, string) {
 	if code := r.admitLocked(ref, ref.SessionID, request.EnvironmentID); code != "" {
 		return nil, code
+	}
+	environment := r.assignments[ref.SessionID].environment
+	if environment == nil {
+		return nil, "read_unsupported"
 	}
 	if request.Handle != "" {
 		p := r.preparations[request.Handle]
 		if p == nil || p.request.Assignment != ref || p.environmentID != request.EnvironmentID || p.status.State != "ready" ||
-			!p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) || r.localWorkspace == nil {
+			!p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) {
 			return nil, "resource_unavailable"
 		}
-		return r.localWorkspace, ""
+		return environment, ""
 	}
 	s := r.sessions[request.RunID]
 	if s == nil || s.assignment != ref || s.environmentID != request.EnvironmentID || s.session == nil ||
 		!r.runRouteOpenLocked(s) {
 		return nil, "resource_unavailable"
 	}
-	if r.localWorkspace != nil {
-		return r.localWorkspace, ""
-	}
-	lister, ok := s.session.(agent.WorkspaceDirectoryLister)
-	if !ok {
-		return nil, "read_unsupported"
-	}
-	return lister, ""
+	return environment, ""
 }
 
-func listWorkspaceDirectory(ctx context.Context, lister agent.WorkspaceDirectoryLister, request proto.WorkspaceReadPayload) proto.WorkspaceReadResultPayload {
-	read, err := lister.ListWorkspaceDirectory(ctx, request.Path, request.MaxEntries)
+func listWorkspaceDirectory(ctx context.Context, environment Environment, request proto.WorkspaceReadPayload) proto.WorkspaceReadResultPayload {
+	read, err := environment.ListWorkspaceDirectory(ctx, request.Path, request.MaxEntries)
 	if err != nil {
 		return workspaceReadFailure(err)
 	}
@@ -119,9 +114,7 @@ func workspaceReadFailure(err error) proto.WorkspaceReadResultPayload {
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceReadUnsupported, "read_unsupported"},
 		{agent.ErrWorkspaceReadUnavailable, "resource_unavailable"},
-		{agent.ErrWorkspaceReadBusy, "read_capacity"},
 		{agent.ErrWorkspaceReadInvalid, "invalid_request"},
 		{agent.ErrWorkspaceNotDirectory, proto.WorkspaceReadNotDirectory},
 		{fs.ErrNotExist, "not_found"},

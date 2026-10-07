@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: bda8cb83cb7a350d613c44e9b09e6ab78f604643cb31c4f8bfed9e6bcdd45820
+source_hash: 58f0ccc44daf024d3f8079e0f09b78dfefb2e55e558f5663c2add01ee153061a
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -30,7 +30,7 @@ wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blo
 
 wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `false`。不完整声明编码失败。解码拒绝省略、null、无效和未知字段，以及缺失的 capability 对象。无效 heartbeat 会清空连接的 admission snapshot 并关闭 transport；这不证明原生完成或取消结果。
 
-每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。工作区支持包括公共 Runtime 工作区实现，因此原生 adapter 不支持的 workspace 方法不会禁用该组合。
+每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。Runtime 根据其 [Environment owner](#session-assignments) 声明 `workspace_read_preparation` 和 `workspace_output_export`，从不由 Harness adapter 声明。
 
 新增字段要求每个生产声明都作出明确决定。契约测试为注册、wire 往返和持久化 boolean 投影逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)负责各声明的 adapter 侧规则。
 
@@ -118,7 +118,9 @@ Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替�
 
 在一条连接上执行 Session 的第一个操作之前，包括没有 Turn 的 Environment 初始化和文件操作，Core 发送带 Session 的 Environment ID 的 `assignment_bind`，并等待 `assignment_status` `bound`。当 Runtime 是 agent host 且 Environment 有存活的 [Link](./sandbox-link-protocol.md) resource 时，绑定还携带 `resource` 和 `attach_grant`：前者是该 resource，形式与[引导输入](./sandbox-bootstrap.md#launch-input)中的相同；后者是 base64 编码的 grant，agent host 凭它在此分配和 epoch 下打开该 resource generation 上的服务。grant 是机密。Core 不向其他任何 Runtime 发送这两个字段。只带其中一个字段、或带其他 Environment 的 resource 的绑定以 `invalid_request` 失败。以相同的 Environment、resource 和 grant 重复绑定同一分配仍得到 `bound`；该分配的其他绑定以 `assignment_conflict` 失败。Runtime 只在其已绑定的分配下准入 Session frame：较旧的 epoch 或已释放的分配以 `assignment_stale` 失败；其他分配、Session 或 Environment 以 `assignment_conflict` 失败。已启动 Run 的 frame，包括其取消回执，在释放前仍可在启动它的分配下准入。Runtime 已记录回执的重复函数结果或决策只在应用它的分配下得到回答；其他分配以 `assignment_conflict` 失败。
 
-Core 先记录释放并推进 epoch，再发送任何消息；记录即撤回该分配的 attach grant。随后 Core 让 relay 吊销 Environment 的 Link resource 的当前 generation，使凭该 grant 打开的 attachment 在 Runtime 收到释放之前关闭。删除 Session 以 `remove_home: true` 释放其分配；释放其 Environment 发送 `false`。删除从不吊销共享的 Runtime 凭据。`assignment_release` 立即约束该分配。随后 Runtime 停止 Session 的工作：仍在接收内容、或已提交但尚未应用的传输以 `assignment_stale` 结束；它释放只读准备，并等待每个 workspace 读取、写入、导出和 Runtime 准备发送结果。它关闭 Session 的 Executor，并在要求时删除原生 home；此后才回复 `released` 或 `home_removed`。未完成的清理回复 `failed` 和 `cleanup_unconfirmed`，同一 epoch 的重试会重复清理。声明 `home_removal` 不支持的 Runtime 以 `unsupported_operation` 回答 `remove_home: true`，Core 只要求它释放。Core 根据匹配的 `released` 或 `home_removed` 记录释放已应用；没有 Runtime 能处理该释放时立即记录：发给无授权 Runtime 的释放在记录时即结清，吊销 Runtime 会结清它的释放。Core 在 Runtime 连接时重发所有未确认的释放；失败的释放退避重试，等待最久的释放先发送，因此失败的释放不会拖延其他释放。已 quiesce 的 Runtime 只准入释放和匹配的 `environment_resume`，后者携带使其 quiesce 的分配。
+Session 的第一次绑定确定其 Environment owner，此后不再改变；owner 持有 Environment 的资源，并执行对这些资源的每个作用。owner 根据 Environment 检查每个 `execution_prepare` 配置（包括只读 profile），并在 Executor 启动前填入已安装的能力。它应用 `runtime_prepare`，为 `workspace_read` 列举目录，为 `workspace_write` 写入文件，为 `workspace_export` 导出输出。Runtime 的 dispatcher 保留准入、传输分帧和 fencing，从不替换为其他实现。self-hosted Runtime 的 owner 是其绑定的本地工作区，该工作区比每个分配存续得更久；Runtime 以 `assignment_conflict` 拒绝任何其他 Session 的绑定。没有 owner 的 Session 不支持上述任何操作，Runtime 以各自的类型化错误码拒绝：只读 preparation 为 `unsupported_read_preparation`；带 `local_environment` 的 Executor 配置为 `invalid_configuration`（agent host 除外，其 Executor 自行绑定 Environment）；`runtime_prepare` 为 `runtime_preparation_unsupported`；`workspace_write` 为 `write_unsupported`；`workspace_read` 和 `workspace_export` 为 `read_unsupported`。
+
+Core 先记录释放并推进 epoch，再发送任何消息；记录即撤回该分配的 attach grant。随后 Core 让 relay 吊销 Environment 的 Link resource 的当前 generation，使凭该 grant 打开的 attachment 在 Runtime 收到释放之前关闭。删除 Session 以 `remove_home: true` 释放其分配；释放其 Environment 发送 `false`。删除从不吊销共享的 Runtime 凭据。`assignment_release` 立即约束该分配。随后 Runtime 停止 Session 的工作：仍在接收内容、或已提交但尚未应用的传输以 `assignment_stale` 结束；它释放只读准备，并等待每个 workspace 读取、写入、导出和 Runtime 准备发送结果。它关闭 Session 的 Executor，随后释放其 Environment owner 持有的资源，并在要求时删除原生 home；此后才回复 `released` 或 `home_removed`。未完成的清理回复 `failed` 和 `cleanup_unconfirmed`，同一 epoch 的重试会重复清理。声明 `home_removal` 不支持的 Runtime 以 `unsupported_operation` 回答 `remove_home: true`，Core 只要求它释放。Core 根据匹配的 `released` 或 `home_removed` 记录释放已应用；没有 Runtime 能处理该释放时立即记录：发给无授权 Runtime 的释放在记录时即结清，吊销 Runtime 会结清它的释放。Core 在 Runtime 连接时重发所有未确认的释放；失败的释放退避重试，等待最久的释放先发送，因此失败的释放不会拖延其他释放。已 quiesce 的 Runtime 只准入释放和匹配的 `environment_resume`，后者携带使其 quiesce 的分配。
 
 Runtime 对无法路由的 Core frame 回复 `protocol_error`，回显请求 ID，并携带其类型和错误码。
 
@@ -198,7 +200,7 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 ## 工作区操作 {#workspace-operations}
 
-无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 从绑定的本地工作区提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
+无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Session 的 Environment owner 提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
 `workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份，列出一个 workspace 相对目录（空路径选择根目录）；调用方不能提供 socket、凭据或 workspace root。结果最多携带 `max_entries`（1 到 1024）个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。
 
@@ -206,7 +208,7 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执行时针对精确 Run。它在有限时 read 与 release 期间保留预约，仅在确认 close 后返回数据（不完整读取或不确定清理返回 unavailable，不包含数据），在交付结果前释放预约，并在完成或失败后撤销限定作用域的读取凭据。Runtime 保留不确定清理的所有权和容量。[Environment Files 契约](../../contracts/agents-api/zh/environment-files.md)负责公开授权、路径和分页。
 
-`workspace_write` 在原生 writer 运行前，通过已确认的 64 KiB frame 传输完整且有界的 body，验证声明的 digest，不运行模型。私有 transfer 限制为 50 MiB，与公开 API 在任何 Runtime 工作前检查的 5 MiB decoded inline 限制独立。Runtime 在接收或应用写入时排除执行；格式错误、不完整或到期的 transfer 不会到达 installer。精确的 commit 或拒绝回执释放 mutation owner。缺失或有歧义的回执保留不确定性：observer 取消和本地进程退出不能证明没有改变任何内容。公开准入前，Core 在 Session lock 下持久预约写入，跨重启阻止后继 mutation，直到精确结算；请求不重放。各平台都使用 daemon 的 Go 实现进行目录列举、文件创建与输出导出，不使用外部 helper 或 staging directory。
+`workspace_write` 在原生 writer 运行前，通过已确认的 64 KiB frame 传输完整且有界的 body，验证声明的 digest，不运行模型。私有 transfer 限制为 50 MiB，与公开 API 在任何 Runtime 工作前检查的 5 MiB decoded inline 限制独立。Runtime 在接收或应用写入时排除执行；格式错误、不完整或到期的 transfer 不会到达 installer。精确的 commit 或拒绝回执释放 mutation owner。缺失或有歧义的回执保留不确定性：observer 取消和本地进程退出不能证明没有改变任何内容。公开准入前，Core 在 Session lock 下持久预约写入，跨重启阻止后继 mutation，直到精确结算；请求不重放。在各平台上，owner 都在 daemon 内列举目录、创建文件和导出输出，不使用外部 helper 或 staging directory。
 
 ## MCP 连接权限 {#mcp-connection-authority}
 

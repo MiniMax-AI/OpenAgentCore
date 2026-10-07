@@ -68,7 +68,8 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				return e, nil
 			})
 			sender := make(preparationWireSender, 64)
-			r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, LocalWorkspace: binding})
+			environments := func(proto.AssignmentRef, proto.AssignmentBindPayload) dispatch.Environment { return binding }
+			r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Environments: environments})
 			if err != nil {
 				t.Fatal(err)
 			}

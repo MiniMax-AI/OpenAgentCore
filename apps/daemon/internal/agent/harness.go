@@ -15,7 +15,8 @@
 // static declaration list and installs each resulting Runtime through Register.
 // Availability and factory selection belong to the adapter. RegisterKind resets
 // the factories, so Register installs it first. RegisterExecutor derives the
-// Preparation capability; the adapter declares WorkspaceReadPreparation.
+// Preparation capability. The Runtime's Environment owner, not the adapter,
+// serves and declares workspace operations.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
@@ -602,30 +603,6 @@ type Steerer interface {
 // A successful return requires its native application receipt.
 type FunctionResultSubmitter interface {
 	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
-}
-
-// Workspace extensions, implemented by each owner explicitly. The common
-// Runtime may supply an authorized workspace owner independently of the adapter.
-// A resource without native access returns the corresponding Unsupported error;
-// this does not disable capabilities provided by the common workspace owner.
-
-// WorkspaceDirectoryLister reads one directory through an existing workspace owner.
-// An empty directory selects the root; other paths contain only relative components.
-// Entry names are single components. Kind is file, directory, symlink or other;
-// SizeBytes is present and nonnegative only for regular files. Results have no
-// prescribed order, and Truncated must not be presented as a complete inventory.
-// maxEntries is positive; adapters may reject limits above their private bound.
-// Successful return requires settled directory/metadata access and handle cleanup.
-// Implementations retain workspace authorization and isolation and use the existing
-// WorkspaceRead errors for unsupported, unavailable, busy, invalid or uncertain reads.
-// This interface does not establish public Files pagination or feature admission.
-type WorkspaceDirectoryLister interface {
-	ListWorkspaceDirectory(context.Context, string, int) (WorkspaceDirectoryResult, error)
-}
-
-// WorkspaceWriter confirms a native commit on an already authorized prepared owner.
-type WorkspaceWriter interface {
-	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
 }
 
 // Kind registration.
