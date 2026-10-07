@@ -289,7 +289,7 @@ func TestRuntimeInitializationNoDataAndExitReceipt(t *testing.T) {
 		t.Run(fmt.Sprint(exit), func(t *testing.T) {
 			s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 			defer s.Close("test")
-			request := proto.RuntimePreparePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Network: "enabled", Command: "echo test"}}
+			request := proto.RuntimePreparePayload{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: "echo test"}}
 			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), request, []byte("forbidden")); err == nil {
 				t.Fatal("initialization body accepted")
 			}

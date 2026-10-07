@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -30,7 +29,6 @@ type preparationState struct {
 	timer             *time.Timer
 	ctx               context.Context
 	cancel            context.CancelFunc
-	prepared          agent.Prepared
 	environmentID     string
 	busy              bool
 	owns              bool
@@ -52,14 +50,14 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if !available {
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
-	prepare, err := r.registry.ResolvePreparation(req.AgentKind)
-	if err != nil || !caps.Preparation.IsSupported() {
+	if !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
-	if req.WorkspaceReadOnly && (!caps.WorkspaceReadPreparation.IsSupported() || !proto.ValidWorkspaceReadPreparation(req)) {
+	if !caps.WorkspaceReadPreparation.IsSupported() || !proto.ValidWorkspaceReadPreparation(req) {
 		return r.rejectPreparation(env, "unsupported_read_preparation")
 	}
-	if req, err = r.localWorkspace.Configure(req); err != nil {
+	req, err := r.localWorkspace.Configure(req)
+	if err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if req.RunID != "" || len(req.Input) != 0 || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" {
@@ -67,9 +65,6 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	}
 	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported()) {
 		return r.rejectPreparation(env, "unsupported_configuration")
-	}
-	if req.LocalEnvironment != nil && req.WorkspaceReadOnly {
-		prepare = prepareLocalDirectory
 	}
 	encoded, err := json.Marshal(req)
 	if err != nil {
@@ -81,7 +76,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	if r.runtimePreparation != nil || ((r.workspaceWrite != nil || r.workspaceExport != nil) && !req.WorkspaceReadOnly) {
+	if r.runtimePreparation != nil {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
@@ -107,37 +102,25 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), workspaceReadOnly: true, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
 	r.preparations[p.status.Handle], r.preparationRequests[p.requestID] = p, p
-	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })
+	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true) })
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
-	go r.prepareExecution(p, req, prepare)
+	go r.prepareExecution(p)
 	return nil
 }
 
-func (r *Router) prepareExecution(p *preparationState, req proto.PromptRequestPayload, prepare agent.PreparationFactory) {
+// prepareExecution readies a read-only preparation without starting a Harness.
+func (r *Router) prepareExecution(p *preparationState) {
 	defer r.shutdownWG.Done()
 	if !r.sendPreparation(p.requestID, p.trace, proto.PreparationStatusPayload{Handle: p.status.Handle, Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}) {
-		r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
-	}
-	var prepared agent.Prepared
-	var err error
-	if p.ctx.Err() == nil {
-		prepared, err = prepare(p.ctx, req)
-	} else {
-		err = p.ctx.Err()
-	}
-	if err == nil && prepared != nil && !p.workspaceReadOnly {
-		if _, ok := prepared.(agent.PreparedCancellation); !ok {
-			err = errors.New("executable preparation requires cross-transfer cancellation")
-		}
+		r.releasePreparation(p, "failed", "status_delivery_failed", false)
 	}
 	r.mu.Lock()
 	p.busy = false
-	p.prepared = prepared
-	ready := err == nil && prepared != nil && p.status.State == "preparing" && p.ctx.Err() == nil && !r.closed
+	ready := p.status.State == "preparing" && p.ctx.Err() == nil && !r.closed
 	if ready {
 		p.status.State, p.status.Revision = "ready", p.status.Revision+1
 	} else if p.status.State == "preparing" {
@@ -152,15 +135,10 @@ func (r *Router) prepareExecution(p *preparationState, req proto.PromptRequestPa
 	r.mu.Unlock()
 	if !ready {
 		r.closePreparationResource(p)
-		if p.workspaceReadOnly {
-			return
-		}
-		r.mu.Lock()
-		status = p.status
-		r.mu.Unlock()
+		return
 	}
-	if !r.sendPreparation(p.requestID, p.trace, status) && ready {
-		r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
+	if !r.sendPreparation(p.requestID, p.trace, status) {
+		r.releasePreparation(p, "failed", "status_delivery_failed", false)
 	}
 }
 
@@ -176,11 +154,11 @@ func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) e
 	if !valid {
 		return r.rejectPreparation(env, "unknown_preparation")
 	}
-	r.releasePreparation(p, "released", "", true, true)
+	r.releasePreparation(p, "released", "", true)
 	return nil
 }
 
-func (r *Router) releasePreparation(p *preparationState, state, code string, publish, retryHandoff bool) {
+func (r *Router) releasePreparation(p *preparationState, state, code string, publish bool) {
 	r.mu.Lock()
 	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
@@ -191,26 +169,6 @@ func (r *Router) releasePreparation(p *preparationState, state, code string, pub
 		r.abandonExecutorAdmission(p, state, code, publish)
 		return
 	}
-	if p.handoff != nil {
-		if active := r.sessions[p.status.RunID]; active != nil && active.preparedHandoff == p.handoff {
-			if state == "expired" && p.handoff.published {
-				r.mu.Unlock()
-				return
-			}
-			switch p.status.State {
-			case "preparing", "ready", "starting", "started":
-				p.status.State, p.status.ErrorCode, p.status.Revision = state, code, p.status.Revision+1
-				p.timer.Stop()
-			}
-			r.claimPreparedReleaseLocked(active, true, "", retryHandoff)
-			status := p.status
-			r.mu.Unlock()
-			if publish {
-				r.publishPreparation(p, status)
-			}
-			return
-		}
-	}
 	closeResource := false
 	switch p.status.State {
 	case "preparing", "ready", "starting":
@@ -219,9 +177,6 @@ func (r *Router) releasePreparation(p *preparationState, state, code string, pub
 		p.timer.Stop()
 	}
 	if p.owns && !p.busy {
-		if p.workspaceReadOnly && state == "released" && p.status.ErrorCode == "cleanup_unconfirmed" {
-			p.status.State, p.status.ErrorCode, p.status.Revision = state, "", p.status.Revision+1
-		}
 		p.busy = true
 		closeResource = true
 		r.shutdownWG.Add(1)
@@ -232,7 +187,7 @@ func (r *Router) releasePreparation(p *preparationState, state, code string, pub
 	if closeResource {
 		go func() { defer r.shutdownWG.Done(); r.closePreparationResource(p) }()
 	}
-	if publish && (!p.workspaceReadOnly || settled) {
+	if publish && settled {
 		r.publishPreparation(p, status)
 	}
 }
@@ -274,7 +229,7 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 		defer r.shutdownWG.Done()
 		// A failed terminal notification must not restart incomplete cleanup.
 		if !r.sendPreparation(p.requestID, p.trace, status) && (!p.workspaceReadOnly || status.State == "preparing" || status.State == "ready") {
-			r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
+			r.releasePreparation(p, "failed", "status_delivery_failed", false)
 		}
 	}()
 }

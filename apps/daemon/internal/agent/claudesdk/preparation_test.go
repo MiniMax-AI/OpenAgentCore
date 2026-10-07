@@ -5,12 +5,9 @@ package claudesdk
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -24,15 +21,15 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	req := preparationRequest()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
-	result := make(chan agent.Prepared, 1)
+	result := make(chan agent.Executor, 1)
 	failed := make(chan error, 1)
 	go func() {
-		p, err := NewPreparationFactory(config)(ctx, req)
+		e, err := NewExecutorFactory(config)(ctx, req)
 		if err != nil {
 			failed <- err
 			return
 		}
-		result <- p
+		result <- e
 	}()
 	raw := waitPreparationFile(t, filepath.Join(config.StateDir, "prepare.json"))
 	select {
@@ -45,17 +42,17 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(config.StateDir, "ready"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	var preparedResource agent.Prepared
+	var resource agent.Executor
 	select {
-	case preparedResource = <-result:
+	case resource = <-result:
 	case err := <-failed:
 		t.Fatal(err)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
-	p := preparedResource.(*prepared)
-	defer p.Cancel(context.Background())
-	pid := p.session.process.Cmd.Process.Pid
+	e := resource.(*executor)
+	defer e.Close(context.Background())
+	pid := e.base.process.Cmd.Process.Pid
 	if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
 		t.Fatal("preparation submitted input")
 	}
@@ -68,24 +65,17 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	}
 	config.Env[0] = "ANTHROPIC_AUTH_TOKEN=changed"
 	config.Workspace.Directory = "/changed"
-	config.Workspace.Directory = "/changed"
 	req.AgentOptions["model"] = "changed"
 	req.AgentSessionID = "changed"
 	out := make(chan proto.Envelope, 16)
 	operation, stopOperation := context.WithCancel(ctx)
-	s, err := p.Start(operation, "actual-run", proto.TextInput("hello"), out)
+	turn, err := e.StartTurn(operation, "actual-run", proto.TextInput("hello"), out)
 	stopOperation()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.(*session).owner != p.executor || s.(*session).process.Cmd.Process.Pid != pid {
-		t.Fatal("Start replaced the prepared native process")
-	}
-	if err := p.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := p.Start(ctx, "duplicate", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
-		t.Fatal("duplicate Start was accepted")
+	if turn.(*session).owner != e || turn.(*session).process.Cmd.Process.Pid != pid {
+		t.Fatal("StartTurn replaced the prepared native process")
 	}
 	var done proto.DonePayload
 	for event := range out {
@@ -107,7 +97,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 }
 
 func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T) {
-	for _, name := range []string{"run", "prompt", "attachments", "subagents", "workspace-missing", "none", "functions", "mcp", "controls", "old-runtime"} {
+	for _, name := range []string{"run", "prompt", "attachments", "subagents", "none", "functions", "mcp", "controls", "old-runtime"} {
 		t.Run(name, func(t *testing.T) {
 			config := preparationFixture(t, name)
 			req := preparationRequest()
@@ -120,8 +110,6 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 				req.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 			case "subagents":
 				req.ObserveSubagentIdentities = true
-			case "workspace-missing":
-				config.Workspace = nil
 			case "none":
 				req.DisableExecutionEnvironment = true
 			case "functions":
@@ -131,7 +119,7 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 			case "controls":
 				req.ExecutionControls = &proto.ExecutionControls{WebSearch: "enabled", TextVerbosity: "medium"}
 			}
-			if _, err := NewPreparationFactory(config)(t.Context(), req); err == nil {
+			if _, err := NewExecutorFactory(config)(t.Context(), req); err == nil {
 				t.Fatal("invalid preparation was accepted")
 			}
 			if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
@@ -147,7 +135,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 			config := preparationFixture(t, mode)
 			owner, stop := context.WithCancel(t.Context())
 			defer stop()
-			resource, err := NewPreparationFactory(config)(owner, preparationRequest())
+			resource, err := NewExecutorFactory(config)(owner, preparationRequest())
 			if mode == "history-missing" || mode == "invalid-receipt" {
 				if err == nil || mode == "history-missing" && !strings.Contains(err.Error(), "history_unavailable") {
 					t.Fatal("preparation failure was lost", err)
@@ -157,15 +145,15 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			p := resource.(*prepared)
-			defer p.Cancel(context.Background())
+			e := resource.(*executor)
+			defer e.Close(context.Background())
 			switch mode {
 			case "close":
-				err = p.Close()
+				err = e.Close(t.Context())
 			case "owner-cancel":
 				stop()
 			case "native-exit":
-				err = p.session.process.Cmd.Process.Signal(syscall.SIGKILL)
+				err = e.base.process.Cmd.Process.Signal(syscall.SIGKILL)
 			case "invalid-start", "cancelled-start":
 				operation, cancel := context.WithCancel(t.Context())
 				prompt := ""
@@ -173,150 +161,24 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 					prompt = "hello"
 					cancel()
 				}
-				_, startErr := p.Start(operation, "run", proto.TextInput(prompt), make(chan proto.Envelope, 8))
+				_, startErr := e.StartTurn(operation, "run", proto.TextInput(prompt), make(chan proto.Envelope, 8))
 				cancel()
 				if startErr == nil {
-					t.Fatal("invalid or cancelled Start succeeded")
+					t.Fatal("invalid or cancelled StartTurn succeeded")
 				}
-				err = p.Close()
+				err = e.Close(t.Context())
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
 			select {
-			case <-p.executor.done:
+			case <-e.done:
 			case <-time.After(5 * time.Second):
 				t.Fatal("unused process was not settled")
 			}
-			if _, err := p.Start(t.Context(), "late", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
-				t.Fatal("released preparation was reusable")
-			}
-			if got := p.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
-				t.Fatal("unstarted process fabricated an execution outcome", got)
+			if _, err := e.StartTurn(t.Context(), "late", proto.TextInput("hello"), make(chan proto.Envelope, 8)); err == nil {
+				t.Fatal("released Executor was reusable")
 			}
 		})
-	}
-}
-
-func TestPreparedCancellationKeepsOwnershipUntilOutputDrain(t *testing.T) {
-	config := preparationFixture(t, "cancellation")
-	owner, stop := context.WithTimeout(t.Context(), 10*time.Second)
-	defer stop()
-	resource, err := NewPreparationFactory(config)(owner, preparationRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := resource.(*prepared)
-	defer p.Cancel(context.Background())
-	out := make(chan proto.Envelope)
-	operation, stopOperation := context.WithCancel(owner)
-	if _, err := p.Start(operation, "run", proto.TextInput("hello"), out); err != nil {
-		t.Fatal(err)
-	}
-	stopOperation()
-	if err := p.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if event := <-out; event.Type != proto.TypeDelta {
-		t.Fatal("operation cancellation or Close cancelled the Session")
-	}
-	short, cancel := context.WithTimeout(owner, 30*time.Millisecond)
-	err = p.Cancel(short)
-	cancel()
-	if !errors.Is(err, context.DeadlineExceeded) || !reflect.DeepEqual(p.CancellationOutcome(), proto.DonePayload{}) {
-		t.Fatal("pending output drain reported settled ownership", err)
-	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.Cancel(owner); err != nil {
-		t.Fatal(err)
-	}
-	got := p.CancellationOutcome()
-	if got.Content != "partialtaildrained" || got.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || got.Usage.Raw["claude_sdk_result"] == nil {
-		t.Fatal("cancellation across transfer lost observed output", got)
-	}
-	for range out {
-	}
-}
-
-func TestPreparedStartRacesCloseAndCancellation(t *testing.T) {
-	for _, cancelResource := range []bool{false, true} {
-		for range 6 {
-			config := preparationFixture(t, "success")
-			resource, err := NewPreparationFactory(config)(t.Context(), preparationRequest())
-			if err != nil {
-				t.Fatal(err)
-			}
-			p := resource.(*prepared)
-			out := make(chan proto.Envelope, 16)
-			var running agent.Session
-			var startErr error
-			var wg sync.WaitGroup
-			wg.Add(2)
-			go func() {
-				defer wg.Done()
-				running, startErr = p.Start(t.Context(), "run", proto.TextInput("hello"), out)
-			}()
-			go func() {
-				defer wg.Done()
-				if cancelResource {
-					_ = p.Cancel(t.Context())
-				} else {
-					_ = p.Close()
-				}
-			}()
-			wg.Wait()
-			if startErr == nil {
-				if running == nil {
-					t.Fatal("successful transfer lost its Session")
-				}
-				for range out {
-				}
-			}
-			if err := p.Cancel(t.Context()); err != nil {
-				// A racing Close can confirm resource cleanup without proving the Turn result.
-				if closeErr := p.executor.Close(t.Context()); closeErr != nil {
-					t.Fatal(closeErr)
-				}
-			}
-			select {
-			case <-p.session.process.Done():
-			default:
-				t.Fatal("race left the owned process alive")
-			}
-		}
-	}
-}
-
-func TestPreparedConcurrentStartTransfersOnlyOnce(t *testing.T) {
-	config := preparationFixture(t, "success")
-	resource, err := NewPreparationFactory(config)(t.Context(), preparationRequest())
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := resource.(*prepared)
-	defer p.Cancel(context.Background())
-	results := make(chan bool, 2)
-	var wg sync.WaitGroup
-	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			out := make(chan proto.Envelope, 16)
-			_, err := p.Start(t.Context(), "run", proto.TextInput("hello"), out)
-			results <- err == nil
-			if err == nil {
-				for event := range out {
-					if event.Type == proto.TypeError {
-						t.Error("losing Start cancelled the transferred Session")
-					}
-				}
-			}
-		}()
-	}
-	wg.Wait()
-	if first, second := <-results, <-results; first == second {
-		t.Fatal("concurrent Start did not produce exactly one owner")
 	}
 }

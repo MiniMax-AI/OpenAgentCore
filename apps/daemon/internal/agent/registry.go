@@ -13,7 +13,6 @@ import (
 // factories for each agent_kind. Safe for concurrent use.
 type Registry struct {
 	mu             sync.RWMutex
-	preparers      map[string]PreparationFactory
 	executors      map[string]ExecutorFactory
 	kinds          map[string]proto.SupportedAgentKind
 	configurations map[string]harnessconfig.Configuration
@@ -21,7 +20,6 @@ type Registry struct {
 
 func NewRegistry() *Registry {
 	return &Registry{
-		preparers:      make(map[string]PreparationFactory),
 		executors:      make(map[string]ExecutorFactory),
 		kinds:          make(map[string]proto.SupportedAgentKind),
 		configurations: make(map[string]harnessconfig.Configuration),
@@ -57,14 +55,4 @@ func (r *Registry) ResolveExecutor(kind string) (ExecutorFactory, error) {
 		return nil, fmt.Errorf("agent: executor unavailable for %q", kind)
 	}
 	return factory, nil
-}
-
-func (r *Registry) ResolvePreparation(kind string) (PreparationFactory, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	f := r.preparers[kind]
-	if f == nil {
-		return nil, fmt.Errorf("agent: preparation unavailable for %q", kind)
-	}
-	return f, nil
 }

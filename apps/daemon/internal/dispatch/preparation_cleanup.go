@@ -1,31 +1,13 @@
 package dispatch
 
-func (r *Router) closePreparationResource(p *preparationState) error {
+func (r *Router) closePreparationResource(p *preparationState) {
 	// Only the operation that owns busy calls this; other paths cancel its owner.
-	var err error
-	if p.prepared != nil {
-		err = p.prepared.Close()
-	}
 	r.mu.Lock()
-	p.busy, p.closeErr = false, err
-	if err == nil {
-		p.prepared, p.owns = nil, false
-	}
-	if p.workspaceReadOnly {
-		p.status.Revision++
-		if err != nil {
-			p.status.State, p.status.ErrorCode = "failed", "cleanup_unconfirmed"
-		}
-	}
+	p.busy, p.owns = false, false
+	p.status.Revision++
 	status := p.status
 	r.mu.Unlock()
-	if p.workspaceReadOnly {
-		r.publishPreparation(p, status)
-	}
-	if err != nil {
-		r.log.Warn("preparation cleanup incomplete", "handle", p.status.Handle)
-	}
-	return err
+	r.publishPreparation(p, status)
 }
 
 func (r *Router) closePendingPreparationsLocked() []*preparationState {
@@ -36,9 +18,6 @@ func (r *Router) closePendingPreparationsLocked() []*preparationState {
 			continue
 		}
 		if !p.owns {
-			continue
-		}
-		if p.handoff != nil {
 			continue
 		}
 		p.cancel()

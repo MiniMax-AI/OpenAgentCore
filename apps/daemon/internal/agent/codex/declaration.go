@@ -61,18 +61,9 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	caps := &runtime.Info.Capabilities
 	caps.NativeSessionRecovery = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	caps.LocalEnvironment = proto.CapabilityFromBool(SupportsLocalEnvironment(version))
+	caps.WorkspaceReadPreparation = caps.LocalEnvironment
 	caps.MCPHTTPRequired = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	runtime.Executor = NewExecutorFactory()
-	if caps.LocalEnvironment.IsSupported() {
-		runtime.WorkspaceReadPreparation = true
-		runtime.Preparation = func(ctx context.Context, req proto.PromptRequestPayload) (agent.Prepared, error) {
-			prepared, err := Prepare(ctx, req)
-			if prepared == nil {
-				return nil, err
-			}
-			return prepared, err
-		}
-	}
 	fmt.Fprintf(options.Stdout, "Codex preflight ok (%s)\n", version)
 	return runtime
 }

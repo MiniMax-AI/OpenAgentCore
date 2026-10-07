@@ -29,8 +29,8 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	}
 	var harnessCalls atomic.Int32
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
-	reg.RegisterPreparation("native", true, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	reg.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		harnessCalls.Add(1)
 		return nil, errors.New("must not prepare a harness")
 	})
@@ -108,8 +108,8 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
-	reg.RegisterPreparation("native", true, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	reg.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}

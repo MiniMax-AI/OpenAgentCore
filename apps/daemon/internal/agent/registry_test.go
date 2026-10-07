@@ -36,24 +36,16 @@ func TestRegistryRegisterPanicsOnEmptyKind(t *testing.T) {
 func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
 	info := proto.SupportedAgentKind{Kind: "k", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}
 	executor := func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil }
-	preparation := func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return nil, nil }
-	for name, runtime := range map[string]agent.Runtime{
-		"executor":    {Info: info, Executor: executor},
-		"preparation": {Info: info, Preparation: preparation},
-	} {
-		t.Run(name, func(t *testing.T) {
-			registry := agent.NewRegistry()
-			defer func() {
-				if recover() == nil {
-					t.Fatal("unavailable runtime registered factories")
-				}
-				if len(registry.SupportedAgentKinds()) != 0 {
-					t.Fatal("rejected runtime changed registry")
-				}
-			}()
-			registry.Register(agent.Declaration{Info: info}, runtime)
-		})
-	}
+	registry := agent.NewRegistry()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("unavailable runtime registered factories")
+		}
+		if len(registry.SupportedAgentKinds()) != 0 {
+			t.Fatal("rejected runtime changed registry")
+		}
+	}()
+	registry.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Executor: executor})
 }
 
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {

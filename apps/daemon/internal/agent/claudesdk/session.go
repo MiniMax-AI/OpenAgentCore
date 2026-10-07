@@ -72,23 +72,6 @@ func launch(ctx context.Context, config Config, start startRequest, env []string
 	return &session{process: process, writeMu: &sync.Mutex{}, functions: functionState{calls: map[string]*pendingFunction{}}, settled: make(chan struct{})}, nil
 }
 
-func (s *session) drain(scanner *bridgeOutput, stderrDone <-chan struct{}, failure error) (error, bool) {
-	for scanner.Scan() {
-	}
-	if scanner.Err() != nil {
-		failure = fmt.Errorf("claudesdk: SDK bridge output read failed")
-		s.process.Cancel()
-	}
-	<-stderrDone
-	s.stopWorkspaceReads()
-	s.stopWorkspaceDirectories()
-	waitErr := s.process.Wait()
-	if waitErr != nil && failure == nil {
-		failure = fmt.Errorf("claudesdk: SDK process failed")
-	}
-	return failure, scanner.Err() == nil && waitErr == nil
-}
-
 func bridgeFailure(code string) error {
 	switch code {
 	case "invalid_request", "history_unavailable", "execution_failed", "cancelled":
