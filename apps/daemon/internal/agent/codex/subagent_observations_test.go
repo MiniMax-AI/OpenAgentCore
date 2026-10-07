@@ -75,11 +75,14 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 		t.Fatal(err)
 	}
 	f.persist(t)
-	s := &Session{runID: "run", nativeHome: agent.ViewDir{Host: f.home, View: f.home}, rpc: client.JSONRPCClient, out: out, cancelCtx: ctx, cancelFn: cancel, cfg: defaultSessionConfig(), bufs: NewItemBuffers()}
+	s := &Session{runID: "run", nativeHome: agent.ViewDir{Host: f.home, View: f.home}, rpc: client.JSONRPCClient, out: out, cancelCtx: ctx, cancelFn: cancel, cfg: defaultSessionConfig(), bufs: NewItemBuffers(),
+		waitDone: make(chan struct{}), outputDone: make(chan struct{})}
 	s.setThreadID("root")
 	s.beginRootTurn("root", "root-turn")
 	s.startSubagentObservations()
 	s.registerHandlers()
+	// Settle as Executor.StartTurn does after a confirmed native start.
+	go s.settleExecutorTurn(nil)
 	go func() {
 		decoder := json.NewDecoder(server.FromClient)
 		for {
@@ -98,6 +101,8 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 				result = map[string]any{"thread": f.history(id)}
 			case "thread/turns/list":
 				result = map[string]any{"data": f.history(id).Turns, "nextCursor": nil}
+			case "thread/backgroundTerminals/list":
+				result = map[string]any{"data": []any{}}
 			case "thread/list":
 				result = map[string]any{"data": []any{map[string]any{"id": "child", "parentThreadId": "root", "createdAt": 100, "agentNickname": "Child", "source": map[string]any{"subAgent": map[string]any{"thread_spawn": map[string]any{"parent_thread_id": "root"}}}}}, "nextCursor": nil}
 			case "turn/interrupt":
@@ -131,6 +136,8 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 	})
 	return s, f, out
 }
+
+var rootCompleted = json.RawMessage(`{"threadId":"root","turn":{"id":"root-turn","status":"completed"}}`)
 
 func collectObserved(t *testing.T, out <-chan proto.Envelope) []proto.Envelope {
 	t.Helper()
@@ -209,7 +216,7 @@ func TestSubagentRootFirstRetainsChildUntilTerminal(t *testing.T) {
 
 func TestSubagentCancellationAfterRootFrozenCollectsNativeTerminal(t *testing.T) {
 	s, f, out := observationSession(t, "inProgress")
-	s.emitDoneAt("frozen", nil, nil)
+	s.onTurnCompleted(rootCompleted)
 	for i := 0; i < 4; i++ {
 		select {
 		case <-out:

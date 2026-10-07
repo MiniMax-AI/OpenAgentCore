@@ -39,18 +39,17 @@ func defaultSessionConfig() sessionConfig {
 	}
 }
 
-// Session implements agent.Session. State lifecycle:
+// Session is one Executor Turn. State lifecycle:
 //
-//  1. Preparation initializes RPC and verifies the selected environment.
-//  2. Start transfers that RPC and wires notification/server-request handlers.
-//  3. thread/start or thread/resume runs (resume falls back to start).
+//  1. Executor preparation initializes RPC and verifies the selected environment.
+//  2. StartTurn wires notification/server-request handlers on that RPC.
+//  3. The first Turn runs thread/start or thread/resume.
 //  4. turn/start delivers the user prompt; subsequent stream notifications
 //     fan out to proto.Envelope via session_items.go.
-//  5. turn/completed emits TypeDone + closes out. Cancel can short-cut
-//     this by killing the child early.
+//  5. turn/completed emits TypeDone and closes out. Cancel interrupts the
+//     native turn; settlement decides whether the Executor stays reusable.
 type Session struct {
 	retiredTurns              map[string]bool
-	executor                  *Executor
 	outputDone                chan struct{}
 	nativeSettled             atomic.Bool
 	settlement                agent.TurnSettlement
@@ -82,7 +81,6 @@ type Session struct {
 	outMu        sync.RWMutex
 	outClosed    bool
 	waitDone     chan struct{}
-	cleanup      func()
 
 	threadIDMu sync.Mutex
 	threadID   string
@@ -220,7 +218,6 @@ func (s *Session) onTurnCompleted(raw json.RawMessage) {
 			body = appendOnNewline(body, errText)
 		}
 		s.emitTerminalFailure(body, true, classifyTurnError(p.Turn.Error))
-		s.finishAfterTerminal()
 		return
 	}
 	var completedAt *int64
@@ -286,7 +283,6 @@ func (s *Session) onTurnFailed(raw json.RawMessage) {
 		"turn_status", p.Turn.Status,
 		"last_err_text_present", s.peekLastErrText() != "")
 	s.emitTerminal("codex: turn failed", true)
-	s.finishAfterTerminal()
 }
 
 func (s *Session) onErrorNotif(raw json.RawMessage) {
@@ -369,9 +365,7 @@ func (s *Session) emitTerminal(message string, asError bool) {
 }
 
 func (s *Session) emitTerminalFailure(message string, asError bool, failure proto.ErrorPayload) {
-	if s.executor != nil {
-		defer s.finishAfterTerminal()
-	}
+	defer s.finishAfterTerminal()
 	if !s.terminal.CompareAndSwap(false, true) {
 		return
 	}

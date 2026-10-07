@@ -16,7 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestFunctionFactoryNativeReceipts(t *testing.T) {
+func TestFunctionTurnNativeReceipts(t *testing.T) {
 	for _, mode := range []string{"functions-success", "functions-wrong-receipt", "functions-no-receipt", "functions-cancel"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()

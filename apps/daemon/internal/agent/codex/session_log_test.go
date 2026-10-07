@@ -247,7 +247,10 @@ func drainEnvelopes(out <-chan proto.Envelope) []proto.Envelope {
 	var got []proto.Envelope
 	for {
 		select {
-		case env := <-out:
+		case env, open := <-out:
+			if !open {
+				return got
+			}
 			got = append(got, env)
 		default:
 			return got

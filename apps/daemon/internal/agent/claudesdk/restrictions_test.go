@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestTextFactoryAcceptsRestrictiveCapabilities(t *testing.T) {
+func TestTextTurnAcceptsRestrictiveCapabilities(t *testing.T) {
 	for _, test := range []struct {
 		name                   string
 		environment, subagents bool

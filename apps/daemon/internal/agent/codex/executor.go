@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -14,30 +15,18 @@ import (
 // Executor owns the prepared process, fixed plan and native thread. Each StartTurn
 // creates independent receipt, observation, cancellation and output ownership.
 type Executor struct {
-	mu       sync.Mutex
-	prepared *Prepared
-	active   *Session
-	closed   bool
-	closeMu  sync.Mutex
+	mu                           sync.Mutex
+	base                         *Session
+	plan                         SessionPlan
+	resumeID                     string
+	requireExistingNativeSession bool
+	active                       *Session
+	closed                       bool
+	closeMu                      sync.Mutex
 }
 
 func PrepareExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 	return newExecutor(ctx, req, defaultSessionConfig())
-}
-
-func newExecutor(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
-	p, err := newPreparation(ctx, req, cfg)
-	if err != nil {
-		if p != nil {
-			return &Executor{prepared: p}, err
-		}
-		return nil, err
-	}
-	p.mu.Lock()
-	p.started = true
-	close(p.transferred)
-	p.mu.Unlock()
-	return &Executor{prepared: p}, nil
 }
 
 func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
@@ -48,7 +37,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 		return nil, err
 	}
 	e.mu.Lock()
-	base := e.prepared.session
+	base := e.base
 	if e.closed || base.cancelCtx.Err() != nil || !base.rpc.Alive() {
 		e.mu.Unlock()
 		return nil, errors.New("codex: executor unavailable")
@@ -68,10 +57,10 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	}
 	functions := &functionCalls{definitions: base.functions.definitions, names: base.functions.names, pending: map[string]*pendingFunction{}}
 	turnCtx, cancel := context.WithCancel(base.cancelCtx)
-	s := &Session{executor: e, nativeHome: base.nativeHome,
+	s := &Session{nativeHome: base.nativeHome,
 		functions: functions, observeMessages: base.observeMessages, observeSubagentIdentities: base.observeSubagentIdentities,
 		cfg: base.cfg, rpc: base.rpc, cancelCtx: turnCtx, cancelFn: cancel,
-		waitDone: make(chan struct{}), outputDone: make(chan struct{}), cleanup: func() {},
+		waitDone: make(chan struct{}), outputDone: make(chan struct{}),
 		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, runID: runID, out: out}
 	if previous != nil {
 		s.threadID = previous.currentThreadID()
@@ -93,13 +82,39 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	}
 	s.registerHandlers()
 	e.mu.Unlock()
-	req := proto.PromptRequestPayload{RunID: runID, Input: input, AgentSessionID: e.prepared.resumeID, RequireExistingNativeSession: e.prepared.requireExistingNativeSession}
 	// Ownership precedes any native submission. Even an uncertain start returns the
 	// exact Turn so its caller can await settlement without replaying the input.
-	err := s.startNative(ctx, e.prepared.plan, req)
+	var err error
+	if s.currentThreadID() == "" {
+		err = s.resolveThread(proto.PromptRequestPayload{AgentSessionID: e.resumeID, RequireExistingNativeSession: e.requireExistingNativeSession}, e.plan)
+	}
+	var native []UserInput
+	if err == nil {
+		native, err = nativeInput(input)
+	}
+	model := strings.TrimSpace(s.resolvedModel)
+	if err == nil && model == "" {
+		err = errors.New("codex: collaboration mode requires a resolved model")
+	}
+	if err == nil {
+		var developerInstructions *string
+		if instructions := e.plan.SystemPrompt; instructions != "" {
+			developerInstructions = &instructions
+		}
+		params := TurnStartParams{ThreadID: s.currentThreadID(), Input: native, CollaborationMode: &CollaborationMode{
+			Mode:     CollaborationModeDefault,
+			Settings: CollaborationModeSettings{ReasoningEffort: e.plan.ModelReasoningEffort, Model: model, DeveloperInstructions: developerInstructions},
+		}}
+		startCtx, stop := context.WithTimeout(ctx, 10*time.Second)
+		_, err = s.rpc.requestWithResult(startCtx, "turn/start", params, s.bindTurnResult)
+		stop()
+		if err != nil {
+			s.cfg.logger.Warn("codex: turn/start ack failed", "run_id", runID, "err", err)
+			err = fmt.Errorf("codex: turn/start: %w", err)
+		}
+	}
 	if err != nil {
 		s.emitTerminal("codex: native start failed", true)
-		s.finishAfterTerminal()
 	}
 	go s.settleExecutorTurn(err)
 	return s, err
@@ -113,7 +128,7 @@ func (e *Executor) Close(ctx context.Context) error {
 	go func() {
 		e.closeMu.Lock()
 		defer e.closeMu.Unlock()
-		base := e.prepared.session
+		base := e.base
 		e.mu.Lock()
 		running := e.active
 		e.mu.Unlock()
@@ -158,7 +173,7 @@ func (e *Executor) Close(ctx context.Context) error {
 			err = base.rpc.awaitReaders(ctx)
 		}
 		if err == nil {
-			e.prepared.plan.Cleanup()
+			e.plan.Cleanup()
 		}
 		done <- err
 	}()

@@ -71,7 +71,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 		}
 	})
 	t.Logf("native_version=0.153.4 prepare_ms=%d", time.Since(began).Milliseconds())
-	pid := e.prepared.session.rpc.process.Cmd.Process.Pid
+	pid := e.base.rpc.process.Cmd.Process.Pid
 	var thread string
 	run := func(id, prompt string, old agent.Turn, interrupt bool) (agent.Turn, string) {
 		t.Helper()
@@ -159,7 +159,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 	if err := e.Close(ctx); err != nil {
 		t.Fatal("native final cleanup failed")
 	}
-	if e.prepared.session.rpc.Alive() {
+	if e.base.rpc.Alive() {
 		t.Fatal("native child remained alive after owner close")
 	}
 }

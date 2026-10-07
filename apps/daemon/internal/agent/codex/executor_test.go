@@ -107,7 +107,7 @@ func TestExecutorNormalTurnsKeepProcessAndThread(t *testing.T) {
 	if counts["initialize"] != 1 || counts["thread/start"] != 1 || counts["turn/start"] != 2 || counts["turn/interrupt"] != 0 || len(pids) != 1 {
 		t.Fatal(counts, pids)
 	}
-	if !e.prepared.session.rpc.Alive() {
+	if !e.base.rpc.Alive() {
 		t.Fatal("normal completion closed executor")
 	}
 }
@@ -124,7 +124,7 @@ func TestExecutorFreezesPreparedConfiguration(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertPreparationOnly(t, root)
-			cwd := e.prepared.plan.Cwd
+			cwd := e.plan.Cwd
 			// Caller-owned data cannot revise the prepared native configuration.
 			req.Model = "different-model"
 			req.AgentSessionID = "different-thread"
@@ -183,7 +183,7 @@ func TestExecutorUnavailableOwnerStartsNoTurn(t *testing.T) {
 			case "owner cancelled":
 				cancelOwner()
 			case "rpc exited":
-				err = e.prepared.session.rpc.Close()
+				err = e.base.rpc.Close()
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -292,7 +292,7 @@ func TestExecutorCloseRetainsPlanUntilReaped(t *testing.T) {
 	t.Cleanup(func() { process.Cancel(); reap.Do(rpc.waitChild) })
 	_, cancel := context.WithCancel(t.Context())
 	var cleaned atomic.Bool
-	e := &Executor{prepared: &Prepared{session: &Session{rpc: rpc, cancelFn: cancel}, plan: SessionPlan{Cleanup: func() { cleaned.Store(true) }}}}
+	e := &Executor{base: &Session{rpc: rpc, cancelFn: cancel}, plan: SessionPlan{Cleanup: func() { cleaned.Store(true) }}}
 	ctx, stop := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer stop()
 	if err = e.Close(ctx); !errors.Is(err, context.DeadlineExceeded) {
@@ -328,7 +328,7 @@ func TestExecutorCloseSeparatesTurnFailureFromResourceCleanup(t *testing.T) {
 	if err := e.Close(ctx); err != nil {
 		t.Fatal("failed Turn prevented confirmed resource cleanup", err)
 	}
-	if e.prepared.session.rpc.Alive() || len(preparedCatalogs(t, root)) != 0 {
+	if e.base.rpc.Alive() || len(preparedCatalogs(t, root)) != 0 {
 		t.Fatal("Close did not release native process and plan")
 	}
 	if _, err := turn.AwaitSettlement(ctx); err == nil {
@@ -360,7 +360,7 @@ func TestExecutorCloseTerminatesAfterMissingCancellationTerminal(t *testing.T) {
 	if err := e.Close(retry); err != nil {
 		t.Fatal("Close never retired the native process", err)
 	}
-	if e.prepared.session.rpc.Alive() || len(preparedCatalogs(t, root)) != 0 {
+	if e.base.rpc.Alive() || len(preparedCatalogs(t, root)) != 0 {
 		t.Fatal("unresponsive native process or plan still owned after Close")
 	}
 	select {

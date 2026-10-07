@@ -19,7 +19,7 @@ import (
 
 // Run only inside a separately qualified outer placement, with its pinned native
 // dependencies. This fixture does not create isolation or public admission.
-func TestLiveClaudeWorkspaceFactory(t *testing.T) {
+func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 	configFile := os.Getenv("OAC_TEST_CLAUDE_WORKSPACE_LIVE_CONFIG")
 	if configFile == "" {
 		t.Skip("requires explicit qualified placement and real provider configuration")

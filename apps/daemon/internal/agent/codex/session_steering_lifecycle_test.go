@@ -83,13 +83,8 @@ func TestBlockedSteeringWriteEndsRunWithTerminalFrames(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 8)
-	turnCtx, cancelTurn := context.WithCancel(ctx)
-	s := &Session{
-		executor: &Executor{}, runID: "run", rpc: client.JSONRPCClient, cancelCtx: turnCtx, cancelFn: cancelTurn, out: out, resolvedModel: "synthetic",
-		cfg: sessionConfig{logger: obslog.Bg()}, waitDone: make(chan struct{}), outputDone: make(chan struct{}), cleanup: func() {},
-		bufs: NewItemBuffers(),
-	}
-	s.registerHandlers()
+	e := &Executor{base: &Session{rpc: client.JSONRPCClient, cancelCtx: ctx, functions: &functionCalls{}, resolvedModel: "synthetic",
+		cfg: sessionConfig{logger: obslog.Bg()}}, plan: SessionPlan{Model: "synthetic"}}
 	ready := make(chan error, 1)
 	go func() {
 		decoder := json.NewDecoder(server.FromClient)
@@ -120,11 +115,14 @@ func TestBlockedSteeringWriteEndsRunWithTerminalFrames(t *testing.T) {
 		}
 		ready <- nil
 	}()
-	// Executor.StartTurn starts and settles each Turn through these two steps.
-	go s.settleExecutorTurn(s.startNative(ctx, SessionPlan{Model: "synthetic"}, proto.PromptRequestPayload{Input: proto.TextInput("first")}))
+	turn, err := e.StartTurn(ctx, "run", proto.TextInput("first"), out)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := <-ready; err != nil {
 		t.Fatal(err)
 	}
+	s := turn.(*Session)
 	callCtx, callCancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer callCancel()
 	if err := s.Steer(callCtx, proto.PromptSteerPayload{InputID: "blocked", Input: proto.TextInput("extra")}); err == nil {

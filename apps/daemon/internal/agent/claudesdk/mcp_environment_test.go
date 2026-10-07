@@ -20,7 +20,7 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/local", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "untrusted-package-command", Args: []string{"package-argument"}, EnvVars: []string{"MCP_TOKEN"}}},
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", BearerTokenEnvVar: "MCP_TOKEN"}, BearerToken: &token},
 	}}
-	start, env, err := prepare(config, req)
+	start, env, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,7 @@ import (
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
+func newExecutor(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		return nil, errors.New("codex: structured output is not qualified")
 	}
@@ -74,59 +74,55 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		rpc:                       rpc,
 		cancelCtx:                 cancelCtx,
 		cancelFn:                  cancelFn,
-		waitDone:                  make(chan struct{}),
-		cleanup:                   sync.OnceFunc(plan.Cleanup),
-		bufs:                      NewItemBuffers(),
 		resolvedModel:             plan.Model,
 	}
-	plan.Cleanup = s.cleanup
-	p := &Prepared{
-		session: s, plan: plan,
-		resumeID: req.AgentSessionID, requireExistingNativeSession: req.RequireExistingNativeSession,
-		transferred: make(chan struct{}),
-	}
+	plan.Cleanup = sync.OnceFunc(plan.Cleanup)
+	e := &Executor{base: s, plan: plan, resumeID: req.AgentSessionID, requireExistingNativeSession: req.RequireExistingNativeSession}
 
 	initParams := InitializeParams{
 		ClientInfo:   InitializeClientInfo{Name: "oac-daemon", Version: "0.0.0"},
 		Capabilities: &InitializeCapabilities{ExperimentalAPI: true},
 	}
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
-		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
+		return e.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
 		if err := verifyProgrammaticToolsDisabled(cancelCtx, rpc); err != nil {
-			return p.preparationFailed(err)
+			return e.preparationFailed(err)
 		}
 	}
 	if req.DisableExecutionEnvironment {
 		if err := verifyNoExecutionEnvironment(cancelCtx, rpc); err != nil {
-			return p.preparationFailed(err)
+			return e.preparationFailed(err)
 		}
 	}
 	if s.observeSubagentIdentities {
 		if err := verifySubagentObservationProfile(cancelCtx, rpc, plan.Cwd); err != nil {
-			return p.preparationFailed(err)
+			return e.preparationFailed(err)
 		}
 	}
 
 	if plan.mcpServers != nil {
 		if err := verifyMCPConfig(cancelCtx, rpc, plan); err != nil {
-			return p.preparationFailed(err)
+			return e.preparationFailed(err)
 		}
 	}
 	if len(skillRoots) > 0 {
 		if err := setSkillExtraRoots(cancelCtx, rpc, skillRoots); err != nil {
-			return p.preparationFailed(fmt.Errorf("codex: register skill root: %w", err))
+			return e.preparationFailed(fmt.Errorf("codex: register skill root: %w", err))
 		}
 	}
 
-	go p.watchOwner()
-	return p, nil
+	return e, nil
 }
 
-func (p *Prepared) preparationFailed(cause error) (*Prepared, error) {
-	if err := p.Close(); err != nil {
-		return p, errors.Join(cause, err)
+// preparationFailed releases the unused process and plan. An unconfirmed release
+// keeps them in the returned Executor for a later Close.
+func (e *Executor) preparationFailed(cause error) (*Executor, error) {
+	e.base.cancelFn()
+	if err := e.base.rpc.Close(); err != nil {
+		return e, errors.Join(cause, err)
 	}
+	e.plan.Cleanup()
 	return nil, cause
 }

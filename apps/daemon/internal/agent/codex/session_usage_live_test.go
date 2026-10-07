@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"runtime"
@@ -53,9 +52,10 @@ func TestUsagePublishedBeforeCompletion(t *testing.T) {
 }
 
 func TestUsageBackpressureKeepsSnapshotReadableAndCompletionOrdered(t *testing.T) {
-	s, _, server := cancellationTestSession(t)
+	client, server, cleanup := NewTestClient()
+	t.Cleanup(cleanup)
 	out := make(chan proto.Envelope, 1)
-	s.out = out
+	s := &Session{rpc: client.JSONRPCClient, cancelCtx: t.Context(), cfg: defaultSessionConfig(), out: out, bufs: NewItemBuffers()}
 	s.out <- proto.Envelope{Type: "occupied"}
 	s.registerHandlers()
 	s.setThreadID("thread")
@@ -90,35 +90,6 @@ func TestUsageBackpressureKeepsSnapshotReadableAndCompletionOrdered(t *testing.T
 	if err := <-written; err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestCancellationReleasesUsageBackpressure(t *testing.T) {
-	s, _, server := cancellationTestSession(t)
-	s.out = make(chan proto.Envelope, 1)
-	s.out <- proto.Envelope{Type: "occupied"}
-	s.registerHandlers()
-	s.setThreadID("thread")
-	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn"}}`))
-	requests := collectCancellationRequests(t, server, "response timeout")
-	written := make(chan error, 1)
-	go func() {
-		_, err := io.WriteString(server.ToClient, activeUsageNotification+"\n")
-		written <- err
-	}()
-	waitForUsageBackpressure(t, s)
-	assertReadableUsageSnapshot(t, s)
-	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Second)
-	defer cancel()
-	if err := s.Cancel(ctx); err != nil {
-		t.Fatal("cancellation could not release usage backpressure", err)
-	}
-	if s.cancelCtx.Err() == nil || len(<-requests) != 1 {
-		t.Fatal("native cancellation did not settle")
-	}
-	if err := <-written; err != nil {
-		t.Fatal(err)
-	}
-	assertReadableUsageSnapshot(t, s)
 }
 
 func waitForUsageBackpressure(t *testing.T, s *Session) {

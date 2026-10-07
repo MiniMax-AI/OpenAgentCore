@@ -58,13 +58,13 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}}
 			registry := agent.NewRegistry()
 			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfiguration.Configuration())
-			prepared := make(chan *Prepared, 1)
+			prepared := make(chan *Executor, 1)
 			registry.RegisterExecutor("codex", func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 				e, err := newExecutor(ctx, req, cfg)
 				if err != nil {
 					return nil, err
 				}
-				prepared <- e.prepared
+				prepared <- e
 				return e, nil
 			})
 			sender := make(preparationWireSender, 64)
@@ -117,7 +117,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			ready := await("ready")
 			p := <-prepared
 			assertPreparationOnly(t, root)
-			pid := p.session.rpc.process.Cmd.Process.Pid
+			pid := p.base.rpc.process.Cmd.Process.Pid
 			if r.ActiveRuns() != 0 {
 				t.Fatal("preparation became a Run")
 			}
@@ -140,7 +140,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				}
 				send(proto.TypeExecutionStart, "prepare-request", input)
 				send(proto.TypeExecutionRelease, "prepare-request", proto.ExecutionReleasePayload{Handle: ready.Handle})
-				if !p.session.rpc.Alive() || r.ActiveRuns() != 1 {
+				if !p.base.rpc.Alive() || r.ActiveRuns() != 1 {
 					t.Fatal("release cancelled transferred native session")
 				}
 				send(proto.TypePromptCancel, "actual-run", proto.PromptCancelPayload{})
@@ -150,7 +150,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err := r.Shutdown(ctx); err != nil {
 				t.Fatal(err)
 			}
-			waitPreparedRelease(t, p, root)
+			waitExecutorRelease(t, p, root)
 			if !start {
 				assertPreparationOnly(t, root)
 			}

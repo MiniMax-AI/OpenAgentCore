@@ -88,9 +88,6 @@ func (s *Session) settleExecutorTurn(startErr error) {
 }
 
 func (s *Session) beginOperation() bool {
-	if s.executor == nil {
-		return true
-	}
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
 	if s.operationsClosed {
@@ -99,13 +96,9 @@ func (s *Session) beginOperation() bool {
 	s.operations.Add(1)
 	return true
 }
-func (s *Session) endOperation() {
-	if s.executor != nil {
-		s.operations.Done()
-	}
-}
+func (s *Session) endOperation() { s.operations.Done() }
 
-func (s *Session) cancelExecutorTurn(ctx context.Context) error {
+func (s *Session) Cancel(ctx context.Context) error {
 	s.operationMu.Lock()
 	if s.operationsClosed {
 		s.operationMu.Unlock()
@@ -151,15 +144,13 @@ var _ agent.Turn = (*Session)(nil)
 // Server callbacks retain their originating Turn, whose ID must match exactly.
 func (s *Session) onServerRequest(method string, handler ServerRequestHandler) {
 	s.rpc.OnServerRequest(method, func(raw json.RawMessage, id any) (any, error) {
-		if s.executor != nil {
-			var scope struct {
-				ThreadID string `json:"threadId"`
-				TurnID   string `json:"turnId"`
-			}
-			if json.Unmarshal(raw, &scope) != nil || !s.isRootThread(scope.ThreadID) || s.terminal.Load() ||
-				scope.TurnID == "" || !s.isRootTurn(scope.ThreadID, scope.TurnID) {
-				return nil, errors.New("codex: request does not belong to the active turn")
-			}
+		var scope struct {
+			ThreadID string `json:"threadId"`
+			TurnID   string `json:"turnId"`
+		}
+		if json.Unmarshal(raw, &scope) != nil || !s.isRootThread(scope.ThreadID) || s.terminal.Load() ||
+			scope.TurnID == "" || !s.isRootTurn(scope.ThreadID, scope.TurnID) {
+			return nil, errors.New("codex: request does not belong to the active turn")
 		}
 		if !s.beginOperation() {
 			return nil, errors.New("codex: turn has settled")

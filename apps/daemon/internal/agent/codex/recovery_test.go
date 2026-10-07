@@ -165,8 +165,8 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if e.prepared.plan.Cwd != cwd {
-				t.Fatalf("cwd = %q, want %q", e.prepared.plan.Cwd, cwd)
+			if e.plan.Cwd != cwd {
+				t.Fatalf("cwd = %q, want %q", e.plan.Cwd, cwd)
 			}
 			assertPreparationOnly(t, root)
 			out := make(chan proto.Envelope, 16)
@@ -202,8 +202,8 @@ func TestRecoveryRequiresWritableAgentState(t *testing.T) {
 			case "read-only":
 				req.WorkspaceReadOnly = true
 			}
-			if p, err := newPreparation(t.Context(), req, cfg); err == nil {
-				p.Close()
+			if e, err := newExecutor(t.Context(), req, cfg); err == nil {
+				_ = e.Close(t.Context())
 				t.Fatal("invalid recovery admitted")
 			}
 			if len(preparationFrames(t, root)) != 0 {
