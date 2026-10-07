@@ -30,11 +30,19 @@ WHERE c.key_id = sqlc.arg(key_id) AND c.tenant_id = sqlc.arg(tenant_id)
     AND p.organization_id = sqlc.arg(organization_id) AND p.project_id = sqlc.arg(project_id);
 
 -- name: RotateExecutorCredential :one
-UPDATE environment_executor_credentials
-SET token_sha256 = sqlc.arg(token_sha256), issued_at = clock_timestamp(), revoked_at = NULL
-WHERE key_id = sqlc.arg(key_id) AND tenant_id = sqlc.arg(tenant_id)
-    AND subject_kind = sqlc.arg(subject_kind) AND subject_id = sqlc.arg(subject_id)
-RETURNING key_id, environment_id;
+-- Rotation advances the generation of the key's enrollments, so the Link
+-- authority refuses what the old secret served.
+WITH rotated AS (
+    UPDATE environment_executor_credentials
+    SET token_sha256 = sqlc.arg(token_sha256), issued_at = clock_timestamp(), revoked_at = NULL
+    WHERE key_id = sqlc.arg(key_id) AND tenant_id = sqlc.arg(tenant_id)
+        AND subject_kind = sqlc.arg(subject_kind) AND subject_id = sqlc.arg(subject_id)
+    RETURNING key_id, environment_id
+), advanced AS (
+    UPDATE sandbox_enrollments n SET generation = n.generation + 1
+    FROM rotated r WHERE n.executor_key_id = r.key_id
+)
+SELECT key_id, environment_id FROM rotated;
 
 -- name: RevokeExecutorCredential :execrows
 UPDATE environment_executor_credentials SET revoked_at = COALESCE(revoked_at, clock_timestamp())

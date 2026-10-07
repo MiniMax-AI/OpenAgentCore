@@ -220,23 +220,23 @@ func TestLinkAuthorityAgentHost(t *testing.T) {
 			t.Fatalf("Serve of another resource refused with %v, want %v", got, test.want)
 		}
 	}
-	if _, err := l.attach(l.resource.ID, l.serve); linkCode(err) != sandboxlink.AuthenticationFailed {
-		t.Fatal("a Serve credential attached", err)
-	}
 	if _, err := l.attach(l.device.ID, []byte(l.credential)); linkCode(err) != sandboxlink.AuthenticationFailed {
 		t.Fatal("an unmarked device attached", err)
 	}
 
 	l.exec("UPDATE devices SET agent_host = true WHERE id = $1", l.device.ID)
+	link, err := l.attach(l.device.ID, []byte(l.credential))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.attach(l.device.ID, l.serve); linkCode(err) != sandboxlink.AuthenticationFailed {
+		t.Fatal("a Serve credential attached", err)
+	}
 	ref, payload := l.bind()
 	if payload.Resource == nil || *payload.Resource != l.resource || len(payload.AttachGrant) == 0 {
 		t.Fatalf("agent host bind = %+v", payload)
 	}
 	grant := payload.AttachGrant
-	link, err := l.attach(l.device.ID, []byte(l.credential))
-	if err != nil {
-		t.Fatal(err)
-	}
 	file, err := l.open(link, sandboxlink.ServiceFile, ref, grant)
 	if err != nil {
 		t.Fatal(err)
@@ -367,6 +367,54 @@ func TestLinkAuthorityEnrollment(t *testing.T) {
 	if got := startLinkServe(t, srv, []byte(key.Token), resource.Ref()).refused(t); got != sandboxlink.AuthenticationFailed {
 		t.Fatal("a revoked executor key served", got)
 	}
+}
+
+// TestLinkAuthorityEnrollmentRotation checks that rotating an executor key
+// advances its enrollment's generation: the serve peer of the old secret stays
+// connected but no Open or renewal for the old generation is authorized, and
+// the new secret serves the new generation.
+func TestLinkAuthorityEnrollmentRotation(t *testing.T) {
+	l := newLinkHarness(t, false)
+	// The Session's Link resource becomes an enrollment of an executor key.
+	l.exec("UPDATE runtime_allocations SET serve_credential_hash = NULL WHERE id = $1", l.resource.ID)
+	l.exec(`UPDATE sessions SET configuration = jsonb_set(configuration, '{environment,type}', '"self_hosted"') WHERE id = $1`, l.session.ID)
+	principal := FixtureExecutorPrincipal(t, l.s, l.tenant)
+	key, err := sessionService(t, l.s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), l.session.Environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.resource.Kind, l.resource.ID = "enrollment", uuid.NewString()
+	l.exec("INSERT INTO sandbox_enrollments(id, environment_id, executor_key_id) VALUES($1, $2, $3)", l.resource.ID, l.resource.EnvironmentID, key.KeyID)
+	p := startLinkServe(t, l.relay, []byte(key.Token), l.resource.Ref())
+	within(t, p.connected)
+	l.exec("UPDATE devices SET agent_host = true WHERE id = $1", l.device.ID)
+	ref, payload := l.bind()
+	if payload.Resource == nil || *payload.Resource != l.resource {
+		t.Fatalf("agent host bind = %+v", payload)
+	}
+	link, err := l.attach(l.device.ID, []byte(l.credential))
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := l.open(link, sandboxlink.ServiceFile, ref, payload.AttachGrant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	within(t, p.binds)
+
+	rotated, err := sessionService(t, l.s).RotateExecutorCredential(t.Context(), principal, key.KeyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.open(link, sandboxlink.ServiceFile, ref, payload.AttachGrant); linkCode(err) != sandboxlink.StaleGeneration {
+		t.Fatal("an Open reached the old secret's serve peer", err)
+	}
+	if err := l.renew(link, file, payload.AttachGrant); linkCode(err) != sandboxlink.StaleGeneration {
+		t.Fatal("an attachment to the old secret's serve peer renewed", err)
+	}
+	next := l.resource
+	next.Generation++
+	within(t, startLinkServe(t, l.relay, []byte(rotated.Token), next.Ref()).connected)
 }
 
 // TestLinkAuthorityDestroyedAllocation checks that the Worker's cleanup of an
