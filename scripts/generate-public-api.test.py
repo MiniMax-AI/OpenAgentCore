@@ -51,6 +51,25 @@ class PublicAPITests(unittest.TestCase):
         self.assertIn('FutureField *string', generated)
         self.assertIn('json:"future_field,omitempty"', generated)
 
+    def test_generated_request_shapes_are_current(self):
+        owners = generator.extension_owners(self.bindings)
+        self.assertEqual(generator.request_shapes(self.source, owners), generator.SHAPES.read_bytes())
+
+    def test_new_official_members_and_values_reach_request_shapes(self):
+        source = copy.deepcopy(self.source)
+        schemas = source['components']['schemas']
+        schemas['McpTransportConfigParamStdio']['properties']['future_field'] = {'type': 'string'}
+        schemas['ServiceTierParam']['enum'].append('future_tier')
+        generated = generator.request_shapes(source, generator.extension_owners(self.bindings)).decode()
+        self.assertIn('{"future_field", shape{kind: stringValue}}', generated)
+        self.assertEqual(generated.count('"future_tier"'), 3)
+
+    def test_open_request_objects_are_rejected(self):
+        source = copy.deepcopy(self.source)
+        del source['components']['schemas']['McpTransportConfigParamStdio']['additionalProperties']
+        with self.assertRaisesRegex(ValueError, 'Unsupported open object'):
+            generator.request_shapes(source, generator.extension_owners(self.bindings))
+
     def test_stale_binding_cannot_add_a_public_field(self):
         bindings = copy.deepcopy(self.bindings)
         bindings['Vault']['fields'] = {'private_data': {'type': 'string'}}

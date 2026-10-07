@@ -36,7 +36,7 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 	}
 	var override v1.SavedAgentConfiguration
 	if err := json.Unmarshal(resolved.Configuration, &override); err != nil {
-		return v1.Agent{}, err
+		return v1.Agent{}, &storedDataError{err}
 	}
 	cfg := override
 	if saved != nil {
@@ -83,9 +83,6 @@ func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
 	}
 	if cfg.ServiceTier != "auto" {
 		return v1.Agent{}, errors.New("Execution currently supports service_tier=auto only.")
-	}
-	if err := validateTextVerbosity(cfg.Text.Verbosity); err != nil {
-		return v1.Agent{}, err
 	}
 	tools, err := resolveSessionTools(cfg.Tools)
 	if err != nil {

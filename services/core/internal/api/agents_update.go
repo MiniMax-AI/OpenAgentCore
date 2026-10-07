@@ -17,7 +17,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	command, err := resolveAgentUpdate(raw)
 	if err != nil {
-		if !writeFieldError(w, err) {
+		if !writeStoredDataError(w, r, err) && !writeFieldError(w, err) {
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 		}
 		return
@@ -33,33 +33,25 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 
 // resolveAgentUpdate returns the command without its tenant and Agent.
 func resolveAgentUpdate(raw []byte) (agents.UpdateCommand, error) {
-	if err := metadataTypeError(raw); err != nil {
-		return agents.UpdateCommand{}, err
-	}
-	if err := validateSavedAgentBody(raw, savedAgentUpdate); err != nil {
+	if err := validateSavedAgentBody(raw, updateAgentParams); err != nil {
 		return agents.UpdateCommand{}, err
 	}
 	if err := validateSavedCoreInput(raw); err != nil {
 		return agents.UpdateCommand{}, err
 	}
 	var request v1.UpdateAgentRequest
-	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
+	// The walks bound members and types, not integer ranges.
+	if json.Unmarshal(raw, &request) != nil {
 		return agents.UpdateCommand{}, errors.New("Request must be a JSON object containing supported fields.")
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return agents.UpdateCommand{}, err
-	}
-	if _, supplied := fields["model"]; supplied && request.Model == nil {
-		return agents.UpdateCommand{}, errors.New("model must be a string when supplied.")
-	}
+	_, fields := orderedMembers(raw)
 	normalized, err := resolveSavedFields(v1.CreateAgentRequest(request))
 	if err != nil {
 		return agents.UpdateCommand{}, err
 	}
 	var patch map[string]json.RawMessage
 	if err := json.Unmarshal(normalized.Configuration, &patch); err != nil {
-		return agents.UpdateCommand{}, err
+		return agents.UpdateCommand{}, &storedDataError{err}
 	}
 	if _, supplied := fields["x_agents_core"]; supplied && request.XAgentsCore == nil {
 		patch["x_agents_core"] = json.RawMessage(`null`)

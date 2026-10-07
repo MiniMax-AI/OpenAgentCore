@@ -93,9 +93,6 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 		if err := json.Unmarshal(request.Agent, &input.agentFields); err != nil {
 			return input, sessions.ErrInvalidInput
 		}
-		if _, supplied := input.agentFields["model"]; supplied && input.Agent.Model == nil {
-			return input, sessions.ErrInvalidInput
-		}
 	}
 	if len(request.AgentID) > 0 {
 		var id string

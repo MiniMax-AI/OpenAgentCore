@@ -83,7 +83,7 @@ Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitte
 }
 ```
 
-- `server_label` is nonempty and unique within the Session. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials, query or fragment. Nonempty `headers` and `request_metadata` are rejected.
+- `server_label` is nonempty and unique within the Session. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials, query or fragment. Nonempty `headers` and `request_metadata` and an inline `authorization` are rejected.
 - [Public MCP connection origin](./environments.md#public-mcp-connection-origin) owns origin defaults, placement and credential authority; [Harness capabilities](./harness-capabilities.md#tools) owns per-Harness support.
 - Omitted or null `allowed_tools` permits every server tool; `[]` permits none.
 - `required: true` makes native thread creation and cold resume wait for the server to initialize; a failure stops execution without replacing retained history. It needs the Runtime's `mcp_http_required` capability. Public work can be accepted or queued during the wait.

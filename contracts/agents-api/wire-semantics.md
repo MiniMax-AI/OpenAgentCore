@@ -162,7 +162,7 @@ Saving a value does not make it executable. Session creation admits a smaller se
 
 ### Configuration validation
 
-Agent create and update bodies and the inline `agent` of Session create are checked against the pinned shapes of `tools`, `text`, `reasoning`, `service_tier`, `multi_agent`, `model`, `name` and `instructions`, before their parsers and before Harness admission. Failures return 400 with type and code `invalid_request_error`:
+Agent create and update bodies and the inline `agent` of Session create are checked against the pinned shapes of `tools`, `text`, `reasoning`, `service_tier`, `multi_agent`, `model`, `name`, `instructions` and `metadata`, before their parsers and before Harness admission. Failures return 400 with type and code `invalid_request_error`:
 
 | Case | Param | Message |
 | --- | --- | --- |
@@ -175,7 +175,7 @@ Agent create and update bodies and the inline `agent` of Session create are chec
 | Function `parameters` with a string root `type` other than `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema with a string root `type` other than `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`, also on Agent requests |
 
-Within one object Core reports a union's `type` first, then unknown members, then member values in document order, then missing members; tools before `text`, and the whole object before the duplicate and schema-root checks. Schemas without a string root `type` are not checked. Function and output schemas, MCP `transport`, `request_metadata`, `metadata` and `x_agents_core` keep their own parsers. Update bodies and the inline Session agent are validated before the Agent lookup, so owned, foreign, missing and malformed Agent IDs give the same response.
+Within one object Core reports a union's `type` first, then unknown members, then member values in document order, then missing members in the pinned schema's order; tools before `text`, and the whole object before the duplicate and schema-root checks. Schemas without a string root `type` are not checked. Function and output schemas, `request_metadata` and `x_agents_core` keep their own parsers. Update bodies and the inline Session agent are validated before the Agent lookup, so owned, foreign, missing and malformed Agent IDs give the same response.
 
 Core saves values the pinned shapes allow even when it cannot run them: function names of any length, enabled programmatic tool calling, reasoning effort `max` and service tier `flex`.
 
