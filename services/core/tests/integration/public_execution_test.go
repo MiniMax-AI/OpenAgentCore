@@ -23,7 +23,7 @@ func publicSession(t *testing.T, h *dispatchHarness, key string) sessions.Sessio
 
 func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	h := newDispatchHarness(t)
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	h.session = publicSession(t, h, "public")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -60,7 +60,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	if err := request.DecodePayload(&prompt); err != nil {
 		t.Fatal(err)
 	}
-	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) {
+	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{TextVerbosity: "medium"}) {
 		t.Fatal(prompt)
 	}
 	bound, err := sessionAdapter(h.s).GetSessionDevice(ctx, h.tenant, h.session.ID)

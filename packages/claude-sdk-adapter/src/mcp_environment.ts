@@ -20,7 +20,7 @@ export function parseEnvironmentMCP(value: unknown): EnvironmentMCPServer[] | un
     if (!server || typeof server !== "object" || labels.has(server.server_label)) throw new Error("invalid_request");
     if ("command" in server) {
         if (Object.keys(server).some(key => !["server_label", "command", "args", "allowed_tools"].includes(key)) ||
-            typeof server.server_label !== "string" || !/^[a-zA-Z0-9_-]+$/.test(server.server_label) || server.server_label === "functions" || server.allowed_tools !== null ||
+            typeof server.server_label !== "string" || !server.server_label || server.allowed_tools !== null ||
             typeof server.command !== "string" || !isAbsolute(server.command) || normalize(server.command) !== server.command || /[\x00-\x1f\x7f]/.test(server.command) ||
             ("args" in server && (!Array.isArray(server.args) || server.args.length !== 4 || server.args[0] !== "runtime-mcp-exec" ||
             typeof server.args[1] !== "string" || !isAbsolute(server.args[1]) || normalize(server.args[1]) !== server.args[1] || server.args[1] === parse(server.args[1]).root ||

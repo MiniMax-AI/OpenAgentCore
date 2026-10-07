@@ -84,7 +84,7 @@ test('Chinese documentation preserves routes, source copies and heading anchors'
 
 test('Chinese landing and top navigation link to Chinese documentation', () => {
   const source = readFileSync(resolve(dist, 'zh/index.html'), 'utf8')
-  for (const page of ['docs/getting-started/', 'docs/api/public-agent-api', 'docs/architecture', 'contracts/agents-api/harness-capabilities']) {
+  for (const page of ['docs/getting-started/', 'docs/api/public-agent-api', 'docs/architecture', 'contracts/agents-api/#known-gaps']) {
     assert.ok(source.includes(`href="${base}zh/${page}"`), page)
   }
 })

@@ -45,7 +45,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
 
-Which operation each Harness supports on each placement is in the [Harness capabilities](./harness-capabilities.md). [Core wire behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
+Each Harness declares what it supports once, in `internal/harnessconfig/<kind>` ([Declare support](./harness-onboarding.md#declare-support)). [Core wire behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
 
 Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/public-agent-api.md#core-extensions-x_agents_core)). The Core administration API (`/core/v1`) and the machine API (`/api/v1`) are not part of the Agents API.
 
@@ -109,7 +109,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - Explicit reasoning effort or summary, service tiers other than `auto`, enabled `web_search` and enabled programmatic tool calling are saved but rejected at Session admission.
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
+- Harness support differs as each [declaration](./harness-onboarding.md#declare-support) states. Codex has no structured output or `tool_search`. Claude Code takes no whitespace-only text, `medium` verbosity only and function-result images only inline and in successful results; it rejects structured output with Subagents, MCP, installed capabilities or `tool_search`, and `tool_search` with MCP or installed capabilities. MiniMax Code has no public functions, no service-origin MCP, no image input, no whitespace-only text, no required MCP and `medium` verbosity only, and takes `allowed_tools` null only. Each Harness reserves an MCP `server_label`: `codex_apps` for Codex, `functions` for Claude Code and `oac_workspace` for MiniMax Code. Claude Code also requires labels to match `^[a-zA-Z0-9_-]+$` and `allowed_tools` names to match `^[a-zA-Z0-9_.-]+$`.
 - Model-derived reasoning defaults are not resolved.
 - MCP tools support the `http` transport only; `stdio` is rejected, and so is an inline `authorization` on a Session MCP transport ([HTTP MCP](./execution-tools.md#http-mcp)).
 
@@ -122,7 +122,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Behind the [credential gateway](./model-execution.md#credential-gateway), pinned Codex compacts history locally and never calls `/responses/compact`.
 - Claude Code and MiniMax Code report no public usage.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
-- Images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.
+- Message images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.
 
 **Environments and Templates**
 

@@ -81,7 +81,7 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 	token := "synthetic-catalog-secret"
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentStateKey: "catalog", DisableExecutionEnvironment: true, MCPHTTPServers: &servers,
-		Model: "fixture-model", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		Model: "fixture-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
 	plan, err := prepareSessionPlan(t.Context(), req, cfg)

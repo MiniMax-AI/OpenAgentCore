@@ -78,7 +78,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	providerRevision := uuid.New()
-	handler, err := publicHandler(t, h.s, auth, options.Engine, workerExecution(t, worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+	handler, err := publicHandler(t, h.s, auth, options.Engine, workerExecution(t, worker), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 		return &modelconfiguration.Snapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
 	}))
 	if err != nil {

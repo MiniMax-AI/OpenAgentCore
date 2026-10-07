@@ -59,9 +59,6 @@ export class FunctionBridge {
       throw new Error("Invalid function result.");
     }
     parseInputContent(result.content);
-    if (!result.success && result.content.some(part => part.type === "input_image")) {
-      throw new Error("Native error results cannot retain images.");
-    }
     const pending = this.pending.get(result.call_id);
     if (!pending || pending.result) throw new Error("Function result is not pending.");
     pending.result = result;

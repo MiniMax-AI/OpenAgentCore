@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // fakeStorage is a strict Storage fake: a call whose func is nil fails the test.
@@ -79,6 +80,17 @@ func TestCreateValidatesBeforeStorage(t *testing.T) {
 		if _, err := service.Create(context.Background(), command); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("Create = %v", err)
 		}
+	}
+}
+
+// A saved Agent's Harness rejects an unsupported combination at creation,
+// before storage and without a device, naming the request field.
+func TestCreateRejectsUnsupportedHarnessSelection(t *testing.T) {
+	service := newTestService(t, &fakeStorage{})
+	_, err := service.Create(context.Background(), CreateCommand{Configuration: json.RawMessage(`{"model":"a","x_agents_core":{"harness":"claude_sdk"},"multi_agent":{"enabled":true},"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}}`)})
+	var selection *proto.SelectionError
+	if !errors.As(err, &selection) || selection.Param != "text.format" {
+		t.Fatalf("Create = %v", err)
 	}
 }
 

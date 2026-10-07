@@ -24,29 +24,26 @@ Each physical connection has fresh routing, admission handles and transfer state
 
 ## Capability declarations
 
-`AgentKindCapabilities` in [`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available` and of Core's engine profile. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
+`AgentKindCapabilities` in [`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available`. It is the part of the Harness's [declaration](../contracts/agents-api/harness-onboarding.md#declare-support) that an installation narrows. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
 
 On the wire each field is a JSON boolean, and every field is present, including `false`. Encoding an incomplete declaration fails. Decoding rejects omitted, null, invalid and unknown fields, and a missing capability object. An invalid heartbeat clears the connection's admission snapshot and closes its transport; that establishes no native completion or cancellation result.
 
-Each admitted Executor and Turn keeps the declaration it was admitted with. A later heartbeat cannot add operations to an existing owner. Optional operations check this snapshot before any native call; the presence of a Go interface never grants support. A declared operation that returns `agent.ErrUnsupportedOperation` is a contract violation, distinct from unavailability, a failed native call or an uncertain write. Uncertain operations keep their receipts and ownership and are never replayed automatically. A Runtime declares `local_environment` and `environment_none` only where both the Harness and its [Environment owner](#session-assignments) support them, and `workspace_read_preparation` and `workspace_output_export` exactly where it declares `local_environment`, never from a Harness adapter.
+Each admitted Executor and Turn keeps the declaration it was admitted with. A later heartbeat cannot add operations to an existing owner. Optional operations check this snapshot before any native call; the presence of a Go interface never grants support. A declared operation that returns `agent.ErrUnsupportedOperation` is a contract violation, distinct from unavailability, a failed native call or an uncertain write. Uncertain operations keep their receipts and ownership and are never replayed automatically. A Runtime declares `local_environment` and `environment_none` only where both the Harness and its [Environment owner](#session-assignments) support them; `local_environment` also covers the owner's workspace reads, read-only preparation and output export.
 
 A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration and wire round trips; the shared test fixture lists fields individually and supplies no defaults for future ones. [Harness onboarding](../contracts/agents-api/harness-onboarding.md) owns the adapter side of each declaration.
 
-A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's engine profile also qualifies it. During device selection and again at the final check before it claims a Turn, Core requires the selected device to report the Harness `available` and checks its declaration:
+A heartbeat only narrows the Harness's static declaration. Core treats a heartbeat as invalid when a kind has no built-in declaration or advertises support its static declaration lacks. During device selection and again at the final check before it claims a Turn, Core requires the selected device to report the Harness `available` and checks the Session against the static declaration narrowed to the heartbeat with `proto.ValidateSelection`, which requires:
 
 | Capability | Core requires it when |
 | --- | --- |
 | `environment_none` | The Environment type is `none` |
-| `local_environment`, `workspace_read_preparation`, `workspace_output_export` | The Environment type is `openai_hosted` or `self_hosted` |
-| `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
+| `local_environment` | The Environment type is `openai_hosted` or `self_hosted`, or an idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
-| `web_search_control`, `text_verbosity` | The Harness's engine profile declares that control |
+| `text_verbosity` | The Agent requests a verbosity other than `medium` |
 | `structured_output` | The Agent requests `json_schema` output |
 | `subagent_observations` | `multi_agent.enabled` is true |
-| `subagent_control` | `multi_agent.enabled` is false |
 | `tool_search` | The Agent enables tool search or defers function loading |
-| `programmatic_tool_calling_disable` | The Agent explicitly disables programmatic tool calling |
-| `function_tools` | The Agent declares function tools |
+| `function_tools` | The Agent declares function tools, or a function result is delivered |
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
@@ -57,7 +54,7 @@ The `execution_prepare` configuration carries the Session's model configuration 
 | Field | Set by Core |
 | --- | --- |
 | `model`, `system_prompt`, `model_provider`, `harness_config` | From the Session's frozen configuration: the Agent's model and instructions, the Session's provider bundle, and the [native model parameters](../contracts/agents-api/model-execution.md#native-model-parameters). The Harness validates them before any native effect |
-| `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
+| `execution_controls` | Always: the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
@@ -197,7 +194,7 @@ Core stores accepted values in the Turn outcome as `engine_error_code` and `engi
 
 ## Workspace operations
 
-A workspace read that needs no running Turn uses the read-only preparation profile: `execution_prepare` with `workspace_read_only`, which requires the `workspace_read_preparation` capability. It accepts only the bound Environment and resource identity; execution options, model and MCP credentials, native Session continuation and model or tool input are excluded, and the owner rejects `execution_start`. The Session's Environment owner serves it without starting a Harness process. The profile publishes `released` after the Runtime drops the preparation's ownership; a stale status snapshot never publishes success. A release request, HTTP disconnect or remote socket closure alone does not confirm the release.
+A workspace read that needs no running Turn uses the read-only preparation profile: `execution_prepare` with `workspace_read_only`, which requires the `local_environment` capability. It accepts only the bound Environment and resource identity; execution options, model and MCP credentials, native Session continuation and model or tool input are excluded, and the owner rejects `execution_start`. The Session's Environment owner serves it without starting a Harness process. The profile publishes `released` after the Runtime drops the preparation's ownership; a stale status snapshot never publishes success. A release request, HTTP disconnect or remote socket closure alone does not confirm the release.
 
 `workspace_read` lists one workspace-relative directory (an empty path selects the root) of an existing preparation handle, or the Run it was transferred to, on the same authenticated device connection, with the exact frozen Environment identity; callers cannot supply sockets, credentials or workspace roots. A result carries at most `max_entries` (1 to 1024) single-component UTF-8 names of at most 255 bytes each, the entry kind, regular-file sizes and explicit truncation, and is returned only after directory access and handle cleanup settle. There is no snapshot, recursion or pagination at this layer.
 

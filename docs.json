@@ -27,7 +27,7 @@
           "docs/api/public-agent-api",
           "contracts/agents-api/admin-api",
           "contracts/agents-api/machine-api",
-          "contracts/agents-api/harness-capabilities"
+          "contracts/agents-api/index"
         ]
       },
       {

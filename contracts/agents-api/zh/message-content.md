@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 085ade22b792243b8fea4fb798f1de3cbed872d27752afa4f30b93f251b829a8
+source_hash: 8758bbcce858298277343026e303e6d7939c849e1995b8a6cf5fc59017cda49c
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -27,11 +27,11 @@ source_hash: 085ade22b792243b8fea4fb798f1de3cbed872d27752afa4f30b93f251b829a8
 | Claude Code | 在 `none`、`openai_hosted`、`self_hosted` 接受 |
 | MiniMax Code | 拒绝 |
 
-任何写入之前，准入检查 Harness；Harness 无法接受的图像返回 400。Runtime 也必须报告消息图像支持：Core 仅将输入含图像的 Session 绑定到此类 Runtime，交付给不支持的 Runtime 会失败。应使用接受图像的模型。
+任何写入之前，准入检查 Harness；Harness 无法接受的图像返回 400 `unsupported_or_invalid_configuration`。Runtime 也必须报告消息图像支持：Core 仅将输入含图像的 Session 绑定到此类 Runtime，交付给不支持的 Runtime 会失败。应使用接受图像的模型。
 
 ## 仅空白文本 {#whitespace-only-text}
 
-`"   "` 或 `"\n\t"` 等仅含空白的文本为有效内容，原样存储和返回。Harness 能否运行由引擎配置声明：
+`"   "` 或 `"\n\t"` 等仅含空白的文本为有效内容，原样存储和返回。Harness 能否运行属于其[声明](harness-onboarding.md#declare-support)：
 
 | Harness | 无图像且无非空白文本的消息 |
 | --- | --- |
@@ -52,7 +52,7 @@ source_hash: 085ade22b792243b8fea4fb798f1de3cbed872d27752afa4f30b93f251b829a8
 | Harness | 函数结果 |
 | --- | --- |
 | Codex | 文本与有序文本/图像输出。Core 仅检查各部分格式正确，并将图像引用原样传给 Harness |
-| Claude Code | 文本输出。仅成功结果可含内联 PNG 或 JPEG 图像；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码；公开 Item 保留提交字节 |
+| Claude Code | 文本输出。仅成功结果可含内联 PNG 或 JPEG 图像；失败结果图像、远程引用或格式错误的引用在任何存储前返回 400 `unsupported_or_invalid_configuration`，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码；公开 Item 保留提交字节 |
 | MiniMax Code | 无公开函数 |
 
 ### 应用回执 {#application-receipts}
@@ -66,7 +66,7 @@ source_hash: 085ade22b792243b8fea4fb798f1de3cbed872d27752afa4f30b93f251b829a8
 
 ## Runtime 边界 {#runtime-boundary}
 
-Core–Runtime wire 在初始输入、准备后启动和引导中将消息作为 `MessageInput` 携带，使用与函数结果相同的有序 `InputContent` 部分（[Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)）。准入检查 Harness 声明配置；绑定和交付检查 Runtime 报告。适配器负责原生编码和应用回执。仅文本适配器拒绝图像部分，不丢弃它们。
+Core–Runtime wire 在初始输入、准备后启动和引导中将消息作为 `MessageInput` 携带，使用与函数结果相同的有序 `InputContent` 部分（[Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)）。准入检查 Harness 的声明；绑定和交付按 Runtime 心跳收窄后的声明检查。适配器负责原生编码和应用回执。仅文本适配器拒绝图像部分，不丢弃它们。
 
 - **Codex** 将批次展平为原生输入列表，在公开消息之间插入空行分隔。公开消息边界保留于 Core 存储，原生历史不保留。
 - **Claude Code** 发送原生图像块及每条原生用户消息的 UUID。一个公开输入仅在批次所有消息消费后视为已应用。单个原生 Turn 内桥接层最多接受 64 条用户消息（含开场提示）；超过界限的引导批次在提交任何部分前被拒绝，并结束运行 Turn。daemon 要求桥接协议 3。

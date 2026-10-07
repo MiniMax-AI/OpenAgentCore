@@ -158,7 +158,7 @@ The harness is the agent program that runs a Session: Codex (`codex`), Claude Co
 - **Provider.** The harness calls your provider with one of the harness's native protocols, through a [credential gateway](../../contracts/agents-api/model-execution.md#credential-gateway) that keeps your key out of the harness; there is no conversion, and a mismatch is rejected when the Session is created. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) lists each harness's protocols and which provider a Session uses on each Environment type. A Session freezes its provider at creation.
 - **Native parameters.** `harness_config` carries the harness's own model settings; see [native model parameters](../../contracts/agents-api/model-execution.md#native-model-parameters).
 
-Not every combination of harness, placement and operation is supported; the [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) lists them.
+Not every combination of harness, placement and operation is supported. An unsupported one returns 400 `unsupported_or_invalid_configuration` with the rejected field in `param`; [known gaps](../../contracts/agents-api/index.md#known-gaps) lists each harness's differences.
 
 ## Agents
 
@@ -535,7 +535,7 @@ The HTTP path is `/vaults`, with the Beta header. A Session selects credentials 
 
 1. Read the Session's `status` and `error`, and the latest Turn's `error`. A failed Turn reports only a generic `internal_error`.
 2. Check that the Environment is connected and its harness is available.
-3. Check the harness, model and tool combination in [Harness capabilities](../../contracts/agents-api/harness-capabilities.md).
+3. Check the harness, model and tool combination against [known gaps](../../contracts/agents-api/index.md#known-gaps).
 4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
 
 A 401 usually means a key from another namespace; see [API namespaces and credentials](./index.md).

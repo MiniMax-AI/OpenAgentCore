@@ -157,31 +157,27 @@ const (
 	DoneMetaAgentSessionType = "agent_session_type"
 )
 
-// AgentKindCapabilities describes what a daemon-side agent_kind can
-// do inside one prompt session. Every field requires an explicit support
-// decision, including for unavailable engines. The Runtime lifecycle
-// (streaming, durable Turns and input receipts, preparation) is mandatory for
-// every Harness and is not declared.
+// AgentKindCapabilities is the part of a Harness's Declaration that a Runtime
+// advertises in its heartbeat. The heartbeat only narrows the static
+// declaration. Every field requires an explicit support decision, including
+// for unavailable engines. The Runtime lifecycle (streaming, durable Turns and
+// input receipts, preparation) is mandatory for every Harness and is not
+// declared.
 type AgentKindCapabilities struct {
 	SubagentObservations  CapabilitySupport `json:"subagent_observations"`
 	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`
 
-	EnvironmentNone                CapabilitySupport `json:"environment_none"`
-	LocalEnvironment               CapabilitySupport `json:"local_environment"`
-	WorkspaceReadPreparation       CapabilitySupport `json:"workspace_read_preparation"`
-	WorkspaceOutputExport          CapabilitySupport `json:"workspace_output_export"`
-	ProgrammaticToolCallingDisable CapabilitySupport `json:"programmatic_tool_calling_disable"`
-	WebSearchControl               CapabilitySupport `json:"web_search_control"`
-	TextVerbosity                  CapabilitySupport `json:"text_verbosity"`
-	StructuredOutput               CapabilitySupport `json:"structured_output"`
-	ToolSearch                     CapabilitySupport `json:"tool_search"`
-	MessageImages                  CapabilitySupport `json:"message_images"`
-	FunctionResultImages           CapabilitySupport `json:"function_result_images"`
-	SubagentControl                CapabilitySupport `json:"subagent_control"`
-	FunctionTools                  CapabilitySupport `json:"function_tools"`
-	MCPHTTPTools                   CapabilitySupport `json:"mcp_http_tools"`
-	MCPHTTPRequired                CapabilitySupport `json:"mcp_http_required"`
-	MCPHTTPBearerAuth              CapabilitySupport `json:"mcp_http_bearer_auth"`
+	EnvironmentNone      CapabilitySupport `json:"environment_none"`
+	LocalEnvironment     CapabilitySupport `json:"local_environment"`
+	TextVerbosity        CapabilitySupport `json:"text_verbosity"`
+	StructuredOutput     CapabilitySupport `json:"structured_output"`
+	ToolSearch           CapabilitySupport `json:"tool_search"`
+	MessageImages        CapabilitySupport `json:"message_images"`
+	FunctionResultImages CapabilitySupport `json:"function_result_images"`
+	FunctionTools        CapabilitySupport `json:"function_tools"`
+	MCPHTTPTools         CapabilitySupport `json:"mcp_http_tools"`
+	MCPHTTPRequired      CapabilitySupport `json:"mcp_http_required"`
+	MCPHTTPBearerAuth    CapabilitySupport `json:"mcp_http_bearer_auth"`
 }
 
 // SupportedAgentKind is one daemon-advertised agent engine. Daemons

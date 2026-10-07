@@ -11,29 +11,10 @@ import (
 )
 
 // Declaration owns Codex discovery, configuration and execution factories.
-var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
-	Kind: "codex",
-	Capabilities: proto.AgentKindCapabilities{
-		SubagentObservations:           proto.CapabilitySupported,
-		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		EnvironmentNone:                proto.CapabilitySupported,
-		LocalEnvironment:               proto.CapabilityUnsupported,
-		WorkspaceReadPreparation:       proto.CapabilityUnsupported,
-		WorkspaceOutputExport:          proto.CapabilityUnsupported,
-		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
-		WebSearchControl:               proto.CapabilitySupported,
-		TextVerbosity:                  proto.CapabilityFromBool(SupportsTextVerbosity),
-		StructuredOutput:               proto.CapabilityUnsupported,
-		ToolSearch:                     proto.CapabilityUnsupported,
-		MessageImages:                  proto.CapabilitySupported,
-		FunctionResultImages:           proto.CapabilitySupported,
-		SubagentControl:                proto.CapabilitySupported,
-		FunctionTools:                  proto.CapabilitySupported,
-		MCPHTTPTools:                   proto.CapabilitySupported,
-		MCPHTTPRequired:                proto.CapabilityUnsupported,
-		MCPHTTPBearerAuth:              proto.CapabilitySupported,
-	},
-}, Configuration: configuration.Configuration(), Discover: discover}
+// Discovery narrows the declared support to what the installed version and
+// platform serve.
+var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "codex", Capabilities: configuration.Configuration().Declaration.Capabilities},
+	Configuration: configuration.Configuration(), Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
@@ -49,10 +30,10 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	}
 	runtime.Info.Available, runtime.Info.Version = true, version
 	caps := &runtime.Info.Capabilities
-	caps.NativeSessionRecovery = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
-	// A local Environment requires native Session recovery.
-	caps.LocalEnvironment = caps.NativeSessionRecovery
-	caps.MCPHTTPRequired = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
+	// A local Environment and required MCP servers need native Session recovery.
+	recovery := proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
+	caps.NativeSessionRecovery, caps.LocalEnvironment, caps.MCPHTTPRequired = recovery, recovery, recovery
+	caps.TextVerbosity = proto.CapabilityFromBool(SupportsTextVerbosity)
 	runtime.Executor = NewExecutorFactory()
 	runtime.View = discoverView(version)
 	fmt.Fprintf(options.Stdout, "Codex preflight ok (%s)\n", version)

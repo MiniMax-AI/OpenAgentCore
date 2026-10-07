@@ -111,7 +111,7 @@ const en: LandingCopy = {
     },
     input: 'Fix the failing test and explain the change.',
     footnote: 'The supported combinations are declared by each harness, not guessed.',
-    footnoteLink: 'Harness capabilities',
+    footnoteLink: 'Harness differences',
   },
   architecture: {
     index: '02',
@@ -213,7 +213,7 @@ const zh: LandingCopy = {
     },
     input: '修复失败的测试，并说明改动。',
     footnote: '支持哪些组合，由每个 Harness 明确声明，而不是猜测。',
-    footnoteLink: 'Harness 能力表',
+    footnoteLink: 'Harness 差异',
   },
   architecture: {
     index: '02',

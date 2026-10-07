@@ -21,7 +21,7 @@ func testRequest(t *testing.T) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{RunID: "run-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"),
 		Model: "fixture", SystemPrompt: "Current instructions",
 		ModelProvider:               &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "fixture-key", ContextWindow: 64000, MaxOutputTokens: 4096},
-		DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 }
 
 // helperRequest selects a protocol fixture scenario as the native CLI.

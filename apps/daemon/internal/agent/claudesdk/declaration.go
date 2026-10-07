@@ -18,27 +18,11 @@ import (
 const claudeSDKEntrypointEnv = "OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT"
 const claudeSDKNodeEnv = "OAC_RUNTIME_CLAUDE_SDK_NODE"
 
-// Declaration owns Claude SDK discovery, configuration and execution factories.
-var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
-	SubagentObservations:           proto.CapabilityUnsupported,
-	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	EnvironmentNone:                proto.CapabilitySupported,
-	LocalEnvironment:               proto.CapabilityUnsupported,
-	WorkspaceReadPreparation:       proto.CapabilityUnsupported,
-	WorkspaceOutputExport:          proto.CapabilityUnsupported,
-	ProgrammaticToolCallingDisable: proto.CapabilitySupported,
-	WebSearchControl:               proto.CapabilityUnsupported,
-	TextVerbosity:                  proto.CapabilityUnsupported,
-	StructuredOutput:               proto.CapabilityUnsupported,
-	ToolSearch:                     proto.CapabilityUnsupported,
-	MessageImages:                  proto.CapabilityUnsupported,
-	FunctionResultImages:           proto.CapabilityUnsupported,
-	SubagentControl:                proto.CapabilitySupported,
-	FunctionTools:                  proto.CapabilitySupported,
-	MCPHTTPTools:                   proto.CapabilityUnsupported,
-	MCPHTTPRequired:                proto.CapabilityUnsupported,
-	MCPHTTPBearerAuth:              proto.CapabilityUnsupported,
-}}, Configuration: configuration.Configuration(), Discover: discover}
+// Declaration owns Claude SDK discovery, configuration and execution
+// factories. Discovery narrows the declared support to what the installed
+// bundle serves.
+var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: configuration.Configuration().Declaration.Capabilities},
+	Configuration: configuration.Configuration(), Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckRuntime)
@@ -100,13 +84,11 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if err != nil {
 		return fail(err)
 	}
-	caps := &out.Info.Capabilities
-	if config.Workspace != nil {
-		if !info.SupportsLocalRuntime() {
-			return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
-		}
-		caps.NativeSessionRecovery = proto.CapabilitySupported
+	if config.Workspace != nil && !info.SupportsLocalRuntime() {
+		return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
 	}
+	caps := &out.Info.Capabilities
+	caps.NativeSessionRecovery = proto.CapabilityFromBool(config.Workspace != nil)
 	// One declaration holds for every Executor of the install: the workspace
 	// bridge, the agent-host view and a Runtime without a workspace, so each
 	// feature is its workspace variant, which the others also support.

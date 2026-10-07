@@ -328,7 +328,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if !pending.waiting && !pending.written {
-				if requireMessageImages(peer, request.AgentKind, pending.input) != nil {
+				if validateDelivery(peer, request.AgentKind, proto.Selection{Messages: pending.input}) != nil {
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}

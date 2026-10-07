@@ -258,19 +258,23 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	h, s := configurationHandler(t, nil)
 	session := configurationOperations()[2]
-	for _, tc := range []struct{ fields, message string }{
-		{`"tools":[{"type":"web_search","mode":"live"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search","mode":"cached"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search","mode":null}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Programmatic tool calling is not qualified for execution."},
-		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
-		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not qualified for this engine."},
-		{`"reasoning":{"effort":"max"}`, "Explicit reasoning execution options are not supported by this service yet."},
-		{`"service_tier":"flex"`, "Execution currently supports service_tier=auto only."},
-		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes."},
+	for _, tc := range []struct{ fields, message, param string }{
+		{`"tools":[{"type":"web_search","mode":"live"}]`, "Only disabled web_search is qualified for execution.", ""},
+		{`"tools":[{"type":"web_search","mode":"cached"}]`, "Only disabled web_search is qualified for execution.", ""},
+		{`"tools":[{"type":"web_search","mode":null}]`, "Only disabled web_search is qualified for execution.", ""},
+		{`"tools":[{"type":"web_search"}]`, "Only disabled web_search is qualified for execution.", ""},
+		{`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Programmatic tool calling is not qualified for execution.", ""},
+		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls.", ""},
+		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: The harness does not support json_schema output.", "agent.text.format"},
+		{`"reasoning":{"effort":"max"}`, "Explicit reasoning execution options are not supported by this service yet.", ""},
+		{`"service_tier":"flex"`, "Execution currently supports service_tier=auto only.", ""},
+		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes.", ""},
 	} {
-		assertConfigurationError(t, credentialRequest(h, http.MethodPost, session.path, session.body(tc.fields)), "unsupported_or_invalid_configuration", nil, tc.message)
+		var param *string
+		if tc.param != "" {
+			param = &tc.param
+		}
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, session.path, session.body(tc.fields)), "unsupported_or_invalid_configuration", param, tc.message)
 	}
 	for _, op := range configurationOperations()[:2] {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"multi_agent":{"enabled":true,"max_concurrent_subagents":4294967296}`)), "unsupported_or_invalid_configuration", nil, "max_concurrent_subagents must be an integer from 1 to 4294967295.")

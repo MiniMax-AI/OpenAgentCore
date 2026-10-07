@@ -71,11 +71,10 @@ type PromptCancelPayload struct {
 	DeliveryID string `json:"delivery_id,omitempty"`
 }
 
-// ExecutionControls requires both values when supplied; omitting the block keeps native defaults.
-// Send only to a peer advertising execution_controls.
+// ExecutionControls requires text_verbosity when supplied; omitting the block
+// keeps native defaults. Native web search is always disabled.
 type ExecutionControls struct {
 	DisableProgrammaticToolCalling bool          `json:"disable_programmatic_tool_calling,omitempty"`
-	WebSearch                      string        `json:"web_search"`
 	TextVerbosity                  string        `json:"text_verbosity"`
 	OutputFormat                   *OutputFormat `json:"output_format,omitempty"`
 }

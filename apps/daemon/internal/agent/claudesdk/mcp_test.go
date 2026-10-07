@@ -10,7 +10,7 @@ import (
 )
 
 func TestHTTPMCPDeclaration(t *testing.T) {
-	for _, mode := range []string{"unrestricted", "selected", "empty", "nil-slice", "required", "auth", "url-auth", "query", "wildcard", "reserved", "duplicate", "environment"} {
+	for _, mode := range []string{"unrestricted", "selected", "empty", "nil-slice", "required", "auth", "url-auth", "query", "duplicate", "environment"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
@@ -36,11 +36,6 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 				servers[0].ServerURL = "https://user:secret@example.invalid/mcp"
 			case "query":
 				servers[0].ServerURL += "?"
-			case "wildcard":
-				tools = []string{"*"}
-				servers[0].AllowedTools = &tools
-			case "reserved":
-				servers[0].ServerLabel = "functions"
 			case "duplicate":
 				servers = append(servers, servers[0])
 			case "environment":

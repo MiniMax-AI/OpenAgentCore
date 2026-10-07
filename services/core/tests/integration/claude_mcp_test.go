@@ -28,7 +28,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}
 				claudeSession(t, h, configuration, prebound)
 				// Base MCP support does not imply authentication or required initialization.
-				caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(authenticated || required)})
+				caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(authenticated || required)})
 				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 				awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "Claude MCP heartbeat", func() bool {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
@@ -101,7 +101,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 				configuration = strings.Replace(configuration, `"tickets"`, `"functions"`, 1)
 			}
 			claudeSession(t, h, configuration, true)
-			caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})
+			caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})
 			if profile == "missing required capability" {
 				caps.MCPHTTPRequired = proto.CapabilityUnsupported
 			}

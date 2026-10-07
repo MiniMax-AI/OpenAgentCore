@@ -40,7 +40,7 @@ type startRequest struct {
 }
 
 func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
-	start, provider, err := prepareOptions(req, req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0))
+	start, provider, err := prepareOptions(req)
 	if err != nil {
 		return startRequest{}, nil, err
 	}
@@ -91,12 +91,11 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	return start, env, nil
 }
 
-// prepareOptions validates the request's execution configuration and renders
-// the selected model provider. mcp reports whether the Executor serves MCP, which
-// an agent-host view takes from its Session rather than the request.
-func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []string, error) {
-	skills := req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) != 0
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, Functions: req.FunctionTools}
+// prepareOptions renders the request's execution configuration and the
+// selected model provider. The registered factory already admitted the
+// selection against the declaration.
+func prepareOptions(req proto.PromptRequestPayload) (startRequest, []string, error) {
+	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ToolSearch: req.ToolSearch}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
@@ -105,36 +104,20 @@ func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []s
 		return startRequest{}, nil, err
 	}
 	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
-	if err := req.ValidateToolSearch(true); err != nil {
-		return startRequest{}, nil, err
-	}
-	if req.ToolSearch {
-		if skills || mcp || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
-			return fail("tool discovery requires the single-agent text/function profile")
-		}
-		start.ToolSearch = true
-	}
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
 	}
-	// Search is disabled by the fixed native tool profile. Medium selects the
-	// SDK's default text generation; it has no native verbosity-level option.
-	if controls := req.ExecutionControls; controls != nil && (controls.WebSearch != "disabled" || controls.TextVerbosity != "medium") {
-		return fail("execution controls require disabled web search and medium text verbosity")
-	}
+	// The declaration admits only medium text verbosity, the SDK's default text
+	// generation, and the fixed native tool profile excludes search.
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
-		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.DisableSubagents || mcp || skills {
-			return fail("structured output requires the qualified single-agent function profile")
+		if req.ExecutionControls.OutputFormat.Type != "json_schema" {
+			return fail("structured output requires a json_schema format")
 		}
-		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
-			return startRequest{}, nil, err
-		}
-		start.OutputFormat = format
+		start.OutputFormat = req.ExecutionControls.OutputFormat
 	}
 	if req.ObserveSubagentIdentities {
-		if req.DisableSubagents || len(req.FunctionTools) != 0 || mcp {
-			return fail("subagent execution does not support this tool combination")
+		if req.DisableSubagents {
+			return fail("subagent observation requires enabled subagents")
 		}
 		limit := 6
 		if req.MaxConcurrentSubagents != nil {
@@ -145,7 +128,7 @@ func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []s
 		}
 		start.Subagents = &subagentOptions{MaxConcurrent: limit}
 	}
-	if err := validateFunctions(req.FunctionTools); err != nil {
+	if start.Functions, err = functionTools(req.FunctionTools); err != nil {
 		return startRequest{}, nil, err
 	}
 	start.Model, start.SystemPrompt = modelConfiguration.Model, req.SystemPrompt

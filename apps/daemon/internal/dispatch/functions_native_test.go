@@ -109,7 +109,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 	}))
 	defer model.Close()
 	reg := agent.NewRegistry()
-	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, codex.NewExecutorFactory())
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, codex.NewExecutorFactory())
 	sender := make(nativeFunctionSender, 256)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()

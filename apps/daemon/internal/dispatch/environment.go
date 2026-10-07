@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
@@ -85,21 +86,22 @@ var (
 	ErrWorkspaceWriteUnsafe    = fmt.Errorf("%w: destination exists or its path is not a plain directory chain", ErrWorkspaceWriteRejected)
 )
 
-func validateExecutionEnvironment(req proto.PromptRequestPayload, caps proto.AgentKindCapabilities) error {
+// validateExecutionEnvironment checks the request's structure;
+// proto.ValidateSelection checks what the Harness supports.
+func validateExecutionEnvironment(req proto.PromptRequestPayload) error {
 	if (req.LocalEnvironment != nil) == req.DisableExecutionEnvironment {
 		return errors.New("execution requires exactly one of local_environment and disable_execution_environment")
 	}
-	if err := req.ValidateProgrammaticToolCallingDisable(caps.ProgrammaticToolCallingDisable.IsSupported()); err != nil {
-		return err
+	if req.MCPHTTPServers == nil {
+		return nil
 	}
-	if err := req.ValidateToolSearch(caps.ToolSearch.IsSupported()); err != nil {
-		return err
+	for _, server := range *req.MCPHTTPServers {
+		if err := server.ValidateConnectionOrigin(req); err != nil {
+			return err
+		}
+		if endpoint, err := url.Parse(server.ServerURL); server.BearerToken != nil && (err != nil || endpoint.Scheme != "https" || endpoint.Hostname() == "") {
+			return errors.New("authenticated HTTP MCP requires HTTPS")
+		}
 	}
-	if req.LocalEnvironment != nil && !caps.LocalEnvironment.IsSupported() {
-		return errors.New("engine does not support this local Environment configuration")
-	}
-	if req.DisableExecutionEnvironment && !caps.EnvironmentNone.IsSupported() {
-		return errors.New("engine does not support execution environment none")
-	}
-	return validateMCPHTTP(req, caps)
+	return nil
 }

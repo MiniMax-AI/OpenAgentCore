@@ -46,7 +46,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(missing != "mcp_http_tools"), MCPHTTPRequired: proto.CapabilityFromBool(missing != "mcp_http_required"), MCPHTTPBearerAuth: proto.CapabilityFromBool(missing != "mcp_http_bearer_auth"), FunctionTools: proto.CapabilityFromBool(missing != "function_tools" && !isMCP)})
+				caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilityFromBool(missing != "mcp_http_tools"), MCPHTTPRequired: proto.CapabilityFromBool(missing != "mcp_http_required"), MCPHTTPBearerAuth: proto.CapabilityFromBool(missing != "mcp_http_bearer_auth"), FunctionTools: proto.CapabilityFromBool(missing != "function_tools" && !isMCP)})
 				heartbeat := func() {
 					h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 				}

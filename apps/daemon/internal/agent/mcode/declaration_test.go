@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
-	"reflect"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // An available runtime is execution-capable; a rejected native version is unavailable.
@@ -24,25 +22,9 @@ func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 			if (runtime.Executor != nil) != available {
 				t.Fatalf("factories: %+v", runtime)
 			}
-			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.LocalEnvironment.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
-				t.Fatalf("capabilities=%+v", info.Capabilities)
-			}
-			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {
-				t.Fatal("unqualified capability advertised")
+			if info.Available != available {
+				t.Fatalf("available=%v", info.Available)
 			}
 		})
-	}
-}
-
-// The static declaration supports nothing until discovery finds the CLI.
-func TestDeclaredCapabilityBaseline(t *testing.T) {
-	value := reflect.ValueOf(Declaration.Info.Capabilities)
-	for i := 0; i < value.NumField(); i++ {
-		if got := value.Field(i).Interface(); got != proto.CapabilityUnsupported {
-			t.Errorf("%s = %v, want unsupported", value.Type().Field(i).Name, got)
-		}
-	}
-	if err := Declaration.Info.ValidateDeclaration(); err != nil {
-		t.Fatal(err)
 	}
 }

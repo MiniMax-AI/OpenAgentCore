@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -19,21 +17,19 @@ func imageAdmissionBatch() []sessions.Input {
 	}
 }
 
-func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
+// MiniMax Code declares no message images, so an image rejects the whole
+// batch before anything persists.
+func TestUnsupportedImageAdmissionIsAtomic(t *testing.T) {
 	for _, placement := range []string{"none", "self_hosted"} {
 		t.Run(placement, func(t *testing.T) {
 			h := newDispatchHarness(t)
-			// A registered text-only profile must stay closed regardless of the
-			// adapters currently qualified by the built-in catalog.
-			profile, _ := (engine.Catalog{}).Lookup("codex")
-			profile.MessageImages = proto.CapabilityUnsupported
-			h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"codex": profile})}
 			worker := startWorker(t, t.Context(), h.s, h.d)
 			defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 			configuration := json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"` + placement + `","workspace_directory":"/workspace"}}`)
-			create := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "image-create", Configuration: configuration, InitialInputs: imageAdmissionBatch()}
-			if _, err := worker.CreateSession(t.Context(), h.tenant, create); !errors.Is(err, sessions.ErrInvalidInput) {
-				t.Fatal("creation accepted an unqualified image", err)
+			create := sessions.CreateSession{Creator: FixtureCreator(), Engine: "mcode", IdempotencyKey: "image-create", Configuration: configuration, InitialInputs: imageAdmissionBatch()}
+			var unsupported *proto.SelectionError
+			if _, err := worker.CreateSession(t.Context(), h.tenant, create); !errors.As(err, &unsupported) {
+				t.Fatal("creation accepted an unsupported image", err)
 			}
 			// Create a Session without starting work to exercise both ordinary and
 			// prepared admission before their respective persistence paths.
@@ -42,8 +38,8 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, "image-batch", imageAdmissionBatch()); !errors.Is(err, sessions.ErrInvalidInput) {
-				t.Fatal("batch accepted an unqualified image", err)
+			if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, "image-batch", imageAdmissionBatch()); !errors.As(err, &unsupported) {
+				t.Fatal("batch accepted an unsupported image", err)
 			}
 			session, err = sessionAdapter(h.s).GetSession(t.Context(), h.tenant, session.ID)
 			if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity != nil {

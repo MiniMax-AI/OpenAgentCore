@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -53,7 +52,7 @@ func TestRegistryResolvesOnlyDeclaredViews(t *testing.T) {
 	declared := validView(t)
 	for kind, view := range map[string]*agent.View{"with_view": &declared, "without_view": nil} {
 		info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
-		reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, View: view}, agent.EnvironmentSupport{})
+		reg.Register(agent.Declaration{Info: info, Configuration: prototest.ModelConfiguration()}, agent.Runtime{Info: info, View: view}, agent.EnvironmentSupport{})
 	}
 	if _, err := reg.ResolveView("without_view"); !errors.Is(err, agent.ErrUnsupportedOperation) {
 		t.Fatalf("ResolveView without a view = %v, want ErrUnsupportedOperation", err)
@@ -71,10 +70,7 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 		return nil, errReached
 	}
 	info := proto.SupportedAgentKind{Kind: "viewed", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
-	declaration := agent.Declaration{
-		Info:          info,
-		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Responses)}}},
-	}
+	declaration := agent.Declaration{Info: info, Configuration: prototest.ModelConfiguration()}
 	reg.Register(declaration, agent.Runtime{Info: info, View: &declared}, agent.EnvironmentSupport{})
 	view, err := reg.ResolveView("viewed")
 	if err != nil {

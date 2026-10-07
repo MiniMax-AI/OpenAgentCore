@@ -1,10 +1,16 @@
-package harnessconfig
+package harnessconfig_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+)
 
 func TestRegistryOwnsDeclarations(t *testing.T) {
-	declaration := Configuration{Providers: []Provider{{Protocol: "responses", RequiresTokenLimits: true}}}
-	registry := NewRegistry(map[string]Configuration{"additional-adapter": declaration})
+	declaration := prototest.ModelConfiguration()
+	declaration.Providers[0].RequiresTokenLimits = true
+	registry := harnessconfig.NewRegistry(map[string]harnessconfig.Configuration{"additional-adapter": declaration})
 	declaration.Providers[0].Protocol = "changed"
 	got, ok := registry.Lookup("additional-adapter")
 	if !ok || got.Validate("responses", 100, 20) != nil || got.Validate("responses", 0, 0) == nil || got.ValidateProtocol("unknown") == nil {
@@ -21,7 +27,7 @@ func TestRegistryOwnsDeclarations(t *testing.T) {
 }
 
 func TestUndeclaredHarnessHasNoNativeParameters(t *testing.T) {
-	registry := NewRegistry(nil)
+	registry := harnessconfig.NewRegistry(nil)
 	for _, raw := range []string{"", "{}", "{ \n }"} {
 		if err := registry.ValidateHarnessConfig("additional-adapter", []byte(raw)); err != nil {
 			t.Fatalf("empty parameters rejected: %v", err)

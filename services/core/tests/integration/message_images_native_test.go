@@ -48,7 +48,7 @@ func TestNativeMessageImagePublicExecution(t *testing.T) {
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, auth, kind, workerExecution(t, worker), withPolicy(h.d.Policy), nativeDeploymentDefaults(model, provider))
+	handler, err := publicHandler(t, h.s, auth, kind, workerExecution(t, worker), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}

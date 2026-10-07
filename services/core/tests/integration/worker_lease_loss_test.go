@@ -14,7 +14,7 @@ import (
 func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	h := newDispatchHarness(t)
 	_, pool := testStore(t)
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	h.session = publicSession(t, h, "active")
 	queued := publicSession(t, h, "queued")
 	worker := startWorker(t, t.Context(), h.s, h.d)

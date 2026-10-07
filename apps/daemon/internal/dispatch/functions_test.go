@@ -38,7 +38,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	reg := agent.NewRegistry()
 	sender := &recSender{}
 	sessions := map[string]*functionSession{}
-	registerSession(reg, proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
+	registerSession(reg, proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported})}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		s := &functionSession{fakeSession: &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}}
 		sessions[p.RunID] = s
 		return s, nil

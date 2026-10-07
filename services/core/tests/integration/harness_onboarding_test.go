@@ -18,8 +18,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -28,23 +26,6 @@ import (
 
 func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	h := newDispatchHarness(t)
-	profile := enginetest.Profile(nil)
-	profile.ConfigurationValidation = engine.AdditionalValidation
-	profile.ToolsValidation = engine.AdditionalValidation
-	profile.ValidateConfiguration = func(a v1.Agent, _ *v1.Environment) error {
-		if a.Text.Verbosity != "medium" || a.Text.Format.Type != "text" || a.MultiAgent.Enabled || a.Reasoning.Effort != nil || a.Reasoning.Summary != nil || a.ServiceTier != "auto" {
-			return engine.ErrInvalidInput
-		}
-		return nil
-	}
-	profile.ValidateTools = func(_ *v1.Environment, f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
-		if len(f)+len(m) > 0 {
-			return engine.ErrInvalidInput
-		}
-		return nil
-	}
-	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"mcode": profile})}
-	h.d.Policy = policy
 	// The fixture only supplies an adapter and registration to the real daemon router.
 	// Core sees its ordinary authenticated gateway connection and neutral frames.
 	started, write, declaration := startOnboardingPeer(t, h)
@@ -63,7 +44,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}()
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	handler, err := publicHandler(t, h.s, auth, "mcode", workerExecution(t, worker), withPolicy(policy), fixtureDeploymentProvider())
+	handler, err := publicHandler(t, h.s, auth, "mcode", workerExecution(t, worker), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,11 +110,11 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 202)
 	waitTurn(t, h, next.RunID, sessions.TurnCancelled)
-	// A missing required capability must prevent claiming queued work.
+	// A capability the Session needs going missing must prevent claiming queued work.
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	// Mutate the actual wire declaration, not its lossy persisted boolean projection.
 	changed := declaration
-	changed.Capabilities.SubagentControl = proto.CapabilityUnsupported
+	changed.Capabilities.EnvironmentNone = proto.CapabilityUnsupported
 	// A separate unbound Session is used, without changing public handler behavior.
 	update, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{changed}})
 	if err := write(update); err != nil {
@@ -141,7 +122,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	for deadline := time.Now().Add(3 * time.Second); ; {
 		current, _, _ := peer.AgentKindStatus("mcode")
-		if !current.Capabilities.SubagentControl.IsSupported() {
+		if !current.Capabilities.EnvironmentNone.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

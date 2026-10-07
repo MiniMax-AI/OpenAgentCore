@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
@@ -225,7 +226,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		selectedEngine, provider, providerSource, deploymentRevision, err = h.resolveSessionExecution(r.Context(), input, inheritedProvider, configuration)
 	}
 	if err == nil {
-		if invalid := h.Policy.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
+		if invalid := execution.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
 			err = fmt.Errorf("Harness %s does not support the requested Agent/environment configuration: %w", selectedEngine, invalid)
 		}
 	}
@@ -240,6 +241,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.As(err, &required):
 			writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
+		case writeSelectionError(w, err):
 		case writeStoredDataError(w, r, err):
 		case !writeFieldError(w, err):
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())

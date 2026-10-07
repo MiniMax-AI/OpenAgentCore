@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,7 +26,7 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	if err := bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(time.Second)
 	for {
 		peer, _ := h.registry.LookupDevice(h.device.ID)
@@ -199,7 +198,7 @@ func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 	}
 	input := h.message("start", "Run")
 	result := <-h.run(t.Context(), input.TurnID)
-	if result.err == nil || !strings.Contains(result.err.Error(), "function_tools") {
+	if result.err == nil || result.err.Error() != "The harness does not support function tools." {
 		t.Fatal(result)
 	}
 	turn, err := sessionAdapter(h.s).GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)

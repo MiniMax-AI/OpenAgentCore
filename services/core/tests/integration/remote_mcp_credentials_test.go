@@ -57,7 +57,7 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 				if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), "synthetic-token") || strings.Contains(response.Body.String(), "ciphertext") || strings.Contains(response.Body.String(), "mcp_credentials") {
 					t.Fatal("rejected MCP credential combination admitted or disclosed", response.Code, response.Body)
 				}
-				message := "environment:none"
+				message := "Service-origin MCP requires environment none."
 				if mode == "deleted" {
 					message = "MCP credential_id " + credential.ID + " was not found in an attached vault"
 				}

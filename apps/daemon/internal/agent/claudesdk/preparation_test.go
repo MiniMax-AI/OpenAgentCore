@@ -97,7 +97,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 }
 
 func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T) {
-	for _, name := range []string{"run", "prompt", "attachments", "subagents", "none", "functions", "mcp", "controls", "old-runtime"} {
+	for _, name := range []string{"run", "prompt", "attachments", "subagents", "none", "functions", "mcp", "old-runtime"} {
 		t.Run(name, func(t *testing.T) {
 			config := preparationFixture(t, name)
 			req := preparationRequest()
@@ -116,8 +116,6 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 				req.FunctionTools = []proto.FunctionTool{{Name: "hello", Parameters: json.RawMessage(`{"type":"object"}`)}}
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
-			case "controls":
-				req.ExecutionControls = &proto.ExecutionControls{WebSearch: "enabled", TextVerbosity: "medium"}
 			}
 			if _, err := NewExecutorFactory(config)(t.Context(), req); err == nil {
 				t.Fatal("invalid preparation was accepted")

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -18,9 +17,6 @@ type Dependencies struct {
 	// deployment enables for explicit selection.
 	Engine    string
 	Harnesses []string
-	// Policy is the immutable qualification shared with the execution
-	// Dispatcher. The zero value uses the built-in engine registrations.
-	Policy execution.Policy
 	// CoreKeys authenticates /core/v1 and keeps Core keys out of Project key
 	// authentication.
 	CoreKeys *DeploymentAuthenticator

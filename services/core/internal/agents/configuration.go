@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 )
@@ -55,10 +58,10 @@ func normalizeConfiguration(raw json.RawMessage) (json.RawMessage, error) {
 	return normalized, nil
 }
 
-// validateModelExecution checks the saved Harness configuration and that the
-// model provider bundle suits the saved Harness. provider is the bundle being
-// saved, if any. Native parameters without a saved Harness return
-// harnessconfig.ErrHarnessRequired.
+// validateModelExecution checks the saved Harness configuration, the saved
+// Agent against its Harness's declaration and that the model provider bundle
+// suits the saved Harness. provider is the bundle being saved, if any. Native
+// parameters without a saved Harness return harnessconfig.ErrHarnessRequired.
 func validateModelExecution(configuration json.RawMessage, provider *v1.ModelProviderInput) error {
 	if provider != nil {
 		if err := provider.Validate(); err != nil {
@@ -80,13 +83,26 @@ func validateModelExecution(configuration json.RawMessage, provider *v1.ModelPro
 			return fmt.Errorf("%w: %s", ErrInvalidInput, err)
 		}
 	}
-	if config.Core == nil || config.Core.ModelProvider == nil || config.Core.Harness == "" {
+	if config.Core == nil || config.Core.Harness == "" {
 		return nil
 	}
-	if err := config.Core.ModelProvider.ValidateHarness(config.Core.Harness); err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidInput, err)
+	if config.Core.ModelProvider != nil {
+		if err := config.Core.ModelProvider.ValidateHarness(config.Core.Harness); err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalidInput, err)
+		}
 	}
-	return nil
+	declared, ok := builtin.Registry().Lookup(config.Core.Harness)
+	var agent v1.SavedAgentConfiguration
+	if !ok || json.Unmarshal(configuration, &agent) != nil {
+		return ErrInvalidInput
+	}
+	err := proto.ValidateSelection(declared.Declaration, v1.HarnessSelection(v1.Agent{MultiAgent: agent.MultiAgent, Text: agent.Text, Tools: agent.Tools}, nil))
+	var invalid *proto.SelectionError
+	if errors.As(err, &invalid) {
+		// A saved Agent's fields are top-level request fields.
+		invalid.Param = strings.TrimPrefix(invalid.Param, "agent.")
+	}
+	return err
 }
 
 // mergeConfiguration applies an update's supplied fields to the saved

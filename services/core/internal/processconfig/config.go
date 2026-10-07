@@ -21,12 +21,12 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/net/http/httpguts"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -138,7 +138,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	c.DefaultHarness = cmp.Or(os.Getenv("OAC_DEFAULT_HARNESS"), defaultHarness)
-	if _, known := (engine.Catalog{}).Lookup(c.DefaultHarness); !known {
+	if !builtin.Contains(c.DefaultHarness) {
 		return Config{}, configError("OAC_DEFAULT_HARNESS is not a known harness")
 	}
 	if c.Harnesses, err = harnesses(c.DefaultHarness); err != nil {
@@ -181,7 +181,7 @@ func (c Config) Settings() []api.InstallationSetting {
 		setting("log.format", format, "auto", []string{"core", "web"}),
 		setting("log.add_source", c.Log.AddSource, false, []string{"core", "web"}),
 		setting("core.execution_concurrency", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []string{"core"}),
-		setting("core.harnesses", c.Harnesses, (engine.Catalog{}).Kinds(), []string{"core"}),
+		setting("core.harnesses", c.Harnesses, builtin.Kinds(), []string{"core"}),
 		setting("core.default_harness", c.DefaultHarness, defaultHarness, []string{"core"}),
 		setting("core.write_audit_retention", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []string{"core"}),
 		setting("core.oauth_trusted_origins", origins, []string{}, []string{"core"}),
@@ -281,11 +281,11 @@ func harnesses(defaultEngine string) ([]string, error) {
 	if value := os.Getenv("OAC_HARNESSES"); value != "" {
 		kinds = append(kinds, strings.Split(value, ",")...)
 	} else {
-		kinds = append(kinds, (engine.Catalog{}).Kinds()...)
+		kinds = append(kinds, builtin.Kinds()...)
 	}
 	for i, kind := range kinds {
 		kind = strings.TrimSpace(kind)
-		if _, known := (engine.Catalog{}).Lookup(kind); !known {
+		if !builtin.Contains(kind) {
 			return nil, configError("OAC_HARNESSES contains an unknown harness")
 		}
 		kinds[i] = kind

@@ -2,7 +2,7 @@
 title: "Subagents"
 ---
 
-With `multi_agent.enabled`, a Harness may start native child agents. Core exposes them through the six Subagent read operations of the pinned SDK in [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) and records them from adapter observations. With `multi_agent.enabled=false`, the Runtime removes native child tools. [Harness capabilities](./harness-capabilities.md) lists which Harness supports Subagents in which combinations.
+With `multi_agent.enabled`, a Harness may start native child agents. Core exposes them through the six Subagent read operations of the pinned SDK in [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) and records them from adapter observations. With `multi_agent.enabled=false`, the Runtime removes native child tools. Every Harness supports Subagents. No Harness runs them with function tools or `agent.tools` MCP, and Claude also rejects them with installed Plugin MCP or structured output ([Declare support](./harness-onboarding.md#declare-support)).
 
 ## Public reads
 
@@ -49,8 +49,6 @@ Child Turns have a native writer, so they are stored apart from Core's work queu
 An adapter freezes root output before child settlement, keeps its native owner and reader alive while finite child work completes, and delivers child Items before their terminal Turn snapshot and the Run's completion. Cancellation uses the same owner and settles child writes before release. A failed observation or uncertain native effect never becomes a successful empty history; parent output, task completion, observation time or an empty list never substitutes for a missing fact.
 
 ## Native profiles
-
-[Harness capabilities](./harness-capabilities.md#tools) lists rejected tool combinations.
 
 **Codex.** The adapter enables the native `multi_agent` feature with a nesting depth of 64 and maps the concurrency limit to `agents.max_threads`. It disables native hooks, plugins, code mode and `multi_agent_v2`, and refuses to start if the native hook list is not empty or managed requirements force a conflicting feature. Close and reopen facts come from direct tool output correlated with the same call's persisted completion, so they need native persisted receipts. Native Turn times have second precision. Child file work can finish under the same owner after the root Turn finishes. Cancellation continues under the same owner after a caller deadline; a later call can confirm settlement without repeating the native interrupt.
 

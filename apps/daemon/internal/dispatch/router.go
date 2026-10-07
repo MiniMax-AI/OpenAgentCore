@@ -69,7 +69,7 @@ type appliedFunctionResult struct {
 // frontend → server → daemon → agent → server attribution.
 type sessionState struct {
 	assignment      proto.AssignmentRef
-	capabilities    proto.AgentKindCapabilities
+	declaration     proto.Declaration
 	runID           string
 	environmentID   string
 	session         agent.Turn

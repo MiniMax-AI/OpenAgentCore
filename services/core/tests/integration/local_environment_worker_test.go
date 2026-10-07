@@ -24,10 +24,9 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})
 	if execute {
-		caps.WorkspaceOutputExport = proto.CapabilitySupported
-		caps.WebSearchControl, caps.TextVerbosity, caps.SubagentControl = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+		caps.TextVerbosity = proto.CapabilitySupported
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "local capability", func() bool {

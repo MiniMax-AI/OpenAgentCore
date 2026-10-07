@@ -32,8 +32,6 @@ func TestSubagentConfigurationRejectsUnqualifiedAuthority(t *testing.T) {
 	for _, change := range []func(*proto.PromptRequestPayload){
 		func(r *proto.PromptRequestPayload) { r.DisableSubagents = true },
 		func(r *proto.PromptRequestPayload) { n := 0; r.MaxConcurrentSubagents = &n },
-		func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "function"}} },
-		func(r *proto.PromptRequestPayload) { v := []proto.MCPHTTPServer{}; r.MCPHTTPServers = &v },
 	} {
 		req := workspaceRequest()
 		req.DisableSubagents, req.ObserveSubagentIdentities = false, true

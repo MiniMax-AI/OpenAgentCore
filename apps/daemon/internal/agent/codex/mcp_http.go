@@ -31,9 +31,6 @@ func mcpServersFromBindings(bindings []agent.MCPBinding, stdio func(proto.Enviro
 	servers := make(map[string]mcpServerConfig, len(bindings))
 	var env []string
 	for _, binding := range bindings {
-		if binding.ServerLabel == "codex_apps" {
-			return nil, nil, errors.New("codex: reserved MCP server label")
-		}
 		server := mcpServerConfig{Name: binding.ServerLabel, URL: binding.ServerURL, Required: binding.Required, EnabledTools: binding.AllowedTools, ApproveTools: binding.ConnectionOrigin == "environment"}
 		if binding.Stdio != nil {
 			server.Command, server.Args = stdio(*binding.Stdio)

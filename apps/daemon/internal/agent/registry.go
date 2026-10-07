@@ -62,6 +62,17 @@ func (r *Registry) ResolveExecutor(kind string) (ExecutorFactory, error) {
 	return factory, nil
 }
 
+// Declaration returns an available kind's support, narrowed to what the
+// Runtime advertises.
+func (r *Registry) Declaration(kind string) (proto.Declaration, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if !r.kinds[kind].Available {
+		return proto.Declaration{}, false
+	}
+	return r.configurations[kind].Declaration, true
+}
+
 // Configuration returns an owned declaration for registry wrappers. Wrappers
 // transfer it with the factory; they must not infer configuration from kind names.
 func (r *Registry) Configuration(kind string) (harnessconfig.Configuration, error) {

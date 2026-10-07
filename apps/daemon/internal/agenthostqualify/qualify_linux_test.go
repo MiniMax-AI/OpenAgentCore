@@ -149,7 +149,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		"3. Answer with exactly one line: VALUE=<the printed value> EXIT=<the exit status>"
 
 	configuration := proto.PromptRequestPayload{AgentKind: kind, DisableSubagents: true,
-		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
+		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"},
 		LocalEnvironment: &proto.LocalEnvironment{ID: uuid.UUID(sb.resource.EnvironmentID).String(), WorkspaceDirectory: workspace, NetworkAccess: "enabled",
 			CapabilitySources: &agentcapabilities.Input{}}}
 	if caps.FunctionTools.IsSupported() {

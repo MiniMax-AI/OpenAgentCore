@@ -33,7 +33,7 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	reader, _ := testSessions(t, pgtest.Open(t), nil)
 	d := Dispatcher{SessionsReader: reader}
 	session := sessions.Session{TenantID: uuid.NewString(), ID: uuid.NewString(), Engine: "codex"}
-	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.Declaration{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
 }

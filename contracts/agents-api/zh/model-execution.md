@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: e0d23ec03ffdfa296dcfb02fb595164ed4170183a89f1c6c209bdc8928e5c595
+source_hash: 2f4cbc16107fe0aeb26f911c4e1275803e992de90d26b9a4295d39472b2c9d3f
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 定义 Core 和 Runtime 共同应用的[提供商规则](#session-override)，并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -17,7 +17,7 @@ source_hash: e0d23ec03ffdfa296dcfb02fb595164ed4170183a89f1c6c209bdc8928e5c595
 - 省略：Session 继承其已保存 Agent 的 Harness；内联 Agent 使用部署默认 Harness。
 - Session 的内联扩展显式为 null：重置为部署默认 Harness，同时保留继承的提供商配置包。对于已保存 Agent，null 扩展会清除其 Harness 和提供商。
 - 所选 Harness 必须已启用；Core 绝不会回退到其他 Harness。
-- 创建 Session 时，Core 在处理已保存 Agent 的覆盖值后解析该选择，验证 Harness 配置文件，并将结果存储为 Session 的引擎。当生效的 Agent 包含该扩展时，Session 读取结果会报告它；其他 Session 保持官方 Agent 结构。读取操作从不查询当前 Agent 或部署默认值。
+- 创建 Session 时，Core 在处理已保存 Agent 的覆盖值后解析该选择，根据 Harness 的[声明](harness-onboarding.md#declare-support)检查配置，并将结果存储为 Session 的引擎。当生效的 Agent 包含该扩展时，Session 读取结果会报告它；其他 Session 保持官方 Agent 结构。读取操作从不查询当前 Agent 或部署默认值。
 - 使用显式选择器重试创建时会保留调用方意图；在已有 Idempotency-Key 下更改选择器会产生冲突。
 
 Session 的 `environment` 和 Environment Templates 用于选择准备流程，而不是 Harness 或提供商。该扩展仅在 `contracts/agents-api/v1` 中定义一次；校验器从目录派生，任何处理程序或 schema 都不会维护自己的名称列表。

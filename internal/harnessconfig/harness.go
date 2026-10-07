@@ -1,8 +1,9 @@
 // Package harnessconfig defines the shared model configuration contract.
 // This file is the authoring entry point for Harness configuration: declare
-// native provider support and parameter validation once, then bind that same
-// Configuration when registering the Runtime Harness. Core admission, support
-// descriptions and every Runtime execution/preparation entry consume it.
+// native provider support, parameter validation and the Harness's support
+// Declaration once, then bind that same Configuration when registering the
+// Runtime Harness. Core admission, support descriptions and every Runtime
+// execution/preparation entry consume it.
 // Adapter-specific validation and native rendering remain private implementations.
 // Execution lifecycle and operation qualification are separate contracts.
 //
@@ -55,6 +56,9 @@ type Configuration struct {
 	// ValidateNativeConfig belongs to the selected adapter, never Core. It
 	// receives the decoded harness_config object.
 	ValidateNativeConfig func(map[string]any) bool
+	// Declaration is the only authored source of the Harness's support. A
+	// Runtime's heartbeat only narrows its Capabilities.
+	Declaration proto.Declaration
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects:
@@ -116,11 +120,14 @@ func (c Configuration) ValidateDeclaration() error {
 		}
 		seen[provider.Protocol] = true
 	}
-	return nil
+	return c.Declaration.ValidateDeclaration()
 }
 
 func (c Configuration) Clone() Configuration {
 	c.Providers = slices.Clone(c.Providers)
+	c.Declaration.MCPOrigins = slices.Clone(c.Declaration.MCPOrigins)
+	c.Declaration.ReservedMCPLabels = slices.Clone(c.Declaration.ReservedMCPLabels)
+	c.Declaration.Conflicts = slices.Clone(c.Declaration.Conflicts)
 	return c
 }
 

@@ -18,9 +18,10 @@
 // in: Register composes its EnvironmentSupport with the Harness's own
 // declaration once.
 //
-// Runtime registration and Core service qualification remain separate. A public
-// Harness also needs a profile in services/core/internal/engine; advertising
-// a capability cannot authorize it. Requests, events and capability descriptors
+// The Harness's support is its harnessconfig Declaration, which Core reads
+// too. Discovery and the Environment owner only narrow its Capabilities, and
+// the registered Executor factory runs only for a request whose selection that
+// narrowed declaration admits. Requests, events and capability descriptors
 // use the existing internal/agentdaemon/proto types. An Environment execution
 // request carries the Runtime's bound workspace directory in
 // LocalEnvironment.WorkspaceRoot; the native Harness runs there.
@@ -87,7 +88,6 @@ type EnvironmentSupport struct {
 // Compose narrows caps, a Harness's own declaration, to what s serves.
 func (s EnvironmentSupport) Compose(caps proto.AgentKindCapabilities) proto.AgentKindCapabilities {
 	caps.LocalEnvironment = proto.CapabilityFromBool(s.Local && caps.LocalEnvironment.IsSupported())
-	caps.WorkspaceReadPreparation, caps.WorkspaceOutputExport = caps.LocalEnvironment, caps.LocalEnvironment
 	caps.EnvironmentNone = proto.CapabilityFromBool(s.None && caps.EnvironmentNone.IsSupported())
 	return caps
 }
@@ -516,15 +516,14 @@ func (r *Registry) ResolveView(kind string) (View, error) {
 	return view.clone(), nil
 }
 
-// Model configuration has one shared contract, authored in
+// Model configuration and support have one shared contract, authored in
 // internal/harnessconfig/harness.go. RegisterKind requires that declaration;
-// RegisterExecutor inherits it. Every registered entry
-// validates model, provider and native parameters before calling native code.
-// The declaration belongs to the adapter and is also consumed by Core. Keep
+// RegisterExecutor inherits it. Every registered entry validates the selection,
+// model, provider and native parameters before calling native code. The
+// declaration belongs to the adapter and is also consumed by Core. Keep
 // adapter field rules and rendering private. That shared contract owns frozen
 // configuration and native application obligations. This file owns execution
-// lifecycle only. Native image/tool/operation support is qualified through proto
-// capabilities and the Core engine profile, not model configuration declarations.
+// lifecycle only.
 //
 // Preparation failure retains unconfirmed native cleanup in a non-nil Executor
 // under the factory ownership contract below.
@@ -595,6 +594,11 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 		panic(err)
 	}
 	configuration = configuration.Clone()
+	declaration, err := configuration.Declaration.Narrow(info.Capabilities)
+	if err != nil {
+		panic(err)
+	}
+	configuration.Declaration = declaration
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.configurations[kind] = configuration
@@ -603,8 +607,9 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	r.kinds[kind] = info
 }
 
-// RegisterExecutor installs the shared lifecycle after RegisterKind. It does
-// not enable other public operations.
+// RegisterExecutor installs the shared lifecycle after RegisterKind. Its
+// factory rejects a request whose selection the kind's narrowed declaration
+// does not admit. It does not enable other public operations.
 func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -617,6 +622,9 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		panic("agent.Registry.RegisterExecutor: configuration required")
 	}
 	r.executors[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Executor, error) {
+		if err := proto.ValidateSelection(configuration.Declaration, req.Selection()); err != nil {
+			return nil, err
+		}
 		if _, err := configuration.Prepare(req); err != nil {
 			return nil, err
 		}

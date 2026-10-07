@@ -7,31 +7,14 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
-
-func TestStructuredOutputNeedsOperationQualification(t *testing.T) {
-	raw := json.RawMessage(`{"agent":{"model":"model","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"}}`)
-	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
-		if err := (Policy{}).ValidateSessionConfiguration(kind, raw); (err == nil) != (kind == "claude_sdk") {
-			t.Fatalf("%s: %v", kind, err)
-		}
-	}
-	for _, qualified := range []bool{false, true} {
-		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": enginetest.Profile(func(p *engine.Profile) { p.StructuredOutput = proto.CapabilityFromBool(qualified) })})}
-		if err := policy.ValidateSessionConfiguration("new_harness", raw); (err == nil) != qualified {
-			t.Fatal("new harness did not use common qualification", err)
-		}
-	}
-}
 
 func TestStructuredOutputRequestKeepsFrozenSchemaAndInstructions(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"number":{"const":9007199254740992}}}`)
 	instructions := "Keep these original instructions."
 	snapshot := Snapshot{ModelProviderConfigured: true, Agent: v1.Agent{Model: "model", Instructions: &instructions, Text: v1.TextConfig{Format: v1.TextFormat{Type: "json_schema", Schema: schema}}}}
-	request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: "claude_sdk"}}).executionRequest(context.Background(), sessions.Session{Engine: "claude_sdk"}, snapshot, proto.AgentKindCapabilities{StructuredOutput: proto.CapabilitySupported}, sessions.ExecutionBinding{})
+	request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: "claude_sdk"}}).executionRequest(context.Background(), sessions.Session{Engine: "claude_sdk"}, snapshot, proto.Declaration{}, sessions.ExecutionBinding{})
 	if err != nil || request.ExecutionControls.OutputFormat == nil {
 		t.Fatal(err)
 	}

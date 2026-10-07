@@ -32,8 +32,7 @@ type Dispatcher struct {
 	// sessionExecution runs the Session execution operations on the lease;
 	// Bind sets it from Owner.Sessions.
 	sessionExecution *sessions.ExecutionOperations
-	Policy
-	Registry *runtimegateway.Registry
+	Registry         *runtimegateway.Registry
 	// Credentials opens the bearer tokens of authenticated MCP servers.
 	Credentials Credentials
 	// Observer records which deployment default model configurations committed
@@ -94,10 +93,6 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
 		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
-	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
-	if err != nil {
-		return sessions.Turn{}, err
-	}
 	if !environmentNone(snapshot) {
 		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
@@ -105,10 +100,11 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	if err := d.messageInputSupport(peer, session.Engine, snapshot, text); err != nil {
+	declaration, err := admitSession(peer, session.Engine, snapshot, text)
+	if err != nil {
 		return sessions.Turn{}, err
 	}
-	req, err := d.executionRequest(ctx, session, snapshot, caps, bound)
+	req, err := d.executionRequest(ctx, session, snapshot, declaration, bound)
 	if err != nil {
 		return sessions.Turn{}, err
 	}

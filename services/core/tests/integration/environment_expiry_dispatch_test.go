@@ -10,8 +10,7 @@ import (
 
 func enableEnvironmentExpiryDispatch(h *dispatchHarness) {
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-		EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported,
-	})}}})
+		EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported})}}})
 }
 
 func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {

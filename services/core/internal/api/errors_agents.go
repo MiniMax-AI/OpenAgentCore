@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
@@ -21,6 +22,7 @@ func writeAgentsError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var provider *v1.ModelProviderError
 	switch {
+	case writeSelectionError(w, err):
 	case errors.Is(err, harnessconfig.ErrHarnessRequired):
 		writeError(w, http.StatusBadRequest, "invalid_request_error", harnessRequiredMessage, "x_agents_core.harness")
 	case errors.As(err, &provider):
@@ -33,4 +35,19 @@ func writeAgentsError(w http.ResponseWriter, r *http.Request, err error) {
 		log.Ctx(r.Context()).Error("oac-core persistence operation failed")
 		writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
 	}
+}
+
+// writeSelectionError reports a selection the Harness declaration rejects,
+// with the rejected field path as param.
+func writeSelectionError(w http.ResponseWriter, err error) bool {
+	var selection *proto.SelectionError
+	if !errors.As(err, &selection) {
+		return false
+	}
+	var param []string
+	if selection.Param != "" {
+		param = append(param, selection.Param)
+	}
+	writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error(), param...)
+	return true
 }

@@ -44,7 +44,7 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 		AgentKind: "codex", AgentStateKey: "prepared-session",
 		Model:                       "fixture-model",
 		ModelProvider:               fixtureProvider(),
-		ExecutionControls:           &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
+		ExecutionControls:           &proto.ExecutionControls{TextVerbosity: "medium"},
 		DisableExecutionEnvironment: true,
 		FunctionTools:               []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
 	}

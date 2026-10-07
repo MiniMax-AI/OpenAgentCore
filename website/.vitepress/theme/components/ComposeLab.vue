@@ -141,7 +141,7 @@ const lines = computed<Tok[][]>(() => {
     </div>
     <p class="lab-foot">
       {{ t.footnote }}
-      <a :href="withBase(`${lang === 'zh' ? '/zh' : ''}/contracts/agents-api/harness-capabilities`)">{{ t.footnoteLink }} →</a>
+      <a :href="withBase(`${lang === 'zh' ? '/zh' : ''}/contracts/agents-api/#known-gaps`)">{{ t.footnoteLink }} →</a>
     </p>
   </div>
 </template>
