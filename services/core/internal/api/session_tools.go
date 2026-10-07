@@ -18,8 +18,8 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 		var kind struct {
 			Type string `json:"type"`
 		}
-		if json.Unmarshal(raw, &kind) != nil {
-			return nil, errors.New("Invalid execution tool configuration.")
+		if err := json.Unmarshal(raw, &kind); err != nil {
+			return nil, &storedDataError{err}
 		}
 		switch kind.Type {
 		case "programmatic_tool_calling", "web_search":
@@ -32,15 +32,10 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			if kind.Type == "web_search" {
 				resolved, err = resolveDisabledWebSearch(raw)
 			} else {
-				resolved, err = resolveProgrammaticTool(raw)
-				var value struct {
-					Enabled bool `json:"enabled"`
-				}
-				if err == nil {
-					_ = json.Unmarshal(resolved, &value)
-					if value.Enabled {
-						err = errors.New("Programmatic tool calling is not qualified for execution.")
-					}
+				var enabled bool
+				resolved, enabled, err = resolveProgrammaticTool(raw)
+				if err == nil && enabled {
+					err = errors.New("Programmatic tool calling is not qualified for execution.")
 				}
 			}
 			if err != nil {
@@ -48,8 +43,8 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			}
 			tools[i] = resolved
 		case "tool_search":
-			if search || decodeInputObject(raw, &kind, "type") != nil {
-				return nil, errors.New("Execution requires one type-only tool_search declaration.")
+			if search {
+				return nil, errors.New("Execution requires one tool_search declaration.")
 			}
 			search = true
 			tools[i], _ = json.Marshal(kind)
@@ -59,15 +54,18 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 				return nil, err
 			}
 			var tool v1.MCPTool
-			if json.Unmarshal(resolved, &tool) != nil || servers[tool.ServerLabel] {
+			if err := json.Unmarshal(resolved, &tool); err != nil {
+				return nil, &storedDataError{err}
+			}
+			if servers[tool.ServerLabel] {
 				return nil, errors.New("Execution requires distinct MCP server labels.")
 			}
 			servers[tool.ServerLabel] = true
 			tools[i] = resolved
 		case "function":
 			var function v1.FunctionToolInput
-			if decodeInputObject(raw, &function, "type", "name", "description", "parameters", "defer_loading") != nil {
-				return nil, errors.New("Invalid execution function fields.")
+			if err := json.Unmarshal(raw, &function); err != nil {
+				return nil, &storedDataError{err}
 			}
 			functions = append(functions, function)
 			positions = append(positions, i)

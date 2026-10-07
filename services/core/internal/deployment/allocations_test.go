@@ -322,14 +322,14 @@ func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 			findAllocation: func() (Allocation, bool, error) { return Allocation{}, false, nil },
 			lockDeployment: func() (placement.Deployment, error) { return deployment, nil }}
 	}
-	paused := fresh()
-	paused.lockDeployment = func() (placement.Deployment, error) {
+	resetting := fresh()
+	resetting.lockDeployment = func() (placement.Deployment, error) {
 		d := deployment
-		d.AdmissionPaused = true
+		d.Resetting = true
 		return d, nil
 	}
-	if _, err := allocationOperations(t, paused, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, placement.ErrAdmissionClosed) {
-		t.Fatal("paused admission reserved an allocation", err)
+	if _, err := allocationOperations(t, resetting, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, placement.ErrResetAdmission) {
+		t.Fatal("a resetting deployment reserved an allocation", err)
 	}
 	released := fresh()
 	released.loadReserved = func() (placement.Reserved, error) {

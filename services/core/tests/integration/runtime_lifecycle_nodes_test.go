@@ -37,7 +37,7 @@ func lifecycleTestSession(t *testing.T, s *Store, node string) (string, sessions
 	}
 	return tenant, session
 }
-func lifecycleTestAllocation(t *testing.T, s, w *Store, d deployment.ProcessDeployment, node string) deployment.Allocation {
+func lifecycleTestAllocation(t *testing.T, s, w *Store, d managerNode, node string) deployment.Allocation {
 	t.Helper()
 	tenant, session := lifecycleTestSession(t, s, node)
 	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
@@ -52,20 +52,20 @@ func TestRuntimeLifecycleNodePagesAreIndependent(t *testing.T) {
 	other := lifecycleTestNode(t, s)
 	var allocated, pending []string
 	for range 34 {
-		allocated = append(allocated, lifecycleTestAllocation(t, s, w, d, d.LocalNodeID).ID)
-		_, session := lifecycleTestSession(t, s, d.LocalNodeID)
+		allocated = append(allocated, lifecycleTestAllocation(t, s, w, d, d.NodeID).ID)
+		_, session := lifecycleTestSession(t, s, d.NodeID)
 		pending = append(pending, session.Environment.ID)
 	}
 	second := lifecycleTestAllocation(t, s, w, d, other)
 	_, secondPending := lifecycleTestSession(t, s, other)
 	// Offline and unresolved cleanup remain discoverable without changing placement.
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.LocalNodeID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET state='cleanup_pending' WHERE node_id=$1", d.LocalNodeID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET state='cleanup_pending' WHERE node_id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
 	}
-	for _, node := range []string{d.LocalNodeID, other} {
+	for _, node := range []string{d.NodeID, other} {
 		var gotAlloc, gotPending []string
 		cursor := ""
 		for range 4 {
@@ -181,7 +181,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodes, err = deploymentStore(w).LifecycleNodes(t.Context())
-	if err != nil || len(nodes) != 1 || nodes[0] != d.LocalNodeID {
+	if err != nil || len(nodes) != 1 || nodes[0] != d.NodeID {
 		t.Fatal("removed node discovered", nodes, err)
 	}
 }
@@ -190,14 +190,14 @@ func TestRuntimeLifecycleNodeRejectsMissingOrReleasedPlacement(t *testing.T) {
 	for _, mutation := range []string{"DELETE FROM runtime_placements WHERE environment_id=$1", "UPDATE runtime_placements SET released_at=clock_timestamp() WHERE environment_id=$1"} {
 		t.Run(mutation[:6], func(t *testing.T) {
 			s, w, d := managerFixture(t, 4, 4)
-			tenant, session := lifecycleTestSession(t, s, d.LocalNodeID)
+			tenant, session := lifecycleTestSession(t, s, d.NodeID)
 			if _, err := s.pool.Exec(t.Context(), mutation, session.Environment.ID); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := deploymentService(t, w).LifecycleNode(t.Context(), tenant, session.Environment.ID); !errors.Is(err, placement.ErrNodeUnavailable) {
 				t.Fatal("invalid placement routed", err)
 			}
-			rows, err := deploymentStore(w).UnallocatedEnvironments(t.Context(), d.LocalNodeID, "")
+			rows, err := deploymentStore(w).UnallocatedEnvironments(t.Context(), d.NodeID, "")
 			if err != nil || len(rows) != 0 {
 				t.Fatal("invalid placement provisioned", rows, err)
 			}
@@ -206,7 +206,12 @@ func TestRuntimeLifecycleNodeRejectsMissingOrReleasedPlacement(t *testing.T) {
 }
 
 func TestRuntimeLifecycleNodelessLane(t *testing.T) {
-	s, w, _, a := nodelessAllocationFixture(t)
+	s, w, installation := managedArchiveFixture(t)
+	_, reserved := localEnvironment(t, s, uuid.NewString())
+	a, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: reserved.TenantID, EnvironmentID: reserved.ID}, installation, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	nodes, err := deploymentStore(w).LifecycleNodes(t.Context())
 	if err != nil || !slices.Equal(nodes, []string{""}) {
 		t.Fatal(nodes, err)

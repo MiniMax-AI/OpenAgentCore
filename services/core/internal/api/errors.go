@@ -105,6 +105,28 @@ func writeInternalError(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
 }
 
+// storedDataError carries a failure of Core's own stored or resolved
+// configuration on the Agent and Session paths: a saved configuration or tool
+// that Core resolved or stored and that does not decode, or a storage or
+// decryption failure while reading the deployment default model provider. It
+// is never the client's input, so it is never echoed in a response.
+type storedDataError struct{ err error }
+
+func (e *storedDataError) Error() string { return e.err.Error() }
+func (e *storedDataError) Unwrap() error { return e.err }
+
+// writeStoredDataError reports a storedDataError as a service error and returns
+// false for any other error. The underlying failure is logged for diagnosis.
+func writeStoredDataError(w http.ResponseWriter, r *http.Request, err error) bool {
+	var stored *storedDataError
+	if !errors.As(err, &stored) {
+		return false
+	}
+	log.Ctx(r.Context()).Error("oac-core stored data failed", "error", stored.err)
+	writeModelConfigurationError(w, r, stored.err)
+	return true
+}
+
 // writeTextValueError reports request text that PostgreSQL cannot store and
 // returns false for any other error. It is a documented local limit: text and
 // jsonb cannot store U+0000, and text parameters, including query filters,

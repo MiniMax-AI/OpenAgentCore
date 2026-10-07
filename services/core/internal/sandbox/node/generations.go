@@ -15,7 +15,10 @@ type GenerationProvider struct {
 	SpecificationDigest string
 	Provider            sandbox.SandboxProvider
 	Probe               func(context.Context) error
-	Close               func()
+	// Quiescent reports that no helper outlived its canceled caller; nil
+	// means always quiescent.
+	Quiescent func() bool
+	Close     func()
 }
 
 type GenerationManagerOptions struct {
@@ -217,11 +220,7 @@ func (m *GenerationManager) Drop(ctx context.Context, grant sandbox.GenerationRe
 		m.mu.Unlock()
 		return sandbox.ErrOwnership
 	}
-	quiet := true
-	if provider, ok := g.value.Provider.(interface{ Quiescent() bool }); ok {
-		quiet = provider.Quiescent()
-	}
-	if !quiet || g.refs != 0 || g.removing || m.target.Generation == grant.Generation || m.target.ServingGeneration != nil && *m.target.ServingGeneration == grant.Generation {
+	if g.value.Quiescent != nil && !g.value.Quiescent() || g.refs != 0 || g.removing || m.target.Generation == grant.Generation || m.target.ServingGeneration != nil && *m.target.ServingGeneration == grant.Generation {
 		m.mu.Unlock()
 		return ErrUnavailable
 	}
@@ -265,7 +264,7 @@ func (m *GenerationManager) prepareLoop() {
 				if candidate == nil || candidate.removing || candidate.collecting || candidate.preparing || candidate.refs != 0 || candidate.value.Provider != nil && !candidate.repairing || time.Now().Before(candidate.retryAt) {
 					continue
 				}
-				if provider, ok := candidate.value.Provider.(interface{ Quiescent() bool }); ok && !provider.Quiescent() {
+				if candidate.value.Quiescent != nil && !candidate.value.Quiescent() {
 					continue
 				}
 				g = candidate

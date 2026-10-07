@@ -3,6 +3,8 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -96,11 +98,48 @@ func (r *Registry) DiscoverConfiguration(ctx context.Context, kind string, input
 	if err := a.Configuration.Requirements().Discovery.Check("DiscoverConfiguration"); err != nil {
 		return nil, err
 	}
-	discovery, ok := a.Configuration.(sandbox.ConfigurationDiscoverer)
-	if !ok {
-		return nil, providercontract.ErrContract
+	result, err := a.Configuration.DiscoverConfiguration(ctx, input, paths)
+	if err != nil {
+		return nil, declaredResult("DiscoverConfiguration", err)
 	}
-	return discovery.DiscoverConfiguration(ctx, input, paths)
+	return result, nil
+}
+
+// DiscoverSelection resolves a direct candidate's omitted native values.
+func (r *Registry) DiscoverSelection(ctx context.Context, c sandbox.DirectConfig) (sandbox.Selection, error) {
+	a, err := r.Lookup(c.Selection.Provider)
+	if err != nil {
+		return sandbox.Selection{}, err
+	}
+	if err := a.Configuration.Requirements().SelectionDiscovery.Check("DiscoverSelection"); err != nil {
+		return sandbox.Selection{}, err
+	}
+	s, err := a.Configuration.DiscoverSelection(ctx, c)
+	if err != nil {
+		return sandbox.Selection{}, declaredResult("DiscoverSelection", err)
+	}
+	return s, nil
+}
+
+// VerifyCredential checks a candidate credential against owned resources.
+func (r *Registry) VerifyCredential(ctx context.Context, c sandbox.DirectConfig, refs []sandbox.Reference) error {
+	a, err := r.Lookup(c.Selection.Provider)
+	if err != nil {
+		return err
+	}
+	if err := a.Configuration.Requirements().CredentialVerification.Check("VerifyCredential"); err != nil {
+		return err
+	}
+	return declaredResult("VerifyCredential", a.Configuration.VerifyCredential(ctx, c, refs))
+}
+
+// declaredResult keeps a supported declaration binding: an operation declared
+// Supported that reports Unsupported breaks the contract.
+func declaredResult(operation string, err error) error {
+	if errors.Is(err, providercontract.ErrUnsupported) {
+		return fmt.Errorf("%w: %s is declared supported", providercontract.ErrContract, operation)
+	}
+	return err
 }
 
 type nodeConfiguration struct{}
@@ -113,7 +152,10 @@ type nodeConfigurationAdapter struct {
 }
 
 func (nodeConfigurationAdapter) Requirements() sandbox.ConfigurationRequirements {
-	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
+	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired,
+		Discovery:              providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"},
+		SelectionDiscovery:     providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"},
+		CredentialVerification: providercontract.Support{State: providercontract.Unsupported, Reason: "credentials_not_required"}}
 }
 func (nodeConfigurationAdapter) DecodeInput(public, secret json.RawMessage) (sandbox.Configuration, error) {
 	if len(secret) > 0 || sandbox.DecodeConfigurationObject(public, &struct{}{}) != nil {
@@ -159,4 +201,10 @@ func (a nodeConfigurationAdapter) Equal(x, y sandbox.Configuration) (bool, error
 }
 func (nodeConfigurationAdapter) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
+}
+func (nodeConfigurationAdapter) DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error) {
+	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "node_configuration_has_no_catalog"}
+}
+func (nodeConfigurationAdapter) VerifyCredential(context.Context, sandbox.DirectConfig, []sandbox.Reference) error {
+	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "credentials_not_required"}
 }

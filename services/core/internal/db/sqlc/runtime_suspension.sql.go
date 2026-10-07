@@ -27,30 +27,6 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 	return err
 }
 
-const countRuntimeComputeReservations = `-- name: CountRuntimeComputeReservations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released' AND compute_phase <> 'suspended'
-`
-
-func (q *Queries) CountRuntimeComputeReservations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRuntimeComputeReservations, providerKey)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countRuntimeRetainedAllocations = `-- name: CountRuntimeRetainedAllocations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released'
-`
-
-func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRuntimeRetainedAllocations, providerKey)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
     GREATEST(a.compute_activity_at,

@@ -101,8 +101,8 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
-	})
+		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}, nil
+	}, unusedPreparation(t))
 	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), config)
 	if err != nil {
 		t.Fatal(err)
@@ -215,8 +215,8 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
-	})
+		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}, nil
+	}, unusedPreparation(t))
 	var published []uint64
 	config.PublishUnconfigured = func(generation uint64) {
 		if committedReads != 0 {
@@ -256,10 +256,10 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 	id := uuid.NewString()
 	reader := &strictDeploymentReader{t: t, snapshot: func(context.Context) (deployment.Snapshot, error) {
-		return deployment.Snapshot{Record: deployment.Record{InstallationID: id, WebManaged: true, Generation: 1}}, nil
+		return deployment.Snapshot{Record: deployment.Record{InstallationID: id, Generation: 1}}, nil
 	}}
 	deployments, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
-	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 func TestSandboxResetChangesReturnViewReadAfterCommit(t *testing.T) {
 	owner, deployments, reader := resetManager(t)
 	id := initializeE2BDeployment(t, owner)
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

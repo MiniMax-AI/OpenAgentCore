@@ -473,8 +473,8 @@ func TestEnvironmentCreationReservesItsInitialInput(t *testing.T) {
 	}
 }
 
-// Hosted creation checks admission on the locked deployment, so it sees
-// maintenance committed while it waited, and places after creating the
+// Hosted creation checks admission on the locked deployment, so it sees a
+// reset committed while it waited, and places after creating the
 // Environment, rolling both back when no node is available. A retry admits
 // nothing and still returns its Session.
 func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
@@ -505,19 +505,20 @@ func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 		done <- err
 	}()
 	awaitBlocked(ctx, t, pool, holder)
-	if _, err := tx.Exec(ctx, "UPDATE runtime_deployment SET installation_id=$1, backend_fingerprint=$2, admission_paused=true", uuid.New(), strings.Repeat("a", 64)); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE runtime_deployment SET installation_id=$1, backend_fingerprint=$2, provider_kind='docker', mode='nodes', generation=1,
+		reset_clear='force', reset_requested_at=now(), reset_forced_at=now(), reset_audit='{}'`, uuid.New(), strings.Repeat("a", 64)); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, placement.ErrAdmissionClosed) {
-		t.Fatal("creation bypassed committed maintenance", err)
+	if err := <-done; !errors.Is(err, placement.ErrResetAdmission) {
+		t.Fatal("creation bypassed the committed reset", err)
 	}
 	if retry, err := service.CreateSession(ctx, tenant, hosted("existing")); err != nil || retry.Created || retry.Session.ID != existing.Session.ID {
 		t.Fatal("retry ran admission", retry, err)
 	}
-	exec(t, pool, "UPDATE runtime_deployment SET admission_paused=false, web_managed=true")
+	exec(t, pool, "UPDATE runtime_deployment SET reset_clear=NULL, reset_requested_at=NULL, reset_forced_at=NULL, reset_audit=NULL, provider_kind='', mode=''")
 	if _, err := service.CreateSession(ctx, tenant, hosted("unplaced")); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("placement without a node", err)
 	}

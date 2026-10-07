@@ -1,7 +1,7 @@
 ---
 title: "Core 协议行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 08b1d6adaabbc67bb28ff412dbea21095f4f56954fb62d4d244bd175319ca862
+source_hash: 2d6be390379d4bbb9a4286e85111661aad0f3571cd505b0db14ec0fd54ab7da8
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[coverage ledger](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -164,7 +164,7 @@ Agent 创建要求提供 `model`。对于省略的字段，Core 会保存并返�
 
 ### 配置验证 {#configuration-validation}
 
-Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其解析器和 Harness 准入之前，根据已锁定的 `tools`、`text`、`reasoning`、`service_tier`、`multi_agent`、`model`、`name` 和 `instructions` 形状进行检查。失败时返回 400，`type` 和 `code` 均为 `invalid_request_error`：
+Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其解析器和 Harness 准入之前，根据已锁定的 `tools`、`text`、`reasoning`、`service_tier`、`multi_agent`、`model`、`name`、`instructions` 和 `metadata` 形状进行检查。失败时返回 400，`type` 和 `code` 均为 `invalid_request_error`：
 
 | 情况 | Param | 消息 |
 | --- | --- | --- |
@@ -177,7 +177,7 @@ Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其
 | Function `parameters` 的字符串根 `type` 不是 `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema 的字符串根 `type` 不是 `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`，Agent 请求上也会返回此消息 |
 
-在同一个对象内，Core 会先报告联合类型的 `type`，然后报告未知成员，再按文档顺序报告成员值，最后报告缺失成员；先检查 tools，再检查 `text`，并在重复项和 schema 根检查之前检查整个对象。没有字符串根 `type` 的 schema 不会被检查。Function 和 output schema、MCP `transport`、`request_metadata`、`metadata` 和 `x_agents_core` 使用各自的解析器。更新正文和 Session 内联 Agent 会在查找 Agent 之前进行验证，因此属于当前租户、属于外部租户、缺失和格式错误的 Agent ID 会得到相同的响应。
+在同一个对象内，Core 会先报告联合类型的 `type`，然后报告未知成员，再按文档顺序报告成员值，最后按固定 schema 的顺序报告缺失成员；先检查 tools，再检查 `text`，并在重复项和 schema 根检查之前检查整个对象。没有字符串根 `type` 的 schema 不会被检查。Function 和 output schema、`request_metadata` 和 `x_agents_core` 使用各自的解析器。更新正文和 Session 内联 Agent 会在查找 Agent 之前进行验证，因此属于当前租户、属于外部租户、缺失和格式错误的 Agent ID 会得到相同的响应。
 
 即使无法执行，Core 也会保存已锁定形状允许的值：任意长度的函数名称、已启用的 programmatic tool calling、reasoning effort `max` 和 service tier `flex`。
 

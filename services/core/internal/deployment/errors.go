@@ -20,7 +20,6 @@ var (
 	ErrNotConfigured         = errors.New("the sandbox deployment is not configured")
 	ErrNodeInUse             = errors.New("sandbox node retains resources")
 	ErrNodeCredential        = errors.New("invalid sandbox node credential")
-	ErrLocalNodeConfigured   = errors.New("local sandbox node is enabled in deployment configuration")
 	// ErrAllocationConflict rejects an allocation change whose owner no longer
 	// matches the stored allocation, device binding, state or compute revision,
 	// or a replay for another installation.

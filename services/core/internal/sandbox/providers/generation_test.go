@@ -81,6 +81,9 @@ func TestMicrosandboxGenerationBindsLeaseIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeProvider()
+	if built.Quiescent == nil || !built.Quiescent() {
+		t.Fatal("generation does not report helper quiescence")
+	}
 	response, err := json.Marshal(sandboxmicro.Response{Version: sandboxmicro.ProtocolVersion})
 	if err != nil {
 		t.Fatal(err)

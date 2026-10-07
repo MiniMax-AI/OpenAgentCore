@@ -18,7 +18,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -124,21 +123,13 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		cp.mu.Unlock()
 		server.Close()
 	})
-	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
+	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: webDeployment(t, s, "microsandbox"), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
-	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
-	f.worker = startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
-	spec := SandboxDeploymentTestSpec("microsandbox")
-	raw, _ := json.Marshal(spec)
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification=$1", raw); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_nodes SET specification_digest=$1,deployment_generation=1", spec.Digest("microsandbox")); err != nil {
-		t.Fatal(err)
-	}
+	f.worker = startWebWorker(t, s, registry, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})
 	t.Cleanup(f.stop)
 	f.epoch = fixtureOwnerEpoch(t, s)
+	f.enroll(f.nodeA)
 	f.enroll(f.nodeB)
 	f.online(f.nodeA)
 	f.online(f.nodeB)

@@ -25,22 +25,18 @@ import (
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
 	// PublishUnconfigured updates the shared observation cache after reset commit.
-	PublishUnconfigured              func(uint64)
-	Generation                       uint64
-	Mode                             string
-	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
-	prepareDeployment                RuntimeDeploymentPreparer
-	ProviderKind                     string
-	LocalNodeID                      string
-	LocalCredentialSHA256            string
-	LocalMaxActive, LocalMaxRetained int
-	CoreURL                          string
-	SandboxLink                      string
-	InstallationID                   string
-	BackendFingerprint               string
-	Provider                         sandbox.SandboxProvider
-	AdmissionPaused                  bool
-	Suspension                       *RuntimeSuspensionPolicy
+	PublishUnconfigured func(uint64)
+	Generation          uint64
+	Mode                string
+	loadDeployment      func(context.Context) (*RuntimeProvider, error)
+	prepareDeployment   RuntimeDeploymentPreparer
+	ProviderKind        string
+	CoreURL             string
+	SandboxLink         string
+	InstallationID      string
+	BackendFingerprint  string
+	Provider            sandbox.SandboxProvider
+	Suspension          *RuntimeSuspensionPolicy
 }
 
 type runtimeLifecycle struct {
@@ -71,21 +67,12 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentR
 	if config == nil {
 		return nil, nil
 	}
-	var copied RuntimeProvider
-	if config.loadDeployment != nil {
-		id, err := uuid.Parse(config.InstallationID)
-		if err != nil || id == uuid.Nil || id.String() != config.InstallationID || registry == nil {
-			return nil, sandbox.ErrInvalid
-		}
-	} else {
-		var err error
-		copied, err = validatedRuntimeProvider(config, registry)
-		if err != nil {
-			return nil, err
-		}
+	id, err := uuid.Parse(config.InstallationID)
+	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || config.loadDeployment == nil || config.prepareDeployment == nil || registry == nil {
+		return nil, sandbox.ErrInvalid
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, links: links, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, links: links, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -102,18 +89,15 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 		return RuntimeProvider{}, err
 	}
 	copied := *config
-	if copied.Mode == "" && copied.ProviderKind != "" {
-		copied.Mode = "nodes"
-	}
-	if copied.Mode != "" && copied.Mode != "nodes" && copied.Mode != "direct" {
+	if copied.ProviderKind == "" || (copied.Mode != "nodes" && copied.Mode != "direct") {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == "direct" && (copied.ProviderKind == "" || copied.LocalNodeID != "" || copied.Suspension != nil) {
+	if copied.Mode == "direct" && copied.Suspension != nil {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy
@@ -194,25 +178,6 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
 	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
-	if _, err := r.reader.EnvironmentAllocation(ctx, key); errors.Is(err, deployment.ErrNotFound) {
-		if r.config.AdmissionPaused && r.config.Generation == 0 {
-			return deployment.Allocation{}, ErrExecutionUnavailable
-		}
-		if err := r.computeFreshCapacity(ctx, providerKey); err != nil {
-			return deployment.Allocation{}, err
-		}
-		if policy := r.config.Suspension; policy != nil && r.config.ProviderKind == "" {
-			count, err := r.reader.CountRetainedAllocations(ctx, providerKey)
-			if err != nil {
-				return deployment.Allocation{}, err
-			}
-			if count >= int64(policy.MaxRetained) {
-				return deployment.Allocation{}, ErrExecutionUnavailable
-			}
-		}
-	} else if err != nil {
-		return deployment.Allocation{}, err
-	}
 	secret := make([]byte, 64)
 	if _, err := rand.Read(secret); err != nil {
 		return deployment.Allocation{}, err
@@ -465,12 +430,4 @@ func runtimeReference(owner deployment.Allocation) sandbox.Reference {
 
 func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 	return w.runtimes.run(ctx)
-}
-
-// Manager deployments reserve capacity with Session placement before provisioning.
-func (r *runtimeLifecycle) computeFreshCapacity(ctx context.Context, key string) error {
-	if r.config.ProviderKind != "" {
-		return nil
-	}
-	return r.computeCapacity(ctx, key)
 }

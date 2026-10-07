@@ -38,7 +38,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		{"wrong local constructor", func(a *Adapter) { a.Mode = "direct" }},
 		{"missing direct constructor", func(a *Adapter) { a.Mode = "direct"; a.BuildLocal = nil }},
 		{"both constructors", func(a *Adapter) {
-			a.BuildDirect = func(DirectConfig) (sandbox.SandboxProvider, error) {
+			a.BuildDirect = func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
 				t.Fatal("called direct constructor")
 				return nil, nil
 			}
@@ -47,7 +47,6 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		{"missing resource validator", func(a *Adapter) { a.ValidateResources = nil }},
 		{"missing configuration", func(a *Adapter) { a.Configuration = nil }},
 		{"typed nil configuration", func(a *Adapter) { var c *registrationConfiguration; a.Configuration = c }},
-		{"missing discovery implementation", func(a *Adapter) { a.Configuration = missingConfigurationDiscovery{a.Configuration} }},
 		{"missing configuration requirement", func(a *Adapter) { a.Configuration = registrationConfiguration{} }},
 		{"invalid credential requirement", func(a *Adapter) {
 			r := a.Configuration.Requirements()
@@ -94,7 +93,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 					_, _, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, LocalOptions{Standalone: true})
 					return err
 				}},
-				{"direct build", func() error { _, err := registry.BuildDirect(DirectConfig{Selection: selection}); return err }},
+				{"direct build", func() error { _, err := registry.BuildDirect(sandbox.DirectConfig{Selection: selection}); return err }},
 				{"binding", func() error { return ValidateBinding(a, &docker.Provider{}) }},
 				{"projection", func() error {
 					text, err := registry.PythonDeploymentContract()
@@ -146,12 +145,12 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	// Direct providers may legitimately need no remote credential or extra
 	// selection state; registration must not require irrelevant callback stubs.
 	a.Mode, a.BuildLocal, a.NodeArtifacts = "direct", nil, nil
-	a.BuildDirect = func(DirectConfig) (sandbox.SandboxProvider, error) {
+	a.BuildDirect = func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
 		calls++
 		return &docker.Provider{}, nil
 	}
 	registry.adapters[kind] = a
-	p, err := registry.BuildDirect(DirectConfig{Selection: sandbox.Selection{Provider: kind}})
+	p, err := registry.BuildDirect(sandbox.DirectConfig{Selection: sandbox.Selection{Provider: kind}})
 	if err != nil || p == nil || calls != 2 {
 		t.Fatalf("credential-free direct build: %v calls=%d", err, calls)
 	}

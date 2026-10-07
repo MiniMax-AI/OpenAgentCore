@@ -31,7 +31,7 @@ func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.
 	if err != nil || retained.State != "running" || retained.ID != owner.ID || retained.ObservationError != "node_unavailable" {
 		t.Fatal(retained, err)
 	}
-	if err := deploymentService(t, s).RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), d.NodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("diagnostic released resource", err)
 	}
 	// A new lifecycle observation must not be erased by an earlier result.

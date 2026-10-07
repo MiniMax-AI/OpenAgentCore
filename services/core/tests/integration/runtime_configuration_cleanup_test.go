@@ -84,7 +84,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			s, _ := newManagedTestStore(t)
-			key := uuid.NewString()
+			key := webDeployment(t, s, "e2b")
 			p := &configurationCleanupProvider{
 				lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: test.loseCreate},
 				rejectCreate:      test.rejectCreate, settleCreate: test.settleCreate,

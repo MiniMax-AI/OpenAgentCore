@@ -6,23 +6,20 @@ import (
 	"maps"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 type provider struct {
 	hub               *Hub
 	resolveGeneration func(context.Context, sandbox.Reference) (string, uint64, error)
-	kind              string
 	operations        providercontract.Operations
 }
 
 var _ sandbox.SandboxProvider = (*provider)(nil)
-var _ sandbox.CheckpointProvider = (*provider)(nil)
 
 // Proxy binds a fixed node and deployment generation explicitly.
-func (h *Hub) Proxy(id, kind string, declared providercontract.Operations, generation uint64) sandbox.SandboxProvider {
-	return h.GenerationProvider(kind, declared, func(context.Context, sandbox.Reference) (string, uint64, error) { return id, generation, nil })
+func (h *Hub) Proxy(id string, declared providercontract.Operations, generation uint64) sandbox.SandboxProvider {
+	return h.GenerationProvider(declared, func(context.Context, sandbox.Reference) (string, uint64, error) { return id, generation, nil })
 }
 func (p *provider) call(ctx context.Context, q request) (response, error) {
 	if err := providercontract.Require(p, operationMethod(q.Operation)); err != nil {
@@ -71,15 +68,6 @@ func creationSettled(info *sandbox.Info, ref sandbox.Reference) bool {
 }
 func (p *provider) ProviderOperations() providercontract.Operations {
 	return maps.Clone(p.operations)
-}
-func (*provider) ObserveBatch(context.Context, []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
-	return nil, &providercontract.UnsupportedError{Operation: "ObserveBatch", Reason: "node_transport_has_no_batch_observation"}
-}
-func (p *provider) DiscoverSelection(context.Context, sandbox.Selection) (sandbox.Selection, error) {
-	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "node_configuration_is_core_owned"}
-}
-func (p *provider) VerifyCredential(context.Context, []sandbox.Reference) error {
-	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "node_credentials_are_transport_owned"}
 }
 func (p *provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	return p.info(ctx, request{Operation: "create", Reference: b.Reference, Bootstrap: &b})
@@ -163,13 +151,7 @@ func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c san
 
 // GenerationProvider routes every operation with allocation-owned generation,
 // distinct from the request's compute generation. declared is the kind's
-// registered operations; the transport replaces the ones it owns.
-func (h *Hub) GenerationProvider(kind string, declared providercontract.Operations, resolve func(context.Context, sandbox.Reference) (string, uint64, error)) sandbox.SandboxProvider {
-	operations := maps.Clone(declared)
-	if operations != nil {
-		operations["DiscoverSelection"] = providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_is_core_owned"}
-		operations["VerifyCredential"] = providercontract.Support{State: providercontract.Unsupported, Reason: "node_credentials_are_transport_owned"}
-		operations["ObserveBatch"] = providercontract.Support{State: providercontract.Unsupported, Reason: "node_transport_has_no_batch_observation"}
-	}
-	return &provider{hub: h, kind: kind, operations: operations, resolveGeneration: resolve}
+// registered operations.
+func (h *Hub) GenerationProvider(declared providercontract.Operations, resolve func(context.Context, sandbox.Reference) (string, uint64, error)) sandbox.SandboxProvider {
+	return &provider{hub: h, operations: maps.Clone(declared), resolveGeneration: resolve}
 }

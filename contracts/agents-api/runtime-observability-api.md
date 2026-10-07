@@ -145,7 +145,7 @@ Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rule
 | `unsupported` | `runtime_mode_not_observable` | `none` and `self_hosted` Sessions. |
 | `unavailable` | `allocation_pending` | The managed allocation does not exist yet or is being created. |
 | `unavailable` | `runtime_not_running` | The allocation is being cleaned up or is released, or the provider reports the Runtime absent, stopped or suspended. |
-| `unavailable` | `source_not_configured` | No observation source serves the allocation's provider. |
+| `unavailable` | `source_not_configured` | This Core has no managed installation identity. |
 | `unavailable` | `sample_timeout` | The provider read exceeded its deadline. |
 | `unavailable` | `sample_unavailable` | The provider could not produce a current sample. |
 

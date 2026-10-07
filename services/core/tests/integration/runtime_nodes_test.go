@@ -17,19 +17,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func managerFixture(t *testing.T, active, retained int) (*Store, *Store, deployment.ProcessDeployment) {
+// managerNode is the deployment managerFixture sets up: installation
+// InstallationID runs Docker on the one online node NodeID.
+type managerNode struct{ InstallationID, NodeID string }
+
+func managerFixture(t *testing.T, active, retained int) (*Store, *Store, managerNode) {
 	t.Helper()
-	s, _ := newManagedTestStore(t)
-	w := executionWriter(t, s)
-	d := deploymentSelection()
-	d.ProviderKind = "docker"
-	d.LocalNodeID = uuid.NewString()
-	d.LocalCredentialSHA256 = runtimedevice.HashCredential("local-node-credential")
-	d.LocalMaxActive = active
-	d.LocalMaxRetained = retained
-	deploymentConfigure(t, w, &d)
-	onlineManagerNode(t, s, d.LocalNodeID)
-	return s, w, d
+	s, w, view, _ := webSpecificationFixture(t, "docker")
+	node := enrollNode(t, s, view, deployment.Capacity{MaxActive: active, MaxRetained: retained})
+	return s, w, managerNode{InstallationID: view.InstallationID, NodeID: node.NodeID}
 }
 func onlineManagerNode(t *testing.T, s *Store, id string) string {
 	t.Helper()
@@ -158,7 +154,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err != nil || len(nodes) != 1 || nodes[0].Active != 1 || nodes[0].Retained != 1 || nodes[0].Reserved != 1 {
 		t.Fatal(nodes, err)
 	}
-	if err := service.RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
+	if err := service.RemoveNode(t.Context(), d.NodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("removed pending placement", err)
 	}
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: retained.ID}); err != nil {
@@ -169,7 +165,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.LocalNodeID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
 	}
 	replay, err := s.CreateSession(t.Context(), tenant, input)
@@ -180,7 +176,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 		t.Fatal("foreign placement leaked", err)
 	}
 	placement, err := sessionRuntimePlacement(t.Context(), s, tenant, first.ID)
-	if err != nil || placement.NodeID != d.LocalNodeID || placement.Available {
+	if err != nil || placement.NodeID != d.NodeID || placement.Available {
 		t.Fatal(placement, err)
 	}
 }
@@ -220,7 +216,9 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 		}
 	}
 	epoch := managerEpoch(t, s)
-	deploymentConfigure(t, w, &d)
+	if err := deploymentExecution(t, w).Claim(t.Context(), d.InstallationID); err != nil {
+		t.Fatal(err)
+	}
 	if next := managerEpoch(t, s); next != epoch+1 {
 		t.Fatal(next)
 	}
@@ -230,7 +228,7 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("stale node admitted", err)
 	}
-	onlineManagerNode(t, s, d.LocalNodeID)
+	onlineManagerNode(t, s, d.NodeID)
 	if err := nodes.RemoveNode(t.Context(), input.NodeID); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +252,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
+	if err := nodes.RemoveNode(t.Context(), next.NodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal(err)
 	}
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: pending.ID}); err != nil {
@@ -267,7 +265,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
+	if err := nodes.RemoveNode(t.Context(), next.NodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("unknown cleanup released node", err)
 	}
 	retained, err = deploymentExecution(t, w).SettleCreation(t.Context(), retained)
@@ -277,22 +275,8 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), retained); err != nil {
 		t.Fatal(err)
 	}
-	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrLocalNodeConfigured) {
-		t.Fatal("configured local node was removed", err)
-	}
-	if _, err := nodes.AuthenticateNode(t.Context(), next.LocalNodeID, "local-node-credential"); err != nil {
-		t.Fatal("rejected removal changed local credentials", err)
-	}
-	next.AdmissionPaused = true
-	deploymentConfigure(t, w, &next)
-	detached := next
-	detached.LocalNodeID = ""
-	detached.LocalCredentialSHA256 = ""
-	detached.LocalMaxActive, detached.LocalMaxRetained = 0, 0
-	detached.BackendFingerprint = strings.Repeat("b", 64)
-	deploymentConfigure(t, w, &detached)
-	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); err != nil {
-		t.Fatal("detached resolved node cannot be removed", err)
+	if err := nodes.RemoveNode(t.Context(), next.NodeID); err != nil {
+		t.Fatal("released node cannot be removed", err)
 	}
 }
 func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
@@ -371,22 +355,17 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 days' WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.LocalNodeID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
 	}
 	offline, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || offline.Expired || offline.State != "running" {
 		t.Fatal("offline treated as destructive expiry", offline, err)
 	}
-	if err := deploymentService(t, s).RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), d.NodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("offline ownership discarded", err)
 	}
-	changed := d
-	changed.LocalNodeID = uuid.NewString()
-	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), &changed); err == nil {
-		t.Fatal("lost local state created replacement identity")
-	}
-	onlineManagerNode(t, s, d.LocalNodeID)
+	onlineManagerNode(t, s, d.NodeID)
 	resumed, err := deploymentExecution(t, w).ObserveRunning(t.Context(), offline)
 	if err != nil || resumed.ID != owner.ID || resumed.DeviceID != owner.DeviceID || resumed.NodeID != owner.NodeID {
 		t.Fatal("reconnect changed instance", resumed, err)
@@ -397,20 +376,20 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_phase='suspended',compute_state=$2::jsonb,compute_retained_until=clock_timestamp()+interval '1 day' WHERE id=$1", owner.ID, json.RawMessage(`{"snapshot":{"id":"same-snapshot"}}`)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.LocalNodeID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
 	}
 	retained, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || retained.Expired || string(retained.ComputeState) != `{"snapshot": {"id": "same-snapshot"}}` {
 		t.Fatal(retained, err)
 	}
-	onlineManagerNode(t, s, d.LocalNodeID)
+	onlineManagerNode(t, s, d.NodeID)
 	same, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || same.ID != owner.ID || string(same.ComputeState) != string(retained.ComputeState) {
 		t.Fatal("snapshot changed across reconnect", same, err)
 	}
 	placement, err := sessionRuntimePlacement(t.Context(), s, tenant, session.ID)
-	if err != nil || placement.NodeID != d.LocalNodeID {
+	if err != nil || placement.NodeID != d.NodeID {
 		t.Fatal(placement, err)
 	}
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1", owner.ID); err != nil {

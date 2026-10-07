@@ -32,7 +32,8 @@ func configuration(s sandbox.Selection) *DeploymentConfiguration {
 	return c
 }
 func (ConfigurationAdapter) Requirements() sandbox.ConfigurationRequirements {
-	return sandbox.ConfigurationRequirements{Credential: sandbox.Required, Discovery: providercontract.Support{State: providercontract.Supported}}
+	return sandbox.ConfigurationRequirements{Credential: sandbox.Required, Discovery: providercontract.Support{State: providercontract.Supported},
+		SelectionDiscovery: providercontract.Support{State: providercontract.Supported}, CredentialVerification: providercontract.Support{State: providercontract.Supported}}
 }
 func (ConfigurationAdapter) DecodeInput(public, secret json.RawMessage) (sandbox.Configuration, error) {
 	var p publicConfiguration

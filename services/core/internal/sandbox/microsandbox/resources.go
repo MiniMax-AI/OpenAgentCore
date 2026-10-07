@@ -10,10 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-var _ runtimeobs.Source = (*Provider)(nil)
-
-func (*Provider) ObservationProviderType() string { return "microsandbox" }
-
 // Observe reads one point-in-time native metrics snapshot through the existing
 // one-shot helper. The persisted compute receipt selects the exact generation;
 // browser input and provider display names never select a sandbox.
@@ -73,8 +69,4 @@ func sampleFromMetrics(config Config, metrics Metrics) (runtimeobs.Sample, error
 		CPUUsageSecondsTotal: &cpuUsage, CPUCapacityCores: &cpuCapacity,
 		MemoryUsageBytes: &memoryUsage, MemoryLimitBytes: &memoryLimit,
 	}, nil
-}
-
-func (p *Provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
-	return p, nil
 }

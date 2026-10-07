@@ -21,6 +21,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
+	key := webDeployment(t, s, "e2b")
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{
 		Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -35,8 +36,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, initializationPeer: initializationPeer{deferred: true}}
-	key := uuid.NewString()
-	worker, _ := managedWorkerMode(t, s, key, provider, false, true)
+	worker, _ := managedWorkerMode(t, s, key, provider, true)
 	owner, err := worker.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil || initializationState(t, s, owner.TenantID, owner.EnvironmentID) != "pending" {
 		t.Fatal(owner, err)
