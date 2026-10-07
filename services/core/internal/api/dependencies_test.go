@@ -1,12 +1,10 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
@@ -166,11 +164,6 @@ func newTestHandler(t testing.TB, deps Dependencies) http.Handler {
 		t.Fatal(err)
 	}
 	return h
-}
-
-// noDeploymentModelProvider is a deployment without a default model provider.
-func noDeploymentModelProvider(context.Context, string) (*modelconfiguration.Snapshot, error) {
-	return nil, nil
 }
 
 func TestNewHandlerAcceptsCompleteDependencies(t *testing.T) {

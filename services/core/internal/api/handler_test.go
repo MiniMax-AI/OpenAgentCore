@@ -57,9 +57,9 @@ func (s *recordingStore) record(f *testFakes) {
 
 // testHandler serves strict fakes for a fresh tenant whose caller
 // authenticates with "Bearer test-api-key". A recordingStore answers Session
-// creation, reads and listing, and the deployment has no default model
-// provider. Each configure func adjusts the dependencies before the handler is
-// built.
+// creation, reads and listing, and the deployment has a default model provider
+// for every harness. Each configure func adjusts the dependencies before the
+// handler is built.
 func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, *recordingStore, string) {
 	t.Helper()
 	tenant := uuid.NewString()
@@ -68,7 +68,7 @@ func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (ht
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(hash[:]), TenantID: tenant}).ResolveAPIKey
 	s := &recordingStore{}
 	s.record(fakes)
-	fakes.modelProviders.resolve = noDeploymentModelProvider
+	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	for _, c := range configure {
 		c(&deps, fakes)
 	}

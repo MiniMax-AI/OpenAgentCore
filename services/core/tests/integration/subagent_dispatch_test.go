@@ -19,7 +19,7 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 				"environment": map[string]string{"type": "none"},
 			})
 			var err error
-			h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})
+			h.session, err = h.s.CreateSession(ctx, h.tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration}))
 			if err != nil {
 				t.Fatal(err)
 			}

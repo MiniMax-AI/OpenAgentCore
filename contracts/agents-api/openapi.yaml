@@ -2987,18 +2987,17 @@ paths:
       consumes:
       - application/json
       description: 'The optional Core model_provider bundle resolves from the Session
-        override, saved Agent defaults, then, for openai_hosted and none, the deployment
-        default of the resolved harness; self_hosted never uses the deployment default
-        and none accepts only it. openai_hosted and self_hosted Sessions that resolve
-        no bundle return 400 model_provider_required with param x_agents_core.model_provider
-        before any write. Core encrypts and freezes the resolved bundle; later Agent
-        or deployment default edits and same-key retries cannot change it. Keys are
-        never returned. Supports inline configuration or a tenant-owned saved agent_id
-        with per-Session field replacements. Execution supports model/instructions,
-        text verbosity, non-deferred function tools, adapter-qualified multi_agent
-        with persisted Subagent reads, implicit reasoning, service tier auto and environment
-        type none, subject to the configured engine. Codex additionally supports HTTP
-        MCP with service origin (omitted or null on HTTP transport is saved as service),
+        override, saved Agent defaults, then the deployment default of the resolved
+        harness, for every environment type. A Session that resolves no bundle returns
+        400 model_provider_required with param x_agents_core.model_provider before
+        any write. Core encrypts and freezes the resolved bundle; later Agent or deployment
+        default edits and same-key retries cannot change it. Keys are never returned.
+        Supports inline configuration or a tenant-owned saved agent_id with per-Session
+        field replacements. Execution supports model/instructions, text verbosity,
+        non-deferred function tools, adapter-qualified multi_agent with persisted
+        Subagent reads, implicit reasoning, service tier auto and environment type
+        none, subject to the configured engine. Codex additionally supports HTTP MCP
+        with service origin (omitted or null on HTTP transport is saved as service),
         native allowed_tools and boolean required defaulting to false. Session vault_ids
         attach only project-owned Vaults; credential_id selects an attached static
         bearer or OAuth credential for the exact HTTPS URL, while null/omission selects
@@ -3056,11 +3055,9 @@ paths:
         actions keep it open; disconnect does not cancel execution. The GET events
         stream remains live-only. New Sessions retain their authenticated creator;
         all creation retries require the same typed subject, including across key
-        rotation. Saved-Agent retries and inline requests using Vault attachments
-        or credential references retain caller intent independently of later resource
-        changes; new hosted inline requests also freeze caller intent before deployment
-        defaults resolve; unrelated non-hosted inline retries preserve resolved/default
-        equivalences, and their resolved hash leaves out any deployment default. Provider
+        rotation. Every creation records caller intent before saved Agents, templates,
+        Vault credentials or deployment defaults resolve, so a same-intent retry returns
+        the committed Session independently of later changes to those resources. Provider
         keys enter retry hashes only as fingerprints keyed by the credential key.
         Unknown historical creators reject retries; known creators without recorded
         intent retain resolved-snapshot retry rules. These conflict policies are local
@@ -3072,48 +3069,46 @@ paths:
         Hosted execution reuses native workspace tools and Files/Artifacts; Skills,
         Plugins, capability directories, HTTP MCP, Subagent and tool_search combinations
         remain unqualified, including inherited template contents. Other non-text
-        initial input remains unsupported. Basic Codex and Claude SDK openai_hosted
-        creation requires an explicitly configured managed provider. The Claude workspace
-        profile supports non-deferred function tools with text or successful inline
-        PNG/JPEG results alongside native workspace tools; explicit environment-origin
-        HTTP MCP uses the common Runtime path. MiniMax accepts public environment-origin
-        HTTP MCP only with null or omitted allowed_tools and required=false; even
-        an empty non-null allowlist rejects. Idle Sessions provision automatically;
-        initial provisioning has no caller connection action. Network defaults to
-        enabled; disabled and restricted policies reject before compute allocation
-        because the current Runtime cannot enforce them. The x_agents_core.environment
-        extension accepts common preparation fields for either hosted or self-hosted
-        placement: environment_template_id, files, env, packages, setup_commands,
-        skills, plugins and capability_directories. Duplicate fields in environment
-        and the extension reject. Confidential env, npm/Python packages and ordered
-        setup commands use the same Environment-owned initialization lifecycle; compute
-        allocation does not own preparation. Unknown side effects are not replayed
-        after disconnect or restart. System dependencies must be preinstalled in the
-        sandbox image or template, or on the host machine; packages.system is rejected.
-        Initial inline and tenant-owned file_id files freeze encrypted bytes before
-        provisioning, then install through the common Core lifecycle before native
-        execution or live Files access. With a template reference, omitted/null files,
-        env, packages and setup_commands inherit. Non-null files and command lists
-        replace; env overlays by key; each package manager inherits on omission/null
-        and otherwise replaces its list. Empty lists clear their selected field. Tenant-owned
-        environment_template_id references inherit omitted/null network and allow
-        only narrowing overrides. Inline hosted network:null retains the enabled default;
-        updating a Template with network:null resets its saved policy to enabled.
-        Core freezes effective configuration; template updates/deletion do not alter
-        Session snapshots or same-intent creation retries. Inline or tenant-owned
-        skill_reference Skills share initialization. Templates preserve default/latest/explicit
-        selectors; Session creation freezes concrete metadata and encrypted content
-        atomically. Skill, Plugin and capability-directory list omission/null inherit;
-        a non-null list replaces, including empty-list clearing. Omitted/null Skill
-        version selectors resolve the default version. Source deletion/default updates
-        cannot change committed Session Skill contents. Deferred function discovery
-        uses type-only tool_search and per-function defer_loading in the qualified
-        single-agent Claude function profile on none or a managed/user-owned workspace,
-        including qualified inline image messages and text results. Explicit web_search
-        mode disabled and programmatic_tool_calling enabled false use frozen common
-        Runtime controls. Enabled forms, including those saved on an Agent, remain
-        unqualified and reject before any write unless the Session replaces tools.
-        Omitted programmatic configuration preserves native behavior, a documented
+        initial input remains unsupported. The Claude workspace profile supports non-deferred
+        function tools with text or successful inline PNG/JPEG results alongside native
+        workspace tools; explicit environment-origin HTTP MCP uses the common Runtime
+        path. MiniMax accepts public environment-origin HTTP MCP only with null or
+        omitted allowed_tools and required=false; even an empty non-null allowlist
+        rejects. Idle Sessions provision automatically; initial provisioning has no
+        caller connection action. Network defaults to enabled; disabled and restricted
+        policies reject before compute allocation because the current Runtime cannot
+        enforce them. The x_agents_core.environment extension accepts common preparation
+        fields for either hosted or self-hosted placement: environment_template_id,
+        files, env, packages, setup_commands, skills, plugins and capability_directories.
+        Duplicate fields in environment and the extension reject. Confidential env,
+        npm/Python packages and ordered setup commands use the same Environment-owned
+        initialization lifecycle; compute allocation does not own preparation. Unknown
+        side effects are not replayed after disconnect or restart. System dependencies
+        must be preinstalled in the sandbox image or template, or on the host machine;
+        packages.system is rejected. Initial inline and tenant-owned file_id files
+        freeze encrypted bytes before provisioning, then install through the common
+        Core lifecycle before native execution or live Files access. With a template
+        reference, omitted/null files, env, packages and setup_commands inherit. Non-null
+        files and command lists replace; env overlays by key; each package manager
+        inherits on omission/null and otherwise replaces its list. Empty lists clear
+        their selected field. Tenant-owned environment_template_id references inherit
+        omitted/null network and allow only narrowing overrides. Inline hosted network:null
+        retains the enabled default; updating a Template with network:null resets
+        its saved policy to enabled. Core freezes effective configuration; template
+        updates/deletion do not alter Session snapshots or same-intent creation retries.
+        Inline or tenant-owned skill_reference Skills share initialization. Templates
+        preserve default/latest/explicit selectors; Session creation freezes concrete
+        metadata and encrypted content atomically. Skill, Plugin and capability-directory
+        list omission/null inherit; a non-null list replaces, including empty-list
+        clearing. Omitted/null Skill version selectors resolve the default version.
+        Source deletion/default updates cannot change committed Session Skill contents.
+        Deferred function discovery uses type-only tool_search and per-function defer_loading
+        in the qualified single-agent Claude function profile on none or a managed/user-owned
+        workspace, including qualified inline image messages and text results. Explicit
+        web_search mode disabled and programmatic_tool_calling enabled false use frozen
+        common Runtime controls. Enabled forms, including those saved on an Agent,
+        remain unqualified and reject before any write unless the Session replaces
+        tools. Omitted programmatic configuration preserves native behavior, a documented
         difference from the official default-on behavior. Other combinations remain
         unqualified; see the operation coverage.'
       parameters:

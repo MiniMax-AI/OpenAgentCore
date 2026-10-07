@@ -37,7 +37,7 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	})
 	// No Runtime is connected, so a file write that passes the gate is unavailable.
 	unavailable := func(d *api.Dependencies) { d.Execution.Workspaces = unavailableWorkspaces{strictStandIn{t}} }
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), unavailable, acceptUnavailable(t))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), unavailable, acceptUnavailable(t), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -39,8 +39,8 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 	return saved, provider, nil
 }
 
-// modelProviderRequiredError reports a hosted or self-hosted Session that
-// would have no model provider. The message says what to configure.
+// modelProviderRequiredError reports a Session that would have no model
+// provider. The message says what to configure.
 type modelProviderRequiredError struct{ message string }
 
 func (e *modelProviderRequiredError) Error() string { return e.message }
@@ -52,16 +52,13 @@ type modelProviderDefaultsError struct{ err error }
 func (e *modelProviderDefaultsError) Error() string { return e.err.Error() }
 func (e *modelProviderDefaultsError) Unwrap() error { return e.err }
 
-func modelProviderRequired(environment, engine string) error {
-	if environment == "self_hosted" {
-		return &modelProviderRequiredError{"self_hosted Sessions need a model provider for harness " + engine + ": pass x_agents_core.model_provider or use an Agent that has one saved. Deployment default model providers apply to openai_hosted and none Sessions, never to self_hosted."}
-	}
+func modelProviderRequired(engine string) error {
 	return &modelProviderRequiredError{"No model provider is configured for harness " + engine + ". Pass x_agents_core.model_provider, use an Agent that has one saved, or ask the Core administrator to set a deployment default model provider for " + engine + "."}
 }
 
 // resolveSessionExecution applies provider precedence: the Session bundle, the
-// saved Agent bundle, then the deployment default where the environment allows
-// it. Bundles are never merged.
+// saved Agent bundle, then the deployment default. Every Environment type
+// accepts every source, and every Session needs one. Bundles are never merged.
 func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, string, uuid.UUID, error) {
 	engine, err := h.sessionHarness(raw)
 	if err != nil {
@@ -77,22 +74,11 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 			provider, source = extension.ModelProvider, v1.ModelProviderSourceSession
 		}
 	}
-	environment := input.Environment.Type
-	if provider == nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
-		snapshot := input.deploymentDefaults
-		if snapshot != nil {
-			provider, revision = snapshot.Provider, snapshot.Revision
-		}
-		source = v1.ModelProviderSourceDeployment
+	if provider == nil && input.deploymentDefaults != nil {
+		provider, source, revision = input.deploymentDefaults.Provider, v1.ModelProviderSourceDeployment, input.deploymentDefaults.Revision
 	}
 	if provider == nil {
-		if v1.ModelProviderRequired(environment) {
-			return "", nil, "", uuid.Nil, modelProviderRequired(environment, engine)
-		}
-		return engine, nil, "", uuid.Nil, nil
-	}
-	if !v1.ModelProviderAllowed(environment, source) {
-		return "", nil, "", uuid.Nil, errors.New("caller model credentials require an openai_hosted or self_hosted environment")
+		return "", nil, "", uuid.Nil, modelProviderRequired(engine)
 	}
 	if err := provider.ValidateConfiguration(engine, input.resolvedHarnessConfig); err != nil {
 		return "", nil, "", uuid.Nil, err

@@ -95,23 +95,3 @@ func attachedVault(attached []string, vault string) bool {
 	}
 	return false
 }
-
-// Attached inline requests need recorded caller intent before reading mutable
-// Vault contents. Other inline requests retain their resolved/default identity.
-func inlineCredentialIntent(input sessionRequest) bool {
-	if len(input.VaultIDs) > 0 {
-		return true
-	}
-	var tools []struct {
-		Type         string  `json:"type"`
-		CredentialID *string `json:"credential_id"`
-	}
-	if json.Unmarshal(input.agentFields["tools"], &tools) == nil {
-		for _, tool := range tools {
-			if tool.Type == "mcp" && tool.CredentialID != nil {
-				return true
-			}
-		}
-	}
-	return false
-}

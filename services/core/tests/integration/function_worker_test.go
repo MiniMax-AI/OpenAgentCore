@@ -36,7 +36,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				}
 				if !prebound || isMCP {
 					var err error
-					h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "unbound", Configuration: []byte(configuration)})
+					h.session, err = h.s.CreateSession(t.Context(), h.tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "unbound", Configuration: []byte(configuration)}))
 					if err != nil {
 						t.Fatal(err)
 					}

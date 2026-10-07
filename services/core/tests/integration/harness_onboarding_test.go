@@ -42,7 +42,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		}
 		return nil
 	}
-	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
+	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"mcode": profile})}
 	h.d.Policy = policy
 	// The fixture only supplies an adapter and registration to the real daemon router.
 	// Core sees its ordinary authenticated gateway connection and neutral frames.
@@ -62,7 +62,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}()
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	handler, err := publicHandler(t, h.s, auth, "fixture_harness", workerExecution(t, worker), withPolicy(policy))
+	handler, err := publicHandler(t, h.s, auth, "mcode", workerExecution(t, worker), withPolicy(policy), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := awaitOnboardingPrompt(t, started)
-	if first.AgentKind != "fixture_harness" || first.AgentSessionID != "" {
+	if first.AgentKind != "mcode" || first.AgentSessionID != "" {
 		t.Fatal(first)
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"finish"}]}]}]}`, 202)
@@ -133,7 +133,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(3 * time.Second); ; {
-		current, _, _ := peer.AgentKindStatus("fixture_harness")
+		current, _, _ := peer.AgentKindStatus("mcode")
 		if !current.Capabilities.DurableInputReceipts {
 			break
 		}
@@ -215,7 +215,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 					return
 				}
 				for _, info := range heartbeat.SupportedAgentKinds {
-					if info.Kind == "fixture_harness" {
+					if info.Kind == "mcode" {
 						select {
 						case declarations <- info:
 						default:
@@ -298,7 +298,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 	for {
 		peer, err := h.registry.LookupDevice(h.device.ID)
 		if err == nil {
-			_, found, known := peer.AgentKindStatus("fixture_harness")
+			_, found, known := peer.AgentKindStatus("mcode")
 			if found && known {
 				return started, write, <-declarations
 			}

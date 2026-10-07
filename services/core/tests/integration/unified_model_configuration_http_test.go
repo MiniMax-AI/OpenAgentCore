@@ -141,21 +141,14 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 		{"explicit empty inline parameters", `{"agent":{"x_agents_core":{"harness_config":{}}},"environment":{"type":"openai_hosted"}}`, "model-replacement", "deployment", "deployment", "deployment-canary"},
 		{"explicit empty Session parameters", `{"agent":{},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, "model-replacement", "deployment", "deployment", "deployment-canary"},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			id := create(tc.body, uuid.NewString())
-			assertSession(id, tc.model, `{}`, tc.modelSource, "session", tc.providerSource, tc.key)
-		})
+		// self_hosted resolves deployment defaults exactly as openai_hosted does.
+		for _, environment := range []string{`{"type":"openai_hosted"}`, `{"type":"self_hosted","workspace_directory":"/workspace"}`} {
+			t.Run(tc.name+" "+environment, func(t *testing.T) {
+				id := create(strings.Replace(tc.body, `{"type":"openai_hosted"}`, environment, 1), uuid.NewString())
+				assertSession(id, tc.model, `{}`, tc.modelSource, "session", tc.providerSource, tc.key)
+			})
+		}
 	}
-	const selfHosted = `{"agent":{"model":"self-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`
-	failure := object(call("POST", "/v1/agents/sessions", token, selfHosted, uuid.NewString(), 400))
-	if !strings.Contains(string(failure["error"]), `"code":"model_provider_required"`) {
-		t.Fatal("self-hosted provider error was not explicit")
-	}
-	selfExplicit := strings.TrimSuffix(selfHosted, "}") + `,"x_agents_core":{"model_provider":` + explicitProvider + `}}`
-	selfID := create(selfExplicit, uuid.NewString())
-	assertSession(selfID, "self-model", `{}`, "session", "session", "session", "explicit-canary")
-	selfWithoutModel := `{"agent":{},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"x_agents_core":{"model_provider":` + explicitProvider + `}}`
-	call("POST", "/v1/agents/sessions", token, selfWithoutModel, uuid.NewString(), 400)
 
 	// Saved Agent changes must discard parameters belonging to the former selection.
 	for _, tc := range []struct{ name, update string }{

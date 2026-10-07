@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// Hosted and self-hosted Sessions must freeze a model provider. Tests that
-// exercise other behavior supply these fixtures instead of relaxing that check.
+// Every Session must freeze a model provider. Tests that exercise other
+// behavior supply these fixtures instead of relaxing that check.
 
 // fixtureModelProvider returns a valid bundle for the harness.
 func fixtureModelProvider(harness string) *v1.ModelProviderInput {

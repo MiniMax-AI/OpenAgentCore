@@ -29,9 +29,8 @@ func NewModelTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	return NewWithCredentialCipher(pool, fixtureCipher), pool
 }
 
-// FixtureModelProvider is a valid bundle for the harness. Hosted and self-hosted
-// Sessions cannot run without one, so fixtures supply it instead of relaxing
-// that check.
+// FixtureModelProvider is a valid bundle for the harness. No Session runs
+// without one, so fixtures supply it instead of relaxing that check.
 func FixtureModelProvider(harness string) *v1.ModelProviderInput {
 	if harness == "codex" {
 		return &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-model-key"}
@@ -40,15 +39,9 @@ func FixtureModelProvider(harness string) *v1.ModelProviderInput {
 }
 
 // WithFixtureModelProvider adds the fixture provider, as a Session-supplied
-// bundle, to a hosted or self-hosted creation that has none. The store must
-// have a credential key; other inputs are returned unchanged.
+// bundle, to a creation that has none. The store must have a credential key.
 func WithFixtureModelProvider(input sessions.CreateSession) sessions.CreateSession {
-	var configuration struct {
-		Environment struct {
-			Type string `json:"type"`
-		} `json:"environment"`
-	}
-	if input.ModelProvider != nil || json.Unmarshal(input.Configuration, &configuration) != nil || !v1.ModelProviderRequired(configuration.Environment.Type) {
+	if input.ModelProvider != nil {
 		return input
 	}
 	input.ModelProvider, input.ModelProviderSource = FixtureModelProvider(input.Engine), v1.ModelProviderSourceSession

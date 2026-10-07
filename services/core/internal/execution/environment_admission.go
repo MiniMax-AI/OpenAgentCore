@@ -87,9 +87,9 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.S
 		// Neither kind creates a Turn. The Session lock preserves target and retry identity.
 		return w.admitInputs(ctx, session.TenantID, session.ID, key, inputs)
 	}
-	// Messages start work. A Session from before deployment defaults moved into
-	// Core may have no frozen provider; reject it here instead of queueing work
-	// its harness cannot run. Cancellation and results above stay available.
+	// Messages start work. Every Session freezes a provider at creation, so a
+	// stored one without it cannot run; reject it here instead of queueing
+	// work. Cancellation and results above stay available.
 	var snapshot Snapshot
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured {
 		return nil, ErrModelProviderRequired

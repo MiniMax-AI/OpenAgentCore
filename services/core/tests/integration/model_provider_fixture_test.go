@@ -10,9 +10,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 )
 
-// Hosted and self-hosted Sessions must freeze a model provider. HTTP fixtures
-// supply one here instead of relaxing that check; the store needs a credential
-// key (NewModelTestStore).
+// Every Session must freeze a model provider. HTTP fixtures supply one here
+// instead of relaxing that check; the store needs a credential key
+// (NewModelTestStore).
 
 // fixtureDeploymentProvider configures a deployment default for every harness.
 func fixtureDeploymentProvider() func(*api.Dependencies) {
@@ -22,7 +22,7 @@ func fixtureDeploymentProvider() func(*api.Dependencies) {
 }
 
 // fixtureSessionProvider is the top-level Session request member that supplies
-// the harness's fixture bundle, for self-hosted Sessions.
+// the harness's fixture bundle.
 func fixtureSessionProvider(harness string) string {
 	raw, _ := json.Marshal(map[string]any{"model_provider": FixtureModelProvider(harness)})
 	return `"x_agents_core":` + string(raw)
