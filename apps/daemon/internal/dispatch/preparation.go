@@ -123,18 +123,19 @@ func (r *Router) prepareExecution(p *preparationState) {
 	ready := p.status.State == "preparing" && p.ctx.Err() == nil && !r.closed
 	if ready {
 		p.status.State, p.status.Revision = "ready", p.status.Revision+1
-	} else if p.status.State == "preparing" {
-		p.status.State, p.status.ErrorCode, p.status.Revision = "failed", "preparation_failed", p.status.Revision+1
-	}
-	status := p.status
-	if !ready {
-		p.busy = true
+	} else {
+		if p.status.State == "preparing" {
+			p.status.State, p.status.ErrorCode, p.status.Revision = "failed", "preparation_failed", p.status.Revision+1
+		}
+		// A release or shutdown during readiness left ownership to this return.
+		p.owns = false
 		p.cancel()
 		p.timer.Stop()
 	}
+	status := p.status
 	r.mu.Unlock()
 	if !ready {
-		r.closePreparationResource(p)
+		r.publishPreparation(p, status)
 		return
 	}
 	if !r.sendPreparation(p.requestID, p.trace, status) {
@@ -169,25 +170,21 @@ func (r *Router) releasePreparation(p *preparationState, state, code string, pub
 		r.abandonExecutorAdmission(p, state, code, publish)
 		return
 	}
-	closeResource := false
 	switch p.status.State {
-	case "preparing", "ready", "starting":
+	case "preparing", "ready":
 		p.status.State, p.status.ErrorCode, p.status.Revision = state, code, p.status.Revision+1
 		p.cancel()
 		p.timer.Stop()
 	}
-	if p.owns && !p.busy {
-		p.busy = true
-		closeResource = true
-		r.shutdownWG.Add(1)
+	// A busy preparation drops ownership and reports when readiness returns.
+	// Dropping ownership here always reports it.
+	report := !p.busy && (publish || p.owns)
+	if !p.busy {
+		p.owns = false
 	}
 	status := p.status
-	settled := !p.owns && !p.busy
 	r.mu.Unlock()
-	if closeResource {
-		go func() { defer r.shutdownWG.Done(); r.closePreparationResource(p) }()
-	}
-	if publish && settled {
+	if report {
 		r.publishPreparation(p, status)
 	}
 }
@@ -213,11 +210,9 @@ func (r *Router) prunePreparationsLocked() {
 
 func (r *Router) publishPreparation(p *preparationState, status proto.PreparationStatusPayload) {
 	r.mu.Lock()
-	if p.workspaceReadOnly {
-		if status.Revision != p.status.Revision || (p.owns && (p.busy || status.State == "released" || status.State == "expired") && status.State != "preparing" && status.State != "ready") {
-			r.mu.Unlock()
-			return
-		}
+	if p.workspaceReadOnly && status.Revision != p.status.Revision {
+		r.mu.Unlock()
+		return
 	}
 	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
