@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -116,6 +117,28 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// With environment none the CLI runs in the work directory without the
+// workspace tools, and it runs each stdio binding's alias without arguments.
+func TestViewRunsEnvironmentNoneAndStdioAliases(t *testing.T) {
+	install, _, req := viewFixture(t)
+	session := agent.ViewSession{Home: agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}}
+	none := req
+	none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
+	opts, err := install.prepare(t.Context(), none, session)
+	if err != nil || opts.Dir != "/.oac/home/work" || opts.MCP == nil || len(opts.MCP) != 0 {
+		t.Fatalf("environment none runs in %q with MCP %v: %v", opts.Dir, opts.MCP, err)
+	}
+
+	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
+	if opts, err = install.prepare(t.Context(), req, session); err != nil || len(opts.MCP) != 2 || opts.MCP[0]["name"] != "oac_workspace" || opts.MCP[1]["command"] != agent.ViewAlias(0) {
+		t.Fatalf("stdio MCP = %v: %v", opts.MCP, err)
+	}
+	if args, ok := opts.MCP[1]["args"].([]string); !ok || args == nil || len(args) != 0 {
+		t.Fatalf("the stdio alias runs with arguments %#v", opts.MCP[1]["args"])
 	}
 }
 

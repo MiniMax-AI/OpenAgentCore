@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a8f7439baa3f7896bb7a2a95a3ed7641d6f527045db477d09d33599f3363b902
+source_hash: a936fab8c8a3c52387de4acdc16c76a6287beb894aae1002ef34e0b6264f3636
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -369,7 +369,7 @@ stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 
 | `Home` | 原生历史和配置保存在 `/.oac/home` 下，同一 Session 中后续的 Executor 从中继续。 |
 | `Capabilities` | 每项受支持的功能都通过 dispatch 运行一个 Turn：空根视图中的 Environment none、Skills、函数调用及其结果、工具搜索，以及每个以别名运行的 stdio 绑定。 |
 
-`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。视图声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。视图声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。视图声明 environment none 时，一个没有 Environment 的 Session 中的 Turn 通过模型作答，且 Session home 中 Harness 的原生历史必须记录 `/.oac/home/work` 为其工作目录。视图声明 stdio MCP 时，测试为一个 Session 的 Environment 提供一个已安装的 stdio MCP 服务器，即在沙箱中运行的脚本，回答必须报告其唯一工具返回的代码。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
+`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。视图声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。视图声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。视图声明 environment none 时，一个没有 Environment 的 Session 中的 Turn 通过模型作答，且 Session home 中 Harness 的原生状态必须写明其工作目录 `/.oac/home/work`。视图声明 stdio MCP 时，测试为一个 Session 的 Environment 提供一个已安装的 stdio MCP 服务器，即在沙箱中运行的脚本，回答必须报告其唯一工具返回的代码。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
 
 ## 原生参考 {#native-references}
 

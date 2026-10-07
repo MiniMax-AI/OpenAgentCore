@@ -126,7 +126,7 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 // calls a function there. A view that declares tool search runs a Turn in
 // another Session that finds the function, deferred, with tool search. A view
 // that declares environment none answers a Turn in a Session without an
-// Environment, and its native history records the work directory as its cwd.
+// Environment, and its native state names the work directory.
 // A view that declares stdio MCP calls a tool of a stdio MCP server that runs
 // in the sandbox.
 func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps agent.ViewCapabilities, model proto.PromptRequestPayload) {
@@ -342,11 +342,11 @@ func withMCP(t *testing.T, reg *agent.Registry, mcp []proto.EnvironmentMCP) *age
 	return wrapped
 }
 
-// checkCwd checks that a file of the Harness's native history in the Session
-// home records cwd as its working directory.
+// checkCwd checks that the Harness's native state in the Session home names
+// cwd, which the adapter writes into none of its files there.
 func (s *session) checkCwd(t *testing.T, cwd string) {
 	t.Helper()
-	want := []byte(`"cwd":"` + cwd + `"`)
+	want := []byte(cwd)
 	home := filepath.Join(s.cfg.StateDir, "sessions", s.binding.SessionID.String(), agent.ViewHomeName)
 	var found string
 	err := filepath.WalkDir(home, func(name string, entry fs.DirEntry, err error) error {
@@ -360,10 +360,10 @@ func (s *session) checkCwd(t *testing.T, cwd string) {
 		return nil
 	})
 	if err != nil || found == "" {
-		t.Errorf("no native history in %s records %s: %v", home, want, err)
+		t.Errorf("no native state in %s names %s: %v", home, want, err)
 		return
 	}
-	t.Logf("%s records %s", found, want)
+	t.Logf("%s names %s", found, want)
 }
 
 func handle(t *testing.T, router *dispatch.Router, typ, id string, payload any) {
