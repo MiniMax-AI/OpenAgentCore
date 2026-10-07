@@ -13,7 +13,7 @@ func TestHarnessConfigReachesBridge(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-	req := proto.PromptRequestPayload{Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"effort":"high","thinking":{"type":"enabled","budgetTokens":1024}}`)}
+	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"effort":"high","thinking":{"type":"enabled","budgetTokens":1024}}`)}
 	start, _, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)

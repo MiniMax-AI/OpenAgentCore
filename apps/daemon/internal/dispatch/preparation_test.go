@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -113,13 +111,13 @@ func localPreparationHarness(t *testing.T) *harness {
 }
 
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, StrictResume: true, ReleaseOnCompletion: true, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, StrictResume: true, ReleaseOnCompletion: true, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}})}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory agent.PreparationFactory) *dispatch.Router {
 	t.Helper()
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Permissions: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Permissions: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, errors.New("ordinary Factory must not be used for preparation")
 	})
 	reg.RegisterPreparation("prepared", true, factory)

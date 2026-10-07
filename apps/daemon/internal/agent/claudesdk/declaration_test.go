@@ -127,7 +127,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 			}
 			if !ready {
 				factory, _ := registry.Resolve("claude_sdk")
-				if _, err := factory(t.Context(), proto.PromptRequestPayload{}, nil); err == nil || !strings.Contains(err.Error(), "runtime is unavailable") {
+				if _, err := factory(t.Context(), proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}, nil); err == nil || !strings.Contains(err.Error(), "runtime is unavailable") {
 					t.Fatal(err)
 				}
 			}

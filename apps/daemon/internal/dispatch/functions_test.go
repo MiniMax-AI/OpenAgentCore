@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"bytes"
 	"context"
@@ -38,7 +36,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	reg := agent.NewRegistry()
 	sender := &recSender{}
 	sessions := map[string]*functionSession{}
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		s := &functionSession{fakeSession: &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}}
 		sessions[p.RunID] = s
 		return s, nil
@@ -49,7 +47,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	}
 	defer router.Shutdown(context.Background())
 	for _, id := range []string{"one", "two"} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, id, proto.PromptRequestPayload{AgentKind: "function-test", Input: proto.TextInput("lookup"), FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
+		env, _ := proto.NewEnvelope(proto.TypePromptRequest, id, prototest.WithModel(proto.PromptRequestPayload{AgentKind: "function-test", Input: proto.TextInput("lookup"), FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}}))
 		if err := router.Handle(t.Context(), env); err != nil {
 			t.Fatal(err)
 		}
@@ -138,14 +136,14 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
 	reg := agent.NewRegistry()
 	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "unsupported", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "unsupported", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})
 	sender := &recSender{}
 	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	defer router.Shutdown(context.Background())
-	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
+	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}}))
 	if err := router.Handle(t.Context(), env); err == nil || called {
 		t.Fatal("unsupported engine silently ignored tools", err)
 	}
@@ -166,14 +164,14 @@ func functionResultContent(text string) []proto.InputContent {
 func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
 	reg := agent.NewRegistry()
 	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})
 	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
 	defer router.Shutdown(context.Background())
 	for _, search := range []bool{false, true} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, "discovery", proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}})
+		env, _ := proto.NewEnvelope(proto.TypePromptRequest, "discovery", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}}))
 		if err := router.Handle(t.Context(), env); err == nil || called {
 			t.Fatal("deferred definitions reached an eager-only adapter", err)
 		}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 type preparationFrame struct {
@@ -44,11 +45,16 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 		AgentKind: "codex", AgentStateKey: "prepared-session",
 		ReleaseOnCompletion: true, StrictResume: true,
 		Model:                       "fixture-model",
+		ModelProvider:               fixtureProvider(),
 		ExecutionControls:           &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
 		DisableExecutionEnvironment: true,
 		FunctionTools:               []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
 	}
 	return req, cfg, root
+}
+
+func fixtureProvider() *modelprovider.Provider {
+	return &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://model.example/v1", APIKey: "fixture-key"}
 }
 
 func preparationFrames(t *testing.T, root string) []preparationFrame {

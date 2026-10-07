@@ -180,7 +180,8 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	// mount. No trust entry is written, so the project stays untrusted.
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"allow_login_shell", "false"}, [2]string{"project_root_markers", "[]"})
 	if req.ExecutionControls != nil {
-		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, req.ModelProvider); err != nil {
+		// buildSessionPlan admitted the request's provider.
+		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, *req.ModelProvider); err != nil {
 			plan.Cleanup()
 			return SessionPlan{}, err
 		}
@@ -218,7 +219,7 @@ func viewHome(home agent.ViewDir) (agent.ViewDir, error) {
 
 // viewModelVerbosity reads the catalog from the trusted install on this host,
 // with a scratch CODEX_HOME that holds only the Session's provider.
-func viewModelVerbosity(ctx context.Context, binary string, plan *SessionPlan, provider *modelprovider.Provider) error {
+func viewModelVerbosity(ctx context.Context, binary string, plan *SessionPlan, provider modelprovider.Provider) error {
 	scratch, err := os.MkdirTemp("", "oac-codex-catalog-")
 	if err != nil {
 		return err
@@ -230,10 +231,8 @@ func viewModelVerbosity(ctx context.Context, binary string, plan *SessionPlan, p
 			return err
 		}
 	}
-	if provider != nil {
-		if err := writeCodexProviderConfig(home, nativeProvider(*provider)); err != nil {
-			return err
-		}
+	if err := writeCodexProviderConfig(home, nativeProvider(provider)); err != nil {
+		return err
 	}
 	probe := catalogProbe{binary: binary, dir: home, env: []string{"HOME=" + home, "CODEX_HOME=" + home, "TMPDIR=" + tmp, "DISABLE_TELEMETRY=1"}}
 	return verifyModelVerbosity(ctx, probe, plan)

@@ -1,16 +1,15 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"testing"
-	"time"
 )
 
 type shutdownAllSendsBlockSender struct {
@@ -47,7 +46,7 @@ func TestShutdownCancelsCompletionErrorSend(t *testing.T) {
 	sender := &shutdownAllSendsBlockSender{entered: make(chan struct{}), terminal: make(chan context.Context, 1), rescue: make(chan struct{})}
 	registry := agent.NewRegistry()
 	var session *fakeSession
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true}
 		return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error { return nil }}, nil
 	})
@@ -55,7 +54,7 @@ func TestShutdownCancelsCompletionErrorSend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "shutdown-terminal", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
+	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "shutdown-terminal", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true}))); err != nil {
 		t.Fatal(err)
 	}
 	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown-terminal", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {

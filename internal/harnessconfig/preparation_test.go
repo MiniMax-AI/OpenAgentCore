@@ -15,22 +15,24 @@ func TestPrepareModelConfiguration(t *testing.T) {
 	provider := func() *modelprovider.Provider {
 		return &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://provider.example/v1", APIKey: "private-sentinel"}
 	}
+	with := func(native string) proto.PromptRequestPayload {
+		return proto.PromptRequestPayload{Model: "fixture", ModelProvider: provider(), HarnessConfig: json.RawMessage(native)}
+	}
 	for _, tc := range []struct {
 		name  string
 		req   proto.PromptRequestPayload
 		valid bool
 	}{
-		{"native owned", proto.PromptRequestPayload{}, true},
-		{"native model", proto.PromptRequestPayload{Model: "fixture"}, true},
 		{"explicit", proto.PromptRequestPayload{Model: "fixture", ModelProvider: provider()}, true},
+		{"missing provider", proto.PromptRequestPayload{Model: "fixture"}, false},
 		{"missing model", proto.PromptRequestPayload{ModelProvider: provider()}, false},
-		{"blank model", proto.PromptRequestPayload{Model: "  "}, false},
+		{"blank model", proto.PromptRequestPayload{Model: "  ", ModelProvider: provider()}, false},
 		{"invalid provider", proto.PromptRequestPayload{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses}}, false},
 		{"undeclared protocol", proto.PromptRequestPayload{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "private-sentinel"}}, false},
-		{"empty native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`{}`)}, true},
-		{"null native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`null`)}, false},
-		{"array native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`[]`)}, false},
-		{"undeclared native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`{"effort":"high"}`)}, false},
+		{"empty native", with(`{}`), true},
+		{"null native", with(`null`), false},
+		{"array native", with(`[]`), false},
+		{"undeclared native", with(`{"effort":"high"}`), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := c.Prepare(tc.req)
@@ -71,6 +73,26 @@ func TestConfigurationDeclarationRejectsUnknownAndDuplicateProtocols(t *testing.
 		c := Configuration{Providers: providers}
 		if c.ValidateDeclaration() == nil {
 			t.Fatal("invalid declaration accepted")
+		}
+	}
+}
+
+// The typed wire fields decode an explicit null or "" as absent, so Prepare
+// must reject each of these decoded prompt requests.
+func TestPrepareRejectsDecodedRequestsWithoutModelOrProvider(t *testing.T) {
+	c := Configuration{Providers: []Provider{{Protocol: "responses"}}}
+	provider := `{"protocol":"responses","base_url":"https://provider.example/v1","api_key":"private-sentinel"}`
+	for payload, want := range map[string]error{
+		`{"model":"m","model_provider":null}`:              ErrModelProvider,
+		`{"model":"","model_provider":` + provider + `}`:   ErrModel,
+		`{"model":null,"model_provider":` + provider + `}`: ErrModel,
+	} {
+		var req proto.PromptRequestPayload
+		if err := (proto.Envelope{Type: proto.TypePromptRequest, Payload: json.RawMessage(payload)}).DecodeRequest(&req); err != nil {
+			t.Fatalf("%s: %v", payload, err)
+		}
+		if _, err := c.Prepare(req); !errors.Is(err, want) {
+			t.Fatalf("%s: err=%v, want %v", payload, err, want)
 		}
 	}
 }

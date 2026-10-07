@@ -222,5 +222,6 @@ func TestPublishedPreparedRunRetainsRetryAfterHandleRetirement(t *testing.T) {
 func readOnlyPreparationRequest() proto.ExecutionPreparePayload {
 	req := preparationRequest()
 	req.Configuration.WorkspaceReadOnly = true
+	req.Configuration.Model, req.Configuration.ModelProvider = "", nil
 	return req
 }

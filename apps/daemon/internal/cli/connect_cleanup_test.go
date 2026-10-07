@@ -1,7 +1,5 @@
 package cli
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -116,7 +114,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	owner := &cleanupExecutor{retry: make(chan struct{}), confirm: make(chan struct{})}
 	registry := agent.NewRegistry()
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-		harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, errors.New("unexpected legacy factory")
 		})
 	var factories atomic.Int32
@@ -148,7 +146,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	}
 	defer peer.Close()
 	env, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: "cleanup",
-		Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", StrictResume: true, DisableExecutionEnvironment: true}})
+		Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", StrictResume: true, DisableExecutionEnvironment: true})})
 	if err != nil {
 		t.Fatal(err)
 	}

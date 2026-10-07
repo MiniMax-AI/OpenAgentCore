@@ -82,14 +82,11 @@ func prepareOptionsWithTools(req proto.PromptRequestPayload, tools *workspaceToo
 }
 
 // validateOptions checks the request before any native effect and returns its
-// model configuration, which must name a model and a model provider.
+// model configuration.
 func validateOptions(req proto.PromptRequestPayload) (harnessconfig.PreparedConfiguration, error) {
 	prepared, err := harnessconfiguration.Configuration().Prepare(req)
 	if err != nil {
 		return prepared, err
-	}
-	if prepared.Model == "" || prepared.Provider == nil {
-		return prepared, fmt.Errorf("mcode: model and model provider are required")
 	}
 	if req.StrictResume {
 		if err := validateExecutionRequest(req); err != nil {
@@ -114,7 +111,7 @@ func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.Pr
 		return err
 	}
 	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
-	config["custom_provider"] = map[string]any{"oac": modelProviderConfig(*prepared.Provider, prepared.Model)}
+	config["custom_provider"] = map[string]any{"oac": modelProviderConfig(prepared.Provider, prepared.Model)}
 	if req.StrictResume {
 		configureTextExecution(config)
 		if !req.DisableSubagents {

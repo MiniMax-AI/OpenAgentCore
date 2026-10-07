@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -16,11 +14,11 @@ func TestNoEnvironmentRejectsOtherEngineBeforeFactory(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	called := false
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})
-	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "none", proto.PromptRequestPayload{AgentKind: "fake_alpha", DisableExecutionEnvironment: true}))
+	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "none", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha", DisableExecutionEnvironment: true})))
 	if err == nil || called {
 		t.Fatal("unsupported engine was started", err)
 	}
@@ -35,11 +33,11 @@ func TestNoEnvironmentUsesAvailableCapability(t *testing.T) {
 		h := newHarness(t)
 		defer h.router.Shutdown(context.Background())
 		called := false
-		h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			called = true
 			return nil, errors.New("controlled factory stop")
 		})
-		_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "sdk", proto.PromptRequestPayload{AgentKind: "claude_sdk", DisableExecutionEnvironment: true}))
+		_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "sdk", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "claude_sdk", DisableExecutionEnvironment: true})))
 		if called != available {
 			t.Fatalf("factory called=%t, available=%t", called, available)
 		}
@@ -54,7 +52,7 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 			called := false
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: mode != "unavailable",
 				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(mode != "unsupported")})},
-				harnessconfig.Configuration{}, func(_ context.Context, req proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
+				prototest.ModelConfiguration(), func(_ context.Context, req proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
 					called = true
 					if req.LocalEnvironment == nil || req.LocalEnvironment.ID != preparationEnvironmentID {
 						t.Error("local descriptor lost before factory")

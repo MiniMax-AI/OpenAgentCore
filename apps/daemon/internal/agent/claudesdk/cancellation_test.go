@@ -163,7 +163,7 @@ func cancellationConfig(root, mode string) Config {
 }
 
 func cancellationRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 }
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {

@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"encoding/json"
@@ -111,7 +109,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 	}))
 	defer model.Close()
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{}, codex.Factory)
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration(), codex.Factory)
 	sender := make(nativeFunctionSender, 256)
 	router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	if err != nil {

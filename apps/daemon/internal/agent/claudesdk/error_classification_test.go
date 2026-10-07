@@ -21,7 +21,7 @@ func TestClassifiedBridgeFailurePreservesTerminalEvidence(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=classified-" + mode, "GORACE=atexit_sleep_ms=0"}}
-			req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+			req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

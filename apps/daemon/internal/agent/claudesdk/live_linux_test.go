@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/google/uuid"
 )
 
@@ -90,9 +91,9 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 		proxy.ServeHTTP(w, req)
 	}))
 	defer forwarder.Close()
+	provider := &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: forwarder.URL, APIKey: strings.TrimSpace(string(key))}
 	config := Config{Entrypoint: entrypoint, StateDir: filepath.Join(root, "state"), Env: []string{
-		"ANTHROPIC_BASE_URL=" + forwarder.URL, "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)),
-		"ANTHROPIC_API_KEY=", "CLAUDE_CODE_OAUTH_TOKEN=", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
+		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL=MiniMax-M3", "ANTHROPIC_DEFAULT_OPUS_MODEL=MiniMax-M3", "ANTHROPIC_DEFAULT_HAIKU_MODEL=MiniMax-M3",
 	}}
 
@@ -137,7 +138,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 		requestStart := len(requests)
 		mu.Unlock()
 		out := make(chan proto.Envelope, 64)
-		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", SystemPrompt: "Answer briefly and preserve the exact verification value in the conversation. Use no tools."}
+		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Answer briefly and preserve the exact verification value in the conversation. Use no tools."}
 		if success != nil {
 			request.ObserveToolObservations = true
 			request.SystemPrompt = "Call lookup exactly once as requested, then report both result parts and any prior verification value. Never retry a failed tool."

@@ -66,7 +66,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if frozen.Model != "fixture" || frozen.Resume != "native-session" || frozen.Workspace == nil || len(frozen.Input) != 0 {
 		t.Fatal("configuration-only request was not retained")
 	}
-	config.Env[0] = "ANTHROPIC_AUTH_TOKEN=changed"
+	config.Env[0] = "HTTPS_PROXY=http://changed.example"
 	config.Workspace.Directory = "/changed"
 	config.Workspace.Directory = "/changed"
 	req.Model = "changed"

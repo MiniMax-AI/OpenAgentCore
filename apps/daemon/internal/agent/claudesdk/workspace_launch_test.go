@@ -19,8 +19,8 @@ func TestWorkspaceLaunchAndReadinessInheritsUserEnvironment(t *testing.T) {
 	// not a native sandbox or provider acceptance test.
 	script := `#!/bin/sh
 test "$OAC_TEST_PARENT_SECRET" = must-not-inherit || exit 21
-test -z "${ANTHROPIC_API_KEY+x}" || exit 22
-test "$ANTHROPIC_AUTH_TOKEN" = selected-provider-fixture || exit 23
+test "${ANTHROPIC_API_KEY-}" != unselected || exit 22
+test -z "${ANTHROPIC_AUTH_TOKEN+x}" && test "$HTTPS_PROXY" = http://proxy.example || exit 23
 test "$TMPDIR" != "$CLAUDE_CONFIG_DIR/tmp" || exit 24
 case "$1" in
   */runtime_check.js)

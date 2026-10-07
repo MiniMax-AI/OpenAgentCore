@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -29,11 +27,11 @@ func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{})}
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
 		return sess, nil
 	})
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "release", proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "stable", ReleaseOnCompletion: true})); err != nil {
+	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "release", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "stable", ReleaseOnCompletion: true}))); err != nil {
 		t.Fatal(err)
 	}
 	sess.out <- mustEnv(t, proto.TypeDone, "release", proto.DonePayload{Content: "Finished"})
@@ -76,11 +74,11 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{}), outcome: test.outcome, err: test.err}
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
 				return sess, nil
 			})
-			if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
+			if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
 				t.Fatal(err)
 			}
 			done := make(chan error, 1)
@@ -125,7 +123,7 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 func TestLegacyCancellationDoesNotEmitNewFrames(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "legacy", proto.PromptRequestPayload{AgentKind: "fake_alpha"})); err != nil {
+	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "legacy", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))); err != nil {
 		t.Fatal(err)
 	}
 	sess := <-h.gotSess

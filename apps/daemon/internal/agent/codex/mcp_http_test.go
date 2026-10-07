@@ -20,7 +20,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
 		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
 	}
-	req := proto.PromptRequestPayload{AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
+	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 	plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 	if err := os.WriteFile(path, stored, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	req := proto.PromptRequestPayload{AgentStateKey: "credentials", DisableExecutionEnvironment: true, MCPHTTPServers: &valid}
+	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "credentials", DisableExecutionEnvironment: true, MCPHTTPServers: &valid}
 	if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil {
 		t.Fatal("existing MCP credentials accepted")
 	}

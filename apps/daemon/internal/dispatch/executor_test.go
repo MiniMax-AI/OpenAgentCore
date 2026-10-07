@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -70,13 +68,13 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 }
 
 func executorRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true}}
+	return proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true})}
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, errors.New("ordinary factory is forbidden")
 	})
 	reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
@@ -220,7 +218,7 @@ func TestExecutorPreInputFailureConfirmsCloseBeforeRetrySignal(t *testing.T) {
 func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, *recSender) {
 	t.Helper()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, errors.New("unexpected legacy factory")
 	})
 	registry.RegisterExecutor("reusable", factory)

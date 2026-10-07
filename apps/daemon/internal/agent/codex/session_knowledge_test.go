@@ -3,9 +3,10 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 func TestResumeRefreshesReferenceContext(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/google/uuid"
 )
 
@@ -41,8 +42,9 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		t.Fatal("cannot read selected credential file")
 	}
 	t.Setenv("OAC_RUNTIME_HOME", proof)
+	provider := &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: endpoint, APIKey: strings.TrimSpace(string(key))}
 	config := Config{Node: os.Getenv("OAC_TEST_CLAUDE_EXECUTOR_NODE"), Entrypoint: entry, StateDir: filepath.Join(proof, "state"), Env: []string{
-		"ANTHROPIC_BASE_URL=" + endpoint, "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)), "ANTHROPIC_API_KEY=", "CLAUDE_CODE_OAUTH_TOKEN=", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
+		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL=" + model, "ANTHROPIC_DEFAULT_OPUS_MODEL=" + model, "ANTHROPIC_DEFAULT_HAIKU_MODEL=" + model,
 	}}
 	if proxy := os.Getenv("OAC_TEST_CLAUDE_EXECUTOR_HTTP_PROXY"); proxy != "" {
@@ -80,7 +82,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(proof, "executor-evidence.json"), raw, 0600)
 	}
 	defer persist()
-	request := proto.PromptRequestPayload{StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: model, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
+	request := proto.PromptRequestPayload{StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: model, ModelProvider: provider, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
 	factory := NewExecutorFactory(config)
 	prepared := time.Now()
 	owner, err := factory(ctx, request)

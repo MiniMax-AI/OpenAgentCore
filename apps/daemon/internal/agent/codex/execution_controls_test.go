@@ -8,17 +8,17 @@ import (
 
 func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state"})
+	plan, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "state"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	plan.Cleanup()
-	if len(plan.ExtraConfig) != 0 {
+	if len(plan.ExtraConfig) != 1 || plan.ExtraConfig[0][0] != "model_provider" {
 		t.Fatal("native settings without ExecutionControls", plan.ExtraConfig)
 	}
 	for _, search := range []string{"disabled", "cached", "live"} {
 		for _, verbosity := range []string{"low", "medium", "high"} {
-			plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state", ExecutionControls: &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity}})
+			plan, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "state", ExecutionControls: &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -45,7 +45,7 @@ func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
 		{}, {WebSearch: "disabled"}, {TextVerbosity: "medium"},
 		{WebSearch: "invalid", TextVerbosity: "medium"}, {WebSearch: "disabled", TextVerbosity: "invalid"},
 	} {
-		if plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state", ExecutionControls: &controls}); err == nil {
+		if plan, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "state", ExecutionControls: &controls}); err == nil {
 			plan.Cleanup()
 			t.Fatal("invalid controls accepted", controls)
 		}

@@ -1,7 +1,5 @@
 package dispatch
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -94,7 +92,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			owner := &terminalHandoffExecutor{turns: make(chan *terminalHandoffTurn, 3)}
 			registry := agent.NewRegistry()
 			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-				harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+				prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 					return nil, errors.New("legacy path forbidden")
 				})
 			var creates atomic.Int32
@@ -150,7 +148,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 					}
 				}
 			}
-			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true}}
+			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true})}
 			admit := func(id string) proto.PreparationStatusPayload {
 				t.Helper()
 				handle(proto.TypeExecutionPrepare, id, request)
