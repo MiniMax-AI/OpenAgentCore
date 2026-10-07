@@ -4,45 +4,33 @@ import { nodeFilesAvailable, sandboxConsoleConfig } from "./console-config";
 afterEach(() => vi.unstubAllGlobals());
 describe("bundled console capabilities", () => {
   it("uses the existing console login without sending a project or admin bearer", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64) })));
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64), node_artifacts: ["docker"] })));
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
-    expect(await sandboxConsoleConfig(controller.signal)).toEqual({ sandbox_admin: true, node_installer: true, node_installer_sha256: "a".repeat(64) });
+    expect(await sandboxConsoleConfig(controller.signal)).toEqual({ node_installer: true, node_installer_sha256: "a".repeat(64), node_artifacts: ["docker"] });
     expect(fetch).toHaveBeenCalledWith("/console/config", { credentials: "include", signal: controller.signal });
   });
-  it.each([{}, { sandbox_admin: "true", node_installer: true }, { sandbox_admin: false, node_installer: true, node_installer_sha256: "bad" }])("does not enable installation without a verified digest %j", async (body) => {
+  it.each([{}, { node_installer: "true", node_installer_sha256: "a".repeat(64) }, { node_installer: true, node_installer_sha256: "bad" }])("does not enable installation without a verified digest %j", async (body) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(body))));
-    expect((await sandboxConsoleConfig(new AbortController().signal))?.node_installer).toBe(false);
+    expect((await sandboxConsoleConfig(new AbortController().signal)).node_installer).toBe(false);
   });
-  it("reports unavailable capability on an absent console endpoint", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Not found", { status: 404 })));
-    expect(await sandboxConsoleConfig(new AbortController().signal)).toBeNull();
-  });
-  it("reports a failed read as a failure, not as an unconfigured console", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Bad gateway", { status: 502 })));
+  it.each([404, 502])("reports a failed read (HTTP %i) as a failure", async (status) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Failed", { status })));
     await expect(sandboxConsoleConfig(new AbortController().signal)).rejects.toThrow();
   });
-  it("blocks a provider's command only when the console reports no node files for it", async () => {
+  it("blocks a provider's command when the console reports no node files for it", async () => {
     const read = async (body: object) => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64), ...body }))));
-      return (await sandboxConsoleConfig(new AbortController().signal))!;
+      return sandboxConsoleConfig(new AbortController().signal);
     };
-    // An older console doesn't report them: nothing is blocked.
-    const older = await read({});
-    expect(older.node_artifacts).toBeUndefined();
-    expect(nodeFilesAvailable(older, "docker")).toBe(true);
     const docker = await read({ node_artifacts: ["docker"] });
     expect(nodeFilesAvailable(docker, "docker")).toBe(true);
     expect(nodeFilesAvailable(docker, "microsandbox")).toBe(false);
-    // null, like any malformed value, reports none.
-    for (const node_artifacts of [null, "docker", { docker: true }]) {
-      const config = await read({ node_artifacts });
+    // An absent, null or malformed value reports none.
+    for (const body of [{}, { node_artifacts: null }, { node_artifacts: "docker" }, { node_artifacts: { docker: true } }]) {
+      const config = await read(body);
       expect(config.node_artifacts).toEqual([]);
       expect(nodeFilesAvailable(config, "docker")).toBe(false);
     }
-  });
-  it("disables sandbox administration only when the console says so", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ sandbox_admin: false }))));
-    expect((await sandboxConsoleConfig(new AbortController().signal))?.sandbox_admin).toBe(false);
   });
 });

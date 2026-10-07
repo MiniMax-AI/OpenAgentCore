@@ -21,10 +21,6 @@ definitions:
         type: string
       resource_type:
         type: string
-      result_ids:
-        items:
-          type: object
-        type: array
       trace_id:
         type: string
     type: object
@@ -3393,13 +3389,9 @@ definitions:
     type: object
   writeaudit.ResourceOwner:
     properties:
-      admin_audit_id:
-        type: string
       api_key:
         $ref: '#/definitions/writeaudit.APIKey'
       resource_id:
-        type: string
-      source:
         type: string
     type: object
 info:

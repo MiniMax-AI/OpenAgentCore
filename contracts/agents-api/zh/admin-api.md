@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 22ac83d8596bcee671a4f94c81d2fe65e109ab9c0b3759e17cf30626bd5d41df
+source_hash: 7759541dbc59dab917499f506c9e9c11184e8065fd1ed6fb418baaf4a478faf3
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -183,12 +183,12 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 ```json
 {"data":[
-  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null},"source":"api_key","admin_audit_id":null},
-  {"resource_id":"id2","api_key":null,"source":null,"admin_audit_id":null}
+  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null}},
+  {"resource_id":"id2","api_key":null}
 ]}
 ```
 
-当 Core 没有创建记录时，`api_key` 和 `source` 为 null，这包括另一个 Project 中的资源。带有 `admin_audit_id` 的 `source: "admin_copy"` 表示该资源由审计日志中的 `copy` 条目记录；当前没有路由会写入此类记录。
+当 Core 没有创建记录时，`api_key` 为 null，这包括另一个 Project 中的资源。
 
 `GET /projects/{project_id}/write-operations` 按 `(created_at, id)` 从新到旧列出写入记录。过滤条件包括：`key_id`、`resource_type`、`resource_id`、包含起始时间的 `created_after` 和不包含结束时间的 `created_before`（RFC 3339）。`limit` 为 1–100，默认值为 50。在过滤条件不变的情况下，将上一个 `next_cursor` 作为 `after` 传入。响应为 `{data, has_more, next_cursor}`；每个条目包含 `id`、`created_at`、`api_key`、`action`、`resource_type`、`resource_id`、`parent_id`（不存在时为空）、`request_id` 和 `trace_id`。
 
@@ -219,7 +219,7 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 `GET /audit-log` 按从新到旧的顺序列出管理员写入。过滤条件包括 `project_id`、`resource_type`、`resource_id`、`action`、包含起始时间的 `created_after` 和不包含结束时间的 `created_before`（RFC 3339）。`limit` 为 1–100，默认值为 50，并使用不透明的 `after` 游标。响应为 `{data, has_more, next_cursor}`。
 
-每个条目包含 `id`、`created_at`、`admin_credential_id`（Core 密钥摘要的前 8 个十六进制字符）、`actor_label`、`action`、`project_id`、`resource_type`、`resource_id`、`result_ids`、`request_id` 和 `trace_id`。除 `copy` 条目外，`result_ids` 都是空数组。部署范围条目为 `project_id: null`，使用 `project_id` 过滤时会排除这些条目。
+每个条目包含 `id`、`created_at`、`admin_credential_id`（Core 密钥摘要的前 8 个十六进制字符）、`actor_label`、`action`、`project_id`、`resource_type`、`resource_id`、`request_id` 和 `trace_id`。部署范围条目为 `project_id: null`，使用 `project_id` 过滤时会排除这些条目。
 
 | `resource_type` | `action` | `resource_id` |
 | --- | --- | --- |

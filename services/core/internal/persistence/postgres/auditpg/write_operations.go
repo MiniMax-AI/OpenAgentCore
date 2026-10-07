@@ -24,9 +24,8 @@ func apiKey(id, name, prefix, kind string, revoked pgtype.Timestamptz) writeaudi
 	return key
 }
 
-// GetResourceOwners returns each resource's recorded creator in request order.
-// A resource created through a removed administrator copy reports that audit
-// entry instead of a key.
+// GetResourceOwners returns each resource's recorded creating key in request
+// order.
 func (s *Store) GetResourceOwners(ctx context.Context, tenantID, resourceType string, resourceIDs []string) ([]writeaudit.ResourceOwner, error) {
 	tenant, err := pgunit.ParseID(tenantID)
 	if err != nil {
@@ -36,24 +35,12 @@ func (s *Store) GetResourceOwners(ctx context.Context, tenantID, resourceType st
 		return nil, err
 	}
 	keys := make(map[string]writeaudit.APIKey, len(resourceIDs))
-	admins := make(map[string]string)
 	err = s.pool.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		rows, err := q.GetResourceOwners(ctx, sqlc.GetResourceOwnersParams{TenantID: tenant, ResourceType: resourceType, Column3: resourceIDs})
-		if err != nil {
-			return err
-		}
+		rows, err := sqlc.New(tx).GetResourceOwners(ctx, sqlc.GetResourceOwnersParams{TenantID: tenant, ResourceType: resourceType, Column3: resourceIDs})
 		for _, row := range rows {
 			keys[row.ResourceID] = apiKey(row.KeyID, row.KeyName, row.KeyPrefix, row.KeyKind, row.RevokedAt)
 		}
-		adminRows, err := q.GetAdminResourceOwners(ctx, sqlc.GetAdminResourceOwnersParams{TenantID: tenant, ResourceType: resourceType, Column3: resourceIDs})
-		if err != nil {
-			return err
-		}
-		for _, row := range adminRows {
-			admins[row.ResourceID] = uuid.UUID(row.AuditID.Bytes).String()
-		}
-		return nil
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -63,13 +50,6 @@ func (s *Store) GetResourceOwners(ctx context.Context, tenantID, resourceType st
 		owner := writeaudit.ResourceOwner{ResourceID: id}
 		if key, ok := keys[id]; ok {
 			owner.APIKey = &key
-			source := "api_key"
-			owner.Source = &source
-		}
-		if auditID, ok := admins[id]; ok && owner.APIKey == nil {
-			source := "admin_copy"
-			owner.Source = &source
-			owner.AdminAuditID = &auditID
 		}
 		result = append(result, owner)
 	}

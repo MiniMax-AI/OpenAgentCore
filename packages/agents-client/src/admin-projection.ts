@@ -4,7 +4,7 @@ import { projectTokenUsage } from "./usage-projection";
 import { safeProvider } from "./execution-configuration-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
 import type { CoreHarness, CoreHarnessKind, HarnessModelConfiguration, ProviderObservationErrorCode, ListPage, SavedAgent } from "./types";
-import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminAuditResultID, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion, ExecutorCredentialList, ExecutorConnection, IssuedExecutorCredential, CoreInstallation, CoreInstallationSetting } from "./admin-types";
+import type { AdminAPIKey, AdminProject, AdminAuditPage, AdminSummary, AdminRuntimeObservation, RuntimeDiskObservation, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperationPage, AdminDeleted, AdminIssuedAPIKey, AdminPage, AdminSessionArchive, SessionArtifact, Skill, SkillVersion, ExecutorCredentialList, ExecutorConnection, IssuedExecutorCredential, CoreInstallation, CoreInstallationSetting } from "./admin-types";
 
 export function invalidAdminResponse(): never {
   throw new AgentCoreError("Core returned an invalid administration response.", 502, "invalid_admin_response");
@@ -98,36 +98,20 @@ export function projectArtifact(value: unknown, sessionId: string, expectedId?: 
     !sameResourceId(artifact.session_id as string, sessionId) || (expectedId !== undefined && !sameResourceId(artifact.id as string, expectedId))) return invalidAdminResponse();
   return { ...artifact } as unknown as SessionArtifact;
 }
-// Historical copy audit entries retain their result mappings.
-function projectAuditResultIDs(value: unknown): AdminAuditResultID[] {
-  if (!Array.isArray(value)) return invalidAdminResponse();
-  const types = new Set(["agent", "skill", "skill_version", "environment_template", "file", "vault", "credential"]);
-  return value.map((entry) => {
-    const item = record(entry, ["type", "source_id", "target_id"]);
-    strings(item, ["type", "source_id", "target_id"]);
-    if (!types.has(item.type as string)) return invalidAdminResponse();
-    return { ...item } as unknown as AdminAuditResultID;
-  });
-}
-
 function projectProvenance(value: unknown): AdminKeyProvenance | null {
   if (value === null) return null;
   const key = record(value, ["id", "name", "prefix", "kind", "revoked_at"]);
   strings(key, ["id", "name", "prefix"]);
-  if ((key.kind !== "issued" && key.kind !== "static" && key.kind !== "console") || !date(key.revoked_at)) return invalidAdminResponse();
+  if (key.kind !== "issued" || !date(key.revoked_at)) return invalidAdminResponse();
   return { ...key } as unknown as AdminKeyProvenance;
 }
 export function projectResourceOwners(value: unknown, ids: string[]): { data: AdminResourceOwner[] } {
   const page = record(value, ["data"]);
   if (!Array.isArray(page.data) || page.data.length !== ids.length) return invalidAdminResponse();
   return { data: page.data.map((entry, index) => {
-    const owner = record(entry, ["resource_id", "api_key", "source", "admin_audit_id"]);
+    const owner = record(entry, ["resource_id", "api_key"]);
     if (owner.resource_id !== ids[index]) return invalidAdminResponse();
-    if (!(owner.source === null || owner.source === "api_key" || owner.source === "admin_copy") ||
-      !(owner.admin_audit_id === null || typeof owner.admin_audit_id === "string")) return invalidAdminResponse();
-    const apiKey = projectProvenance(owner.api_key);
-    if ((owner.source === "api_key") !== (apiKey !== null) || (owner.source === "admin_copy") !== (owner.admin_audit_id !== null)) return invalidAdminResponse();
-    return { resource_id: owner.resource_id as string, api_key: apiKey, source: owner.source, admin_audit_id: owner.admin_audit_id } as AdminResourceOwner;
+    return { resource_id: owner.resource_id as string, api_key: projectProvenance(owner.api_key) };
   }) };
 }
 export function projectWriteOperations(value: unknown): AdminWriteOperationPage {
@@ -192,12 +176,12 @@ export function projectAdminAudit(value: unknown): AdminAuditPage {
   const page = record(value, ["data", "has_more", "next_cursor"]);
   if (!Array.isArray(page.data) || typeof page.has_more !== "boolean" || typeof page.next_cursor !== "string") return invalidAdminResponse();
   const data = page.data.map((entry) => {
-    const audit = record(entry, ["id", "created_at", "admin_credential_id", "actor_label", "action", "project_id", "resource_type", "resource_id", "result_ids", "request_id", "trace_id"]);
+    const audit = record(entry, ["id", "created_at", "admin_credential_id", "actor_label", "action", "project_id", "resource_type", "resource_id", "request_id", "trace_id"]);
     strings(audit, ["id", "created_at", "admin_credential_id", "actor_label", "action", "resource_type", "resource_id", "request_id", "trace_id"]);
     if (!date(audit.created_at) || !(audit.project_id === null || typeof audit.project_id === "string")) return invalidAdminResponse();
-    return { ...audit, result_ids: projectAuditResultIDs(audit.result_ids) };
+    return audit;
   });
-  return { data, has_more: page.has_more, next_cursor: page.next_cursor } as AdminAuditPage;
+  return { data, has_more: page.has_more, next_cursor: page.next_cursor } as unknown as AdminAuditPage;
 }
 export function projectExecutorCredentials(value: unknown): ExecutorCredentialList {
   const page = record(value, ["data", "connection"]);

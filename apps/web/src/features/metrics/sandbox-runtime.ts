@@ -1,5 +1,6 @@
-import type { AgentSession, CoreProjectReader, SandboxAllocation, SandboxNode } from "@oac/agents-client";
+import type { AgentSession, SandboxAllocation, SandboxNode } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 
@@ -14,7 +15,7 @@ import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 export const HOSTED_SESSION_LIMIT = 100;
 const SESSION_READ_CONCURRENCY = 6;
 
-export type SessionReader = Pick<CoreProjectReader, "retrieveSession">;
+export type SessionReader = Pick<ProjectClient, "retrieveSession">;
 
 export interface HostedRuntimeLoad {
   observations: OwnedRuntimeObservation[];

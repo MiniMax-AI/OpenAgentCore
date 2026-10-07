@@ -28,8 +28,8 @@ type auditMutation struct {
 
 func publicAuditContext(ctx context.Context, tenant, request string) context.Context {
 	return writeaudit.WithSource(ctx, writeaudit.Source{
-		KeyID: "static:" + strings.Repeat("a", 64), Name: "vault audit fixture", Prefix: "aaaaaaaa",
-		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "vault-audit-trace",
+		KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Name: "vault audit fixture", Prefix: "pc_aaaaaaaa",
+		Kind: "issued", TenantID: tenant, RequestID: request, TraceID: "vault-audit-trace",
 	})
 }
 
@@ -195,11 +195,11 @@ func TestVaultMutationsRollBackWithTheirAudit(t *testing.T) {
 					if public != 0 || admin != 1 || owners != 0 {
 						t.Fatalf("public audit rows %d, admin rows %d, owners %d", public, admin, owners)
 					}
-					var credential, actor, project, trace, results string
-					if err := pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,result_ids::text,action,resource_type,resource_id,to_jsonb(a)::text FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &results, &action, &kind, &gotID, &raw); err != nil {
+					var credential, actor, project, trace string
+					if err := pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,to_jsonb(a)::text FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &action, &kind, &gotID, &raw); err != nil {
 						t.Fatal(err)
 					}
-					if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" || results != "[]" {
+					if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" {
 						t.Fatal("administrator audit identity differs")
 					}
 					parent = mutation.parent

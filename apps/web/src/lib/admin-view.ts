@@ -49,14 +49,12 @@ export interface KeyRef {
   id: string;
   name: string | null;
   prefix: string | null;
-  kind: "issued" | "static" | "console";
   revoked_at: number | null;
 }
 
-/** Who created a resource: a key, an administrator copy, or unknown. */
+/** Who created a resource: a key, or null when Core has no creation record. */
 export interface Creator {
   key: KeyRef | null;
-  source: "api_key" | "admin_copy" | null;
 }
 
 export interface SpaceUsage {
@@ -128,7 +126,7 @@ function keyView(key: AdminAPIKey): AdminKey {
 
 function keyRef(key: AdminKeyProvenance | null): KeyRef | null {
   if (!key) return null;
-  return { id: key.id, name: key.name || null, prefix: key.prefix || null, kind: key.kind, revoked_at: maybeSeconds(key.revoked_at) };
+  return { id: key.id, name: key.name || null, prefix: key.prefix || null, revoked_at: maybeSeconds(key.revoked_at) };
 }
 
 export async function listAllProjects(signal?: AbortSignal): Promise<Project[]> {
@@ -185,7 +183,7 @@ function summaryView(entry: AdminSummaryEntry, keys: ReadonlyMap<string, AdminKe
     agent_id: entry.agent_id,
     key_id: entry.key_id,
     key: entry.key_id
-      ? { id: entry.key_id, name: key?.name ?? null, prefix: key?.prefix ?? null, kind: "issued", revoked_at: key?.revoked_at ?? null }
+      ? { id: entry.key_id, name: key?.name ?? null, prefix: key?.prefix ?? null, revoked_at: key?.revoked_at ?? null }
       : null,
     assets: entry.assets,
     sessions: entry.sessions,
@@ -271,7 +269,7 @@ export async function listCreators(projectId: string, type: OwnerResourceType, i
   for (let start = 0; start < unique.length; start += PAGE) {
     const batch = unique.slice(start, start + PAGE);
     const result = await admin.retrieveResourceOwners(projectId, type, batch, { signal });
-    for (const owner of result.data) creators.set(owner.resource_id, { key: keyRef(owner.api_key), source: owner.source });
+    for (const owner of result.data) creators.set(owner.resource_id, { key: keyRef(owner.api_key) });
   }
   return creators;
 }

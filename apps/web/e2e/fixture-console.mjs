@@ -97,7 +97,7 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
   const screenshots = process.env.OAC_WEB_SCREENSHOT_DEMO === "1";
   const now = Math.floor(Date.now() / 1000);
   const base = (screenshots ? buildScreenshotDemo : buildDemo)(now, address === "local" ? LOCAL_URL : PUBLIC_URL);
-  const resources = buildResources(now, base.agents, base.sessions);
+  const resources = buildResources(now);
   const admin = buildAdmin(now, base, resources);
   // A fresh install: no project, Session or Runtime yet; Getting started leads.
   if (fresh) for (const list of [admin.projects, base.sessions, base.observations, base.allocations]) list.splice(0);
