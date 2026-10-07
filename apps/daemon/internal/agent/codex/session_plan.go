@@ -71,9 +71,6 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		}
 	}
 
-	if req.DisableExecutionEnvironment {
-		plan.Env = append(plan.Env, "CODEX_EXEC_SERVER_URL=none")
-	}
 	var skillRoots []string
 	if req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) > 0 {
 		if err := verifyHostedSkills(req.LocalEnvironment.Skills); err != nil {

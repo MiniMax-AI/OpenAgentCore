@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -106,10 +105,39 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 		t.Fatal("the real key reached the view")
 	}
 
+	// The Harness runs a stdio binding's alias without arguments.
+	docs := session.MCP
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
-	if _, err := view.Executor(t.Context(), req, session); !errors.Is(err, agent.ErrUnsupportedOperation) {
-		t.Fatalf("stdio MCP = %v, want ErrUnsupportedOperation", err)
+	stdio, err := view.Executor(t.Context(), req, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdio.Close(ctx)
+	var stdioStart startRequest
+	if err := json.Unmarshal(<-requests, &stdioStart); err != nil || stdioStart.Workspace == nil || len(stdioStart.Workspace.MCP) != 1 ||
+		stdioStart.Workspace.MCP[0].Command != agent.ViewAlias(0) || stdioStart.Workspace.MCP[0].Args != nil {
+		t.Fatalf("stdio MCP = %+v, %v", stdioStart.Workspace, err)
+	}
+
+	// With environment none the bridge runs without a workspace in the work directory.
+	none := req
+	none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
+	session.MCP = docs
+	noneExecutor, err := view.Executor(t.Context(), none, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer noneExecutor.Close(ctx)
+	var noneStart startRequest
+	if err := json.Unmarshal(<-requests, &noneStart); err != nil || launched.Dir != "/.oac/home/work" || noneStart.Cwd != launched.Dir || noneStart.Workspace != nil ||
+		noneStart.MCPHTTPServers == nil || len(*noneStart.MCPHTTPServers) != 1 || (*noneStart.MCPHTTPServers)[0].ServerURL != "http://127.0.0.1:17102/mcp/docs" {
+		t.Fatalf("environment none launched in %q with %+v, %v", launched.Dir, noneStart, err)
+	}
+	for _, entry := range launched.Env {
+		if strings.HasPrefix(entry, "CLAUDE_CODE_TMPDIR=") || strings.HasPrefix(entry, "SHELL=") {
+			t.Errorf("environment none sets the workspace tools' %s", entry)
+		}
 	}
 
 	// A link the Session uid planted in its home is never followed.
