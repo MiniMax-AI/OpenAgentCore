@@ -12,13 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// RuntimeSuspensionPolicy applies only to an explicitly qualified single-host
-// provider. Fixed guest sizing plus MaxActive bounds reserved CPU and memory.
+// RuntimeSuspensionPolicy is the idle suspension policy of a provider that
+// suspends sandboxes.
 type RuntimeSuspensionPolicy struct {
 	IdleTimeout time.Duration
 	Retention   time.Duration
-	MaxActive   int
-	MaxRetained int
 }
 
 type runtimeCompute struct {
@@ -30,23 +28,6 @@ type runtimeCompute struct {
 	Rollback  bool                      `json:"rollback,omitempty"`
 }
 
-func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) error {
-	policy := r.config.Suspension
-	if key != r.config.InstallationID {
-		return sandbox.ErrOwnership
-	}
-	if policy == nil {
-		return nil
-	}
-	count, err := r.reader.CountComputeReservations(ctx, key)
-	if err != nil {
-		return err
-	}
-	if count >= int64(policy.MaxActive) {
-		return ErrExecutionUnavailable
-	}
-	return nil
-}
 func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.Allocation, phase string, state runtimeCompute, until *time.Time) (deployment.Allocation, error) {
 	raw, err := json.Marshal(state)
 	if err != nil {
@@ -230,9 +211,6 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.Che
 	if !activity.Busy && !activity.WakeRequested {
 		return nil
 	}
-	if err := r.computeCapacityForAllocation(ctx, owner); err != nil {
-		return err
-	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
 	}
@@ -273,12 +251,4 @@ func ignoreComputeAbsent(err error) error {
 		return nil
 	}
 	return err
-}
-
-// Node-backed restores reserve capacity atomically in SetCompute.
-func (r *runtimeLifecycle) computeCapacityForAllocation(ctx context.Context, owner deployment.Allocation) error {
-	if owner.NodeID != "" {
-		return nil
-	}
-	return r.computeCapacity(ctx, owner.ProviderKey)
 }

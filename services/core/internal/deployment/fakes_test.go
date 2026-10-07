@@ -76,29 +76,27 @@ func (f *fakeExecutionStorage) WithDeployment(ctx context.Context, apply func(De
 }
 
 type fakeReader struct {
-	t                        testing.TB
-	deployment               func(context.Context) (Record, error)
-	snapshot                 func(context.Context) (Snapshot, error)
-	ownerEpoch               func(context.Context) (uint64, error)
-	allocation               func(context.Context, sandbox.Reference) (AllocationRecord, error)
-	generations              func(context.Context, int64) ([]GenerationRecord, error)
-	nodes                    func(context.Context) ([]NodeRecord, error)
-	nodeHistory              func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
-	readNodes                func(context.Context, func(NodeReads) error) error
-	resetSessions            func(context.Context, string, bool) ([]ResetSession, error)
-	addressBindings          func(context.Context, string) (AddressBindings, error)
-	environmentAllocation    func(context.Context, AllocationKey) (Allocation, error)
-	credentialAllocations    func(context.Context, string) ([]Allocation, error)
-	observationSessions      func(context.Context, string, int) (ObservationSessionPage, error)
-	nodeAllocations          func(context.Context, string) ([]NodeAllocation, error)
-	nodeOnline               func(context.Context, string) (bool, error)
-	lifecycleNodes           func(context.Context) ([]string, error)
-	lifecycleAllocations     func(context.Context, string, string) ([]Allocation, error)
-	unallocatedEnvironments  func(context.Context, string, string) ([]UnallocatedEnvironment, error)
-	lifecyclePlacement       func(context.Context, AllocationKey) (LifecyclePlacement, error)
-	activity                 func(context.Context, string) (Activity, error)
-	countComputeReservations func(context.Context, string) (int64, error)
-	countRetainedAllocations func(context.Context, string) (int64, error)
+	t                       testing.TB
+	deployment              func(context.Context) (Record, error)
+	snapshot                func(context.Context) (Snapshot, error)
+	ownerEpoch              func(context.Context) (uint64, error)
+	allocation              func(context.Context, sandbox.Reference) (AllocationRecord, error)
+	generations             func(context.Context, int64) ([]GenerationRecord, error)
+	nodes                   func(context.Context) ([]NodeRecord, error)
+	nodeHistory             func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
+	readNodes               func(context.Context, func(NodeReads) error) error
+	resetSessions           func(context.Context, string, bool) ([]ResetSession, error)
+	addressBindings         func(context.Context, string) (AddressBindings, error)
+	environmentAllocation   func(context.Context, AllocationKey) (Allocation, error)
+	credentialAllocations   func(context.Context, string) ([]Allocation, error)
+	observationSessions     func(context.Context, string, int) (ObservationSessionPage, error)
+	nodeAllocations         func(context.Context, string) ([]NodeAllocation, error)
+	nodeOnline              func(context.Context, string) (bool, error)
+	lifecycleNodes          func(context.Context) ([]string, error)
+	lifecycleAllocations    func(context.Context, string, string) ([]Allocation, error)
+	unallocatedEnvironments func(context.Context, string, string) ([]UnallocatedEnvironment, error)
+	lifecyclePlacement      func(context.Context, AllocationKey) (LifecyclePlacement, error)
+	activity                func(context.Context, string) (Activity, error)
 }
 
 func (f *fakeReader) Deployment(ctx context.Context) (Record, error) {
@@ -353,11 +351,6 @@ type fakeDeploymentTx struct {
 	loadSnapshot                func() (Snapshot, error)
 	countResources              func() (Resources, error)
 	claimInstallation           func(string) error
-	setProcessDeployment        func(string, string, bool) error
-	setManagerDeployment        func(string, string) error
-	loadNode                    func(string) (StoredNode, error)
-	insertNode                  func(NewNode) (StoredNode, error)
-	updateNode                  func(string, NodeLimits) error
 	saveSelection               func(SelectionRecord) error
 	recordConfigurationMetadata func(json.RawMessage) error
 	retainGeneration            func() error
@@ -397,41 +390,6 @@ func (f *fakeDeploymentTx) ClaimInstallation(installationID string) error {
 		unexpected(f.t, "ClaimInstallation")
 	}
 	return f.claimInstallation(installationID)
-}
-
-func (f *fakeDeploymentTx) SetProcessDeployment(installationID, backendFingerprint string, admissionPaused bool) error {
-	if f.setProcessDeployment == nil {
-		unexpected(f.t, "SetProcessDeployment")
-	}
-	return f.setProcessDeployment(installationID, backendFingerprint, admissionPaused)
-}
-
-func (f *fakeDeploymentTx) SetManagerDeployment(provider, localNodeID string) error {
-	if f.setManagerDeployment == nil {
-		unexpected(f.t, "SetManagerDeployment")
-	}
-	return f.setManagerDeployment(provider, localNodeID)
-}
-
-func (f *fakeDeploymentTx) LoadNode(id string) (StoredNode, error) {
-	if f.loadNode == nil {
-		unexpected(f.t, "LoadNode")
-	}
-	return f.loadNode(id)
-}
-
-func (f *fakeDeploymentTx) InsertNode(node NewNode) (StoredNode, error) {
-	if f.insertNode == nil {
-		unexpected(f.t, "InsertNode")
-	}
-	return f.insertNode(node)
-}
-
-func (f *fakeDeploymentTx) UpdateNode(id string, limits NodeLimits) error {
-	if f.updateNode == nil {
-		unexpected(f.t, "UpdateNode")
-	}
-	return f.updateNode(id, limits)
 }
 
 func (f *fakeDeploymentTx) SaveSelection(selection SelectionRecord) error {
@@ -621,20 +579,6 @@ func (f *fakeReader) Activity(ctx context.Context, allocationID string) (Activit
 		unexpected(f.t, "Activity")
 	}
 	return f.activity(ctx, allocationID)
-}
-
-func (f *fakeReader) CountComputeReservations(ctx context.Context, installationID string) (int64, error) {
-	if f.countComputeReservations == nil {
-		unexpected(f.t, "CountComputeReservations")
-	}
-	return f.countComputeReservations(ctx, installationID)
-}
-
-func (f *fakeReader) CountRetainedAllocations(ctx context.Context, installationID string) (int64, error) {
-	if f.countRetainedAllocations == nil {
-		unexpected(f.t, "CountRetainedAllocations")
-	}
-	return f.countRetainedAllocations(ctx, installationID)
 }
 
 // fakeSessionReader serves the Session reads the observation resolver makes;

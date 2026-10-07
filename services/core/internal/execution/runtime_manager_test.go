@@ -19,10 +19,11 @@ func (heldLease) CancelOperations(_ context.Context, cancel context.CancelFunc) 
 }
 func (heldLease) Close(context.Context) error { return nil }
 
+// testRuntimeManager models an already loaded node deployment.
 func testRuntimeManager(t *testing.T) *runtimeManager {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	m := &runtimeManager{lease: heldLease{}, config: RuntimeProvider{ProviderKind: "docker"}, ctx: ctx, cancel: cancel, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}
+	m := &runtimeManager{lease: heldLease{}, config: RuntimeProvider{ProviderKind: "docker", Mode: "nodes", Provider: &drainFixtureProvider{}}, loadDeployment: func(context.Context) (*RuntimeProvider, error) { return nil, nil }, ctx: ctx, cancel: cancel, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}
 	t.Cleanup(func() { m.stop(); m.drain() })
 	return m
 }

@@ -449,7 +449,7 @@ func TestCreateSession(t *testing.T) {
 		tx := newCreationTx(t, hostedSession, true)
 		tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Specification: json.RawMessage(`{}`)})
 		tx.createEnvironment = returns("environment")
-		tx.loadNodes = returns([]placement.Node{{ID: "node", Online: true, ServingReady: true, ReadyGeneration: &ready, MaxActive: 1, MaxRetained: 1}})
+		tx.loadNodes = returns([]placement.Node{{ID: "node", Online: true, ServingReady: true, ReadyGeneration: &ready, MaxActive: 1, MaxRetained: 1, CoreURL: rules.PublicURL()}})
 		tx.reservePlacement = done
 		_, err, calls := runCreation(t, rules, tx, creationInput("openai_hosted"))
 		want := []string{"UpsertSession create", "LockDeployment", "CreateEnvironment", "LoadNodes", "ReservePlacement node 5", "AuditCreation session:session environment:environment:session", "LoadSession"}

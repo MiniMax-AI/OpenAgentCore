@@ -134,7 +134,7 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			lease.inner = owner.Lease
 			id := uuid.NewString()
 			service, reader := unusedSessions(t)
-			dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+			dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t))}
 			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
@@ -193,7 +193,7 @@ func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	id := uuid.NewString()
 	// The Worker's first reconciliation scans the Session work.
 	reader, service := testSessions(t, pool, nil)
-	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t))}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 	if err != nil {
 		t.Fatal(err)

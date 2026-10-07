@@ -121,7 +121,7 @@ func TestValidateNode(t *testing.T) {
 
 func TestCheckGeneration(t *testing.T) {
 	installation := uuid.NewString()
-	current := Record{InstallationID: installation, WebManaged: true, Generation: 3}
+	current := Record{InstallationID: installation, Generation: 3}
 	if err := checkGeneration(current, installation, 3); err != nil {
 		t.Fatal(err)
 	}
@@ -129,12 +129,12 @@ func TestCheckGeneration(t *testing.T) {
 	if err := checkGeneration(current, installation, 2); !errors.As(err, &stale) || stale.CurrentGeneration != 3 || !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale generation: %v", err)
 	}
-	process := current
-	process.WebManaged = false
+	unclaimed := current
+	unclaimed.InstallationID = ""
 	for _, c := range []struct {
 		d            Record
 		installation string
-	}{{process, installation}, {current, uuid.NewString()}} {
+	}{{unclaimed, installation}, {current, uuid.NewString()}} {
 		if err := checkGeneration(c.d, c.installation, 3); !errors.Is(err, ErrConflict) || errors.As(err, &stale) {
 			t.Errorf("checkGeneration(%+v, %s) = %v, want a plain conflict", c.d, c.installation, err)
 		}

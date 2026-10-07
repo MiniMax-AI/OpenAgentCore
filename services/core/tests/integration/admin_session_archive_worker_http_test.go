@@ -41,7 +41,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	deployments := deploymentService(t, s)
 	providerConfig := func(setup deployment.Setup) *execution.RuntimeProvider {
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	}
 	configuration := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
 		setup, err := deployments.Setup(ctx)

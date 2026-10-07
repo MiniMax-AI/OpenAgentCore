@@ -70,7 +70,7 @@ func checkGeneration(d Record, installation string, generation uint64) error {
 	if d.Generation != generation {
 		return &GenerationStaleError{CurrentGeneration: d.Generation}
 	}
-	if !d.WebManaged || d.InstallationID != installation {
+	if d.InstallationID == "" || d.InstallationID != installation {
 		return ErrConflict
 	}
 	return nil
