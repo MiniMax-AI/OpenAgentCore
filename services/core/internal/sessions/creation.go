@@ -389,11 +389,12 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 		if err := input.ModelProvider.ValidateHarness(engine); err != nil {
 			return NewSession{}, nil, nil, fmt.Errorf("%w: %s", ErrInvalidInput, err)
 		}
-		var fields map[string]any
+		// Raw values keep the caller's numbers exact.
+		var fields map[string]json.RawMessage
 		if json.Unmarshal(configuration, &fields) != nil {
 			return NewSession{}, nil, nil, ErrInvalidInput
 		}
-		fields["model_provider_configured"] = true
+		fields["model_provider_configured"] = json.RawMessage("true")
 		if configuration, err = json.Marshal(fields); err != nil {
 			return NewSession{}, nil, nil, err
 		}

@@ -165,6 +165,14 @@ def main():
                         assert issued["project_id"] == project_id
                         return issued["key"]
 
+                    # Core admits a Session only with a model provider; nothing here calls these.
+                    for harness, provider in (("codex", {"protocol": "responses", "base_url": "https://model.fixture.example/v1"}),
+                                              ("claude_sdk", {"protocol": "anthropic", "base_url": "https://model.fixture.example/anthropic",
+                                                              "context_window": 200000, "max_output_tokens": 8000})):
+                        response = admin.put(f"harnesses/{harness}/model-configuration",
+                                             json={"model": "deployment-test-model", "model_provider": {**provider, "api_key": "fixture-model-key"}})
+                        assert response.status_code == 200, "Fixture model configuration failed"
+
                     for index in range(4):
                         response = admin.post("projects", json={"name": f"Official SDK fixture {index}"})
                         assert response.status_code == 201, "Fixture Project creation failed"

@@ -267,6 +267,14 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
 		t.Fatal("provider-free Session accepted work", err)
 	}
+	none, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.SubmitInputs(t.Context(), h.tenant, none.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
+		t.Fatal("provider-free none Session accepted work", err)
+	}
 	if after := reservations(); after != before {
 		t.Fatal("rejected work was queued", before, after)
 	}

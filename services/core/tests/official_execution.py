@@ -156,8 +156,6 @@ def main():
             agent = {"model": "gpt-5.5", "text": {"verbosity": verbosity, "format": {"type": "text"}}}
             key = "text-" + verbosity
             configured = sessions.create(agent=agent, environment={"type": "none"}, input="TEXT-VERBOSITY:" + verbosity, extra_headers={"Idempotency-Key": key})
-            agent["text"]["format"] = None
-            assert sessions.create(agent=agent, environment={"type": "none"}, input="TEXT-VERBOSITY:" + verbosity, extra_headers={"Idempotency-Key": key}).id == configured.id
             assert configured.agent.text.model_dump() == {"format": {"type": "text"}, "verbosity": verbosity}
             for count in (1, 2):
                 if count > 1:
@@ -173,10 +171,14 @@ def main():
         default_agent = {"model": "custom-provider-model"}
         default = sessions.create(agent=default_agent, environment={"type": "none"},
                                   input="DEFAULT-VERBOSITY", extra_headers={"Idempotency-Key": "native-default"})
+        # A retry is compared as sent, so spelling out the default conflicts.
         for text in (None, {"verbosity": None}, {"verbosity": "medium"}):
-            configured = sessions.create(agent=dict(default_agent, text=text), environment={"type": "none"},
-                                         input="DEFAULT-VERBOSITY", extra_headers={"Idempotency-Key": "native-default"})
-            assert configured.id == default.id and configured.agent.text.verbosity == "medium"
+            try:
+                sessions.create(agent=dict(default_agent, text=text), environment={"type": "none"},
+                                input="DEFAULT-VERBOSITY", extra_headers={"Idempotency-Key": "native-default"})
+                raise AssertionError("a retry that spells out the default reused the key")
+            except ConflictError:
+                pass
         for count in (1, 2):
             if count > 1:
                 sessions.events.create(default.id, events=[message("DEFAULT-VERBOSITY")])

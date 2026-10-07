@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 814d5dfa5557e1b96df93159577cd06837e3937bb640b2ccab04c83afb3b8431
+source_hash: f7999939977b8cf4a516c2bea09cd50c8078d6fb05dffeb137dfba45c47839d1
 ---
 
 Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
@@ -251,7 +251,7 @@ oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
 | --- | --- | --- |
 | `openai_hosted` | Core 在某个节点或 E2B 上创建的沙箱；容量由管理员提供 | 可选 `network`、`packages`、`files`、`skills`、`plugins`、`env`、`capability_directories`、`setup_commands`，也可指定模板 |
 | `self_hosted` | 你自己的 Linux、macOS 或 Windows 计算机 | 要求提供绝对路径 `workspace_directory`。Skills、软件包、文件或模板应放在 `x_agents_core.environment` 中。响应会在 `x_agents_core.installation` 中携带安装命令；请参阅 [self-hosted execution](../getting-started/self-hosted.md) |
-| `none` | 由操作员注册的设备连接，无工作区 | `input` 为必填。模型来自安装的默认配置；如果未配置默认模型，则来自设备 |
+| `none` | 由操作员注册的设备连接，无工作区 | `input` 为必填 |
 
 新建的 `openai_hosted` Session 在 Core 准备沙箱期间会读取到 `idle`；Environment 准备就绪后，其首个 Turn 才会启动。[Environment contract](../../../contracts/agents-api/zh/environments.md) 负责部署位置、过期和准备过程。
 
