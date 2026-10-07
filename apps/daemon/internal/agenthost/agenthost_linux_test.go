@@ -152,8 +152,8 @@ type daemon struct {
 
 func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 	t.Helper()
-	dm := &daemon{host: &Host{cfg: cfg, owners: owners{d: d}}, frames: map[string]chan proto.Envelope{}, opened: map[string]*session{}}
-	reg := registry(cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+	dm := &daemon{host: &Host{cfg: cfg, owners: owners{d: d}}}
+	dm.route(t, registry(cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 		if dm.mcp != nil {
 			local := *req.LocalEnvironment
 			local.MCP = dm.mcp
@@ -166,7 +166,15 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 			dm.mu.Unlock()
 		}
 		return e, err
-	})
+	}))
+	return dm
+}
+
+// route serves dm's Sessions through a new Router that runs reg, with the
+// Host's Environment owners.
+func (dm *daemon) route(t *testing.T, reg *agent.Registry) {
+	t.Helper()
+	dm.frames, dm.opened = map[string]chan proto.Envelope{}, map[string]*session{}
 	removeHome := func(session string) error {
 		id, err := canonicalID(session)
 		if err != nil {
@@ -179,7 +187,6 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { dm.shutdown() })
-	return dm
 }
 
 // stateKeyPrefix and the Session ID make the state key dispatch requires.
