@@ -35,7 +35,9 @@ class HarnessCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "catalog.json"
             path.write_text(json.dumps(entries))
-            generated = catalog.render(catalog.load_catalog(path))
+            loaded = catalog.load_catalog(path)
+            generated = catalog.render(loaded)
+        generated["client"] = catalog.render_client(loaded, ["responses"])
         for content in generated.values():
             self.assertIn("example", content)
             for old in ("codex", "claude_sdk", "mcode"):

@@ -1,4 +1,5 @@
-export { coreHarnessKinds, coreHarnessNames } from "./harness-catalog";
+export { coreHarnessKinds, coreHarnessNames, modelProviderProtocols } from "./harness-catalog";
+export { deploymentContract } from "./deployment-contract";
 export { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
 export type { OpenAIAgentsClientOptions, CoreErrorDetail, CoreErrorDetails } from "./client";
 export { createSSEDecoder } from "./sse";
