@@ -146,12 +146,6 @@ type Session struct {
 // connections. The session does NOT start its goroutines automatically — Start
 // runs once the handler is ready so the session can't race with response writes.
 func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger, owner *ownerLease) *Session {
-	if log == nil {
-		log = func(string, ...any) {}
-	}
-	if reg == nil {
-		reg = NewRegistry()
-	}
 	now := time.Now()
 	return &Session{
 		DeviceID:      deviceID,
