@@ -109,7 +109,7 @@ def enum_values(document, schema):
 def union_marshaler(document, name, binding, field_types):
     schema = resolve(document, binding['sources'][0])
     discriminator = schema['discriminator']['propertyName']
-    selector = binding.get('fields', {}).get(discriminator, {}).get('name', go_name(discriminator))
+    selector = go_name(discriminator)
     lines = [f'func (value {name}) MarshalJSON() ([]byte, error) {{', f'switch value.{selector} {{']
     for variant in variants(document, schema):
         tag, = variant['properties'][discriminator]['enum']
@@ -168,7 +168,7 @@ def go_types(document, bindings):
             # Swag still projects the internal APIs that reference these types.
             if 'json.RawMessage' in typ:
                 tags.append('swaggertype:"' + ('array,object' if typ.lstrip('*').startswith('[]') else 'object') + '"')
-            field_types[field] = (override.get('name', go_name(field)), typ)
+            field_types[field] = (go_name(field), typ)
             lines.append('\t' + field_types[field][0] + ' ' + typ + ' `' + ' '.join(tags) + '`')
         lines.append('}\n')
         if binding.get('marshal_union'):
@@ -254,17 +254,18 @@ def write(path, data, check):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true')
-    parser.add_argument('--swag-roots', type=Path, help='Temporary entry points for Go-owned extension types')
-    parser.add_argument('--extensions', type=Path, help='JSON definitions projected from Core extension types')
+    stage = parser.add_mutually_exclusive_group(required=True)
+    stage.add_argument('--swag-roots', type=Path, help='Temporary entry points for Go-owned extension types')
+    stage.add_argument('--extensions', type=Path, help='JSON definitions projected from Core extension types')
     args = parser.parse_args()
     source, pin = read_source()
     bindings = json.loads((CONTRACT / 'go-bindings.json').read_text())
-    write(CONTRACT / 'v1/official.gen.go', go_types(source, bindings), args.check)
     owners = extension_owners(bindings)
     if args.swag_roots:
+        write(CONTRACT / 'v1/official.gen.go', go_types(source, bindings), args.check)
         roots = 'package extensions\n\n' + '\n'.join(f'// @Success 200 {{object}} v1.{name}' for name in sorted(set(owners.values()))) + '\nfunc extensions() {}\n'
         args.swag_roots.write_text(roots)
-    if args.extensions:
+    else:
         doc = public_document(source, json.loads(args.extensions.read_text()), owners, pin["beta_header"])
         # JSON is a YAML subset and keeps generation independent of PyYAML.
         write(CONTRACT / 'openapi.yaml', (json.dumps(doc, indent=2, ensure_ascii=False) + '\n').encode(), args.check)

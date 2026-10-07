@@ -62,19 +62,8 @@ type CreateAgentRequest struct {
 	MultiAgent   json.RawMessage      `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Reasoning    *Reasoning           `json:"reasoning,omitempty" extensions:"x-nullable"`
 	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
-	Text         *SavedAgentTextInput `json:"text,omitempty" extensions:"x-nullable"`
+	Text         *TextConfigInput     `json:"text,omitempty" extensions:"x-nullable"`
 	Tools        []json.RawMessage    `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
-}
-
-// CreateCredentialRequest projects CreateVaultCredentialParams.
-type CreateCredentialRequest struct {
-	Name *string              `json:"name" binding:"required"`
-	Auth *CredentialAuthInput `json:"auth" binding:"required"`
-}
-
-// CreateEventsRequest projects CreateSessionEventsParams.
-type CreateEventsRequest struct {
-	Events []SessionInput `json:"events" binding:"required"`
 }
 
 // CreateSessionRequest projects CreateAgentSessionParams.
@@ -99,12 +88,6 @@ type CreateSubagentCallItem struct {
 	Content         []AgentContent `json:"content" binding:"required"`
 	Model           *string        `json:"model" binding:"required" extensions:"x-nullable"`
 	ReasoningEffort *string        `json:"reasoning_effort" binding:"required" extensions:"x-nullable"`
-}
-
-// CreateVaultRequest projects CreateVaultParams.
-type CreateVaultRequest struct {
-	Name     *string            `json:"name,omitempty"`
-	Metadata map[string]*string `json:"metadata,omitempty" extensions:"x-nullable"`
 }
 
 // Credential projects VaultCredentialResource.
@@ -235,12 +218,6 @@ type EnvironmentPackages struct {
 	Python []string `json:"python" extensions:"x-nullable"`
 }
 
-// EnvironmentPackagesInput projects EnvironmentPackagesParam.
-type EnvironmentPackagesInput struct {
-	NPM    []string `json:"npm,omitempty" extensions:"x-nullable"`
-	Python []string `json:"python,omitempty" extensions:"x-nullable"`
-}
-
 // EnvironmentPackagesResponse projects EnvironmentPackagesResource.
 type EnvironmentPackagesResponse struct {
 	NPM    []string `json:"npm" binding:"required"`
@@ -279,19 +256,6 @@ type EnvironmentTemplateList struct {
 	LastID  *string               `json:"last_id" binding:"required" extensions:"x-nullable"`
 }
 
-// EnvironmentTemplateRequest projects CreateEnvironmentTemplateParams.
-type EnvironmentTemplateRequest struct {
-	Name                  *string                   `json:"name,omitempty" extensions:"x-nullable"`
-	Network               *EnvironmentNetworkInput  `json:"network,omitempty" extensions:"x-nullable"`
-	CapabilityDirectories []string                  `json:"capability_directories,omitempty" extensions:"x-nullable"`
-	Env                   map[string]string         `json:"env,omitempty" extensions:"x-nullable"`
-	Files                 []json.RawMessage         `json:"files,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
-	Packages              *EnvironmentPackagesInput `json:"packages,omitempty" extensions:"x-nullable"`
-	Plugins               []json.RawMessage         `json:"plugins,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
-	Skills                []json.RawMessage         `json:"skills,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
-	SetupCommands         []json.RawMessage         `json:"setup_commands,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
-}
-
 // ErrorResponse projects ErrorResponse-2.
 type ErrorResponse struct {
 	Error APIError `json:"error" binding:"required"`
@@ -317,14 +281,14 @@ type FunctionToolInput struct {
 
 // InlineAgent projects SessionAgentConfigParam.
 type InlineAgent struct {
-	XAgentsCore  *AgentsCore          `json:"x_agents_core,omitempty"`
-	Model        *string              `json:"model,omitempty"`
-	Instructions *string              `json:"instructions,omitempty" extensions:"x-nullable"`
-	MultiAgent   json.RawMessage      `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
-	Reasoning    *Reasoning           `json:"reasoning,omitempty" extensions:"x-nullable"`
-	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
-	Text         *SavedAgentTextInput `json:"text,omitempty" extensions:"x-nullable"`
-	Tools        []json.RawMessage    `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
+	XAgentsCore  *AgentsCore       `json:"x_agents_core,omitempty"`
+	Model        *string           `json:"model,omitempty"`
+	Instructions *string           `json:"instructions,omitempty" extensions:"x-nullable"`
+	MultiAgent   json.RawMessage   `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	Reasoning    *Reasoning        `json:"reasoning,omitempty" extensions:"x-nullable"`
+	ServiceTier  *string           `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
+	Text         *TextConfigInput  `json:"text,omitempty" extensions:"x-nullable"`
+	Tools        []json.RawMessage `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
 }
 
 // InputContent projects InputContentParam.
@@ -521,7 +485,7 @@ type SavedAgentConfiguration struct {
 	MultiAgent   MultiAgentConfig  `json:"multi_agent" binding:"required"`
 	Reasoning    Reasoning         `json:"reasoning" binding:"required"`
 	ServiceTier  string            `json:"service_tier" binding:"required" enums:"auto,default,flex,priority,fast"`
-	Text         SavedAgentText    `json:"text" binding:"required"`
+	Text         TextConfig        `json:"text" binding:"required"`
 	Tools        []json.RawMessage `json:"tools" binding:"required" swaggertype:"array,object"`
 }
 
@@ -532,24 +496,6 @@ type SavedAgentList struct {
 	HasMore bool         `json:"has_more" binding:"required"`
 	FirstID *string      `json:"first_id" binding:"required" extensions:"x-nullable"`
 	LastID  *string      `json:"last_id" binding:"required" extensions:"x-nullable"`
-}
-
-// SavedAgentText projects TextResource.
-type SavedAgentText struct {
-	Format    SavedAgentTextFormat `json:"format" binding:"required"`
-	Verbosity string               `json:"verbosity" binding:"required" enums:"low,medium,high"`
-}
-
-// SavedAgentTextFormat projects TextFormatResource.
-type SavedAgentTextFormat struct {
-	Type   string          `json:"type" binding:"required" enums:"text,json_schema"`
-	Schema json.RawMessage `json:"schema,omitempty" swaggertype:"object"`
-}
-
-// SavedAgentTextInput projects TextParam.
-type SavedAgentTextInput struct {
-	Format    json.RawMessage `json:"format,omitempty" extensions:"x-nullable" swaggertype:"object"`
-	Verbosity *string         `json:"verbosity,omitempty" extensions:"x-nullable" enums:"low,medium,high"`
 }
 
 // SendSubagentInputCallItem projects SendSubagentInputCallItemResource.
@@ -823,8 +769,8 @@ type TextConfig struct {
 
 // TextConfigInput projects TextParam.
 type TextConfigInput struct {
-	Format    *TextFormat `json:"format,omitempty" extensions:"x-nullable"`
-	Verbosity *string     `json:"verbosity,omitempty" extensions:"x-nullable" enums:"low,medium,high"`
+	Format    json.RawMessage `json:"format,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	Verbosity *string         `json:"verbosity,omitempty" extensions:"x-nullable" enums:"low,medium,high"`
 }
 
 // TextFormat projects TextFormatResource.
@@ -882,18 +828,8 @@ type UpdateAgentRequest struct {
 	MultiAgent   json.RawMessage      `json:"multi_agent,omitempty" extensions:"x-nullable" swaggertype:"object"`
 	Reasoning    *Reasoning           `json:"reasoning,omitempty" extensions:"x-nullable"`
 	ServiceTier  *string              `json:"service_tier,omitempty" extensions:"x-nullable" enums:"auto,default,flex,priority,fast"`
-	Text         *SavedAgentTextInput `json:"text,omitempty" extensions:"x-nullable"`
+	Text         *TextConfigInput     `json:"text,omitempty" extensions:"x-nullable"`
 	Tools        []json.RawMessage    `json:"tools,omitempty" extensions:"x-nullable" swaggertype:"array,object"`
-}
-
-// UpdateCredentialRequest projects RotateVaultCredentialParams.
-type UpdateCredentialRequest struct {
-	Auth *CredentialAuthReplacement `json:"auth" binding:"required"`
-}
-
-// UpdateSessionRequest projects UpdateAgentSessionParams.
-type UpdateSessionRequest struct {
-	Metadata map[string]string `json:"metadata" extensions:"x-nullable"`
 }
 
 // Vault projects VaultResource.

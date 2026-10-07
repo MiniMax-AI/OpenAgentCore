@@ -1,31 +1,24 @@
 {
   "APIError": {
     "sources": ["#/components/schemas/Error"],
-    "fields": {
-      "code": {"type": "*string"}
-    },
     "order": ["message", "type", "code", "param"]
   },
   "Agent": {
     "sources": ["#/components/schemas/SessionAgentResource"],
     "fields": {
       "x_agents_core": {"type": "*AgentsCore"},
-      "reasoning": {"type": "Reasoning"},
-      "text": {"type": "TextConfig"}
+      "reasoning": {"type": "Reasoning"}
     },
     "order": ["x_agents_core", "id", "instructions", "model", "multi_agent", "name", "reasoning", "service_tier", "text", "tools"]
   },
   "AgentContent": {
-    "sources": ["#/components/schemas/AgentContentResource"],
-    "order": ["type", "text", "encrypted_content"]
+    "sources": ["#/components/schemas/AgentContentResource"]
   },
   "AgentDeleted": {
-    "sources": ["#/components/schemas/DeletedAgentResource"],
-    "order": ["id", "object", "deleted"]
+    "sources": ["#/components/schemas/DeletedAgentResource"]
   },
   "AgentMessageItem": {
-    "sources": ["#/components/schemas/AgentMessageItemResource"],
-    "order": ["id", "turn_id", "type", "sender_agent_id", "recipient_agent_id", "content"]
+    "sources": ["#/components/schemas/AgentMessageItemResource"]
   },
   "CreateAgentRequest": {
     "sources": ["#/components/schemas/CreateAgentParams"],
@@ -34,21 +27,9 @@
       "model": {"type": "*string"},
       "metadata": {"type": "map[string]*string"},
       "reasoning": {"type": "*Reasoning"},
-      "text": {"type": "*SavedAgentTextInput"}
+      "text": {"type": "*TextConfigInput"}
     },
     "order": ["x_agents_core", "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools"]
-  },
-  "CreateCredentialRequest": {
-    "sources": ["#/components/schemas/CreateVaultCredentialParams"],
-    "fields": {
-      "name": {"type": "*string"},
-      "auth": {"type": "*CredentialAuthInput"}
-    },
-    "order": ["name", "auth"]
-  },
-  "CreateEventsRequest": {
-    "sources": ["#/components/schemas/CreateSessionEventsParams"],
-    "order": ["events"]
   },
   "CreateSessionRequest": {
     "sources": ["#/components/schemas/CreateAgentSessionParams"],
@@ -64,13 +45,6 @@
     "sources": ["#/components/schemas/CreateSubagentCallItemResource"],
     "order": ["id", "turn_id", "type", "status", "agent_id", "content", "model", "reasoning_effort"]
   },
-  "CreateVaultRequest": {
-    "sources": ["#/components/schemas/CreateVaultParams"],
-    "fields": {
-      "metadata": {"type": "map[string]*string"}
-    },
-    "order": ["name", "metadata"]
-  },
   "Credential": {
     "sources": ["#/components/schemas/VaultCredentialResource"],
     "order": ["id", "vault_id", "name", "object", "auth", "created_at", "updated_at"]
@@ -80,8 +54,7 @@
     "fields": {
       "expires_at": {"omit": false},
       "refresh": {"type": "*OAuthCredentialRefresh", "omit": false}
-    },
-    "order": ["type", "mcp_server_url", "expires_at", "refresh"]
+    }
   },
   "CredentialAuthInput": {
     "sources": ["#/components/schemas/CreateVaultCredentialAuthParam"],
@@ -134,20 +107,17 @@
     "order": ["type", "data", "file_id", "path"]
   },
   "EnvironmentFileList": {
-    "sources": ["#/components/schemas/EnvironmentFileListResource"],
-    "order": ["object", "data", "next", "has_more"]
+    "sources": ["#/components/schemas/EnvironmentFileListResource"]
   },
   "EnvironmentInfo": {
     "sources": ["#/components/schemas/PublicEnvironmentResource"],
     "order": ["id", "object", "type", "status", "files", "plugins", "skills"]
   },
   "EnvironmentNetwork": {
-    "sources": ["#/components/schemas/NetworkPolicyResource"],
-    "order": ["access", "allowed_domains"]
+    "sources": ["#/components/schemas/NetworkPolicyResource"]
   },
   "EnvironmentNetworkInput": {
-    "sources": ["#/components/schemas/NetworkPolicyParam"],
-    "order": ["access", "allowed_domains"]
+    "sources": ["#/components/schemas/NetworkPolicyParam"]
   },
   "EnvironmentPackages": {
     "exclude": ["system"],
@@ -156,11 +126,6 @@
       "npm": {"omit": false},
       "python": {"omit": false}
     },
-    "order": ["npm", "python"]
-  },
-  "EnvironmentPackagesInput": {
-    "exclude": ["system"],
-    "sources": ["#/components/schemas/EnvironmentPackagesParam"],
     "order": ["npm", "python"]
   },
   "EnvironmentPackagesResponse": {
@@ -172,26 +137,17 @@
     "order": ["id", "object", "name", "created_at", "updated_at", "capability_directories", "network", "packages", "files", "plugins", "skills"]
   },
   "EnvironmentTemplateDeleted": {
-    "sources": ["#/components/schemas/DeletedEnvironmentTemplateResource"],
-    "order": ["id", "object", "deleted"]
+    "sources": ["#/components/schemas/DeletedEnvironmentTemplateResource"]
   },
   "EnvironmentTemplateList": {
     "sources": ["#/components/schemas/EnvironmentTemplateListResource"],
     "order": ["object", "data", "has_more", "first_id", "last_id"]
   },
-  "EnvironmentTemplateRequest": {
-    "sources": ["#/components/schemas/CreateEnvironmentTemplateParams"],
-    "fields": {
-      "network": {"type": "*EnvironmentNetworkInput"},
-      "files": {"type": "[]json.RawMessage"},
-      "packages": {"type": "*EnvironmentPackagesInput"}
-    },
-    "order": ["name", "network", "capability_directories", "env", "files", "packages", "plugins", "skills", "setup_commands"]
-  },
   "ErrorResponse": {
     "sources": ["#/components/schemas/ErrorResponse-2"],
-    "fields": {"error": {"type": "APIError"}},
-    "order": ["error"]
+    "fields": {
+      "error": {"type": "APIError"}
+    }
   },
   "FunctionCallAction": {
     "sources": ["#/components/schemas/SessionRequiredActionResourceFunctionCall"],
@@ -207,32 +163,28 @@
       "description": {"type": "*string"},
       "parameters": {"type": "json.RawMessage"},
       "defer_loading": {"type": "json.RawMessage"}
-    },
-    "order": ["type", "name", "description", "parameters", "defer_loading"]
+    }
   },
   "InlineAgent": {
     "sources": ["#/components/schemas/SessionAgentConfigParam"],
     "fields": {
       "x_agents_core": {"type": "*AgentsCore"},
       "reasoning": {"type": "*Reasoning"},
-      "text": {"type": "*SavedAgentTextInput"}
+      "text": {"type": "*TextConfigInput"}
     },
     "order": ["x_agents_core", "model", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools"]
   },
   "InputContent": {
-    "sources": ["#/components/schemas/InputContentParam"],
-    "order": ["type", "text", "image_url"]
+    "sources": ["#/components/schemas/InputContentParam"]
   },
   "InputMessage": {
     "sources": ["#/components/schemas/InputMessageParam"],
     "fields": {
       "type": {"type": "string"}
-    },
-    "order": ["type", "role", "content"]
+    }
   },
   "InputTokenDetails": {
-    "sources": ["#/components/schemas/InputTokensDetailsResource"],
-    "order": ["cached_tokens"]
+    "sources": ["#/components/schemas/InputTokensDetailsResource"]
   },
   "Item": {
     "sources": ["#/components/schemas/SessionTurnItemResource"],
@@ -260,8 +212,7 @@
     "sources": ["#/components/schemas/MessageContentResource", "#/components/schemas/EncryptedContentResource"],
     "fields": {
       "image_url": {"type": "string"}
-    },
-    "order": ["type", "text", "image_url", "encrypted_content"]
+    }
   },
   "ItemList": {
     "sources": ["#/components/schemas/SessionItemListResource"],
@@ -271,8 +222,7 @@
     "sources": ["#/components/schemas/PersistedMcpTransportConfigParamHttp"],
     "fields": {
       "headers": {"type": "*map[string]string"}
-    },
-    "order": ["type", "server_url", "headers"]
+    }
   },
   "MCPTool": {
     "sources": ["#/components/schemas/AgentToolResourceMcp"],
@@ -298,8 +248,7 @@
     "sources": ["#/components/schemas/MultiAgentConfigResource"],
     "fields": {
       "max_concurrent_subagents": {"type": "*int"}
-    },
-    "order": ["enabled", "max_concurrent_subagents"]
+    }
   },
   "OAuthCredentialRefresh": {
     "sources": ["#/components/schemas/McpOauthRefreshResource"],
@@ -320,28 +269,22 @@
     "fields": {
       "scope": {"type": "json.RawMessage"},
       "token_endpoint_auth": {"type": "*OAuthEndpointAuthReplacement"}
-    },
-    "order": ["refresh_token", "scope", "token_endpoint_auth"]
+    }
   },
   "OAuthEndpointAuth": {
-    "sources": ["#/components/schemas/McpOauthTokenEndpointAuthResource"],
-    "order": ["type"]
+    "sources": ["#/components/schemas/McpOauthTokenEndpointAuthResource"]
   },
   "OAuthEndpointAuthInput": {
-    "sources": ["#/components/schemas/CreateMcpOauthTokenEndpointAuthParam"],
-    "order": ["type", "client_secret"]
+    "sources": ["#/components/schemas/CreateMcpOauthTokenEndpointAuthParam"]
   },
   "OAuthEndpointAuthReplacement": {
-    "sources": ["#/components/schemas/RotateMcpOauthTokenEndpointAuthParam"],
-    "order": ["type", "client_secret"]
+    "sources": ["#/components/schemas/RotateMcpOauthTokenEndpointAuthParam"]
   },
   "OutputTokenDetails": {
-    "sources": ["#/components/schemas/OutputTokensDetailsResource"],
-    "order": ["reasoning_tokens"]
+    "sources": ["#/components/schemas/OutputTokensDetailsResource"]
   },
   "Reasoning": {
-    "sources": ["#/components/schemas/ReasoningParam"],
-    "order": ["effort", "summary"]
+    "sources": ["#/components/schemas/ReasoningParam"]
   },
   "ReasoningItem": {
     "sources": ["#/components/schemas/ReasoningItemResource"],
@@ -376,20 +319,8 @@
     "sources": ["#/components/schemas/AgentListResource"],
     "order": ["object", "data", "has_more", "first_id", "last_id"]
   },
-  "SavedAgentText": {
-    "sources": ["#/components/schemas/TextResource"],
-    "order": ["format", "verbosity"]
-  },
-  "SavedAgentTextFormat": {
-    "sources": ["#/components/schemas/TextFormatResource"],
-    "fields": {
-      "schema": {"type": "json.RawMessage"}
-    },
-    "order": ["type", "schema"]
-  },
-  "SavedAgentTextInput": {
-    "sources": ["#/components/schemas/TextParam"],
-    "order": ["format", "verbosity"]
+  "TextConfigInput": {
+    "sources": ["#/components/schemas/TextParam"]
   },
   "SendSubagentInputCallItem": {
     "sources": ["#/components/schemas/SendSubagentInputCallItemResource"],
@@ -408,8 +339,7 @@
     "order": ["id", "created_at", "environment_id", "object", "path", "session_id", "size_bytes", "turn_id"]
   },
   "SessionArtifactDeleted": {
-    "sources": ["#/components/schemas/DeletedSessionArtifactResource"],
-    "order": ["id", "object", "deleted"]
+    "sources": ["#/components/schemas/DeletedSessionArtifactResource"]
   },
   "SessionArtifactList": {
     "sources": ["#/components/schemas/SessionArtifactListResource"],
@@ -436,8 +366,7 @@
     "sources": ["#/components/schemas/SessionEnvironmentStateResource"],
     "fields": {
       "error": {"type": "*StreamError"}
-    },
-    "order": ["id", "type", "status", "error"]
+    }
   },
   "SessionEvent": {
     "sources": ["#/components/schemas/SessionEvent"],
@@ -479,12 +408,10 @@
     "order": ["id", "object", "deleted"]
   },
   "SkillList": {
-    "sources": ["#/components/schemas/SkillListResource"],
-    "order": ["object", "data", "first_id", "last_id", "has_more"]
+    "sources": ["#/components/schemas/SkillListResource"]
   },
   "SkillUpdateRequest": {
-    "sources": ["#/components/schemas/SetDefaultSkillVersionBody"],
-    "order": ["default_version"]
+    "sources": ["#/components/schemas/SetDefaultSkillVersionBody"]
   },
   "SkillVersion": {
     "sources": ["#/components/schemas/SkillVersionResource"],
@@ -495,8 +422,7 @@
     "order": ["id", "object", "version", "deleted"]
   },
   "SkillVersionList": {
-    "sources": ["#/components/schemas/SkillVersionListResource"],
-    "order": ["object", "data", "first_id", "last_id", "has_more"]
+    "sources": ["#/components/schemas/SkillVersionListResource"]
   },
   "SourceFile": {
     "sources": ["#/components/schemas/OpenAIFile"],
@@ -507,8 +433,7 @@
     "order": ["id", "object", "bytes", "created_at", "filename", "purpose", "status", "expires_at", "status_details"]
   },
   "SourceFileDeleted": {
-    "sources": ["#/components/schemas/DeleteFileResponse"],
-    "order": ["id", "object", "deleted"]
+    "sources": ["#/components/schemas/DeleteFileResponse"]
   },
   "SourceFileList": {
     "sources": ["#/components/schemas/ListFilesResponse"],
@@ -539,33 +464,19 @@
     "order": ["object", "first_id", "last_id", "data", "has_more"]
   },
   "SummaryText": {
-    "sources": ["#/components/schemas/SummaryTextResource"],
-    "order": ["type", "text"]
+    "sources": ["#/components/schemas/SummaryTextResource"]
   },
   "TextConfig": {
-    "sources": ["#/components/schemas/TextResource"],
-    "order": ["format", "verbosity"],
-    "fields": {
-      "format": {"type": "TextFormat"}
-    }
-  },
-  "TextConfigInput": {
-    "sources": ["#/components/schemas/TextParam"],
-    "fields": {
-      "format": {"type": "*TextFormat"}
-    },
-    "order": ["format", "verbosity"]
+    "sources": ["#/components/schemas/TextResource"]
   },
   "TextFormat": {
     "sources": ["#/components/schemas/TextFormatResource"],
     "fields": {
       "schema": {"type": "json.RawMessage"}
-    },
-    "order": ["type", "schema"]
+    }
   },
   "TokenUsage": {
-    "sources": ["#/components/schemas/TokenUsageResource"],
-    "order": ["input_tokens", "input_tokens_details", "output_tokens", "output_tokens_details", "total_tokens"]
+    "sources": ["#/components/schemas/TokenUsageResource"]
   },
   "Turn": {
     "sources": ["#/components/schemas/TurnResource"],
@@ -576,8 +487,7 @@
     "order": ["id", "agent_id", "subagent_id", "session_id", "object", "status", "created_at", "started_at", "completed_at", "error", "usage"]
   },
   "TurnError": {
-    "sources": ["#/components/schemas/SessionTurnErrorResource"],
-    "order": ["code", "message"]
+    "sources": ["#/components/schemas/SessionTurnErrorResource"]
   },
   "TurnList": {
     "sources": ["#/components/schemas/SessionTurnListResource"],
@@ -589,23 +499,9 @@
       "x_agents_core": {"type": "*SavedAgentCoreInput"},
       "metadata": {"type": "map[string]*string"},
       "reasoning": {"type": "*Reasoning"},
-      "text": {"type": "*SavedAgentTextInput"}
+      "text": {"type": "*TextConfigInput"}
     },
     "order": ["x_agents_core", "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools"]
-  },
-  "UpdateCredentialRequest": {
-    "sources": ["#/components/schemas/RotateVaultCredentialParams"],
-    "fields": {
-      "auth": {"type": "*CredentialAuthReplacement"}
-    },
-    "order": ["auth"]
-  },
-  "UpdateSessionRequest": {
-    "sources": ["#/components/schemas/UpdateAgentSessionParams"],
-    "fields": {
-      "metadata": {"omit": false}
-    },
-    "order": ["metadata"]
   },
   "Vault": {
     "sources": ["#/components/schemas/VaultResource"],
@@ -625,12 +521,10 @@
   },
   "WebSearchAction": {
     "marshal_union": true,
-    "sources": ["#/components/schemas/WebSearchActionResource"],
-    "order": ["type", "query", "queries", "url", "pattern"]
+    "sources": ["#/components/schemas/WebSearchActionResource"]
   },
   "reasoningResponse": {
-    "sources": ["#/components/schemas/ReasoningResource"],
-    "order": ["effort", "summary"]
+    "sources": ["#/components/schemas/ReasoningResource"]
   },
   "sessionError": {
     "sources": ["#/components/schemas/SessionErrorResource"],

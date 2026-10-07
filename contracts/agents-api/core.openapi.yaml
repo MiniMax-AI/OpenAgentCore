@@ -2587,7 +2587,7 @@ definitions:
           - fast
         type: string
       text:
-        $ref: '#/definitions/v1.SavedAgentText'
+        $ref: '#/definitions/v1.TextConfig'
       tools:
         items:
           type: object
@@ -2648,32 +2648,6 @@ definitions:
       - has_more
       - last_id
       - object
-    type: object
-  v1.SavedAgentText:
-    properties:
-      format:
-        $ref: '#/definitions/v1.SavedAgentTextFormat'
-      verbosity:
-        enum:
-          - low
-          - medium
-          - high
-        type: string
-    required:
-      - format
-      - verbosity
-    type: object
-  v1.SavedAgentTextFormat:
-    properties:
-      schema:
-        type: object
-      type:
-        enum:
-          - text
-          - json_schema
-        type: string
-    required:
-      - type
     type: object
   v1.Session:
     properties:
