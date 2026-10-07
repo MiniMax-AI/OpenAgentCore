@@ -32,6 +32,23 @@ const (
 	answerQueue = 64
 )
 
+// The relay's capacity, for one Core serving one deployment, which runs at
+// most 1024 executions at once (the maximum OAC_EXECUTION_CONCURRENCY).
+// Measured idle, the relay spends about 64 KiB on a serve link, 48 KiB on an
+// attach link and 1 KiB on an attachment, so at capacity they hold under
+// 500 MiB.
+const (
+	// maxResources bounds the resources held, and with them serve links,
+	// one per resource. It leaves room for idle sandboxes beside busy ones.
+	maxResources = 4096
+	// maxAttachments bounds attachments, open or with AttachmentClosed events
+	// to write: four per resource.
+	maxAttachments = 16384
+	// maxAttachLinks bounds attach links. An agent host dials one per
+	// attachment it uses, a few per execution.
+	maxAttachLinks = 4096
+)
+
 // Relay accepts Link peers on ServeHTTP. It keeps the current serve peer of
 // each resource, the attachments it has opened and their leases in memory; the
 // Authority stays the durable judge of every grant.
@@ -42,25 +59,40 @@ type Relay struct {
 
 	mu          sync.Mutex
 	epoch       uint64 // counts revocations, so a racing Open re-authorizes
-	generations map[resourceKey]uint64
-	serves      map[resourceKey]*serveLink
-	// closures holds the AttachmentClosed events not yet written to the serve
-	// peer of each resource's newest generation, connected or not.
-	closures    map[resourceKey]closures
+	resources   map[resourceKey]*resource
 	attachments map[sandboxwire.ID]*attachment
+	// held counts attachment slots: open attachments, and closed ones whose
+	// AttachmentClosed events are not yet written or discarded.
+	held        int
+	attachLinks int
+	// The capacity of each bounded kind. New sets the constants above; tests
+	// lower them.
+	maxResources, maxAttachments, maxAttachLinks int
 }
 
-// closures is a set of AttachmentClosed events to write, by attachment.
-type closures map[sandboxwire.ID]sandboxlink.CloseReason
+// resource is what the relay holds for one resource. It takes one of
+// maxResources from the serve Hello that creates it until it holds nothing:
+// no serve peer, Hello being decided, attachment or event.
+type resource struct {
+	generation uint64     // the newest generation seen
+	serve      *serveLink // nil while the serve peer is away
+	// closures holds the AttachmentClosed events not yet written to the serve
+	// peer of generation, connected or not.
+	closures closures
+	refs     int // serve Hellos being decided and open attachments
+}
+
+// closures is a set of AttachmentClosed events to write, by attachment ID.
+// Each event keeps its attachment's slot until it is written or discarded.
+type closures map[sandboxwire.ID]*attachment
 
 // New returns a relay that asks auth to authenticate peers and authorize their
 // requests.
 func New(auth sandboxlink.Authority) *Relay {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Relay{auth: auth, ctx: ctx, cancel: cancel,
-		generations: map[resourceKey]uint64{},
-		serves:      map[resourceKey]*serveLink{},
-		closures:    map[resourceKey]closures{},
+		maxResources: maxResources, maxAttachments: maxAttachments, maxAttachLinks: maxAttachLinks,
+		resources:   map[resourceKey]*resource{},
 		attachments: map[sandboxwire.ID]*attachment{},
 	}
 }
@@ -89,8 +121,8 @@ func (rl *Relay) RevokeAttachment(id sandboxwire.ID) {
 
 // RevokeResource closes every attachment of ref's generation and older and
 // disconnects that serve peer after writing it their AttachmentClosed events.
-// Events it could not write stay for a reconnect of the same generation. The
-// caller withdraws the authority first.
+// The caller withdraws the authority first, so the revoked generation cannot
+// reconnect, and the events it could not read are discarded.
 func (rl *Relay) RevokeResource(ref sandboxlink.ResourceRef) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -101,10 +133,19 @@ func (rl *Relay) RevokeResource(ref sandboxlink.ResourceRef) {
 		}
 	}
 	key := keyOf(ref)
-	if sl := rl.serves[key]; sl != nil && sl.hello.Resource.Generation <= ref.Generation {
-		delete(rl.serves, key)
-		sl.end()
+	r := rl.resources[key]
+	if r == nil || r.generation > ref.Generation {
+		return
 	}
+	if sl := r.serve; sl != nil {
+		// The link keeps the set to write before it ends.
+		r.serve = nil
+		sl.end()
+	} else {
+		rl.dropLocked(r.closures)
+	}
+	r.closures = closures{}
+	rl.releaseLocked(key, r)
 }
 
 type resourceKey struct {
@@ -117,16 +158,17 @@ func keyOf(r sandboxlink.ResourceRef) resourceKey {
 }
 
 // link is one authenticated connection. Its writer sends answers from a
-// bounded queue and AttachmentClosed events from an unbounded set, so the
-// relay never blocks on a peer while holding its lock and never drops an
-// event: an event leaves the set only once it is written.
+// bounded queue and AttachmentClosed events from a set, so the relay never
+// blocks on a peer while holding its lock: an event leaves the set once it is
+// written, or with the set when no link can write it any more.
 type link struct {
 	sess *yamux.Session
 	ctl  *yamux.Stream
 	out  chan outgoing
 	wake chan struct{} // the set has events to write
-	// Under Relay.mu: the events to write and the open service streams. A
-	// serve link shares its resource's set, which outlives the link.
+	// Under Relay.mu: the events to write, nil once the link no longer
+	// writes them, and the open service streams. A serve link shares its
+	// resource's set, which outlives the link.
 	closures closures
 	streams  uint32
 }
@@ -195,32 +237,66 @@ func (rl *Relay) write(l *link) {
 func (rl *Relay) writeClosures(l *link) error {
 	for {
 		rl.mu.Lock()
-		var c sandboxlink.AttachmentClosed
-		for id, reason := range l.closures {
-			c = sandboxlink.AttachmentClosed{AttachmentID: id, Reason: reason}
+		var a *attachment
+		for _, a = range l.closures {
 			break
 		}
 		rl.mu.Unlock()
-		if c.Reason == 0 {
+		if a == nil {
 			return nil
 		}
-		if err := sandboxlink.WriteMessage(l.ctl, 0, c); err != nil {
+		id := a.identity.AttachmentID
+		if err := sandboxlink.WriteMessage(l.ctl, 0, sandboxlink.AttachmentClosed{AttachmentID: id, Reason: a.reason}); err != nil {
 			return err
 		}
 		rl.mu.Lock()
-		if l.closures[c.AttachmentID] == c.Reason {
-			delete(l.closures, c.AttachmentID)
+		if l.closures[id] == a {
+			delete(l.closures, id)
+			rl.unrefLocked(a)
 		}
 		rl.mu.Unlock()
 	}
 }
 
-// closedLocked adds an AttachmentClosed event to l's set and wakes its writer.
-func (l *link) closedLocked(id sandboxwire.ID, reason sandboxlink.CloseReason) {
-	if l.closures == nil {
-		l.closures = closures{}
+// queueLocked adds a's AttachmentClosed event to set, unless set is nil. An
+// unwritten event of an earlier attachment with the same ID gives way to it.
+func (rl *Relay) queueLocked(set closures, a *attachment) {
+	if set == nil {
+		return
 	}
-	l.closures[id] = reason
+	id := a.identity.AttachmentID
+	if old := set[id]; old != nil {
+		rl.unrefLocked(old)
+	}
+	set[id] = a
+	a.refs++
+}
+
+// dropLocked discards the events of a set that no link will write.
+func (rl *Relay) dropLocked(set closures) {
+	for _, a := range set {
+		rl.unrefLocked(a)
+	}
+}
+
+// unrefLocked drops one of a's references, the open attachment or one of its
+// events. The last frees its slot.
+func (rl *Relay) unrefLocked(a *attachment) {
+	a.refs--
+	if a.refs == 0 {
+		rl.held--
+	}
+}
+
+// releaseLocked forgets r, freeing its slot, once it holds nothing.
+func (rl *Relay) releaseLocked(key resourceKey, r *resource) {
+	if r.serve == nil && r.refs == 0 && len(r.closures) == 0 {
+		delete(rl.resources, key)
+	}
+}
+
+// wakeWriter tells l's writer that its set has events.
+func (l *link) wakeWriter() {
 	select {
 	case l.wake <- struct{}{}:
 	default:
@@ -262,7 +338,9 @@ func linger(sess *yamux.Session) {
 }
 
 // attachment is an attachment the relay has opened. It outlives the links
-// that carry its streams until its lease expires or it is closed.
+// that carry its streams until its lease expires or it is closed, and keeps
+// one of maxAttachments until its AttachmentClosed events are written or
+// discarded.
 type attachment struct {
 	identity sandboxlink.Identity
 	runtime  sandboxwire.ID
@@ -271,6 +349,8 @@ type attachment struct {
 	owner    *attachLink // the link that last opened a stream on it
 	bound    bool        // a Bind may have reached the serve peer
 	splices  map[*splice]struct{}
+	reason   sandboxlink.CloseReason // why it closed; zero while open
+	refs     int                     // its slot's holders: the open attachment and its unwritten events
 }
 
 // splice is one service stream from its Open to its end.
@@ -353,17 +433,42 @@ func (rl *Relay) serve(l *link, id uint64, hello sandboxlink.ServeHello) {
 	}()
 	<-l.sess.CloseChan()
 	rl.mu.Lock()
-	if rl.serves[key] == sl {
-		delete(rl.serves, key)
+	defer rl.mu.Unlock()
+	if r := rl.resources[key]; r != nil && r.serve == sl {
+		// The resource keeps the set for a reconnect.
+		r.serve = nil
+		rl.releaseLocked(key, r)
+	} else {
+		// A replaced link has no set; a revoked one takes it along.
+		rl.dropLocked(sl.closures)
 	}
 	sl.closures = nil
-	rl.mu.Unlock()
 }
 
-// admitServe authenticates a serve Hello and installs the link. A revocation
+// admitServe authenticates a serve Hello and installs the link. A Hello for a
+// resource the relay does not hold takes a resource slot first. A revocation
 // that lands while the Authority decides forces a fresh decision, so a
 // withdrawn credential never installs a peer.
 func (rl *Relay) admitServe(l *link, id uint64, hello sandboxlink.ServeHello) (*serveLink, error) {
+	key := keyOf(hello.Resource)
+	rl.mu.Lock()
+	r := rl.resources[key]
+	if r == nil {
+		if len(rl.resources) >= rl.maxResources {
+			rl.mu.Unlock()
+			return nil, sandboxlink.Fail(sandboxlink.LimitExceeded)
+		}
+		r = &resource{closures: closures{}}
+		rl.resources[key] = r
+	}
+	r.refs++
+	rl.mu.Unlock()
+	defer func() {
+		rl.mu.Lock()
+		r.refs--
+		rl.releaseLocked(key, r)
+		rl.mu.Unlock()
+	}()
 	for range authorizeAttempts {
 		rl.mu.Lock()
 		epoch := rl.epoch
@@ -382,7 +487,7 @@ func (rl *Relay) admitServe(l *link, id uint64, hello sandboxlink.ServeHello) (*
 			rl.mu.Unlock()
 			continue
 		}
-		sl, old, err := rl.installServeLocked(l, id, hello)
+		sl, old, err := rl.installServeLocked(r, l, id, hello)
 		rl.mu.Unlock()
 		if old != nil {
 			old.sess.Close()
@@ -392,41 +497,58 @@ func (rl *Relay) admitServe(l *link, id uint64, hello sandboxlink.ServeHello) (*
 	return nil, sandboxlink.Fail(sandboxlink.ServiceUnavailable)
 }
 
-// installServeLocked makes l the resource's serve peer and queues its
-// HelloAccepted while the decision is still current; its writer then writes
-// the resource's pending AttachmentClosed events. It returns the replaced
-// link for the caller to close.
-func (rl *Relay) installServeLocked(l *link, id uint64, hello sandboxlink.ServeHello) (sl, old *serveLink, err error) {
-	key, generation := keyOf(hello.Resource), hello.Resource.Generation
-	if rl.generations[key] > generation {
+// installServeLocked makes l r's serve peer and queues its HelloAccepted
+// while the decision is still current; its writer then writes r's pending
+// AttachmentClosed events. It returns the replaced link for the caller to
+// close.
+func (rl *Relay) installServeLocked(r *resource, l *link, id uint64, hello sandboxlink.ServeHello) (sl, old *serveLink, err error) {
+	generation := hello.Resource.Generation
+	if r.generation > generation {
 		return nil, nil, sandboxlink.Fail(sandboxlink.StaleGeneration)
 	}
-	if rl.generations[key] < generation {
-		rl.generations[key] = generation
-		delete(rl.closures, key)
+	if r.generation < generation {
+		r.generation = generation
+		rl.dropLocked(r.closures)
+		r.closures = closures{}
 		for _, a := range rl.attachments {
 			if a.identity.Resource.SameResource(hello.Resource) {
 				rl.closeLocked(a, sandboxlink.CloseStaleGeneration)
 			}
 		}
 	}
-	if rl.closures[key] == nil {
-		rl.closures[key] = closures{}
-	}
 	sl = &serveLink{link: l, hello: hello}
-	sl.closures = rl.closures[key]
-	old = rl.serves[key]
-	if old != nil {
+	sl.closures = r.closures
+	if old = r.serve; old != nil {
 		old.closures = nil
 	}
-	rl.serves[key] = sl
+	r.serve = sl
 	sl.send(id, sandboxlink.HelloAccepted{})
 	return sl, old, nil
 }
 
 // attach serves an attach peer's control requests and service streams until
-// the link ends. Its attachments stay open until their leases expire.
+// the link ends. The link takes an attach link slot first. Its attachments
+// stay open until their leases expire.
 func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
+	rl.mu.Lock()
+	full := rl.attachLinks >= rl.maxAttachLinks
+	if !full {
+		rl.attachLinks++
+		l.closures = closures{}
+	}
+	rl.mu.Unlock()
+	if full {
+		l.fail(id, sandboxlink.OpHello, sandboxlink.LimitExceeded)
+		return
+	}
+	defer func() {
+		<-l.sess.CloseChan()
+		rl.mu.Lock()
+		rl.attachLinks--
+		rl.dropLocked(l.closures)
+		l.closures = nil
+		rl.mu.Unlock()
+	}()
 	ctx, cancel := rl.authorityContext()
 	peer, err := rl.auth.AuthenticateAttach(ctx, hello)
 	cancel()
@@ -555,27 +677,27 @@ func (rl *Relay) closeRequested(al *attachLink, id uint64, c sandboxlink.CloseAt
 // peer and the serve peer why. A serve peer that is away when its attachment
 // closes hears of it when the same generation reconnects.
 func (rl *Relay) closeLocked(a *attachment, reason sandboxlink.CloseReason) {
-	id := a.identity.AttachmentID
-	delete(rl.attachments, id)
+	delete(rl.attachments, a.identity.AttachmentID)
 	a.timer.Stop()
 	for sp := range a.splices {
 		sp.abortLocked(abortCodes[reason])
 	}
+	a.reason = reason
 	if reason != sandboxlink.CloseRequested {
-		a.owner.closedLocked(id, reason)
+		rl.queueLocked(a.owner.closures, a)
+		a.owner.wakeWriter()
 	}
-	key, generation := keyOf(a.identity.Resource), a.identity.Resource.Generation
-	if !a.bound || rl.generations[key] != generation {
-		return
+	key := keyOf(a.identity.Resource)
+	r := rl.resources[key] // the attachment holds it
+	if a.bound && r.generation == a.identity.Resource.Generation {
+		rl.queueLocked(r.closures, a)
+		if r.serve != nil {
+			r.serve.wakeWriter()
+		}
 	}
-	if sl := rl.serves[key]; sl != nil {
-		sl.closedLocked(id, reason)
-		return
-	}
-	if rl.closures[key] == nil {
-		rl.closures[key] = closures{}
-	}
-	rl.closures[key][id] = reason
+	r.refs--
+	rl.releaseLocked(key, r)
+	rl.unrefLocked(a)
 }
 
 // abortCodes answers an Open that an attachment's close interrupts.
@@ -661,9 +783,27 @@ func (rl *Relay) open(al *attachLink, st *yamux.Stream) {
 	rl.splice(sp)
 }
 
-// admit authorizes o and registers its splice. A revocation that lands while
-// the Authority decides forces a fresh decision.
+// admit authorizes o and registers its splice. An Open of an attachment the
+// relay does not hold takes an attachment slot first. A revocation that lands
+// while the Authority decides forces a fresh decision.
 func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (*splice, sandboxlink.Authorization, error) {
+	rl.mu.Lock()
+	reserved := rl.attachments[o.AttachmentID] == nil
+	if reserved && rl.held >= rl.maxAttachments {
+		rl.mu.Unlock()
+		return nil, sandboxlink.Authorization{}, sandboxlink.Fail(sandboxlink.LimitExceeded)
+	}
+	if reserved {
+		rl.held++
+	}
+	rl.mu.Unlock()
+	defer func() {
+		if reserved {
+			rl.mu.Lock()
+			rl.held--
+			rl.mu.Unlock()
+		}
+	}()
 	for range authorizeAttempts {
 		rl.mu.Lock()
 		epoch := rl.epoch
@@ -682,16 +822,23 @@ func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (*s
 			rl.mu.Unlock()
 			continue
 		}
-		sp, err := rl.admitLocked(al, st, o, auth)
+		sp, err := rl.admitLocked(al, st, o, auth, &reserved)
 		rl.mu.Unlock()
 		return sp, auth, err
 	}
 	return nil, sandboxlink.Authorization{}, sandboxlink.Fail(sandboxlink.ServiceUnavailable)
 }
 
-func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Open, auth sandboxlink.Authorization) (*splice, error) {
+// admitLocked checks o against what the relay holds and registers its
+// splice. A new attachment takes the slot reserved for it, and an attachment
+// that closed since the Open arrived is not opened again.
+func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Open, auth sandboxlink.Authorization, reserved *bool) (*splice, error) {
 	key, generation := keyOf(o.Resource), o.Resource.Generation
-	sl := rl.serves[key]
+	r := rl.resources[key]
+	var sl *serveLink
+	if r != nil {
+		sl = r.serve
+	}
 	var offered *sandboxlink.ServiceVersion
 	if sl != nil {
 		for i, s := range sl.hello.Services {
@@ -705,7 +852,7 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 	switch {
 	case al.streams >= maxStreams || (sl != nil && sl.streams >= maxStreams):
 		code = sandboxlink.LimitExceeded
-	case rl.generations[key] > generation:
+	case r != nil && r.generation > generation:
 		code = sandboxlink.StaleGeneration
 	case sl == nil || sl.hello.Resource.Generation != generation || offered == nil:
 		code = sandboxlink.ServiceUnavailable
@@ -713,7 +860,7 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 		code = sandboxlink.VersionMismatch
 	case !o.ExpectedServerInstanceID.IsZero() && o.ExpectedServerInstanceID != sl.hello.ServerInstanceID:
 		code = sandboxlink.InstanceChanged
-	case !auth.LeaseExpiresAt.After(time.Now()):
+	case !auth.LeaseExpiresAt.After(time.Now()) || (a == nil && !*reserved):
 		code = sandboxlink.LeaseExpired
 	case a != nil && (a.identity != o.Identity() || a.runtime != al.peer.RuntimeID):
 		code = sandboxlink.AttachmentConflict
@@ -722,8 +869,10 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 		return nil, sandboxlink.Fail(code)
 	}
 	if a == nil {
-		a = &attachment{identity: o.Identity(), runtime: al.peer.RuntimeID, splices: map[*splice]struct{}{}}
+		a = &attachment{identity: o.Identity(), runtime: al.peer.RuntimeID, splices: map[*splice]struct{}{}, refs: 1}
 		rl.attachments[o.AttachmentID] = a
+		r.refs++
+		*reserved = false
 	}
 	a.owner = al
 	a.bound = true

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -435,6 +436,120 @@ func TestClosuresReplayOnReconnect(t *testing.T) {
 		if r := recv(t, p.closed); r != sandboxlink.CloseRevoked {
 			t.Fatalf("serve peer saw close reason %d, want revocation", r)
 		}
+	}
+}
+
+// A serve Hello for a resource the relay does not hold takes a slot before the
+// Authority decides: beyond capacity even an unknown credential gets
+// LimitExceeded. A refused Hello leaves no slot taken, and an admitted
+// resource still reconnects at capacity.
+func TestServesAreBounded(t *testing.T) {
+	f := newFixture(t)
+	relay.SetLimits(f.srv.Relay, 1, 16, 16)
+	other := resource(1)
+	other.ID = sandboxwire.NewID()
+	hello := func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), wait)
+		defer cancel()
+		conn, err := sandboxlink.DialWebSocket(ctx, f.srv.URL, f.srv.TLS)
+		if err != nil {
+			return err
+		}
+		sess, _ := sandboxlink.ClientSession(conn)
+		defer sess.Close()
+		ctl, err := sess.OpenStream(ctx)
+		if err == nil {
+			err = sandboxlink.WriteMessage(ctl, 1, sandboxlink.ServeHello{Version: sandboxlink.Version, Credential: []byte("unknown"), Resource: other,
+				ServerInstanceID: sandboxwire.NewID(), Services: []sandboxlink.ServiceVersion{{Service: sandboxlink.ServiceFile, Version: 1}}})
+		}
+		if err == nil {
+			_, err = sandboxlink.ReadReply(ctl, sandboxlink.OpHello, 1)
+		}
+		return err
+	}
+	if err := hello(); !errors.Is(err, sandboxlink.AuthenticationFailed) {
+		t.Fatalf("serve Hello with an unknown credential: %v, want AuthenticationFailed", err)
+	}
+	p := f.serve(1)
+	if err := hello(); !errors.Is(err, sandboxlink.LimitExceeded) {
+		t.Fatalf("serve Hello beyond capacity: %v, want LimitExceeded", err)
+	}
+	if resources, _, _ := relay.Held(f.srv.Relay); resources != 1 {
+		t.Fatalf("relay holds %d resources, want 1", resources)
+	}
+	recv(t, p.conns).Close()
+	recv(t, p.connected)
+}
+
+// An Open of an attachment the relay does not hold takes a slot before the
+// Authority decides: beyond capacity even a forged grant gets LimitExceeded.
+// A refused Open leaves no slot taken, and an open attachment still opens
+// streams at capacity.
+func TestAttachmentsAreBounded(t *testing.T) {
+	f := newFixture(t)
+	relay.SetLimits(f.srv.Relay, 16, 1, 16)
+	f.serve(1)
+	if _, _, err := f.open(sandboxlink.ServiceFile, sandboxwire.NewID(), 1, []byte("forged grant")); !errors.Is(err, sandboxlink.PermissionDenied) {
+		t.Fatalf("open with a forged grant: %v, want PermissionDenied", err)
+	}
+	attachment := sandboxwire.NewID()
+	f.mustOpen(sandboxlink.ServiceFile, attachment, 1)
+	if _, _, err := f.open(sandboxlink.ServiceFile, sandboxwire.NewID(), 1, []byte("forged grant")); !errors.Is(err, sandboxlink.LimitExceeded) {
+		t.Fatalf("open of a new attachment beyond capacity: %v, want LimitExceeded", err)
+	}
+	f.mustOpen(sandboxlink.ServiceFile, attachment, 1)
+	if _, attachments, _ := relay.Held(f.srv.Relay); attachments != 1 {
+		t.Fatalf("relay holds %d attachment slots, want 1", attachments)
+	}
+}
+
+// A closed attachment keeps its slot until its AttachmentClosed event is
+// written to the serve peer, which is away and then reconnects.
+func TestClosuresKeepTheirSlots(t *testing.T) {
+	f := newFixture(t)
+	relay.SetLimits(f.srv.Relay, 16, 2, 16)
+	p := f.serve(1)
+	ids := []sandboxwire.ID{sandboxwire.NewID(), sandboxwire.NewID()}
+	for _, id := range ids {
+		f.mustOpen(sandboxlink.ServiceFile, id, 1)
+	}
+	held, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	f.auth.set(&f.auth.onServe, func() {
+		once.Do(func() { close(held) })
+		<-release
+	})
+	recv(t, p.conns).Close()
+	recv(t, held)
+	for _, id := range ids {
+		if err := f.link.CloseAttachment(context.Background(), id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := f.open(sandboxlink.ServiceFile, sandboxwire.NewID(), 1, f.grant(1)); !errors.Is(err, sandboxlink.LimitExceeded) {
+		t.Fatalf("open while both closures are unwritten: %v, want LimitExceeded", err)
+	}
+	close(release)
+	for range ids {
+		if r := recv(t, p.closed); r != sandboxlink.CloseRequested {
+			t.Fatalf("serve peer saw close reason %d, want a requested close", r)
+		}
+	}
+	// The relay frees an event's slot before it writes the next, so one slot
+	// is free once both events have arrived.
+	f.mustOpen(sandboxlink.ServiceFile, sandboxwire.NewID(), 1)
+}
+
+// An attach Hello takes a link slot before the Authority decides: beyond
+// capacity even an unknown credential gets LimitExceeded.
+func TestAttachLinksAreBounded(t *testing.T) {
+	f := newFixture(t)
+	relay.SetLimits(f.srv.Relay, 16, 16, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	_, err := sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{URL: f.srv.URL, TLS: f.srv.TLS, RuntimeID: sandboxwire.NewID(), Credential: []byte("unknown")})
+	if !errors.Is(err, sandboxlink.LimitExceeded) {
+		t.Fatalf("attach Hello beyond capacity: %v, want LimitExceeded", err)
 	}
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "沙箱 Link 协议"
 source: docs/sandbox-link-protocol.md
-source_hash: ea2004916489420736d6bc73b31f1e26b409747406c20bf646729a2fe0478c41
+source_hash: 4345b96bae3bdeb6a3e45f1449bfffde2492100d86ec77aecb606d0bc7fa1479
 ---
 
 Link 协议通过 relay 连接沙箱 I/O 的两端。Sandbox I/O 服务运行在沙箱内并为其提供服务，是 serve peer。agent host 上的 Runtime 在沙箱外运行 Harness，并通过该服务使用沙箱，是 attach peer。每个 peer 各自向 relay 认证自己的 link。relay 授权 attach peer 打开的每个服务 stream，将其绑定到该资源当前的 serve peer，然后在两个 stream 之间复制字节而不读取内容。服务帧从不携带凭据或 grant。
@@ -43,7 +43,13 @@ attachment 的生命周期长于其 link。重连后，Runtime 使用相同的 b
 
 ## 运行 relay {#run-a-relay}
 
-`relay.New` 接收 `Authority`，返回 `*relay.Relay`，它是一个 `http.Handler`。relay endpoint 位于安装实例的 HTTPS ingress 之后，由 ingress 终止 TLS，因此 handler 在 ingress 的明文 HTTP 一跳上接受 upgrade；peer 在拨号时强制 TLS。每条 link 最多承载 256 个并发服务 stream。
+`relay.New` 接收 `Authority`，返回 `*relay.Relay`，它是一个 `http.Handler`。relay endpoint 位于安装实例的 HTTPS ingress 之后，由 ingress 终止 TLS，因此 handler 在 ingress 的明文 HTTP 一跳上接受 upgrade；peer 在拨号时强制 TLS。
+
+每条 link 最多承载 256 个并发服务 stream。relay 还最多持有 4096 个资源、16384 个 attachment 和 4096 条 attach link。每一项在 relay 接纳它时占用一个名额。需要名额但已无空闲名额的 Hello 或 Open 会在咨询 Authority 之前以 `LimitExceeded` 被拒绝，且不留下任何状态：
+
+- 资源在首次指明它的 serve Hello 处占用名额，并在 relay 仍为它持有任何东西时保留该名额：其 serve peer、裁决中的 Hello、attachment 或未写出的 `AttachmentClosed` 事件。已持有资源的重连不需要新名额。一个资源最多有一条 serve link，因此这也限制了 serve link 的数量。
+- attachment 在创建它的 Open 处占用名额，并保留到它被关闭且其 `AttachmentClosed` 事件已写出或丢弃为止。
+- attach link 在其 Hello 处占用名额，并保留到 link 结束为止。
 
 relay 的 owner 基于其持久记录实现 `Authority`，relay 对每个 Hello、Open 和续期都咨询它。撤销时，先撤回授权，再调用 `RevokeAttachment` 或 `RevokeResource`，让 relay 关闭其持有的对象。
 
@@ -196,7 +202,7 @@ AttachmentClosed
 1. peer 拨号 relay 的 URL：使用 `wss://`；仅当主机为 `localhost` 或 loopback 地址时可用 `ws://`。URL 不含 user、查询或片段，也绝不含凭据。`sandboxlink.CheckRelayURL` 对两个 peer 和[引导输入](./sandbox-bootstrap.md)应用此规则，并以 `sandboxlink.ErrRelayURL` 拒绝其他 URL。使用 `wss://` 时，由 TLS 认证 relay。
 2. peer 启动 yamux 并打开 control stream。
 3. 它以请求 ID 1 发送 Hello，作为 control stream 的第一个请求：Sandbox I/O 服务发送 `ServeHello`，Runtime 发送 `AttachHello`。凭据只在 Hello 中传输。
-4. relay 通过其 Authority 认证 peer，并回复 `HelloAccepted`，或回复失败，随后结束 link。对其他版本的 Hello，relay 不读取版本之后的内容，直接回复 `VersionMismatch`。如果 Authority 裁决 serve Hello 期间发生撤销，relay 会再次询问，因此已撤回的凭据绝不会建立 serve peer。
+4. relay 占用该 Hello 所需的[名额](#run-a-relay)，通过其 Authority 认证 peer，并回复 `HelloAccepted`，或回复失败，随后结束 link。对其他版本的 Hello，relay 不读取版本之后的内容，直接回复 `VersionMismatch`。如果 Authority 裁决 serve Hello 期间发生撤销，relay 会再次询问，因此已撤回的凭据绝不会建立 serve peer。
 
 后续控制请求延续 Hello 的请求 ID。attach link 的请求 ID 未递增时，relay 以 `ProtocolViolation` 结束该 link。`Open` 和 `Bind` 各自是其 stream 上唯一的请求，使用请求 ID 1。
 
@@ -208,10 +214,11 @@ relay 和 serve peer 以 `sandboxlink.HandshakeTimeout`（10 秒）限制每个�
 
 attach peer 打开一个 stream 并发送 `Open`。relay 随后：
 
-1. 调用 `Authority.AuthorizeOpen`。Authority 检查 grant、Runtime、当前 assignment 及其 epoch、资源 generation、允许的服务和访问权限，以及资源的 serve 授权是否当前有效。它返回 binding 身份、服务、lease、`ServiceFile` 的 export 和 `ServiceNetwork` 的 egress 规则。如果 Authority 裁决期间发生撤销，relay 会再次询问。
-2. 依次检查：每条 link 的 stream 上限（`LimitExceeded`）；relay 见过的该资源最新 generation 不比 Open 中的更新（`StaleGeneration`）；Open 所指 generation 的 serve peer 已连接并提供该服务（`ServiceUnavailable`），且支持 Open 的版本（`VersionMismatch`）；非零的 `ExpectedServerInstanceID` 等于该 serve peer 的值（`InstanceChanged`）；lease 尚未到期（`LeaseExpired`）；relay 已以该 `AttachmentID` 持有的 attachment 具有完全相同的身份和 Runtime（`AttachmentConflict`）。
-3. 向 serve peer 打开 stream 并发送 `Bind`。serve peer 回复 `Bound`，或回复失败：对其不提供的服务回复 `ServiceUnavailable`，或回复 `VersionMismatch`，`ExpectedServerInstanceID` 不是自身值时回复 `InstanceChanged`，对最近关闭的 attachment 回复 `LeaseExpired`，或回复 `ProtocolViolation`。relay 将失败转交给 attach peer。`Bind` 已开始发送但未收到回复时，relay 回复带 `EffectPossible` 的 `ServiceUnavailable`。
-4. 回复 `Opened`，并将两个 stream 拼接起来。
+1. 当 relay 未以 Open 的 `AttachmentID` 持有 attachment 时，占用一个 attachment [名额](#run-a-relay)；无空闲名额时回复 `LimitExceeded`。
+2. 调用 `Authority.AuthorizeOpen`。Authority 检查 grant、Runtime、当前 assignment 及其 epoch、资源 generation、允许的服务和访问权限，以及资源的 serve 授权是否当前有效。它返回 binding 身份、服务、lease、`ServiceFile` 的 export 和 `ServiceNetwork` 的 egress 规则。如果 Authority 裁决期间发生撤销，relay 会再次询问。
+3. 依次检查：每条 link 的 stream 上限（`LimitExceeded`）；relay 为该资源持有的最新 generation 不比 Open 中的更新（`StaleGeneration`）；Open 所指 generation 的 serve peer 已连接并提供该服务（`ServiceUnavailable`），且支持 Open 的版本（`VersionMismatch`）；非零的 `ExpectedServerInstanceID` 等于该 serve peer 的值（`InstanceChanged`）；lease 尚未到期，且 Open 到达时 relay 持有的 attachment 此后未被关闭（`LeaseExpired`）；relay 已以该 `AttachmentID` 持有的 attachment 具有完全相同的身份和 Runtime（`AttachmentConflict`）。
+4. 向 serve peer 打开 stream 并发送 `Bind`。serve peer 回复 `Bound`，或回复失败：对其不提供的服务回复 `ServiceUnavailable`，或回复 `VersionMismatch`，`ExpectedServerInstanceID` 不是自身值时回复 `InstanceChanged`，对最近关闭的 attachment 回复 `LeaseExpired`，或回复 `ProtocolViolation`。relay 将失败转交给 attach peer。`Bind` 已开始发送但未收到回复时，relay 回复带 `EffectPossible` 的 `ServiceUnavailable`。
+5. 回复 `Opened`，并将两个 stream 拼接起来。
 
 attachment 的 binding 身份由其 `AttachmentID`、`Resource`、`SessionID`、`AssignmentID` 和 `AssignmentEpoch` 组成。无论在同一 link 还是之后的 link 上重新打开 attachment，都要求同一 Runtime 提供完全相同的身份，并具有当前有效的授权。
 
@@ -233,7 +240,7 @@ relay 在内存中保存 link、attachment 和 lease。Authority 始终是持久
 
 方法以 `*sandboxlink.Error` 表示类型化拒绝；其他任何错误都回复为 `ServiceUnavailable`。凭据 revision 和允许的访问来自 Authority，绝不来自 peer 的声明。
 
-重新创建的资源具有更高的 generation。相同或更高 generation 的 serve peer 替换资源当前的 serve peer；更高 generation 还会以 `CloseStaleGeneration` 关闭旧 generation 的所有 attachment。generation 比 relay 见过的最新 generation 更旧的 serve peer 或 Open 会以 `StaleGeneration` 被拒绝。
+重新创建的资源具有更高的 generation。相同或更高 generation 的 serve peer 替换资源当前的 serve peer；更高 generation 还会以 `CloseStaleGeneration` 关闭旧 generation 的所有 attachment。generation 比 relay 为该资源持有的最新 generation 更旧的 serve peer 或 Open 会以 `StaleGeneration` 被拒绝。relay 仅在[持有该资源](#run-a-relay)期间保留其 generation；此后由 Authority 单独拒绝更旧的 generation。
 
 ## Lease、关闭与撤销 {#leases-closing-and-revocation}
 
@@ -242,7 +249,7 @@ relay 在内存中保存 link、attachment 和 lease。Authority 始终是持久
 - `CloseAttachment` 以 `CloseRequested` 关闭调用方的 attachment。关闭未知 attachment 会成功，关闭其他 Runtime 的 attachment 返回 `PermissionDenied`。
 - `Relay.RevokeAttachment` 关闭一个 attachment。`Relay.RevokeResource` 关闭某个资源 generation 及更旧 generation 的所有 attachment，向 serve peer 写入相应的 `AttachmentClosed` 事件，然后断开它。两者都以 `CloseRevoked` 关闭。
 
-关闭 attachment 会重置其全部 stream，并向 serve peer 发送 `AttachmentClosed`；除 `CloseRequested` 外，也向其 attach peer 发送。relay 将每个 serve peer 未写出的事件保存在没有大小上限的集合中，仅在事件写出后才将其移除，因此已断开的 serve peer，或在事件写出前 link 断开的 serve peer，会在以相同 generation 重连时收到该事件。被关闭打断的 Open 根据原因以 `AttachmentConflict`、`LeaseExpired`、`PermissionDenied` 或 `StaleGeneration` 失败；其 `Bind` 可能已到达 serve peer 时带 `EffectPossible`。
+关闭 attachment 会重置其全部 stream，并向 serve peer 发送 `AttachmentClosed`；除 `CloseRequested` 外，也向其 attach peer 发送。relay 将每个 peer 未写出的事件保存在集合中，在事件写出后将其移除，因此已断开的 serve peer，或在事件写出前 link 断开的 serve peer，会在以相同 generation 重连时收到该事件。不再有 peer 能读取的事件会被丢弃：attach peer 的事件在其 link 结束时丢弃，serve peer 的事件在更新的 generation 连接或 `RevokeResource` 撤销其 generation 时丢弃。被关闭打断的 Open 根据原因以 `AttachmentConflict`、`LeaseExpired`、`PermissionDenied` 或 `StaleGeneration` 失败；其 `Bind` 可能已到达 serve peer 时带 `EffectPossible`。
 
 丢失 link 会重置其承载的 stream，并保留其 attachment，直到 lease 到期或 attachment 被关闭。
 
@@ -271,7 +278,7 @@ relay 通过 32 KiB 缓冲区复制每个方向的数据，每个 stream 最多�
 | 8 | `InstanceChanged` | serve peer 的 `ServerInstanceID` 不是 `ExpectedServerInstanceID` |
 | 9 | `LeaseExpired` | lease 已过期，或 relay 不再持有该 attachment |
 | 10 | `AttachmentConflict` | 该 `AttachmentID` 以其他身份或 Runtime 被持有，或在 Open 期间被关闭 |
-| 11 | `LimitExceeded` | 达到 link 的 stream 上限，或达到裁决中续期的数量上限 |
+| 11 | `LimitExceeded` | 没有空闲的资源、attachment 或 attach link 名额，或达到 link 的 stream 上限或裁决中续期的数量上限 |
 | 12 | `ProtocolViolation` | 消息格式错误、出现在不允许的位置，或携带未递增的请求 ID |
 
 `ServiceUnavailable` 和 `LimitExceeded` 是临时失败：相同请求稍后可能成功，`Code.Retryable` 将它们报告为可重试。其他 code 都是最终失败：以相同凭据、attachment 和 generation 重复请求会再次失败。
@@ -280,4 +287,4 @@ relay 通过 32 KiB 缓冲区复制每个方向的数据，每个 stream 最多�
 
 ## 验证 {#verification}
 
-`go test ./internal/sandboxlink/...` 覆盖 golden 帧、解码拒绝，以及 relay 的授权、generation、lease、撤销、续期上限和重连行为，包括有序结束与中止的传播。`go test -run '^$' -fuzz FuzzDecode ./internal/sandboxlink` 对解码器进行 fuzz 测试。
+`go test ./internal/sandboxlink/...` 覆盖 golden 帧、解码拒绝，以及 relay 的授权、generation、lease、撤销、容量与续期上限以及重连行为，包括有序结束与中止的传播。`go test -run '^$' -fuzz FuzzDecode ./internal/sandboxlink` 对解码器进行 fuzz 测试。

@@ -41,7 +41,13 @@ An attachment outlives its link. After reconnecting, the Runtime opens a stream 
 
 ## Run a relay
 
-`relay.New` takes an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial. Each link carries at most 256 concurrent service streams.
+`relay.New` takes an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial.
+
+Each link carries at most 256 concurrent service streams. The relay also holds at most 4096 resources, 16384 attachments and 4096 attach links. Each takes a slot when the relay admits it. A Hello or an Open that needs a slot when none is free is refused with `LimitExceeded` before the Authority is consulted, and leaves nothing behind:
+
+- A resource takes a slot at the serve Hello that first names it and keeps it while the relay holds anything for it: its serve peer, a Hello being decided, an attachment or an unwritten `AttachmentClosed` event. A reconnect of a held resource needs no new slot. A resource has at most one serve link, so this also bounds serve links.
+- An attachment takes a slot at the Open that creates it and keeps it until it is closed and its `AttachmentClosed` events are written or discarded.
+- An attach link takes a slot at its Hello and keeps it until it ends.
 
 The owner of the relay implements `Authority` from its durable records, and the relay consults it for every Hello, Open and renewal. To revoke, withdraw the authority first, then call `RevokeAttachment` or `RevokeResource` so the relay closes what it holds.
 
@@ -194,7 +200,7 @@ AttachmentClosed
 1. The peer dials the relay's URL: `wss://`, or `ws://` only when the host is `localhost` or a loopback address. The URL carries no user, query or fragment, and never a credential. `sandboxlink.CheckRelayURL` applies this rule for both peers and the [bootstrap input](./sandbox-bootstrap.md) and refuses any other URL with `sandboxlink.ErrRelayURL`. Over `wss://`, TLS authenticates the relay.
 2. The peer starts yamux and opens the control stream.
 3. It sends a Hello as the first request of the control stream, with request ID 1: `ServeHello` from the Sandbox I/O service, `AttachHello` from a Runtime. Credentials travel only in the Hello.
-4. The relay authenticates the peer with its Authority and answers `HelloAccepted`, or a failure after which the link ends. A Hello of another version is answered `VersionMismatch` without reading past its version. When a revocation lands while the Authority decides a serve Hello, the relay asks again, so a withdrawn credential never installs a serve peer.
+4. The relay takes the [slot](#run-a-relay) the Hello needs, authenticates the peer with its Authority and answers `HelloAccepted`, or a failure after which the link ends. A Hello of another version is answered `VersionMismatch` without reading past its version. When a revocation lands while the Authority decides a serve Hello, the relay asks again, so a withdrawn credential never installs a serve peer.
 
 Later control requests continue the Hello's request IDs. The relay ends an attach link whose request ID does not increase with `ProtocolViolation`. `Open` and `Bind` are each the only request on their stream and use request ID 1.
 
@@ -206,10 +212,11 @@ The relay and the serve peer bound each handshake step, the WebSocket upgrade, t
 
 The attach peer opens a stream and sends `Open`. The relay then:
 
-1. Calls `Authority.AuthorizeOpen`. The Authority checks the grant, the Runtime, the current assignment and its epoch, the resource generation, the permitted service and access, and that the resource's serve authority is current. It returns the binding identity, the service, the lease, the exports for `ServiceFile` and the egress rules for `ServiceNetwork`. When a revocation lands while the Authority decides, the relay asks again.
-2. Checks, in order: each link's stream limit (`LimitExceeded`); that the newest generation the relay has seen for the resource is not newer than the Open's (`StaleGeneration`); that a serve peer of the Open's generation is connected and offers the service (`ServiceUnavailable`) at the Open's version (`VersionMismatch`); that a nonzero `ExpectedServerInstanceID` equals the serve peer's (`InstanceChanged`); that the lease lies in the future (`LeaseExpired`); and that an attachment the relay already holds under this `AttachmentID` has the identical identity and Runtime (`AttachmentConflict`).
-3. Opens a stream to the serve peer and sends `Bind`. The serve peer answers `Bound`, or a failure: `ServiceUnavailable` for a service it does not serve, `VersionMismatch`, `InstanceChanged` when `ExpectedServerInstanceID` is not its own, `LeaseExpired` for a recently closed attachment, or `ProtocolViolation`. The relay passes a failure on to the attach peer. When the `Bind` began to be sent but no answer arrives, the relay answers `ServiceUnavailable` with `EffectPossible`.
-4. Answers `Opened` and splices the two streams.
+1. Takes an attachment [slot](#run-a-relay) when it holds no attachment under the Open's `AttachmentID`, or answers `LimitExceeded` when none is free.
+2. Calls `Authority.AuthorizeOpen`. The Authority checks the grant, the Runtime, the current assignment and its epoch, the resource generation, the permitted service and access, and that the resource's serve authority is current. It returns the binding identity, the service, the lease, the exports for `ServiceFile` and the egress rules for `ServiceNetwork`. When a revocation lands while the Authority decides, the relay asks again.
+3. Checks, in order: each link's stream limit (`LimitExceeded`); that the newest generation the relay holds for the resource is not newer than the Open's (`StaleGeneration`); that a serve peer of the Open's generation is connected and offers the service (`ServiceUnavailable`) at the Open's version (`VersionMismatch`); that a nonzero `ExpectedServerInstanceID` equals the serve peer's (`InstanceChanged`); that the lease lies in the future and that an attachment the relay held when the Open arrived has not closed since (`LeaseExpired`); and that an attachment the relay already holds under this `AttachmentID` has the identical identity and Runtime (`AttachmentConflict`).
+4. Opens a stream to the serve peer and sends `Bind`. The serve peer answers `Bound`, or a failure: `ServiceUnavailable` for a service it does not serve, `VersionMismatch`, `InstanceChanged` when `ExpectedServerInstanceID` is not its own, `LeaseExpired` for a recently closed attachment, or `ProtocolViolation`. The relay passes a failure on to the attach peer. When the `Bind` began to be sent but no answer arrives, the relay answers `ServiceUnavailable` with `EffectPossible`.
+5. Answers `Opened` and splices the two streams.
 
 An attachment's binding identity is its `AttachmentID`, `Resource`, `SessionID`, `AssignmentID` and `AssignmentEpoch`. Reopening an attachment, on the same link or a later one, requires the identical identity from the same Runtime and a current authorization.
 
@@ -231,7 +238,7 @@ The relay keeps links, attachments and leases in memory. The Authority stays the
 
 A method returns a `*sandboxlink.Error` for a typed refusal; any other error is answered `ServiceUnavailable`. Credential revision and allowed access come from the Authority, never from what a peer asserts.
 
-A recreated resource has a higher generation. A serve peer of the same or a higher generation replaces the resource's current serve peer, and a higher generation also closes every attachment of an older generation with `CloseStaleGeneration`. A serve peer or an Open of a generation older than the newest the relay has seen is refused with `StaleGeneration`.
+A recreated resource has a higher generation. A serve peer of the same or a higher generation replaces the resource's current serve peer, and a higher generation also closes every attachment of an older generation with `CloseStaleGeneration`. A serve peer or an Open of a generation older than the newest the relay holds for the resource is refused with `StaleGeneration`. The relay keeps a resource's generation only while it [holds the resource](#run-a-relay); after that the Authority alone refuses older generations.
 
 ## Leases, closing and revocation
 
@@ -240,7 +247,7 @@ A recreated resource has a higher generation. A serve peer of the same or a high
 - `CloseAttachment` closes the caller's attachment with `CloseRequested`. Closing an unknown attachment succeeds, and closing another Runtime's returns `PermissionDenied`.
 - `Relay.RevokeAttachment` closes one attachment. `Relay.RevokeResource` closes every attachment of a resource generation and older, writes the serve peer their `AttachmentClosed` events and then disconnects it. Both close with `CloseRevoked`.
 
-Closing an attachment resets all its streams and sends `AttachmentClosed` to its attach peer, except after `CloseRequested`, and to the serve peer. The relay holds each serve peer's unwritten events in a set with no size limit and removes an event only once it is written, so a serve peer that is disconnected, or whose link drops before the event is written, receives it when it reconnects with the same generation. An Open that a close interrupts fails with `AttachmentConflict`, `LeaseExpired`, `PermissionDenied` or `StaleGeneration`, matching the reason, with `EffectPossible` when its `Bind` may have reached the serve peer.
+Closing an attachment resets all its streams and sends `AttachmentClosed` to its attach peer, except after `CloseRequested`, and to the serve peer. The relay holds each peer's unwritten events in a set and removes an event once it is written, so a serve peer that is disconnected, or whose link drops before the event is written, receives it when it reconnects with the same generation. Events no peer can read any more are discarded: an attach peer's when its link ends, and a serve peer's when a newer generation connects or `RevokeResource` revokes its generation. An Open that a close interrupts fails with `AttachmentConflict`, `LeaseExpired`, `PermissionDenied` or `StaleGeneration`, matching the reason, with `EffectPossible` when its `Bind` may have reached the serve peer.
 
 Losing a link resets the streams it carries and keeps its attachments until their leases expire or they are closed.
 
@@ -269,7 +276,7 @@ The relay copies each direction through a 32 KiB buffer and holds at most one 25
 | 8 | `InstanceChanged` | The serve peer's `ServerInstanceID` is not `ExpectedServerInstanceID` |
 | 9 | `LeaseExpired` | The lease has passed, or the relay no longer holds the attachment |
 | 10 | `AttachmentConflict` | The `AttachmentID` is held with another identity or Runtime, or was closed during the Open |
-| 11 | `LimitExceeded` | A link's stream limit or its limit of renewals being decided is reached |
+| 11 | `LimitExceeded` | No resource, attachment or attach link slot is free, or a link's stream limit or its limit of renewals being decided is reached |
 | 12 | `ProtocolViolation` | A message is malformed, not allowed where it arrived, or carries a request ID that does not increase |
 
 `ServiceUnavailable` and `LimitExceeded` are transient: the same request may succeed later, and `Code.Retryable` reports them. Every other code is final: repeating the request with the same credential, attachment and generation fails again.
@@ -278,4 +285,4 @@ An answer that is malformed, or that carries another request ID or operation tha
 
 ## Verification
 
-`go test ./internal/sandboxlink/...` covers the golden frames, decode rejection, and the relay's authorization, generation, lease, revocation, renewal bound and reconnect behavior, including orderly end and abort propagation. `go test -run '^$' -fuzz FuzzDecode ./internal/sandboxlink` fuzzes the decoder.
+`go test ./internal/sandboxlink/...` covers the golden frames, decode rejection, and the relay's authorization, generation, lease, revocation, capacity and renewal bounds, and reconnect behavior, including orderly end and abort propagation. `go test -run '^$' -fuzz FuzzDecode ./internal/sandboxlink` fuzzes the decoder.
