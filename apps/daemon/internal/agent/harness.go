@@ -14,8 +14,8 @@
 // Registration: each adapter exports one Declaration. The Runtime discovers the
 // static declaration list and installs each resulting Runtime through Register.
 // Availability and factory selection belong to the adapter. RegisterKind resets
-// the other factories, so Register installs it first. Preparation capabilities
-// are derived from the declared factories.
+// the factories, so Register installs it first. Preparation capabilities are
+// derived from the declared factories.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
@@ -35,7 +35,7 @@ import (
 
 // Declaration is the complete startup contract for a Harness implementation.
 // Discover returns nil when the adapter is not configured. An unavailable
-// configured adapter returns a Runtime with Available=false and a session factory.
+// configured adapter returns a Runtime with Available=false and no factories.
 // Discovery owns runtime-specific configuration, readiness and feature gates.
 type Declaration struct {
 	Info          proto.SupportedAgentKind
@@ -52,7 +52,6 @@ type DiscoveryOptions struct {
 // Runtime binds one discovered descriptor to its native factories.
 type Runtime struct {
 	Info                     proto.SupportedAgentKind
-	Session                  Factory
 	Preparation              PreparationFactory
 	Executor                 ExecutorFactory
 	WorkspaceReadPreparation bool
@@ -63,7 +62,10 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 	if runtime.Info.Kind != declaration.Info.Kind {
 		panic("agent.Registry.Register: discovery kind differs from declaration")
 	}
-	r.RegisterKind(runtime.Info, declaration.Configuration, runtime.Session)
+	if !runtime.Info.Available && (runtime.Executor != nil || runtime.Preparation != nil) {
+		panic("agent.Registry.Register: unavailable runtime has factories")
+	}
+	r.RegisterKind(runtime.Info, declaration.Configuration)
 	if runtime.Executor != nil {
 		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
 	}
@@ -119,8 +121,8 @@ type TurnSettlement struct {
 	Reason   string
 }
 
-// Session is the cancellation and outcome surface shared by direct-call
-// sessions and Turns. Every owner exposes observed state.
+// Session is the cancellation and outcome surface shared by Turn and
+// PreparedCancellation. Every owner exposes observed state.
 // For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
 // and resource retirement; Cancel alone does not transfer resource ownership.
 type Session interface {
@@ -227,24 +229,15 @@ type PreparedCancellation interface {
 // cleanup remains unconfirmed. The caller must retain and close that resource.
 type PreparationFactory func(context.Context, proto.PromptRequestPayload) (Prepared, error)
 
-// Kind registration and the direct-call factory.
+// Kind registration.
 
-// Factory builds a Session that runs req.Input as req.RunID without an
-// Executor; the router starts every Run through RegisterExecutor instead. out
-// is the channel the agent writes into and closes exactly once after terminal
-// output. ctx is cancelled to wind the session down.
-type Factory func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (Session, error)
-
-// RegisterKind installs f and the heartbeat descriptor for an
-// agent_kind. Callers may set Available=false when an adapter exists
-// but its underlying CLI is not usable.
-func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration harnessconfig.Configuration, f Factory) {
+// RegisterKind installs the heartbeat descriptor and model configuration for an
+// agent_kind. Callers may set Available=false when an adapter exists but its
+// underlying CLI is not usable.
+func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration harnessconfig.Configuration) {
 	kind := info.Kind
 	if kind == "" {
 		panic("agent.Registry.Register: empty kind")
-	}
-	if f == nil {
-		panic("agent.Registry.Register: nil factory")
 	}
 	if err := configuration.ValidateDeclaration(); err != nil {
 		panic(err)
@@ -256,12 +249,6 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.configurations[kind] = configuration
-	r.factories[kind] = func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (Session, error) {
-		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
-			return nil, err
-		}
-		return f(ctx, req, out)
-	}
 	delete(r.preparers, kind)
 	delete(r.executors, kind)
 	info.Capabilities.Preparation = proto.CapabilityUnsupported

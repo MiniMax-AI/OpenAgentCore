@@ -173,10 +173,11 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			s, err := p.start(t.Context(), "actual-run", proto.TextInput("actual prompt"), make(chan proto.Envelope, 8))
+			started, err := p.Start(t.Context(), "actual-run", proto.TextInput("actual prompt"), make(chan proto.Envelope, 8))
 			if err != nil {
 				t.Fatal(err)
 			}
+			s := started.(*Session)
 			defer s.Cancel(context.Background())
 			frames := waitPreparationMethod(t, root, "turn/start")
 			checked, statuses := false, 0

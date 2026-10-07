@@ -19,7 +19,7 @@ func TestQuestionnaireOtherUsesOneQuestion(t *testing.T) {
 		properties := map[string]formProperty{"region": property, "region__other": {Type: "string", Title: "Region? — Other"}}
 		params, _ := json.Marshal(map[string]any{"sessionId": "native-1", "mode": "form", "requestedSchema": map[string]any{"type": "object", "properties": properties}})
 		out := make(chan proto.Envelope, 1)
-		session := &Session{ctx: t.Context(), sessionID: "native-1", out: out, questions: map[string]pendingQuestion{}}
+		session := &Session{ctx: t.Context(), outputContext: t.Context(), sessionID: "native-1", out: out, questions: map[string]pendingQuestion{}}
 		if err := session.askQuestion(rpcFrame{ID: json.RawMessage(`1`), Params: params}); err != nil {
 			t.Fatal(err)
 		}

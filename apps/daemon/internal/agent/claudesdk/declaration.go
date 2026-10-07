@@ -59,9 +59,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if entrypoint == "" {
 		return nil
 	}
-	out := &agent.Runtime{Info: descriptor, Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, fmt.Errorf("claude_sdk: configured runtime is unavailable")
-	}}
+	out := &agent.Runtime{Info: descriptor}
 	var config Config
 
 	fail := func(err error) *agent.Runtime {
@@ -141,7 +139,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityUnsupported, proto.CapabilityUnsupported
 		out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityUnsupported
 	}
-	out.Session = NewFactory(config)
 	out.Executor = NewExecutorFactory(config)
 	if out.Info.Capabilities.LocalEnvironment.IsSupported() {
 		out.Preparation = NewPreparationFactory(config)

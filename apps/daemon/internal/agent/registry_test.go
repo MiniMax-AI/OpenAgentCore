@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -14,77 +13,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
 
-func stubFactory(marker string) agent.Factory {
-	return func(_ context.Context, _ proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
-		return stubSession{marker: marker}, nil
-	}
-}
-
-type stubSession struct{ marker string }
-
-func (stubSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
-
-func (stubSession) Cancel(context.Context) error { return nil }
-func (stubSession) SubmitPermission(context.Context, string, proto.PermissionDecisionPayload) error {
-	return nil
-}
-func (stubSession) SubmitPromptForUserChoice(context.Context, string, proto.PromptForUserChoiceDecisionPayload) error {
-	return nil
-}
-
-func TestRegistryResolveReturnsRegisteredFactory(t *testing.T) {
+func TestRegistryRegisterOverwritesDescriptor(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Version: "v1", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{})
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Version: "v2", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{})
 
-	f, err := reg.Resolve("fake_alpha")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	sess, err := f(context.Background(), proto.PromptRequestPayload{AgentKind: "fake_alpha"}, nil)
-	if err != nil {
-		t.Fatalf("factory: %v", err)
-	}
-	stub, ok := sess.(stubSession)
-	if !ok || stub.marker != "cc" {
-		t.Errorf("resolved factory returned %#v, want stubSession{marker:\"cc\"}", sess)
-	}
-}
-
-func TestRegistryResolveUnknownKindReturnsTypedError(t *testing.T) {
-	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
-
-	_, err := reg.Resolve("fake_beta")
-	if !errors.Is(err, agent.ErrUnsupportedKind) {
-		t.Errorf("Resolve unknown = %v, want ErrUnsupportedKind chain", err)
-	}
-}
-
-func TestRegistryRegisterOverwrites(t *testing.T) {
-	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("v1"))
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("v2"))
-
-	f, err := reg.Resolve("k")
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	sess, _ := f(context.Background(), proto.PromptRequestPayload{}, nil)
-	if got := sess.(stubSession).marker; got != "v2" {
-		t.Errorf("overwrite: marker = %q, want v2", got)
-	}
-}
-
-func TestRegistryKindsReportsRegistered(t *testing.T) {
-	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_beta", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("oc"))
-
-	got := reg.Kinds()
-	slices.Sort(got)
-	want := []string{"fake_alpha", "fake_beta"}
-	if !slices.Equal(got, want) {
-		t.Errorf("Kinds = %v, want %v", got, want)
+	got := reg.SupportedAgentKinds()
+	if len(got) != 1 || got[0].Version != "v2" {
+		t.Errorf("overwrite: descriptors = %#v, want one v2 descriptor", got)
 	}
 }
 
@@ -94,16 +30,30 @@ func TestRegistryRegisterPanicsOnEmptyKind(t *testing.T) {
 			t.Fatal("Register(\"\", ...) did not panic")
 		}
 	}()
-	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("x"))
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{})
 }
 
-func TestRegistryRegisterPanicsOnNilFactory(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("Register(kind, nil) did not panic")
-		}
-	}()
-	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, nil)
+func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
+	info := proto.SupportedAgentKind{Kind: "k", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}
+	executor := func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil }
+	preparation := func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return nil, nil }
+	for name, runtime := range map[string]agent.Runtime{
+		"executor":    {Info: info, Executor: executor},
+		"preparation": {Info: info, Preparation: preparation},
+	} {
+		t.Run(name, func(t *testing.T) {
+			registry := agent.NewRegistry()
+			defer func() {
+				if recover() == nil {
+					t.Fatal("unavailable runtime registered factories")
+				}
+				if len(registry.SupportedAgentKinds()) != 0 {
+					t.Fatal("rejected runtime changed registry")
+				}
+			}()
+			registry.Register(agent.Declaration{Info: info}, runtime)
+		})
+	}
 }
 
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
@@ -115,7 +65,7 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 			Streaming: proto.CapabilitySupported,
 		}),
-	}, harnessconfig.Configuration{}, stubFactory("oc"))
+	}, harnessconfig.Configuration{})
 	reg.RegisterKind(proto.SupportedAgentKind{
 		Kind:      "fake_alpha",
 		Available: true,
@@ -126,7 +76,7 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 			Usage:       proto.CapabilitySupported,
 			Resume:      proto.CapabilitySupported,
 		}),
-	}, harnessconfig.Configuration{}, stubFactory("cc"))
+	}, harnessconfig.Configuration{})
 
 	got := reg.SupportedAgentKinds()
 	if len(got) != 2 {
@@ -145,9 +95,9 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 
 func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("native"))
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{})
 	if _, err := registry.ResolveExecutor("native"); err == nil {
-		t.Fatal("legacy factory implied reusable execution")
+		t.Fatal("kind registration implied reusable execution")
 	}
 	expected := errors.New("executor factory")
 	registry.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, expected })
@@ -158,7 +108,7 @@ func TestRegistryExecutorRequiresExplicitRegistration(t *testing.T) {
 	if _, err := factory(t.Context(), proto.PromptRequestPayload{}); !errors.Is(err, expected) {
 		t.Fatal(err)
 	}
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("replacement"))
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{})
 	if _, err := registry.ResolveExecutor("native"); err == nil {
 		t.Fatal("replacing a kind retained its old executor capability")
 	}
@@ -169,7 +119,10 @@ func TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement(t *testing.T) {
 	for i := 0; i < reflect.TypeOf(valid).NumField(); i++ {
 		t.Run(reflect.TypeOf(valid).Field(i).Name, func(t *testing.T) {
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: valid}, harnessconfig.Configuration{}, stubFactory("original"))
+			original := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: valid}
+			registry.RegisterKind(original, harnessconfig.Configuration{})
+			registry.RegisterExecutor("fixture", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil })
+			original.Capabilities.Preparation = proto.CapabilitySupported
 			missing := valid
 			reflect.ValueOf(&missing).Elem().Field(i).Set(reflect.ValueOf(proto.CapabilityUnspecified))
 			func() {
@@ -178,14 +131,9 @@ func TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement(t *testing.T) {
 						t.Error("incomplete declaration registered")
 					}
 				}()
-				registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: false, Capabilities: missing}, harnessconfig.Configuration{}, stubFactory("replacement"))
+				registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: false, Capabilities: missing}, harnessconfig.Configuration{})
 			}()
-			factory, err := registry.Resolve("fixture")
-			if err != nil {
-				t.Fatal(err)
-			}
-			session, err := factory(t.Context(), proto.PromptRequestPayload{}, nil)
-			if err != nil || session.(stubSession).marker != "original" {
+			if _, err := registry.ResolveExecutor("fixture"); err != nil || !reflect.DeepEqual(registry.SupportedAgentKinds(), []proto.SupportedAgentKind{original}) {
 				t.Fatal("failed declaration changed registry")
 			}
 		})

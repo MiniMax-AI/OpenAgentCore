@@ -20,8 +20,8 @@ import (
 // adapter safety net.
 const terminalSendTimeout = 2 * time.Second
 
-// sessionConfig is the cross-cutting knob bag — production callers go
-// through Factory which uses defaults.
+// sessionConfig is the cross-cutting knob bag; production callers use
+// defaultSessionConfig.
 type sessionConfig struct {
 	codexBinary string
 	logger      *slog.Logger
@@ -34,13 +34,6 @@ func defaultSessionConfig() sessionConfig {
 		logger:      obslog.Bg(),
 		killTimeout: rpcKillTimeout,
 	}
-}
-
-// Factory implements agent.Factory for agent_kind="codex". Spawns one
-// codex app-server child for one Turn. The run stream closes when the turn
-// completes; the child remains until the caller cancels the Session.
-func Factory(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-	return newSession(ctx, req, out, defaultSessionConfig())
 }
 
 // Session implements agent.Session. State lifecycle:

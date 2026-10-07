@@ -157,10 +157,7 @@ func connectRuntime(t *testing.T, peer *corePeer, setupErr error) *runtimeSide {
 	peer.accept(t)
 	rt := &runtimeSide{conn: conn, executor: &controlledExecutor{turn: make(chan *controlledTurn, 1)}, stopped: make(chan struct{})}
 	kinds := agent.NewRegistry()
-	kinds.RegisterKind(proto.SupportedAgentKind{Kind: prototest.HarnessKind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-		harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, errors.New("prepared execution must not use the direct Session factory")
-		})
+	kinds.RegisterKind(proto.SupportedAgentKind{Kind: prototest.HarnessKind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	kinds.RegisterExecutor(prototest.HarnessKind, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		return rt.executor, setupErr
 	})

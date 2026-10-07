@@ -77,7 +77,7 @@ func TestWorkspaceCommandCancellationAndBridgeFailuresCloseOnlyPendingCalls(t *t
 			req := workspaceRequest()
 			req.AgentSessionID = "native-session"
 			out := make(chan proto.Envelope, 32)
-			s, err := NewFactory(config)(ctx, req, out)
+			s, err := startSingleTurn(ctx, config, req, out)
 			if err != nil {
 				t.Fatal(err)
 			}

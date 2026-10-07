@@ -68,9 +68,6 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		edit func(*proto.PromptRequestPayload)
 	}{
 		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.AgentOptions["system_prompt"] = strings.Repeat("x", 32*1024+1) }},
-		{"attachment", func(r *proto.PromptRequestPayload) {
-			r.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
-		}},
 		{"missing model", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model") }},
 		{"missing provider", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }},
 	}

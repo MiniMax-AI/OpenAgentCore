@@ -22,6 +22,7 @@ func TestNativeMCodeACP(t *testing.T) {
 		t.Skip("set OAC_TEST_MCODE_INTEGRATION_BIN to run native ACP smoke test")
 	}
 	req := testRequest(t)
+	t.Setenv("OAC_RUNTIME_MCODE_BIN", binary)
 	var mu sync.Mutex
 	var requests []string
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,18 +45,9 @@ func TestNativeMCodeACP(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		t.Cleanup(cancel)
 		out := make(chan proto.Envelope, 64)
-		session, err := newSession(ctx, req, out, binary)
-		if err != nil {
+		if _, err := startTurn(t, ctx, req, out); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() {
-			_ = session.Cancel(context.Background())
-			select {
-			case <-session.exited:
-			case <-time.After(5 * time.Second):
-				t.Error("native CLI did not stop")
-			}
-		})
 		var done proto.DonePayload
 		for event := range out {
 			if event.Type == proto.TypeError {

@@ -50,7 +50,7 @@ func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.Su
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: info, Session: Factory}
+	runtime := &agent.Runtime{Info: info}
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	version, err := check(ctx, "")

@@ -49,7 +49,7 @@ func TestDeclaredCapabilityBaseline(t *testing.T) {
 
 func TestUnavailableRuntimeHasNoExecutionFactories(t *testing.T) {
 	runtime := discoverWithCheck(t.Context(), agent.DiscoveryOptions{Stdout: io.Discard, Stderr: io.Discard}, Declaration.Info, func(context.Context, string) (string, error) { return "", errors.New("missing") })
-	if runtime.Info.Available || runtime.Executor != nil || runtime.Preparation != nil || runtime.Session == nil {
+	if runtime.Info.Available || runtime.Executor != nil || runtime.Preparation != nil {
 		t.Fatalf("unavailable runtime: %+v", runtime)
 	}
 }

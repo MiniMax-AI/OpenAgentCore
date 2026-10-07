@@ -17,10 +17,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	configuration := harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "responses"}}}
 	calls := 0
 	expected := errors.New("native entry reached")
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, configuration, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		calls++
-		return nil, expected
-	})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, configuration)
 	registry.RegisterExecutor("fixture", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls++
 		return nil, expected
@@ -30,11 +27,9 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		return nil, expected
 	})
 	configuration.Providers[0].Protocol = "anthropic"
-	factory, _ := registry.Resolve("fixture")
 	executor, _ := registry.ResolveExecutor("fixture")
 	preparation, _ := registry.ResolvePreparation("fixture")
 	entries := []func(proto.PromptRequestPayload) error{
-		func(req proto.PromptRequestPayload) error { _, err := factory(t.Context(), req, nil); return err },
 		func(req proto.PromptRequestPayload) error { _, err := executor(t.Context(), req); return err },
 		func(req proto.PromptRequestPayload) error { _, err := preparation(t.Context(), req); return err },
 	}
@@ -55,7 +50,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 			t.Fatal("bound declaration was lost or mutated", err)
 		}
 	}
-	if calls != 3 {
+	if calls != 2 {
 		t.Fatal("unexpected native calls", calls)
 	}
 }
@@ -66,5 +61,5 @@ func TestRegistryRejectsInvalidConfigurationDeclaration(t *testing.T) {
 			t.Fatal("invalid configuration registered")
 		}
 	}()
-	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}}, stubFactory("fixture"))
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}})
 }
