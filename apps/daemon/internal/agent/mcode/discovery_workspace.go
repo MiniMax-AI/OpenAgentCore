@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, runtime *agent.Runtime) *WorkspaceConfig {
@@ -45,10 +44,6 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-
-	caps := &runtime.Info.Capabilities
-	caps.EnvironmentNone = proto.CapabilityUnsupported
-	caps.LocalEnvironment = proto.CapabilitySupported
 	return &c
 }
 

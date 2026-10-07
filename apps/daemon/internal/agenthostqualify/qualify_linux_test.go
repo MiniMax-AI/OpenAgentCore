@@ -112,8 +112,8 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 			if runtime == nil || runtime.View == nil {
 				t.Fatalf("%s declares no agent-host view; discovery reported why above", kind)
 			}
-			reg.Register(declaration, *runtime)
-			qualify(t, h, cfg, sb, kind, runtime.View.Capabilities, sessionModel(t, raw, key))
+			reg.Register(declaration, *runtime, agent.EnvironmentSupport{Local: true, None: true})
+			qualify(t, h, cfg, sb, kind, runtime.Info.Capabilities, sessionModel(t, raw, key))
 		})
 	}
 }
@@ -126,10 +126,9 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 // calls a function there. A view that declares tool search runs a Turn in
 // another Session that finds the function, deferred, with tool search. A view
 // that declares environment none answers a Turn in a Session without an
-// Environment, and its native state names the work directory.
-// A view that declares stdio MCP calls a tool of a stdio MCP server that runs
-// in the sandbox.
-func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps agent.ViewCapabilities, model proto.PromptRequestPayload) {
+// Environment, and its native state names the work directory. Every view
+// calls a tool of a stdio MCP server that runs in the sandbox.
+func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps proto.AgentKindCapabilities, model proto.PromptRequestPayload) {
 	name := "qualify-" + kind + ".txt"
 	value, content := strings.ToLower(rand.Text()), "qualified "+strings.ToLower(rand.Text()[:12])
 	code, _ := rand.Int(rand.Reader, big.NewInt(90))
@@ -191,7 +190,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		}
 		s.checkCwd(t, agent.ViewPrivateRoot+"/"+agent.ViewHomeName+"/"+agent.ViewWorkName)
 	}
-	if caps.StdioMCP.IsSupported() {
+	{
 		code := strings.ToLower(rand.Text()[:12])
 		stdio := configuration
 		stdio.FunctionTools, stdio.ToolSearch = nil, false

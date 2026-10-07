@@ -124,7 +124,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 		boot := &transport.BootstrapResponse{HeartbeatSeconds: 60}
 		if suspend {
 			control := &suspendControl{signal: make(chan os.Signal, 1)}
-			finished <- runSuspendLoop(ctx, dial, registry, boot, agentCLIDiscovery{}, control)
+			finished <- runSuspendLoop(ctx, dial, registry, nil, boot, agentCLIDiscovery{}, control)
 			return
 		}
 		conn, err := dial(ctx)
@@ -133,7 +133,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 			return
 		}
 		defer conn.Close()
-		finished <- pumpConn(ctx, conn, registry, boot, agentCLIDiscovery{})
+		finished <- pumpConn(ctx, conn, registry, nil, boot, agentCLIDiscovery{})
 	}()
 	var peer *websocket.Conn
 	select {

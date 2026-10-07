@@ -48,7 +48,9 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	t.Setenv(claudeSDKNodeEnv, node)
 	for _, features := range [][]string{nil, {"mcp_http_tools"}, {"mcp_http_bearer_auth"}, {"mcp_http_tools", "mcp_http_bearer_auth"}, {"mcp_http_required"}, {"mcp_http_tools", "mcp_http_required"}, {"subagent_resources"}, {"structured_output"}} {
 		out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
-			info := RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: features}
+			// The bundle's workspace variants, which the declaration uses.
+			workspace := []string{"workspace_tools", "workspace_prepare", "workspace_command_observations", "local_runtime_v2", "workspace_mcp_http", "workspace_structured_output"}
+			info := RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: append(slices.Clone(features), workspace...)}
 			return info, nil
 		})
 		supported := len(features) > 0 && features[0] == "mcp_http_tools"

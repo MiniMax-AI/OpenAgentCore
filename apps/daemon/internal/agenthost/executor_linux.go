@@ -27,7 +27,7 @@ type deps struct {
 
 // Registry returns the kinds the agent host runs, for the daemon's dispatch
 // and heartbeat: each kind in Config.Harnesses that declares an agent.View,
-// with Info that describes how views run it. Its Executor factory prepares an
+// in the Environments the agent host serves. Its Executor factory prepares an
 // Executor of the Session that bind binds the request to, as the package
 // documentation describes, and bind's error fails the preparation. The Router
 // that runs it sets dispatch.Config.SessionEnvironments.
@@ -39,29 +39,18 @@ func (h *Host) Registry(bind func(proto.PromptRequestPayload) (Binding, Environm
 }
 
 // registry registers each kind in harnesses that declares a view, with
-// factory as its Executor factory.
+// factory as its Executor factory, in a local Environment and with
+// environment none.
 func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.Registry {
 	reg := agent.NewRegistry()
 	for _, info := range harnesses.SupportedAgentKinds() {
 		configuration, err := harnesses.Configuration(info.Kind)
-		view, viewErr := harnesses.ResolveView(info.Kind)
-		if err != nil || viewErr != nil {
+		if _, viewErr := harnesses.ResolveView(info.Kind); err != nil || viewErr != nil {
 			continue
 		}
-		reg.RegisterKind(viewInfo(info, view.Capabilities), configuration)
-		reg.RegisterExecutor(info.Kind, factory)
+		reg.Register(agent.Declaration{Info: info, Configuration: configuration}, agent.Runtime{Info: info, Executor: factory}, agent.EnvironmentSupport{Local: true, None: true})
 	}
 	return reg
-}
-
-// viewInfo is info as views run the kind: in the Session's Environment, with
-// what caps admits, and without what needs a local workspace.
-func viewInfo(info proto.SupportedAgentKind, caps agent.ViewCapabilities) proto.SupportedAgentKind {
-	c := &info.Capabilities
-	c.LocalEnvironment = proto.CapabilitySupported
-	c.WorkspaceReadPreparation, c.WorkspaceOutputExport = proto.CapabilityUnsupported, proto.CapabilityUnsupported
-	c.EnvironmentNone, c.FunctionTools, c.FunctionResultImages, c.ToolSearch = caps.EnvironmentNone, caps.FunctionTools, caps.FunctionResultImages, caps.ToolSearch
-	return info
 }
 
 // session is an Executor of a Session on the agent host: the view Executor

@@ -223,8 +223,12 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	}
 	obslog.Bg().Info("bootstrap ok", "device_id", boot.DeviceID, "ws_url", wsURL, "heartbeat_interval", boot.HeartbeatInterval())
 
+	local, err := localworkspace.Load()
+	if err != nil {
+		return err
+	}
 	registry := agent.NewRegistry()
-	registerAgentKinds(registry, agentCLIs)
+	registerAgentKinds(registry, agentCLIs, local.Support())
 
 	control, err := newSuspendControl()
 	if err != nil {
@@ -257,7 +261,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	}
 
 	if control != nil {
-		return runSuspendLoop(rootCtx, dial, registry, boot, agentCLIs, control)
+		return runSuspendLoop(rootCtx, dial, registry, local, boot, agentCLIs, control)
 	}
 	for {
 		if err := rootCtx.Err(); err != nil {
@@ -291,7 +295,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 		// pumpConn returns on conn close (peer hangup, transport
 		// error, root ctx cancel). Loop back into Reconnect unless
 		// root ctx is cancelled.
-		pumpErr := pumpConn(rootCtx, conn, registry, boot, agentCLIs)
+		pumpErr := pumpConn(rootCtx, conn, registry, local, boot, agentCLIs)
 		if pumpErr != nil {
 			obslog.Bg().Warn("ws session ended", "err", pumpErr)
 		} else {
@@ -324,28 +328,11 @@ func localEnvironments(local *localworkspace.Binding) func(proto.AssignmentRef, 
 	return local.Resolve
 }
 
-// localEnvironmentKinds declares, for each kind that supports a local
-// Environment, the read-only preparation and output export that the local
-// workspace owner serves.
-func localEnvironmentKinds(registry *agent.Registry, local *localworkspace.Binding) []proto.SupportedAgentKind {
-	kinds := registry.SupportedAgentKinds()
-	for i := range kinds {
-		caps := &kinds[i].Capabilities
-		caps.WorkspaceReadPreparation = proto.CapabilityFromBool(local != nil && caps.LocalEnvironment.IsSupported())
-		caps.WorkspaceOutputExport = caps.WorkspaceReadPreparation
-	}
-	return kinds
-}
-
 // pumpConn runs the per-connection workload: a dispatch.Router fed by
 // conn.Recv(), heartbeats every boot.HeartbeatInterval(), and a
 // confirmed router.Shutdown before returning ownership to the reconnect loop.
 // Failed cleanup keeps this exact Router alive, including after a shutdown signal.
-func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
-	local, err := localworkspace.Load()
-	if err != nil {
-		return err
-	}
+func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, local *localworkspace.Binding, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
 	router, err := dispatch.New(dispatch.Config{
 		Registry:     registry,
 		Sender:       conn,
@@ -365,7 +352,7 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 			Timestamp:           time.Now().Unix(),
 			ActiveRequests:      router.ActiveRuns(),
 			DaemonVersion:       Version,
-			SupportedAgentKinds: localEnvironmentKinds(registry, local),
+			SupportedAgentKinds: registry.SupportedAgentKinds(),
 			HomeRemoval:         proto.CapabilityUnsupported,
 		}
 	}, obslog.Bg().With("component", "heartbeat"))

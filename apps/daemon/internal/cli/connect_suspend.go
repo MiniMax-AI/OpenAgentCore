@@ -35,20 +35,15 @@ type suspendedRouter struct {
 	router   *dispatch.Router
 	sender   *reconnectSender
 	registry *agent.Registry
-	local    *localworkspace.Binding
 }
 
-func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry) (*suspendedRouter, error) {
-	local, err := localworkspace.Load()
-	if err != nil {
-		return nil, err
-	}
+func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry, local *localworkspace.Binding) (*suspendedRouter, error) {
 	sender := &reconnectSender{conn: conn}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), Environments: localEnvironments(local)})
 	if err != nil {
 		return nil, err
 	}
-	return &suspendedRouter{router: router, sender: sender, registry: registry, local: local}, nil
+	return &suspendedRouter{router: router, sender: sender, registry: registry}, nil
 }
 
 func (s *suspendedRouter) shutdown() {
@@ -57,7 +52,7 @@ func (s *suspendedRouter) shutdown() {
 
 // runSuspendLoop uses the ordinary connection authentication and dispatch chain.
 // Only an acknowledged, fully drained suspension retains a Router across sockets.
-func runSuspendLoop(ctx context.Context, dial transport.DialFn, registry *agent.Registry, boot *transport.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) error {
+func runSuspendLoop(ctx context.Context, dial transport.DialFn, registry *agent.Registry, local *localworkspace.Binding, boot *transport.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) error {
 	for ctx.Err() == nil {
 		conn, err := transport.Reconnect(ctx, dial, transport.DefaultBackoff, nil)
 		if err != nil {
@@ -66,7 +61,7 @@ func runSuspendLoop(ctx context.Context, dial transport.DialFn, registry *agent.
 			}
 			return err
 		}
-		state, err := newSuspendedRouter(conn, registry)
+		state, err := newSuspendedRouter(conn, registry, local)
 		if err != nil {
 			_ = conn.Close()
 			return err
@@ -152,7 +147,7 @@ func (s *suspendedRouter) reconnectSuspension(ctx context.Context, dial transpor
 
 func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, boot *transport.BootstrapResponse, discovery agentCLIDiscovery) {
 	conn.StartHeartbeats(ctx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: localEnvironmentKinds(s.registry, s.local), HomeRemoval: proto.CapabilityUnsupported}
+		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: s.registry.SupportedAgentKinds(), HomeRemoval: proto.CapabilityUnsupported}
 	}, obslog.Bg())
 }
 

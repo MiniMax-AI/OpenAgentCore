@@ -24,10 +24,10 @@ func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 			if (runtime.Executor != nil) != available {
 				t.Fatalf("factories: %+v", runtime)
 			}
-			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
+			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.LocalEnvironment.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
 				t.Fatalf("capabilities=%+v", info.Capabilities)
 			}
-			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.LocalEnvironment.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {
+			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {
 				t.Fatal("unqualified capability advertised")
 			}
 		})

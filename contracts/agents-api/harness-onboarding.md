@@ -84,7 +84,7 @@ The reason is a fixed safe string, never submitted content, a credential or raw 
 
 The wire request carries no working directory. The Runtime checks `local_environment.workspace_directory` against its binding and gives the Harness its bound workspace directory in `LocalEnvironment.WorkspaceRoot`; run the native Harness there.
 
-Workspace reads, writes, output export and read-only preparation belong to the Session's [Environment owner](../../docs/runtime-protocol.md#session-assignments), not the adapter. An adapter implements none of them and declares `WorkspaceReadPreparation` and `WorkspaceOutputExport` unsupported; the Runtime sets both from its owner.
+Workspace reads, writes, output export and read-only preparation belong to the Session's [Environment owner](../../docs/runtime-protocol.md#session-assignments), not the adapter. An adapter implements none of them and declares `WorkspaceReadPreparation` and `WorkspaceOutputExport` unsupported. It declares `LocalEnvironment` and `EnvironmentNone` as what its Executors run, and `agent.Registry.Register` composes the declaration once with what the Runtime's owner serves (`agent.EnvironmentSupport`): it keeps each only where the owner serves it and sets both export fields to the composed `LocalEnvironment`. One declaration holds for every Executor of the install, including its [view](#run-in-an-agent-host-view).
 
 The service profile qualifies public combinations and the Runtime advertises the installed combination; neither replaces schema validation or Project authorization. Native behavior tests must agree with the declarations. An advertised operation that returns Unsupported is a contract violation, never success or grounds for replay.
 
@@ -269,7 +269,6 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 | `ShimPaths` | View paths the shim is bound over; each runs the same path in the sandbox |
 | `ForwardEnv` | Harness variables that a process run in the sandbox keeps |
 | `Proxy` | `ViewProxyEnv` or `ViewProxyNone` |
-| `Capabilities` | What the view runs ([Capabilities](#capabilities)) |
 | `Executor` | The `ViewExecutorFactory` that prepares the Session's Executor in its view |
 
 `View.Validate` checks the declaration without touching the host:
@@ -279,23 +278,13 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 - shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc` and `/dev` (`ViewReserved`);
 - each `LocalExec` entry lies in a closure directory or an `Exec` overlay;
 - shim names and `ForwardEnv` names are unique, no shim is named `oac-process-shim`, which is the process relay's, or starts with `oac-mcp-`, which [stdio aliases](#stdio-mcp) use, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
-- every `Capabilities` field is `proto.CapabilitySupported` or `proto.CapabilityUnsupported`;
 - `Proxy` is one of the two values and `Executor` is non-nil.
 
 `harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view.
 
 ### Capabilities
 
-`View.Capabilities` declares each feature the view runs, and the agent host admits a request before any effect only when the view supports each feature the request uses. The registry the agent host gives dispatch derives `EnvironmentNone`, `FunctionTools`, `FunctionResultImages` and `ToolSearch` from it.
-
-| Field | A request that uses it |
-| --- | --- |
-| `EnvironmentNone` | Sets `DisableExecutionEnvironment` ([Environment none](#environment-none)) |
-| `Skills` | Has resolved Skills (`LocalEnvironment.Skills`) |
-| `FunctionTools`, `FunctionResultImages`, `ToolSearch` | Uses the feature of the same `AgentKindCapabilities` name |
-| `StdioMCP` | Has a stdio MCP binding ([Stdio MCP](#stdio-mcp)) |
-
-Whatever the view declares, the agent host rejects with `ErrUnsupportedOperation` a request without strict resume, one whose installed Capabilities no preparation resolved, and one with a restricted network, because only the Provider's workload network boundary can contain a process's own sockets. It rejects a stdio binding that needs a credential with `ErrViewHandoff`.
+A view runs every request that the kind's declaration admits, so the adapter declares only what both its local Executor and its view run, and dispatch checks each request against that declaration. The agent host serves a local Environment and environment none, and every view runs [stdio MCP](#stdio-mcp). Whatever the kind declares, the agent host rejects with `ErrUnsupportedOperation` a request with Skills, one whose installed Capabilities no preparation resolved, and one with a restricted network, because only the Provider's workload network boundary can contain a process's own sockets. It rejects a stdio binding that needs a credential with `ErrViewHandoff`.
 
 ### Environment none
 
@@ -362,9 +351,9 @@ Run the adapter's Turns, cancellation and continuation in a view, then qualify e
 | `ForwardEnv` | A process run in the sandbox keeps each declared variable and no other Harness variable. |
 | `Proxy` | With `ViewProxyEnv`, every local request, such as web fetches, downloads and update checks, goes through the proxy. With `ViewProxyNone`, a request enabling a feature that needs it is rejected. |
 | `Home` | Native history and configuration stay under `/.oac/home`, and a later Executor in the same Session continues from them. |
-| `Capabilities` | Each supported feature runs a Turn through dispatch: environment none in the empty-root view, Skills, function calls and results, tool search, and each stdio binding under its alias. |
+| Declaration | Each declared feature runs a Turn through dispatch: environment none in the empty-root view, function calls and results, tool search, and each stdio binding under its alias. |
 
-`scripts/qualify-agent-host.sh` runs each Harness's Turns through the daemon's dispatch against the [agent-host and sandbox images](../../docs/maintainers.md#runtime-images-and-helpers). The `agenthostqualify` test binary runs as the agent host with the [agent-host container's flags](../../docs/configuration.md#agent-host-container), and the sandbox image serves the sandbox. The first Turn writes a file and reports the output and exit status of a failing command whose values only the sandbox's tool environment holds. When the view declares function tools, a second Turn runs in a new Executor that resumes the Session's native history and calls a function; the test returns a text, image and text result through dispatch, and the answer must report both texts. When the view declares tool search, a Turn in another Session finds the deferred function with tool search and calls it. When the view declares environment none, a Turn in a Session without an Environment answers through the model, and the Harness's native state in the Session home must name its working directory, `/.oac/home/work`. When the view declares stdio MCP, the test gives a Session's Environment one installed stdio MCP server, a script that runs in the sandbox, and the answer must report the code its one tool returns. The Link runs over WSS with a CA the test generates. The test also checks the cgroup v2 delegation: the container's own read-only cgroup fails with `ErrUnsupported`, and in a delegated directory the agent host ends a cgroup left behind with `cgroup.kill`. Set `OAC_AGENT_HOST_IMAGE` and `OAC_SANDBOX_IMAGE` to the two images, `OAC_QUALIFY_KEY_FILE` to the model key's file and, for each Harness to qualify, `OAC_QUALIFY_CLAUDE_SDK`, `OAC_QUALIFY_CODEX` or `OAC_QUALIFY_MCODE` to its `model` and `model_provider` without `api_key`. The gateway dials model providers directly, so on a host whose only egress is an HTTP proxy, set `OAC_QUALIFY_PROXY` to it and the test tunnels the providers' hosts through it.
+`scripts/qualify-agent-host.sh` runs each Harness's Turns through the daemon's dispatch against the [agent-host and sandbox images](../../docs/maintainers.md#runtime-images-and-helpers). The `agenthostqualify` test binary runs as the agent host with the [agent-host container's flags](../../docs/configuration.md#agent-host-container), and the sandbox image serves the sandbox. The first Turn writes a file and reports the output and exit status of a failing command whose values only the sandbox's tool environment holds. When the kind declares function tools, a second Turn runs in a new Executor that resumes the Session's native history and calls a function; the test returns a text, image and text result through dispatch, and the answer must report both texts. When the kind declares tool search, a Turn in another Session finds the deferred function with tool search and calls it. When the kind declares environment none, a Turn in a Session without an Environment answers through the model, and the Harness's native state in the Session home must name its working directory, `/.oac/home/work`. The test gives a Session's Environment one installed stdio MCP server, a script that runs in the sandbox, and the answer must report the code its one tool returns. The Link runs over WSS with a CA the test generates. The test also checks the cgroup v2 delegation: the container's own read-only cgroup fails with `ErrUnsupported`, and in a delegated directory the agent host ends a cgroup left behind with `cgroup.kill`. Set `OAC_AGENT_HOST_IMAGE` and `OAC_SANDBOX_IMAGE` to the two images, `OAC_QUALIFY_KEY_FILE` to the model key's file and, for each Harness to qualify, `OAC_QUALIFY_CLAUDE_SDK`, `OAC_QUALIFY_CODEX` or `OAC_QUALIFY_MCODE` to its `model` and `model_provider` without `api_key`. The gateway dials model providers directly, so on a host whose only egress is an HTTP proxy, set `OAC_QUALIFY_PROXY` to it and the test tunnels the providers' hosts through it.
 
 ## Native references
 

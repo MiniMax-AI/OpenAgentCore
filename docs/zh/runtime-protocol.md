@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 0890cc82a6ab41096a81aebfee6024b22d8c298e82104b34f7ab194a54b05a55
+source_hash: 6139b91a175c1d3e746bafc15a062421615bd10541918f2dceaac0e4db9b3dfc
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -30,7 +30,7 @@ wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blo
 
 wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `false`。不完整声明编码失败。解码拒绝省略、null、无效和未知字段，以及缺失的 capability 对象。无效 heartbeat 会清空连接的 admission snapshot 并关闭 transport；这不证明原生完成或取消结果。
 
-每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。Runtime 根据其 [Environment owner](#session-assignments) 声明 `workspace_read_preparation` 和 `workspace_output_export`，从不由 Harness adapter 声明。
+每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。Runtime 仅在 Harness 及其 [Environment owner](#session-assignments) 都支持时声明 `local_environment` 和 `environment_none`，并恰好在声明 `local_environment` 时声明 `workspace_read_preparation` 和 `workspace_output_export`，从不由 Harness adapter 声明后两者。
 
 新增字段要求每个生产声明都作出明确决定。契约测试为注册和 wire 往返逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)负责各声明的 adapter 侧规则。
 

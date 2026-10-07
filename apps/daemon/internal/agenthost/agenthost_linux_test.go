@@ -71,15 +71,10 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 // register declares kind with view, or without one when view is nil.
 func register(reg *agent.Registry, kind string, view *agent.View) {
 	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}
+		LocalEnvironment: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
 	declaration := agent.Declaration{Info: info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
-	reg.Register(declaration, agent.Runtime{Info: info, View: view})
-}
-
-// declared declares every view capability as s.
-func declared(s proto.CapabilitySupport) agent.ViewCapabilities {
-	return agent.ViewCapabilities{EnvironmentNone: s, Skills: s, FunctionTools: s, FunctionResultImages: s, ToolSearch: s, StdioMCP: s}
+	reg.Register(declaration, agent.Runtime{Info: info, View: view}, agent.EnvironmentSupport{Local: true, None: true})
 }
 
 // request is a Session request the agent host admits.

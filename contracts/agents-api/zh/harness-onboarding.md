@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: c8ffdd603108bace70451b09b123eb250e3a957358dc2d8c6b5af9601c044148
+source_hash: bd60eb63b07d823a0b44502bcbe1a329100a063d05a1b7ebdda979fa152eb60a
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -86,7 +86,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 线协议请求不携带工作目录。Runtime 将 `local_environment.workspace_directory` 与其绑定进行核对，并通过 `LocalEnvironment.WorkspaceRoot` 向 Harness 提供其绑定的工作区目录；必须在该目录中运行原生 Harness。
 
-工作区读取、写入、输出导出和只读 preparation 属于 Session 的 [Environment owner](../../../docs/zh/runtime-protocol.md#session-assignments)，不属于 adapter。adapter 不实现其中任何操作，并将 `WorkspaceReadPreparation` 和 `WorkspaceOutputExport` 声明为不支持；Runtime 根据其 owner 设置二者。
+工作区读取、写入、输出导出和只读 preparation 属于 Session 的 [Environment owner](../../../docs/zh/runtime-protocol.md#session-assignments)，不属于 adapter。adapter 不实现其中任何操作，并将 `WorkspaceReadPreparation` 和 `WorkspaceOutputExport` 声明为不支持。它将 `LocalEnvironment` 和 `EnvironmentNone` 声明为其 Executor 能运行的内容，`agent.Registry.Register` 将该声明与 Runtime 的 owner 所提供的内容（`agent.EnvironmentSupport`）组合一次：仅在 owner 提供时保留二者，并将两个导出字段设为组合后的 `LocalEnvironment`。一份声明适用于该安装的每个 Executor，包括其[视图](#run-in-an-agent-host-view)。
 
 服务 profile 对公共组合进行资格认定，Runtime 宣称已安装的组合；二者都不能替代 schema 验证或 Project 授权。原生行为测试必须与声明一致。已宣称但返回 Unsupported 的操作属于契约违规，既不是成功，也不能作为重放的依据。
 
@@ -271,7 +271,6 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 | `ShimPaths` | 绑定 shim 的视图路径；每个路径在沙箱中运行相同路径 |
 | `ForwardEnv` | 在沙箱中运行的进程保留的 Harness 变量 |
 | `Proxy` | `ViewProxyEnv` 或 `ViewProxyNone` |
-| `Capabilities` | 视图运行的功能（[能力](#capabilities)） |
 | `Executor` | 在 Session 的视图中准备其 Executor 的 `ViewExecutorFactory` |
 
 `View.Validate` 在不访问主机的情况下检查声明：
@@ -281,23 +280,13 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 - shim 路径、overlay 和 mask 互不重叠，也不与 `/` 重叠，并且不进入视图自己构建的树：`/.oac`、`/proc` 和 `/dev`（`ViewReserved`）；
 - 每个 `LocalExec` 条目都位于某个 closure 目录或某个 `Exec` overlay 中；
 - shim 名称和 `ForwardEnv` 名称各自唯一，没有 shim 名为 `oac-process-shim`（该名称属于进程 relay）或以 `oac-mcp-` 开头（该前缀属于 [stdio 别名](#stdio-mcp)），变量名不含 `=`，且 `ForwardEnv` 不指定视图或 broker 设置的变量（[环境](#environment)）；
-- 每个 `Capabilities` 字段都是 `proto.CapabilitySupported` 或 `proto.CapabilityUnsupported`；
 - `Proxy` 是两个取值之一，且 `Executor` 非 nil。
 
 `harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。
 
 ### 能力 {#capabilities}
 
-`View.Capabilities` 声明视图运行的每项功能。只有当视图支持请求使用的每项功能时，agent host 才会在产生任何副作用之前准入该请求。agent host 交给 dispatch 的 registry 据此推导 `EnvironmentNone`、`FunctionTools`、`FunctionResultImages` 和 `ToolSearch`。
-
-| 字段 | 使用该功能的请求 |
-| --- | --- |
-| `EnvironmentNone` | 设置了 `DisableExecutionEnvironment`（[Environment none](#environment-none)） |
-| `Skills` | 带有已解析的 Skills（`LocalEnvironment.Skills`） |
-| `FunctionTools`、`FunctionResultImages`、`ToolSearch` | 使用 `AgentKindCapabilities` 中同名的功能 |
-| `StdioMCP` | 带有 stdio MCP 绑定（[Stdio MCP](#stdio-mcp)） |
-
-无论视图如何声明，agent host 都以 `ErrUnsupportedOperation` 拒绝没有严格恢复的请求、已安装的 Capabilities 未经任何准备解析的请求，以及带受限网络的请求，因为只有 Provider 的工作负载网络边界才能约束进程自己的 socket。它以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
+视图运行该 kind 的声明所准入的每个请求，因此 adapter 只声明其本地 Executor 和视图都能运行的内容，dispatch 按该声明检查每个请求。agent host 提供本地 Environment 和 environment none，且每个视图都运行 [stdio MCP](#stdio-mcp)。无论 kind 如何声明，agent host 都以 `ErrUnsupportedOperation` 拒绝带 Skills 的请求、已安装的 Capabilities 未经任何准备解析的请求，以及带受限网络的请求，因为只有 Provider 的工作负载网络边界才能约束进程自己的 socket。它以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
 
 ### Environment none {#environment-none}
 
@@ -364,9 +353,9 @@ stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 
 | `ForwardEnv` | 在沙箱中运行的进程保留每个声明的变量，且不保留任何其他 Harness 变量。 |
 | `Proxy` | 使用 `ViewProxyEnv` 时，每个本地请求（例如网页抓取、下载和更新检查）都经过代理。使用 `ViewProxyNone` 时，启用需要代理的功能的请求会被拒绝。 |
 | `Home` | 原生历史和配置保存在 `/.oac/home` 下，同一 Session 中后续的 Executor 从中继续。 |
-| `Capabilities` | 每项受支持的功能都通过 dispatch 运行一个 Turn：空根视图中的 Environment none、Skills、函数调用及其结果、工具搜索，以及每个以别名运行的 stdio 绑定。 |
+| 声明 | 每项声明的功能都通过 dispatch 运行一个 Turn：空根视图中的 Environment none、函数调用及其结果、工具搜索，以及每个以别名运行的 stdio 绑定。 |
 
-`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。视图声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。视图声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。视图声明 environment none 时，一个没有 Environment 的 Session 中的 Turn 通过模型作答，且 Session home 中 Harness 的原生状态必须写明其工作目录 `/.oac/home/work`。视图声明 stdio MCP 时，测试为一个 Session 的 Environment 提供一个已安装的 stdio MCP 服务器，即在沙箱中运行的脚本，回答必须报告其唯一工具返回的代码。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
+`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。kind 声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。kind 声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。kind 声明 environment none 时，一个没有 Environment 的 Session 中的 Turn 通过模型作答，且 Session home 中 Harness 的原生状态必须写明其工作目录 `/.oac/home/work`。测试为一个 Session 的 Environment 提供一个已安装的 stdio MCP 服务器，即在沙箱中运行的脚本，回答必须报告其唯一工具返回的代码。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
 
 ## 原生参考 {#native-references}
 

@@ -24,6 +24,35 @@ func TestRegistryRegisterOverwritesDescriptor(t *testing.T) {
 	}
 }
 
+// The heartbeat declares what the Harness runs within what the Environment
+// owner serves, and the owner serves read preparation and export with every
+// local Environment.
+func TestRegisterComposesEnvironmentSupport(t *testing.T) {
+	s, u := proto.CapabilitySupported, proto.CapabilityUnsupported
+	for _, c := range []struct {
+		environments        agent.EnvironmentSupport
+		local, none         bool
+		wantLocal, wantNone proto.CapabilitySupport
+	}{
+		{agent.EnvironmentSupport{Local: true, None: true}, true, true, s, s},
+		{agent.EnvironmentSupport{Local: true}, true, true, s, u},
+		{agent.EnvironmentSupport{None: true}, true, true, u, s},
+		{agent.EnvironmentSupport{Local: true, None: true}, false, false, u, u},
+	} {
+		info := proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+			LocalEnvironment: proto.CapabilityFromBool(c.local), EnvironmentNone: proto.CapabilityFromBool(c.none)})}
+		registry := agent.NewRegistry()
+		registry.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info}, c.environments)
+		got := registry.SupportedAgentKinds()[0].Capabilities
+		want := info.Capabilities
+		want.LocalEnvironment, want.EnvironmentNone = c.wantLocal, c.wantNone
+		want.WorkspaceReadPreparation, want.WorkspaceOutputExport = c.wantLocal, c.wantLocal
+		if got != want {
+			t.Errorf("%+v over %+v: declared %+v, want %+v", c.environments, info.Capabilities, got, want)
+		}
+	}
+}
+
 func TestRegistryRegisterPanicsOnEmptyKind(t *testing.T) {
 	defer func() {
 		if r := recover(); r == nil {
@@ -45,7 +74,7 @@ func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
 			t.Fatal("rejected runtime changed registry")
 		}
 	}()
-	registry.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Executor: executor})
+	registry.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Executor: executor}, agent.EnvironmentSupport{Local: true})
 }
 
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {

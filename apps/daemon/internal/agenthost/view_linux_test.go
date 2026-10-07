@@ -100,16 +100,13 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	copyExecutable(t, filepath.Join(closure, "harness"))
-	caps := declared(proto.CapabilityUnsupported)
-	caps.EnvironmentNone, caps.StdioMCP = proto.CapabilitySupported, proto.CapabilitySupported
 	register(reg, "test", &agent.View{
-		Closure:      []agent.ViewMount{{Name: "harness", HostDir: closure}},
-		Masks:        []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
-		LocalExec:    []string{harnessPath},
-		ShimPaths:    []string{"/bin/sh"},
-		ForwardEnv:   []string{"KEEP"},
-		Proxy:        agent.ViewProxyEnv,
-		Capabilities: caps,
+		Closure:    []agent.ViewMount{{Name: "harness", HostDir: closure}},
+		Masks:      []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
+		LocalExec:  []string{harnessPath},
+		ShimPaths:  []string{"/bin/sh"},
+		ForwardEnv: []string{"KEEP"},
+		Proxy:      agent.ViewProxyEnv,
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
 			e := &testExecutor{session: s, dir: workDir,
 				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir, proxyEnv + "=" + s.Proxy}}

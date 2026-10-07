@@ -26,11 +26,10 @@ import (
 
 var errFactory = errors.New("factory reached")
 
-// viewFixture registers "viewed", whose factory records what it receives and
-// whose view supports no capability, "supporting", whose view supports every
-// capability, "masked", whose view masks an /etc file the agent host writes,
-// "shimmed", whose view runs a shim name on the sandbox PATH, and "plain",
-// which declares no view.
+// viewFixture registers "viewed", whose factory records what it receives,
+// "masked", whose view masks an /etc file the agent host writes, "shimmed",
+// whose view runs a shim name on the sandbox PATH, and "plain", which declares
+// no view.
 type viewFixture struct {
 	cfg     Config
 	req     proto.PromptRequestPayload
@@ -44,10 +43,9 @@ func newViewFixture(t *testing.T) *viewFixture {
 	f := &viewFixture{}
 	reg := agent.NewRegistry()
 	view := agent.View{
-		Closure:      []agent.ViewMount{{Name: "harness", HostDir: t.TempDir()}},
-		LocalExec:    []string{"/.oac/harness/harness"},
-		Proxy:        agent.ViewProxyEnv,
-		Capabilities: declared(proto.CapabilityUnsupported),
+		Closure:   []agent.ViewMount{{Name: "harness", HostDir: t.TempDir()}},
+		LocalExec: []string{"/.oac/harness/harness"},
+		Proxy:     agent.ViewProxyEnv,
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
 			f.req, f.session = req, s
 			info, err := os.Stat(s.Home.Host)
@@ -56,9 +54,6 @@ func newViewFixture(t *testing.T) *viewFixture {
 		},
 	}
 	register(reg, "viewed", &view)
-	supporting := view
-	supporting.Capabilities = declared(proto.CapabilitySupported)
-	register(reg, "supporting", &supporting)
 	masked := view
 	masked.Masks = []agent.ViewMask{{Path: "/etc/passwd"}}
 	register(reg, "masked", &masked)
@@ -80,21 +75,24 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 	}{
 		"kind without a view":                {"plain", func(*proto.PromptRequestPayload) {}, unsupported},
 		"view meeting the agent host's /etc": {"masked", func(*proto.PromptRequestPayload) {}, []error{ErrUnsupported, agent.ErrInvalidView}},
-		"incomplete binding":                 {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment = nil }, []error{ErrInvalidSession}},
+		"incomplete binding":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment = nil }, []error{ErrInvalidSession}},
 		"shim name without PATH":             {"shimmed", func(*proto.PromptRequestPayload) {}, []error{ErrInvalidSession}},
 		"relative workspace":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
 		"no model provider":                  {"viewed", func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }, []error{ErrUnsupported}},
-		// The typed rejections that hold whatever the view declares.
-		"restricted network":      {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, unsupported},
-		"allowed domains only":    {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, unsupported},
-		"unprepared Capabilities": {"supporting", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, unsupported},
-		"credentialed stdio MCP": {"supporting", func(r *proto.PromptRequestPayload) {
+		"restricted network":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, unsupported},
+		"allowed domains only":               {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, unsupported},
+		"unprepared Capabilities":            {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, unsupported},
+		"Skills": {"viewed", func(r *proto.PromptRequestPayload) {
+			r.LocalEnvironment.Capabilities, r.LocalEnvironment.CapabilityRoot = true, "/capabilities"
+			r.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{RelativeRoot: "skills/review"}}
+		}, unsupported},
+		"credentialed stdio MCP": {"viewed", func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
 		}, []error{ErrUnsupported, agent.ErrViewHandoff}},
-		"stdio MCP without an absolute directory": {"supporting", func(r *proto.PromptRequestPayload) {
+		"stdio MCP without an absolute directory": {"viewed", func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/tools"}}}
 		}, []error{ErrInvalidSession}},
-		"stdio MCP name without PATH": {"supporting", func(r *proto.PromptRequestPayload) {
+		"stdio MCP name without PATH": {"viewed", func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
 		}, []error{ErrInvalidSession}},
 	} {
@@ -133,43 +131,6 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 	}
 }
 
-func TestAdmissionFollowsDeclarations(t *testing.T) {
-	f := newViewFixture(t)
-	roots, err := checkConfig(f.cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	network := func(context.Context) (sandboxlink.Stream, error) { return nil, errors.New("not dialled") }
-	for name, c := range map[string]struct {
-		use                func(*proto.PromptRequestPayload)
-		viewed, supporting bool
-	}{
-		"environment none": {func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment, r.LocalEnvironment = true, nil }, false, true},
-		"Skills": {func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.Capabilities, r.LocalEnvironment.CapabilityRoot = true, "/capabilities"
-			r.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{RelativeRoot: "skills/review"}}
-		}, false, true},
-		"function tools": {func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "lookup"}} }, false, true},
-		"tool search":    {func(r *proto.PromptRequestPayload) { r.ToolSearch = true }, false, true},
-		"stdio MCP": {func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/tools"}}}
-		}, false, true},
-		// An installation with only HTTP MCP needs no Skill support.
-		"installed HTTP MCP": {func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.Capabilities, r.LocalEnvironment.CapabilityRoot = true, "/capabilities"
-			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "docs", Type: "http", URL: "https://mcp.test/docs"}}}
-		}, true, true},
-	} {
-		for kind, admitted := range map[string]bool{"viewed": c.viewed, "supporting": c.supporting} {
-			req := request(kind, "/workspace", "https://model.test", "sk-test")
-			c.use(&req)
-			if _, err := admit(f.cfg, roots, req, Environment{}, network); admitted != (err == nil) || (err != nil && !errors.Is(err, ErrUnsupported)) {
-				t.Errorf("%s on %s: admit = %v, want admitted %v or ErrUnsupported", name, kind, err, admitted)
-			}
-		}
-	}
-}
-
 // The binding at index i runs under alias i, which the process broker maps to
 // the frozen command; only HTTP bindings reach the gateway.
 func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
@@ -178,7 +139,7 @@ func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := request("supporting", "/workspace", "https://model.test", "sk-test")
+	req := request("viewed", "/workspace", "https://model.test", "sk-test")
 	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{
 		{Server: agentplugin.MCPServer{Name: "docs", Type: "http", URL: "https://mcp.test/docs"}},
 		{InstallationRoot: "/capabilities", PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "bin/tools", Args: []string{"--stdio"}, CWD: "run"}},
@@ -198,20 +159,14 @@ func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
 	}
 }
 
-func TestRegistryDescribesTheViewPath(t *testing.T) {
+func TestRegistryRunsKindsWithViews(t *testing.T) {
 	f := newViewFixture(t)
 	var kinds []string
 	for _, info := range (&Host{cfg: f.cfg}).Registry(nil).SupportedAgentKinds() {
 		kinds = append(kinds, info.Kind)
-		c, declared := info.Capabilities, info.Kind == "supporting"
-		if !c.LocalEnvironment.IsSupported() || !c.MCPHTTPTools.IsSupported() || c.EnvironmentNone.IsSupported() != declared ||
-			c.FunctionTools.IsSupported() != declared || c.FunctionResultImages.IsSupported() != declared || c.ToolSearch.IsSupported() != declared ||
-			c.WorkspaceOutputExport.IsSupported() || c.WorkspaceReadPreparation.IsSupported() {
-			t.Errorf("%s: capabilities %+v do not describe the view path", info.Kind, c)
-		}
 	}
 	slices.Sort(kinds)
-	if !slices.Equal(kinds, []string{"masked", "shimmed", "supporting", "viewed"}) {
+	if !slices.Equal(kinds, []string{"masked", "shimmed", "viewed"}) {
 		t.Errorf("kinds %v, want those that declare a view", kinds)
 	}
 }
