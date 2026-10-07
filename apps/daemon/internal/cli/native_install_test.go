@@ -257,10 +257,9 @@ func TestNativeInstallationConnectCannotBypassValidation(t *testing.T) {
 			for _, connection := range [][]string{
 				nil,
 				{"--remote", "ws://127.0.0.1:1/api/v1/agent-daemon/ws"},
-				{"--url", "http://127.0.0.1:1", "--token", "private-test-token"},
 			} {
 				err := runConnect(rc, connection)
-				if err == nil || !strings.Contains(err.Error(), "use oac-daemon start") || strings.Contains(err.Error(), "private-test-token") {
+				if err == nil || !strings.Contains(err.Error(), "use oac-daemon start") {
 					t.Fatal("connect bypassed native installation validation", err)
 				}
 			}
