@@ -20,12 +20,11 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	t.Setenv("OAC_RUNTIME_HOME", private)
 	root := t.TempDir()
 	environment, session := uuid.NewString(), uuid.NewString()
-	b, err := New(environment, session, root)
+	b, err := NewWithCapabilityDirectory(environment, session, root, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	b.networkAccess = "disabled"
-	b.capabilityRoot = t.TempDir()
 	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: "agents-api-" + session}
 }
 

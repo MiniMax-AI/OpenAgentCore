@@ -187,7 +187,7 @@ func adoptEnvelopeTrace(ctx context.Context, env proto.Envelope) context.Context
 			return obslog.WithTrace(ctx, carrier)
 		}
 	}
-	ctx, _ = obslog.StartBackgroundTrace(ctx, "daemon.envelope")
+	ctx, _ = obslog.StartBackgroundTrace(ctx)
 	return ctx
 }
 

@@ -18,7 +18,6 @@ type Provider struct {
 var _ sandbox.SandboxProvider = (*Provider)(nil)
 var _ sandbox.CheckpointProvider = (*Provider)(nil)
 
-func New(c Config) (*Provider, error) { return NewWithCaller(c, &ProcessCaller{}) }
 func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	if c.Validate() != nil || caller == nil {
 		return nil, sandbox.ErrInvalid

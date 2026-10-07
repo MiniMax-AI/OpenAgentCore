@@ -33,7 +33,7 @@ func (s *capabilitiesTestSender) Send(ctx context.Context, env proto.Envelope) e
 func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
 	t.Helper()
 	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.New(environment, session, t.TempDir())
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
