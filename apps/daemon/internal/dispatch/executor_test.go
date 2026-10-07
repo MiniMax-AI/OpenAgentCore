@@ -69,17 +69,27 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 	}
 }
 
+// noEnvironmentPreparation prepares config for session without an execution environment.
+func noEnvironmentPreparation(session string, config proto.PromptRequestPayload) proto.ExecutionPreparePayload {
+	config.AgentStateKey, config.DisableExecutionEnvironment = "agents-api-"+session, true
+	return proto.ExecutionPreparePayload{SessionID: session, Configuration: config}
+}
 func executorRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-session", DisableExecutionEnvironment: true}}
+	return noEnvironmentPreparation("session", proto.PromptRequestPayload{AgentKind: "reusable"})
+}
+
+// registerExecutorKind registers info for prepared execution only.
+func registerExecutorKind(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.ExecutorFactory) {
+	reg.RegisterKind(info, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		return nil, errors.New("prepared execution must not use the direct Session factory")
+	})
+	reg.RegisterExecutor(info.Kind, factory)
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("ordinary factory is forbidden")
-	})
-	reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})

@@ -39,7 +39,7 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+		if req.RunID != "" || len(req.Input) != 0 {
 			return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
 		}
 		var err error

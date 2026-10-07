@@ -114,7 +114,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 }
 
 func (r *Router) runtimePreparationResourcesBusyLocked() bool {
-	if r.workspaceWrite != nil || r.workspaceExport != nil || len(r.workspaceReads) != 0 || len(r.sessions) != 0 || len(r.idle) != 0 || len(r.executors) != 0 {
+	if r.workspaceWrite != nil || r.workspaceExport != nil || len(r.workspaceReads) != 0 || len(r.sessions) != 0 || len(r.executors) != 0 {
 		return true
 	}
 	for _, p := range r.preparations {

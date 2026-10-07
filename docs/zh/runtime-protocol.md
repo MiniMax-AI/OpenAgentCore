@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: fd5bcb71c9234310a449fad97a30a899027133ca8df862e8a3306f6bd3dacae8
+source_hash: 1d425cdf68ffd76fbf4ebb856fcf7af8a96eea93e28b1686292eeb0184376664
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -55,7 +55,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 
 `permissions` 控制 Runtime 内部权限决定。Core 对 `usage` 和 `resume` 没有准入规则。
 
-prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core 为各 Run 设置的显式启用项：
+`execution_prepare` 的配置携带 Core 为各 Run 设置的显式启用项：
 
 | 字段 | Core 设置方式 |
 | --- | --- |
@@ -100,7 +100,7 @@ User-choice decision 携带 `question_answers`：每个已提供回答都有明�
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [初始化与能力传输](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[交互](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
@@ -129,8 +129,6 @@ preparation 和 start 在 receive loop 与 router lock 之外运行。admission 
 
 Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并发限制独立。关闭时 Runtime 关闭活动和空闲 Executor，保留关闭失败的目标，并允许稍后串行重试。普通断连会关闭失败的 transport 并保留原 router，直到 shutdown 成功；等待超时或清理失败不授权重连，进程 shutdown 继续等待，不丢弃自己拥有的原生资源。工作区操作在跨 Turn 和 Executor 关闭后仍保留绑定与结算规则。
 
-`prompt_request` 不经过 admission handle，直接启动 Run。它不是 prepared start 失败后的回退。
-
 ## 活动输入回执 {#active-input-receipts}
 
 Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`，每个 Run 一次交付一个输入，并等待回执后再发送下一个：
@@ -141,7 +139,7 @@ Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`�
 | `written` 确认 | Core 从交付开始最多等待 30 秒取得 `written`；否则输入结果未知 |
 | 回执发送 | 每次发送回执都有独立的 5 秒预算，并感知 shutdown |
 | 原生接受 | `accepted` 在 Turn 生命周期内到达，不自动重新交付 |
-| Done | `done` 前，Runtime 最多等待 15 秒（写入与发送预算），等待正在处理的输入 |
+| Done | Runtime 在原生 Turn 结算完成、且正在处理的输入的回执发送结束后才发送 `done`；该输入受原生写入与回执发送预算限制 |
 
 `written` 和发送失败都不会推进 Core 的 input cursor。取消发出后，即使输入先变为未知，终结结果也由取消回执负责；15 秒内没有取消确认时，Core 记录 `cancel_unconfirmed`。未发出 `done` 时，取消回执携带已停止 Turn 的已确认 continuity snapshot。
 
@@ -201,7 +199,7 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 ## MCP 连接权限 {#mcp-connection-authority}
 
-prompt request 中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
+`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
 
 ## 契约验证 {#contract-verification}
 

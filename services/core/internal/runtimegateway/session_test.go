@@ -342,10 +342,11 @@ func TestSession_SendWritesToWire(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{
-		AgentKind: "fake_alpha",
-		RunID:     "run-1",
-		Input:     proto.TextInput("hello"),
+	env, _ := proto.NewEnvelope(proto.TypeExecutionStart, "prepare-1", proto.ExecutionStartPayload{
+		Handle:     "handle-1",
+		ExecutorID: "executor-1",
+		RunID:      "run-1",
+		Input:      proto.TextInput("hello"),
 	})
 	if err := sess.Send(context.Background(), env); err != nil {
 		t.Fatalf("Send: %v", err)

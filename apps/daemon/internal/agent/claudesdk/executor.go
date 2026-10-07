@@ -36,7 +36,7 @@ func NewExecutorFactory(config Config) agent.ExecutorFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+		if req.RunID != "" || len(req.Input) != 0 {
 			return nil, errors.New("claudesdk: Executor preparation cannot submit input")
 		}
 		start, env, err := prepareConfiguration(config, req)

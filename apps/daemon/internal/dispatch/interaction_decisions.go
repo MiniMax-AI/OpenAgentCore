@@ -101,7 +101,7 @@ func (r *Router) dropPermission(s *sessionState, permissionID string) {
 // those entries linger until cleanupSession — acceptable because they
 // can't double-fire (the session's own pendingAskTable.Take already
 // guards that); cleanupSession removes the routing entry when the run
-// stream closes, even if the underlying CLI remains in the idle pool.
+// stream closes.
 func (r *Router) handlePromptForUserChoiceDecision(ctx context.Context, env proto.Envelope) error {
 	if env.ID == "" {
 		return errors.New("dispatch: prompt_for_user_choice_decision missing ask id (Envelope.ID empty)")

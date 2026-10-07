@@ -15,11 +15,13 @@ type suspendSender func(context.Context, proto.Envelope) error
 
 func (s suspendSender) Send(ctx context.Context, env proto.Envelope) error { return s(ctx, env) }
 
-type suspendedSession struct{ cancelled atomic.Int32 }
+type suspendedExecutor struct{ closed atomic.Int32 }
 
-func (s *suspendedSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
+func (e *suspendedExecutor) StartTurn(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
+	return nil, errors.New("suspended executor must not start a Turn")
+}
 
-func (s *suspendedSession) Cancel(context.Context) error { s.cancelled.Add(1); return nil }
+func (e *suspendedExecutor) Close(context.Context) error { e.closed.Add(1); return nil }
 
 func suspensionRouter(t *testing.T, sender Sender) *Router {
 	t.Helper()
@@ -37,7 +39,7 @@ func suspensionRouter(t *testing.T, sender Sender) *Router {
 
 func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 	cases := map[string]func(*Router){
-		"active":     func(r *Router) { r.sessions["run"] = &sessionState{ctxCancel: func() {}} },
+		"active":     func(r *Router) { r.sessions["run"] = &sessionState{} },
 		"preparing":  func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
 		"receipt":    func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
 		"read":       func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
@@ -90,7 +92,7 @@ func TestQuiesceDrainsPendingReceiptAndFencesConcurrentAdmission(t *testing.T) {
 	}
 	admitted := make(chan error, 1)
 	go func() {
-		admitted <- r.Handle(context.Background(), proto.Envelope{Type: proto.TypePromptRequest, ID: "late"})
+		admitted <- r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late"})
 	}()
 	select {
 	case err := <-quiet:
@@ -106,23 +108,23 @@ func TestQuiesceDrainsPendingReceiptAndFencesConcurrentAdmission(t *testing.T) {
 	}
 }
 
-func TestQuiescePreservesIdleOwnerAgainstExpiredTimerAndRequiresExactResume(t *testing.T) {
+func TestQuiescePreservesIdleExecutorAgainstExpiredTimerAndRequiresExactResume(t *testing.T) {
 	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
 	r := suspensionRouter(t, sender)
-	session := &suspendedSession{}
-	state := &sessionState{runID: "run", environmentID: "env", stateKey: "state", session: session, ctxCancel: func() {}, retain: true}
+	native := &suspendedExecutor{}
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
 	r.mu.Lock()
-	r.idle["state"] = map[*sessionState]struct{}{state: {}}
-	r.scheduleIdleLocked(state)
-	oldLease := state.idleLease
+	r.executors[owner.sessionID] = owner
+	r.scheduleExecutorIdleLocked(owner)
+	oldLease := owner.idleLease
 	r.mu.Unlock()
 	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
 	if err := r.Quiesce(context.Background(), request); err != nil {
 		t.Fatal(err)
 	}
-	r.expireIdle(state, oldLease)
-	if session.cancelled.Load() != 0 {
-		t.Fatal("pre-snapshot timer killed retained owner")
+	r.expireIdleExecutor(owner, oldLease)
+	if native.closed.Load() != 0 {
+		t.Fatal("pre-snapshot timer closed retained owner")
 	}
 	wrong := request
 	wrong.SuspendID = "obsolete"
@@ -133,10 +135,10 @@ func TestQuiescePreservesIdleOwnerAgainstExpiredTimerAndRequiresExactResume(t *t
 		t.Fatal(err)
 	}
 	r.mu.Lock()
-	newLease := state.idleLease
+	newLease := owner.idleLease
 	r.mu.Unlock()
-	r.expireIdle(state, newLease)
-	if session.cancelled.Load() != 1 {
+	r.expireIdleExecutor(owner, newLease)
+	if native.closed.Load() != 1 {
 		t.Fatal("normal idle expiration was not restored")
 	}
 }
@@ -164,7 +166,7 @@ func TestQuiesceDrainDeadlineCannotReopenAdmission(t *testing.T) {
 	if err := r.Quiesce(ctx, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("quiesce=%v", err)
 	}
-	if err := r.Handle(context.Background(), proto.Envelope{Type: proto.TypePromptRequest, ID: "late"}); !errors.Is(err, ErrRouterQuiesced) {
+	if err := r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late"}); !errors.Is(err, ErrRouterQuiesced) {
 		t.Fatalf("deadline reopened admission: %v", err)
 	}
 	r.shutdownWG.Done()

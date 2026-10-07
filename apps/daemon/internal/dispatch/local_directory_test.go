@@ -43,7 +43,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
-	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, WorkspaceReadOnly: true}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
-	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, WorkspaceReadOnly: true}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
 		t.Fatal(err)
 	}

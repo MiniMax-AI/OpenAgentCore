@@ -113,7 +113,7 @@ func localPreparationHarness(t *testing.T) *harness {
 }
 
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, ReleaseOnCompletion: true, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory agent.PreparationFactory) *dispatch.Router {
@@ -369,9 +369,8 @@ func TestPreparationFailedReadyDeliveryAbandonsAdmission(t *testing.T) {
 
 func TestPreparationRejectsInputAndProductConfiguration(t *testing.T) {
 	for name, change := range map[string]func(*proto.PromptRequestPayload){
-		"run":          func(p *proto.PromptRequestPayload) { p.RunID = "run" },
-		"input":        func(p *proto.PromptRequestPayload) { p.Input = proto.TextInput("input") },
-		"conversation": func(p *proto.PromptRequestPayload) { p.ConversationID = "product" },
+		"run":   func(p *proto.PromptRequestPayload) { p.RunID = "run" },
+		"input": func(p *proto.PromptRequestPayload) { p.Input = proto.TextInput("input") },
 		"attachment": func(p *proto.PromptRequestPayload) {
 			p.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 		},

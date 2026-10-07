@@ -128,9 +128,9 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 	}
 }
 
-func (p *preparedStart) start(ctx context.Context, request proto.PromptRequestPayload) error {
+func (p *preparedStart) start(ctx context.Context, runID string, input proto.MessageInput) error {
 	p.startSentAt = time.Now()
-	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: request.RunID, Input: request.Input})
+	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: runID, Input: input})
 }
 
 func (p *preparedStart) started(env proto.Envelope, runID string) (bool, error) {

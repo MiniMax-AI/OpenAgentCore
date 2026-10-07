@@ -107,7 +107,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 }
 
 func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T) {
-	for _, name := range []string{"run", "prompt", "conversation", "attachments", "subagents", "workspace-missing", "none", "functions", "mcp", "controls", "old-runtime"} {
+	for _, name := range []string{"run", "prompt", "attachments", "subagents", "workspace-missing", "none", "functions", "mcp", "controls", "old-runtime"} {
 		t.Run(name, func(t *testing.T) {
 			config := preparationFixture(t, name)
 			req := preparationRequest()
@@ -116,8 +116,6 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 				req.RunID = "unexpected"
 			case "prompt":
 				req.Input = proto.TextInput("unexpected")
-			case "conversation":
-				req.ConversationID = "product"
 			case "attachments":
 				req.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 			case "subagents":

@@ -37,7 +37,7 @@ type harness struct {
 }
 
 func (h *harness) prepare(_ context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+	if req.RunID != "" || len(req.Input) != 0 {
 		return nil, errors.New("preparation submitted fixture input")
 	}
 	if !req.DisableExecutionEnvironment || !req.DisableSubagents || len(req.FunctionTools) > 0 || req.MCPHTTPServers != nil {

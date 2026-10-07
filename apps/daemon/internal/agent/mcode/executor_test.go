@@ -16,7 +16,6 @@ import (
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
 	t.Helper()
 	config, req, record := workspaceFixture(t)
-	req.ReleaseOnCompletion = false
 	script, err := os.ReadFile(config.Binary)
 	if err != nil {
 		t.Fatal(err)
@@ -29,8 +28,7 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 		factory = NewExecutorFactory(&config)
 	} else {
 		req = testRequest(t)
-		req.ReleaseOnCompletion = false
-		req.RunID, req.Input, req.ConversationID = "", nil, ""
+		req.RunID, req.Input = "", nil
 		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)
 		factory = NewExecutorFactory(nil)
 	}
@@ -263,7 +261,6 @@ func TestExecutorCloseRetainsOwnerAfterDeadline(t *testing.T) {
 
 func TestExecutorFactoryPreparationFailureHasNoTypedNilOwner(t *testing.T) {
 	config, req, _ := workspaceFixture(t)
-	req.ReleaseOnCompletion = false
 	if err := os.WriteFile(config.Binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}

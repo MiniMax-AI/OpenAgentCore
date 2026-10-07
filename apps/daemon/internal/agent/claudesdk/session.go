@@ -37,7 +37,7 @@ func NewFactory(config Config) agent.Factory {
 	prepareExecutor := NewExecutorFactory(config)
 	return func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		run, input := req.RunID, req.Input
-		req.RunID, req.ConversationID, req.Input = "", "", nil
+		req.RunID, req.Input = "", nil
 		resource, err := prepareExecutor(ctx, req)
 		if err != nil {
 			return nil, err

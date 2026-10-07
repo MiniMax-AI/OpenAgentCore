@@ -47,7 +47,7 @@ func (h *dispatchHarness) executionFrame(env proto.Envelope) (proto.Envelope, bo
 		}
 		h.write(env.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: admission.handle, ExecutorID: admission.executor, Revision: 2, State: "started", RunID: start.RunID})
 		request := admission.prepare.Configuration
-		request.RunID, request.ConversationID, request.Input = start.RunID, admission.prepare.SessionID, start.Input
+		request.RunID, request.Input = start.RunID, start.Input
 		projected, err := proto.NewEnvelope(testExecutionRequest, start.RunID, request)
 		if err != nil {
 			h.t.Fatal(err)
