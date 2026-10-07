@@ -300,9 +300,6 @@ func (s *session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, er
 	}
 }
 
-var _ agent.Executor = (*executor)(nil)
-var _ agent.Turn = (*session)(nil)
-
 // A timed-out operation retains its original Turn identity. Its callback cannot
 // retire a healthy successor after that operation has otherwise settled.
 func (s *session) invalidate() {

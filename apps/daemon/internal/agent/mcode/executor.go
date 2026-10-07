@@ -24,9 +24,6 @@ type executor struct {
 	starting, closed, invalid bool
 }
 
-var _ agent.Executor = (*executor)(nil)
-var _ agent.Turn = (*Session)(nil)
-
 // NewExecutorFactory fixes the deployment workspace once; nil selects none.
 func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 	var frozen *WorkspaceConfig

@@ -25,19 +25,9 @@ type TurnSteerParams struct {
 	Input          []UserInput `json:"input"`
 }
 
-var _ agent.Steerer = (*Session)(nil)
-
-// Steer returns success only after Codex accepts input for this native turn.
-func (s *Session) Steer(ctx context.Context, input proto.PromptSteerPayload) error {
-	return s.steer(ctx, input, nil)
-}
-
-// SteerWithReceipt waits under the Run context after reporting the complete write.
+// SteerWithReceipt returns success only after Codex accepts input for this
+// native turn. It waits under the Run context after reporting the complete write.
 func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
-	return s.steer(ctx, input, written)
-}
-
-func (s *Session) steer(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
 	if !s.beginOperation() {
 		return agent.ErrSteeringInactive
 	}
@@ -67,19 +57,13 @@ func (s *Session) steer(ctx context.Context, input proto.PromptSteerPayload, wri
 		return agent.ErrSteeringRejected
 	}
 	params := TurnSteerParams{ThreadID: threadID, ExpectedTurnID: turnID, Input: content}
-	timeout := s.rpc.cfg.RequestTimeout
-	if written != nil {
-		timeout = 0
-	}
 	raw, err := s.rpc.requestWithTimeout(ctx, "turn/steer", params, func(frame any) error {
 		if err := s.rpc.writeFrameContext(ctx, frame); err != nil {
 			return err
 		}
-		if written != nil {
-			written()
-		}
+		written()
 		return nil
-	}, timeout, nil)
+	}, 0, nil)
 	if err != nil {
 		var rejected *JsonRpcError
 		if errors.As(err, &rejected) {

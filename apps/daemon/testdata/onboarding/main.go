@@ -127,9 +127,6 @@ func (s *session) Cancel(context.Context) error {
 func (s *session) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{Content: "cancelled", Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}}
 }
-func (s *session) Steer(ctx context.Context, p proto.PromptSteerPayload) error {
-	return s.SteerWithReceipt(ctx, p, func() {})
-}
 func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload, written func()) error {
 	text, err := p.Input.TextOnly()
 	if err != nil {
@@ -148,6 +145,10 @@ func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload
 	s.release()
 	close(s.settled)
 	return nil
+}
+
+func (s *session) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return fmt.Errorf("%w: the fixture has no functions", agent.ErrUnsupportedOperation)
 }
 
 func (s *session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {

@@ -11,13 +11,23 @@ import (
 // preparedFixture is a disposable fault-injection resource; Start transfers it
 // to one Session. A cancellablePreparation follows that Session across Start.
 type preparedFixture interface {
-	Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error)
+	Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (fixtureSession, error)
 	Close() error
 }
 
 type cancellablePreparation interface {
 	preparedFixture
-	agent.Session
+	Cancel(context.Context) error
+	CancellationOutcome() proto.DonePayload
+}
+
+// fixtureSession is the agent.Turn a fixture starts, without the settlement
+// that preparationTurn supplies.
+type fixtureSession interface {
+	Cancel(context.Context) error
+	CancellationOutcome() proto.DonePayload
+	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
+	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
 }
 
 type preparationFactory func(context.Context, proto.PromptRequestPayload) (preparedFixture, error)
@@ -77,11 +87,11 @@ func (e *preparationExecutor) StartTurn(ctx context.Context, id string, input pr
 		// This fixture's old Start may have produced output before rejecting; retain its Turn.
 		return &preparationTurn{owner: e, settled: terminal}, err
 	}
-	return &preparationTurn{Session: session, owner: e, settled: terminal}, err
+	return &preparationTurn{fixtureSession: session, owner: e, settled: terminal}, err
 }
 
 type preparationTurn struct {
-	agent.Session
+	fixtureSession
 	owner   *preparationExecutor
 	settled <-chan struct{}
 }
@@ -100,25 +110,4 @@ func (t *preparationTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettle
 	case <-ctx.Done():
 		return agent.TurnSettlement{}, ctx.Err()
 	}
-}
-func (t *preparationTurn) SubmitFunctionResult(ctx context.Context, p proto.FunctionResultPayload) error {
-	if target, ok := t.Session.(agent.FunctionResultSubmitter); ok {
-		return target.SubmitFunctionResult(ctx, p)
-	}
-	return agent.ErrUnknownFunctionCall
-}
-func (t *preparationTurn) Steer(ctx context.Context, p proto.PromptSteerPayload) error {
-	if target, ok := t.Session.(agent.Steerer); ok {
-		return target.Steer(ctx, p)
-	}
-	return agent.ErrSteeringInactive
-}
-func (t *preparationTurn) SteerWithReceipt(ctx context.Context, p proto.PromptSteerPayload, write func()) error {
-	if target, ok := t.Session.(agent.DurableSteerer); ok {
-		return target.SteerWithReceipt(ctx, p, write)
-	}
-	if target, ok := t.Session.(agent.Steerer); ok {
-		return target.Steer(ctx, p)
-	}
-	return agent.ErrSteeringInactive
 }

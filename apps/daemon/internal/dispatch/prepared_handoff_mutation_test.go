@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -29,7 +28,7 @@ func (s *preparedMutationSession) SubmitFunctionResult(context.Context, proto.Fu
 	return nil
 }
 
-func (s *preparedMutationSession) Steer(context.Context, proto.PromptSteerPayload) error {
+func (s *preparedMutationSession) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	s.steers.Add(1)
 	return nil
 }
@@ -79,7 +78,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 			}
 			session := &preparedMutationSession{fakeSession: &fakeSession{closeOutOnCancel: true}, cancelEntered: make(chan struct{})}
 			p := &controlledPreparation{closed: make(chan struct{})}
-			p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 				session.out = out
 				return session, nil
 			}
@@ -193,7 +192,7 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 			defer close(sender.release)
 			session := &preparedMutationSession{fakeSession: &fakeSession{closeOutOnCancel: true}, cancelEntered: make(chan struct{})}
 			p := &controlledPreparation{closed: make(chan struct{})}
-			p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 				session.out = out
 				return session, nil
 			}
@@ -236,7 +235,7 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 	emitted, allowReturn := make(chan struct{}), make(chan struct{})
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{Content: "complete"})
 		close(emitted)
@@ -270,6 +269,3 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 		t.Fatalf("started/Done order invalid: started=%d done=%d cancels=%d", started, done, session.cancels())
 	}
 }
-
-var _ agent.FunctionResultSubmitter = (*preparedMutationSession)(nil)
-var _ agent.Steerer = (*preparedMutationSession)(nil)

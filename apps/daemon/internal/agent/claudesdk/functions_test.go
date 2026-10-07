@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -31,7 +30,6 @@ func TestFunctionTurnNativeReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer running.Cancel(context.Background())
-			submitter := running.(agent.FunctionResultSubmitter)
 			submissions := make(chan error, 2)
 			calls := 0
 			failed := false
@@ -48,17 +46,17 @@ func TestFunctionTurnNativeReceipts(t *testing.T) {
 					}
 					calls++
 					invalid := proto.FunctionResultPayload{DeliveryID: "delivery-" + call.CallID, CallID: call.CallID, Success: true}
-					if err := submitter.SubmitFunctionResult(ctx, invalid); err == nil {
+					if err := running.SubmitFunctionResult(ctx, invalid); err == nil {
 						t.Fatal("missing content consumed call")
 					}
 					image := "https://example.invalid/image"
 					invalid.Content = []proto.InputContent{{Type: "input_image", ImageURL: &image}}
-					if err := submitter.SubmitFunctionResult(ctx, invalid); err == nil {
+					if err := running.SubmitFunctionResult(ctx, invalid); err == nil {
 						t.Fatal("image should fail before delivery")
 					}
 					first, second := "first-"+call.CallID, "second-"+call.CallID
 					value := proto.FunctionResultPayload{DeliveryID: "delivery-" + call.CallID, CallID: call.CallID, Success: call.CallID == "b", Content: []proto.InputContent{{Type: "input_text", Text: &first}, {Type: "input_text", Text: &second}}}
-					go func() { submissions <- submitter.SubmitFunctionResult(ctx, value) }()
+					go func() { submissions <- running.SubmitFunctionResult(ctx, value) }()
 				case proto.TypeToolCall:
 					var tool proto.ToolCallPayload
 					if err := event.DecodePayload(&tool); err != nil {

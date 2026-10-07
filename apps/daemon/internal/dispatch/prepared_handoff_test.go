@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -19,7 +18,7 @@ func TestPreparedHandoffDrainsBurstBeforeStartReturns(t *testing.T) {
 	sent, allowReturn := make(chan struct{}), make(chan struct{})
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		for sequence := uint64(1); sequence <= preparedBurstFrames; sequence++ {
 			select {
@@ -113,7 +112,7 @@ func (s *blockingStartingSender) Send(ctx context.Context, env proto.Envelope) e
 func TestPreparedHandoffAbortBeforeStartAdmissionSkipsNativeStart(t *testing.T) {
 	sender := &blockingStartingSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (fixtureSession, error) {
 		t.Fatal("abort that won admission called native Start")
 		return nil, errors.New("unexpected Start")
 	}
@@ -159,7 +158,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	sender := &blockingStartedSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 	session := &preparedMutationSession{fakeSession: &fakeSession{closeOutOnCancel: true}, cancelEntered: make(chan struct{})}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		return session, nil
 	}
@@ -210,7 +209,7 @@ func TestPreparedHandoffUnsupportedFunctionReleasesOperationBarrier(t *testing.T
 	sender := &recSender{}
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		return session, nil
 	}
@@ -235,7 +234,7 @@ func TestPreparedHandoffEarlyDoneStillAllowsExplicitAbort(t *testing.T) {
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(cancelled) }) }
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 		<-cancelled
 		return nil, context.Canceled
@@ -261,7 +260,7 @@ func TestPreparedHandoffExpiresDuringStartedPublication(t *testing.T) {
 	sender := &blockingStartedSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		return session, nil
 	}
@@ -293,7 +292,7 @@ func TestPreparedHandoffEarlyDoneDetachesPublishedPreparation(t *testing.T) {
 	defer unblock()
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 		<-allowReturn

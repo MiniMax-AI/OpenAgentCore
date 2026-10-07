@@ -21,9 +21,9 @@ type controlledPreparation struct {
 	closed    chan struct{}
 	once      sync.Once
 	mu        sync.Mutex
-	session   agent.Session
+	session   fixtureSession
 	starts    atomic.Int32
-	start     func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error)
+	start     func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (fixtureSession, error)
 	closeHook func()
 }
 
@@ -38,7 +38,7 @@ func (p *controlledPreparation) Close() error {
 	})
 	return nil
 }
-func (p *controlledPreparation) Start(ctx context.Context, id string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+func (p *controlledPreparation) Start(ctx context.Context, id string, prompt proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 	p.starts.Add(1)
 	session, err := p.start(ctx, id, prompt, out)
 	if session != nil {
@@ -211,7 +211,7 @@ func TestPreparationSingleTransferAndReleaseDoesNotCancelRun(t *testing.T) {
 	sender := &recSender{}
 	gotSession := make(chan *fakeSession, 1)
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, id string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, id string, prompt proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		if id != "real-run" || *prompt[0].Content[0].Text != "actual input" {
 			t.Error("start identity or prompt changed")
 		}
@@ -265,7 +265,7 @@ func TestPreparationCancelDuringStartClosesLateSession(t *testing.T) {
 	entered, cancelEntered, allowReturn := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	lateSession := make(chan *fakeSession, 1)
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		close(entered)
 		<-allowReturn
 		s := &fakeSession{out: out, closeOutOnCancel: true}

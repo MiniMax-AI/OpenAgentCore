@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 749d48c7bcdf5dfbf2f01d21b4524ff8c7fd45943252d0ce5f2ca5ba9efae8eb
+source_hash: f7c2ab839807374439ed19d9ba5a433e8756261fd7d74705aa3dcc2a4c4f8423
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -60,20 +60,19 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 
 ## 必需的适配器接口 {#required-adapter-interfaces}
 
-[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ExecutorFactory`、`Executor`、`Turn`（包括 `DurableSteerer`）和 `TurnSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。Turn 扩展接口应保持小而独立，但每个公共适配器都必须明确实现每一个接口。所有接口都使用中立协议类型。
+[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ExecutorFactory`、`Executor`、`Turn` 和 `TurnSettlement`。`Turn` 是一个接口：`Cancel`、`CancellationOutcome`、`SteerWithReceipt`、`SubmitFunctionResult` 和 `AwaitSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。适配器不支持的操作返回 Unsupported，由能力声明而不是方法决定 Runtime 是否调用它。所有接口都使用中立协议类型。
 
-例如，Codex 适配器保留其 app-server 和 thread，Claude 适配器保留一个流式 Query，MiniMax 适配器保留其 ACP 连接和原生 session。它们都公开相同的 Executor 和 Turn 契约。原生回调和资源保留在适配器内部；Runtime 负责准入、空闲过期和替换。取消通过 `agent.Session` 精确定位到目标 Turn，适配器则向 Runtime 提供原生完成证据。
+例如，Codex 适配器保留其 app-server 和 thread，Claude 适配器保留一个流式 Query，MiniMax 适配器保留其 ACP 连接和原生 session。它们都公开相同的 Executor 和 Turn 契约。原生回调和资源保留在适配器内部；Runtime 负责准入、空闲过期和替换。取消通过 `Turn.Cancel` 精确定位到目标 Turn，适配器则向 Runtime 提供原生完成证据。
 
 | 接口或契约 | 必需处理 | 义务 |
 | --- | --- | --- |
 | `ExecutorFactory`、`Executor.StartTurn`、`Executor.Close` | 真实实现 | 在没有模型输入的情况下准备；保留失败或不确定资源的所有权；确认清理 |
-| `Session`、`Turn`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
-| `DurableSteerer` | 每个 Turn 上真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
-| `Steerer` | 明确实现或 Unsupported | 额外的非持久化活动 Turn 输入 |
-| `FunctionResultSubmitter` | 明确实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
+| `Turn.Cancel`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
+| `Turn.SteerWithReceipt` | 真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
+| `Turn.SubmitFunctionResult` | 真实实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
 | 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
 
-每个适配器的 `contracts.go` 都包含针对每个小型接口的单项编译时断言。不要嵌入会让未来接口看起来已经实现的默认实现。添加契约时，还必须在通用完整性检查中进行分类，并在每个公共适配器中添加明确断言；该检查遵循已编写的 Harness 目录。
+每个适配器的 `contracts.go` 在编译时断言其实现了 `agent.Executor` 和 `agent.Turn`。不要嵌入会让新方法看起来已经实现的默认实现。通用完整性检查遵循已编写的 Harness 目录，并拒绝 `agent` 中的任何其他导出接口。
 
 对于设计层面的拒绝，请直接实现该方法：
 
@@ -105,7 +104,7 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 
 **绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。连接丢失会让其所有者和句柄退役；旧计时器、输出和取消操作不能影响替代对象。
 
-**每 Turn 状态。** 每个 Turn 都会获得全新的包装器、输出通道和回执状态。引导和函数接口均属于该 Turn。原生回调必须在异步工作开始前捕获来源 Turn，因此迟到事件绝不会被归到当前活动的 Turn 上。原生进程、query 或传输连接、固定能力配置和原生 session 身份均属于 Executor。不要重置已完成的 `sync.Once` 值，也不要复用旧 Turn 对象。
+**每 Turn 状态。** 每个 Turn 都会获得全新的包装器、输出通道和回执状态。引导和函数结果均属于该 Turn。原生回调必须在异步工作开始前捕获来源 Turn，因此迟到事件绝不会被归到当前活动的 Turn 上。原生进程、query 或传输连接、固定能力配置和原生 session 身份均属于 Executor。不要重置已完成的 `sync.Once` 值，也不要复用旧 Turn 对象。
 
 **开始。** `StartTurn` 返回 nil Turn，保证没有提交任何原生输入，也没有保留输出通道；随后由 Runtime 关闭该通道。一旦输入可能已经提交，即使同时返回错误，也必须返回非 nil Turn：该 Turn 拥有恰好一次的输出关闭权，并在结算前持续接受跟踪。未知输入绝不能重放。明确的 `executor_unavailable` Start 拒绝允许进行一次通用恢复尝试，但只能在此前 Executor 已关闭且未提交输入之后进行；Runtime 会重新检查同一物理对端和当前授权。
 
@@ -115,8 +114,8 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 - 错误表示结算尚未确认，既不释放所有权，也不释放容量。调用方截止时间只会停止等待，不会停止受跟踪的清理。必须串行重试同一个清理目标；清理失败会阻止替换并保留其资源槽位。
 - `Executor.Close` 独立于 Turn 结果确认资源退役：不可变的 Turn 错误不得阻止在其工作和输出已经停止后关闭原生传输层。
 - 结算必须包含所属的后台工作，并在失败后保留精确的原生清理目标。原生终止由适配器负责；仅有批量清理确认并不能证明已达到静默状态。
-- 每个 `Session` 都要声明 `CancellationOutcome`。`Turn` 继承该声明。快照保留已观察到的原生身份、Usage 和输出，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
-- `Session.Cancel` 请求取消；输出关闭表示拆卸开始。Turn 结算仍需要 `AwaitSettlement` 和所需的任何 `Executor.Close`；取消请求成功或其快照都不能替代这些等待。
+- 每个 Turn 都实现 `CancellationOutcome`。快照保留已观察到的原生身份、Usage 和输出，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
+- `Turn.Cancel` 请求取消；输出关闭表示拆卸开始。Turn 结算仍需要 `AwaitSettlement` 和所需的任何 `Executor.Close`；取消请求成功或其快照都不能替代这些等待。
 
 **Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的 64 帧通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入和函数准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算等待时间为十秒，回执发送预算为五秒；超时不能证明已达到静默状态。
 
@@ -162,7 +161,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 每个 `proto.AgentKindCapabilities` 字段都必须显式设为 `proto.CapabilitySupported` 或 `proto.CapabilityUnsupported`，即使 Harness 不可用也是如此。`proto.CapabilityUnspecified` 无效：零值和省略字段绝不表示 Unsupported。安装探测可以使用 `proto.CapabilityFromBool` 设置单个字段；但不得填充未提及字段或未来字段。可用性通过 `SupportedAgentKind.Available` 单独表示。注册会在更改 registry 之前验证完整声明；线协议会为每个字段携带显式布尔值，因此省略字段和 null 字段均无效。添加新字段时，每个生产声明都必须作出决定。Runtime 使用者应调用 `IsSupported()`，并在原生操作前拒绝不受支持的请求；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致；[Core–Runtime protocol](../../../docs/zh/runtime-protocol.md#capability-declarations) 负责声明的传输方式和冻结方式。
 
-每个可用 Harness 都无需声明即实现共享 Turn 生命周期（包括 `DurableSteerer` 输入和由 `contracttest.TextLifecycle` 检查的 Turn 结算契约）、类型化的 `execution_controls` 和工具观测。在某个平台上无法满足这些要求的 Harness 在该平台报告 `Available` 为 false。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`，由 Environment owner 就绪并提供读取，不调用 Executor 工厂。Runtime 注册不会授予 Core 资格；服务 profile 才会授予。
+每个可用 Harness 都无需声明即实现共享 Turn 生命周期（包括持久的 `SteerWithReceipt` 输入和由 `contracttest.TextLifecycle` 检查的 Turn 结算契约）、类型化的 `execution_controls` 和工具观测。在某个平台上无法满足这些要求的 Harness 在该平台报告 `Available` 为 false。`FunctionTools` 准入 `SubmitFunctionResult`。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`，由 Environment owner 就绪并提供读取，不调用 Executor 工厂。Runtime 注册不会授予 Core 资格；服务 profile 才会授予。
 
 可运行的仅测试示例 [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) 会以 `mcode` 类型注册一个仅支持文本的合成 Harness，因为 Core 只接纳[目录](harness-catalog.md)中的 Harness。它展示 Session 所有的 Executor、全新的 Turn、持久化引导、取消和历史绑定，并且绝不会发布。
 

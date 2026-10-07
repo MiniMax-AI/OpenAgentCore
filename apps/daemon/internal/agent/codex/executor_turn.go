@@ -139,8 +139,6 @@ func (s *Session) Cancel(ctx context.Context) error {
 	return err
 }
 
-var _ agent.Turn = (*Session)(nil)
-
 // Server callbacks retain their originating Turn, whose ID must match exactly.
 func (s *Session) onServerRequest(method string, handler ServerRequestHandler) {
 	s.rpc.OnServerRequest(method, func(raw json.RawMessage, id any) (any, error) {

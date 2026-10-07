@@ -6,19 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
-
-type durableSteeringSession struct {
-	*steeringSession
-	phased func(context.Context, proto.PromptSteerPayload, func()) error
-}
-
-func (s *durableSteeringSession) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
-	return s.phased(ctx, input, written)
-}
 
 func TestDurableSteeringWaitsBeyondTransportDeadline(t *testing.T) {
 	h := newHarness(t)
@@ -26,9 +16,9 @@ func TestDurableSteeringWaitsBeyondTransportDeadline(t *testing.T) {
 	var session *fakeSession
 	var calls atomic.Int32
 	release := make(chan struct{})
-	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true}
-		return &durableSteeringSession{steeringSession: &steeringSession{fakeSession: session}, phased: func(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
+		return &steeringSession{fakeSession: session, steer: func(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
 			calls.Add(1)
 			written()
 			select {
@@ -40,7 +30,7 @@ func TestDurableSteeringWaitsBeyondTransportDeadline(t *testing.T) {
 		}}, nil
 	})
 	startRun(t, h.router, h.sender, "codex", "durable")
-	input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("additional"), DurableReceipt: true}
+	input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("additional")}
 	env := scoped(t, "durable", proto.TypePromptSteer, "durable", input)
 	if err := handleSteeringAndWait(t, h, env); err != nil {
 		t.Fatal(err)
@@ -77,8 +67,8 @@ func TestDurableSteeringTransportTimeoutAndShutdown(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			exited := make(chan struct{})
-			registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-				return &durableSteeringSession{steeringSession: &steeringSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}}, phased: func(ctx context.Context, _ proto.PromptSteerPayload, written func()) error {
+			registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
+				return &steeringSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}, steer: func(ctx context.Context, _ proto.PromptSteerPayload, written func()) error {
 					defer close(exited)
 					if phase == "written" {
 						written()
@@ -89,7 +79,7 @@ func TestDurableSteeringTransportTimeoutAndShutdown(t *testing.T) {
 			})
 			ctx := context.Background()
 			startRun(t, h.router, h.sender, "codex", "run")
-			if err := h.router.Handle(ctx, scoped(t, "run", proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text"), DurableReceipt: true})); err != nil {
+			if err := h.router.Handle(ctx, scoped(t, "run", proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {
 				t.Fatal(err)
 			}
 			if phase == "blocked-write" {

@@ -2,13 +2,7 @@ package claudesdk
 
 import "github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 
-// Every public Harness implements each small contract explicitly. Unsupported
-// extensions return agent.ErrUnsupportedOperation without native effects.
 var (
-	_ agent.Executor                = (*executor)(nil)
-	_ agent.Turn                    = (*session)(nil)
-	_ agent.Session                 = (*session)(nil)
-	_ agent.DurableSteerer          = (*session)(nil)
-	_ agent.Steerer                 = (*session)(nil)
-	_ agent.FunctionResultSubmitter = (*session)(nil)
+	_ agent.Executor = (*executor)(nil)
+	_ agent.Turn     = (*session)(nil)
 )

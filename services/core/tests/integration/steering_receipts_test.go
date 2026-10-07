@@ -22,8 +22,8 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 			h.read(testExecutionRequest)
 			extra := h.message("extra", "additional")
 			var input proto.PromptSteerPayload
-			if err := h.read(proto.TypePromptSteer).DecodePayload(&input); err != nil || !input.DurableReceipt {
-				t.Fatal("durable receipt was not requested", err)
+			if err := h.read(proto.TypePromptSteer).DecodePayload(&input); err != nil {
+				t.Fatal(err)
 			}
 			h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Written: true})
 			status := sessions.TurnFailed

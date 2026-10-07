@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func (r *Router) steerDurably(sendCtx context.Context, state *sessionState, session agent.DurableSteerer, env proto.Envelope, input proto.PromptSteerPayload, fingerprint [32]byte) error {
+func (r *Router) steerDurably(sendCtx context.Context, state *sessionState, session agent.Turn, env proto.Envelope, input proto.PromptSteerPayload, fingerprint [32]byte) error {
 	ctx, cancel := context.WithCancel(state.ctx)
 	defer cancel()
 	stopShutdown := context.AfterFunc(sendCtx, cancel)
@@ -32,7 +32,7 @@ func (r *Router) steerDurably(sendCtx context.Context, state *sessionState, sess
 
 func (r *Router) publishSteeringReceipt(ctx context.Context, state *sessionState, env proto.Envelope, input proto.PromptSteerPayload, fingerprint [32]byte, ack proto.PromptSteerAckPayload) bool {
 	r.mu.Lock()
-	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack}
 	r.mu.Unlock()
 	sendCtx, cancel := context.WithTimeout(ctx, steeringSendTimeout)
 	defer cancel()

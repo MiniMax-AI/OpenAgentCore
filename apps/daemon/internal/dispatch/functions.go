@@ -54,30 +54,20 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		}
 	}
 	session, finishOperation, ready := r.preparedOperationLocked(state)
-	var submitter agent.FunctionResultSubmitter
-	if ready {
-		submitter, _ = session.(agent.FunctionResultSubmitter)
-	}
 	r.mu.Unlock()
-	if state != nil && !ready {
-		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "not_ready", "function call is waiting for the native session")
-	}
-	if finishOperation != nil {
-		defer finishOperation()
-		var stop context.CancelFunc
-		ctx, stop = r.shutdownContext(ctx)
-		defer stop()
-	}
-	if state != nil && !state.capabilities.FunctionTools.IsSupported() {
-		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
-	}
-	if ready && submitter == nil {
-		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "contract_violation", "Declared function capability has no implementation.")
-	}
-	if submitter == nil {
+	if state == nil {
 		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "not_pending", "function call is no longer pending")
 	}
-	if err := submitter.SubmitFunctionResult(ctx, result); err != nil {
+	if !ready {
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "not_ready", "function call is waiting for the native session")
+	}
+	defer finishOperation()
+	ctx, stop := r.shutdownContext(ctx)
+	defer stop()
+	if !state.capabilities.FunctionTools.IsSupported() {
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
+	}
+	if err := session.SubmitFunctionResult(ctx, result); err != nil {
 		code := "runtime_error"
 		if errors.Is(err, agent.ErrUnsupportedOperation) {
 			code = "contract_violation"

@@ -50,8 +50,6 @@ type Session struct {
 	subagentHistoryReady bool
 }
 
-var _ agent.Session = (*Session)(nil)
-
 func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*Session, error) {
 	start, args := opts.start, []string{"acp"}
 	if start == nil {
