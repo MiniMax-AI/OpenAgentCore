@@ -21,7 +21,7 @@ func TestNativeDirectoryFailureMapping(t *testing.T) {
 		{fs.ErrPermission, "rejected", "permission_denied"},
 		{agent.ErrWorkspaceReadUncertain, "unknown", "read_unconfirmed"},
 	} {
-		got := workspaceReadResult(agent.WorkspaceReadResult{}, test.err, 0)
+		got := workspaceReadFailure(test.err)
 		if got.Outcome != test.outcome || got.ErrorCode != test.code {
 			t.Fatal(test.err, got)
 		}

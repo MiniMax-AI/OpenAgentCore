@@ -26,11 +26,11 @@ func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 	}
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "prepare", preparationRequest()))
 	ready := waitPreparationStatus(t, sender, "prepare", "ready", "")
-	request := proto.WorkspaceReadPayload{Operation: "directory", Handle: ready.Handle, EnvironmentID: preparationEnvironmentID, MaxEntries: 1}
+	request := proto.WorkspaceReadPayload{Handle: ready.Handle, EnvironmentID: preparationEnvironmentID, MaxEntries: 1}
 	for _, phase := range []string{"idle", "active"} {
 		_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, phase, request))
 		result := waitWorkspaceRead(t, sender, phase)
-		if result.Outcome != "completed" || !result.CloseAcknowledged || result.Directory == nil || !result.Directory.Truncated || len(result.Directory.Entries) != 1 || len(result.Data) != 0 {
+		if result.Outcome != "completed" || !result.CloseAcknowledged || result.Directory == nil || !result.Directory.Truncated || len(result.Directory.Entries) != 1 {
 			t.Fatal(result)
 		}
 		bad := request
@@ -50,10 +50,8 @@ func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 		}
 	}
 	for index, bad := range []proto.WorkspaceReadPayload{
-		{Operation: "directory", RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: 2, MaxBytes: 1},
-		{Operation: "directory", RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: proto.WorkspaceDirectoryMaxEntries + 1},
-		{Operation: "directory", Handle: ready.Handle, RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: 2},
-		{Operation: "recursive", RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: 2},
+		{RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: proto.WorkspaceDirectoryMaxEntries + 1},
+		{Handle: ready.Handle, RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: 2},
 	} {
 		id := fmt.Sprintf("invalid-%d", index)
 		_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, id, bad))

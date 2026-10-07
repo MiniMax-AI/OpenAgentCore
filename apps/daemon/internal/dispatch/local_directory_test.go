@@ -48,18 +48,10 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		t.Fatal(err)
 	}
 	ready := waitPreparationStatus(t, sender, "idle", "ready", "")
-	read := proto.WorkspaceReadPayload{EnvironmentID: environment, Handle: ready.Handle, Operation: "directory", MaxEntries: 10}
+	read := proto.WorkspaceReadPayload{EnvironmentID: environment, Handle: ready.Handle, MaxEntries: 10}
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "list", read))
 	if got := waitWorkspaceRead(t, sender, "list"); got.Outcome != "completed" || got.Directory == nil {
 		t.Fatal("idle directory unavailable", got)
-	}
-	if err := os.WriteFile(filepath.Join(workspace, "bytes"), []byte{0, 255, 17}, 0600); err != nil {
-		t.Fatal(err)
-	}
-	content := proto.WorkspaceReadPayload{EnvironmentID: environment, Handle: ready.Handle, Path: "bytes", MaxBytes: 2}
-	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "content", content))
-	if got := waitWorkspaceRead(t, sender, "content"); got.Outcome != "completed" || !got.Truncated || !got.CloseAcknowledged || len(got.Data) != 2 || got.Data[1] != 255 {
-		t.Fatal("file prefix unavailable", got)
 	}
 	read.EnvironmentID = uuid.NewString()
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "foreign", read))
@@ -134,7 +126,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		"file":       {Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory},
 		"../invalid": {Outcome: "rejected", ErrorCode: "invalid_request"},
 	} {
-		read := proto.WorkspaceReadPayload{EnvironmentID: environment, Handle: ready.Handle, Operation: "directory", Path: path, MaxEntries: 10}
+		read := proto.WorkspaceReadPayload{EnvironmentID: environment, Handle: ready.Handle, Path: path, MaxEntries: 10}
 		_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, path, read))
 		if got := waitWorkspaceRead(t, sender, path); got.Outcome != want.Outcome || got.ErrorCode != want.ErrorCode || got.Directory != nil || got.CloseAcknowledged {
 			t.Fatal("native directory result changed", path, got)

@@ -5,11 +5,6 @@ import (
 	"fmt"
 )
 
-type WorkspaceReadResult struct {
-	Data      []byte
-	Truncated bool
-}
-
 var (
 	ErrWorkspaceReadUnsupported = fmt.Errorf("%w: workspace read", ErrUnsupportedOperation)
 	ErrWorkspaceReadUnavailable = errors.New("workspace read unavailable")

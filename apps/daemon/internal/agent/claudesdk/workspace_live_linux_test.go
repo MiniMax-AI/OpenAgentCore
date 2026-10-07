@@ -59,20 +59,19 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	liveWorkspaceReadFixtures(t, config.Workspace.Directory)
+	liveWorkspaceDirectoryFixtures(t, config.Workspace.Directory)
 	heartbeat := filepath.Join(config.Workspace.Directory, "heartbeat.txt")
 	artifact := filepath.Join(config.Workspace.Directory, "value.txt")
 	type evidence struct {
-		Reads      []liveWorkspaceRead `json:"reads,omitempty"`
-		RunID      string              `json:"run_id"`
-		Events     []proto.Envelope    `json:"events"`
-		Done       proto.DonePayload   `json:"done"`
-		Failure    string              `json:"failure,omitempty"`
-		Cancelled  bool                `json:"cancelled"`
-		CancelMS   int64               `json:"cancel_ms,omitempty"`
-		BridgePID  int                 `json:"bridge_pid"`
-		Terminals  int                 `json:"terminals"`
-		Heartbeats []string            `json:"heartbeats,omitempty"`
+		RunID      string            `json:"run_id"`
+		Events     []proto.Envelope  `json:"events"`
+		Done       proto.DonePayload `json:"done"`
+		Failure    string            `json:"failure,omitempty"`
+		Cancelled  bool              `json:"cancelled"`
+		CancelMS   int64             `json:"cancel_ms,omitempty"`
+		BridgePID  int               `json:"bridge_pid"`
+		Terminals  int               `json:"terminals"`
+		Heartbeats []string          `json:"heartbeats,omitempty"`
 	}
 	writeEvidence := func(name string, proof evidence) {
 		t.Helper()
@@ -106,7 +105,7 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 		s := running.(*session)
 		defer s.Cancel(context.Background())
 		proof.BridgePID = s.process.Cmd.Process.Pid
-		proof.Reads = append(proof.Reads, liveWorkspaceReads(t, ctx, s, config.Workspace.Directory, "active", "read-binary.bin", "read-empty.bin", "read-large.bin")...)
+		liveWorkspaceDirectories(t, ctx, s, config.Workspace.Directory, "active")
 		ticker := time.NewTicker(80 * time.Millisecond)
 		defer ticker.Stop()
 		for out != nil {
@@ -116,7 +115,7 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 			case <-ticker.C:
 				value, _ := os.ReadFile(heartbeat)
 				if cancelOnEffect && !proof.Cancelled && len(value) > 0 && string(value) != "0" && string(value) != "1" {
-					proof.Reads = append(proof.Reads, liveWorkspaceReads(t, ctx, s, config.Workspace.Directory, "effect", "value.txt")...)
+					liveWorkspaceDirectories(t, ctx, s, config.Workspace.Directory, "effect")
 					started := time.Now()
 					if err := s.Cancel(ctx); err != nil {
 						t.Fatal("factory cancellation failed", err)

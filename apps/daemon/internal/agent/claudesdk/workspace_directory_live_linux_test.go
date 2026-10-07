@@ -31,12 +31,8 @@ func liveWorkspaceDirectoryFixtures(t *testing.T, root string) {
 	}
 }
 
-func liveWorkspaceDirectories(t *testing.T, ctx context.Context, reader agent.WorkspaceReader, root, stage string) {
+func liveWorkspaceDirectories(t *testing.T, ctx context.Context, lister agent.WorkspaceDirectoryLister, root, stage string) {
 	t.Helper()
-	lister, ok := reader.(agent.WorkspaceDirectoryLister)
-	if !ok {
-		t.Fatal("workspace directory owner missing")
-	}
 	result, err := lister.ListWorkspaceDirectory(ctx, "", 1000)
 	if err != nil || result.Truncated {
 		t.Fatal("workspace directory failed", stage, err)

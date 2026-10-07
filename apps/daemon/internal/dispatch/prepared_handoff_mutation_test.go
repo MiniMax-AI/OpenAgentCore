@@ -17,7 +17,6 @@ type preparedMutationSession struct {
 	cancelOnce    sync.Once
 	functions     atomic.Int32
 	steers        atomic.Int32
-	reads         atomic.Int32
 }
 
 func (s *preparedMutationSession) Cancel(ctx context.Context) error {
@@ -33,11 +32,6 @@ func (s *preparedMutationSession) SubmitFunctionResult(context.Context, proto.Fu
 func (s *preparedMutationSession) Steer(context.Context, proto.PromptSteerPayload) error {
 	s.steers.Add(1)
 	return nil
-}
-
-func (s *preparedMutationSession) ReadWorkspaceFile(context.Context, string, int) (agent.WorkspaceReadResult, error) {
-	s.reads.Add(1)
-	return agent.WorkspaceReadResult{Data: []byte("x")}, nil
 }
 
 type blockingPreparedReceiptSender struct {

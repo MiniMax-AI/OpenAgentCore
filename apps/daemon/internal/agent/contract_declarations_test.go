@@ -24,7 +24,6 @@ func TestPublicHarnessContractDeclarations(t *testing.T) {
 		"FunctionResultSubmitter":  {"session"},
 		"PermissionResponder":      {"session"},
 		"UserChoiceResponder":      {"session"},
-		"WorkspaceReader":          {"executor", "session"},
 		"WorkspaceDirectoryLister": {"executor", "session"},
 		"WorkspaceWriter":          {"executor", "session"},
 	}

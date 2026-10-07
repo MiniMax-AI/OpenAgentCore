@@ -33,24 +33,3 @@ func TestNativeDirectoryAPI(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
-
-func TestNativeFileReadPrefixAndEntryKinds(t *testing.T) {
-	b := nativeFileBinding(t)
-	if _, err := b.WriteWorkspaceFile(t.Context(), "nested/file", []byte{0, 255, 17}); err != nil {
-		t.Fatal(err)
-	}
-	got, err := b.ReadWorkspaceFile(t.Context(), "nested/file", 2)
-	if err != nil || !got.Truncated || len(got.Data) != 2 || got.Data[1] != 255 {
-		t.Fatal(got, err)
-	}
-	got, err = b.ReadWorkspaceFile(t.Context(), "nested/file", 3)
-	if err != nil || got.Truncated || len(got.Data) != 3 {
-		t.Fatal(got, err)
-	}
-	if _, err = b.ReadWorkspaceFile(t.Context(), "nested", 3); !errors.Is(err, agent.ErrWorkspaceReadInvalid) {
-		t.Fatal(err)
-	}
-	if _, err = b.ReadWorkspaceFile(t.Context(), "missing", 3); !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
-}
