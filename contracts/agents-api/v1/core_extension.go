@@ -2,7 +2,10 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
@@ -22,5 +25,10 @@ func (x *AgentsCore) Validate() error {
 	if x.Harness != "" && !builtin.Contains(x.Harness) {
 		return fmt.Errorf("x_agents_core.harness must select a registered harness")
 	}
-	return ValidateHarnessConfig(x.Harness, x.HarnessConfig)
+	// Session admission requires the harness on the resolved Agent: an inline
+	// extension without one keeps the saved Agent's.
+	if err := ValidateHarnessConfig(x.Harness, x.HarnessConfig); err != nil && !errors.Is(err, harnessconfig.ErrHarnessRequired) {
+		return err
+	}
+	return nil
 }

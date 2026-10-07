@@ -179,6 +179,27 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 			}
 		})
 	}
+	// Native parameters need the explicit Harness that defines them.
+	t.Run("harness_config needs its harness", func(t *testing.T) {
+		agentError := `{"error":{"message":"harness_config parameters require an explicit x_agents_core.harness.","type":"invalid_request_error","code":"invalid_request_error","param":"x_agents_core.harness"}}`
+		sessionError := strings.Replace(agentError, `"param":"x_agents_core.harness"`, `"param":"agent.x_agents_core.harness"`, 1)
+		harnessless := text(object(call("POST", "/v1/agents", token, `{"model":"saved-model"}`, "", 201))["id"])
+		codex := text(object(call("POST", "/v1/agents", token, `{"model":"saved-model","x_agents_core":{"harness":"codex"}}`, "", 201))["id"])
+		for _, tc := range []struct{ path, body, want string }{
+			{"/v1/agents", `{"model":"saved-model","x_agents_core":{"harness_config":` + high + `}}`, agentError},
+			{"/v1/agents/" + harnessless, `{"x_agents_core":{"harness_config":` + high + `}}`, agentError},
+			{"/v1/agents/sessions", `{"agent":{"x_agents_core":{"harness_config":` + high + `}},"environment":{"type":"openai_hosted"}}`, sessionError},
+			{"/v1/agents/sessions", `{"agent_id":"` + harnessless + `","environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":` + high + `}}`, sessionError},
+		} {
+			if got := strings.TrimSpace(string(call("POST", tc.path, token, tc.body, uuid.NewString(), 400))); got != tc.want {
+				t.Fatalf("%s: %s", tc.path, got)
+			}
+		}
+		// Native parameters set alone keep the saved Agent's Harness.
+		call("POST", "/v1/agents/"+codex, token, `{"x_agents_core":{"harness_config":`+high+`}}`, "", 200)
+		session := create(`{"agent_id":"`+codex+`","agent":{"x_agents_core":{"harness_config":`+low+`}},"environment":{"type":"openai_hosted"}}`, uuid.NewString())
+		assertSession(session, "saved-model", low, "agent", "session", "deployment", "deployment-canary")
+	})
 	// Disabling tools cannot enable a non-native model protocol.
 	for _, protocol := range []string{"anthropic", "chat_completions"} {
 		t.Run("non-native protocol "+protocol, func(t *testing.T) {

@@ -40,7 +40,9 @@ func (x *SavedAgentCoreInput) Validate() error {
 			return err
 		}
 	}
-	if err := ValidateHarnessConfig(x.Harness, x.HarnessConfig); err != nil {
+	// The saved Agent after the write must have the harness: an update keeps
+	// the saved one.
+	if err := ValidateHarnessConfig(x.Harness, x.HarnessConfig); err != nil && !errors.Is(err, harnessconfig.ErrHarnessRequired) {
 		return err
 	}
 	if x.ModelProvider == nil {

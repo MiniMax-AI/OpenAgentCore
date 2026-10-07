@@ -152,7 +152,7 @@ Any other member is rejected with 400. `api_key` is write-only: reads return `ap
 
 ## Choose a harness and a model
 
-The harness is the agent program that runs a Session: Codex (`codex`), Claude Code (`claude_sdk`) or MiniMax Code (`mcode`). Set `x_agents_core.harness` on the Agent or the inline `agent`; without it, the installation's default harness applies ([`core.default_harness`](../configuration.md#settings), Codex unless the operator changed it).
+The harness is the agent program that runs a Session: Codex (`codex`), Claude Code (`claude_sdk`) or MiniMax Code (`mcode`). Set `x_agents_core.harness` on the Agent or the inline `agent`; without it, the installation's default harness applies ([`core.default_harness`](../configuration.md#settings), Codex unless the operator changed it) and `harness_config` must be empty.
 
 - **Model.** `model` is the provider's exact model ID. An inline Agent may omit it to use the default model configuration of its harness. A saved Agent always needs one.
 - **Provider.** The harness calls your provider with one of the harness's native protocols, through a [credential gateway](../../contracts/agents-api/model-execution.md#credential-gateway) that keeps your key out of the harness; there is no conversion, and a mismatch is rejected when the Session is created. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) lists each harness's protocols and which provider a Session uses on each Environment type. A Session freezes its provider at creation.

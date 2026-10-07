@@ -24,10 +24,10 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 		{"model override discards", `{"agent_id":"a","agent":{"model":"other"},"environment":{"type":"openai_hosted"}}`, saved, "other", `{}`, "session", false},
 		{"explicit model discards deployment", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"}}`, nil, "other", `{}`, "session", false},
 		{"explicit clear", `{"agent_id":"a","environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, saved, "saved-model", `{}`, "session", false},
-		{"inline native", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"}}`, nil, "other", `{"model_reasoning_effort":"medium"}`, "session", false},
-		{"session beats inline", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, nil, "other", `{}`, "session", false},
+		{"inline native", `{"agent":{"model":"other","x_agents_core":{"harness":"codex","harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"}}`, nil, "other", `{"model_reasoning_effort":"medium"}`, "session", false},
+		{"session beats inline", `{"agent":{"model":"other","x_agents_core":{"harness":"codex","harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, nil, "other", `{}`, "session", false},
 		{"null rejects", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":null}}`, nil, "", "", "", true},
-		{"reserved rejects", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{"api_key":"secret"}}}`, nil, "", "", "", true},
+		{"reserved rejects", `{"agent":{"model":"other","x_agents_core":{"harness":"codex"}},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{"api_key":"secret"}}}`, nil, "", "", "", true},
 		{"self_hosted deployment", `{"agent":{},"environment":{"type":"self_hosted","workspace_directory":"/tmp/work"}}`, nil, "deployment-model", `{"model_reasoning_effort":"high"}`, "deployment", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

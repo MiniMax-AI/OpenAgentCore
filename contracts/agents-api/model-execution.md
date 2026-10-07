@@ -100,7 +100,7 @@ The Harness reaches its frozen upstream through a Session-local credential gatew
 
 ## Native model parameters
 
-`harness_config` holds the selected Harness's native model parameters. Saved Agents accept it in `x_agents_core`, Sessions in the inline `agent.x_agents_core` and in the top-level `x_agents_core`; the top-level value wins.
+`harness_config` holds the selected Harness's native model parameters. Saved Agents accept it in `x_agents_core`, Sessions in the inline `agent.x_agents_core` and in the top-level `x_agents_core`; the top-level value wins. A non-empty object needs an explicitly selected Harness: the Agent's `x_agents_core.harness`, which an update keeps, or for a Session the inline `agent.x_agents_core.harness` or the saved Agent's. The deployment default Harness does not count. Without one, the request fails with 400 `invalid_request_error` and `param` `x_agents_core.harness`, or `agent.x_agents_core.harness` on Session creation.
 
 | Harness | Accepted fields | Applied as |
 | --- | --- | --- |
