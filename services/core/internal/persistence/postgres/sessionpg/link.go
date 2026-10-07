@@ -3,12 +3,14 @@ package sessionpg
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
@@ -52,6 +54,21 @@ func (s *Store) GetAgentHostCredential(ctx context.Context, runtime string) (run
 		return runtimedevice.AgentHost{}, false, err
 	}
 	return runtimedevice.AgentHost{CredentialHash: row.CredentialHash, Revision: uint64(row.CredentialRevision)}, true, nil
+}
+
+// RegisterAgentHost records the deployment's agent host with the digest of
+// its credential. Registering it again with the same credential changes
+// nothing.
+func (s *Store) RegisterAgentHost(ctx context.Context, runtime, credentialHash string) error {
+	id, err := pgunit.ParseID(runtime)
+	if err != nil {
+		return err
+	}
+	_, err = s.units.Queries().RegisterAgentHost(ctx, sqlc.RegisterAgentHostParams{ID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("agent host %s is registered as another device", runtime)
+	}
+	return err
 }
 
 // GetLinkAssignment reads an assignment as the Link authority sees it. A

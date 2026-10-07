@@ -80,7 +80,17 @@ func TestInitializeKeepsIdentityAndKeysAcrossRestarts(t *testing.T) {
 	if _, err := uuid.Parse(strings.TrimSpace(saved["secrets/core/installation.id"])); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"secrets/web/core.key", "secrets/database/password", "secrets/core/credential.key"} {
+	var identity struct {
+		RuntimeID  string `json:"runtime_id"`
+		Credential string `json:"credential"`
+	}
+	if err := json.Unmarshal([]byte(saved["secrets/agent-host/identity.json"]), &identity); err != nil || uuid.Validate(identity.RuntimeID) != nil {
+		t.Fatalf("agent-host identity: %v", err)
+	}
+	if raw, err := base64.StdEncoding.DecodeString(identity.Credential); err != nil || len(raw) != 32 {
+		t.Fatalf("agent-host credential: %v", err)
+	}
+	for _, name := range []string{"secrets/web/core.key", "secrets/database/password", "secrets/core/credential.key", "secrets/agent-host/identity.json"} {
 		info, err := os.Stat(filepath.Join(root, name))
 		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 			t.Fatalf("%s: %v %v", name, info.Mode(), err)
@@ -250,7 +260,7 @@ func TestInitializationLogsLifecycleWithoutCredentials(t *testing.T) {
 			t.Fatal("negative duration")
 		}
 	}
-	for _, name := range []string{"secrets/web/core.key", "secrets/database/password", "secrets/core/credential.key", "secrets/core/core-key-digests.json"} {
+	for _, name := range []string{"secrets/web/core.key", "secrets/database/password", "secrets/core/credential.key", "secrets/core/core-key-digests.json", "secrets/agent-host/identity.json"} {
 		data, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {
 			t.Fatal(err)

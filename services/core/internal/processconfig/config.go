@@ -29,6 +29,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -53,6 +54,12 @@ type Config struct {
 	// InstallationID comes from OAC_INSTALLATION_ID_FILE. Empty leaves the
 	// sandbox deployment and node routes off.
 	InstallationID string
+	// AgentHostID and AgentHostCredentialHash are the deployment's agent host
+	// from OAC_AGENT_HOST_IDENTITY_FILE, which the Runtime gateway requires;
+	// Core registers it at startup. The hash is the one Runtime and Link
+	// authentication compare.
+	AgentHostID             string
+	AgentHostCredentialHash string
 	// CredentialKey seals stored credentials. Nil when
 	// OAC_CREDENTIAL_KEY_FILE is unset.
 	CredentialKey *credentialcrypto.Cipher
@@ -127,6 +134,15 @@ func Load() (Config, error) {
 	}
 	if c.InstallationID != "" && c.PublicOrigin == nil {
 		return Config{}, configError("OAC_INSTALLATION_ID_FILE requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
+	}
+	if c.AgentHostID, c.AgentHostCredentialHash, err = agentHost(); err != nil {
+		return Config{}, err
+	}
+	if c.AgentHostID != "" && c.PublicOrigin == nil {
+		return Config{}, configError("OAC_AGENT_HOST_IDENTITY_FILE requires OAC_PUBLIC_URL, the origin of the Runtime gateway the agent host connects to")
+	}
+	if c.AgentHostID == "" && c.PublicOrigin != nil {
+		return Config{}, configError("OAC_PUBLIC_URL requires OAC_AGENT_HOST_IDENTITY_FILE, the agent host its Runtime gateway serves")
 	}
 	if c.CredentialKey, err = credentialKey(); err != nil {
 		return Config{}, err
@@ -224,6 +240,32 @@ func installationID() (string, error) {
 		return "", configError("OAC_INSTALLATION_ID_FILE must contain a canonical UUID")
 	}
 	return value, nil
+}
+
+// agentHost reads the agent-host identity: its canonical Runtime ID and the
+// digest of its credential, which the agent host presents verbatim.
+func agentHost() (string, string, error) {
+	path := os.Getenv("OAC_AGENT_HOST_IDENTITY_FILE")
+	if path == "" {
+		return "", "", nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", configError("OAC_AGENT_HOST_IDENTITY_FILE must name a readable file")
+	}
+	var identity struct {
+		RuntimeID  string `json:"runtime_id"`
+		Credential string `json:"credential"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&identity) != nil || decoder.Decode(new(any)) != io.EOF {
+		return "", "", configError("OAC_AGENT_HOST_IDENTITY_FILE must hold one JSON object with runtime_id and credential")
+	}
+	if id, err := uuid.Parse(identity.RuntimeID); err != nil || id == uuid.Nil || id.String() != identity.RuntimeID || strings.TrimSpace(identity.Credential) == "" {
+		return "", "", configError("OAC_AGENT_HOST_IDENTITY_FILE must hold a canonical UUID runtime_id and a credential")
+	}
+	return identity.RuntimeID, runtimedevice.HashCredential(identity.Credential), nil
 }
 
 func credentialKey() (*credentialcrypto.Cipher, error) {

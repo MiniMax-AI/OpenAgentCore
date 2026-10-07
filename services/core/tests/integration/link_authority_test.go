@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -476,5 +479,61 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
 	if got := p.refused(t); got != sandboxlink.AuthenticationFailed {
 		t.Fatal("a destroyed allocation's Serve credential served", got)
+	}
+}
+
+// TestRegisteredAgentHostAuthenticates registers the agent host from its
+// identity file as Core's startup does. The Link route and the Runtime gateway
+// accept its credential, a second startup changes nothing, and another
+// device's ID is never taken over.
+func TestRegisteredAgentHostAuthenticates(t *testing.T) {
+	s, _ := testStore(t)
+	dir := t.TempDir()
+	runtime, credential := uuid.NewString(), uuid.NewString()
+	identity, _ := json.Marshal(map[string]string{"runtime_id": runtime, "credential": credential})
+	for name, content := range map[string][]byte{"identity.json": identity, "digests.json": []byte(`["` + strings.Repeat("ab", 32) + `"]`)} {
+		if err := os.WriteFile(filepath.Join(dir, name), content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("OAC_DATABASE_URL", "postgres://core@database/core")
+	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", filepath.Join(dir, "digests.json"))
+	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
+	t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", filepath.Join(dir, "identity.json"))
+	config, err := processconfig.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := func() string {
+		var state string
+		if err := s.pool.QueryRow(t.Context(), `SELECT row(tenant_id IS NULL, environment_id IS NULL, executor_key_id IS NULL, agent_host,
+			credential_hash, credential_revision, revoked_at IS NULL, count(*) OVER ())::text FROM devices WHERE id = $1`, runtime).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		return state
+	}
+	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), config.AgentHostID, config.AgentHostCredentialHash); err != nil {
+		t.Fatal(err)
+	}
+	registered := row()
+	if want := "(t,t,t,t," + runtimedevice.HashCredential(credential) + ",1,t,1)"; registered != want {
+		t.Fatalf("registered %s, want %s", registered, want)
+	}
+	if _, err := attachLink(t, startLinkRoute(t, s), runtime, []byte(credential)); err != nil {
+		t.Fatal("the Link refused the agent host", err)
+	}
+	if _, err := runtimegateway.NewAuthenticator(sessionAdapter(s)).AuthenticateBearer(t.Context(), runtime, credential); err != nil {
+		t.Fatal("the Runtime gateway refused the agent host", err)
+	}
+	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), config.AgentHostID, config.AgentHostCredentialHash); err != nil || row() != registered {
+		t.Fatal("a second registration changed the agent host", err)
+	}
+
+	device, err := sessionService(t, s).CreateDevice(t.Context(), uuid.NewString(), "operator", runtimedevice.HashCredential(credential))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), device.ID, config.AgentHostCredentialHash); err == nil {
+		t.Fatal("registration took over a tenant device")
 	}
 }

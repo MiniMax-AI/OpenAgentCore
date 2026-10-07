@@ -165,7 +165,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 	}
-	for _, name := range []string{"core", "web", "database"} {
+	for _, name := range []string{"core", "web", "database", "agent-host"} {
 		if err := ownedDir(filepath.Join(root, "secrets", name), 0o700, 65532); err != nil {
 			return err
 		}
@@ -256,6 +256,11 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			{"secrets/database/password", func() string { return randomHex(32) }},
 			{"secrets/core/credential.key", func() string { return base64.StdEncoding.EncodeToString(randomBytes(32)) }},
 			{"secrets/core/installation.id", func() string { return uuid.NewString() }},
+			// Core registers the agent host from this file; the agent host presents the credential as written.
+			{"secrets/agent-host/identity.json", func() string {
+				identity, _ := json.Marshal(map[string]string{"runtime_id": uuid.NewString(), "credential": base64.StdEncoding.EncodeToString(randomBytes(32))})
+				return string(identity)
+			}},
 		}
 		for _, secret := range generators {
 			path := filepath.Join(root, secret.name)

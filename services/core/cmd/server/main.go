@@ -224,6 +224,9 @@ func run(config processconfig.Config) error {
 	var executorURL string
 	var nativeInstaller *api.NativeInstaller
 	if origin := config.PublicOrigin; origin != nil {
+		if err := sessionStore.RegisterAgentHost(ctx, config.AgentHostID, config.AgentHostCredentialHash); err != nil {
+			return fmt.Errorf("agent host registration failed: %w", err)
+		}
 		executorURL = origin.DaemonWebSocket()
 		links := runtimegateway.NewLinkAuthority(sessionStore)
 		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, sessionStore, links, executorURL)

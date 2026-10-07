@@ -104,3 +104,28 @@ func (q *Queries) GetSandboxServeAuthority(ctx context.Context, id pgtype.UUID) 
 	)
 	return i, err
 }
+
+const registerAgentHost = `-- name: RegisterAgentHost :one
+INSERT INTO devices (id, name, credential_hash, agent_host)
+VALUES ($1, 'agent-host', $2, true)
+ON CONFLICT (id) DO UPDATE SET credential_hash = EXCLUDED.credential_hash,
+    credential_revision = devices.credential_revision + (devices.credential_hash IS DISTINCT FROM EXCLUDED.credential_hash)::int
+WHERE devices.agent_host
+RETURNING id
+`
+
+type RegisterAgentHostParams struct {
+	ID             pgtype.UUID `json:"id"`
+	CredentialHash pgtype.Text `json:"credential_hash"`
+}
+
+// The deployment's agent host, with no tenant, Environment or executor key.
+// A new credential advances the revision, which fences the Links the old one
+// authenticated; a revocation stays. No row means the ID belongs to a device
+// that is not an agent host.
+func (q *Queries) RegisterAgentHost(ctx context.Context, arg RegisterAgentHostParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, registerAgentHost, arg.ID, arg.CredentialHash)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
