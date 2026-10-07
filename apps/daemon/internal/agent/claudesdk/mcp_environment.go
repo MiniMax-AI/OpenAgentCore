@@ -21,6 +21,13 @@ func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, 
 	if err != nil {
 		return nil, nil, err
 	}
+	return mcpServers(bindings, localworkspace.MCPStdioCommand)
+}
+
+// mcpServers renders resolved bindings, each stdio binding with the command
+// and arguments stdio gives it and each credential in a private environment
+// variable.
+func mcpServers(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (string, []string)) ([]environmentMCPServer, []string, error) {
 	var servers []environmentMCPServer
 	var env []string
 	for _, binding := range bindings {
@@ -28,7 +35,7 @@ func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, 
 			return nil, nil, fmt.Errorf("claudesdk: unsupported MCP identity")
 		}
 		if binding.Stdio != nil {
-			command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
+			command, args := stdio(*binding.Stdio)
 			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: args})
 			continue
 		}

@@ -87,7 +87,7 @@ func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOpti
 	if opts.script != "" {
 		args = []string{opts.script, "acp"}
 	}
-	process, err := start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args, Dir: opts.Dir, Env: opts.Env, NeedStdin: true, OwnProcessGroup: req.StrictResume})
+	process, err := start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args, Dir: opts.Dir, Env: opts.Env, NeedStdin: true})
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (s *Session) run() {
 	defer close(s.finished)
 	err := s.prepareNative()
 	if err == nil {
-		if s.req.StrictResume && !s.req.DisableSubagents {
+		if !s.req.DisableSubagents {
 			var snapshot nativeSubagentSnapshot
 			snapshot, err = s.readSubagents(s.ctx)
 			s.subagentHistoryReady = err == nil
@@ -128,7 +128,7 @@ func (s *Session) run() {
 	if err == nil {
 		err = s.executePrompt()
 	}
-	if s.req.StrictResume && !s.req.DisableSubagents && s.subagentHistoryReady && s.out != nil {
+	if !s.req.DisableSubagents && s.subagentHistoryReady && s.out != nil {
 		observationErr := s.settleSubagents()
 		s.mu.Lock()
 		s.subagentSettlementError = observationErr
@@ -181,7 +181,7 @@ func (s *Session) prepareNative() error {
 	if initialized.ProtocolVersion != 1 {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
 	}
-	if s.req.StrictResume && !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
+	if !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
 		return fmt.Errorf("mcode: native Subagent admission is unavailable")
 	}
 	params := map[string]any{"cwd": s.opts.Dir, "mcpServers": s.opts.MCP}
@@ -228,7 +228,7 @@ func (s *Session) executePrompt() error {
 	var result struct {
 		StopReason string `json:"stopReason"`
 	}
-	err = s.call("session/prompt", map[string]any{"sessionId": s.sessionID, "prompt": promptContent(prompt, s.req.StrictResume)}, &result, true)
+	err = s.call("session/prompt", map[string]any{"sessionId": s.sessionID, "prompt": promptContent(prompt)}, &result, true)
 	s.active = false
 	s.mu.Lock()
 	s.steeringReady = false
@@ -367,16 +367,13 @@ func (s *Session) Cancel(ctx context.Context) error {
 	if s.executor != nil {
 		return s.cancelTurn(ctx)
 	}
-	if s.req.StrictResume && !s.req.DisableSubagents {
+	if !s.req.DisableSubagents {
 		if err := s.cancelSubagents(ctx); err != nil {
 			s.process.Cancel()
 			return err
 		}
 	}
 	s.process.Cancel()
-	if !s.req.StrictResume {
-		return nil
-	}
 	select {
 	case <-s.exited:
 	case <-ctx.Done():

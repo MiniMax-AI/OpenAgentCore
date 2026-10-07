@@ -9,7 +9,7 @@ export interface ThemeContextValue {
   setPreference: (preference: ThemePreference) => void;
 }
 
-export const themeStorageKey = "agents-core-web.theme";
+export const themeStorageKey = "oac-web.theme";
 export const defaultThemePreference: ThemePreference = "system";
 export const ThemeContext = createContext<ThemeContextValue | null>(null);
 

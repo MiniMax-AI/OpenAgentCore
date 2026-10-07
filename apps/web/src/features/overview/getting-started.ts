@@ -131,9 +131,9 @@ export function checklistView(states: readonly StepState[], memory: ChecklistMem
   return memory === "open" && states.some((state) => state !== null) ? "full" : "hidden";
 }
 
-const MEMORY_KEY = "agents-core-web.getting-started";
+const MEMORY_KEY = "oac-web.getting-started";
 /** The installation this browser last read, so the checklist keeps its entry while the deployment cannot be read. */
-const INSTALLATION_KEY = "agents-core-web.last-installation";
+const INSTALLATION_KEY = "oac-web.last-installation";
 
 /**
  * The storage entry for this installation, so a reinstall at the same origin

@@ -16,7 +16,6 @@ func newSession(parent context.Context, req proto.PromptRequestPayload, out chan
 		return nil, errors.New("codex: nil out channel")
 	}
 	runID, prompt := req.RunID, req.Input
-	req.AgentStateKey = effectiveAgentStateKey(req)
 	req.RunID, req.Input = "", nil
 	prepared, err := newPreparation(parent, req, cfg)
 	if err != nil {
@@ -32,9 +31,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	}
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
-	}
-	if req.RequireExistingNativeSession && (!req.StrictResume || req.AgentStateKey == "" || req.WorkspaceReadOnly) {
-		return nil, errors.New("codex: native-session recovery requires strict private state")
 	}
 	if req.RunID != "" || len(req.Input) != 0 {
 		return nil, errors.New("codex: preparation does not accept a run identity or prompt")
@@ -52,7 +48,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if err != nil {
 		return nil, err
 	}
-	req.AgentStateKey = effectiveAgentStateKey(req)
 	var plan SessionPlan
 	var skillRoots []string
 	if cfg.view != nil {
@@ -85,11 +80,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	rpc := NewJSONRPCClient(rpcCfg)
 
 	s := &Session{
-		nativeHome:      plan.home,
-		functions:       functions,
-		observeMessages: req.ObserveMessages,
-
-		observeToolObservations:   req.ObserveToolObservations,
+		nativeHome:                plan.home,
+		functions:                 functions,
+		observeMessages:           req.ObserveMessages,
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,
 		rpc:                       rpc,
@@ -104,7 +97,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	plan.Cleanup = s.cleanup
 	p := &Prepared{
 		session: s, plan: plan,
-		resumeID: req.AgentSessionID, strictResume: req.StrictResume, requireExistingNativeSession: req.RequireExistingNativeSession,
+		resumeID: req.AgentSessionID, requireExistingNativeSession: req.RequireExistingNativeSession,
 		transferred: make(chan struct{}),
 	}
 

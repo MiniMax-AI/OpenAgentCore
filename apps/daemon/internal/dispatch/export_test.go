@@ -36,3 +36,11 @@ func (r *Router) SteeringClosedForTest(runID string) bool {
 	state := r.sessions[runID]
 	return state != nil && state.steeringClosed
 }
+
+// RunStartedForTest reports whether runID's Turn accepts operations.
+func (r *Router) RunStartedForTest(runID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	state := r.sessions[runID]
+	return state != nil && state.session != nil
+}

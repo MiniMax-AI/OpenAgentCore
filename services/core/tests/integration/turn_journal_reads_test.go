@@ -50,7 +50,7 @@ type SubagentIdentity struct {
 // GetSubagentIdentity reads a binding in its authorized, visible Session. Only
 // tests read bindings back.
 func (s *Store) GetSubagentIdentity(ctx context.Context, tenantID, sessionID, nativeID string) (SubagentIdentity, error) {
-	p, err := sessionpg.DeviceLookup(tenantID, sessionID)
+	p, err := sessionpg.ResourceLookup(tenantID, sessionID)
 	if err != nil {
 		return SubagentIdentity{}, err
 	}

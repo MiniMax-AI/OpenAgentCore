@@ -64,7 +64,7 @@ func TestAssignmentRejectsStaleAndForeignFrames(t *testing.T) {
 	}
 	foreign := ref("s")
 	foreign.AssignmentID = "foreign"
-	prepare := proto.ExecutionPreparePayload{SessionID: "s", Configuration: proto.PromptRequestPayload{AgentKind: "fake_alpha", AgentStateKey: stateKey("s"), StrictResume: true, DisableExecutionEnvironment: true}}
+	prepare := noEnvironmentPreparation("s", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
 	for id, test := range map[string]struct {
 		ref  proto.AssignmentRef
 		code string

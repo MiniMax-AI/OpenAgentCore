@@ -40,25 +40,25 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		if frozen != nil {
 			binary = frozen.Binary
 		}
-		return startExecutor(ctx, req, binary, func(ctx context.Context) (launchOptions, error) {
+		return startExecutor(ctx, req, binary, func() (launchOptions, error) {
 			if frozen == nil {
 				return prepareOptions(req)
 			}
-			return prepareWorkspaceOptions(ctx, *frozen, req)
+			return prepareWorkspaceOptions(*frozen, req)
 		})
 	}
 }
 
 // startExecutor prepares the native owner for req, which carries no Turn
 // input, and starts binary.
-func startExecutor(ctx context.Context, req proto.PromptRequestPayload, binary string, prepare func(context.Context) (launchOptions, error)) (agent.Executor, error) {
+func startExecutor(ctx context.Context, req proto.PromptRequestPayload, binary string, prepare func() (launchOptions, error)) (agent.Executor, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+	if req.RunID != "" || len(req.Input) != 0 {
 		return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
 	}
-	opts, err := prepare(ctx)
+	opts, err := prepare()
 	if err != nil {
 		return nil, err
 	}

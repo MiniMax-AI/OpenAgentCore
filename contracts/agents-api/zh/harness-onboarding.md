@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: d23b13d16a6de898b81c94e07ed3b2c32a2ea36dd70caaf17479bf2bc824595c
+source_hash: d0b84eef91e766fb74e2acf8a767d1767f6a3f270adb1b72790b7c616ee63d05
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -250,7 +250,7 @@ agent-host 镜像使用同一契约。`deploy/distribution/AgentHost.Dockerfile`
 
 ## 原生进程所有权 {#native-process-ownership}
 
-daemon 的 `clirunner` 为 SDK 会启动原生子进程的适配器提供可选的 Unix 进程组所有权；不支持的主机会在启动前拒绝此模式。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
+daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启动（Windows 上为 Job 对象）；其他主机会拒绝启动。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
 
 所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
 
@@ -340,7 +340,7 @@ stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 
 
 ### 启动 {#launch}
 
-`ViewSession.Launch` 取代 `clirunner.Start`。每次调用构建一个视图并在其中运行 `Binary`，每个 Session 同一时间至多有一个活动视图。`Dir` 是沙箱中的路径，`OwnProcessGroup` 为 true，`Env` 是完整环境。返回的 `clirunner.Process` 遵循[原生进程所有权](#native-process-ownership)：
+`ViewSession.Launch` 取代 `clirunner.Start`。每次调用构建一个视图并在其中运行 `Binary`，每个 Session 同一时间至多有一个活动视图。`Dir` 是沙箱中的路径，`Env` 是完整环境。返回的 `clirunner.Process` 遵循[原生进程所有权](#native-process-ownership)：
 
 - Cancel 向视图中的每个进程发送 TERM，并在 `KillTimeout` 后关闭视图。如果 Cancel 发现 Harness 已退出，即使它遗留的进程仍在结束中，也保持其退出结果不变。
 - Harness 退出而仍有其他进程时，除非 Cancel 已发送过 TERM，视图会向它们发送 TERM，并在它们退出或自首次 TERM 起经过 `KillTimeout` 后结束。
@@ -369,7 +369,7 @@ stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 
 | `Home` | 原生历史和配置保存在 `/.oac/home` 下，同一 Session 中后续的 Executor 从中继续。 |
 | `Capabilities` | 每项受支持的功能都通过 dispatch 运行一个 Turn：空根视图中的 Environment none、Skills、函数调用及其结果、工具搜索，以及每个以别名运行的 stdio 绑定。 |
 
-`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。视图声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。视图声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
+`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。视图声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。视图声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。视图声明 environment none 时，一个没有 Environment 的 Session 中的 Turn 通过模型作答，且 Session home 中 Harness 的原生状态必须写明其工作目录 `/.oac/home/work`。视图声明 stdio MCP 时，测试为一个 Session 的 Environment 提供一个已安装的 stdio MCP 服务器，即在沙箱中运行的脚本，回答必须报告其唯一工具返回的代码。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
 
 ## 原生参考 {#native-references}
 

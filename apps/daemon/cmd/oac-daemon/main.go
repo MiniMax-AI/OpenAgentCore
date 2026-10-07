@@ -1,5 +1,5 @@
-// Command oac-daemon is the reverse-WebSocket worker that pairs a user
-// machine with a OpenAgentCore server and exposes a local agent CLI
+// Command oac-daemon is the reverse-WebSocket worker that connects a
+// machine to an OpenAgentCore server and exposes a local agent CLI
 // subprocess as a connector_type=agent_daemon target. See
 // apps/daemon/README.md for the subcommand spec.
 package main

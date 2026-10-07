@@ -9,18 +9,12 @@ import (
 
 func (s *Session) resolveThread(req proto.PromptRequestPayload, plan SessionPlan) error {
 	if strings.TrimSpace(req.AgentSessionID) != "" {
-		if err := s.resumeThread(req.AgentSessionID, plan); err == nil {
-			return nil
-		} else if req.StrictResume {
+		if err := s.resumeThread(req.AgentSessionID, plan); err != nil {
 			return fmt.Errorf("codex: thread/resume: %w", err)
-		} else {
-			s.cfg.logger.Warn("codex: thread/resume failed; starting fresh", "run_id", s.runID, "thread_id", req.AgentSessionID, "err", err)
 		}
+		return nil
 	}
 	if req.RequireExistingNativeSession {
-		if !req.StrictResume {
-			return fmt.Errorf("codex: recovery requires strict resume")
-		}
 		id, err := s.recoverRoot(plan)
 		if err != nil {
 			return err

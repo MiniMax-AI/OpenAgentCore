@@ -12,14 +12,14 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
-import zipapp
+import zipfile
+
+from distribution import temporary_file
 
 
 def atomic_json(path, value):
-    descriptor, temporary = tempfile.mkstemp(prefix=".generation-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "w") as stream:
+    with temporary_file(path) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
             json.dump(value, stream, sort_keys=True)
             stream.write("\n")
             stream.flush()
@@ -30,9 +30,6 @@ def atomic_json(path, value):
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
 def helper_archive(args, installer):
@@ -42,14 +39,12 @@ def helper_archive(args, installer):
         source = args.bundle / "node-install.pyz"
     if source.suffix == ".pyz" and source.is_file() and not source.is_symlink():
         return source.read_bytes()
-    with tempfile.TemporaryDirectory() as directory:
-        package = Path(directory)
-        source_dir = Path(installer.__file__).parent
+    archive = io.BytesIO()
+    source_dir = Path(installer.__file__).parent
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
         for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"):
-            shutil.copyfile(source_dir / name, package / ("__main__.py" if name == "node_install.py" else name))
-        archive = io.BytesIO()
-        zipapp.create_archive(package, archive, compressed=True)
-        return archive.getvalue()
+            package.write(source_dir / name, "__main__.py" if name == "node_install.py" else name)
+    return archive.getvalue()
 
 
 def install_helper(root, args, installer, archive=None):
@@ -62,10 +57,9 @@ def install_helper(root, args, installer, archive=None):
     installer.existing_file(target)
     if archive is None:
         archive = helper_archive(args, installer)
-    with tempfile.TemporaryDirectory(dir=root) as directory:
-        staged = Path(directory) / "helper.pyz"
-        staged.write_bytes(archive)
-        os.chmod(staged, 0o600)
+    with temporary_file(target) as staged:
+        with os.fdopen(os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output:
+            output.write(archive)
         os.replace(staged, target)
     atomic_json(settings, value)
 

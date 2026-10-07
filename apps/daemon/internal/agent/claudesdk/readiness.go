@@ -75,16 +75,14 @@ func (info RuntimeInfo) supportsWorkspace() bool {
 	return slices.Contains(info.Features, "workspace_tools")
 }
 
+// Workspace execution always emits neutral command observations, so a bridge
+// without them cannot run a prepared workspace.
 func (info RuntimeInfo) supportsWorkspacePreparation() bool {
-	return info.supportsWorkspace() && slices.Contains(info.Features, "workspace_prepare")
-}
-
-func (info RuntimeInfo) supportsWorkspaceCommands() bool {
-	return info.supportsWorkspacePreparation() && slices.Contains(info.Features, "workspace_command_observations")
+	return info.supportsWorkspace() && slices.Contains(info.Features, "workspace_prepare") && slices.Contains(info.Features, "workspace_command_observations")
 }
 
 func (info RuntimeInfo) SupportsLocalRuntime() bool {
-	return info.supportsWorkspaceCommands() && slices.Contains(info.Features, "local_runtime_v2")
+	return info.supportsWorkspacePreparation() && slices.Contains(info.Features, "local_runtime_v2")
 }
 
 func (info RuntimeInfo) SupportsWorkspaceFunctions() bool {
@@ -116,10 +114,10 @@ func CheckRuntime(ctx context.Context, config Config) (RuntimeInfo, error) {
 	}
 	process, err := clirunner.Start(clirunner.StartOptions{
 		Parent: ctx, Binary: binary,
-		Args:            []string{filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js"), config.Entrypoint},
-		Dir:             filepath.Dir(config.Entrypoint),
-		Env:             env,
-		OwnProcessGroup: true, KillTimeout: 250 * time.Millisecond,
+		Args:        []string{filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js"), config.Entrypoint},
+		Dir:         filepath.Dir(config.Entrypoint),
+		Env:         env,
+		KillTimeout: 250 * time.Millisecond,
 	})
 	if err != nil {
 		return RuntimeInfo{}, fmt.Errorf("claudesdk: cannot start runtime check: %w", err)

@@ -67,17 +67,28 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 	}
 }
 
+// noEnvironmentPreparation prepares config for session without an execution
+// environment, with the fixture model and provider.
+func noEnvironmentPreparation(session string, config proto.PromptRequestPayload) proto.ExecutionPreparePayload {
+	config.AgentStateKey, config.DisableExecutionEnvironment = stateKey(session), true
+	return proto.ExecutionPreparePayload{SessionID: session, Configuration: prototest.WithModel(config)}
+}
 func executorRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-" + preparationSessionID, StrictResume: true, DisableExecutionEnvironment: true})}
+	return noEnvironmentPreparation(preparationSessionID, proto.PromptRequestPayload{AgentKind: "reusable"})
+}
+
+// registerExecutorKind registers info for prepared execution only.
+func registerExecutorKind(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.ExecutorFactory) {
+	reg.RegisterKind(info, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		return nil, errors.New("prepared execution must not use the direct Session factory")
+	})
+	reg.RegisterExecutor(info.Kind, factory)
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("ordinary factory is forbidden")
-	})
-	reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})
@@ -293,6 +304,18 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatal("mismatched session invoked native preparation")
+	}
+}
+
+func TestExecutorRejectsMissingEnvironmentBeforeFactory(t *testing.T) {
+	r, s, calls := executorRouter(t, &reusableExecutor{}, time.Minute)
+	req := executorRequest()
+	req.Configuration.DisableExecutionEnvironment = false
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", req)); err == nil {
+		t.Fatal("unsupported configuration accepted")
+	}
+	if status := waitPreparationStatus(t, s, "request", "rejected", ""); status.ErrorCode != "unsupported_configuration" || calls.Load() != 0 {
+		t.Fatalf("status=%+v factory calls=%d", status, calls.Load())
 	}
 }
 

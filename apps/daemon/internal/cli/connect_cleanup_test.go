@@ -150,7 +150,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 		t.Fatalf("bind = %+v", got)
 	}
 	env, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: "cleanup",
-		Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", StrictResume: true, DisableExecutionEnvironment: true})})
+		Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", DisableExecutionEnvironment: true})})
 	if err != nil {
 		t.Fatal(err)
 	}

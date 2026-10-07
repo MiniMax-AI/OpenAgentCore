@@ -105,8 +105,6 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		return nil, unsupported("environment none")
 	case local != nil && !isViewPath(local.WorkspaceDirectory):
 		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
-	case !req.StrictResume:
-		return nil, unsupported("a Session without strict resume")
 	case local != nil && local.Capabilities && local.CapabilityRoot == "":
 		return nil, unsupported("installed Capabilities that no preparation resolved")
 	case local != nil && len(local.Skills) > 0 && !caps.Skills.IsSupported():

@@ -7,6 +7,6 @@ var (
 	// the tenant. Missing, malformed and foreign IDs are indistinguishable.
 	ErrNotFound = errors.New("environment template not found")
 	// ErrInvalidInput reports input that is not a valid Template, or a saved
-	// Template whose configuration no longer decodes as one.
+	// Template whose configuration no longer passes validation.
 	ErrInvalidInput = errors.New("invalid environment template")
 )

@@ -53,21 +53,22 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 
 `permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
 
-The configuration of `execution_prepare` carries the Session's model configuration and the opt-ins Core sets for each Run:
+The `execution_prepare` configuration carries the Session's model configuration and the opt-ins Core sets for each Run:
 
 | Field | Set by Core |
 | --- | --- |
 | `model`, `system_prompt`, `model_provider`, `harness_config` | From the Session's frozen configuration: the Agent's model and instructions, the Session's provider bundle, and the [native model parameters](../contracts/agents-api/model-execution.md#native-model-parameters). The Harness validates them before any native effect |
 | `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
-| `observe_tool_observations` | Always. Tool-call frames then carry the engine-neutral `observation` |
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
-| `strict_resume`, `require_existing_native_session` | Always strict; the second when a native Session must be recovered |
+| `require_existing_native_session` | When a native Session must be recovered |
 | `durable_receipt` on `prompt_steer` | For every active input Core delivers |
 
-Requests without an opt-in keep the frames and fields they had without it.
+An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
+
+Requests without an opt-in keep the frames and fields they had without it. A `tool_call` frame carries the engine-neutral `observation` whenever the adapter maps the native tool.
 
 ## Envelope and identity
 
@@ -151,7 +152,7 @@ Core delivers active input as `prompt_steer` with `durable_receipt: true`, one i
 | `written` acknowledgement | Core waits at most 30 seconds from delivery for `written`; otherwise the input outcome is unknown |
 | Receipt send | Each receipt send has its own 5-second, shutdown-aware budget |
 | Native acceptance | `accepted` arrives under the Turn lifetime, with no automatic redelivery |
-| Done | Before `done`, the Runtime waits at most 15 seconds (the write and send budgets) for an in-flight input |
+| Done | The Runtime sends `done` after native Turn settlement and after the receipt send of any in-flight input; the native write and receipt send budgets bound that input |
 
 Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives within 15 seconds. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
 
@@ -211,7 +212,7 @@ Core runs an idle directory read on the Worker's Session scheduling reservation 
 
 ## MCP connection authority
 
-Every public `MCPHTTPServer` in an execution configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Contract verification
 

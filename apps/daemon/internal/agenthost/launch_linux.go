@@ -73,8 +73,6 @@ func (s *session) checkStart(opts clirunner.StartOptions) error {
 		return fmt.Errorf("%w: %w: %q", ErrLaunch, agent.ErrNotLocalExec, opts.Binary)
 	case !isViewPath(opts.Dir):
 		return fmt.Errorf("%w: directory %q is not absolute and clean", ErrLaunch, opts.Dir)
-	case !opts.OwnProcessGroup:
-		return fmt.Errorf("%w: a view process runs in its own process group", ErrLaunch)
 	}
 	return nil
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestSetSkillExtraRootsUsesCodexRPC(t *testing.T) {
@@ -38,15 +36,5 @@ func TestSetSkillExtraRootsUsesCodexRPC(t *testing.T) {
 	}
 	if err := <-result; err != nil {
 		t.Fatalf("setSkillExtraRoots: %v", err)
-	}
-}
-
-func TestEffectiveAgentStateKeyFallsBackToConversation(t *testing.T) {
-	got := effectiveAgentStateKey(proto.PromptRequestPayload{
-		ConversationID: "conv-legacy",
-		RunID:          "run-ignored",
-	})
-	if got != "_legacy_conversation/conv-legacy/codex" {
-		t.Fatalf("state key = %q", got)
 	}
 }

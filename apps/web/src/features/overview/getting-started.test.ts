@@ -126,10 +126,10 @@ describe("Getting started visibility", () => {
     const stored = new Map<string, string>();
     vi.stubGlobal("window", { localStorage: { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => stored.set(key, value) } });
     const down: FleetState = { status: "failed", error: new Error("down") };
-    expect(checklistStorageKey(fleet(deployment({ installation_id: "inst-1" })))).toBe("agents-core-web.getting-started.inst-1");
-    expect(checklistStorageKey(down)).toBe("agents-core-web.getting-started");
+    expect(checklistStorageKey(fleet(deployment({ installation_id: "inst-1" })))).toBe("oac-web.getting-started.inst-1");
+    expect(checklistStorageKey(down)).toBe("oac-web.getting-started");
     rememberInstallation("inst-1");
-    expect(checklistStorageKey(down)).toBe("agents-core-web.getting-started.inst-1");
+    expect(checklistStorageKey(down)).toBe("oac-web.getting-started.inst-1");
     expect(checklistStorageKey({ status: "loading" })).toBeNull();
   });
 });

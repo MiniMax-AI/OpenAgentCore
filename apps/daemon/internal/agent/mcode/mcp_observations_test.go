@@ -16,7 +16,7 @@ func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 	t.Helper()
 	out := make(chan proto.Envelope, 16)
 	s := &Session{ctx: context.Background(), opts: launchOptions{DataDir: t.TempDir()},
-		req: proto.PromptRequestPayload{RunID: "run", ObserveToolObservations: true,
+		req: proto.PromptRequestPayload{RunID: "run",
 			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
 		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, active: true, sessionID: "native-session"}
 	resolveTestBindings(s)

@@ -17,7 +17,6 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 	for _, mode := range []string{"new ready", "new failed", "resume ready", "resume failed"} {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
-			req.StrictResume = true
 			req.ExecutionControls = nil
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp", Required: true}}
 			req.MCPHTTPServers = &servers

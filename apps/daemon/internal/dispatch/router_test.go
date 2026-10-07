@@ -3,6 +3,7 @@ package dispatch_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -177,12 +178,12 @@ func registerSession(reg *agent.Registry, info proto.SupportedAgentKind, factory
 	}))
 }
 
-// startRun binds the Session run to r, prepares its Executor of kind and
-// starts run. sender records r's frames.
+// startRun binds the Session run to r, prepares its Executor of kind, starts
+// run and waits until it accepts operations. sender records r's frames.
 func startRun(t *testing.T, r *dispatch.Router, sender *recSender, kind, run string) {
 	t.Helper()
 	assign(t, r, run, "")
-	prepare := scoped(t, run, proto.TypeExecutionPrepare, "prepare-"+run, proto.ExecutionPreparePayload{SessionID: run, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: kind, AgentStateKey: stateKey(run), StrictResume: true, DisableExecutionEnvironment: true})})
+	prepare := scoped(t, run, proto.TypeExecutionPrepare, "prepare-"+run, noEnvironmentPreparation(run, proto.PromptRequestPayload{AgentKind: kind}))
 	if err := r.Handle(t.Context(), prepare); err != nil {
 		t.Fatalf("execution_prepare: %v", err)
 	}
@@ -191,6 +192,7 @@ func startRun(t *testing.T, r *dispatch.Router, sender *recSender, kind, run str
 		t.Fatalf("execution_start: %v", err)
 	}
 	waitPreparationStatus(t, sender, prepare.ID, "started", "")
+	waitFor(t, func() bool { return r.RunStartedForTest(run) }, "run "+run+" to accept operations")
 }
 
 // ref is the assignment the tests bind session to.
@@ -227,6 +229,99 @@ func mustEnv(t *testing.T, typ, id string, payload any) proto.Envelope {
 // ---------------------------------------------------------------------
 // tests
 // ---------------------------------------------------------------------
+
+func TestExecutionStartRunsInputAndForwardsOutput(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+
+	startRun(t, h.router, h.sender, "fake_alpha", "run_1")
+	req := <-h.gotReq
+	sess := <-h.gotSess
+	if req.RunID != "run_1" || len(req.Input) != 1 || *req.Input[0].Content[0].Text != "input" {
+		t.Errorf("Turn got run %q input %+v, want run_1/input", req.RunID, req.Input)
+	}
+
+	// Session emits a delta + done; both should reach the sender.
+	sess.out <- mustEnv(t, proto.TypeDelta, "run_1", proto.DeltaPayload{Delta: "hello", Sequence: 1})
+	sess.out <- mustEnv(t, proto.TypeDone, "run_1", proto.DonePayload{Content: "hello"})
+
+	waitForTypes(t, h.sender, "run_1", []string{proto.TypeDelta, proto.TypeDone})
+
+	// Settlement should have removed the Run.
+	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "active runs to drop to 0")
+}
+
+func TestExecutionStartRejectsDuplicateRunID(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+
+	startRun(t, h.router, h.sender, "fake_alpha", "run_dup")
+	<-h.gotReq
+
+	// Another Executor must not start a second Turn for the same RunID.
+	assign(t, h.router, "session-dup", "")
+	second := executorAdmission(t, h.router, h.sender, "prepare-dup", noEnvironmentPreparation("session-dup", proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
+	start := scoped(t, "session-dup", proto.TypeExecutionStart, "prepare-dup", proto.ExecutionStartPayload{Handle: second.Handle, ExecutorID: second.ExecutorID, RunID: "run_dup", Input: proto.TextInput("input")})
+	if err := h.router.Handle(context.Background(), start); err == nil {
+		t.Fatal("duplicate Run started")
+	}
+	if status := waitPreparationStatus(t, h.sender, "prepare-dup", "rejected", ""); status.ErrorCode != "run_conflict" {
+		t.Fatalf("duplicate start status = %+v, want run_conflict", status)
+	}
+	select {
+	case extra := <-h.gotReq:
+		t.Fatalf("Turn started twice for duplicate run, second run=%s", extra.RunID)
+	default:
+	}
+}
+
+func TestExecutionPrepareRejectsUnknownKind(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+
+	assign(t, h.router, "x", "")
+	env := scoped(t, "x", proto.TypeExecutionPrepare, "prepare_x", noEnvironmentPreparation("x", proto.PromptRequestPayload{AgentKind: "fake_beta"}))
+	if err := h.router.Handle(context.Background(), env); err == nil {
+		t.Error("unknown kind admitted")
+	}
+	if status := waitPreparationStatus(t, h.sender, "prepare_x", "rejected", ""); status.ErrorCode != "resource_unavailable" {
+		t.Errorf("unknown kind status = %+v, want resource_unavailable", status)
+	}
+	if got, want := h.sender.typesFor("prepare_x"), []string{proto.TypePreparationStatus}; !slices.Equal(got, want) {
+		t.Errorf("sender frames for prepare_x = %v, want %v", got, want)
+	}
+}
+
+func TestExecutionStartRequiresRunID(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+
+	assign(t, h.router, preparationSessionID, "")
+	ready := executorAdmission(t, h.router, h.sender, "prepare", noEnvironmentPreparation(preparationSessionID, proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
+	start := mustEnv(t, proto.TypeExecutionStart, "prepare", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, Input: proto.TextInput("input")})
+	if err := h.router.Handle(context.Background(), start); err == nil {
+		t.Fatal("expected error on missing run id")
+	}
+	if status := waitPreparationStatus(t, h.sender, "prepare", "rejected", ""); status.ErrorCode != "invalid_start" {
+		t.Fatalf("missing run id status = %+v, want invalid_start", status)
+	}
+}
+
+func TestHandlePromptCancelInvokesSessionCancel(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+
+	startRun(t, h.router, h.sender, "fake_alpha", "run_2")
+	<-h.gotReq
+	sess := <-h.gotSess
+
+	if err := h.router.Handle(context.Background(), scoped(t, "run_2", proto.TypePromptCancel, "run_2", nil)); err != nil {
+		t.Fatalf("prompt_cancel: %v", err)
+	}
+
+	waitFor(t, func() bool { return sess.cancels() == 1 }, "session.Cancel to fire once")
+	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "session to be cleaned up")
+}
 
 func TestHandlePromptCancelUnknownRunIsNoop(t *testing.T) {
 	h := newHarness(t)
@@ -283,6 +378,53 @@ func TestPermissionDecisionUnknownPermIsNoop(t *testing.T) {
 		t.Errorf("decision for unknown perm = %v, want nil", err)
 	}
 	assertDecisionAck(t, h.sender, "delivery-unknown-perm", false, "not_pending")
+}
+
+func TestPromptForUserChoiceDecisionRoutesToSession(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+
+	startRun(t, h.router, h.sender, "fake_alpha", "run_ask")
+	<-h.gotReq
+	sess := <-h.gotSess
+
+	// Envelope.ID is the run id (server-side dispatch fans on it); the
+	// ask id rides on the payload. Daemon's indexPermissionFrame reads
+	// payload.AskID to seed askIndex.
+	sess.out <- mustEnv(t, proto.TypePromptForUserChoice, "run_ask", proto.PromptForUserChoicePayload{
+		AskID:     "ask_abcd1234",
+		Questions: []proto.PromptForUserChoiceQuestion{{Question: "?", Options: []proto.PromptForUserChoiceOption{{Label: "yes"}, {Label: "no"}}}},
+		ToolUseID: "toolu_42",
+	})
+	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePromptForUserChoice, "run_ask") }, "prompt_for_user_choice forwarded")
+
+	dec := scoped(t, "run_ask", proto.TypePromptForUserChoiceDecision, "ask_abcd1234", proto.PromptForUserChoiceDecisionPayload{
+		DeliveryID: "delivery-ask-1", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
+	})
+	if err := h.router.Handle(context.Background(), dec); err != nil {
+		t.Fatalf("prompt_for_user_choice_decision: %v", err)
+	}
+
+	sess.askMu.Lock()
+	calls := append([]askCall(nil), sess.askCalls...)
+	sess.askMu.Unlock()
+	if len(calls) != 1 || calls[0].id != "ask_abcd1234" {
+		t.Fatalf("askCalls = %+v, want one ask_abcd1234", calls)
+	}
+	if len(calls[0].decision.QuestionAnswers[0].Answers) != 1 || calls[0].decision.QuestionAnswers[0].Answers[0] != "yes" {
+		t.Errorf("answer payload mismatch: %+v", calls[0].decision)
+	}
+	assertDecisionAck(t, h.sender, "delivery-ask-1", true, "")
+
+	// Cleanup contract: a successful decision drops the ask from both
+	// the router-level index and the session's pendingAsks set, so a
+	// stale retry short-circuits as "run gone".
+	if got := h.router.AskIndexLenForTest(); got != 0 {
+		t.Errorf("askIndex len = %d, want 0 after decision", got)
+	}
+	if got := h.router.PendingAsksLenForTest("run_ask"); got != 0 {
+		t.Errorf("pendingAsks len = %d, want 0 after decision", got)
+	}
 }
 
 // TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown locks in the
@@ -403,9 +545,48 @@ func TestHandleAfterShutdownReturnsErrRouterClosed(t *testing.T) {
 	}
 }
 
+func TestShutdownWaitsForPumpDrain(t *testing.T) {
+	h := newHarness(t)
+
+	startRun(t, h.router, h.sender, "fake_alpha", "rs")
+	<-h.gotReq
+	sess := <-h.gotSess
+	sess.closeOutOnCancel = false
+
+	// Background: emit one frame then close out shortly after
+	// shutdown is asked for.
+	go func() {
+		sess.out <- mustEnv(t, proto.TypeDelta, "rs", proto.DeltaPayload{Delta: "x"})
+		time.Sleep(20 * time.Millisecond)
+		close(sess.out)
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := h.router.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown returned %v before pump drained", err)
+	}
+	if h.router.ActiveRuns() != 0 {
+		t.Errorf("ActiveRuns after Shutdown = %d, want 0", h.router.ActiveRuns())
+	}
+}
+
 // ---------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------
+
+func waitForTypes(t *testing.T, s *recSender, runID string, want []string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got := s.typesFor(runID)
+		if slices.Equal(got, want) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("never observed types %v for run %s; got %v", want, runID, s.typesFor(runID))
+}
 
 func waitFor(t *testing.T, cond func() bool, what string) {
 	t.Helper()

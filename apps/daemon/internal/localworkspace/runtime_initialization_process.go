@@ -110,7 +110,7 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 		return &InitializationFailure{}
 	}
 	process, err := clirunner.Start(clirunner.StartOptions{Parent: operation, Binary: binary, Args: args,
-		Dir: directory, Env: env, OwnProcessGroup: true, KillTimeout: 250 * time.Millisecond})
+		Dir: directory, Env: env, KillTimeout: 250 * time.Millisecond})
 	if err != nil {
 		return ErrInitializationUnconfirmed
 	}

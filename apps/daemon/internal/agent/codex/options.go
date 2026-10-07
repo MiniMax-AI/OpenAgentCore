@@ -19,8 +19,9 @@ import (
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
 	// Cwd is the working directory passed to codex and the spawned
-	// app-server: the bound workspace root for an Environment request and
-	// the Session's private CODEX_HOME for environment:none.
+	// app-server: the bound workspace root for an Environment request and,
+	// for environment:none, the Session's private CODEX_HOME or a view's work
+	// directory.
 	Cwd string
 
 	// Env is the environment slice (KEY=value) the plan adds. A local
@@ -29,12 +30,11 @@ type SessionPlan struct {
 	Env []string
 
 	// ExtraConfig is a list of `-c key=value` overrides applied at the
-	// app-server CLI. Used to layer web_search, model_verbosity and
-	// model_reasoning_effort without editing config.toml.
+	// app-server CLI.
 	ExtraConfig [][2]string
 
 	// EnableFeatures / DisableFeatures forward to `--enable / --disable`
-	// flags.
+	// flags for the profiles the adapter configures.
 	EnableFeatures  []string
 	DisableFeatures []string
 
@@ -58,9 +58,6 @@ type SessionPlan struct {
 
 	// SystemPrompt is forwarded as developerInstructions on thread/start.
 	SystemPrompt string
-
-	// CollaborationMode selects Codex's default or plan tool surface.
-	CollaborationMode CollaborationModeKind
 
 	// ModelReasoningEffort is frozen for launch and every native Turn.
 	ModelReasoningEffort string
@@ -88,10 +85,9 @@ func BuildSessionPlan(req proto.PromptRequestPayload) (SessionPlan, error) {
 // only after the request validates.
 func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
 	plan := SessionPlan{
-		CollaborationMode: CollaborationModeDefault,
-		ApprovalPolicy:    AskForApproval{String: "never"},
-		Sandbox:           SandboxDangerFullAcces,
-		Cleanup:           func() {},
+		ApprovalPolicy: AskForApproval{String: "never"},
+		Sandbox:        SandboxDangerFullAcces,
+		Cleanup:        func() {},
 	}
 	prepared, err := harnessconfiguration.Configuration().Prepare(req)
 	if err != nil {
@@ -106,7 +102,7 @@ func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.Vi
 		switch controls.TextVerbosity {
 		case "low", "medium", "high":
 		default:
-			return plan, fmt.Errorf("codex: model_verbosity must be low, medium or high")
+			return plan, fmt.Errorf("codex: text_verbosity must be low, medium or high")
 		}
 		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv(controls.WebSearch)}, [2]string{"model_verbosity", strconv(controls.TextVerbosity)})
 	}
@@ -122,6 +118,9 @@ func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.Vi
 	}
 	plan.home = home
 	plan.Env = []string{"DISABLE_TELEMETRY=1", "CODEX_HOME=" + home.View}
+	if req.DisableExecutionEnvironment {
+		plan.Env = append(plan.Env, "CODEX_EXEC_SERVER_URL=none")
+	}
 	if err := writeCodexProviderConfig(home.Host, nativeProvider(prepared.Provider)); err != nil {
 		return plan, err
 	}
