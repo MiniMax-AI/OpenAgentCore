@@ -38,11 +38,9 @@ type OwnershipChecker interface {
 }
 
 type SamplerOptions struct {
-	Interval      time.Duration
 	PageSize      int
 	Concurrency   int
 	SourceTimeout time.Duration
-	Report        func(SweepResult)
 }
 
 // SweepResult is deliberately low-cardinality. It reports collection coverage
@@ -54,20 +52,16 @@ type SweepResult struct {
 }
 
 type Sampler struct {
-	lister     SessionLister
-	observer   HistoryObserver
-	owner      OwnershipChecker
-	options    SamplerOptions
-	now        func() time.Time
-	afterSweep func(SweepResult)
+	lister   SessionLister
+	observer HistoryObserver
+	owner    OwnershipChecker
+	options  SamplerOptions
+	now      func() time.Time
 }
 
 func NewSampler(lister SessionLister, observer HistoryObserver, owner OwnershipChecker, options SamplerOptions) (*Sampler, error) {
 	if lister == nil || observer == nil || owner == nil {
 		return nil, errors.New("Runtime history sampler dependencies are required")
-	}
-	if options.Interval <= 0 {
-		return nil, errors.New("Runtime history sampler interval must be positive")
 	}
 	if options.PageSize == 0 {
 		options.PageSize = defaultSamplerPageSize
@@ -87,37 +81,12 @@ func NewSampler(lister SessionLister, observer HistoryObserver, owner OwnershipC
 	if options.SourceTimeout < time.Millisecond || options.SourceTimeout > 30*time.Second {
 		return nil, errors.New("Runtime history sampler source timeout is out of range")
 	}
-	return &Sampler{lister: lister, observer: observer, owner: owner, options: options, now: time.Now, afterSweep: options.Report}, nil
+	return &Sampler{lister: lister, observer: observer, owner: owner, options: options, now: time.Now}, nil
 }
 
-// Run performs one immediate full keyset sweep and then repeats without overlap.
-// A failed sweep is isolated from execution and retried at the next interval.
-func (s *Sampler) Run(ctx context.Context) error {
-	for {
-		result := s.sweep(ctx)
-		s.report(result)
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		timer := time.NewTimer(s.options.Interval)
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			timer.Stop()
-			return ctx.Err()
-		}
-	}
-}
-
-func (s *Sampler) report(result SweepResult) {
-	if s.afterSweep == nil {
-		return
-	}
-	defer func() { _ = recover() }()
-	s.afterSweep(result)
-}
-
-func (s *Sampler) sweep(ctx context.Context) (result SweepResult) {
+// Sweep performs one full keyset sweep. A failed sweep is isolated from
+// execution; the caller repeats sweeps without overlap.
+func (s *Sampler) Sweep(ctx context.Context) (result SweepResult) {
 	result.StartedAt = s.now()
 	defer func() { result.CompletedAt = s.now() }()
 	sweepCtx, cancel := context.WithCancel(ctx)

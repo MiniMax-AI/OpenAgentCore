@@ -58,8 +58,6 @@ services:
       OAC_DATABASE_PASSWORD_FILE: /run/database/password
       OAC_CREDENTIAL_KEY_FILE: /run/oac/credential.key
       OAC_CORE_KEY_DIGESTS_FILE: /run/oac/core-key-digests.json
-      OAC_PROVIDER_STATE_ROOT: /state
-      OAC_NATIVE_INSTALLER_DIR: /opt/oac/native-installers
       OAC_EXECUTION_CONCURRENCY: ${OAC_EXECUTION_CONCURRENCY:-}
       OAC_DEFAULT_HARNESS: ${OAC_DEFAULT_HARNESS:-}
       OAC_HARNESSES: ${OAC_HARNESSES:-}
@@ -99,8 +97,7 @@ services:
     depends_on:
       init: {condition: service_completed_successfully}
     environment:
-      OAC_WEB_ORIGIN: *public-url
-      OAC_WEB_UPSTREAM: http://core:8091
+      OAC_PUBLIC_URL: *public-url
       OAC_WEB_CORE_KEY_FILE: /run/oac/core.key
       OAC_WEB_NODE_PAYLOAD_DIR: /node-payload
       OAC_LOG_LEVEL: ${OAC_LOG_LEVEL:-}

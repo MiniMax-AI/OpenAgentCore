@@ -5,7 +5,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-install_dir="${OAC_INSTALL_DIR_DEFAULT:-$HOME/.oac/local}"
+install_dir="$HOME/.oac/local"
 host_address="127.0.0.1"
 web_port="8080"
 

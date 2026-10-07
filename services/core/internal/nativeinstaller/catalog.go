@@ -42,8 +42,12 @@ var platformName = regexp.MustCompile(`^(linux|darwin|windows)-(amd64|arm64)$`)
 
 // Load checks the matched catalog without downloading execution payloads. Local
 // offline archives are verified once; the directory stays immutable while serving.
+// A directory without catalog.json holds no installer and returns nil.
 func Load(directory, version string) (*Catalog, error) {
 	raw, err := os.ReadFile(filepath.Join(directory, "catalog.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -123,8 +127,9 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 func psQuote(s string) string    { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
-func (c *Catalog) Commands(origin, authorization string) map[string]string {
-	base := origin + "/api/v1/agent-daemon/install/" + c.Version
+// Commands installs this catalog's version from the installer base URL.
+func (c *Catalog) Commands(installerBase, authorization string) map[string]string {
+	base := installerBase + c.Version
 	// Hold the small bootstrap in memory so an interrupted fetch leaves no file.
 	// Only execute a complete successful response; preserve interactive stdin.
 	posix := `set -e; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; bash -c "$script" -- "$@"`

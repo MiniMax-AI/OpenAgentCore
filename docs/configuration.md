@@ -2,16 +2,17 @@
 title: "Configuration reference"
 ---
 
-Every setting of a Core installation has exactly one home. There are two kinds:
+Every setting of a Core installation has exactly one home, in one of three categories:
 
-| Kind | Examples | Home | Change it with | Takes effect |
+| Category | Examples | Home | Change it with | Takes effect |
 | --- | --- | --- | --- | --- |
-| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, Runtime history export | `.env` in the installation directory (default `~/.oac/core`) | Edit `.env`, then run `oac apply` | `oac apply` recreates the services that read the changed settings |
+| [Process settings](#process-settings) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, Runtime history | `.env` in the installation directory (default `~/.oac/core`) | Edit `.env`, then run `oac apply` | `oac apply` recreates the services that read the changed settings |
+| [Secrets](#compose-installations) | Database password, credential encryption key, installation ID, Core key and the Core key digest derived from it | `secrets/` in the Compose data volume, one copy each | Initialization generates them once; `oac rotate-core-key` replaces the Core key and its digest | `oac rotate-core-key` restarts Core and Web |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; nodes prepare Runtime changes asynchronously |
 
-Web's **System** page shows the installation's addresses, the default models, the sandbox configuration and, under **Startup settings**, the process settings Core loaded. Secrets live in [`secrets/`](#compose-installations), one copy each. No configuration file defines Projects or API keys.
+Web's **System** page shows the installation's addresses, the default models, the sandbox configuration and, under **Startup settings**, the process settings Core loaded. No configuration file defines Projects or API keys.
 
-## Process settings {#process-settings-configjson}
+## Process settings
 
 Installer flags in [installation options](./getting-started/install-options.md) write `.env` once. To change a setting, edit `.env` and apply it:
 
@@ -38,11 +39,11 @@ To change it, point the reverse proxy at the new address first, then edit `OAC_P
 
 ### Settings
 
-`OAC_HISTORY_SETTINGS_FILE` may point at a file whose headers hold export credentials. The file stays mode `0600`, and those headers never appear in `oac` output or in the installation report. Model providers are not process settings; see [Default models](#default-models).
+Model providers are not process settings; see [Default models](#default-models).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | `http://localhost:8080` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
+| `OAC_PUBLIC_URL` | `http://localhost:8080`, set by `compose.yaml`. Core started without it runs no Runtime gateway and executes no Sessions | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
 | `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. The installer sets `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -53,9 +54,23 @@ To change it, point the reverse proxy at the new address first, then edit `OAC_P
 | `OAC_HARNESSES` | Every registered Harness | Comma-separated Harnesses to enable besides the default one. Unknown names stop startup |
 | `OAC_WRITE_AUDIT_RETENTION` | `2160h` | Minimum `1h` |
 | `OAC_OAUTH_TRUSTED_ORIGINS` | unset | Comma-separated HTTPS origins |
-| `OAC_HISTORY_SETTINGS_FILE` | unset | Optional Runtime history file. Sensitive; Core reports only whether it is configured |
+| `OAC_HISTORY_SETTINGS_FILE` | unset | Optional [Runtime history file](#runtime-history-file). Sensitive; Core reports only whether it is configured |
 
-An unset or empty value selects the default. Edit `.env`, then run `oac apply`. Core reports the process settings it loaded at `GET /core/v1/installation`. `oac-core check-config` validates the same environment without starting Core. Sensitive settings report only whether they are configured. How Core collects and keeps Runtime history is in [retained history](../contracts/agents-api/runtime-observability.md#retained-history-and-optional-export).
+An unset or empty value selects the default. Edit `.env`, then run `oac apply`. Core reads every process setting, and every file a setting names, once at startup and reports what it loaded at `GET /core/v1/installation`. `oac-core check-config` loads and validates the same settings and files without starting Core. The native installer catalog under `OAC_PROVIDER_ROOT` is not a setting; Core checks it only when it starts. Errors name the variable, never its value. Sensitive settings report only whether they are configured.
+
+### Runtime history file
+
+`OAC_HISTORY_SETTINGS_FILE` names a JSON file that tunes [retained history](../contracts/agents-api/runtime-observability.md#retained-history-and-optional-export) and adds an optional OTLP export. Without it, Core keeps history in its database with the defaults below. In a Compose installation, put the file in the data volume's `secrets/core/` directory, owned by UID 65532 with mode `0600`, and set `OAC_HISTORY_SETTINGS_FILE=/run/oac/<file name>`: Core mounts that directory read-only at `/run/oac`. Headers may hold export credentials; they never appear in `oac` output or in the installation report. Unknown fields are rejected.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `sample_interval_seconds` | `30` | Periodic sampling interval, from 5 to 300 |
+| `queue_capacity` | `256` | Records each exporter queues, at most 4096 |
+| `timeout_seconds` | `2` | Export and history query timeout, at most 30 |
+| `endpoint` | unset | Absolute OTLP/HTTP metrics URL, such as `https://collector.example/v1/metrics`. Unset, Core exports nothing and the other export fields must be unset |
+| `transport` | unset | `otlp_http`; required with `endpoint` |
+| `insecure` | `false` | `true` is required for an `http` endpoint and rejected for `https` |
+| `headers` | none | Request headers for the endpoint. `Host`, `Content-Length`, `Content-Type` and `Content-Encoding` are reserved |
 
 ## Runtime settings: Web
 
@@ -84,7 +99,7 @@ Set a default in **System** → **Default model configuration**, or use `PUT /co
 
 ## Compose installations
 
-The [standalone Compose file](./getting-started/install-options.md#docker-compose-and-hosting-platforms) takes process settings from the platform's environment. An empty `OAC_PUBLIC_URL` selects `http://localhost:8080`. Set it to the exact public origin, without a trailing slash, and recreate Core and Web before adding nodes or executors. The platform terminates TLS and routes to `web:8080`.
+The [standalone Compose file](./getting-started/install-options.md#docker-compose-and-hosting-platforms) takes process settings from the platform's environment. Set [`OAC_PUBLIC_URL`](#settings) to the exact public origin, without a trailing slash, and recreate Core and Web before adding nodes or executors. The platform terminates TLS and routes to `web:8080`.
 
 The initialization service generates secrets and the installation ID once, then verifies them on subsequent deployments. Each secret has one persistent source; Core's key digest is derived from Web's sign-in key. Initialization never replaces missing or changed secrets on an existing installation. Core reads the process environment from `.env`.
 
@@ -94,7 +109,7 @@ The initialization service generates secrets and the installation ID once, then 
 | `secrets/database/` | Generated database password | PostgreSQL and Core |
 | `secrets/core/` | Credential encryption key, installation ID and Core key digest | Core |
 | `secrets/web/` | Generated Core sign-in key | Web |
-| `state/` | Private Provider state | Core |
+| `state/` | Private Provider state, mounted in Core at `/state`. Each adapter owns a subdirectory; E2B uses `e2b/`, with no group or other access | Core |
 | `node-payload/` | Verified node installation metadata | Web |
 
 Initialization prepares this directory; application services receive their secret directories read-only. `docker compose exec web oac-web core-key` prints the Core key to the operator terminal without writing it to container logs. Database passwords and credential encryption keys are never printed.
@@ -135,21 +150,17 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 
 | Variable | Set from |
 | --- | --- |
-| `OAC_PUBLIC_URL` | The public origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
+| `OAC_PUBLIC_URL` | The [public URL](#settings). Core validates it once and derives the Agents API base, the daemon WebSocket URL, the self-hosted `remote_url`, the installer downloads, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers |
 | `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
-| `OAC_DATABASE_URL` | PostgreSQL without a password |
+| `OAC_DATABASE_URL` | Required. PostgreSQL without a password |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |
 | `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
-| `OAC_CORE_KEY_DIGESTS_FILE` | `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
-| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded |
-| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching [process settings](#settings). `oac-core check-config` validates them without starting Core |
-| `OAC_HISTORY_SETTINGS_FILE` | Optional Runtime history file. Sensitive; the installation report says only whether it is set |
-| `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | Logging; Web reads the same three |
-| `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root |
-| `OAC_PROVIDER_STATE_ROOT` | Absolute private state root: `/state` in the Core image. Each adapter owns its subdirectory; E2B uses `e2b/`, owned by Core's user with no group or other access. Back it up with the database and `credential.key`; don't mount it into Web or a Runtime |
-| `OAC_NATIVE_INSTALLER_DIR` | Self-hosted daemon installers: `/opt/oac/native-installers` in the Compose file. Unset, Core serves none. Core checks the catalog against its own release before serving it |
+| `OAC_CORE_KEY_DIGESTS_FILE` | Required. `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
+| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL`. Core refuses an ID other than the one its database recorded |
+| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
+| `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 
-Core logs the file paths it loads, never environment values or file contents.
+Core logs the history file path it loads, never environment values or file contents.
 
 Invalid explicit OAuth trusted origins stop Core at startup. Entries must be HTTPS origins without credentials, query or a non-root path. [Vaults](../contracts/agents-api/vaults.md) owns refresh and network policy. A private issuer also needs a trusted CA: independently managed Unix Core can use Go’s `SSL_CERT_FILE` PEM CA-bundle override, which preserves certificate verification. Managed installation has no custom-CA setting.
 
@@ -159,11 +170,11 @@ Compose sets these for Web. Set them yourself only when you run the console with
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_WEB_ADDR` | `:8080` | Listener address |
-| `OAC_WEB_ORIGIN` | `http://127.0.0.1:8080` | The exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
-| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path |
-| `OAC_WEB_CORE_KEY_FILE` | `/admin/core.key` | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
+| `OAC_WEB_ADDR` | `:8080` | Listener address. The healthcheck probes it on `127.0.0.1` when its host is empty or unspecified |
+| `OAC_PUBLIC_URL` | Required | The [public URL](#settings): the exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
+| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path. The healthcheck probes its `/healthz` |
+| `OAC_WEB_CORE_KEY_FILE` | Required | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
 | `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
 | `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |
 
-Defaults apply when a variable is absent; an explicitly empty value is validated as supplied. An invalid `OAC_WEB_*` value stops the console at startup with a message naming the variable. The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([Core environment](#appendix-core-environment-without-the-installer)); unknown values fall back to their defaults. Use HTTPS for any browser that is not on the same machine.
+An unset or empty variable selects its default. An invalid value stops the console at startup with a message naming the variable. The console also reads the three log [process settings](#settings) and rejects the values Core rejects. Use HTTPS for any browser that is not on the same machine.

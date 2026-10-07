@@ -132,7 +132,7 @@ Core writes this record in the same transaction that creates the Session. Later 
 | Field | Meaning |
 | --- | --- |
 | `object` | `core.installation` |
-| `installation_id` | The installation ID from `state.json` ([installation directory](../../docs/configuration.md#installation-directory)); null when Core runs without the sandbox manager |
+| `installation_id` | The installation ID from `OAC_INSTALLATION_ID_FILE` ([Compose installations](../../docs/configuration.md#compose-installations)); null when Core runs without the sandbox manager |
 | `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset |
 | `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys. Null when `public_url` is null |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
