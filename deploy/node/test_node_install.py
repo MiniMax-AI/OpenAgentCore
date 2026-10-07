@@ -547,6 +547,11 @@ class NodeInstallTests(unittest.TestCase):
         partial = self.root / ".enrollment-token.partial"
         self.assertTrue(partial.exists())
         identity = (self.root / "state/node/identity.json").read_bytes()
+        with mock.patch.object(installer.node_spec, "fetch", side_effect=installer.InstallError("Core unavailable")):
+            with self.assertRaisesRegex(installer.InstallError, "Core unavailable"):
+                self.install()
+        self.assertFalse(partial.exists())
+        self.assertEqual((self.root / "state/node/identity.json").read_bytes(), identity)
         helper = self.root / ".generation-preparer.pyz.partial"
         helper.write_bytes(b'unfinished helper')
         helper.chmod(0o600)

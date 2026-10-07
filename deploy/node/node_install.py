@@ -338,10 +338,8 @@ def unit_name(installation_id):
     return "oac-node-" + installation_id + ".service"
 
 
-def open_node(args, token):
-    """Read the Core specification and check the host; returns the node's state directory."""
-    root = Path.home() / ".oac/nodes" / args.installation_id
-    safe_directory(root)
+def configure_node(root, args, token):
+    """Read the Core specification and check the host under the installation lock."""
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
     args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not (root / "registered.json").exists())
@@ -354,7 +352,6 @@ def open_node(args, token):
         if not owner.exists() and any(runtime_home.iterdir()):
             raise InstallError("Microsandbox home contains unowned state; refusing to adopt it")
         write_once(owner, json_text({"installation_id": args.installation_id}))
-    return root
 
 
 @contextlib.contextmanager
@@ -438,8 +435,10 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
 
 def prepare_service_node(args, token, helper_archive):
     """Sudo mode, as the service user: everything but the root-owned system unit."""
-    root = open_node(args, token)
+    root = Path.home() / ".oac/nodes" / args.installation_id
+    safe_directory(root)
     with install_lock(root), distribution.temporary_file(root / "enrollment-token") as secret_path:
+        configure_node(root, args, token)
         register_node(root, args, token, helper_archive, secret_path=secret_path)
 
 

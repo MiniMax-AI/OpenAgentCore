@@ -141,7 +141,7 @@ fi
 if [[ -z "$public_url" ]]; then public_url="http://localhost:$web_port"; local_only=1; fi
 
 if [[ "$resume" == 0 ]]; then
-  # Publish configuration only after both downloads and Compose validation succeed.
+  # Prepare configuration privately until downloads and image pulls succeed.
   # Before publication only this invocation's private staging directory is removed.
   download() {
     curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
@@ -150,27 +150,18 @@ if [[ "$resume" == 0 ]]; then
   }
   step "Downloading release checksums" download compose-sha256sums.txt
   step "Downloading Compose configuration" download compose.yaml
-  (cd "$stage" && sha256sum --check --quiet compose-sha256sums.txt)
   {
     echo "COMPOSE_PROJECT_NAME=oac-$(od -An -N5 -tx1 /dev/urandom | tr -d ' \n')"
     printf "OAC_INSTALL_DIR='%s'\nOAC_HOST='%s'\nOAC_WEB_PORT='%s'\nOAC_PUBLIC_URL='%s'\n" "$install_dir" "$host_address" "$web_port" "$public_url"
   } >"$stage/.env"
-  (cd "$stage" && step "Checking Compose configuration" docker compose config --quiet)
-  # An existing empty directory may be replaced, never a directory with user data.
-  if [[ -e "$install_dir" ]]; then rmdir "$install_dir"; fi
-  mv "$stage" "$install_dir"
-  stage=""
-  log="$install_dir/install.log"
-  rm -f "$install_dir/.oac-installer"
-  published=1
 fi
 
-cd "$install_dir"
+if [[ "$resume" == 0 ]]; then cd "$stage"; else cd "$install_dir"; fi
 [[ ! -L .oac.lock && ( ! -e .oac.lock || ( -f .oac.lock && -O .oac.lock ) ) ]] || fail "Invalid installation lock: $install_dir/.oac.lock"
 exec 8>>.oac.lock
 flock -n 8 || fail "Another oac command is using this installation. Wait for it to finish and rerun."
 [[ ! -L install.log && ( ! -e install.log || ( -f install.log && -O install.log ) ) ]] || fail "Invalid installation log: $install_dir/install.log"
-log="$install_dir/install.log"
+log="$PWD/install.log"
 : >"$log"
 step "Verifying saved configuration" sha256sum --check --quiet compose-sha256sums.txt
 step "Checking Compose configuration" docker compose config --quiet
@@ -191,6 +182,16 @@ pull_images() {
   done <<<"$images"
 }
 step "Checking and downloading images" pull_images
+if [[ "$resume" == 0 ]]; then
+  # An existing empty directory may be replaced, never a directory with user data.
+  if [[ -e "$install_dir" ]]; then rmdir "$install_dir"; fi
+  mv "$stage" "$install_dir"
+  stage=""
+  cd "$install_dir"
+  log="$install_dir/install.log"
+  published=1
+fi
+rm -f .oac-installer
 copy_cli() (
   [[ ! -L ./oac.download ]] || fail "Temporary oac command must not be a symbolic link."
   trap 'rm -f ./oac.download' EXIT

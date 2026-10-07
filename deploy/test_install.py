@@ -15,7 +15,7 @@ INSTALL = ROOT / "deploy/install.sh"
 
 
 class InstallScriptTests(unittest.TestCase):
-    def install(self, root, *args, compose_up=0, docker_info=0, key_status=0, download_status=0, kill_download=False, kill_start=False, file_limit=False, missing_image="", route="1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0"):
+    def install(self, root, *args, compose_up=0, docker_info=0, key_status=0, download_status=0, kill_download=False, kill_start=False, pull_status=0, kill_pull=False, file_limit=False, missing_image="", route="1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0"):
         bin_dir = root / "bin"
         bin_dir.mkdir(exist_ok=True)
         log = root / "docker.log"
@@ -23,6 +23,7 @@ class InstallScriptTests(unittest.TestCase):
             #!/bin/sh
             [ {1 if file_limit else 0} -eq 1 ] || printf '%s\\n' "$*" >> {log}
             if [ "$1" = info ]; then exit {docker_info}; fi
+            if [ "$1" = pull ]; then {'kill -KILL "$PPID"' if kill_pull else ':'}; exit {pull_status}; fi
             if [ "$1" = image ] && [ "$2" = inspect ] && [ "$3" = "{missing_image}" ]; then exit 1; fi
             if [ "$1" = compose ] && [ "$2" = config ] && [ "$3" = --images ]; then printf 'fixture-core:latest\\nfixture-web:latest\\n'; fi
             if [ "$1" = compose ] && [ "$2" = logs ]; then echo service-diagnostic >&2; fi
@@ -152,6 +153,21 @@ class InstallScriptTests(unittest.TestCase):
             completed, _ = self.install(root)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertFalse((root / "oac.staging").exists())
+
+    def test_failed_initial_pull_never_adopts_old_cached_images_on_retry(self):
+        for kill in (False, True):
+            with self.subTest(kill=kill), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                failed, _ = self.install(root, pull_status=1, kill_pull=kill)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertFalse((root / "oac").exists())
+                (root / "docker.log").unlink()
+                # Every image inspect succeeds: another installation cached old tags.
+                completed, recorded = self.install(root)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                for image in ("fixture-core:latest", "fixture-web:latest"):
+                    self.assertIn("pull --platform linux/amd64 " + image, recorded)
+                self.assertFalse((root / "oac.staging").exists())
 
     def test_invalid_port_and_unavailable_docker_fail_before_installation(self):
         for args, status in [(["--web-port", "0"], 0), (["--web-port", "70000"], 0), ([], 1)]:
