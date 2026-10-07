@@ -130,7 +130,15 @@ func (i viewInstall) view() agent.View {
 		Shims:     []string{"git", "rg"},
 		ShimPaths: []string{"/bin/bash"},
 		Proxy:     agent.ViewProxyNone,
-		Executor:  i.executor,
+		Capabilities: agent.ViewCapabilities{
+			EnvironmentNone:      proto.CapabilityUnsupported,
+			Skills:               proto.CapabilityUnsupported,
+			FunctionTools:        proto.CapabilityUnsupported,
+			FunctionResultImages: proto.CapabilityUnsupported,
+			ToolSearch:           proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilityUnsupported,
+		},
+		Executor: i.executor,
 	}
 	i.loader.AddTo(&view)
 	return view

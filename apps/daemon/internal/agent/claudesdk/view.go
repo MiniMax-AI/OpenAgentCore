@@ -78,6 +78,14 @@ func declareView(probe Config, node, root, bridge, native string, loader viewloa
 		Shims:      []string{"bash", "rg", "git"},
 		ForwardEnv: []string{"CLAUDECODE", "GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
+		Capabilities: agent.ViewCapabilities{
+			EnvironmentNone:      proto.CapabilityUnsupported,
+			Skills:               proto.CapabilityUnsupported,
+			FunctionTools:        proto.CapabilityUnsupported,
+			FunctionResultImages: proto.CapabilityUnsupported,
+			ToolSearch:           proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilityUnsupported,
+		},
 	}
 	loader.AddTo(view)
 	view.Executor = newViewExecutorFactory(probe, layout)

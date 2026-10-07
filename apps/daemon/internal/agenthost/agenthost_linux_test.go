@@ -80,6 +80,11 @@ func register(reg *agent.Registry, kind string, view *agent.View) {
 		}})
 }
 
+// declared declares every view capability as s.
+func declared(s proto.CapabilitySupport) agent.ViewCapabilities {
+	return agent.ViewCapabilities{EnvironmentNone: s, Skills: s, FunctionTools: s, FunctionResultImages: s, ToolSearch: s, StdioMCP: s}
+}
+
 // request is a Session request the agent host admits.
 func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{

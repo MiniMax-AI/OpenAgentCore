@@ -94,11 +94,12 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	}
 	copyExecutable(t, filepath.Join(closure, "harness"))
 	register(reg, "test", &agent.View{
-		Closure:   []agent.ViewMount{{Name: "harness", HostDir: closure}},
-		Masks:     []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
-		LocalExec: []string{harnessPath},
-		ShimPaths: []string{"/bin/sh"},
-		Proxy:     agent.ViewProxyNone,
+		Closure:      []agent.ViewMount{{Name: "harness", HostDir: closure}},
+		Masks:        []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
+		LocalExec:    []string{harnessPath},
+		ShimPaths:    []string{"/bin/sh"},
+		Proxy:        agent.ViewProxyNone,
+		Capabilities: declared(proto.CapabilityUnsupported),
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
 			return &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
 				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir}}, nil

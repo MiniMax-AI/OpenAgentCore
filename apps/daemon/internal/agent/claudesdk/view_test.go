@@ -23,6 +23,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -105,7 +106,8 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 		t.Fatal("the real key reached the view")
 	}
 
-	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &proto.EnvironmentMCP{}}}
+	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
 	if _, err := view.Executor(t.Context(), req, session); !errors.Is(err, agent.ErrUnsupportedOperation) {
 		t.Fatalf("stdio MCP = %v, want ErrUnsupportedOperation", err)
 	}
