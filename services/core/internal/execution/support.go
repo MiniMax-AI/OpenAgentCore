@@ -99,7 +99,7 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput.IsSupported() || !caps.MessageItems.IsSupported()) {
 		return fail("device must support structured output and message observations")
 	}
-	if profile.TextVerbosity.IsSupported() && !caps.TextVerbosity.IsSupported() {
+	if verbosity := snapshot.Agent.Text.Verbosity; verbosity != "" && verbosity != "medium" && !caps.TextVerbosity.IsSupported() {
 		return fail("device must advertise text_verbosity")
 	}
 	if snapshot.Agent.MultiAgent.Enabled && !caps.SubagentObservations.IsSupported() {

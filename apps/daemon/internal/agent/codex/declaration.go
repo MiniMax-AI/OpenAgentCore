@@ -41,11 +41,6 @@ func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.Su
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
 	runtime := &agent.Runtime{Info: info}
-	if !SupportsTextVerbosity {
-		// Every execution carries a text verbosity, which needs the bounded catalog probe.
-		fmt.Fprintln(options.Stderr, "oac-daemon: codex unavailable: text verbosity requires Unix process-group cancellation support")
-		return runtime
-	}
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	version, err := check(ctx, "")

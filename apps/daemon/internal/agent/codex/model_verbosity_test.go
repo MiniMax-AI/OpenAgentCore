@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,17 +96,11 @@ func TestPrepareDefaultModelVerbosity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				found := false
-				for _, kv := range plan.ExtraConfig {
-					if kv[0] == "model_verbosity" {
-						found = true
-						if kv[1] != `"`+level+`"` {
-							t.Fatal("configured verbosity changed", kv)
-						}
-					}
+				if !slices.Contains(plan.ExtraConfig, [2]string{"model_verbosity", `"` + level + `"`}) || plan.Model != model {
+					t.Fatal("configured verbosity or model identity changed", plan.ExtraConfig, plan.Model)
 				}
-				if found != (model == "supported") || plan.Model != model {
-					t.Fatal("native default or model identity changed", plan.ExtraConfig, plan.Model)
+				if level == "medium" {
+					return // the default amount needs no catalog decision
 				}
 				kv := plan.ExtraConfig[len(plan.ExtraConfig)-1]
 				raw, err := os.ReadFile(strings.Trim(kv[1], `"`))
