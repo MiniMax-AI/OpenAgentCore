@@ -53,6 +53,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 					InputAdmission:   unavailableAdmission{},
 					SessionArchive:   strictStandIn{t},
 					Workspaces:       strictStandIn{t},
+					Links:            strictStandIn{t},
 				}
 			})
 		}

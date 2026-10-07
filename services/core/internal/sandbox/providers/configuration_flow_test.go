@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -150,6 +151,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 			InputAdmission:   struct{ api.InputAdmission }{},
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
+			Links:            struct{ http.Handler }{},
 		},
 		Sandboxes: &api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), nil), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
 			DeploymentReset: leaseSetup{t: t, changes: changes, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},

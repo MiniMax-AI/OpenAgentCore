@@ -1,10 +1,10 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 18cc3d9491e65cc9845223045039967317c9e3532987c24cc2732dec820f8c57
+source_hash: ede6031c1e4761dbbf27dd19829642ff892c2e12f26ec972da46dcb76c43c4fe
 ---
 
-机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
+机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon、Sandbox I/O 服务和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
 
 ## 路由 {#routes}
 
@@ -21,10 +21,11 @@ source_hash: 18cc3d9491e65cc9845223045039967317c9e3532987c24cc2732dec820f8c57
 | `POST agent-daemon/bootstrap` | Runtime daemon | daemon 凭据 | [daemon 引导](#daemon-bootstrap) |
 | `GET agent-daemon/device-status?device_id=` | Runtime daemon | daemon 凭据 | [设备状态](#device-status) |
 | WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | daemon 凭据 | [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md) |
+| WebSocket `GET sandbox-link` | Sandbox I/O 服务（serve peer）和 agent-host Runtime（attach peer） | 资源的 Serve 凭据或 agent host 的 Runtime 凭据，在 Link Hello 中发送 | [Sandbox link 协议](../../../docs/zh/sandbox-link-protocol.md) |
 
-所有凭据通过 `Authorization: Bearer` 头传输，不放入 URL。
+所有凭据通过 `Authorization: Bearer` 头传输；`sandbox-link` 例外，各 peer 在升级之后的 Link Hello 中发送凭据。凭据从不放入 URL。Core 从 `OAC_PUBLIC_URL` 派生 [Link URL](../../../docs/zh/configuration.md#changing-the-public-url)。
 
-生成的 [`runtime.openapi.yaml`](../runtime.openapi.yaml) 仅描述 sandbox-node 配置、登记、身份路由和两个安装路由。两个 WebSocket 及 daemon 引导、设备状态、登记和连接路由在 API 路由器外提供，无生成 schema；本文及所链接契约是它们唯一的定义。
+生成的 [`runtime.openapi.yaml`](../runtime.openapi.yaml) 仅描述 sandbox-node 配置、登记、身份路由、两个安装路由和 `sandbox-link` 升级；该升级上的消息由 Sandbox link 协议定义。`sandbox-node/connect` 和 `agent-daemon/ws` 两个 WebSocket 及 daemon 引导、设备状态、登记和连接路由在 API 路由器外提供，无生成 schema；本文及所链接契约是它们唯一的定义。
 
 ## 凭据 {#credentials}
 

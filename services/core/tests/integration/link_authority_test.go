@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -17,8 +20,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -29,8 +35,8 @@ import (
 const linkWait = 10 * time.Second
 
 // linkHarness is a hosted Session bound to h.device whose Environment has an
-// allocation with a Serve credential, and Core's Link Authority behind a
-// relay.
+// allocation with a Serve credential, and Core's Link Authority behind the
+// Link route.
 type linkHarness struct {
 	*dispatchHarness
 	relay    *sandboxlinktest.Server
@@ -51,13 +57,35 @@ func newLinkHarness(t *testing.T, guest bool) *linkHarness {
 		}
 		device = allocated.ID
 	}
-	l := &linkHarness{dispatchHarness: h, relay: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(h.s))), serve: []byte(uuid.NewString()),
+	l := &linkHarness{dispatchHarness: h, relay: startLinkRoute(t, h.s), serve: []byte(uuid.NewString()),
 		resource: sandboxbootstrap.Resource{TenantID: h.tenant, EnvironmentID: h.session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}}
 	if _, err := h.s.pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,state,create_settled,deployment_generation,serve_credential_hash)
 		VALUES($1,$2,$3,$4,'running',true,(SELECT generation FROM runtime_deployment),$5)`, l.resource.ID, l.resource.EnvironmentID, device, uuid.NewString(), serveHash(l.serve)); err != nil {
 		t.Fatal(err)
 	}
 	return l
+}
+
+// startLinkRoute serves Core's Link Authority at the Link route of the API
+// handler on s, on an httptest TLS server, and dials it at the Link URL its
+// origin derives. The relay closes before the server when the test ends.
+func startLinkRoute(t *testing.T, s *Store) *sandboxlinktest.Server {
+	t.Helper()
+	rl := relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+	handler, err := publicHandler(t, s, fixtureKeyResolver{}, "codex", storeExecution(t, s), func(d *api.Dependencies) { d.Execution.Links = rl })
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewTLSServer(handler)
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { rl.Close() })
+	link, err := placement.LinkURL(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	return &sandboxlinktest.Server{URL: link, TLS: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}, Relay: rl}
 }
 
 func serveHash(credential []byte) string {
@@ -357,7 +385,7 @@ func TestLinkAuthorityEnrollment(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "INSERT INTO sandbox_enrollments(id, environment_id, executor_key_id) VALUES($1, $2, $3)", resource.ID, resource.EnvironmentID, key.KeyID); err != nil {
 		t.Fatal(err)
 	}
-	srv := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+	srv := startLinkRoute(t, s)
 	served := startLinkServe(t, srv, []byte(key.Token), resource.Ref())
 	within(t, served.connected)
 	served.stop()
@@ -424,7 +452,7 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	tenant, session, environment := managedSession(t, s)
 	key := uuid.NewString()
-	srv := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+	srv := startLinkRoute(t, s)
 	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: srv.Relay, ManagedRuntimes: &execution.RuntimeProvider{
 		CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: strings.Repeat("a", 64), Provider: &lifecycleProvider{resources: map[string]sandbox.Info{}}}})
 	t.Cleanup(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })

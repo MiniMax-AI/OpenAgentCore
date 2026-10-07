@@ -254,6 +254,19 @@ paths:
       summary: Claim an Environment's installation credential
       tags:
         - Native Installation
+  /api/v1/sandbox-link:
+    get:
+      description: 'Upgrades to a WebSocket that carries the Sandbox link protocol. The Sandbox I/O service connects as the serve peer and the agent-host Runtime as the attach peer. The route takes no credential: each peer authenticates in its Link Hello, and the relay ends a link the Hello does not authenticate.'
+      responses:
+        "101":
+          description: Switching Protocols; the connection carries the Link
+        "400":
+          description: The request is not a WebSocket upgrade
+        "403":
+          description: The request carries an Origin other than its Host
+      summary: Open a sandbox Link
+      tags:
+        - Sandbox Link
   /api/v1/sandbox-node/configuration:
     get:
       description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.

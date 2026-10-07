@@ -419,6 +419,7 @@ func run() error {
 			InputAdmission:   worker,
 			SessionArchive:   deploymentExecution,
 			Workspaces:       worker,
+			Links:            linkRelay,
 			NativeInstaller:  nativeInstaller,
 		}
 	}

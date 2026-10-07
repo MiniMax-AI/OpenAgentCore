@@ -84,6 +84,8 @@ type Execution struct {
 	InputAdmission   InputAdmission
 	SessionArchive   SessionArchive
 	Workspaces       EnvironmentWorkspaces
+	// Links is the Link relay, served at GET /api/v1/sandbox-link.
+	Links http.Handler
 	// NativeInstaller is nil for a build without a source revision: the native
 	// installation routes are then absent and Sessions carry no installation.
 	NativeInstaller *NativeInstaller
@@ -159,6 +161,7 @@ func (d Dependencies) validate() error {
 			field{"Execution.InputAdmission", e.InputAdmission},
 			field{"Execution.SessionArchive", e.SessionArchive},
 			field{"Execution.Workspaces", e.Workspaces},
+			field{"Execution.Links", e.Links},
 		); err != nil {
 			return err
 		}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"io"
+	"net/http"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -390,6 +391,12 @@ func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 
 		unexpectedCall(f.t, "WriteEnvironmentFile")
 	}
 	return f.writeEnvironmentFile(a0, a1, a2, a3)
+}
+
+type fakeLinks struct{ t testing.TB }
+
+func (f *fakeLinks) ServeHTTP(http.ResponseWriter, *http.Request) {
+	unexpectedCall(f.t, "Links.ServeHTTP")
 }
 
 type fakeEnvironmentsReader struct {

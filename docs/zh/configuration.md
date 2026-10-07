@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 61cb35a25bbe3624a9a7dfea02e845b0c393f1e9609900225bb4e82d1b18f36d
+source_hash: 92a9515766fa24442f4c6c53bfa2c3940662a0a64a4bc2505af715c4dfd31e7e
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置。共有两类：
@@ -30,7 +30,9 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ### 更改公共 URL {#changing-the-public-url}
 
-`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的唯一源地址。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url` 和每个沙箱的连接地址。它是 http 或 https 源地址，也就是浏览器和节点使用的地址。安装通过 `OAC_WEB_PORT` 以 HTTP 提供 Web；前面有反向代理或托管平台时，由它们终止 HTTPS。
+`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的唯一源地址。Core 从中派生守护进程 WebSocket URL、沙箱 Link URL、自托管 `remote_url` 和每个沙箱的连接地址。它是 http 或 https 源地址，也就是浏览器和节点使用的地址。安装通过 `OAC_WEB_PORT` 以 HTTP 提供 Web；前面有反向代理或托管平台时，由它们终止 HTTPS。
+
+源地址为 https 时，沙箱和 agent host 通过 `wss://<origin>/api/v1/sandbox-link` 连接[沙箱 Link](./sandbox-link-protocol.md)。`localhost` 或回环地址上的 http 源地址得到 `ws://<origin>/api/v1/sandbox-link`，只有 Core 自身网络命名空间内的 peer 能访问。其他主机上的 http 源地址没有 Link URL：在源地址改为 https 之前，任何组件都无法使用 Link。
 
 要更改它，先把反向代理指向新地址，然后编辑 `OAC_PUBLIC_URL` 并运行 `oac apply`。之后：
 
@@ -157,7 +159,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 
 | 变量 | 设置来源 |
 | --- | --- |
-| `OAC_PUBLIC_URL` | `public_url`，或 Core 的回环源地址。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url`、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生。未设置时，Core 不运行 Runtime 网关，也不执行任何 Session |
+| `OAC_PUBLIC_URL` | `public_url`，或 Core 的回环源地址。Core 从中派生守护进程 WebSocket URL、[沙箱 Link URL](#changing-the-public-url)、自托管 `remote_url`、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生。未设置时，Core 不运行 Runtime 网关，也不执行任何 Session |
 | `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
 | `OAC_DATABASE_URL` | 该安装不含密码的 PostgreSQL URL，并将 `core.database_pool` 作为 `pool_*` 查询参数附加到其中 |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`。此时 URL 不得包含密码 |
