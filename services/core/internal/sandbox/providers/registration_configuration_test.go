@@ -61,7 +61,6 @@ func TestConfigurationRequirementsRejectInvalidDeclarations(t *testing.T) {
 	registry := Builtin()
 	for _, change := range []func(*sandbox.ConfigurationRequirements){
 		func(r *sandbox.ConfigurationRequirements) { r.Credential = "automatic" },
-		func(r *sandbox.ConfigurationRequirements) { r.PublicOrigin = "private" },
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.State = "unknown" },
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.Reason = "" },
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.Reason = "https://private:key@host" },
@@ -83,23 +82,17 @@ func TestConfigurationRequirementsDoNotInventDependencies(t *testing.T) {
 	// Required credentials are input policy. VerifyCredential is a separate
 	// resource operation that may be Unsupported for this provider.
 	for _, credential := range []sandbox.Requirement{sandbox.Required, sandbox.NotRequired} {
-		for _, public := range []sandbox.Requirement{sandbox.Required, sandbox.NotRequired} {
-			a := registry.adapters["docker"]
-			requirements := a.Configuration.Requirements()
-			requirements.Credential, requirements.PublicOrigin = credential, public
-			a.Configuration = registrationConfiguration{requirements: requirements}
-			if err := ValidateRegistration(a); err != nil {
-				t.Fatal(err)
-			}
-			registry.adapters[kind] = a
-			gotCredential, err := registry.UsesCredential(kind)
-			if err != nil || gotCredential != (credential == sandbox.Required) {
-				t.Fatalf("credential %s: value=%v error=%v", credential, gotCredential, err)
-			}
-			gotPublic, err := registry.RequiresPublicOrigin(kind)
-			if err != nil || gotPublic != (public == sandbox.Required) {
-				t.Fatalf("public origin %s: value=%v error=%v", public, gotPublic, err)
-			}
+		a := registry.adapters["docker"]
+		requirements := a.Configuration.Requirements()
+		requirements.Credential = credential
+		a.Configuration = registrationConfiguration{requirements: requirements}
+		if err := ValidateRegistration(a); err != nil {
+			t.Fatal(err)
+		}
+		registry.adapters[kind] = a
+		gotCredential, err := registry.UsesCredential(kind)
+		if err != nil || gotCredential != (credential == sandbox.Required) {
+			t.Fatalf("credential %s: value=%v error=%v", credential, gotCredential, err)
 		}
 	}
 }

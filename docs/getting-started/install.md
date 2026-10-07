@@ -75,7 +75,7 @@ For insufficient space or quota, free space on the filesystem named by the error
 
 ## Configure the public address {#configure-the-domain-and-https}
 
-Applications, nodes and sandboxes reach Core at one address, the public URL. HTTP is enough on the local network. When you expose Core beyond it, put a reverse proxy in front and set the public URL to the HTTPS origin it serves. E2B guests reach Core from the internet, so they need a public URL that is not loopback.
+Applications, nodes and sandboxes reach Core at one address, the public URL. HTTP is enough for applications and nodes on the local network. Hosted sandboxes need an HTTPS public URL on a host that is not loopback: put a reverse proxy in front and set the public URL to the HTTPS origin it serves.
 
 1. Point your reverse proxy at Web.
 2. Set `OAC_PUBLIC_URL` to the HTTPS origin it serves, then run `oac apply`. See [changing the public URL](../configuration.md#changing-the-public-url).

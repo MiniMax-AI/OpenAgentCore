@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 50edc63c79976e9aad9590604a0e361aae178144bc8a6009989b2da5d031408d
+source_hash: 6278225ab39366f8cad392969669a6b5e25a1d4e48b116ac31c53fd5167404d1
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -97,7 +97,7 @@ source_hash: 50edc63c79976e9aad9590604a0e361aae178144bc8a6009989b2da5d031408d
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 Managed in System 前往 System，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 System、Sandbox 配置摘要和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 System 和 Nodes 摘要中 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（`public_url` 为回环地址或不是 https 时的任何提供商）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 Managed in System 前往 System，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 System、Sandbox 配置摘要和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 System 和 Nodes 摘要中 |
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中的节点容量。在线节点的 `diagnostic`（`docker_unavailable`、`docker_limits_unsupported`、`runtime_image_unavailable`、`kvm_unavailable`、`microsandbox_artifacts_unavailable`、`capacity_insufficient`、`provider_unavailable`；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在上述每个页面及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态；如果 `core_url` 为空（Core 未注册该节点），则状态为未知，而不是旧地址。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |

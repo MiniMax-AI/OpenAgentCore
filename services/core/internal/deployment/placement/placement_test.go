@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 const publicURL = "https://core.example"
@@ -17,15 +16,7 @@ const publicURL = "https://core.example"
 // test left nil fails the test.
 type fakeDeclarations struct {
 	t                     *testing.T
-	requiresPublicOrigin  func(provider string) (bool, error)
 	validateSpecification func(provider string, spec sandbox.DeploymentSpec) error
-}
-
-func (f *fakeDeclarations) RequiresPublicOrigin(provider string) (bool, error) {
-	if f.requiresPublicOrigin == nil {
-		f.t.Fatalf("unexpected RequiresPublicOrigin(%q)", provider)
-	}
-	return f.requiresPublicOrigin(provider)
 }
 
 func (f *fakeDeclarations) ValidateSpecification(provider string, spec sandbox.DeploymentSpec) error {
@@ -55,20 +46,20 @@ func TestNewRulesRequiresDeclarations(t *testing.T) {
 	}
 }
 
-// The built-in registry satisfies the declarations the rules read.
-func TestRegistryDeclaresPublicOrigin(t *testing.T) {
-	loopback := rules(t, providers.Builtin(), "http://127.0.0.1:8091")
-	if err := loopback.CheckPublicOrigin("e2b"); !errors.Is(err, ErrPublicURLUnreachable) {
-		t.Fatalf("CheckPublicOrigin(e2b) on loopback = %v", err)
-	}
-	if err := loopback.CheckPublicOrigin("docker"); err != nil {
-		t.Fatalf("CheckPublicOrigin(docker) on loopback = %v", err)
-	}
-	if err := rules(t, providers.Builtin(), publicURL).CheckPublicOrigin("e2b"); err != nil {
-		t.Fatalf("CheckPublicOrigin(e2b) on a public URL = %v", err)
-	}
-	if err := loopback.CheckPublicOrigin("unknown"); err == nil {
-		t.Fatal("CheckPublicOrigin accepted an unknown provider")
+// Hosted sandboxes need an https public URL on a host that is not loopback.
+func TestCheckPublicOrigin(t *testing.T) {
+	for url, want := range map[string]error{
+		publicURL:                nil,
+		"http://127.0.0.1:8091":  ErrPublicURLUnreachable,
+		"http://localhost:8091":  ErrPublicURLUnreachable,
+		"http://10.0.0.5:8091":   ErrPublicURLUnreachable,
+		"https://localhost":      ErrPublicURLUnreachable,
+		"https://127.0.0.1:8443": ErrPublicURLUnreachable,
+		"":                       ErrPublicURLUnreachable,
+	} {
+		if err := rules(t, &fakeDeclarations{t: t}, url).CheckPublicOrigin(); err != want {
+			t.Errorf("CheckPublicOrigin on %q = %v", url, err)
+		}
 	}
 }
 
@@ -111,9 +102,6 @@ func TestCheckAdmission(t *testing.T) {
 }
 
 func TestDecidePlacement(t *testing.T) {
-	origin := func(required bool) *fakeDeclarations {
-		return &fakeDeclarations{t: t, requiresPublicOrigin: func(string) (bool, error) { return required, nil }}
-	}
 	ready := func(id string, g uint64, active int64) Node {
 		return Node{ID: id, Online: true, ServingReady: true, ReadyGeneration: generation(g), Active: active, MaxActive: 4, Retained: active, MaxRetained: 4, CoreURL: publicURL}
 	}
@@ -137,20 +125,20 @@ func TestDecidePlacement(t *testing.T) {
 		want         *Placement
 		err          error
 	}{
-		"reset":                       {origin(false), publicURL, with(func(d *Deployment) { d.Resetting = true }), nil, nil, ErrResetAdmission},
-		"loopback public origin":      {origin(true), "http://localhost:8091", nodes, []Node{ready("a", 1, 0)}, nil, ErrPublicURLUnreachable},
-		"direct":                      {origin(false), publicURL, with(func(d *Deployment) { d.Mode = "direct" }), nil, nil, nil},
-		"direct paused":               {origin(false), publicURL, with(func(d *Deployment) { d.Mode, d.AdmissionPaused = "direct", true }), nil, nil, ErrNodeUnavailable},
-		"no provider":                 {&fakeDeclarations{t: t}, publicURL, Deployment{}, nil, nil, nil},
-		"no provider on Web":          {&fakeDeclarations{t: t}, publicURL, Deployment{WebManaged: true}, nil, nil, ErrNodeUnavailable},
-		"paused":                      {origin(false), publicURL, with(func(d *Deployment) { d.AdmissionPaused = true }), []Node{ready("a", 1, 0)}, nil, ErrNodeUnavailable},
-		"no nodes":                    {origin(false), publicURL, nodes, nil, nil, ErrNodeUnavailable},
-		"only ineligible nodes":       {origin(false), publicURL, nodes, []Node{offline, unready, full, retainedFull, elsewhere, {ID: "never", Online: true, ServingReady: true, MaxActive: 1, MaxRetained: 1, CoreURL: publicURL}}, nil, ErrNodeUnavailable},
-		"preparing":                   {origin(false), publicURL, nodes, []Node{offline, preparing}, nil, ErrNodesPreparing},
-		"highest generation":          {origin(false), publicURL, nodes, []Node{ready("old", 1, 0), ready("new", 2, 3), preparing}, &Placement{NodeID: "new", Generation: 2}, nil},
-		"fewest active":               {origin(false), publicURL, nodes, []Node{ready("busy", 2, 3), ready("idle", 2, 1)}, &Placement{NodeID: "idle", Generation: 2}, nil},
-		"other address off Web":       {origin(false), publicURL, with(func(d *Deployment) { d.WebManaged = false }), []Node{elsewhere}, &Placement{NodeID: "elsewhere", Generation: 9}, nil},
-		"public origin on public URL": {origin(true), publicURL, nodes, []Node{ready("a", 1, 0)}, &Placement{NodeID: "a", Generation: 1}, nil},
+		"reset":                      {&fakeDeclarations{t: t}, publicURL, with(func(d *Deployment) { d.Resetting = true }), nil, nil, ErrResetAdmission},
+		"loopback public URL":        {&fakeDeclarations{t: t}, "http://localhost:8091", nodes, []Node{ready("a", 1, 0)}, nil, ErrPublicURLUnreachable},
+		"loopback public URL direct": {&fakeDeclarations{t: t}, "http://localhost:8091", with(func(d *Deployment) { d.Mode = "direct" }), nil, nil, ErrPublicURLUnreachable},
+		"direct":                     {&fakeDeclarations{t: t}, publicURL, with(func(d *Deployment) { d.Mode = "direct" }), nil, nil, nil},
+		"direct paused":              {&fakeDeclarations{t: t}, publicURL, with(func(d *Deployment) { d.Mode, d.AdmissionPaused = "direct", true }), nil, nil, ErrNodeUnavailable},
+		"no provider":                {&fakeDeclarations{t: t}, publicURL, Deployment{}, nil, nil, nil},
+		"no provider on Web":         {&fakeDeclarations{t: t}, publicURL, Deployment{WebManaged: true}, nil, nil, ErrNodeUnavailable},
+		"paused":                     {&fakeDeclarations{t: t}, publicURL, with(func(d *Deployment) { d.AdmissionPaused = true }), []Node{ready("a", 1, 0)}, nil, ErrNodeUnavailable},
+		"no nodes":                   {&fakeDeclarations{t: t}, publicURL, nodes, nil, nil, ErrNodeUnavailable},
+		"only ineligible nodes":      {&fakeDeclarations{t: t}, publicURL, nodes, []Node{offline, unready, full, retainedFull, elsewhere, {ID: "never", Online: true, ServingReady: true, MaxActive: 1, MaxRetained: 1, CoreURL: publicURL}}, nil, ErrNodeUnavailable},
+		"preparing":                  {&fakeDeclarations{t: t}, publicURL, nodes, []Node{offline, preparing}, nil, ErrNodesPreparing},
+		"highest generation":         {&fakeDeclarations{t: t}, publicURL, nodes, []Node{ready("old", 1, 0), ready("new", 2, 3), preparing}, &Placement{NodeID: "new", Generation: 2}, nil},
+		"fewest active":              {&fakeDeclarations{t: t}, publicURL, nodes, []Node{ready("busy", 2, 3), ready("idle", 2, 1)}, &Placement{NodeID: "idle", Generation: 2}, nil},
+		"other address off Web":      {&fakeDeclarations{t: t}, publicURL, with(func(d *Deployment) { d.WebManaged = false }), []Node{elsewhere}, &Placement{NodeID: "elsewhere", Generation: 9}, nil},
 	} {
 		got, err := rules(t, test.declarations, test.url).DecidePlacement(test.d, test.nodes)
 		if !errors.Is(err, test.err) || (test.err == nil) != (err == nil) || (got == nil) != (test.want == nil) || (got != nil && *got != *test.want) {

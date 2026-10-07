@@ -249,8 +249,7 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 	if err != nil {
 		return Setup{}, configurationError(err)
 	}
-	// Adapters declare whether their guests require a public Core origin.
-	if err := s.rules.CheckPublicOrigin(input.Provider); err != nil {
+	if err := s.rules.CheckPublicOrigin(); err != nil {
 		return Setup{}, err
 	}
 	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}

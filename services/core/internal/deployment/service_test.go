@@ -97,23 +97,25 @@ func TestNewServiceAndOperationsRejectNilDependencies(t *testing.T) {
 	}
 }
 
-// A provider whose guests connect to Core from outside the host cannot use a
-// loopback public URL. The check writes nothing: the fakes allow no call.
+// Hosted sandboxes run outside Core's network namespace, so every provider
+// needs an https public URL on a host that is not loopback. The check writes nothing: the fakes allow no call.
 func TestSetupForSelectionRequiresAReachablePublicURL(t *testing.T) {
 	id := uuid.NewString()
 	e2bSelection := sandbox.Selection{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}}
-	for _, publicURL := range []string{"http://127.0.0.1:8091", "http://localhost:8091", "http://[::1]:8091"} {
-		if _, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL).SetupForSelection(id, e2bSelection); !errors.Is(err, placement.ErrPublicURLUnreachable) {
-			t.Errorf("E2B accepted the loopback public URL %s: %v", publicURL, err)
+	docker := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
+	for _, selection := range []sandbox.Selection{e2bSelection, docker} {
+		for _, publicURL := range []string{"http://127.0.0.1:8091", "http://localhost:8091", "http://[::1]:8091", "http://10.0.0.5:8091", "https://localhost"} {
+			if _, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL).SetupForSelection(id, selection); !errors.Is(err, placement.ErrPublicURLUnreachable) {
+				t.Errorf("%s accepted the public URL %s: %v", selection.Provider, publicURL, err)
+			}
 		}
 	}
 	setup, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL).SetupForSelection(id, e2bSelection)
 	if err != nil || setup.Provider != "e2b" || setup.Mode != "direct" || setup.InstallationID != id || !setup.UsesCredential {
 		t.Fatalf("E2B with a public URL = %+v, %v", setup, err)
 	}
-	docker := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
-	if setup, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, "http://127.0.0.1:8091").SetupForSelection(id, docker); err != nil || setup.Mode != "nodes" || setup.UsesCredential {
-		t.Fatalf("Docker with a loopback public URL = %+v, %v", setup, err)
+	if setup, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL).SetupForSelection(id, docker); err != nil || setup.Mode != "nodes" || setup.UsesCredential {
+		t.Fatalf("Docker with a public URL = %+v, %v", setup, err)
 	}
 }
 

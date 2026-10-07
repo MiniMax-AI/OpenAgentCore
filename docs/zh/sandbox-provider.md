@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 729f9dd34c2810e08347a57a192c0509619960faefec1a1876f87fa7a7bf0367
+source_hash: c6bcdf8b09e317b9e2dd0e6afc3b872918b8756144982908f9b90953686b09cc
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -130,7 +130,7 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 - Runtime input policy 要么接受固定 Runtime，要么给出 adapter 拒绝它的固定原因，不能两者兼有。
 - Checkpoint 支持要求 node mode 和适合 Runtime duration 的正 idle、retention 默认值；不支持 checkpoint 的 provider 不配置 suspension 默认值。
 
-configuration adapter 必须非 nil，包括其具体值。每个 `ConfigurationRequirements` 字段都需要明确有效的决定：`Credential` 和 `PublicOrigin` 为 `Required` 或 `NotRequired`，`Discovery` 使用共享 supported 或 unsupported 声明并携带安全 reason。新增 requirement field 或 discovery method 需要明确更新验证，不继承已有决定。configuration discovery 与 resource selection discovery 不同，要求凭据也不承诺支持 `VerifyCredential` 操作。这些检查证明注册完整，不证明原生 SDK 行为正确；constructor 和 adapter 契约测试仍然适用。
+configuration adapter 必须非 nil，包括其具体值。每个 `ConfigurationRequirements` 字段都需要明确有效的决定：`Credential` 为 `Required` 或 `NotRequired`，`Discovery` 使用共享 supported 或 unsupported 声明并携带安全 reason。新增 requirement field 或 discovery method 需要明确更新验证，不继承已有决定。configuration discovery 与 resource selection discovery 不同，要求凭据也不承诺支持 `VerifyCredential` 操作。这些检查证明注册完整，不证明原生 SDK 行为正确；constructor 和 adapter 契约测试仍然适用。
 
 ### 配置存储与构造 {#configuration-storage-and-construction}
 

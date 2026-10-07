@@ -425,7 +425,7 @@ export const chinese = {
   "Change the sandbox configuration": "修改沙箱配置",
   "The address nodes and sandboxes use to reach Core.": "节点和沙箱访问 Core 使用的地址。",
   "Managed in System": "在系统中管理",
-  "Set a public address before connecting remote nodes; E2B sandboxes need an HTTPS one.": "连接远程节点前，请先设置公开地址；E2B 沙箱需要 HTTPS 地址。",
+  "Set an HTTPS public address before saving; sandboxes and remote nodes can't reach this one.": "保存前请设置 HTTPS 公开地址；沙箱和远程节点无法访问当前地址。",
   "Enter the E2B key again to save.": "请重新输入 E2B key 后再保存。",
   "Enter the key": "输入 key",
   "{{name}} is still bound to an old Core address. Remove it and add it again.": "{{name}} 仍绑定在旧的 Core 地址上，需要移除后重新添加。",

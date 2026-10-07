@@ -19,9 +19,8 @@ const (
 )
 
 type ConfigurationRequirements struct {
-	Credential   Requirement
-	PublicOrigin Requirement
-	Discovery    providercontract.Support
+	Credential Requirement
+	Discovery  providercontract.Support
 }
 
 // Configuration is an adapter-owned typed value, never a request or response DTO.

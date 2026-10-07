@@ -387,8 +387,8 @@ async function sandboxRoute(request, response, path, url) {
     if (!initialize && !state.deployment.provider) return error(response, 409, "The sandbox deployment is not configured.", "sandbox_deployment_conflict");
     const e2b = input.provider === "e2b";
     if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
-    // As Core (ErrSandboxPublicURLUnreachable): E2B sandboxes reach Core over the internet, which a loopback public_url cannot serve.
-    if (e2b && state.installation === "local") return error(response, 409, "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback (public_url in config.json, OAC_PUBLIC_URL for Core).", "sandbox_configuration_error");
+    // As Core (ErrPublicURLUnreachable): sandboxes reach Core from outside its host, which a loopback public_url cannot serve.
+    if (state.installation === "local") return error(response, 409, "Sandboxes reach Core from outside its host. Set an HTTPS public URL that is not loopback (public_url in config.json, OAC_PUBLIC_URL for Core).", "sandbox_configuration_error");
     // Synthetic classifier outcomes only; never persist or echo submitted keys.
     if (e2b) {
       if (!input.configuration?.template || (initialize && !input.credential?.api_key) || (Object.hasOwn(input, "credential") && !input.credential?.api_key)) return error(response, 400, "The E2B API key was rejected.", "sandbox_credential_invalid");
