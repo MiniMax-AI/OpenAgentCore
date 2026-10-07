@@ -21,8 +21,7 @@ var (
 	// admission.
 	ErrResetAdmission = errors.New("hosted admission is paused for a sandbox reset")
 	// ErrAdmissionClosed rejects new hosted work that the deployment cannot
-	// admit: paused for maintenance, without a valid specification, or for
-	// another installation.
+	// admit: without a valid specification, or for another installation.
 	ErrAdmissionClosed = errors.New("environment is no longer available")
 	// ErrPublicURLUnreachable rejects hosted selection and admission while the
 	// installation public URL is loopback or not https.
@@ -65,12 +64,10 @@ func (r *Rules) PublicURL() string { return r.publicURL }
 // Deployment is the deployment as placement reads it, loaded under the
 // deployment lock.
 type Deployment struct {
-	// InstallationID is empty until an installation is claimed or configured.
-	InstallationID  string
-	Provider, Mode  string
-	Generation      uint64
-	WebManaged      bool
-	AdmissionPaused bool
+	// InstallationID is empty until Web setup claims an installation.
+	InstallationID string
+	Provider, Mode string
+	Generation     uint64
 	// Resetting reports a sandbox reset in progress.
 	Resetting     bool
 	Specification json.RawMessage
@@ -135,9 +132,6 @@ func (r *Rules) CheckAdmission(d Deployment, installation string) error {
 	if d.Resetting {
 		return ErrResetAdmission
 	}
-	if d.AdmissionPaused {
-		return fmt.Errorf("%w: sandbox creation is paused for provider maintenance", ErrAdmissionClosed)
-	}
 	if d.Provider != "" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(d.Specification, &spec) != nil || r.declarations.ValidateSpecification(d.Provider, spec) != nil {
@@ -153,8 +147,8 @@ func (r *Rules) CheckAdmission(d Deployment, installation string) error {
 // DecidePlacement chooses the node a new Session's hosted Environment
 // reserves, or nil when the deployment places no node: in direct mode and
 // without a provider. It prefers the highest ready generation, then the
-// fewest active sandboxes. A Web-managed installation places only on nodes
-// enrolled with its public URL; restores still reach the others.
+// fewest active sandboxes. It places only on nodes enrolled with the public
+// URL; restores still reach the others.
 func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) {
 	if d.Resetting {
 		return nil, ErrResetAdmission
@@ -167,26 +161,20 @@ func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) 
 		}
 	}
 	if d.Mode == "direct" {
-		if d.AdmissionPaused {
-			return nil, ErrNodeUnavailable
-		}
 		return nil, nil
 	}
 	if d.Provider == "" {
-		if d.WebManaged {
+		if d.InstallationID != "" {
 			return nil, ErrNodeUnavailable
 		}
 		return nil, nil
-	}
-	if d.AdmissionPaused {
-		return nil, ErrNodeUnavailable
 	}
 	var chosen *Node
 	preparing := false
 	for i := range nodes {
 		n := &nodes[i]
 		free := n.Active < int64(n.MaxActive) && n.Retained < int64(n.MaxRetained)
-		reachable := !d.WebManaged || n.CoreURL == r.publicURL
+		reachable := n.CoreURL == r.publicURL
 		if n.Online && n.TargetState == "preparing" && free && reachable {
 			preparing = true
 		}

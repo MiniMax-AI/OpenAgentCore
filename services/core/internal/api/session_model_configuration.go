@@ -58,7 +58,7 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 			if errors.As(err, &configurationError) {
 				return configurationError
 			}
-			return &modelProviderDefaultsError{err}
+			return &storedDataError{err}
 		}
 	}
 	input.modelSource = "session"

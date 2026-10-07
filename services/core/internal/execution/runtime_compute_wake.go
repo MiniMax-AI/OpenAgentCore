@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if state.Rollback {
 		if _, err := p.ResumeCompute(ctx, runtimeReference(owner), state.Current); err != nil {
 			return err
@@ -76,7 +76,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 	return r.observeConnection(ctx, next)
 }
 
-func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}

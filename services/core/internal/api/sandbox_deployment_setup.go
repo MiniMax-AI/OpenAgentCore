@@ -51,7 +51,7 @@ type DeploymentReset interface {
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. Every provider returns 409 sandbox_configuration_error while the public URL is loopback or not https. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; differing selections and file-managed deployments reject. This does not create compute or execute work.
+// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. Every provider returns 409 sandbox_configuration_error while the public URL is loopback or not https. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

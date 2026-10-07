@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -88,19 +87,12 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 				worker.runtimes.stop()
 			}
 		}()
-	}
-	var process *deployment.ProcessDeployment
-	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
-		config := worker.runtimes.config
-		process = &deployment.ProcessDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
-	}
-	if worker.runtimes != nil && worker.runtimes.loadDeployment != nil {
 		err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID)
 		if err == nil {
 			_, err = worker.runtimes.ensureDeployment(ctx)
 		}
 	} else {
-		err = owner.Deployment.ConfigureProcess(ctx, process)
+		err = owner.Deployment.RequireUnclaimed(ctx)
 	}
 	if err != nil {
 		return nil, err

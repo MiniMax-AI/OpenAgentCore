@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 
@@ -112,31 +111,19 @@ func TestSandboxDeploymentSetupConcurrentSelection(t *testing.T) {
 	}
 }
 
-func TestSandboxDeploymentSetupRejectsFileManagedAndUnleasedWrites(t *testing.T) {
+func TestSandboxDeploymentSetupRejectsUnleasedWrites(t *testing.T) {
 	f := newFixture(t)
-	input := sandbox.Selection{DeploymentSpec: testSpecification("docker"), Provider: "docker"}
-	process := deployment.ProcessDeployment{InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("a", 64), ProviderKind: "docker",
-		LocalNodeID: uuid.NewString(), LocalCredentialSHA256: setupDigest("local-node-credential"), LocalMaxActive: 4, LocalMaxRetained: 16}
+	id := uuid.NewString()
 	// Deployment changes run only on the execution lease; a closed one writes nothing.
 	closed := setupClosedExecution(t, f)
-	if err := closed.ConfigureProcess(t.Context(), &process); !errors.Is(err, pgunit.ErrLeaseClosed) {
-		t.Fatal("unleased process configuration accepted", err)
+	if err := closed.Claim(t.Context(), id); !errors.Is(err, pgunit.ErrLeaseClosed) {
+		t.Fatal("unleased claim accepted", err)
 	}
-	if _, err := closed.Initialize(t.Context(), process.InstallationID, input); !errors.Is(err, pgunit.ErrLeaseClosed) {
+	if _, err := closed.Initialize(t.Context(), id, sandbox.Selection{DeploymentSpec: testSpecification("docker"), Provider: "docker"}); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatal("unleased setup accepted", err)
 	}
 	if view, err := f.service.View(t.Context()); err != nil || view.InstallationID != "" || view.Provider != "" {
 		t.Fatal("unleased writes changed the deployment", view, err)
-	}
-	changes, _ := f.execution(t)
-	if err := changes.ConfigureProcess(t.Context(), &process); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := changes.Initialize(t.Context(), process.InstallationID, input); !errors.Is(err, deployment.ErrConflict) {
-		t.Fatal("file-managed deployment changed", err)
-	}
-	if err := changes.Claim(t.Context(), process.InstallationID); !errors.Is(err, deployment.ErrConflict) {
-		t.Fatal("file-managed deployment adopted", err)
 	}
 }
 
@@ -181,56 +168,5 @@ func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {
 	changed, err := changes.Update(admin(t), id, change)
 	if err != nil || changed.Generation != view.Generation+1 || changed.Configuration == nil || setupE2BPublic(t, changed).APIURL != "https://api.e2b.app" || setupE2BPublic(t, changed).Domain != "e2b.app" {
 		t.Fatal("online endpoint switch failed", changed, err)
-	}
-}
-
-func TestRuntimeDeploymentRequiresMaintenanceBeforeIdentityChange(t *testing.T) {
-	f := newFixture(t)
-	old := deployment.ProcessDeployment{InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("a", 64)}
-	if err := setupClosedExecution(t, f).ConfigureProcess(t.Context(), &old); !errors.Is(err, pgunit.ErrLeaseClosed) {
-		t.Fatal("unleased configuration accepted", err)
-	}
-	changes, _ := f.execution(t)
-	configure := func(selected *deployment.ProcessDeployment) {
-		t.Helper()
-		if err := changes.ConfigureProcess(t.Context(), selected); err != nil {
-			t.Fatal(err)
-		}
-	}
-	configure(&old)
-	for _, changeID := range []bool{false, true} {
-		next := old
-		if changeID {
-			next.InstallationID = uuid.NewString()
-		} else {
-			next.BackendFingerprint = strings.Repeat("b", 64)
-		}
-		next.AdmissionPaused = true
-		if err := changes.ConfigureProcess(t.Context(), &next); err == nil || !strings.Contains(err.Error(), "maintenance") {
-			t.Fatal("identity changed before prior maintenance", err)
-		}
-	}
-	old.AdmissionPaused = true
-	configure(&old)
-	next := old
-	next.BackendFingerprint = strings.Repeat("b", 64)
-	next.AdmissionPaused = false
-	if err := changes.ConfigureProcess(t.Context(), &next); err == nil {
-		t.Fatal("switch reopened creation in same operation")
-	}
-	next.AdmissionPaused = true
-	configure(&next)
-	var id, fingerprint string
-	var maintenance bool
-	if err := f.pool.QueryRow(t.Context(), "SELECT installation_id::text,backend_fingerprint,admission_paused FROM runtime_deployment").Scan(&id, &fingerprint, &maintenance); err != nil || id != next.InstallationID || fingerprint != next.BackendFingerprint || !maintenance {
-		t.Fatal("switch identity not durable", id, fingerprint, maintenance, err)
-	}
-	configure(nil)
-	// Disabling the configured adapter must not forget the old maintenance state.
-	next.AdmissionPaused = false
-	configure(&next)
-	another := deployment.ProcessDeployment{InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("a", 64), AdmissionPaused: true}
-	if err := changes.ConfigureProcess(t.Context(), &another); err == nil {
-		t.Fatal("nil selection erased the maintenance prerequisite")
 	}
 }

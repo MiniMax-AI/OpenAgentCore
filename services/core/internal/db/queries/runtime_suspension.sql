@@ -39,14 +39,6 @@ SELECT clock_timestamp()::timestamptz AS observed_at,
 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
 WHERE a.id = $1;
 
--- name: CountRuntimeComputeReservations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released' AND compute_phase <> 'suspended';
-
--- name: CountRuntimeRetainedAllocations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released';
-
 -- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id

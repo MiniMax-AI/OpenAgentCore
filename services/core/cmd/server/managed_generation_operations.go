@@ -15,11 +15,7 @@ func (p *generationRouter) Initial(ctx context.Context, r sandbox.Reference) (sa
 		return sandbox.Compute{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.Compute{}, err
-	}
-	return cp.Initial(ctx, r)
+	return v.Initial(ctx, r)
 }
 func (p *generationRouter) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, snapshot *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
 	if err := providercontract.Require(p, "NewCompute"); err != nil {
@@ -30,11 +26,7 @@ func (p *generationRouter) NewCompute(ctx context.Context, r sandbox.Reference, 
 		return sandbox.Compute{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.Compute{}, err
-	}
-	return cp.NewCompute(ctx, r, g, snapshot)
+	return v.NewCompute(ctx, r, g, snapshot)
 }
 func (p *generationRouter) GetCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	if err := providercontract.Require(p, "GetCompute"); err != nil {
@@ -45,11 +37,7 @@ func (p *generationRouter) GetCompute(ctx context.Context, r sandbox.Reference, 
 		return sandbox.ComputeState{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.ComputeState{}, err
-	}
-	return cp.GetCompute(ctx, r, c)
+	return v.GetCompute(ctx, r, c)
 }
 func (p *generationRouter) Suspend(ctx context.Context, q sandbox.SuspendRequest) (sandbox.ComputeState, error) {
 	if err := providercontract.Require(p, "Suspend"); err != nil {
@@ -60,11 +48,7 @@ func (p *generationRouter) Suspend(ctx context.Context, q sandbox.SuspendRequest
 		return sandbox.ComputeState{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.ComputeState{}, err
-	}
-	return cp.Suspend(ctx, q)
+	return v.Suspend(ctx, q)
 }
 func (p *generationRouter) Resume(ctx context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
 	if err := providercontract.Require(p, "Resume"); err != nil {
@@ -75,11 +59,7 @@ func (p *generationRouter) Resume(ctx context.Context, q sandbox.ResumeRequest) 
 		return sandbox.ComputeState{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.ComputeState{}, err
-	}
-	return cp.Resume(ctx, q)
+	return v.Resume(ctx, q)
 }
 func (p *generationRouter) KillCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) error {
 	if err := providercontract.Require(p, "KillCompute"); err != nil {
@@ -90,11 +70,7 @@ func (p *generationRouter) KillCompute(ctx context.Context, r sandbox.Reference,
 		return err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return err
-	}
-	return cp.KillCompute(ctx, r, c)
+	return v.KillCompute(ctx, r, c)
 }
 func (p *generationRouter) DeleteSnapshot(ctx context.Context, r sandbox.Reference, snapshot sandbox.SnapshotIdentity) error {
 	if err := providercontract.Require(p, "DeleteSnapshot"); err != nil {
@@ -105,11 +81,7 @@ func (p *generationRouter) DeleteSnapshot(ctx context.Context, r sandbox.Referen
 		return err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return err
-	}
-	return cp.DeleteSnapshot(ctx, r, snapshot)
+	return v.DeleteSnapshot(ctx, r, snapshot)
 }
 func (p *generationRouter) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, command sandbox.Command) (sandbox.CommandResult, error) {
 	if err := providercontract.Require(p, "RunCommandCompute"); err != nil {
@@ -120,11 +92,7 @@ func (p *generationRouter) RunCommandCompute(ctx context.Context, r sandbox.Refe
 		return sandbox.CommandResult{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.CommandResult{}, err
-	}
-	return cp.RunCommandCompute(ctx, r, c, command)
+	return v.RunCommandCompute(ctx, r, c, command)
 }
 func (p *generationRouter) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	if err := providercontract.Require(p, "ResumeCompute"); err != nil {
@@ -135,15 +103,5 @@ func (p *generationRouter) ResumeCompute(ctx context.Context, r sandbox.Referenc
 		return sandbox.ComputeState{}, err
 	}
 	defer done()
-	cp, err := sandbox.Checkpoint(v)
-	if err != nil {
-		return sandbox.ComputeState{}, err
-	}
-	return cp.ResumeCompute(ctx, r, c)
-}
-func (*generationRouter) DiscoverSelection(context.Context, sandbox.Selection) (sandbox.Selection, error) {
-	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "generation_router_does_not_discover_configuration"}
-}
-func (*generationRouter) VerifyCredential(context.Context, []sandbox.Reference) error {
-	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "generation_router_does_not_verify_configuration"}
+	return v.ResumeCompute(ctx, r, c)
 }

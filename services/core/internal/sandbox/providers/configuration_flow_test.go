@@ -32,7 +32,8 @@ func (regionalConfiguration) ReplacesCredential() bool { return false }
 type regionalCodec struct{}
 
 func (regionalCodec) Requirements() sandbox.ConfigurationRequirements {
-	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
+	unsupported := providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}
+	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, Discovery: unsupported, SelectionDiscovery: unsupported, CredentialVerification: unsupported}
 }
 func (regionalCodec) WithCredential(sandbox.Configuration, sandbox.Configuration) (sandbox.Configuration, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "WithCredential", Reason: "credentials_not_required"}
@@ -75,6 +76,12 @@ func (a regionalCodec) Equal(x, y sandbox.Configuration) (bool, error) {
 }
 func (regionalCodec) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
+}
+func (regionalCodec) DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error) {
+	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "node_configuration_has_no_catalog"}
+}
+func (regionalCodec) VerifyCredential(context.Context, sandbox.DirectConfig, []sandbox.Reference) error {
+	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "node_configuration_has_no_catalog"}
 }
 
 // A registered native configuration reaches the ordinary API and Store without

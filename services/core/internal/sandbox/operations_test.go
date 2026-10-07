@@ -3,13 +3,18 @@ package sandbox_test
 import (
 	"context"
 	"errors"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
-	"reflect"
-	"testing"
 )
 
 type changedDeclaration struct {
@@ -19,23 +24,13 @@ type changedDeclaration struct {
 
 func (p *changedDeclaration) ProviderOperations() providercontract.Operations { return p.operations }
 
-type onlyRequired struct{ sandbox.SandboxProvider }
-
-func (*onlyRequired) ProviderOperations() providercontract.Operations { return docker.Operations() }
-
 func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T) {
 	for _, mutate := range []struct {
 		name   string
 		change func(providercontract.Operations)
 	}{
-		{"identity unsupported", func(o providercontract.Operations) {
-			o["ObservationProviderType"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_identity"}
-		}},
-		{"resolver unsupported", func(o providercontract.Operations) {
-			o["ResolveObservationSource"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_resolver"}
-		}},
 		{"omitted", func(o providercontract.Operations) { delete(o, "DeleteSnapshot") }},
-		{"zero", func(o providercontract.Operations) { o["ObserveBatch"] = providercontract.Support{} }},
+		{"zero", func(o providercontract.Operations) { o["Observe"] = providercontract.Support{} }},
 		{"unknown", func(o providercontract.Operations) {
 			o["FutureOperation"] = providercontract.Support{State: providercontract.Supported}
 		}},
@@ -46,10 +41,10 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 			o["Initial"] = providercontract.Support{State: providercontract.Supported}
 		}},
 		{"unsafe reason", func(o providercontract.Operations) {
-			o["ObserveBatch"] = providercontract.Support{State: providercontract.Unsupported, Reason: "https://private:key@host"}
+			o["Observe"] = providercontract.Support{State: providercontract.Unsupported, Reason: "https://private:key@host"}
 		}},
 		{"unknown state", func(o providercontract.Operations) {
-			o["ObserveBatch"] = providercontract.Support{State: "unavailable"}
+			o["Observe"] = providercontract.Support{State: "unavailable"}
 		}},
 	} {
 		t.Run(mutate.name, func(t *testing.T) {
@@ -59,9 +54,6 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 				t.Fatal(err)
 			}
 		})
-	}
-	if err := sandbox.ValidateProvider(&onlyRequired{}); !errors.Is(err, providercontract.ErrContract) {
-		t.Fatal("missing extension implementations accepted", err)
 	}
 	var nilProvider *docker.Provider
 	if err := sandbox.ValidateProvider(nilProvider); !errors.Is(err, providercontract.ErrContract) {
@@ -101,27 +93,31 @@ func TestEveryUnsupportedNativeOperationRejectsWithoutSideEffects(t *testing.T) 
 	}
 }
 
-// An extended interface cannot inherit success through the existing declaration.
-type nextContract interface {
-	sandbox.SandboxProvider
-	NextOperation(context.Context) error
-}
-type futureProvider struct{ *docker.Provider }
-
-func (*futureProvider) NextOperation(context.Context) error { return nil }
-func TestNewContractRequiresAnAuthoredDecision(t *testing.T) {
-	for _, p := range []providercontract.Declared{&docker.Provider{}, &futureProvider{&docker.Provider{}}} {
-		if err := providercontract.Validate(p, reflect.TypeFor[nextContract]()); !errors.Is(err, providercontract.ErrContract) {
-			t.Fatal("new operation inherited a default", err)
-		}
+// Bootstrap.Validate is the one gate Core applies before Create.
+func TestBootstrapValidateRejections(t *testing.T) {
+	ref := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
+	if err := contracttest.Bootstrap(ref).Validate(); err != nil {
+		t.Fatal("valid bootstrap rejected:", err)
 	}
-}
-
-type invalidObservationIdentity struct{ *docker.Provider }
-
-func (*invalidObservationIdentity) ObservationProviderType() string { return "" }
-func TestProviderRegistrationRequiresObservationIdentity(t *testing.T) {
-	if err := sandbox.ValidateProvider(&invalidObservationIdentity{&docker.Provider{}}); !errors.Is(err, providercontract.ErrContract) {
-		t.Fatal("provider registration accepted empty observation identity", err)
+	for name, change := range map[string]func(*sandbox.Bootstrap){
+		"noncanonical tenant":        func(b *sandbox.Bootstrap) { b.TenantID = strings.ToUpper(b.TenantID) },
+		"nil session":                func(b *sandbox.Bootstrap) { b.SessionID = uuid.Nil.String() },
+		"missing device":             func(b *sandbox.Bootstrap) { b.DeviceID = "" },
+		"Core URL off the API base":  func(b *sandbox.Bootstrap) { b.CoreURL = "https://core.example" },
+		"empty Runtime credential":   func(b *sandbox.Bootstrap) { b.Credential = "" },
+		"unknown network access":     func(b *sandbox.Bootstrap) { b.NetworkAccess = "sometimes" },
+		"plain ws Link off loopback": func(b *sandbox.Bootstrap) { b.SandboxIO.LinkURL = "ws://core.example/api/v1/sandbox-link" },
+		"empty Serve credential":     func(b *sandbox.Bootstrap) { b.SandboxIO.Credential = "" },
+		"zero generation":            func(b *sandbox.Bootstrap) { b.SandboxIO.Resource.Generation = 0 },
+		"enrollment resource":        func(b *sandbox.Bootstrap) { b.SandboxIO.Resource.Kind = "enrollment" },
+		"another allocation":         func(b *sandbox.Bootstrap) { b.SandboxIO.Resource.ID = uuid.NewString() },
+		"another tenant":             func(b *sandbox.Bootstrap) { b.SandboxIO.Resource.TenantID = uuid.NewString() },
+		"another Environment":        func(b *sandbox.Bootstrap) { b.SandboxIO.Resource.EnvironmentID = uuid.NewString() },
+	} {
+		b := contracttest.Bootstrap(ref)
+		change(&b)
+		if err := b.Validate(); !errors.Is(err, sandbox.ErrInvalid) {
+			t.Errorf("%s: Validate = %v", name, err)
+		}
 	}
 }

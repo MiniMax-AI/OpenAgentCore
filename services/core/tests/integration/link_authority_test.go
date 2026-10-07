@@ -454,12 +454,11 @@ func TestLinkAuthorityEnrollmentRotation(t *testing.T) {
 // peer, which cannot serve again.
 func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 	s, _ := newManagedTestStore(t)
+	key := webDeployment(t, s, "e2b")
 	tenant, session, environment := managedSession(t, s)
-	key := uuid.NewString()
 	srv := startLinkRoute(t, s)
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: srv.Relay, ManagedRuntimes: &execution.RuntimeProvider{
-		CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: key, BackendFingerprint: strings.Repeat("a", 64), Provider: provider}})
+	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: srv.Relay, ManagedRuntimes: webRuntimes(t, s, key, provider, nil)})
 	t.Cleanup(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {

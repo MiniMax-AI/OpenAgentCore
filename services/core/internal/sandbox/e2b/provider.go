@@ -56,7 +56,7 @@ func Discover(ctx context.Context, caller Caller, binary, apiKey, apiURL, domain
 	if out.ErrorCode == "invalid" {
 		return Response{}, sandbox.ErrInvalid
 	}
-	if out.ErrorCode != "" || out.Info != nil || out.Command != nil || out.TemplateBuild != nil || out.Observations != nil {
+	if out.ErrorCode != "" || out.Info != nil || out.Command != nil || out.TemplateBuild != nil || out.Observation != nil {
 		return Response{}, sandbox.ErrComputeUnconfirmed
 	}
 	if operation == "list_templates" {
@@ -151,6 +151,33 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	}
 	return &Provider{config: c, caller: caller, now: time.Now}, nil
 }
+
+// BuildDirect builds the Provider for one direct-mode selection.
+func BuildDirect(c sandbox.DirectConfig) (sandbox.SandboxProvider, error) { return newDirect(c) }
+
+func newDirect(c sandbox.DirectConfig) (*Provider, error) {
+	deployment := configuration(c.Selection)
+	if deployment == nil {
+		return nil, errors.New("E2B deployment configuration is unavailable")
+	}
+	binary, state, err := InstalledPaths(c.ProcessPaths)
+	if err != nil {
+		return nil, err
+	}
+	// Only a candidate that omitted its resources has none; its validation
+	// reads them from the template build before the candidate is rebuilt.
+	var resources *sandbox.Resources
+	if c.Selection.DeploymentSpec.Resources != (sandbox.Resources{}) {
+		resources = &c.Selection.DeploymentSpec.Resources
+	}
+	provider, err := NewWithCaller(Config{Binary: binary, StateDir: state,
+		Resources: resources, InstallationID: c.InstallationID, APIKey: deployment.APIKey, Template: deployment.Template,
+		APIURL: deployment.APIURL, Domain: deployment.Domain, TimeoutSeconds: 3600}, &ProcessCaller{Fence: c.Fence})
+	if err != nil {
+		return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")
+	}
+	return provider, nil
+}
 func (p *Provider) call(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap, command *sandbox.Command) (Response, error) {
 	deadline, ok := ctx.Deadline()
 	if !ok || (operation != "validate_deployment" && !validReference(r)) {
@@ -213,7 +240,7 @@ func (p *Provider) ValidateDeployment(ctx context.Context) (TemplateBuild, error
 		return TemplateBuild{}, err
 	}
 	build := out.TemplateBuild
-	if !out.DeploymentValid || out.Info != nil || out.Command != nil || out.Observations != nil || build == nil || build.Status != "ready" ||
+	if !out.DeploymentValid || out.Info != nil || out.Command != nil || out.Observation != nil || build == nil || build.Status != "ready" ||
 		build.CPUs == 0 || build.MemoryMiB == 0 || build.RootDiskMiB != nil && *build.RootDiskMiB == 0 ||
 		p.config.Resources != nil && (build.CPUs != p.config.Resources.CPUs || build.MemoryMiB != p.config.Resources.MemoryMiB) {
 		return TemplateBuild{}, sandbox.ErrComputeUnconfirmed

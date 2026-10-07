@@ -1,5 +1,5 @@
 """Five bounded SDK operations for an already authorized Core allocation, plus
-read-only deployment validation and batch observation."""
+read-only deployment validation and observation."""
 from concurrent.futures import ThreadPoolExecutor
 import json
 import math
@@ -14,7 +14,7 @@ from e2b.exceptions import AuthenticationException, FileNotFoundException, Sandb
 from sdk import connection_material, definitely_rejected, list_builds, list_templates, read_metrics, restore, run, sdk_options, validate_deployment, verify_team_template
 from state import Failure, Receipt, private_root, read_receipt
 from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIELDS, REFERENCE_FIELDS,
-    MAX_OBSERVATION_REFERENCES, MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS)
+    MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS)
 
 PREFIX = 'oac_'
 FIELDS = ('InstallationID', *REFERENCE_FIELDS)
@@ -38,9 +38,9 @@ def utc(value):
     return value.astimezone(timezone.utc).isoformat()
 
 
-def observed(reference, cloud, point):
-    """Map one metrics point without changing E2B units. A malformed point makes
-    only its own row unavailable.
+def observed(cloud, point):
+    """Map one metrics point without changing E2B units. A malformed point is
+    unavailable.
 
     Disk metrics need a newer envd; unless E2B reports both integer values and a
     positive total, disk stays unknown rather than an observed zero."""
@@ -56,11 +56,11 @@ def observed(reference, cloud, point):
                 not math.isfinite(cpu_pct) or cpu_pct < 0 or
                 any(type(v) is not int or v < 0 for v in values) or metric.mem_total < 1):
             raise ValueError('malformed metrics point')
-        return dict(reference, Status='observed', ObservedAt=utc(metric.timestamp), StartedAt=utc(cloud.started_at),
+        return dict(Status='observed', ObservedAt=utc(metric.timestamp), StartedAt=utc(cloud.started_at),
                     CPUCount=cpu_count, CPUUsedPct=cpu_pct, MemUsed=metric.mem_used, MemTotal=metric.mem_total,
                     DiskUsed=metric.disk_used if disk_known else None, DiskTotal=metric.disk_total if disk_known else None)
     except Exception:
-        return dict(reference, Status='unavailable')
+        return {'Status': 'unavailable'}
 
 
 class Provider:
@@ -80,12 +80,8 @@ class Provider:
         if (type(request['Version']) is not int or request['Version'] != PROTOCOL_VERSION or
                 not isinstance(request['Operation'], str) or request['Operation'] not in OPERATIONS or
                 set(request) - set(REQUEST_FIELDS) or
-                (request['Operation'] not in ('validate_deployment', 'observe', 'list_templates', 'list_builds', 'verify_credential') and
+                (request['Operation'] not in ('validate_deployment', 'list_templates', 'list_builds', 'verify_credential') and
                  not valid_reference(self.reference)) or
-                (request['Operation'] == 'observe' and
-                 (not 1 <= len(self.references) <= MAX_OBSERVATION_REFERENCES or
-                  not all(valid_reference(r) for r in self.references) or
-                  len({tuple(sorted(r.items())) for r in self.references}) != len(self.references))) or
                 (request['Operation'] == 'verify_credential' and
                  (len(self.references) > MAX_CREDENTIAL_REFERENCES or
                   not all(valid_reference(r) for r in self.references))) or
@@ -279,66 +275,38 @@ class Provider:
         self.receipt.save(status='killed', settled=True, bootstrap_complete=False, connection=None)
 
     def observe(self):
-        """Latest metrics of owned running sandboxes, without locks, writes or connect.
+        """Latest metrics of the owned running sandbox, without locks, writes or connect.
 
-        Receipts name each allocation's sandbox so that the one batch metrics
-        request runs alongside the labelled listing that confirms it is running."""
-        root = private_root(self.config)
-        statuses, candidates = [], {}
-        for index, reference in enumerate(self.references):
-            try:
-                record = read_receipt(self.config, root, reference) or {}
-            except Failure as error:
-                statuses.append(error.code)
-                continue
-            except Exception:
-                statuses.append('unavailable')
-                continue
-            ids = record.get('ids', [])
-            if record.get('status') in ('killed', 'rejected'):
-                statuses.append('not_running')
-            elif len(ids) == 1 and isinstance(ids[0], str):
-                statuses.append('unavailable')
-                candidates[index] = ids[0]
-            else:
-                statuses.append('unavailable')
-        if not candidates:
-            return [dict(r, Status=status) for r, status in zip(self.references, statuses)]
-        installation = self.config['InstallationID']
-        # One allocation filters by all its labels; a page lists the installation.
-        metadata = {PREFIX + 'installationid': installation}
-        if len(self.references) == 1:
-            metadata = self.metadata_for(self.references[0])
-        wanted, seen = set(candidates.values()), set()
+        The receipt names the allocation's sandbox so that the metrics request
+        runs alongside the labelled listing that confirms it is running."""
+        try:
+            record = read_receipt(self.config, private_root(self.config), self.reference) or {}
+        except Failure as error:
+            return {'Status': error.code}
+        except Exception:
+            return {'Status': 'unavailable'}
+        ids = record.get('ids', [])
+        if record.get('status') in ('killed', 'rejected'):
+            return {'Status': 'not_running'}
+        if len(ids) != 1 or not isinstance(ids[0], str):
+            return {'Status': 'unavailable'}
+        found = []
         with ThreadPoolExecutor(max_workers=1) as pool:
-            metrics = pool.submit(read_metrics, self.config, sorted(wanted), self.remaining)
-            running = {}
-            paginator = Sandbox.list(query=SandboxQuery(metadata=metadata, state=[SandboxState.RUNNING]),
+            metrics = pool.submit(read_metrics, self.config, ids[0], self.remaining)
+            paginator = Sandbox.list(query=SandboxQuery(metadata=self.metadata, state=[SandboxState.RUNNING]),
                                      limit=100, **self.options())
-            # Stop once every receipt's sandbox has been listed. Detection of a
+            # Stop once the receipt's sandbox has been listed. Detection of a
             # second sandbox with the same allocation labels then covers only
             # the pages read; lifecycle discovery remains exhaustive.
-            while paginator.has_next and not wanted <= seen:
-                for cloud in paginator.next_items(**self.options()):
-                    labels = cloud.metadata or {}
-                    if labels.get(PREFIX + 'installationid') == installation:
-                        key = tuple(labels.get(PREFIX + field.lower()) for field in FIELDS[1:])
-                        running.setdefault(key, []).append(cloud)
-                        seen.add(cloud.sandbox_id)
-            points = metrics.result()
-        result = []
-        for index, reference in enumerate(self.references):
-            if index not in candidates:
-                result.append(dict(reference, Status=statuses[index]))
-                continue
-            found = running.get(tuple(reference[field] for field in FIELDS[1:]), [])
-            if not found:
-                result.append(dict(reference, Status='not_running'))
-            elif len(found) != 1 or found[0].sandbox_id != candidates[index] or not isinstance(points.get(candidates[index]), dict):
-                result.append(dict(reference, Status='unavailable'))
-            else:
-                result.append(observed(reference, found[0], points[candidates[index]]))
-        return result
+            while paginator.has_next and not any(cloud.sandbox_id == ids[0] for cloud in found):
+                found += [cloud for cloud in paginator.next_items(**self.options())
+                          if all((cloud.metadata or {}).get(k) == v for k, v in self.metadata.items())]
+            point = metrics.result()
+        if not found:
+            return {'Status': 'not_running'}
+        if len(found) != 1 or found[0].sandbox_id != ids[0] or not isinstance(point, dict):
+            return {'Status': 'unavailable'}
+        return observed(found[0], point)
 
     def metadata_for(self, reference):
         return {PREFIX + field.lower(): value for field, value in
@@ -397,7 +365,7 @@ class Provider:
                     self.verify_credential()
                     return {'Version': PROTOCOL_VERSION, 'DeploymentValid': True, 'ErrorCode': ''}
                 if self.q['Operation'] == 'observe':
-                    return {'Version': PROTOCOL_VERSION, 'Observations': self.observe(), 'ErrorCode': ''}
+                    return {'Version': PROTOCOL_VERSION, 'Observation': self.observe(), 'ErrorCode': ''}
                 verify_team_template(self.config, self.remaining)
                 build = validate_deployment(self.config, self.remaining)
                 return {'Version': PROTOCOL_VERSION, 'DeploymentValid': True, 'TemplateBuild': build, 'ErrorCode': ''}

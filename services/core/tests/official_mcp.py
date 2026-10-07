@@ -74,19 +74,22 @@ def verify_mcp_configuration(client, other, expect_error):
                     {"authorization": "synthetic-private"},
                     {"server_url": "https://mcp.example.invalid/mcp?token=synthetic-private"}):
         invalid.append({**tool, "transport": {**transport, **changes}})
-    # Transports other than HTTP stay unsupported with or without an origin.
-    stdio = {"type": "stdio", "command": "synthetic-private"}
-    invalid += [{**minimal, "transport": stdio}, {**tool, "transport": stdio}]
+    # A pinned stdio transport stays unsupported with or without an origin; a
+    # malformed one gets the official field error first.
+    stdio, malformed = {"type": "stdio", "command": "synthetic-private", "cwd": "/"}, {"type": "stdio", "command": "synthetic-private"}
+    invalid += [{**minimal, "transport": stdio}, {**tool, "transport": stdio}, {**tool, "transport": malformed}]
     for declaration in invalid:
-        for operation in (
-            lambda: agents.create(model="requested-model", tools=[declaration]),
-            lambda: sessions.create(agent={"model": "requested-model", "tools": [declaration]},
-                                    input="Verify mcp fixture admission.", environment={"type": "none"}),
+        for prefix, operation in (
+            ("", lambda: agents.create(model="requested-model", tools=[declaration])),
+            ("agent.", lambda: sessions.create(agent={"model": "requested-model", "tools": [declaration]},
+                                               input="Verify mcp fixture admission.", environment={"type": "none"})),
         ):
             error = expect_error(BadRequestError, operation)
             assert "synthetic-private" not in str(error.body)
             if declaration["transport"] is stdio:
                 assert error.body["message"] == "MCP currently supports HTTP transport only."
+            if declaration["transport"] is malformed:
+                assert error.body["message"] == f"Missing required parameter: '{prefix}tools[0].transport.cwd'."
     assert {item.id for item in sessions.list()} == before
     assert {item.id for item in agents.list()} == saved_before
     print("HTTP MCP: pinned saved/Session projections, omitted/null origins, null/empty allowlists, immutable snapshots and rejected writes passed; no native execution claimed.")

@@ -30,7 +30,7 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 	}
 	saved := &v1.SavedAgent{ID: resource.ID}
 	if err := json.Unmarshal(resource.Configuration, &saved.SavedAgentConfiguration); err != nil {
-		return nil, nil, err
+		return nil, nil, &storedDataError{err}
 	}
 	if inherit && saved.XAgentsCore != nil && saved.XAgentsCore.ModelProvider != nil && provider == nil {
 		return nil, nil, errors.New("saved agent model provider bundle is missing")
@@ -43,13 +43,6 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 type modelProviderRequiredError struct{ message string }
 
 func (e *modelProviderRequiredError) Error() string { return e.message }
-
-// modelProviderDefaultsError carries a storage or decryption failure while
-// reading the deployment default; it is reported as a service error.
-type modelProviderDefaultsError struct{ err error }
-
-func (e *modelProviderDefaultsError) Error() string { return e.err.Error() }
-func (e *modelProviderDefaultsError) Unwrap() error { return e.err }
 
 func modelProviderRequired(engine string) error {
 	return &modelProviderRequiredError{"No model provider is configured for harness " + engine + ". Pass x_agents_core.model_provider, use an Agent that has one saved, or ask the Core administrator to set a deployment default model provider for " + engine + "."}

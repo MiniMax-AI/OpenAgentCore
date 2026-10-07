@@ -82,11 +82,3 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 		}
 	}
 }
-
-func TestManagedSessionArchiveRejectsFileManagedDeployment(t *testing.T) {
-	s, w, _ := managerFixture(t, 1, 1)
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	if _, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 0); !errors.Is(err, deployment.ErrConflict) {
-		t.Fatal("archive accepted file-managed deployment", err)
-	}
-}

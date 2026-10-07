@@ -243,12 +243,9 @@ type RuntimeDeployment struct {
 	Singleton          bool               `json:"singleton"`
 	InstallationID     pgtype.UUID        `json:"installation_id"`
 	BackendFingerprint string             `json:"backend_fingerprint"`
-	AdmissionPaused    bool               `json:"admission_paused"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ProviderKind       string             `json:"provider_kind"`
-	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
 	OwnerEpoch         int64              `json:"owner_epoch"`
-	WebManaged         bool               `json:"web_managed"`
 	IdleSeconds        int64              `json:"idle_seconds"`
 	RetentionSeconds   int64              `json:"retention_seconds"`
 	Generation         int64              `json:"generation"`

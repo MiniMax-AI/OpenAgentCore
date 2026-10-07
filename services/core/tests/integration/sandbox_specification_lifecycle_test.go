@@ -44,8 +44,14 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, dep
 
 func specificationNode(t *testing.T, s *Store, view deployment.View) deployment.Enrollment {
 	t.Helper()
+	return enrollNode(t, s, view, deployment.Capacity{MaxActive: 4, MaxRetained: 16})
+}
+
+// enrollNode enrolls an online node with capacity on the committed setup view.
+func enrollNode(t *testing.T, s *Store, view deployment.View, capacity deployment.Capacity) deployment.Enrollment {
+	t.Helper()
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 16}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), capacity))
 	if err != nil {
 		t.Fatal(err)
 	}

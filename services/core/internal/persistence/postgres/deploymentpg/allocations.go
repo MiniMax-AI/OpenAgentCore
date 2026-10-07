@@ -544,19 +544,3 @@ func (s *Store) Activity(ctx context.Context, allocationID string) (deployment.A
 	}
 	return loadActivity(ctx, s.pool.Queries(), id)
 }
-
-func (s *Store) CountComputeReservations(ctx context.Context, installationID string) (int64, error) {
-	id, err := parseID(installationID)
-	if err != nil {
-		return 0, err
-	}
-	return s.pool.Queries().CountRuntimeComputeReservations(ctx, id)
-}
-
-func (s *Store) CountRetainedAllocations(ctx context.Context, installationID string) (int64, error) {
-	id, err := parseID(installationID)
-	if err != nil {
-		return 0, err
-	}
-	return s.pool.Queries().CountRuntimeRetainedAllocations(ctx, id)
-}

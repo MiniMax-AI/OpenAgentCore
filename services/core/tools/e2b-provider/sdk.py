@@ -18,7 +18,7 @@ from e2b.api.client.types import UNSET
 
 from state import Failure
 
-from helper_contract_generated import SDK_VERSION, MAX_OUTPUT, MAX_COMMAND_INPUT, MAX_OBSERVATION_REFERENCES
+from helper_contract_generated import SDK_VERSION, MAX_OUTPUT, MAX_COMMAND_INPUT
 
 
 def list_templates(config, remaining):
@@ -120,16 +120,14 @@ def validate_deployment(config, remaining):
     raise Failure('unconfirmed')
 
 
-def read_metrics(config, sandbox_ids, remaining):
-    """Latest metrics point per sandbox from one batch request of at most 100 IDs."""
-    if not 1 <= len(sandbox_ids) <= MAX_OBSERVATION_REFERENCES:
-        raise Failure('invalid')
+def read_metrics(config, sandbox_id, remaining):
+    """Latest metrics point of one sandbox, or None when E2B reports none."""
     client = get_api_client(ConnectionConfig(**sdk_options(config, remaining)))
-    response = get_sandboxes_metrics.sync_detailed(client=client, sandbox_ids=sandbox_ids)
+    response = get_sandboxes_metrics.sync_detailed(client=client, sandbox_ids=[sandbox_id])
     if (response.status_code != 200 or not isinstance(response.parsed, SandboxesWithMetrics) or
             not isinstance(response.parsed.sandboxes, dict)):
         raise Failure('unconfirmed')
-    return response.parsed.sandboxes
+    return response.parsed.sandboxes.get(sandbox_id)
 
 
 def connection_material(sandbox):

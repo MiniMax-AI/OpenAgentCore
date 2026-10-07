@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -14,7 +15,6 @@ import (
 // call through the nil embedded interfaces fails the test immediately.
 type registrationConfiguration struct {
 	sandbox.ConfigurationAdapter
-	sandbox.ConfigurationDiscoverer
 	requirements sandbox.ConfigurationRequirements
 }
 
@@ -22,17 +22,11 @@ func (a registrationConfiguration) Requirements() sandbox.ConfigurationRequireme
 	return a.requirements
 }
 
-// A declaration of Unsupported still requires an explicit rejection method.
-type missingConfigurationDiscovery struct{ sandbox.ConfigurationAdapter }
-
-func TestConfigurationRegistrationRejectsNilAndMissingDiscovery(t *testing.T) {
+func TestConfigurationRegistrationRejectsNil(t *testing.T) {
 	registry := Builtin()
 	a := registry.adapters["docker"]
 	var typedNil *registrationConfiguration
-	for _, configuration := range []sandbox.ConfigurationAdapter{
-		nil, typedNil, missingConfigurationDiscovery{a.Configuration},
-		missingConfigurationDiscovery{registry.adapters["e2b"].Configuration},
-	} {
+	for _, configuration := range []sandbox.ConfigurationAdapter{nil, typedNil} {
 		a.Configuration = configuration
 		if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
 			t.Fatalf("%T: %v", configuration, err)
@@ -97,12 +91,7 @@ func TestConfigurationRequirementsDoNotInventDependencies(t *testing.T) {
 	}
 }
 
-type futureConfigurationDiscovery interface {
-	sandbox.ConfigurationDiscoverer
-	NextDiscovery(context.Context) error
-}
-
-func TestFutureConfigurationRequirementAndMethodNeedExplicitHandling(t *testing.T) {
+func TestFutureConfigurationRequirementNeedsExplicitHandling(t *testing.T) {
 	registry := Builtin()
 	original := registry.adapters["docker"].Configuration.Requirements()
 	fields := make([]reflect.StructField, 0, 4)
@@ -119,32 +108,85 @@ func TestFutureConfigurationRequirementAndMethodNeedExplicitHandling(t *testing.
 	if err := validateConfigurationRequirements(value); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal("new requirement silently inherited policy", err)
 	}
-	if err := validateConfigurationDiscoveryInterface(reflect.TypeFor[futureConfigurationDiscovery]()); !errors.Is(err, providercontract.ErrContract) {
-		t.Fatal("new discovery method inherited support", err)
+}
+
+func TestUnsupportedSetupOperationsMatchAuthoredReasons(t *testing.T) {
+	registry := Builtin()
+	for kind, a := range registry.adapters {
+		requirements := a.Configuration.Requirements()
+		direct := sandbox.DirectConfig{Selection: sandbox.Selection{Provider: kind}}
+		discover := func(read func() (json.RawMessage, error)) func() error {
+			return func() error {
+				if result, err := read(); result != nil {
+					return errors.New("fabricated catalog")
+				} else {
+					return err
+				}
+			}
+		}
+		for _, operation := range []struct {
+			name    string
+			support providercontract.Support
+			calls   []func() error
+		}{
+			{"DiscoverConfiguration", requirements.Discovery, []func() error{
+				discover(func() (json.RawMessage, error) {
+					return a.Configuration.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
+				}),
+				discover(func() (json.RawMessage, error) {
+					return registry.DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
+				}),
+			}},
+			{"DiscoverSelection", requirements.SelectionDiscovery, []func() error{
+				func() error { _, err := a.Configuration.DiscoverSelection(t.Context(), direct); return err },
+				func() error { _, err := registry.DiscoverSelection(t.Context(), direct); return err },
+			}},
+			{"VerifyCredential", requirements.CredentialVerification, []func() error{
+				func() error { return a.Configuration.VerifyCredential(t.Context(), direct, nil) },
+				func() error { return registry.VerifyCredential(t.Context(), direct, nil) },
+			}},
+		} {
+			if operation.support.State != providercontract.Unsupported {
+				continue
+			}
+			for _, call := range operation.calls {
+				err := call()
+				if reason, valid := providercontract.UnsupportedReason(err, operation.name); !valid || reason != operation.support.Reason {
+					t.Fatalf("%s %s: reason=%s err=%v", kind, operation.name, reason, err)
+				}
+			}
+		}
 	}
 }
 
-func TestUnsupportedConfigurationDiscoveryMatchesAuthoredReason(t *testing.T) {
+// contradictingConfiguration declares every setup operation Supported and then
+// reports each as Unsupported.
+type contradictingConfiguration struct{ registrationConfiguration }
+
+func (contradictingConfiguration) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
+	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "not_ready"}
+}
+func (contradictingConfiguration) DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error) {
+	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "not_ready"}
+}
+func (contradictingConfiguration) VerifyCredential(context.Context, sandbox.DirectConfig, []sandbox.Reference) error {
+	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "not_ready"}
+}
+
+func TestSupportedSetupOperationsCannotReportUnsupported(t *testing.T) {
 	registry := Builtin()
-	for kind, a := range registry.adapters {
-		support := a.Configuration.Requirements().Discovery
-		if support.State != providercontract.Unsupported {
-			continue
-		}
-		native := a.Configuration.(sandbox.ConfigurationDiscoverer)
-		for _, read := range []func() ([]byte, error){
-			func() ([]byte, error) {
-				return native.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
-			},
-			func() ([]byte, error) {
-				return registry.DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
-			},
-		} {
-			result, err := read()
-			reason, valid := providercontract.UnsupportedReason(err, "DiscoverConfiguration")
-			if result != nil || !valid || reason != support.Reason {
-				t.Fatalf("%s: result=%v reason=%s err=%v", kind, result, reason, err)
-			}
+	a := registry.adapters["docker"]
+	requirements := a.Configuration.Requirements()
+	supported := providercontract.Support{State: providercontract.Supported}
+	requirements.Discovery, requirements.SelectionDiscovery, requirements.CredentialVerification = supported, supported, supported
+	a.Configuration = contradictingConfiguration{registrationConfiguration{requirements: requirements}}
+	registry.adapters["docker"] = a
+	direct := sandbox.DirectConfig{Selection: sandbox.Selection{Provider: "docker"}}
+	_, discoverErr := registry.DiscoverConfiguration(t.Context(), "docker", sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
+	_, selectionErr := registry.DiscoverSelection(t.Context(), direct)
+	for _, err := range []error{discoverErr, selectionErr, registry.VerifyCredential(t.Context(), direct, nil)} {
+		if !errors.Is(err, providercontract.ErrContract) || errors.Is(err, providercontract.ErrUnsupported) {
+			t.Fatal(err)
 		}
 	}
 }

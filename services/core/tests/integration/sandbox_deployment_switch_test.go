@@ -190,7 +190,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), id, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
-	// AdmissionPaused rejects a valid enrollment without consuming it. Authentication
+	// A reset rejects a valid enrollment without consuming it. Authentication
 	// still precedes deployment details for invalid or retired credentials.
 	spareNode := node
 	spareNode.NodeID = uuid.NewString()

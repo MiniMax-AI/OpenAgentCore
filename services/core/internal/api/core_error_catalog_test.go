@@ -24,8 +24,6 @@ var nonAdministrationCodes = []string{
 	"environment_input_cancelled", "environment_input_expired", "model_provider_required", "sandbox_nodes_preparing", "turn_conflict",
 	// Machine routes for nodes and native installers.
 	"installation_authorization_invalid", "installation_unavailable", "invalid_node_credential", "sandbox_node_address_mismatch",
-	// Removal of the file-managed local node, which the process deployment path owns.
-	"runtime_local_node_configured",
 }
 
 // The shared catalog lists every code an administration caller (/core/v1 or

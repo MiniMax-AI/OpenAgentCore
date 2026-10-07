@@ -20,7 +20,7 @@ FROM environments e JOIN sessions s ON s.id=e.session_id
 LEFT JOIN runtime_placements p ON p.environment_id=e.id
 WHERE p.node_id IS NOT DISTINCT FROM sqlc.narg(node_id)::uuid
   AND p.released_at IS NULL
-  AND NOT (SELECT admission_paused FROM runtime_deployment)
+  AND (SELECT reset_clear IS NULL FROM runtime_deployment)
   AND e.id > sqlc.arg(after_id)::uuid AND s.deleted_at IS NULL AND e.status='pending'
   AND s.configuration->'environment'->>'type'='openai_hosted'
   AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id=e.id)

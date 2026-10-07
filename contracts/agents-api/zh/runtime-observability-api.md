@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: d6111447def530b07c392d457cce0cd553f92dafb2e7cc7f481da47f816fcab2
+source_hash: 6eca80ffefcaf8e26901659e5251518f84d2c6c93349085b378d46f9ac49149d
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -147,7 +147,7 @@ Authorization: Bearer <Core key>
 | `unsupported` | `runtime_mode_not_observable` | `none` 和 `self_hosted` Session。 |
 | `unavailable` | `allocation_pending` | 托管分配尚不存在或正在创建。 |
 | `unavailable` | `runtime_not_running` | 分配正在清理或已释放，或者提供方报告 Runtime 不存在、已停止或已暂停。 |
-| `unavailable` | `source_not_configured` | 该分配的提供方未配置任何观测源。 |
+| `unavailable` | `source_not_configured` | 此 Core 没有托管 installation 标识。 |
 | `unavailable` | `sample_timeout` | 提供方读取超过其截止时间。 |
 | `unavailable` | `sample_unavailable` | 提供方无法生成当前样本。 |
 

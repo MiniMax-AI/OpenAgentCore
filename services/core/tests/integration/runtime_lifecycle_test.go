@@ -75,12 +75,15 @@ func (p *lifecycleProvider) RunCommand(context.Context, sandbox.Reference, sandb
 	return sandbox.CommandResult{}, errors.New("not used")
 }
 
+// managedWorker starts a Worker that runs the Web setup webDeployment
+// committed for installation key on p.
 func managedWorker(t *testing.T, s *Store, key string, p sandbox.SandboxProvider) (*execution.Worker, func()) {
 	t.Helper()
 	return managedWorkerMode(t, s, key, p, false)
 }
 
-func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
+// managedWorkerMode is managedWorker that also runs the Worker when run is set.
+func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProvider, run bool) (*execution.Worker, func()) {
 	t.Helper()
 	registry := runtimegateway.NewRegistry()
 	if peer, ok := p.(interface {
@@ -91,8 +94,8 @@ func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProv
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
 	}
-	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
-	if len(run) > 0 && run[0] {
+	w := startWebWorker(t, s, registry, key, p, nil)
+	if run {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
 		go func() { done <- w.Run(ctx) }()
@@ -149,8 +152,8 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, s *Store, tenant, 
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	s, _ := newManagedTestStore(t)
+	key := webDeployment(t, s, "e2b")
 	tenant, session, env := managedSession(t, s)
-	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
 	w, stop := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
@@ -188,8 +191,8 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	s, _ := newManagedTestStore(t)
+	key := webDeployment(t, s, "e2b")
 	tenant, session, env := managedSession(t, s)
-	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
 	w, _ := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
@@ -216,37 +219,10 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	}
 }
 
-func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	tenant, _, env := managedSession(t, s)
-	key := uuid.NewString()
-	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, _ := managedWorker(t, s, key, p)
-	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
-		t.Fatal(err)
-	}
-	p.unavailable = true
-	reconcileManagedState(t, w, s, tenant, env.ID, "cleanup_pending")
-	got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
-	if err != nil || got.State != "cleanup_pending" {
-		t.Fatalf("expiry lost on provider failure: %+v %v", got, err)
-	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-		t.Fatal("expired credential still authenticates")
-	}
-	if p.kills != 0 {
-		t.Fatal("unavailable provider misreported cleanup")
-	}
-}
-
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
 	s, _ := newManagedTestStore(t)
+	key := webDeployment(t, s, "e2b")
 	tenant, _, env := managedSession(t, s)
-	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, _ := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)

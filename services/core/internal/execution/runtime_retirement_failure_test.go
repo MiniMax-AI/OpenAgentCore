@@ -32,11 +32,7 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 			owner, _, _, pool := delayedReadWriter(t, &armed, reading, releaseRead)
 			m := testRuntimeManager(t)
 			m.lease = owner.Lease
-			m.loadDeployment = func(context.Context) (*RuntimeProvider, error) { return nil, nil }
 			m.mutationGate = make(chan struct{}, 1)
-			// This fixture models an already loaded node deployment; its provider is
-			// needed only for node admission, not for external sandbox operations.
-			m.config.Provider = &drainFixtureProvider{}
 			original, err := m.node("retiring")
 			if err != nil {
 				t.Fatal(err)
@@ -160,7 +156,8 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 	}
 }
 
-// No provider method is called by the retirement ownership fixture.
+// No provider method is called by the runtime manager fixtures; the provider is
+// needed only for node admission.
 type drainFixtureProvider struct{ sandbox.SandboxProvider }
 
 // Done is evaluated only after lockMutation's initial admission check, letting
@@ -178,7 +175,6 @@ func (c *mutationWaitContext) Done() <-chan struct{} {
 
 func TestFailedManagerRejectsAlreadyWaitingMutation(t *testing.T) {
 	m := testRuntimeManager(t)
-	m.loadDeployment = func(context.Context) (*RuntimeProvider, error) { return nil, nil }
 	m.mutationGate = make(chan struct{}, 1)
 	m.mutationGate <- struct{}{}
 	ctx, cancel := context.WithCancel(t.Context())
