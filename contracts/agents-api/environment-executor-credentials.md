@@ -95,4 +95,4 @@ A machine reconnects only with its bound `key_id`, rotated to a new secret that 
 
 ## Model provider
 
-A `self_hosted` Session carries its own model provider; deployment defaults never apply. [Model execution](./model-execution.md) owns the delivery rules. A saved Agent's provider key is delivered to the executor of every `self_hosted` Session created with that Agent in the Project, so anyone who can create `self_hosted` Sessions in the Project and run an executor can read it.
+[Model execution](./model-execution.md) owns provider resolution and delivery. A saved Agent's provider key is delivered to the executor of every `self_hosted` Session created with that Agent in the Project, and a deployment default's key to the executor of every `self_hosted` Session that falls back to it, so anyone who can create such a Session and run an executor can read that key.

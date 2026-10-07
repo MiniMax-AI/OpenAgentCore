@@ -168,7 +168,7 @@ Every `proto.AgentKindCapabilities` field must be explicitly `proto.CapabilitySu
 
 The admission mapping is explicit. `Steering` controls non-durable `Steerer` input. `DurableInputReceipts` controls `DurableSteerer` input and also requires the Turn settlement contract; neither implies the other, and Core's public text profile requires both. `Permissions` qualifies permission and user-choice responses together and requires both native response paths. Workspace declarations describe the authorized resource owner, including the common Runtime workspace implementation. Runtime registration does not grant Core qualification; the service profile does.
 
-The runnable test-only example [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) registers a text-only synthetic Harness. It shows a Session-owned Executor, fresh Turns, durable steering, cancellation and history binding, and is never shipped.
+The runnable test-only example [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) registers a text-only synthetic Harness under the `mcode` kind, because Core admits only [catalog](./harness-catalog.md) Harnesses. It shows a Session-owned Executor, fresh Turns, durable steering, cancellation and history binding, and is never shipped.
 
 ## Add the engine to Core
 
@@ -205,7 +205,7 @@ Run the `engine` and `execution` tests for omission, policy, combination and err
 
 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory, preparation and Executor paths all validate through that declaration before native side effects, and Registry wrappers keep the declaration with the factory. The wire object is `proto.HarnessConfig`. [Model execution](./model-execution.md#native-model-parameters) lists each Harness's accepted fields.
 
-A supplied `model` must be a nonempty string, and an explicit `model_provider` requires it. The native-owned connection path may omit both; explicit null is invalid. An explicitly empty declaration accepts no provider or nonempty native parameters and advertises no provider support. Unknown protocol formats and duplicate protocol declarations fail at registration.
+Every request names a nonempty `model` and a `model_provider`; preparation rejects a request without either, including an explicit null or empty value, before any native side effect. An empty declaration therefore accepts no request. Unknown protocol formats and duplicate protocol declarations fail at registration.
 
 The declaration's ordered `protocols` list is the only source of accepted protocols and the default (the first entry); it also feeds Core's configuration-support descriptor, and Core and Runtime reject unsupported combinations through it. Adapters connect through native configuration and the [credential gateway](./model-execution.md#credential-gateway); they never introduce their own model API proxy or protocol converter, a second model capability registry, or capabilities inferred from model names. Claude's private bridge receives compiled native options and performs structural checks only, not a second copy of the declaration's rules.
 

@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 5ac3e57f943b8bb3fadbf9cda0a72399317ad101416ec28ca4037eea07703a82
+source_hash: c9df6b31ca54f1601aad360c3c3f8039ef35eb7bd4f6084b8495a18c131dcbfb
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -184,7 +184,7 @@ cd && rm -rf ~/.oac/core
 | `This installation did not finish installing …` | 安装程序在报告服务运行前停止。重新执行安装命令，[清理残留](install.md#install)后重新安装，或[卸载](#uninstall) |
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
-| 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |
+| 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供 |
 | Add node 不展示命令 | 参阅[添加节点前](nodes.md#before-you-add-a-node) |
 | 节点未就绪 | 参阅[节点问题排查](nodes.md#troubleshooting) |
 

@@ -71,7 +71,6 @@ The application owns the machine. It creates the Session with a clean absolute `
 - `remote_url` is the daemon WebSocket URL derived from Core's public URL, never from request headers or a daemon address. It names Core's private daemon transport.
 - Enrollment binds the exact Session, Environment, device and executor key. It creates no allocation and cannot move a Session to another device.
 - The Session's workspace must equal the `/workspace` alias or the exact canonical directory the Runtime is bound to. Naming a path grants no access to it.
-- The Session carries its own model provider; deployment defaults never apply ([model execution](./model-execution.md#saved-defaults-and-precedence)).
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
 - The workspace and native history must survive a daemon restart. Losing them never authorizes silent replacement or replay.

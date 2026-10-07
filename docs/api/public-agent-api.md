@@ -154,7 +154,7 @@ Any other member is rejected with 400. `api_key` is write-only: reads return `ap
 
 The harness is the agent program that runs a Session: Codex (`codex`), Claude Code (`claude_sdk`) or MiniMax Code (`mcode`). Set `x_agents_core.harness` on the Agent or the inline `agent`; without it, the installation's default harness applies ([`core.default_harness`](../configuration.md#settings), Codex unless the operator changed it).
 
-- **Model.** `model` is the provider's exact model ID. An inline Agent on an `openai_hosted` or `none` Session may omit it to use the default model configuration of its harness. A saved Agent always needs one.
+- **Model.** `model` is the provider's exact model ID. An inline Agent may omit it to use the default model configuration of its harness. A saved Agent always needs one.
 - **Provider.** The harness calls your provider with one of the harness's native protocols, through a [credential gateway](../../contracts/agents-api/model-execution.md#credential-gateway) that keeps your key out of the harness; there is no conversion, and a mismatch is rejected when the Session is created. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) lists each harness's protocols and which provider a Session uses on each Environment type. A Session freezes its provider at creation.
 - **Native parameters.** `harness_config` carries the harness's own model settings; see [native model parameters](../../contracts/agents-api/model-execution.md#native-model-parameters).
 
@@ -238,17 +238,17 @@ Returns 201 with the Session:
 | Field | Meaning |
 | --- | --- |
 | `environment` | Required. Where the agent works; see the table below |
-| `agent_id` or `agent` | A saved Agent, or an inline Agent object (same fields as create). An inline Agent on `openai_hosted` or `none` may omit `model` to use the installation default |
+| `agent_id` or `agent` | A saved Agent, or an inline Agent object (same fields as create). An inline Agent may omit `model` to use the installation default |
 | `input` | The first message: a string or a message array. Required on `none`, and with `stream: true` except on `self_hosted` ([initial input](../../contracts/agents-api/sessions-events.md#initial-input-at-session-creation)) |
 | `metadata` | Your own string key-value pairs |
 | `vault_ids` | [Vaults](#vaults) whose credentials MCP servers may use |
 | `stream` | `true` returns [server-sent events](#stream-events) instead of JSON |
-| `x_agents_core.model_provider` | This Session's model access, if not from the Agent or the default. Rejected on `none` |
+| `x_agents_core.model_provider` | This Session's model access, if not from the Agent or the default |
 
 | `environment.type` | Runs on | Notes |
 | --- | --- | --- |
 | `openai_hosted` | A sandbox Core creates on a node or E2B; the administrator provides the capacity | Optional `network`, `packages`, `files`, `skills`, `plugins`, `env`, `capability_directories`, `setup_commands`, or a template |
-| `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](../getting-started/self-hosted.md). The Session brings its own `model_provider` |
+| `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](../getting-started/self-hosted.md) |
 | `none` | A device connection an operator registered, with no workspace | `input` required. The model comes from the installation default, or from the device when no default is configured |
 
 A new `openai_hosted` Session reads `idle` while Core prepares its sandbox; its first Turn starts when the Environment is ready. The [Environment contract](../../contracts/agents-api/environments.md) owns placement, expiry and preparation.
