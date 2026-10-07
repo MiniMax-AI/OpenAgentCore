@@ -35,7 +35,11 @@ test("installed MCP projection uses the common Runtime launcher", t => {
     output_format: { type: "json_schema", schema: { type: "object" } } })), /invalid_request/);
   assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
-  for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, env: { TOKEN: "secret" } }],
+  // An agent-host view's alias runs without arguments.
+  const alias = { server_label: "installed", command: "/.oac/bin/oac-mcp-0", allowed_tools: null };
+  assert.deepEqual(parseEnvironmentMCP([alias]), [alias]);
+  assert.deepEqual(new MCPProfile([alias], []).servers.installed.args, []);
+  for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, command: "/bin/line\n" }], [{ ...stdio, env: { TOKEN: "secret" } }],
     [{ ...stdio, args: ["-c", "untrusted"] }], [{ ...stdio, allowed_tools: ["*"] }],
     [{ ...stdio, server_url: "https://example.invalid" }], [{ ...stdio, args: [...stdio.args.slice(0, 2), "../escape", "installed"] }]]) {
     assert.throws(() => parseEnvironmentMCP(value), /invalid_request/);
