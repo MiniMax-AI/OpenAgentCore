@@ -113,8 +113,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 }
 
 func wakeHintInput(text string) []sessions.Input {
-	payload, _ := json.Marshal(map[string]string{"text": text})
-	return []sessions.Input{{Kind: "message", Payload: payload}}
+	return []sessions.Input{messageInput(text)}
 }
 
 func (f *wakeHintIntegration) pending(t *testing.T, target wakeHintIntegrationTarget, key string) sessions.EnvironmentInputReservation {

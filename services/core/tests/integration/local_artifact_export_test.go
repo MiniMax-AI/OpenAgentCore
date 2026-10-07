@@ -3,7 +3,6 @@ package integration
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -46,7 +45,7 @@ func completeLocalArtifactExport(t *testing.T, h *dispatchHarness, worker *execu
 		t.Fatal("capture published before native completion", err)
 	}
 	completeCaptureDirectoryRead(t, h, worker, environment)
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "during-artifact-capture", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"run after the completed native execution"}`)}})
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "during-artifact-capture", []sessions.Input{messageInput("run after the completed native execution")})
 	if err != nil || pending.State != sessions.EnvironmentInputPending || len(pending.Receipts) != 0 {
 		t.Fatalf("input during artifact capture was assigned to the finished executor: %+v %v", pending, err)
 	}

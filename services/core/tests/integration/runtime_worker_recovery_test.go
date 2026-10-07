@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -35,7 +34,7 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
 	h, _ := runtimeWorkerHarness(t)
 	h.d, h.lease = h.bound(), h.owner().Lease
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{messageInput("first")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +55,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 
 func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	h, pool := runtimeWorkerHarness(t)
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{messageInput("first")})
 	if err != nil {
 		t.Fatal(err)
 	}

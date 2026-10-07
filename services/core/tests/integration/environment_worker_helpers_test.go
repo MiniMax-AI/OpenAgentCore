@@ -47,7 +47,7 @@ func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessi
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "work", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "work", []sessions.Input{messageInput("first")})
 	if err != nil {
 		t.Fatal(err)
 	}

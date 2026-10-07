@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 			enableWorkerEnvironment(t, h)
 			frames := workerFrames(t, h)
-			pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+			pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{messageInput("first")})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,7 +57,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 				t.Fatal("failed input retried", frame.Type)
 			case <-time.After(1200 * time.Millisecond):
 			}
-			next, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"next"}`)}})
+			next, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{messageInput("next")})
 			if err != nil {
 				t.Fatal("new input remained blocked", err)
 			}
@@ -98,7 +97,7 @@ func TestWorkerRetriesUncertainPreparationFailure(t *testing.T) {
 			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 			enableWorkerEnvironment(t, h)
 			frames := workerFrames(t, h)
-			pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "retry", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"retry"}`)}})
+			pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "retry", []sessions.Input{messageInput("retry")})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -130,7 +129,7 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 	enableWorkerEnvironment(t, h)
 	frames := workerFrames(t, h)
-	first, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	first, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{messageInput("first")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +139,7 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	if _, err := cancelEnvironmentInput(t.Context(), h.s, h.tenant, h.session.ID, first.ID); err != nil {
 		t.Fatal(err)
 	}
-	next, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"next"}`)}})
+	next, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{messageInput("next")})
 	if err != nil {
 		t.Fatal(err)
 	}

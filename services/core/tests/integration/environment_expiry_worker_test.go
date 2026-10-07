@@ -25,7 +25,7 @@ func newEnvironmentExpiryReservation(t *testing.T, s *Store) (string, sessions.E
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wait for the environment"}`)}})
+	pending, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "pending", []sessions.Input{messageInput("wait for the environment")})
 	if err != nil {
 		t.Fatal(err)
 	}
