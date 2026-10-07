@@ -297,9 +297,10 @@ func TestSupersedingBindFencesTheEarlierEpoch(t *testing.T) {
 		payload proto.AssignmentBindPayload
 		code    string
 	}{
-		"lower":    {1, proto.AssignmentBindPayload{}, proto.AssignmentStale},
-		"changed":  {2, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString()}, proto.AssignmentConflict},
-		"repeated": {2, proto.AssignmentBindPayload{}, ""},
+		"lower":             {1, proto.AssignmentBindPayload{}, proto.AssignmentStale},
+		"changed":           {2, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString()}, proto.AssignmentConflict},
+		"other environment": {3, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString()}, proto.AssignmentConflict},
+		"repeated":          {2, proto.AssignmentBindPayload{}, ""},
 	} {
 		if got := bind(id, test.epoch, test.payload); got.ErrorCode != test.code {
 			t.Fatalf("%s bind = %+v", id, got)

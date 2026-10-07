@@ -112,7 +112,13 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 	case a.ref.AssignmentID != ref.AssignmentID:
 		code = proto.AssignmentConflict
 	case ref.Epoch > a.ref.Epoch && (!a.released || a.superseding != nil):
-		// The bind supersedes the earlier epoch, or a pending supersede.
+		// The bind supersedes the earlier epoch, or a pending supersede. A
+		// Session's Environment never changes, so another one is refused
+		// before anything is fenced.
+		if input.EnvironmentID != a.environmentID {
+			code = proto.AssignmentConflict
+			break
+		}
 		preparations := r.fenceSessionWorkLocked(ref.SessionID)
 		a.ref, a.released, a.superseding = ref, true, &input
 		r.shutdownWG.Add(1)
@@ -186,7 +192,7 @@ func (r *Router) supersede(ctx context.Context, env proto.Envelope, a *assignmen
 		if input.Resource != nil {
 			resource = *input.Resource
 		}
-		a.environmentID, a.resource, a.grant, a.environment = input.EnvironmentID, resource, input.AttachGrant, owner
+		a.resource, a.grant, a.environment = resource, input.AttachGrant, owner
 		a.released, a.superseding = false, nil
 	}
 	r.mu.Unlock()
