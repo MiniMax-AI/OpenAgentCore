@@ -183,7 +183,7 @@ check-microsandbox-provider:
 .PHONY: check-distribution build-core-distribution
 check-distribution:
 	node --test scripts/build-native-catalog.test.mjs
-	go test ./services/web -count=1
+	go test ./services/web ./services/core/cmd/oac -count=1
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/node -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/compose -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/acceptance -p 'test_*.py'

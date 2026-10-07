@@ -1,8 +1,6 @@
 // Package dispatch wires inbound WebSocket frames to the agent layer.
-// It owns one Turn per active RunID, a per-Turn output goroutine that
-// forwards the agent's events to the transport, and a
-// permission_id → run_id index so permission_decision frames route
-// back to the right session.
+// It owns one Turn per active RunID and a per-Turn output goroutine that
+// forwards the agent's events to the transport.
 //
 // Concurrency: Handle is safe for one goroutine (typically the read
 // loop). Each session runs its own goroutine. Internal state is
@@ -37,10 +35,8 @@ type Router struct {
 	admission           sync.RWMutex
 	suspension          *proto.EnvironmentSuspendPayload
 	mu                  sync.Mutex
-	sessions            map[string]*sessionState // RunID → state
-	permIndex           map[string]string        // permID  → RunID
-	askIndex            map[string]string        // askID   → RunID
-	applied             map[string]appliedInteractionDecision
+	sessions            map[string]*sessionState         // RunID → state
+	applied             map[string]appliedFunctionResult // RunID and call ID → applied result
 	shutdownAttempt     *shutdownAttempt
 	shutdownCh          chan struct{} // closed by Shutdown
 	shutdownWG          dispatchWork  // waits for all pump goroutines
@@ -58,9 +54,7 @@ type Router struct {
 	sessionEnvironments bool
 }
 
-type appliedInteractionDecision struct {
-	requestID   string
-	kind        string
+type appliedFunctionResult struct {
 	fingerprint [32]byte
 	recordedAt  time.Time
 }
@@ -77,8 +71,6 @@ type sessionState struct {
 	session         agent.Turn
 	out             chan proto.Envelope
 	ctx             context.Context
-	pendingIDs      map[string]struct{}
-	pendingAsks     map[string]struct{}
 	traceparent     string
 	steering        map[string]steeringReceipt
 	steerBusy       bool
@@ -132,9 +124,7 @@ func New(cfg Config) (*Router, error) {
 		sender:              cfg.Sender,
 		log:                 log,
 		sessions:            make(map[string]*sessionState),
-		permIndex:           make(map[string]string),
-		askIndex:            make(map[string]string),
-		applied:             make(map[string]appliedInteractionDecision),
+		applied:             make(map[string]appliedFunctionResult),
 		shutdownCh:          make(chan struct{}),
 		idleTimeout:         idleTimeout,
 		executors:           make(map[string]*executorState),
@@ -189,10 +179,6 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 		return r.handleFunctionResult(ctx, env)
 	case proto.TypePromptSteer:
 		return r.handlePromptSteer(ctx, env)
-	case proto.TypePermissionDecision:
-		return r.handlePermissionDecision(ctx, env)
-	case proto.TypePromptForUserChoiceDecision:
-		return r.handlePromptForUserChoiceDecision(ctx, env)
 	default:
 		// Unknown types are logged and dropped — keeps the daemon
 		// forward-compatible with server-side additions.
@@ -238,11 +224,5 @@ func (r *Router) drain(ch <-chan proto.Envelope) {
 func (r *Router) cleanupSession(s *sessionState) {
 	r.mu.Lock()
 	delete(r.sessions, s.runID)
-	for permID := range s.pendingIDs {
-		delete(r.permIndex, permID)
-	}
-	for askID := range s.pendingAsks {
-		delete(r.askIndex, askID)
-	}
 	r.mu.Unlock()
 }

@@ -61,27 +61,12 @@ type fakeSession struct {
 	runID               string
 	input               proto.MessageInput
 	cancelCalls         int
-	submitCalls         []permCall
-	askCalls            []askCall
-	submitErr           error
-	askErr              error
-	cancelMu, submitMu  sync.Mutex
-	askMu               sync.Mutex
+	cancelMu            sync.Mutex
 	closeOutOnCancel    bool
 	out                 chan<- proto.Envelope
 	closeOutOnCancelMu  sync.Once
 	postCancelEnvelopes []proto.Envelope // emitted to out after Cancel fires
 	ctx                 context.Context
-}
-
-type permCall struct {
-	id       string
-	decision proto.PermissionDecisionPayload
-}
-
-type askCall struct {
-	id       string
-	decision proto.PromptForUserChoiceDecisionPayload
 }
 
 func (s *fakeSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
@@ -101,32 +86,10 @@ func (s *fakeSession) Cancel(context.Context) error {
 	return nil
 }
 
-func (s *fakeSession) SubmitPermission(_ context.Context, permID string, dec proto.PermissionDecisionPayload) error {
-	s.submitMu.Lock()
-	s.submitCalls = append(s.submitCalls, permCall{id: permID, decision: dec})
-	s.submitMu.Unlock()
-	return s.submitErr
-}
-
-func (s *fakeSession) SubmitPromptForUserChoice(_ context.Context, askID string, dec proto.PromptForUserChoiceDecisionPayload) error {
-	s.askMu.Lock()
-	s.askCalls = append(s.askCalls, askCall{id: askID, decision: dec})
-	s.askMu.Unlock()
-	return s.askErr
-}
-
 func (s *fakeSession) cancels() int {
 	s.cancelMu.Lock()
 	defer s.cancelMu.Unlock()
 	return s.cancelCalls
-}
-
-func (s *fakeSession) submissions() []permCall {
-	s.submitMu.Lock()
-	defer s.submitMu.Unlock()
-	out := make([]permCall, len(s.submitCalls))
-	copy(out, s.submitCalls)
-	return out
 }
 
 // ---------------------------------------------------------------------
@@ -149,7 +112,7 @@ func newHarness(t *testing.T) *harness {
 		reg:     agent.NewRegistry(),
 		gotSess: make(chan *fakeSession, 16),
 	}
-	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Permissions: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		sess := &fakeSession{runID: runID, input: input, out: out}
 		h.gotSess <- sess
 		return sess, nil
@@ -290,192 +253,6 @@ func TestHandlePromptCancelUnknownRunIsNoop(t *testing.T) {
 	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptCancel, "ghost", nil)); err != nil {
 		t.Errorf("cancel for unknown run = %v, want nil", err)
 	}
-}
-
-func TestPermissionRequestIsIndexedAndDecisionRoutes(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	startRun(t, h.router, h.sender, "run_p", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
-	sess := <-h.gotSess
-
-	// Session emits a permission_request; pump should index it.
-	permEnv := mustEnv(t, proto.TypePermissionRequest, "run_p", proto.PermissionRequestPayload{
-		RequestID: "perm_abcd1234", Tool: "Bash", Title: "rm -rf /",
-	})
-	sess.out <- permEnv
-	// Wait until sender records — indexing happens before send.
-	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePermissionRequest, "run_p") }, "permission_request to be forwarded")
-
-	dec := mustEnv(t, proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-1", Approved: true})
-	if err := h.router.Handle(context.Background(), dec); err != nil {
-		t.Fatalf("permission_decision: %v", err)
-	}
-	calls := sess.submissions()
-	if len(calls) != 1 || calls[0].id != "perm_abcd1234" || !calls[0].decision.Approved {
-		t.Errorf("submissions = %+v, want one approved perm_abcd1234", calls)
-	}
-	assertDecisionAck(t, h.sender, "delivery-perm-1", true, "")
-	retry := mustEnv(t, proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-2", Approved: true})
-	if err := h.router.Handle(context.Background(), retry); err != nil {
-		t.Fatalf("idempotent permission replay: %v", err)
-	}
-	if calls := sess.submissions(); len(calls) != 1 {
-		t.Fatalf("idempotent replay reached agent twice: %+v", calls)
-	}
-	assertDecisionAck(t, h.sender, "delivery-perm-2", true, "")
-	conflict := mustEnv(t, proto.TypePermissionDecision, "perm_abcd1234", proto.PermissionDecisionPayload{DeliveryID: "delivery-perm-3", Approved: false})
-	if err := h.router.Handle(context.Background(), conflict); err != nil {
-		t.Fatalf("conflicting permission replay: %v", err)
-	}
-	assertDecisionAck(t, h.sender, "delivery-perm-3", false, "decision_conflict")
-
-	close(sess.out)
-}
-
-func TestPermissionDecisionUnknownPermIsNoop(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePermissionDecision, "perm_unknown", proto.PermissionDecisionPayload{DeliveryID: "delivery-unknown-perm"})); err != nil {
-		t.Errorf("decision for unknown perm = %v, want nil", err)
-	}
-	assertDecisionAck(t, h.sender, "delivery-unknown-perm", false, "not_pending")
-}
-
-func TestPromptForUserChoiceDecisionRoutesToSession(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	startRun(t, h.router, h.sender, "run_ask", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
-	sess := <-h.gotSess
-
-	// Envelope.ID is the run id (server-side dispatch fans on it); the
-	// ask id rides on the payload. Daemon's indexPermissionFrame reads
-	// payload.AskID to seed askIndex.
-	askEnv := mustEnv(t, proto.TypePromptForUserChoice, "run_ask", proto.PromptForUserChoicePayload{
-		AskID:     "ask_abcd1234",
-		Questions: []proto.PromptForUserChoiceQuestion{{Question: "?", Options: []proto.PromptForUserChoiceOption{{Label: "yes"}, {Label: "no"}}}},
-		ToolUseID: "toolu_42",
-	})
-	sess.out <- askEnv
-	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePromptForUserChoice, "run_ask") }, "prompt_for_user_choice forwarded")
-
-	dec := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_abcd1234", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-1", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
-	})
-	if err := h.router.Handle(context.Background(), dec); err != nil {
-		t.Fatalf("prompt_for_user_choice_decision: %v", err)
-	}
-
-	sess.askMu.Lock()
-	calls := append([]askCall(nil), sess.askCalls...)
-	sess.askMu.Unlock()
-	if len(calls) != 1 || calls[0].id != "ask_abcd1234" {
-		t.Fatalf("askCalls = %+v, want one ask_abcd1234", calls)
-	}
-	if len(calls[0].decision.QuestionAnswers[0].Answers) != 1 || calls[0].decision.QuestionAnswers[0].Answers[0] != "yes" {
-		t.Errorf("answer payload mismatch: %+v", calls[0].decision)
-	}
-	assertDecisionAck(t, h.sender, "delivery-ask-1", true, "")
-
-	// Cleanup contract: a successful decision drops the ask from both
-	// the router-level index and the session's pendingAsks set, so a
-	// stale retry short-circuits as "run gone".
-	if got := h.router.AskIndexLenForTest(); got != 0 {
-		t.Errorf("askIndex len = %d, want 0 after decision", got)
-	}
-	if got := h.router.PendingAsksLenForTest("run_ask"); got != 0 {
-		t.Errorf("pendingAsks len = %d, want 0 after decision", got)
-	}
-
-	close(sess.out)
-}
-
-// TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown locks in the
-// other cleanup branch: when the session returns ErrUnknownAsk (timer
-// already consumed the entry), the router still drops the index so a
-// retry doesn't loop into Submit again.
-func TestPromptForUserChoiceDecisionClearsIndexOnAgentUnknown(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	startRun(t, h.router, h.sender, "run_ask_u", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
-	sess := <-h.gotSess
-	sess.askErr = agent.ErrUnknownAsk
-
-	askEnv := mustEnv(t, proto.TypePromptForUserChoice, "run_ask_u", proto.PromptForUserChoicePayload{
-		AskID:     "ask_xxxxxxxx",
-		Questions: []proto.PromptForUserChoiceQuestion{{Question: "?", Options: []proto.PromptForUserChoiceOption{{Label: "yes"}}}},
-		ToolUseID: "toolu_y",
-	})
-	sess.out <- askEnv
-	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePromptForUserChoice, "run_ask_u") }, "prompt_for_user_choice forwarded")
-
-	dec := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_xxxxxxxx", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-gone", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
-	})
-	if err := h.router.Handle(context.Background(), dec); err != nil {
-		t.Fatalf("prompt_for_user_choice_decision: %v", err)
-	}
-
-	if got := h.router.AskIndexLenForTest(); got != 0 {
-		t.Errorf("askIndex len = %d, want 0 after ErrUnknownAsk", got)
-	}
-	if got := h.router.PendingAsksLenForTest("run_ask_u"); got != 0 {
-		t.Errorf("pendingAsks len = %d, want 0 after ErrUnknownAsk", got)
-	}
-	assertDecisionAck(t, h.sender, "delivery-ask-gone", false, "not_pending")
-
-	close(sess.out)
-}
-
-func TestPromptForUserChoiceDecisionKeepsIndexOnTransientAgentError(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	startRun(t, h.router, h.sender, "run_ask_retry", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
-	sess := <-h.gotSess
-	sess.askErr = errors.New("temporary stdin failure")
-
-	sess.out <- mustEnv(t, proto.TypePromptForUserChoice, "run_ask_retry", proto.PromptForUserChoicePayload{
-		AskID: "ask_retry", Questions: []proto.PromptForUserChoiceQuestion{{ID: "q0", Question: "Retry?"}},
-	})
-	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypePromptForUserChoice, "run_ask_retry") }, "prompt_for_user_choice forwarded")
-
-	decision := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_retry", proto.PromptForUserChoiceDecisionPayload{
-		DeliveryID: "delivery-ask-retry", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}},
-	})
-	if err := h.router.Handle(context.Background(), decision); err != nil {
-		t.Fatalf("first decision: %v", err)
-	}
-	assertDecisionAck(t, h.sender, "delivery-ask-retry", false, "runtime_error")
-	if got := h.router.AskIndexLenForTest(); got != 1 {
-		t.Fatalf("askIndex len = %d, want 1 after transient error", got)
-	}
-	if got := h.router.PendingAsksLenForTest("run_ask_retry"); got != 1 {
-		t.Fatalf("pendingAsks len = %d, want 1 after transient error", got)
-	}
-
-	sess.askErr = nil
-	if err := h.router.Handle(context.Background(), decision); err != nil {
-		t.Fatalf("retry decision: %v", err)
-	}
-	assertDecisionAck(t, h.sender, "delivery-ask-retry", true, "")
-	if got := h.router.AskIndexLenForTest(); got != 0 {
-		t.Fatalf("askIndex len = %d, want 0 after successful retry", got)
-	}
-	close(sess.out)
-}
-
-func TestPromptForUserChoiceDecisionUnknownAskIsNoop(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask_unknown", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "delivery-unknown-ask"})); err != nil {
-		t.Errorf("decision for unknown ask = %v, want nil", err)
-	}
-	assertDecisionAck(t, h.sender, "delivery-unknown-ask", false, "not_pending")
 }
 
 func assertDecisionAck(t *testing.T, sender *recSender, deliveryID string, applied bool, errorCode string) {

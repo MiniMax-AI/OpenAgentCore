@@ -32,7 +32,7 @@ type TextFixture struct {
 
 // TextLifecycle verifies ordinary reuse, exact Turn ownership, durable active
 // input, confirmed cancellation and continuation of a healthy Executor. It asks
-// for no optional tools, images, interactions, workspace or detailed Usage.
+// for no optional tools, images, workspace or detailed Usage.
 // Native fault injection and history recovery have separate adapter tests.
 func TextLifecycle(t *testing.T, fixture TextFixture) {
 	t.Helper()

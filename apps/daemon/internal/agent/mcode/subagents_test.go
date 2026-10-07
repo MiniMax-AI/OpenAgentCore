@@ -27,7 +27,7 @@ func childSnapshot(t *testing.T) nativeSubagentSnapshot {
 func TestSubagentSnapshotsKeepOwnHistoryAndStableNativeIdentity(t *testing.T) {
 	project := func(snapshot nativeSubagentSnapshot) []proto.Envelope {
 		out := make(chan proto.Envelope, 32)
-		s := &Session{ctx: context.Background(), out: out, previousNativeTurns: map[string]bool{}}
+		s := &Session{ctx: context.Background(), outputContext: context.Background(), out: out, previousNativeTurns: map[string]bool{}}
 		if err := s.projectSubagents(snapshot); err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestSubagentSnapshotsKeepOwnHistoryAndStableNativeIdentity(t *testing.T) {
 func TestSubagentSnapshotRejectsMissingParentProvenance(t *testing.T) {
 	snapshot := childSnapshot(t)
 	snapshot.Sessions[0].Tasks = nil
-	s := &Session{ctx: context.Background(), out: make(chan proto.Envelope, 32)}
+	s := &Session{ctx: context.Background(), outputContext: context.Background(), out: make(chan proto.Envelope, 32)}
 	if err := s.projectSubagents(snapshot); err == nil {
 		t.Fatal("accepted child without original spawning provenance")
 	}

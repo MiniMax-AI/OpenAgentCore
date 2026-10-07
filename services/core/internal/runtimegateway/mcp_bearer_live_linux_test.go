@@ -182,8 +182,8 @@ func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, 
 		}
 		turn.Events = append(turn.Events, event)
 		switch event.Type {
-		case proto.TypeError, proto.TypePermissionRequest, proto.TypePromptForUserChoice:
-			t.Fatal("unexpected execution failure or interaction during private MCP acceptance")
+		case proto.TypeError:
+			t.Fatal("unexpected execution failure during private MCP acceptance")
 		case proto.TypeToolCall:
 			var call proto.ToolCallPayload
 			if event.DecodePayload(&call) != nil || call.Observation == nil {

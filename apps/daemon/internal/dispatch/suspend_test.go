@@ -39,14 +39,12 @@ func suspensionRouter(t *testing.T, sender Sender) *Router {
 
 func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 	cases := map[string]func(*Router){
-		"active":     func(r *Router) { r.sessions["run"] = &sessionState{} },
-		"preparing":  func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
-		"receipt":    func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
-		"read":       func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
-		"write":      func(r *Router) { r.workspaceWrite = &workspaceUpload{} },
-		"export":     func(r *Router) { r.workspaceExport = &workspaceExport{} },
-		"permission": func(r *Router) { r.permIndex["permission"] = "run" },
-		"choice":     func(r *Router) { r.askIndex["choice"] = "run" },
+		"active":    func(r *Router) { r.sessions["run"] = &sessionState{} },
+		"preparing": func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
+		"receipt":   func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
+		"read":      func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
+		"write":     func(r *Router) { r.workspaceWrite = &workspaceUpload{} },
+		"export":    func(r *Router) { r.workspaceExport = &workspaceExport{} },
 	}
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {

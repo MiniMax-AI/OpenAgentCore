@@ -163,9 +163,6 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	}
 	disableProgrammaticTools(&plan, req.ExecutionControls)
 	plan.Cwd = cwd
-	plan.Sandbox = SandboxDangerFullAcces
-	plan.Permissions = ""
-	plan.ApprovalPolicy = AskForApproval{String: "never"}
 	if req.DisableSubagents {
 		disableSubagents(&plan)
 	}

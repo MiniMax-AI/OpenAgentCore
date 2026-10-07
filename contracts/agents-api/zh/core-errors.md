@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: d5c4450c0c74927115c79dca70d29372a7316d5d2591c7e18af688d08257a98c
+source_hash: 3d8e6a03d6a54c7dc86a27164749ffae963b5ef52cbede0e0da843c7da0216ba
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -98,7 +98,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `execution_interrupted` | Core 执行被中断 |
 | `delivery_unconfirmed` | `delivery_unknown`、`input_outcome_unknown`、`cancel_unconfirmed`、`cancel_outcome_unavailable`、`function_result_unconfirmed` |
 | `input_rejected` | `invalid_input`、`input_not_applied`、`message_input_unsupported`，以及确切的 steering 结果 `input_invalid_input`、`input_run_inactive`、`input_input_conflict`、`input_input_limit`、`input_unsupported`、`input_rejected`、`input_not_ready`、`input_busy` |
-| `executor_protocol_error` | `invalid_executor_result`、`interaction_not_supported`、`execution_state_unavailable`、`execution_state_changed`、`function_call_invalid`、`function_result_invalid` |
+| `executor_protocol_error` | `invalid_executor_result`、`execution_state_unavailable`、`execution_state_changed`、`function_call_invalid`、`function_result_invalid` |
 | `core_storage_failed` | `event_persistence_failed`、`artifact_capture_failed` |
 | `internal_error` | 结果未知或格式错误；不返回原始值 |
 | `environment_connection_timeout` | 初始输入连接截止时间已过 |

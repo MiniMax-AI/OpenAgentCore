@@ -16,12 +16,28 @@ permissions:
 
 jobs:
   review:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: code
+            name: Code review
+            instructions: |
+              检查本次代码改动的正确性、仓库设计规则及已有 CI 结果。先读取 AGENTS.md 和 CONTRIBUTING.md，再查看相关实现和测试。
+              用 gh pr checks 查询这个 PR 已有的检查结果，必要时读取 Actions 日志。检查失败、缺失或尚未完成时如实报告，不把合并当作检查通过的证据。
+              报告包括实际行为变化（1–3 条）、代码审查结论和 CI 状态。全部正常时保持简短；有问题时给出文件与行号、证据和最小修改建议。
+          - kind: docs
+            name: Docs review
+            instructions: |
+              每次都检查文档与本次代码变化是否一致，即使 PR 没改文档。读取相关实现、测试和完整文档，核对平台、命令、配置、路径、默认值、接口和操作流程，找出遗漏更新或已经过时的说明。
+              文档有修改（包括新增、删除和重命名）时，再检查文档内部及同主题文档间的矛盾、重复维护的事实、主题归属和中英文含义。按 AGENTS.md 和 CONTRIBUTING.md 的 Documentation ownership 表判断位置。必要的概述加链接、中英文对照和同一来源生成的文档不算重复。
+              分别报告“文档与代码一致性”和“文档矛盾、重复与归属”。未改文档时，第二项写“本次未修改文档”。只报告本次修改引入或使之过时的、有依据的问题，给出文件与行号、对应代码或文档依据，以及最小修改建议。测试或链接检查通过不代表语义一致。只报告影响读者理解或操作的具体问题，不把未穷举实现细节当作文档缺陷。
     if: github.event.pull_request.merged == true
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-24.04' || 'blacksmith-2vcpu-ubuntu-2404' }}
     timeout-minutes: 30
     env:
-      # allowed_non_write_users turns on a subprocess secret scrub; opt out so Claude's
-      # commands can read GH_TOKEN and the Feishu webhook.
+      # Keep GH_TOKEN available to read the PR and Actions logs.
       CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: '0'
     steps:
       # The triggering revision is already on main, so its rules and code are trusted.
@@ -30,14 +46,15 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 2
           persist-credentials: false
-      - name: Review and send Feishu card with Claude Code
-        # Notification is best effort: a failed review or delivery never fails the job.
+      - name: Prepare the report schema
+        id: schema
+        run: python3 scripts/ci_review.py schema >> "$GITHUB_OUTPUT"
+      - name: Review with Claude Code
+        id: llm
         continue-on-error: true
         timeout-minutes: 25
         uses: anthropics/claude-code-action@12dd8d74c712f5f3669365b2369b558c495b1104 # v1
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
           ANTHROPIC_BASE_URL: https://api.minimax.cn/anthropic
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.MINIMAX_API_KEY }}
           CLAUDE_CODE_AUTO_COMPACT_WINDOW: '524288'
@@ -54,29 +71,57 @@ jobs:
           allowed_bots: '*'
           allowed_non_write_users: '*'
           prompt: |
-            你是 CI 的负责人，负责审核 CI 结果并给出结论。
-            仓库 ${{ github.repository }} 的 PR #${{ github.event.pull_request.number }} 已合入 main：
-            - PR：https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}
-            - 合并 commit：${{ github.event.pull_request.merge_commit_sha }}（已 checkout 到当前目录）
+            你负责本次 PR 的 ${{ matrix.name }}，在独立上下文中完成审查。
+            仓库：${{ github.repository }}；PR：#${{ github.event.pull_request.number }}。
+            合并提交：${{ github.event.pull_request.merge_commit_sha }}，已检出到当前目录。
+            先用 gh pr diff ${{ github.event.pull_request.number }} --repo ${{ github.repository }} 读取变更清单与完整差异，再检查相关文件。
 
-            用 gh pr checks ${{ github.event.pull_request.number }} --repo ${{ github.repository }} 查询这个 PR 已有的检查结果，必要时读取对应 Actions 日志。不要触发新的 CI，也不要把合并本身当作检查通过的证据；管理员可能绕过门禁。检查失败、缺失或尚未完成时如实报告。
+            ${{ matrix.instructions }}
 
-            任务：给飞书群发一张中文卡片（Card 2.0）总结这次 CI，尽量在 10 轮以内给出结论，工具调用尽可能的并行。
-            环境里有 gh（已登录，GH_TOKEN）、git、node 和完整的仓库代码。
-
-            卡片要让手机上的读者快速看懂，如果一切正常，表达的尽可能简单，如果没有问题，尽量简洁：
-            1. 哪个 PR（github id + PR 标题 + 链接）
-              - 如：`github id: jing332, PR 标题: 添加一个新功能, 链接: https://github.com/org/repo/pull/123`
-            2. 改了什么（实际行为变化，1–3 条）
-              - 如：`添加了一个新功能、修改了 web 和 backend 的 CI`
-            3. 是否符合仓库规则（AGENTS.md、CONTRIBUTING.md 及相关文档）：未发现明确违规 / 发现需修复问题 / 信息不足，无法确认
-              - 如：`符合仓库规则`
-            4. CI 哪里失败、可能的原因（可以看日志），全部通过就直接说通过，不要给出细节。如果 CI 失败，则详细说明。
-              - 如：`CI 失败，具体是哪几个失败；全部通过 ✅`
-
-            发送：webhook 地址在环境变量 FEISHU_WEBHOOK_URL。
-            响应 code=0 才算成功，失败就排查并重试，直到发出去。最后用一句中文说明结果，如：`CI 结果已发送至飞书群`。
-            不要在输出里打印 webhook 地址和密钥。
+            按 JSON schema 返回中文报告。status 为 ok（未发现问题）、issues（发现有证据的问题）或 incomplete（审查失败、范围未检查完整或检查结果尚未完成）。有问题且仍有未检查项时，用 issues 并在 summary 中说明缺项。summary 无问题时简短，有问题时保留依据和建议，遵守 schema 的长度限制。
+            围绕本次 diff 和受影响的文档展开，证据充分后输出结果，避免重复核对同一结论。
+            只读审查，不修改仓库，不触发新的 CI，不发送消息。两份报告会由后续 job 合并发送。
           claude_args: >-
-            --allowedTools Bash Read Write Edit Glob Grep WebFetch WebSearch
-            --max-turns 30
+            --allowedTools Bash Read Glob Grep
+            --json-schema '${{ steps.schema.outputs.schema }}'
+      - name: Save the review result
+        if: always()
+        env:
+          REVIEW_OUTCOME: ${{ steps.llm.outcome }}
+          REVIEW_RESULT: ${{ steps.llm.outputs.structured_output }}
+        run: python3 scripts/ci_review.py collect "$RUNNER_TEMP/review-${{ matrix.kind }}.json"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: ci-review-${{ matrix.kind }}
+          path: ${{ runner.temp }}/review-${{ matrix.kind }}.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
+
+  notify:
+    name: Combined Feishu notification
+    needs: review
+    if: always() && github.event.pull_request.merged == true
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-24.04' || 'blacksmith-2vcpu-ubuntu-2404' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v6
+        continue-on-error: true
+        with:
+          pattern: ci-review-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reviews
+      - name: Send one card with both results
+        continue-on-error: true
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
+        run: python3 scripts/ci_review.py notify "$RUNNER_TEMP/reviews"

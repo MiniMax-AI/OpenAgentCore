@@ -42,10 +42,16 @@ Core keeps durable execution state. The Runtime runs the chosen harness inside t
 
 ## Install
 
-On a Linux amd64 host with Docker and Python 3.9+:
+On Linux or macOS with [Docker configured](https://openagentcore.dev/docs/getting-started/install#prerequisites):
 
 ```sh
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
 ```
 
 Then:

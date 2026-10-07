@@ -29,7 +29,7 @@ func TestMCPRequiredDiscoveryRequiresPinnedNative(t *testing.T) {
 
 // The declaration must retain the complete baseline capability descriptor.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"SubagentObservations": true, "Streaming": true, "Permissions": true, "Usage": true, "Resume": true, "Steering": true, "MessageItems": true, "ToolObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "WebSearchControl": true, "MessageImages": true, "FunctionResultImages": true, "SubagentControl": true, "DurableInputReceipts": true, "DurableTurns": true, "FunctionTools": true, "MCPHTTPTools": true, "MCPHTTPBearerAuth": true}
+	expected := map[string]bool{"SubagentObservations": true, "Streaming": true, "Usage": true, "Resume": true, "Steering": true, "MessageItems": true, "ToolObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "WebSearchControl": true, "MessageImages": true, "FunctionResultImages": true, "SubagentControl": true, "DurableInputReceipts": true, "DurableTurns": true, "FunctionTools": true, "MCPHTTPTools": true, "MCPHTTPBearerAuth": true}
 	expected["ExecutionControls"], expected["TextVerbosity"] = SupportsTextVerbosity, SupportsTextVerbosity
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {
@@ -49,7 +49,7 @@ func TestDeclaredCapabilityBaseline(t *testing.T) {
 
 func TestUnavailableRuntimeHasNoExecutionFactories(t *testing.T) {
 	runtime := discoverWithCheck(t.Context(), agent.DiscoveryOptions{Stdout: io.Discard, Stderr: io.Discard}, Declaration.Info, func(context.Context, string) (string, error) { return "", errors.New("missing") })
-	if runtime.Info.Available || runtime.Executor != nil || runtime.View != nil || runtime.Session == nil {
+	if runtime.Info.Available || runtime.Executor != nil || runtime.View != nil {
 		t.Fatalf("unavailable runtime: %+v", runtime)
 	}
 }

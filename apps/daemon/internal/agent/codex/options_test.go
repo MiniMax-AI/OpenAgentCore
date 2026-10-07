@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,11 +13,8 @@ func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
-	if plan.ApprovalPolicy.String != "never" {
-		t.Fatalf("default policy must bypass approvals, got %+v", plan.ApprovalPolicy)
-	}
-	if plan.Sandbox != SandboxDangerFullAcces {
-		t.Fatalf("default sandbox = %s, want danger-full-access", plan.Sandbox)
+	if !slices.Contains(plan.ExtraConfig, [2]string{"tools.experimental_request_user_input.enabled", "false"}) {
+		t.Fatalf("default plan must disable the native ask-the-user tool, got %+v", plan.ExtraConfig)
 	}
 	if plan.Cleanup == nil {
 		t.Fatal("Cleanup must be non-nil")

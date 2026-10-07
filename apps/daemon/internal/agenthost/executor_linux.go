@@ -30,8 +30,7 @@ type deps struct {
 // with Info that describes how views run it. Its Executor factory prepares an
 // Executor of the Session that bind binds the request to, as the package
 // documentation describes, and bind's error fails the preparation. The Router
-// that runs it sets dispatch.Config.SessionEnvironments. A direct prompt run
-// is unsupported.
+// that runs it sets dispatch.Config.SessionEnvironments.
 func (h *Host) Registry(bind func(proto.PromptRequestPayload) (Binding, Environment, error)) *agent.Registry {
 	d := deps{dial: relayDial(h.cfg), tasks: taskUIDs}
 	return registry(h.cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
@@ -49,9 +48,7 @@ func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.R
 		if err != nil || viewErr != nil {
 			continue
 		}
-		reg.RegisterKind(viewInfo(info, view.Capabilities), configuration, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, unsupported("a direct prompt run")
-		})
+		reg.RegisterKind(viewInfo(info, view.Capabilities), configuration)
 		reg.RegisterExecutor(info.Kind, factory)
 	}
 	return reg

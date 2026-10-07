@@ -44,7 +44,7 @@ case "$build_network" in
   default|host|none) ;;
   *) printf 'CORE_DISTRIBUTION_BUILD_NETWORK must be default, host, or none\n' >&2; exit 1 ;;
 esac
-# Build one Linux amd64 image and write the ID the local image store gives it to
+# Build one selected Linux architecture image and write the ID the local image store gives it to
 # $stage/NAME.id. BuildKit's --iidfile reports the config digest, which is the
 # image ID only in Docker's classic store; the containerd store (Docker 29's
 # default) uses the manifest digest and cannot resolve the config digest. The
@@ -58,14 +58,14 @@ build_image() {
   # declaration persists the operator's network configuration in the images.
   # The metadata file omits build provenance, so it does not record them either.
   BUILDX_METADATA_PROVENANCE=disabled docker build --network "$build_network" \
-    --platform linux/amd64 --provenance=false --metadata-file "$stage/$name.build.json" \
+    --platform "linux/$GOARCH" --provenance=false --metadata-file "$stage/$name.build.json" \
     --label "org.opencontainers.image.revision=$revision" \
     --build-arg HTTP_PROXY --build-arg HTTPS_PROXY --build-arg ALL_PROXY --build-arg NO_PROXY \
     --build-arg "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" \
     --build-arg "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" \
     --build-arg "all_proxy=${all_proxy:-${ALL_PROXY:-}}" \
     --build-arg "no_proxy=${no_proxy:-${NO_PROXY:-}}" "$@"
-  python3 scripts/core-distribution-manifest.py built-image "$stage/$name.build.json" > "$stage/$name.id"
+  python3 scripts/core-distribution-manifest.py built-image "$stage/$name.build.json" "$GOARCH" > "$stage/$name.id"
 }
 
 require_clean_source() {
@@ -255,3 +255,28 @@ fi
 mv "$stage/artifacts/"* "$output_dir/"
 if [[ -d "$stage/native-artifacts" ]]; then mv "$stage/native-artifacts/"* "$output_dir/"; fi
 mv "$bundle" "$output_dir/"
+
+# Core, Web and initialization also run natively in ARM64 Linux containers.
+# Node and hosted Runtime payloads above remain linux/amd64.
+export GOARCH=arm64
+arm_bundle="$stage/oac-$revision-linux-arm64"
+mkdir -p "$arm_bundle/images"
+OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
+OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
+cp "$stage/core/bin/oac" "$stage/ingress/oac"
+for name in core web ingress; do
+  build_image "$name" "$stage/$name"
+  docker image save --output "$arm_bundle/images/$name.tar" "$(cat "$stage/$name.id")"
+done
+python3 scripts/core-distribution-manifest.py control-archive "$arm_bundle" "$stage" "$revision" arm64
+mv "$arm_bundle.tar.gz" "$arm_bundle.tar.gz.sha256" "$output_dir/"
+
+# The launchers and operator commands use this same portable implementation.
+for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+  extension=""
+  if [[ "$platform" == windows-* ]]; then extension=.exe; fi
+  asset="oac-$platform$extension"
+  GOOS="${platform%-*}" GOARCH="${platform#*-}" CGO_ENABLED=0 go build -mod=readonly -trimpath \
+    -ldflags "-X main.buildRevision=$revision" -o "$output_dir/$asset" ./services/core/cmd/oac
+  (cd "$output_dir" && sha256sum "$asset" > "$asset.sha256")
+done

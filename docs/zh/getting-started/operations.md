@@ -1,14 +1,14 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 8b5ec8893b3e844a2c4173a4122cee17bf08350cd1ea2d5128e9a6c72f590907
+source_hash: f63789e0f3982b9f6633381d3c93441e5185b04398541b95c3e1d0505de588eb
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
 
 ## oac 命令 {#the-oac-command}
 
-每个安装目录中都有自己的管理命令，无需发行包或 root：
+每个安装目录都有自己的原生管理命令：Unix 使用 `oac`，Windows 使用 `oac.exe`。命令需要 Docker 访问权限，不需要 root：
 
 ```sh
 docker compose -f ~/.oac/core/compose.yaml ps
@@ -20,11 +20,11 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose start` | 启动服务 |
 | `docker compose stop` | 停止服务。保留数据、节点和沙箱 |
 | `oac apply` | 先运行 `oac-core check-config`，再执行 `docker compose up -d --wait`。校验失败时不改动任何服务 |
-| `oac core-key [--show]` | 打印 Core 密钥路径；加上 `--show` 时打印密钥本身 |
+| `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web |
 | `docker compose down` | 移除容器。数据保留；要删除数据，请[卸载](#uninstall) |
 
-第二个安装使用自己的目录，例如 `~/.oac/second`。
+示例使用默认安装目录。Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用管理命令，后接相同参数。使用自定义安装目录时，替换各命令中的路径。
 
 ## 服务健康状态 {#service-health}
 
@@ -65,13 +65,13 @@ Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退
 
 ## Core 密钥 {#core-key}
 
-每个安装有一个管理员凭据，即 Core 密钥。安装程序在 `data/secrets/web/core.key` 生成以 `oac_admin_` 为前缀、后接 64 个随机小写十六进制字符的密钥。用 `oac core-key --show` 读取；该文件属于容器用户。Core 密钥：
+每个安装有一个管理员凭据，即 Core 密钥。安装程序在 `secrets/web/core.key` 生成以 `oac_admin_` 为前缀、后接 64 个随机小写十六进制字符的密钥。用 `oac core-key --show` 读取；该文件属于容器用户。Core 密钥：
 
 - 用于登录 Web。浏览器获得 HttpOnly 会话 cookie，不持有密钥；
 - 通过 `Authorization: Bearer <Core key>` 授权 Core API（`/core/v1`）请求；
 - 不授权 Agents API（`/v1`）。应用使用 Project API 密钥，后者也不能调用 `/core/v1`。
 
-请保密。Web 读取 `data/secrets/web/core.key`。Core 只读取 `data/secrets/core/core-key-digests.json` 中的 SHA-256。Core 密钥至少 32 字符且不含空白。Web 限制失败登录。
+请保密。Web 读取 `secrets/web/core.key`。Core 只读取 `secrets/core/core-key-digests.json` 中的 SHA-256。Core 密钥至少 32 字符且不含空白。Web 限制失败登录。
 
 ### 用脚本调用 Core API {#script-the-core-api}
 
@@ -105,7 +105,7 @@ core() (  # core METHOD PATH [JSON body]
 ~/.oac/core/oac rotate-core-key
 ```
 
-它把新密钥写入 `data/secrets/web/core.key`，重新生成 `data/secrets/core/core-key-digests.json`，并重启 Core 和 Web。Core 重启后旧密钥立即失效，所有控制台会话结束：重新登录并更新脚本。
+它在初始化容器中更新数据卷内的 `secrets/web/core.key` 和 `secrets/core/core-key-digests.json`，然后重启 Core 与 Web。Core 重启后旧密钥立即失效，控制台会话也会结束；请重新登录并更新脚本。
 
 ## Project 和 API 密钥 {#projects-and-api-keys}
 
@@ -125,38 +125,34 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 一起备份这些内容；恢复时全部需要：
 
-- PostgreSQL 卷 `<project>_database`。其中包含 Project、密钥摘要、节点、默认模型、加密凭据和全部执行历史（含大对象）。逻辑备份：
+- Docker 卷 `<project>_data`，包括其中的 `database/`、`secrets/` 和 `state/` 目录。其中包含 Project、密钥摘要、节点、默认模型、加密凭据和全部执行历史（含大对象）。逻辑备份：
 
   ```sh
   docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
     pg_dump -U agents_api agents_api > oac-backup.sql
   ```
 
-- 安装目录，尤其是 `data/`。`data/secrets/core/credential.key` 必须与数据库一起保留，否则无法解密存储的凭据。
+- 安装目录中的 `.env`、`compose.yaml` 和管理命令。数据卷内的 `secrets/core/credential.key` 必须与数据库一起保留，否则存储的凭据无法解密。
 
-先 `docker compose stop`，打包安装目录，再 `docker compose start`。
 - 各节点主机上的状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及提供商存储：Docker 卷或 microsandbox 存储。恢复方法见[节点主机故障时](nodes.md#when-a-node-host-fails)。
-- 安装所使用的发行包，用于修复同一版本。
 
-不要通过清理 Docker 卷或删除原生 Harness 历史来让重试成功。Session 已删除不证明所有提供商资源已回收。
+运行 `docker compose stop`，导出完整数据卷并归档安装目录，再运行 `docker compose start`。Docker Desktop 的 **Volumes** 页面支持导出数据卷。SQL 转储不包含加密密钥和 Provider 状态。
 
 ## 卸载 {#uninstall}
 
 ```sh
 cd ~/.oac/core
-docker compose down --remove-orphans
-docker compose run --rm --no-deps --entrypoint find init /data -mindepth 1 -delete
-docker compose down --rmi all
+docker compose down --volumes --remove-orphans --rmi all
 cd && rm -rf ~/.oac/core
 ```
 
-`data/` 归容器所有，因此由 `init` 镜像删除其内容；随后 `down --rmi all` 移除镜像，`rm` 删除安装目录。只有确定要删数据时才执行这些命令。
+`down --volumes` 会删除安装数据卷。之后删除安装目录；Windows 使用 `Remove-Item -Recurse "$HOME/.oac/core"`。
 
 全部数据随之删除：Project 和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 
 卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成；命令展示 Core 正在使用的沙箱数量。
 
-其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装目录删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。安装 ID 在 `data/secrets/core/installation.id`。
+其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装目录删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。安装 ID 在数据卷的 `secrets/core/installation.id` 中。
 
 ## 安装版本策略 {#installation-version-policy}
 
@@ -166,7 +162,7 @@ cd && rm -rf ~/.oac/core
 
 中断的安装可以[沿用已保存配置继续](install.md#install)。与本安装无关的非空目录会被拒绝。
 
-安装程序和修改状态的 `oac` 命令持有 `.oac.lock`。安装程序准备目录时还持有同级的 `<install-dir>.install.lock`。其他命令持有锁时，等待其结束后重试。不要删除锁文件来绕过忙碌安装。
+安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)。其他命令正在运行时，等待其结束后重试。
 
 ## 问题排查 {#troubleshooting}
 

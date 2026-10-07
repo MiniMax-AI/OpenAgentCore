@@ -104,7 +104,6 @@ func (r *Router) claimPreparedReleaseLocked(state *sessionState, abort bool, fai
 		handoff.release = release
 		state.steeringClosed = true
 		state.session = nil
-		r.clearInteractionRoutesLocked(state)
 	}
 	if abort && !release.aborted() {
 		close(release.abort)
@@ -327,10 +326,6 @@ func (r *Router) forwardPreparedOutput(state *sessionState) {
 			r.mu.Unlock()
 			if drainOnly {
 				continue
-			}
-			switch env.Type {
-			case proto.TypePermissionRequest, proto.TypePermissionCancel, proto.TypePromptForUserChoice:
-				r.indexPermissionFrame(state, env)
 			}
 			if err := r.sendSessionOutput(pumpCtx, state, env); err != nil {
 				r.mu.Lock()

@@ -93,9 +93,6 @@ func validateOptions(req proto.PromptRequestPayload) (harnessconfig.PreparedConf
 	if err := validateExecutionRequest(req); err != nil {
 		return prepared, err
 	}
-	if req.Input.HasImages() {
-		return prepared, fmt.Errorf("mcode: ACP does not support attachments")
-	}
 	return prepared, nil
 }
 

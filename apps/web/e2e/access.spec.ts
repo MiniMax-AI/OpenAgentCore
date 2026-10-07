@@ -18,11 +18,11 @@ test("signs in with the Core key, keeps it out of the browser, and signs out and
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Sign in to OpenAgentCore" })).toBeVisible();
-  await expect(page.getByText("cat ~/.oac/core/secrets/core.key", { exact: true })).toBeVisible();
+  await expect(page.getByText('docker compose -f "$HOME/.oac/core/compose.yaml" exec -T web oac-web core-key', { exact: true })).toBeVisible();
   await expect(page.getByText("For a custom installation directory, replace the path in this command.")).toBeVisible();
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.getByRole("button", { name: "Copy key read command" }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("cat ~/.oac/core/secrets/core.key");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('docker compose -f "$HOME/.oac/core/compose.yaml" exec -T web oac-web core-key');
   await signIn(page, "not-the-core-key");
   await expect(page.getByRole("alert")).toHaveText("This Core key is not correct. Check it and try again.");
   await signIn(page, FIXTURE_CORE_KEY);
