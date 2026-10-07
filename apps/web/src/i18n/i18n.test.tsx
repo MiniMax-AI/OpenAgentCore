@@ -44,7 +44,7 @@ describe("Web internationalization", () => {
   });
 
   it("honors a saved choice and otherwise selects the first supported browser preference", () => {
-    expect(resolveLanguage("zh", ["en-US"])).toBe("zh-CN");
+    expect(resolveLanguage("zh-CN", ["en-US"])).toBe("zh-CN");
     expect(resolveLanguage("en", ["zh-CN"])).toBe("en");
     expect(resolveLanguage(null, ["en-US", "zh-CN"])).toBe("en");
     expect(resolveLanguage(null, ["fr-FR", "zh-Hans", "en-US"])).toBe("zh-CN");

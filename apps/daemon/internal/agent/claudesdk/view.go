@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -83,12 +84,12 @@ func declareView(probe Config, info RuntimeInfo, node, root, bridge string, load
 		ForwardEnv: []string{"CLAUDECODE", "GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
 		Capabilities: agent.ViewCapabilities{
-			EnvironmentNone:      proto.CapabilityUnsupported,
+			EnvironmentNone:      proto.CapabilitySupported,
 			Skills:               proto.CapabilityUnsupported,
 			FunctionTools:        proto.CapabilityFromBool(info.SupportsWorkspaceFunctions()),
 			FunctionResultImages: proto.CapabilityFromBool(info.SupportsFunctionResultImages()),
 			ToolSearch:           proto.CapabilityFromBool(info.SupportsWorkspaceToolSearch()),
-			StdioMCP:             proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilitySupported,
 		},
 	}
 	loader.AddTo(view)
@@ -110,20 +111,23 @@ func newViewExecutorFactory(probe Config, layout viewLayout) agent.ViewExecutorF
 			return nil, err
 		}
 		return startExecutor(ctx, checked, probe, start, func() (*session, error) {
-			return startSession(view.Launch, clirunner.StartOptions{Parent: ctx, Binary: layout.node, Args: []string{layout.bridge}, Dir: start.Cwd, Env: env, NeedStdin: true, OwnProcessGroup: true})
+			return startSession(view.Launch, clirunner.StartOptions{Parent: ctx, Binary: layout.node, Args: []string{layout.bridge}, Dir: start.Cwd, Env: env, NeedStdin: true})
 		})
 	}
 }
 
-// prepareView builds the workspace profile for one Session from the request
-// and the view: the workspace is the sandbox's, MCP comes only from the view,
+// prepareView builds the start request for one Session from the request and
+// the view: the workspace profile in the sandbox's workspace, or no workspace
+// in the work directory with environment none. MCP comes only from the view,
 // and the environment is closed.
 func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.ViewSession) (startRequest, []string, error) {
 	environment := req.LocalEnvironment
-	if environment == nil || !workspacePathSyntax(environment.WorkspaceRoot) || req.DisableExecutionEnvironment || view.Launch == nil || view.Proxy == "" {
-		return startRequest{}, nil, errors.New("claudesdk: a view Executor requires the sandbox workspace, Launch and the gateway proxy")
+	if (environment == nil) != req.DisableExecutionEnvironment || environment != nil && !workspacePathSyntax(environment.WorkspaceRoot) || view.Launch == nil || view.Proxy == "" {
+		return startRequest{}, nil, errors.New("claudesdk: a view Executor requires the sandbox workspace or environment none, Launch and the gateway proxy")
 	}
-	servers, err := viewMCP(view.MCP)
+	// The gateway adds each credential and header, and the Harness runs each
+	// stdio alias without arguments.
+	servers, _, err := mcpServers(view.MCP, func(stdio proto.EnvironmentMCP) (string, []string) { return stdio.Server.Command, nil })
 	if err != nil {
 		return startRequest{}, nil, err
 	}
@@ -134,31 +138,22 @@ func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.V
 	if err := viewHome(view.Home); err != nil {
 		return startRequest{}, nil, err
 	}
-	profile, env := viewEnvironment(layout, view.Home.View, view.Proxy, provider)
+	profile, env := viewEnvironment(layout, view.Home.View, view.Proxy, provider, environment != nil)
+	if environment == nil {
+		// Environment none has no Environment MCP, so each server is HTTP.
+		start.Cwd = path.Join(view.Home.View, agent.ViewWorkName)
+		if len(servers) != 0 {
+			http := make([]mcpHTTPServer, 0, len(servers))
+			for _, server := range servers {
+				http = append(http, server.mcpHTTPServer)
+			}
+			start.MCPHTTPServers = &http
+		}
+		return start, env, nil
+	}
 	profile.NetworkAccess, profile.MCP = environment.NetworkAccess, servers
 	start.Workspace, start.Cwd = profile, environment.WorkspaceRoot
 	return start, env, nil
-}
-
-// viewMCP renders the gateway's HTTP endpoints. The gateway adds each
-// credential and header, so none is rendered here.
-func viewMCP(bindings []agent.MCPBinding) ([]environmentMCPServer, error) {
-	declarations := make([]proto.MCPHTTPServer, 0, len(bindings))
-	for _, binding := range bindings {
-		if binding.Transport != "http" || binding.Stdio != nil {
-			return nil, fmt.Errorf("%w: %s MCP in an agent-host view", agent.ErrUnsupportedOperation, binding.Transport)
-		}
-		declarations = append(declarations, proto.MCPHTTPServer{ServerLabel: binding.ServerLabel, ServerURL: binding.ServerURL, AllowedTools: binding.AllowedTools, Required: binding.Required})
-	}
-	if err := validateMCPServers(declarations); err != nil {
-		return nil, err
-	}
-	projected, _ := prepareMCPHTTP(&declarations)
-	servers := make([]environmentMCPServer, 0, len(*projected))
-	for _, server := range *projected {
-		servers = append(servers, environmentMCPServer{mcpHTTPServer: server})
-	}
-	return servers, nil
 }
 
 // viewHome lays out the native directories. A later Executor finds the tree
@@ -185,22 +180,27 @@ func viewHome(home agent.ViewDir) error {
 }
 
 // viewEnvironment is the complete Harness environment. home is the Session
-// home's view path.
-func viewEnvironment(layout viewLayout, home, proxy string, provider []string) (*workspaceProfile, []string) {
+// home's view path, and workspace adds what the workspace tools need.
+func viewEnvironment(layout viewLayout, home, proxy string, provider []string, workspace bool) (*workspaceProfile, []string) {
 	shims := agent.ViewPrivateRoot + "/" + agent.ViewShimName
 	profile := &workspaceProfile{Home: home + "/home", State: home + "/config", Scratch: home + "/tmp", EnvNames: []string{}, AllowedDomains: []string{}}
 	env := []string{
 		"PATH=" + shims, "HOME=" + profile.Home, "TMPDIR=" + profile.Scratch, "CLAUDE_CONFIG_DIR=" + profile.State,
 		// The messaging socket path stays local and short (C5).
 		"XDG_RUNTIME_DIR=" + home + "/xdg",
-		// Bash runs the sandbox shell through the shim (C3).
-		"SHELL=" + shims + "/bash", "CLAUDE_CODE_SHELL=" + shims + "/bash",
-		// The shell's cwd file must be at the same path on both sides (C4).
-		"CLAUDE_CODE_TMPDIR=/tmp/oac-claude-" + strings.ToLower(rand.Text()),
 		"CLAUDE_CODE_CERT_STORE=bundled",         // C2
-		"USE_BUILTIN_RIPGREP=0",                  // C7: rg runs through its shim
 		"CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1", // C9
 		"CLAUDE_CODE_TOOL_MEMORY_LIMIT=0",        // C13
+	}
+	if workspace {
+		env = append(env,
+			// Bash runs the sandbox shell through the shim (C3).
+			"SHELL="+shims+"/bash", "CLAUDE_CODE_SHELL="+shims+"/bash",
+			// The shell's cwd file must be at the same path on both sides
+			// (C4). An empty root has no /tmp, where Claude Code creates it.
+			"CLAUDE_CODE_TMPDIR=/tmp/oac-claude-"+strings.ToLower(rand.Text()),
+			"USE_BUILTIN_RIPGREP=0", // C7: rg runs through its shim
+		)
 	}
 	env = append(env, nativeFlags...)
 	if layout.libraries != "" {

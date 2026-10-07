@@ -15,8 +15,8 @@ import (
 
 func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload, string) {
 	t.Helper()
-	r := executionRequest(t)
-	r.RunID, r.Input, r.ConversationID = "", nil, ""
+	r := testRequest(t)
+	r.RunID, r.Input = "", nil
 	r.DisableExecutionEnvironment = false
 	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
 	record := filepath.Join(t.TempDir(), "calls")
@@ -36,7 +36,6 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
 	t.Helper()
 	config, req, record := workspaceFixture(t)
-	req.ReleaseOnCompletion = false
 	script, err := os.ReadFile(config.Binary)
 	if err != nil {
 		t.Fatal(err)
@@ -48,9 +47,8 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 	if workspace {
 		factory = NewExecutorFactory(&config)
 	} else {
-		req = executionRequest(t)
-		req.ReleaseOnCompletion = false
-		req.RunID, req.Input, req.ConversationID = "", nil, ""
+		req = testRequest(t)
+		req.RunID, req.Input = "", nil
 		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)
 		factory = NewExecutorFactory(nil)
 	}
@@ -283,7 +281,6 @@ func TestExecutorCloseRetainsOwnerAfterDeadline(t *testing.T) {
 
 func TestExecutorFactoryPreparationFailureHasNoTypedNilOwner(t *testing.T) {
 	config, req, _ := workspaceFixture(t)
-	req.ReleaseOnCompletion = false
 	if err := os.WriteFile(config.Binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}

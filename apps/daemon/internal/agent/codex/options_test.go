@@ -79,7 +79,7 @@ func TestBuildSessionPlan_CarriesModelAndSystemPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if plan.CollaborationMode != CollaborationModeDefault || plan.SystemPrompt != "current reference" || plan.Model != "MiniMax-M3" {
+	if plan.SystemPrompt != "current reference" || plan.Model != "MiniMax-M3" {
 		t.Fatalf("plan did not carry the default turn instructions: %+v", plan)
 	}
 }

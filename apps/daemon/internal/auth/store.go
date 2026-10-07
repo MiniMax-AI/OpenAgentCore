@@ -1,6 +1,7 @@
-// Package auth reads the operator device profile that oac-core-device prints
-// into ~/.oac/daemon/<profile>/auth.json: the server URL, the device ID and
-// its runner credential.
+// Package auth reads the daemon credential profile written by
+// oac-core-device: server URL, runtime row id (= device_id), and the
+// long-lived runner_credential. Stored as JSON per-profile at
+// ~/.oac/daemon/<profile>/auth.json (0o600).
 package auth
 
 import (
@@ -12,15 +13,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 )
 
-// Profile is the on-disk representation of one device profile.
+// Profile is the on-disk representation of one daemon credential.
 type Profile struct {
 	// ServerURL is the absolute base URL the daemon dials (no
 	// trailing slash). The daemon joins this with paths like
 	// /agent-daemon/bootstrap.
 	ServerURL string `json:"server_url"`
 
-	// RuntimeID is the device ID. The gateway uses it verbatim as
-	// device_id on WS upgrade.
+	// RuntimeID is the runtimes row id. The gateway uses it verbatim
+	// as device_id on WS upgrade.
 	RuntimeID string `json:"runtime_id"`
 
 	// RunnerCredential is the bearer presented on every
@@ -32,11 +33,11 @@ type Profile struct {
 	DeviceName string `json:"device_name,omitempty"`
 }
 
-// ErrNoProfile is returned by Load when no auth.json exists for the
+// ErrNotPaired is returned by Load when no auth.json exists for the
 // requested profile.
-var ErrNoProfile = errors.New("auth: no device profile — provision one with oac-core-device")
+var ErrNotPaired = errors.New("auth: no daemon credential profile — create one with oac-core-device")
 
-// Load reads the profile's auth.json. Returns ErrNoProfile wrapping
+// Load reads the profile's auth.json. Returns ErrNotPaired wrapping
 // fs.ErrNotExist when the file is missing.
 func Load(profile string) (Profile, error) {
 	authPath, err := paths.AuthFile(profile)
@@ -46,9 +47,9 @@ func Load(profile string) (Profile, error) {
 	raw, err := os.ReadFile(authPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			// Multi-%w so errors.Is matches both ErrNoProfile AND
+			// Multi-%w so errors.Is matches both ErrNotPaired AND
 			// fs.ErrNotExist.
-			return Profile{}, fmt.Errorf("%w (looked at %s): %w", ErrNoProfile, authPath, err)
+			return Profile{}, fmt.Errorf("%w (looked at %s): %w", ErrNotPaired, authPath, err)
 		}
 		return Profile{}, fmt.Errorf("auth: read: %w", err)
 	}

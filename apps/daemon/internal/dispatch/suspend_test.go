@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +24,14 @@ func bindAssignment(r *Router, ref proto.AssignmentRef, environmentID string) {
 	r.mu.Unlock()
 }
 
+type suspendedExecutor struct{ closed atomic.Int32 }
+
+func (e *suspendedExecutor) StartTurn(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
+	return nil, errors.New("suspended executor must not start a Turn")
+}
+
+func (e *suspendedExecutor) Close(context.Context) error { e.closed.Add(1); return nil }
+
 func suspensionRouter(t *testing.T, sender Sender) *Router {
 	t.Helper()
 	r, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, IdleTimeout: time.Hour})
@@ -40,7 +49,7 @@ func suspensionRouter(t *testing.T, sender Sender) *Router {
 
 func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 	cases := map[string]func(*Router){
-		"active":     func(r *Router) { r.sessions["run"] = &sessionState{ctxCancel: func() {}} },
+		"active":     func(r *Router) { r.sessions["run"] = &sessionState{} },
 		"preparing":  func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
 		"receipt":    func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
 		"read":       func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
@@ -137,6 +146,36 @@ func TestResumeRequiresExactSuspensionAndAssignment(t *testing.T) {
 	}
 	if err := r.Resume(suspendRef, request, sender); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestQuiescePreservesIdleExecutorAgainstExpiredTimer(t *testing.T) {
+	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
+	r := suspensionRouter(t, sender)
+	native := &suspendedExecutor{}
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
+	r.mu.Lock()
+	r.executors[owner.sessionID] = owner
+	r.scheduleExecutorIdleLocked(owner)
+	oldLease := owner.idleLease
+	r.mu.Unlock()
+	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
+	if err := r.Quiesce(context.Background(), suspendRef, request); err != nil {
+		t.Fatal(err)
+	}
+	r.expireIdleExecutor(owner, oldLease)
+	if native.closed.Load() != 0 {
+		t.Fatal("pre-snapshot timer closed retained owner")
+	}
+	if err := r.Resume(suspendRef, request, sender); err != nil {
+		t.Fatal(err)
+	}
+	r.mu.Lock()
+	newLease := owner.idleLease
+	r.mu.Unlock()
+	r.expireIdleExecutor(owner, newLease)
+	if native.closed.Load() != 1 {
+		t.Fatal("normal idle expiration was not restored")
 	}
 }
 

@@ -131,12 +131,12 @@ func (i viewInstall) view() agent.View {
 		ShimPaths: []string{"/bin/bash"},
 		Proxy:     agent.ViewProxyNone,
 		Capabilities: agent.ViewCapabilities{
-			EnvironmentNone:      proto.CapabilityUnsupported,
+			EnvironmentNone:      proto.CapabilitySupported,
 			Skills:               proto.CapabilityUnsupported,
 			FunctionTools:        proto.CapabilityUnsupported,
 			FunctionResultImages: proto.CapabilityUnsupported,
 			ToolSearch:           proto.CapabilityUnsupported,
-			StdioMCP:             proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilitySupported,
 		},
 		Executor: i.executor,
 	}
@@ -145,26 +145,30 @@ func (i viewInstall) view() agent.View {
 }
 
 func (i viewInstall) executor(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
-	return startExecutor(ctx, req, i.node, func(ctx context.Context) (launchOptions, error) {
-		return i.prepare(ctx, req, session)
+	return startExecutor(ctx, req, i.node, func() (launchOptions, error) {
+		return i.prepare(req, session)
 	})
 }
 
 // prepare writes the native configuration into the Session home and renders
 // a closed environment. The CLI and its worker use the gateway the request
-// names and the MCP in session; the request's workspace is the sandbox's.
-func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (launchOptions, error) {
+// names and the MCP in session. The request's workspace is the sandbox's, and
+// the workspace tools present it; with environment none the CLI runs in the
+// work directory without them.
+func (i viewInstall) prepare(req proto.PromptRequestPayload, session agent.ViewSession) (launchOptions, error) {
 	local := req.LocalEnvironment
-	if !req.StrictResume || local == nil || req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
-		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view runs Agents API execution in a writable Environment workspace", agent.ErrUnsupportedOperation)
+	if (local == nil) != req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
+		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view runs Agents API execution in a writable Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
-	workspace := local.WorkspaceRoot
-	if !path.IsAbs(workspace) || path.Clean(workspace) != workspace || workspace == "/" {
+	dir := path.Join(session.Home.View, agent.ViewWorkName)
+	if local != nil {
+		dir = local.WorkspaceRoot
+	}
+	if !path.IsAbs(dir) || path.Clean(dir) != dir || dir == "/" {
 		return launchOptions{}, errors.New("mcode: the workspace is not a canonical absolute path")
 	}
-	servers, err := workspaceMCP(session.MCP, func(agent.MCPBinding) (map[string]any, error) {
-		return nil, fmt.Errorf("%w: a MiniMax Code view does not run stdio MCP", agent.ErrUnsupportedOperation)
-	})
+	// The Harness runs each stdio alias without arguments.
+	servers, err := workspaceMCP(session.MCP, func(stdio proto.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
 	if err != nil {
 		return launchOptions{}, err
 	}
@@ -191,15 +195,20 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 		return launchOptions{}, err
 	}
 	defer data.Close()
-	opts := launchOptions{Dir: workspace, DataDir: filepath.Join(session.Home.Host, viewDataName), bindings: session.MCP,
+	opts := launchOptions{Dir: dir, DataDir: filepath.Join(session.Home.Host, viewDataName), bindings: session.MCP,
 		start: session.Launch, script: i.cli, home: session.Home.Host}
 	dataDir, tempDir := path.Join(session.Home.View, viewDataName), path.Join(session.Home.View, viewTempName)
-	tools := workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": workspace, "scratch": tempDir, "network": "enabled"}}
-	if err := writeNativeConfig(private, prepared, data, dataDir, &tools); err != nil {
+	var tools *workspaceTools
+	opts.MCP = []map[string]any{}
+	if local != nil {
+		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir, "network": "enabled"}}
+		opts.MCP = append(opts.MCP, tools.server(dataDir))
+	}
+	if err := writeNativeConfig(private, prepared, data, dataDir, tools); err != nil {
 		return opts, err
 	}
 	opts.Model = prepared.Model
-	opts.MCP = append([]map[string]any{tools.server(dataDir)}, servers...)
+	opts.MCP = append(opts.MCP, servers...)
 	opts.Env = []string{
 		"PATH=" + path.Join(agent.ViewPrivateRoot, agent.ViewShimName),
 		"TMPDIR=" + tempDir,
@@ -213,6 +222,6 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	}
 	opts.Env = append(opts.Env, nativeEnvironment(private, dataDir)...)
 	opts.spawn = session.Spawn
-	opts.reader = clirunner.StartOptions{Binary: i.node, Args: []string{path.Join(path.Dir(i.bridge), "subagent-snapshot.mjs"), dataDir}, Dir: dataDir, Env: opts.Env, OwnProcessGroup: true}
+	opts.reader = clirunner.StartOptions{Binary: i.node, Args: []string{path.Join(path.Dir(i.bridge), "subagent-snapshot.mjs"), dataDir}, Dir: dataDir, Env: opts.Env}
 	return opts, nil
 }

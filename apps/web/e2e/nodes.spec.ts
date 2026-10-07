@@ -35,12 +35,12 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   const field = add.getByLabel("One-time enrollment command", { exact: true });
   await expect(field).toHaveValue(/enroll_fixture_/);
   // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
-  await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
-  await expect(field).toHaveValue(/\| \$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$d\/node-install\.pyz" \$\{NO_COLOR\+--no-color\} --enrollment-token-stdin /);
+  await expect(field).toHaveValue(/^ \(umask 077\n/);
+  await expect(field).toHaveValue(/\| \$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --enrollment-token-stdin /);
   // It downloads from, and names as its source, the public URL, not the loopback address this browser uses.
   await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
   await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
-  await expect(add.getByText("If the command is interrupted or the download stalls, run the same command again: the download resumes.")).toBeVisible();
+  await expect(add.getByText("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
@@ -155,7 +155,7 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
   // Removing the Core record leaves the system service for root/sudo to uninstall on its host.
   const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nexport http_proxy=[^\n]+\nexport HTTP_PROXY=[^\n]+\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$d\/node-install\.pyz" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nexport http_proxy=[^\n]+\nexport HTTP_PROXY=[^\n]+\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   await expect(cleanup.getByText("Installed without sudo?")).toHaveCount(0);
   await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveCount(0);
   // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.

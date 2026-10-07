@@ -160,14 +160,12 @@ if [[ -n "$codex_image$claude_image$mcode_image" ]]; then
     exit 1
   fi
 else
-  : "${AGENTS_RUNTIME_CODEX_PACKAGE:?Set the extracted pinned Codex Linux x64 package directory}"
+  : "${CODEX_CLI_DIR:?Set the extracted pinned Codex Linux x64 package directory}"
   : "${MCODE_HARNESS_BUILD_DIR:?Set the existing built pinned MiniMax Code companion directory}"
   export CLAUDE_SDK_BUILD_DIR="$stage/claude-sdk"
   scripts/build-claude-sdk-runtime.sh
   for harness in codex claude mcode; do
-    script="scripts/build-$harness-runtime.sh"
-    if [[ "$harness" == codex ]]; then script=scripts/build-agents-runtime.sh; fi
-    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "$script"
+    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "scripts/build-$harness-runtime.sh"
     build_image "$harness" "$stage/$harness"
   done
   codex_image="$(cat "$stage/codex.id")"

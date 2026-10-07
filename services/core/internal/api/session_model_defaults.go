@@ -7,7 +7,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
 )
 
@@ -34,7 +33,7 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 		return nil, nil, err
 	}
 	if inherit && saved.XAgentsCore != nil && saved.XAgentsCore.ModelProvider != nil && provider == nil {
-		return nil, nil, credentialcrypto.ErrUnavailable
+		return nil, nil, errors.New("saved agent model provider bundle is missing")
 	}
 	return saved, provider, nil
 }

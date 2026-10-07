@@ -8,7 +8,7 @@ import (
 )
 
 // The launch file is the sole credential source for this connection. Reopening
-// it on process restart neither pairs again nor overwrites an auth profile.
+// it on process restart never reads or overwrites an auth profile.
 func bootstrapProfile(path string) (*auth.Profile, error) {
 	raw, err := runtimefs.ReadPrivatePath(path, runtimebootstrap.MaxBytes)
 	if err != nil {

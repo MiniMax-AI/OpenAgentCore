@@ -47,7 +47,7 @@ func TestRequiredHistoryResolution(t *testing.T) {
 			case "wrong-home":
 				row["path"] = "/another/sessions/rollout.jsonl"
 			}
-			req := proto.PromptRequestPayload{StrictResume: true, RequireExistingNativeSession: true}
+			req := proto.PromptRequestPayload{RequireExistingNativeSession: true}
 			if scenario == "fresh" {
 				req.RequireExistingNativeSession = false
 			}
@@ -197,14 +197,12 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 	}
 }
 
-func TestRecoveryRequiresStrictPrivateExecution(t *testing.T) {
-	for _, mode := range []string{"non-strict", "no-state", "read-only"} {
+func TestRecoveryRequiresWritableAgentState(t *testing.T) {
+	for _, mode := range []string{"no-state", "read-only"} {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.RequireExistingNativeSession = true
 			switch mode {
-			case "non-strict":
-				req.StrictResume = false
 			case "no-state":
 				req.AgentStateKey = ""
 			case "read-only":

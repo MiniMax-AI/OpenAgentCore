@@ -145,7 +145,7 @@ func TestSpawnKeepsItsErrors(t *testing.T) {
 		s, _ := newOwnerSession(t)
 		s.plan = &plan{view: agent.View{LocalExec: []string{"/bin/true"}}}
 		s.live = &liveView{view: &fakeView{exit: make(chan struct{}), spawnErr: c.err}}
-		_, err := s.spawn(clirunner.StartOptions{Binary: "/bin/true", Dir: "/", OwnProcessGroup: true})
+		_, err := s.spawn(clirunner.StartOptions{Binary: "/bin/true", Dir: "/"})
 		if !errors.Is(err, c.err) || errors.Is(err, agent.ErrNoLiveView) != c.ended {
 			t.Errorf("Spawn failing with %v = %v; want that error, and ErrNoLiveView only for an ended view", c.err, err)
 		}

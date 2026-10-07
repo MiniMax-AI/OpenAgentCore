@@ -44,7 +44,13 @@ The script downloads that release's Compose files, checks their SHA-256, and:
 
 It saves no sandbox backend, adds no node, creates no Project or key and makes no model request. It ends by printing the console address and the Core key.
 
-If installation fails before the services become healthy, the installer removes the directory it created. Fix the reported cause and rerun the same command. Once the services have started, a later failure keeps the installation and its data. A new release is a new directory; see [version policy](./operations.md#installation-version-policy).
+Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data and show the service logs. Fix the reported cause and rerun the same command, or specify the installation directory:
+
+```bash
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
+```
+
+Use your chosen directory if it differs. A rerun uses the saved Compose file and settings; installation flags only apply to new directories. Existing images and containers are reused; missing images are downloaded. To change settings, edit `.env` and run `oac apply`. A new release needs a new directory; see [version policy](./operations.md#installation-version-policy).
 
 For insufficient space or quota, free space on the filesystem named by the error. Image-loading failures can also require space in Docker's storage, which may be on a different filesystem.
 

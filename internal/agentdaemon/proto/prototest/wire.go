@@ -116,7 +116,7 @@ func WireScenarios() []WireScenario {
 	}
 	prepare := send(Core, proto.TypeExecutionPrepare, PreparationID, proto.ExecutionPreparePayload{
 		SessionID:     SessionID,
-		Configuration: WithModel(proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, StrictResume: true, DisableExecutionEnvironment: true}),
+		Configuration: WithModel(proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, DisableExecutionEnvironment: true}),
 	})
 	// Core binds the Session before its first Session-scoped frame.
 	bind := []Step{

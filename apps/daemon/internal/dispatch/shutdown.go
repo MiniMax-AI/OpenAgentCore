@@ -28,13 +28,8 @@ func (r *Router) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	first := !r.closed
-	var victims []sessionCancellation
-	for _, state := range r.sessions {
-		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
-		victims = append(victims, sessionCancellation{runID: state.runID, release: release, attempt: attempt})
-	}
-	if first {
+	victims := r.sessionCancellationsLocked()
+	if !r.closed {
 		r.closed = true
 		if r.runtimePreparation != nil {
 			r.runtimePreparation.cancel()
@@ -93,7 +88,11 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 		}
 	}
 	for _, owner := range r.executors {
-		attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: executor %s cleanup unconfirmed: %w", owner.id, owner.closeErr))
+		cause := owner.closeErr
+		if cause == nil {
+			cause = errors.New("cleanup has not settled")
+		}
+		attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: executor %s: %w", owner.id, cause))
 	}
 	close(attempt.done)
 	r.mu.Unlock()
@@ -117,6 +116,18 @@ func waitShutdown(ctx context.Context, attempt *shutdownAttempt) error {
 
 type sessionCancellation struct {
 	runID   string
+	handoff *preparedHandoff
 	release *preparedRelease
 	attempt *preparedReleaseAttempt
+}
+
+// sessionCancellationsLocked claims release of every active Run, retrying a
+// failed native attempt. Router.mu must be held.
+func (r *Router) sessionCancellationsLocked() []sessionCancellation {
+	victims := make([]sessionCancellation, 0, len(r.sessions))
+	for _, state := range r.sessions {
+		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
+		victims = append(victims, sessionCancellation{runID: state.runID, handoff: state.preparedHandoff, release: release, attempt: attempt})
+	}
+	return victims
 }

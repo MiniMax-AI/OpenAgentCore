@@ -49,9 +49,8 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: tools.Functions, ToolSearch: tools.Search,
 		Model: snapshot.Agent.Model, SystemPrompt: instructions, ModelProvider: provider, HarnessConfig: harnessConfig,
 		ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
-		AgentSessionID: bound.NativeSessionID, StrictResume: true,
-		RequireExistingNativeSession: recoverNativeSession,
-		ObserveMessages:              caps.MessageItems, ObserveToolObservations: true,
+		AgentSessionID: bound.NativeSessionID, RequireExistingNativeSession: recoverNativeSession,
+		ObserveMessages:           caps.MessageItems,
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}

@@ -120,13 +120,12 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if _, err := d.sessionExecution.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		return sessions.Turn{}, err
 	}
-	req.ConversationID, req.RunID, req.Input = sessionID, turnID, text
-	release, err := peer.TrackExecutionDelivery(req.RunID)
+	release, err := peer.TrackExecutionDelivery(turnID)
 	if err != nil {
 		return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 	}
 	defer release()
-	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, through, prepared)
+	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, turnID, text, through, prepared)
 	return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
 }
 

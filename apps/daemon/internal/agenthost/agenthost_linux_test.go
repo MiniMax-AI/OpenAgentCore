@@ -89,7 +89,6 @@ func declared(s proto.CapabilitySupport) agent.ViewCapabilities {
 func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{
 		AgentKind:        kind,
-		StrictResume:     true,
 		Model:            "m",
 		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: baseURL, APIKey: key},
 		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"},

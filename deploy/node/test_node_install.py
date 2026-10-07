@@ -509,6 +509,85 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse(any("register" in call for call, _ in self.calls))
         self.assertFalse(any("load" in call for call, _ in self.calls))
 
+    def test_policy_download_after_sigkill_starts_clean(self):
+        root = self.home / "policy"
+        payload = self.payloads["runtime/seccomp.json"]
+        expected = hashlib.sha256(payload).hexdigest()
+        class Interrupted(io.BytesIO):
+            def read(self, size=-1):
+                if self.tell():
+                    os.kill(os.getpid(), signal.SIGKILL)
+                return super().read(1)
+        child = os.fork()
+        if child == 0:
+            with mock.patch.object(installer, "fetch", return_value=Interrupted(payload)):
+                installer.download(self.args.source_url, "runtime/seccomp.json", root, expected)
+            os._exit(1)
+        _, status = os.waitpid(child, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), -signal.SIGKILL)
+        partial = root / "runtime/.seccomp.json.partial"
+        self.assertTrue(partial.exists())
+        installer.download(self.args.source_url, "runtime/seccomp.json", root, expected)
+        self.assertFalse(partial.exists())
+        self.assertEqual((root / "runtime/seccomp.json").read_bytes(), payload)
+
+    def test_retry_after_configuration_write_sigkill_publishes_complete_files(self):
+        for name in ("installation.json", "provider.json", "registered.json"):
+            with self.subTest(name=name):
+                self.args.installation_id = name.replace(".json", "")
+                self.root = self.home / ".oac/nodes" / self.args.installation_id
+                partial = self.root / ("." + name + ".partial")
+                original_open = os.open
+                def interrupted_open(path, *args, **kwargs):
+                    descriptor = original_open(path, *args, **kwargs)
+                    if path == partial:
+                        os.write(descriptor, b'{')
+                        os.kill(os.getpid(), signal.SIGKILL)
+                    return descriptor
+                child = os.fork()
+                if child == 0:
+                    with mock.patch.object(installer.os, "open", side_effect=interrupted_open):
+                        self.install()
+                    os._exit(1)
+                _, status = os.waitpid(child, 0)
+                self.assertEqual(os.waitstatus_to_exitcode(status), -signal.SIGKILL)
+                self.assertTrue(partial.exists())
+                self.assertFalse((self.root / name).exists())
+                self.install()
+                self.assertFalse(partial.exists())
+                for target in ("installation.json", "provider.json", "registered.json"):
+                    self.assertEqual(json.loads((self.root / target).read_text())["installation_id"], self.args.installation_id)
+
+    def test_retry_after_registration_sigkill_removes_secret_and_helper_staging(self):
+        write_once = installer.write_once
+        def killed_after_registration(path, value):
+            write_once(path, value)
+            if path.name == "registered.json":
+                os.kill(os.getpid(), signal.SIGKILL)
+        child = os.fork()
+        if child == 0:
+            with mock.patch.object(installer, "write_once", side_effect=killed_after_registration):
+                self.install()
+            os._exit(1)
+        _, status = os.waitpid(child, 0)
+        self.assertEqual(os.waitstatus_to_exitcode(status), -signal.SIGKILL)
+        partial = self.root / ".enrollment-token.partial"
+        self.assertTrue(partial.exists())
+        identity = (self.root / "state/node/identity.json").read_bytes()
+        with mock.patch.object(installer.node_spec, "fetch", side_effect=installer.InstallError("Core unavailable")):
+            with self.assertRaisesRegex(installer.InstallError, "Core unavailable"):
+                self.install()
+        self.assertFalse(partial.exists())
+        self.assertEqual((self.root / "state/node/identity.json").read_bytes(), identity)
+        helper = self.root / ".generation-preparer.pyz.partial"
+        helper.write_bytes(b'unfinished helper')
+        helper.chmod(0o600)
+        self.install()
+        self.assertFalse(partial.exists())
+        self.assertFalse(helper.exists())
+        self.assertEqual((self.root / "state/node/identity.json").read_bytes(), identity)
+        self.assertFalse(any("register" in call for call, _ in self.calls))
+
     def test_unconfirmed_registration_retains_state_removes_token_and_does_not_start(self):
         self.fail_registration = True
         with self.assertRaisesRegex(installer.InstallError, "not confirmed"):

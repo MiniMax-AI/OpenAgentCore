@@ -12,12 +12,18 @@ func TestSpawnReExecsWithSentinelAndPIDFile(t *testing.T) {
 	dir := privateTempDir(t)
 	logPath := filepath.Join(dir, "child.log")
 	pidPath := filepath.Join(dir, "child.pid")
+	t.Setenv(spawnTestChildEnv, "1")
 
 	// argv[0] is ignored (Spawn uses os.Executable()); argv[1:]
 	// becomes child args. Placeholder subcommand so flag parsing
 	// wouldn't choke — runSpawnTestChild short-circuits anyway.
-	t.Setenv(spawnTestChildEnv, "1")
-	pid, err := Spawn([]string{"oac-daemon", "child-mode"}, ReExecOptions{LogPath: logPath, PIDPath: pidPath})
+	pid, err := Spawn(
+		[]string{"oac-daemon", "child-mode"},
+		ReExecOptions{
+			LogPath: logPath,
+			PIDPath: pidPath,
+		},
+	)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}

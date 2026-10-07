@@ -1,7 +1,6 @@
 package mcode
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,11 +48,11 @@ func ConfigureLocal(binary, node, bridge, root, workspace string, network agentn
 	return c, nil
 }
 
-func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
+func prepareWorkspaceOptions(c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
 	if c.Network != "enabled" || len(c.AllowedDomains) != 0 {
 		return launchOptions{}, fmt.Errorf("mcode: Runtime does not implement network isolation")
 	}
-	if !req.StrictResume || req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
+	if req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
 	servers, bindings, err := runtimeMCP(req)

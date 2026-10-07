@@ -19,6 +19,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"io/fs"
 	"log/slog"
 	"math/big"
 	"net/http/httptest"
@@ -39,6 +40,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -122,7 +124,11 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 // the value and the status. A view that declares function tools runs a second
 // Turn in a new Executor, which resumes the Session's native history, and
 // calls a function there. A view that declares tool search runs a Turn in
-// another Session that finds the function, deferred, with tool search.
+// another Session that finds the function, deferred, with tool search. A view
+// that declares environment none answers a Turn in a Session without an
+// Environment, and its native state names the work directory.
+// A view that declares stdio MCP calls a tool of a stdio MCP server that runs
+// in the sandbox.
 func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps agent.ViewCapabilities, model proto.PromptRequestPayload) {
 	name := "qualify-" + kind + ".txt"
 	value, content := strings.ToLower(rand.Text()), "qualified "+strings.ToLower(rand.Text()[:12])
@@ -138,7 +144,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/home/runtime", "LANG": "C.UTF-8"},
 		Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
 	}
-	configuration := proto.PromptRequestPayload{AgentKind: kind, StrictResume: true, DisableSubagents: true,
+	configuration := proto.PromptRequestPayload{AgentKind: kind, DisableSubagents: true,
 		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
 		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}
 	if caps.FunctionTools.IsSupported() {
@@ -175,7 +181,50 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		done, calls := search.turn(t, "tool-search", k.prompt("Search your tools for the function that looks up support tickets"), k)
 		k.check(t, done, calls)
 	}
+	if caps.EnvironmentNone.IsSupported() {
+		none := configuration
+		none.LocalEnvironment, none.DisableExecutionEnvironment, none.FunctionTools, none.ToolSearch = nil, true, nil, false
+		s := sb.session(h, cfg, agenthost.Environment{}, none)
+		done, _ := s.turn(t, "environment-none", "What is 17 times 23? Answer with exactly one line: PRODUCT=<the number>", k)
+		if !strings.Contains(done.Content, "PRODUCT=391") {
+			t.Errorf("the answer %q does not report PRODUCT=391", done.Content)
+		}
+		s.checkCwd(t, agent.ViewPrivateRoot+"/"+agent.ViewHomeName+"/"+agent.ViewWorkName)
+	}
+	if caps.StdioMCP.IsSupported() {
+		code := strings.ToLower(rand.Text()[:12])
+		stdio := configuration
+		stdio.FunctionTools, stdio.ToolSearch = nil, false
+		s := sb.session(h, cfg, env, stdio)
+		s.mcp = []proto.EnvironmentMCP{{InstallationRoot: workspace, Server: agentplugin.MCPServer{Name: "qualify", Type: "stdio", Command: "python3", Args: []string{"-c", mcpServer, code}}}}
+		done, _ := s.turn(t, "stdio-mcp", "Call the reveal_code tool of the qualify MCP server once.\nAnswer with exactly one line: CODE=<the code it returns>", k)
+		if !strings.Contains(done.Content, "CODE="+code) {
+			t.Errorf("the answer %q does not report CODE=%s", done.Content, code)
+		}
+	}
 }
+
+// mcpServer is a stdio MCP server whose one tool returns the code in its
+// argument.
+const mcpServer = `import json, sys
+code = sys.argv[1]
+for line in iter(sys.stdin.readline, ""):
+    msg = json.loads(line) if line.strip() else {}
+    if "id" not in msg or "method" not in msg:
+        continue
+    method, reply = msg["method"], {"jsonrpc": "2.0", "id": msg["id"]}
+    if method == "initialize":
+        reply["result"] = {"protocolVersion": msg["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "qualify", "version": "1"}}
+    elif method == "tools/list":
+        reply["result"] = {"tools": [{"name": "reveal_code", "description": "Returns the qualification code.", "inputSchema": {"type": "object", "properties": {}}}]}
+    elif method == "tools/call":
+        reply["result"] = {"content": [{"type": "text", "text": "The code is " + code + "."}]}
+    elif method == "ping":
+        reply["result"] = {}
+    else:
+        reply["error"] = {"code": -32601, "message": "method not found"}
+    print(json.dumps(reply), flush=True)
+`
 
 // lookupTicket is the function the function Turns call.
 var lookupTicket = proto.FunctionTool{Name: "lookup_ticket", Description: "Looks up a support ticket by its number.",
@@ -227,6 +276,9 @@ type session struct {
 	env           agenthost.Environment
 	id            string
 	configuration proto.PromptRequestPayload
+	// mcp is the installed MCP that the Environment's preparation resolves
+	// into each request; the wire does not carry it.
+	mcp []proto.EnvironmentMCP
 }
 
 func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, env agenthost.Environment, configuration proto.PromptRequestPayload) *session {
@@ -242,10 +294,13 @@ func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, env agenthos
 func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePayload, []proto.FunctionCallPayload) {
 	t.Helper()
 	out := make(sender, 256)
-	router, err := dispatch.New(dispatch.Config{Sender: out, SessionEnvironments: true, Log: s.cfg.Log,
-		Registry: s.h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) {
-			return s.binding, s.env, nil
-		})})
+	reg := s.h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) {
+		return s.binding, s.env, nil
+	})
+	if s.mcp != nil {
+		reg = withMCP(t, reg, s.mcp)
+	}
+	router, err := dispatch.New(dispatch.Config{Sender: out, SessionEnvironments: true, Log: s.cfg.Log, Registry: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +319,51 @@ func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePa
 		t.Errorf("Shutdown: %v", err)
 	}
 	return done, calls
+}
+
+// withMCP wraps reg so that each request's Environment carries mcp.
+func withMCP(t *testing.T, reg *agent.Registry, mcp []proto.EnvironmentMCP) *agent.Registry {
+	wrapped := agent.NewRegistry()
+	for _, info := range reg.SupportedAgentKinds() {
+		configuration, err := reg.Configuration(info.Kind)
+		direct, directErr := reg.Resolve(info.Kind)
+		factory, factoryErr := reg.ResolveExecutor(info.Kind)
+		if err := errors.Join(err, directErr, factoryErr); err != nil {
+			t.Fatal(err)
+		}
+		wrapped.RegisterKind(info, configuration, direct)
+		wrapped.RegisterExecutor(info.Kind, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+			local := *req.LocalEnvironment
+			local.MCP = mcp
+			req.LocalEnvironment = &local
+			return factory(ctx, req)
+		})
+	}
+	return wrapped
+}
+
+// checkCwd checks that the Harness's native state in the Session home names
+// cwd, which the adapter writes into none of its files there.
+func (s *session) checkCwd(t *testing.T, cwd string) {
+	t.Helper()
+	want := []byte(cwd)
+	home := filepath.Join(s.cfg.StateDir, "sessions", s.binding.SessionID.String(), agent.ViewHomeName)
+	var found string
+	err := filepath.WalkDir(home, func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || found != "" || !entry.Type().IsRegular() {
+			return err
+		}
+		if body, err := os.ReadFile(name); err != nil || bytes.Contains(body, want) {
+			found = name
+			return err
+		}
+		return nil
+	})
+	if err != nil || found == "" {
+		t.Errorf("no native state in %s names %s: %v", home, want, err)
+		return
+	}
+	t.Logf("%s names %s", found, want)
 }
 
 func handle(t *testing.T, router *dispatch.Router, typ, id string, payload any) {

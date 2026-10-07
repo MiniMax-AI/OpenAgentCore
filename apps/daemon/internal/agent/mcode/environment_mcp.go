@@ -15,26 +15,24 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, []agent.MCPBi
 	if err != nil {
 		return nil, nil, err
 	}
-	servers, err := workspaceMCP(bindings, func(binding agent.MCPBinding) (map[string]any, error) {
-		command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
-		return map[string]any{"name": binding.ServerLabel, "command": command, "args": args, "env": []map[string]string{}}, nil
-	})
+	servers, err := workspaceMCP(bindings, localworkspace.MCPStdioCommand)
 	return servers, bindings, err
 }
 
-// workspaceMCP renders the Session's MCP bindings as ACP servers; stdio
-// renders a stdio binding.
-func workspaceMCP(bindings []agent.MCPBinding, stdio func(agent.MCPBinding) (map[string]any, error)) ([]map[string]any, error) {
+// workspaceMCP renders the Session's MCP bindings as ACP servers, each stdio
+// binding with the command and arguments stdio gives it.
+func workspaceMCP(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (string, []string)) ([]map[string]any, error) {
 	var servers []map[string]any
 	for _, binding := range bindings {
 		if binding.ServerLabel == "oac_workspace" || binding.ConnectionOrigin != "environment" || binding.AllowedTools != nil || binding.Required {
 			return nil, fmt.Errorf("mcode: unsupported MCP binding")
 		}
-		render := environmentHTTPMCP
 		if binding.Transport != "http" {
-			render = stdio
+			command, args := stdio(*binding.Stdio)
+			servers = append(servers, map[string]any{"name": binding.ServerLabel, "command": command, "args": args, "env": []map[string]string{}})
+			continue
 		}
-		server, err := render(binding)
+		server, err := environmentHTTPMCP(binding)
 		if err != nil {
 			return nil, err
 		}

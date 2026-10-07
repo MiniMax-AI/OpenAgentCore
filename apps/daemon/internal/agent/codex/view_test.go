@@ -122,7 +122,14 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
-	if _, err := view.Executor(t.Context(), req, session); !errors.Is(err, agent.ErrUnsupportedOperation) || len(launched) != 1 {
-		t.Fatalf("stdio MCP: launches %d, err %v", len(launched), err)
+	req.LocalEnvironment, req.DisableExecutionEnvironment = nil, true
+	if _, err := view.Executor(t.Context(), req, session); err == nil || len(launched) != 2 {
+		t.Fatalf("environment none: launches %d, err %v", len(launched), err)
+	}
+	if launch := launched[1]; launch.Dir != "/.oac/home/work" || !slices.Contains(launch.Env, "CODEX_EXEC_SERVER_URL=none") {
+		t.Fatalf("environment none launched in %q with %v", launch.Dir, launch.Env)
+	}
+	if config, err := os.ReadFile(planted); err != nil || !strings.Contains(string(config), "command = \"/.oac/bin/oac-mcp-0\"\n\n") {
+		t.Fatalf("stdio alias config.toml: %v\n%s", err, config)
 	}
 }

@@ -161,24 +161,19 @@ An installation runs one release for its whole life. In-place version upgrades a
 
 To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the console that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
 
-`install.sh` refuses a directory that is not empty. If the first start fails, it deletes the directory it created, and the same command can be run again. An installation that has already started is left in place.
+An interrupted installation can [resume with its saved configuration](./install.md#install). An unrelated nonempty directory is refused.
 
-Mutating `oac` commands hold `.oac.lock`. If another command holds it, retry after that command finishes. Never delete `.oac.lock` to get past a busy installation.
+The installer and mutating `oac` commands hold `.oac.lock`. The installer also holds a sibling `<install-dir>.install.lock` while preparing the directory. If another command holds either lock, retry after it finishes. Never delete a lock file to get past a busy installation.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `Core installation requires Linux amd64 with Docker access` | Use Linux amd64 and an account with Docker access; root and ordinary users are supported |
-| `Installation failed: inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
-| `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
 | `Port N is already in use.` | Another program holds that port. Stop it, or choose another `--web-port`. The installer does not move to a different port |
-| `Installation directory is not empty` | Use an empty `--install-dir`, or [uninstall](#uninstall) the existing installation first |
+| `Directory is not a complete Core installation` | Preserve the directory and choose another `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` has a value Core rejects. The message names the variable and not the value. Fix `.env` and run `oac apply` again |
 | `Docker Compose 2.26 or newer is required` | Update the Docker Compose plugin |
-| `The services did not start: …` | A new installation's first start failed, and the installer [removed what it created](./install.md#install). Compose's or Core's error is printed above it; fix the cause and run the same command again |
-| `Removal did not finish. Left: …` | A failed first start could not remove everything. Run the printed commands to remove what is left, or fix the cause and run the same command again |
-| `This installation did not finish installing …` | The installer stopped before reporting that the services were running. Rerun the installer command, which [removes what is left](./install.md#install) and installs again, or [uninstall](#uninstall) it |
+| `Installation and data retained at …` | Read the service logs above it, fix the cause, then [resume installation](./install.md#install); keep the data |
 | Web answers 403 `Forbidden` | The browser host is not `OAC_PUBLIC_URL`. Open that origin; a reverse proxy must pass the original Host |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `docker compose ps`, then Core's log |
 | Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the harness, or pass one |

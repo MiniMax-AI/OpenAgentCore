@@ -18,7 +18,7 @@ export interface HostPrerequisite {
  * What a host needs for the default command, which runs the installer as root
  * and the node as the `oac-node` system service (sudo mode), as the command
  * and deploy/node/node_install.py check it:
- * - the command runs curl, sha256sum and python3 (enrollment-command.ts), and
+ * - the command runs curl, sha256sum, flock and python3 (enrollment-command.ts), and
  *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64,
  *   systemd as the init system, and SELinux not enforcing; `other_node` refuses a
  *   host that already runs a sudo-mode node for another installation, since
@@ -42,7 +42,7 @@ export interface HostPrerequisite {
  */
 export function hostRequirements(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
   return [
-    { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
+    { label: "Linux amd64 with systemd; Python 3.9+, curl, sha256sum and flock; root or sudo" },
     { label: "SELinux is not enforcing" },
     { label: "In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused." },
     provider === "docker"

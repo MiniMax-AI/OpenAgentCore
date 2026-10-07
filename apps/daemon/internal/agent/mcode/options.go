@@ -2,7 +2,6 @@ package mcode
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,7 +51,7 @@ func prepareOptionsWithTools(req proto.PromptRequestPayload, tools *workspaceToo
 	if err != nil {
 		return result, err
 	}
-	if req.StrictResume && !req.DisableSubagents {
+	if !req.DisableSubagents {
 		if _, _, err := subagentReader(); err != nil {
 			return result, err
 		}
@@ -88,10 +87,8 @@ func validateOptions(req proto.PromptRequestPayload) (harnessconfig.PreparedConf
 	if err != nil {
 		return prepared, err
 	}
-	if req.StrictResume {
-		if err := validateExecutionRequest(req); err != nil {
-			return prepared, err
-		}
+	if err := validateExecutionRequest(req); err != nil {
+		return prepared, err
 	}
 	if req.Input.HasImages() {
 		return prepared, fmt.Errorf("mcode: ACP does not support attachments")
@@ -112,15 +109,13 @@ func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.Pr
 	}
 	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
 	config["custom_provider"] = map[string]any{"oac": modelProviderConfig(prepared.Provider, prepared.Model)}
-	if req.StrictResume {
-		configureTextExecution(config)
-		if !req.DisableSubagents {
-			config["agents"] = map[string]any{"default": map[string]any{
-				"tools":        []string{"task", "task_append", "task_query", "task_output", "task_stop"},
-				"builtinTools": []string{"task", "task_append", "task_query", "task_output", "task_stop"}, "skills": []string{},
-				"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
-			}}
-		}
+	configureTextExecution(config)
+	if !req.DisableSubagents {
+		config["agents"] = map[string]any{"default": map[string]any{
+			"tools":        []string{"task", "task_append", "task_query", "task_output", "task_stop"},
+			"builtinTools": []string{"task", "task_append", "task_query", "task_output", "task_stop"}, "skills": []string{},
+			"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
+		}}
 	}
 	config["permissionMode"] = "auto"
 	servers := map[string]any{}
@@ -155,35 +150,23 @@ func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.Pr
 	if err := data.WriteFile("config.yaml", raw, 0o600); err != nil {
 		return err
 	}
-	if req.StrictResume {
-		if raw, err = json.Marshal(map[string]any{"mcpServers": servers}); err != nil {
-			return err
-		}
-		if err := data.WriteFile("mcp.json", raw, 0o600); err != nil {
-			return err
-		}
+	if raw, err = json.Marshal(map[string]any{"mcpServers": servers}); err != nil {
+		return err
 	}
-	return nil
+	return data.WriteFile("mcp.json", raw, 0o600)
 }
 
 // nativeEnvironment is the adapter's own native environment, with dataDir as
 // the native process sees its data directory. The adapter owns the native
 // state location, including after cold resume.
 func nativeEnvironment(req proto.PromptRequestPayload, dataDir string) []string {
-	var env []string
-	if req.StrictResume {
-		env = append(env, "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
-		if !req.DisableSubagents {
-			env = append(env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
-		} else {
-			env = append(env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
-		}
+	env := []string{"OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1"}
+	if !req.DisableSubagents {
+		env = append(env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
+	} else {
+		env = append(env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
 	}
-	env = append(env, "MINIMAX_DATA_DIR="+dataDir)
-	if req.StrictResume {
-		env = append(env, "HOME="+dataDir, "USERPROFILE="+dataDir)
-	}
-	return env
+	return append(env, "MINIMAX_DATA_DIR="+dataDir, "HOME="+dataDir, "USERPROFILE="+dataDir)
 }
 
 // readData reads a file the native process wrote in its data directory,
@@ -212,26 +195,16 @@ func dataDirectory(req proto.PromptRequestPayload) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("mcode: resolve data directory: %w", err)
 	}
-	base := filepath.Join(root, "runtime", "mcode")
-	if key := strings.TrimSpace(req.AgentStateKey); key != "" {
-		parts := []string{base, "state"}
-		for _, part := range strings.Split(key, "/") {
-			if safe := safePathPart(part); safe != "" {
-				parts = append(parts, safe)
-			}
+	parts := []string{root, "runtime", "mcode", "state"}
+	for _, part := range strings.Split(req.AgentStateKey, "/") {
+		if safe := safePathPart(part); safe != "" {
+			parts = append(parts, safe)
 		}
-		if len(parts) == 2 {
-			return "", fmt.Errorf("mcode: invalid agent state key %q", req.AgentStateKey)
-		}
-		return filepath.Join(parts...), nil
 	}
-	if id := safePathPart(req.ConversationID); id != "" {
-		return filepath.Join(base, "conv-"+id), nil
+	if len(parts) == 4 {
+		return "", fmt.Errorf("mcode: invalid agent state key %q", req.AgentStateKey)
 	}
-	if id := safePathPart(req.RunID); id != "" {
-		return filepath.Join(base, "run-"+id), nil
-	}
-	return "", errors.New("mcode: agent state key, conversation id, or run id is required")
+	return filepath.Join(parts...), nil
 }
 
 func safePathPart(value string) string {
