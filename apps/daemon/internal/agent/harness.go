@@ -607,9 +607,8 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	r.kinds[kind] = info
 }
 
-// RegisterExecutor installs the shared lifecycle after RegisterKind. Its
-// factory rejects a request whose selection the kind's narrowed declaration
-// does not admit. It does not enable other public operations.
+// RegisterExecutor installs the shared lifecycle after RegisterKind. It does
+// not enable other public operations.
 func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -622,9 +621,6 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		panic("agent.Registry.RegisterExecutor: configuration required")
 	}
 	r.executors[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Executor, error) {
-		if err := proto.ValidateSelection(configuration.Declaration, req.Selection()); err != nil {
-			return nil, err
-		}
 		if _, err := configuration.Prepare(req); err != nil {
 			return nil, err
 		}

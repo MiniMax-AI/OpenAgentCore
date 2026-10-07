@@ -12,8 +12,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-// Every registered factory admits the selection against the narrowed
-// declaration and prepares the bound model configuration before native code.
+// Every registered factory prepares the bound model configuration before
+// native code.
 func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	registry := agent.NewRegistry()
 	configuration := prototest.ModelConfiguration()
@@ -32,7 +32,6 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		{ModelProvider: responses},
 		{Model: "fixture"},
 		{HarnessConfig: proto.HarnessConfig(`{"unknown":"private-sentinel"}`)},
-		{Model: "fixture", ModelProvider: responses, FunctionTools: []proto.FunctionTool{{Name: "f", Parameters: []byte(`{"type":"object"}`)}}},
 	} {
 		_, err := executor(t.Context(), req)
 		if err == nil || errors.Is(err, expected) || calls != 0 || strings.Contains(err.Error(), "private-sentinel") {

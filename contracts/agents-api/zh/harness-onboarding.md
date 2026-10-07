@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 2263e6f7609d7a4dbefdee88078238c5a8144f54a49674a9492fa9941c287894
+source_hash: f5d10dc8f734dae33713d262079a0a0906fd881ca059b769390fc817086273c0
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -172,7 +172,7 @@ Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/har
 
 `internal/harnessconfig/<kind>` 中 `Configuration()` 的 `Declaration` 就是 Harness 的支持范围：一个 `proto.Declaration`，包含其 `AgentKindCapabilities`、消息、图像、MCP 和输出 schema 限制，以及 `Conflicts` 中它能单独支持但不能同时支持的功能对。它说明适配器的最大支持范围，并且是唯一来源：Core 通过 `builtin.Registry()` 读取它，适配器的 Runtime 描述符也从它开始。发现过程和 Environment owner 只能清除支持，Core 拒绝扩大该声明的心跳。只声明 Harness 之间的真实差异；对每个 Harness 都成立的规则属于 `proto.ValidateSelection` 中的通用检查。
 
-`proto.ValidateSelection` 是对声明的唯一检查。Core 在创建或更新已保存 Harness 的 Agent、创建 Session 以及准入输入和函数结果时应用静态声明，在设备选择和认领 Turn 之前应用 Runtime 收窄后的声明。Runtime 在准入时以及调用 Executor 工厂之前应用它。拒绝返回 400 `unsupported_or_invalid_configuration`，并以配置路径作为 `param`。Runtime 事实（例如缺少二进制、原生历史或文件系统就绪状态）仍是适配器准备失败。
+`proto.ValidateSelection` 是对声明的唯一检查。Core 在创建或更新已保存 Harness 的 Agent、创建 Session 以及准入输入和函数结果时应用静态声明，在设备选择和认领 Turn 之前应用 Runtime 收窄后的声明。Runtime 在准入 `execution_prepare` 时应用它，早于任何 Executor 工厂运行。拒绝返回 400 `unsupported_or_invalid_configuration`，并以配置路径作为 `param`。Runtime 事实（例如缺少二进制、原生历史或文件系统就绪状态）仍是适配器准备失败。
 
 每个 Runtime 声明都引用同一个 `internal/harnessconfig/<kind>.Configuration()`，并负责其原生工厂和探测。目录不能声明某台机器的可用性，也不存在动态插件加载器。
 
