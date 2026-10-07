@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
@@ -46,26 +46,10 @@ func ReadToolEnvironment() (map[string]string, error) {
 func readToolEnvironmentFile(path string) (map[string]string, error) {
 	body, err := runtimefs.ReadPrivatePath(path, 1<<20)
 	var values map[string]string
-	if err != nil || json.Unmarshal(body, &values) != nil || values == nil || !validToolEnvironment(values) {
+	if err != nil || json.Unmarshal(body, &values) != nil || values == nil || !agentcapabilities.ValidToolEnvironment(values, runtime.GOOS == "windows") {
 		return nil, errors.New("initialized user environment unavailable")
 	}
 	return values, nil
-}
-func validToolEnvironment(values map[string]string) bool {
-	seen := map[string]bool{}
-	for key, value := range values {
-		if runtime.GOOS == "windows" {
-			folded := strings.ToUpper(key)
-			if seen[folded] {
-				return false
-			}
-			seen[folded] = true
-		}
-		if key == "" || strings.ContainsAny(key, "=\x00\r\n") || strings.ContainsRune(value, 0) {
-			return false
-		}
-	}
-	return true
 }
 
 // ReadOptionalToolEnvironment permits a Runtime without explicit user variables.

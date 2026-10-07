@@ -1,7 +1,7 @@
 package localworkspace
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -9,7 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
-	"github.com/google/uuid"
 )
 
 // snapshotMarker remembers completion outside the installed tree. It contains
@@ -18,17 +17,14 @@ type snapshotMarker struct {
 	directory *os.Root
 	unlock    func()
 	name      string
-	root      string
+	body      []byte
 	completed bool
 }
 
 func (b *Binding) openSnapshotMarker() (*snapshotMarker, error) {
-	identity := b.capabilityIdentity()
-	for _, id := range []string{identity.EnvironmentID, identity.SessionID} {
-		parsed, err := uuid.Parse(id)
-		if err != nil || parsed == uuid.Nil || parsed.String() != id {
-			return nil, agentcapabilities.ErrInvalid
-		}
+	name, body, err := agentcapabilities.Marker(b.capabilityIdentity(), b.capabilityRoot)
+	if err != nil {
+		return nil, err
 	}
 	private, err := paths.Root()
 	if err != nil || agentcapabilities.ValidateLocalDirectories([]string{private}) != nil {
@@ -63,7 +59,7 @@ func (b *Binding) openSnapshotMarker() (*snapshotMarker, error) {
 		current.Close()
 		return nil, agentcapabilities.ErrInvalid
 	}
-	marker := &snapshotMarker{directory: current, unlock: unlock, name: identity.EnvironmentID + "-" + identity.SessionID + ".json", root: b.capabilityRoot}
+	marker := &snapshotMarker{directory: current, unlock: unlock, name: name, body: body}
 	completed, err := marker.read()
 	if err != nil {
 		marker.close()
@@ -92,11 +88,8 @@ func (m *snapshotMarker) read() (bool, error) {
 		return false, agentcapabilities.ErrInvalid
 	}
 	// Exact bytes also reject duplicate members, trailing data and extra fields.
-	expected, _ := json.Marshal(struct {
-		Root string `json:"capability_root"`
-	}{m.root})
 	actual, err := io.ReadAll(io.LimitReader(file, 8193))
-	if err != nil || string(actual) != string(expected)+"\n" {
+	if err != nil || !bytes.Equal(actual, m.body) {
 		return false, agentcapabilities.ErrInvalid
 	}
 	return true, nil
@@ -106,17 +99,11 @@ func (m *snapshotMarker) complete() error {
 	if m.completed {
 		return nil
 	}
-	data, err := json.Marshal(struct {
-		Root string `json:"capability_root"`
-	}{m.root})
-	if err != nil {
-		return agentcapabilities.ErrInvalid
-	}
 	file, err := runtimefs.OpenPrivate(m.directory, m.name, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
 	if err != nil {
 		return agentcapabilities.ErrInvalid
 	}
-	_, writeErr := file.Write(append(data, '\n'))
+	_, writeErr := file.Write(m.body)
 	syncErr := file.Sync()
 	closeErr := file.Close()
 	if writeErr != nil || syncErr != nil || closeErr != nil || runtimefs.SyncDirectory(m.directory) != nil {

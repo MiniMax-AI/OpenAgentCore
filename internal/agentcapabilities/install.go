@@ -2,7 +2,7 @@ package agentcapabilities
 
 import (
 	"encoding/json"
-	"os"
+	"io/fs"
 	"path"
 	"strconv"
 	"strings"
@@ -12,103 +12,119 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
-func InstallSkill(root *os.Root, archive []byte, metadata agentskill.Metadata) error {
-	if unfinished(root) != nil {
-		return ErrInvalid
-	}
-	files, err := agentskill.Read(archive, metadata)
-	if err != nil {
-		return ErrInvalid
-	}
-	return writeTree(root, "skills/"+metadata.Name, files)
+// Tree is one directory of an installation, relative to the installation,
+// and the files it holds.
+type Tree struct {
+	Root  string
+	Files []agentbundle.File
 }
 
-func InstallPlugin(root *os.Root, slot int, archive []byte, metadata agentplugin.Metadata) error {
-	if slot < 0 || slot >= 50 || unfinished(root) != nil {
-		return ErrInvalid
+// SkillTree is the tree that stages a Skill archive.
+func SkillTree(archive []byte, metadata agentskill.Metadata) (Tree, error) {
+	files, err := agentskill.Read(archive, metadata)
+	if err != nil || !validRelative(metadata.Name) || strings.Contains(metadata.Name, "/") {
+		return Tree{}, ErrInvalid
+	}
+	return Tree{Root: "skills/" + metadata.Name, Files: files}, nil
+}
+
+// PluginTree is the tree that stages a Plugin archive in slot.
+func PluginTree(slot int, archive []byte, metadata agentplugin.Metadata) (Tree, error) {
+	if slot < 0 || slot >= 50 {
+		return Tree{}, ErrInvalid
 	}
 	bundle, err := agentplugin.Read(archive, metadata)
 	if err != nil {
-		return ErrInvalid
+		return Tree{}, ErrInvalid
 	}
-	return writeTree(root, "plugins/"+strconv.Itoa(slot), bundle.Files)
+	return Tree{Root: "plugins/" + strconv.Itoa(slot), Files: bundle.Files}, nil
 }
 
-// Finalize captures declared directories once after setup and binds the snapshot.
-// It emits an installation artifact, not another lifecycle or public catalog.
-func Finalize(installed *os.Root, input Input, identity Identity, resolve DirectoryResolver) error {
+// Snapshot completes a staged installation once setup has run: it captures
+// the declared directories and binds the manifest to the selection. It is an
+// installation artifact, not another lifecycle or public catalog.
+type Snapshot struct {
+	manifest    Manifest
+	directories int
+	captured    int
+	total       int
+}
+
+// NewSnapshot checks the staged installation against input. list lists one
+// of the installation's directories, and read reads one of its trees, whose
+// files must be read-only. Only selected, fully imported bundles may precede
+// finalization: a leftover directory capture or temporary manifest is an
+// incomplete installation, not a reason to silently recapture mutable
+// sources.
+func NewSnapshot(input Input, identity Identity, list func(string) ([]fs.DirEntry, error), read func(string) ([]agentbundle.File, error)) (*Snapshot, error) {
 	digest, err := selectionHash(input)
-	if err != nil || validateIdentity(identity) != nil || (len(input.Directories) > 0 && resolve == nil) {
-		return ErrInvalid
+	if err != nil || validateIdentity(identity) != nil || validateStaged(list, input) != nil {
+		return nil, ErrInvalid
 	}
-	if _, err := installed.Lstat(ManifestName); !os.IsNotExist(err) {
-		return ErrInvalid
-	}
-	if validateStaged(installed, input) != nil {
-		return ErrInvalid
-	}
-	manifest := Manifest{Version: 1, Identity: identity, SelectionSHA256: digest, Skills: []InstalledSkill{}}
-	total := 0
-	count := func(files []agentbundle.File) error {
-		for _, file := range files {
-			total += len(file.Data)
-		}
-		if total > MaxSnapshotBytes {
-			return ErrInvalid
-		}
-		return nil
-	}
+	s := &Snapshot{manifest: Manifest{Version: 1, Identity: identity, SelectionSHA256: digest, Skills: []InstalledSkill{}}, directories: len(input.Directories)}
 	for _, metadata := range input.Skills {
 		if !validRelative(metadata.Name) || strings.Contains(metadata.Name, "/") {
-			return ErrInvalid
+			return nil, ErrInvalid
 		}
 		root := "skills/" + metadata.Name
-		files, err := ReadTree(installed, root, true)
-		if err != nil || count(files) != nil {
-			return ErrInvalid
+		files, err := read(root)
+		if err != nil || s.count(files) != nil {
+			return nil, ErrInvalid
 		}
-		body, err := installed.ReadFile(root + "/SKILL.md")
-		if err != nil || agentskill.ValidateManifest(body, metadata) != nil || manifest.add(metadata, root, root) != nil {
-			return ErrInvalid
+		body, ok := fileData(files, "SKILL.md")
+		if !ok || agentskill.ValidateManifest(body, metadata) != nil || s.manifest.add(metadata, root, root) != nil {
+			return nil, ErrInvalid
 		}
 	}
 	for slot, expected := range input.Plugins {
 		root := "plugins/" + strconv.Itoa(slot)
-		files, err := ReadTree(installed, root, true)
-		if err != nil || count(files) != nil {
-			return ErrInvalid
+		files, err := read(root)
+		if err != nil || s.count(files) != nil {
+			return nil, ErrInvalid
 		}
 		bundle, err := agentplugin.Inspect(files)
-		if err != nil || bundle.Metadata != expected || addPlugin(&manifest, root, bundle) != nil {
-			return ErrInvalid
+		if err != nil || bundle.Metadata != expected || addPlugin(&s.manifest, root, bundle) != nil {
+			return nil, ErrInvalid
 		}
 	}
-	for slot, source := range input.Directories {
-		directory, err := resolve(source)
-		if err != nil || directory == nil {
-			if directory != nil {
-				directory.Close()
-			}
-			return ErrInvalid
-		}
-		files, err := ReadTree(directory, ".", false)
-		closeErr := directory.Close()
-		if closeErr != nil {
-			return ErrInvalid
-		}
-		if err != nil || count(files) != nil {
-			return ErrInvalid
-		}
-		root := "directories/" + strconv.Itoa(slot)
-		if discover(&manifest, root, files) != nil || writeTree(installed, root, files) != nil {
-			return ErrInvalid
-		}
+	return s, nil
+}
+
+// Capture records the files of the next selected directory, in input order,
+// and returns the tree to write before the next capture.
+func (s *Snapshot) Capture(files []agentbundle.File) (Tree, error) {
+	if s.captured >= s.directories || s.count(files) != nil {
+		return Tree{}, ErrInvalid
 	}
-	body, err := json.Marshal(manifest)
-	if err != nil || len(body) > 256<<10 || writeFile(installed, ManifestName+".tmp", body, 0400) != nil || installed.Rename(ManifestName+".tmp", ManifestName) != nil {
+	root := "directories/" + strconv.Itoa(s.captured)
+	if discover(&s.manifest, root, files) != nil {
+		return Tree{}, ErrInvalid
+	}
+	s.captured++
+	return Tree{Root: root, Files: files}, nil
+}
+
+// Manifest is the manifest to publish, last, as ManifestName once every
+// directory is captured.
+func (s *Snapshot) Manifest() ([]byte, error) {
+	if s.captured != s.directories {
+		return nil, ErrInvalid
+	}
+	body, err := json.Marshal(s.manifest)
+	if err != nil || len(body) > MaxManifestBytes {
+		return nil, ErrInvalid
+	}
+	return body, nil
+}
+
+func (s *Snapshot) count(files []agentbundle.File) error {
+	for _, file := range files {
+		s.total += len(file.Data)
+	}
+	if s.total > MaxSnapshotBytes {
 		return ErrInvalid
 	}
-	return syncDirectory(installed, ".")
+	return nil
 }
 
 func addPlugin(manifest *Manifest, root string, bundle agentplugin.Bundle) error {
@@ -149,30 +165,24 @@ func discover(manifest *Manifest, root string, files []agentbundle.File) error {
 	return nil
 }
 
-// Load checks the protected installation; it never reads the original workspace
-// directories, even after a native/Core restart.
-func Load(root *os.Root) (Manifest, error) {
-	info, err := root.Lstat(ManifestName)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0222 != 0 || info.Size() > 256<<10 {
-		return Manifest{}, ErrInvalid
-	}
-	body, err := root.ReadFile(ManifestName)
-	if err != nil {
-		return Manifest{}, ErrInvalid
-	}
+// Check decodes a published manifest and checks the packages it names, which
+// read reads as NewSnapshot's read does. It never reads the original sources,
+// even after a native or Core restart. The manifest it returns carries the
+// MCP servers its plugin packages declare.
+func Check(body []byte, read func(string) ([]agentbundle.File, error)) (Manifest, error) {
 	manifest, err := decodeManifest(body)
 	if err != nil {
 		return Manifest{}, err
 	}
 	packages := map[string][]agentbundle.File{}
 	total := 0
-	loadPackage := func(name string) ([]agentbundle.File, error) {
+	load := func(name string) ([]agentbundle.File, error) {
 		if files, ok := packages[name]; ok {
 			return files, nil
 		}
-		files, err := ReadTree(root, name, true)
+		files, err := read(name)
 		if err != nil {
-			return nil, err
+			return nil, ErrInvalid
 		}
 		for _, file := range files {
 			total += len(file.Data)
@@ -184,16 +194,19 @@ func Load(root *os.Root) (Manifest, error) {
 		return files, nil
 	}
 	for _, skill := range manifest.Skills {
-		if _, err := loadPackage(skill.PackageRoot); err != nil {
+		files, err := load(skill.PackageRoot)
+		if err != nil {
 			return Manifest{}, err
 		}
-		body, err := root.ReadFile(skill.RelativeRoot + "/SKILL.md")
-		if err != nil || agentskill.ValidateManifest(body, skill.Metadata) != nil {
+		// decodeManifest checked that the Skill lies in its package.
+		inner := strings.TrimPrefix(strings.TrimPrefix(skill.RelativeRoot, skill.PackageRoot), "/")
+		body, ok := fileData(files, path.Join(inner, "SKILL.md"))
+		if !ok || agentskill.ValidateManifest(body, skill.Metadata) != nil {
 			return Manifest{}, ErrInvalid
 		}
 	}
 	for _, name := range manifest.Plugins {
-		files, err := loadPackage(name)
+		files, err := load(name)
 		if err != nil {
 			return Manifest{}, err
 		}
@@ -208,10 +221,7 @@ func Load(root *os.Root) (Manifest, error) {
 	return manifest, nil
 }
 
-// Only selected, fully imported bundles may precede finalization. A leftover
-// directory capture or temporary manifest is an incomplete installation, not a
-// reason to silently recapture mutable sources.
-func validateStaged(root *os.Root, input Input) error {
+func validateStaged(list func(string) ([]fs.DirEntry, error), input Input) error {
 	expected := map[string]map[string]bool{"skills": {}, "plugins": {}}
 	for _, skill := range input.Skills {
 		expected["skills"][skill.Name] = true
@@ -219,13 +229,8 @@ func validateStaged(root *os.Root, input Input) error {
 	for slot := range input.Plugins {
 		expected["plugins"][strconv.Itoa(slot)] = true
 	}
-	file, err := root.Open(".")
+	entries, err := list(".")
 	if err != nil {
-		return ErrInvalid
-	}
-	entries, err := file.ReadDir(-1)
-	closeErr := file.Close()
-	if err != nil || closeErr != nil {
 		return ErrInvalid
 	}
 	for _, entry := range entries {
@@ -233,13 +238,8 @@ func validateStaged(root *os.Root, input Input) error {
 		if !ok || !entry.IsDir() {
 			return ErrInvalid
 		}
-		directory, err := root.Open(entry.Name())
-		if err != nil {
-			return ErrInvalid
-		}
-		children, err := directory.ReadDir(-1)
-		closeErr := directory.Close()
-		if err != nil || closeErr != nil || len(children) != len(selected) {
+		children, err := list(entry.Name())
+		if err != nil || len(children) != len(selected) {
 			return ErrInvalid
 		}
 		for _, child := range children {
@@ -251,11 +251,11 @@ func validateStaged(root *os.Root, input Input) error {
 	return nil
 }
 
-func unfinished(root *os.Root) error {
-	for _, name := range []string{ManifestName, ManifestName + ".tmp"} {
-		if _, err := root.Lstat(name); !os.IsNotExist(err) {
-			return ErrInvalid
+func fileData(files []agentbundle.File, name string) ([]byte, bool) {
+	for _, file := range files {
+		if file.Path == name {
+			return file.Data, true
 		}
 	}
-	return nil
+	return nil, false
 }

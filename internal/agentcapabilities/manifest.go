@@ -6,9 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"io/fs"
-	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -16,12 +14,14 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
 const Directory = "/environment/initialization/capabilities"
 const ManifestName = "installed.json"
 const MaxSkills = 50
 const MaxSnapshotBytes = 50 << 20
+const MaxManifestBytes = 256 << 10
 
 var ErrInvalid = errors.New("capability installation unavailable or unsupported")
 
@@ -40,10 +40,6 @@ type Identity struct {
 	SessionID     string `json:"session_id"`
 }
 
-// DirectoryResolver opens a declared source after local authorization and path
-// checks. Finalize owns and closes each returned root; callers retain no handle.
-type DirectoryResolver func(string) (*os.Root, error)
-
 type Manifest struct {
 	Identity        Identity         `json:"identity"`
 	SelectionSHA256 string           `json:"selection_sha256"`
@@ -58,6 +54,37 @@ type Manifest struct {
 type InstalledMCP struct {
 	PackageRoot string
 	Server      agentplugin.MCPServer
+}
+
+// ResolveMCP checks that values set every variable the installed servers
+// declare and returns each server's bearer token, nil when it declares none.
+// Server names must be unique.
+func ResolveMCP(installed []InstalledMCP, values map[string]string) ([]*string, error) {
+	tokens := make([]*string, 0, len(installed))
+	names := map[string]bool{}
+	for _, item := range installed {
+		server := item.Server
+		if names[server.Name] {
+			return nil, errors.New("ambiguous environment MCP server identity")
+		}
+		names[server.Name] = true
+		var token *string
+		variables := append([]string{}, server.EnvVars...)
+		if server.BearerTokenEnvVar != "" {
+			variables = append(variables, server.BearerTokenEnvVar)
+		}
+		for _, name := range variables {
+			value, exists := values[name]
+			if !exists || strings.ContainsRune(value, 0) {
+				return nil, errors.New("declared environment MCP variable unavailable")
+			}
+			if name == server.BearerTokenEnvVar {
+				token = &value
+			}
+		}
+		tokens = append(tokens, token)
+	}
+	return tokens, nil
 }
 
 // Input describes frozen sources; directory contents are observed after setup.
@@ -116,7 +143,7 @@ func (m *Manifest) add(metadata agentskill.Metadata, root, pkg string) error {
 
 func decodeManifest(body []byte) (Manifest, error) {
 	var result Manifest
-	if len(body) > 256<<10 || json.Unmarshal(body, &result) != nil || result.Version != 1 || validateIdentity(result.Identity) != nil || !validSelectionHash(result.SelectionSHA256) || len(result.Skills) > MaxSkills {
+	if len(body) > MaxManifestBytes || json.Unmarshal(body, &result) != nil || result.Version != 1 || validateIdentity(result.Identity) != nil || !validSelectionHash(result.SelectionSHA256) || len(result.Skills) > MaxSkills {
 		return Manifest{}, ErrInvalid
 	}
 	checked := Manifest{Version: 1}
