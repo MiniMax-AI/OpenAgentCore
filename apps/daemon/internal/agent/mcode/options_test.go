@@ -11,6 +11,7 @@ import (
 )
 
 func TestOptionsRefreshManagedState(t *testing.T) {
+	t.Setenv("MINIMAX_DATA_DIR", "/wrong")
 	req := testRequest(t)
 	opts, err := prepareOptions(req)
 	if err != nil {
@@ -19,7 +20,13 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if !strings.HasPrefix(opts.Dir, os.Getenv("OAC_RUNTIME_HOME")+string(os.PathSeparator)) {
 		t.Fatalf("workdir escaped managed state: %s", opts.Dir)
 	}
-	if opts.Env[len(opts.Env)-1] != "MINIMAX_DATA_DIR="+opts.DataDir {
+	dataDir := ""
+	for _, entry := range opts.Env {
+		if value, ok := strings.CutPrefix(entry, "MINIMAX_DATA_DIR="); ok {
+			dataDir = value
+		}
+	}
+	if dataDir != opts.DataDir {
 		t.Fatal("native data directory is not the adapter's")
 	}
 	req.SystemPrompt = ""
@@ -97,11 +104,16 @@ func TestQuestionContentPreservesTypesAndValidates(t *testing.T) {
 	}
 }
 
-func TestDataDirectorySanitizesFallback(t *testing.T) {
+func TestDataDirectoryRequiresAgentState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", home)
-	got, err := dataDirectory(proto.PromptRequestPayload{ConversationID: "../conv name", RunID: "ignored"})
-	if want := filepath.Join(home, "runtime", "mcode", "conv-.._conv_name"); err != nil || got != want {
+	for _, key := range []string{"", " ", "../.."} {
+		if _, err := dataDirectory(proto.PromptRequestPayload{AgentStateKey: key, RunID: "ignored"}); err == nil {
+			t.Fatalf("state key %q accepted", key)
+		}
+	}
+	got, err := dataDirectory(proto.PromptRequestPayload{AgentStateKey: "../session-1/a b"})
+	if want := filepath.Join(home, "runtime", "mcode", "state", "session-1", "a_b"); err != nil || got != want {
 		t.Fatalf("data directory = %q, %v; want %q", got, err, want)
 	}
 }

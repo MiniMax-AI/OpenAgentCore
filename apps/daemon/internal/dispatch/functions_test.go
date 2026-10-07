@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/png"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -143,29 +144,28 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 }
 
 // rejectsBeforeFactory reports whether a Router rejects preparing req, whose
-// kind declares caps, before the kind's factory.
+// kind declares caps, as an unsupported configuration before the kind's
+// factory.
 func rejectsBeforeFactory(t *testing.T, caps proto.AgentKindCapabilities, req proto.PromptRequestPayload) bool {
 	t.Helper()
 	reg := agent.NewRegistry()
-	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: req.AgentKind, Available: true, Capabilities: caps}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("ordinary factory is forbidden")
+	var called atomic.Bool
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: req.AgentKind, Available: true, Capabilities: caps}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		called.Store(true)
+		return nil, errors.New("unexpected executor preparation")
 	})
-	reg.RegisterExecutor(req.AgentKind, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
-		called = true
-		return nil, errors.New("controlled factory stop")
-	})
-	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
+	sender := &recSender{}
+	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	defer router.Shutdown(context.Background())
 	assign(t, router, preparationSessionID, "")
-	req.AgentStateKey, req.StrictResume, req.DisableExecutionEnvironment = stateKey(preparationSessionID), true, true
-	err := router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: req}))
-	return err != nil && !called
+	err := router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "prepare", noEnvironmentPreparation(preparationSessionID, req)))
+	status := waitPreparationStatus(t, sender, "prepare", "rejected", "")
+	return err != nil && status.ErrorCode == "unsupported_configuration" && !called.Load()
 }
 
 func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})
-	if !rejectsBeforeFactory(t, caps, prototest.WithModel(proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})) {
+	if !rejectsBeforeFactory(t, caps, proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}}) {
 		t.Fatal("unsupported engine silently ignored tools")
 	}
 }
@@ -185,7 +185,7 @@ func functionResultContent(text string) []proto.InputContent {
 func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})
 	for _, search := range []bool{false, true} {
-		if !rejectsBeforeFactory(t, caps, prototest.WithModel(proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}})) {
+		if !rejectsBeforeFactory(t, caps, proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}}) {
 			t.Fatal("deferred definitions reached an eager-only adapter")
 		}
 	}

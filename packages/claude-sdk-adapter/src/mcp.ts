@@ -80,7 +80,7 @@ export class MCPProfile {
     for (const server of declarations) {
       const prefix = `mcp__${server.server_label}__`;
       if ("command" in server) {
-        this.servers[server.server_label] = { type: "stdio", command: server.command, args: [...server.args], env: {}, alwaysLoad: true };
+        this.servers[server.server_label] = { type: "stdio", command: server.command, args: [...(server.args ?? [])], env: {}, alwaysLoad: true };
       } else {
         const reference = server.bearer_token_env_var;
         if (reference && !process.env[reference]) throw new Error("missing MCP credential environment");

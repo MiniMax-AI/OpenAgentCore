@@ -1,8 +1,8 @@
 // Package dispatch wires inbound WebSocket frames to the agent layer.
-// It owns the Session assignments of its connection, one prepared run per
-// active RunID with a goroutine that forwards the run's events to the
-// transport, and a permission_id → run_id index so permission_decision
-// frames route back to the right run.
+// It owns the Session assignments of its connection, one Turn per active
+// RunID with a goroutine that forwards the Turn's events to the transport,
+// and a permission_id → run_id index so permission_decision frames route
+// back to the right run.
 //
 // Concurrency: Handle is safe for one goroutine (typically the read
 // loop). Each run has its own goroutines. Internal state is
@@ -70,19 +70,18 @@ type appliedInteractionDecision struct {
 }
 
 // sessionState is the dispatcher's per-run bookkeeping. The agent
-// owns the close of out; the dispatcher cancels ctxCancel to wind
-// down. traceparent captures the execution_start's W3C trace so every
-// outbound frame stamps env.Trace with the same value, completing
+// owns the close of out; preparedHandoff owns release. traceparent
+// captures the execution_start's W3C trace so every outbound frame
+// stamps env.Trace with the same value, completing
 // frontend → server → daemon → agent → server attribution.
 type sessionState struct {
 	assignment      proto.AssignmentRef
 	capabilities    proto.AgentKindCapabilities
 	runID           string
 	environmentID   string
-	session         agent.Session
+	session         agent.Turn
 	out             chan proto.Envelope
 	ctx             context.Context
-	ctxCancel       context.CancelFunc
 	pendingIDs      map[string]struct{}
 	pendingAsks     map[string]struct{}
 	traceparent     string

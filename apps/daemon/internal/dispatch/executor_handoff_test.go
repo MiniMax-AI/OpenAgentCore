@@ -150,7 +150,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 					}
 				}
 			}
-			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true})}
+			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", DisableExecutionEnvironment: true})}
 			admit := func(id string) proto.PreparationStatusPayload {
 				t.Helper()
 				handle(proto.TypeExecutionPrepare, id, request)

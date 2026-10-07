@@ -10,15 +10,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func executionRequest(t *testing.T) proto.PromptRequestPayload {
-	r := testRequest(t)
-	r.StrictResume, r.ReleaseOnCompletion, r.DisableExecutionEnvironment, r.DisableSubagents = true, true, true, true
-	r.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}
-	return r
-}
-
 func TestExecutionOptionsInheritUserEnvironment(t *testing.T) {
-	r := executionRequest(t)
+	r := testRequest(t)
 	t.Setenv("OAC_TEST_SECRET_CANARY", "secret")
 	t.Setenv("NODE_OPTIONS", "--import=untrusted")
 	opts, err := prepareOptions(r)
@@ -53,7 +46,7 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 		func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "f"}} },
 		func(r *proto.PromptRequestPayload) { r.ExecutionControls.WebSearch = "enabled" },
 	} {
-		r := executionRequest(t)
+		r := testRequest(t)
 		change(&r)
 		if _, err := prepareOptions(r); err == nil {
 			t.Fatal("unsupported execution accepted")
@@ -63,12 +56,9 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 
 func TestPublicTextDoesNotInvokeACPCommands(t *testing.T) {
 	for _, text := range []string{"/model", "/compact", "hello"} {
-		blocks := promptContent(text, true)
+		blocks := promptContent(text)
 		if len(blocks) != 2 || blocks[0]["text"] != text || blocks[1]["text"] != "" {
 			t.Fatal(blocks)
-		}
-		if blocks = promptContent(text, false); len(blocks) != 1 || blocks[0]["text"] != text {
-			t.Fatal("product prompt changed")
 		}
 	}
 }

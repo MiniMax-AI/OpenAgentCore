@@ -109,9 +109,7 @@ func (m *mcpState) receive(event bridgeEvent, start startRequest, emit func(stri
 		return fmt.Errorf("claudesdk: inconsistent MCP observation")
 	}
 	m.calls[event.ID] = *n
-	if start.observeFunctions {
-		emit(proto.TypeToolCall, proto.ToolCallPayload{ID: event.ID, Name: n.Name, Stage: event.Stage, Observation: n})
-	}
+	emit(proto.TypeToolCall, proto.ToolCallPayload{ID: event.ID, Name: n.Name, Stage: event.Stage, Observation: n})
 	return nil
 }
 
@@ -124,15 +122,13 @@ func (m *mcpState) complete() bool {
 	return true
 }
 
-func (m *mcpState) close(start startRequest, emit func(string, any)) {
+func (m *mcpState) close(emit func(string, any)) {
 	for id, call := range m.calls {
 		if call.Status != "in_progress" {
 			continue
 		}
 		call.Status = "incomplete"
 		m.calls[id] = call
-		if start.observeFunctions {
-			emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: call.Name, Stage: "after", Observation: &call})
-		}
+		emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: call.Name, Stage: "after", Observation: &call})
 	}
 }

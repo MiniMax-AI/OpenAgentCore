@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: a7a566c288258949acdded98e14dc14e102faaf453393bcfd95d43a25bef652d
+source_hash: 9c10ea0accfa7e2efe74e40e65e498f108d03fe4b09d7f78ea77ca78655aa2be
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -15,7 +15,7 @@ source_hash: a7a566c288258949acdded98e14dc14e102faaf453393bcfd95d43a25bef652d
 ```sh
 bash scripts/prepare-release-runtimes.sh
 inputs="$HOME/.oac/build/release-inputs/inputs.json"
-export AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+export CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
 export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
 export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v1.2.3
 make build-core-distribution
@@ -27,7 +27,7 @@ make build-core-distribution
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | 用于提供生成的资源文件名的带版本 HTTPS 目录（绝不能使用 `latest`）。除非 `CORE_DISTRIBUTION_OFFLINE=1`，否则为必填项 |
 | `CORE_DISTRIBUTION_OFFLINE` | 设为 `1` 时还会构建离线归档 |
-| `AGENTS_RUNTIME_CODEX_PACKAGE`、`MCODE_HARNESS_BUILD_DIR` | `prepare-release-runtimes.sh` 固定的 Runtime 输入 |
+| `CODEX_CLI_DIR`、`MCODE_HARNESS_BUILD_DIR` | `prepare-release-runtimes.sh` 固定的 Runtime 输入 |
 | `CORE_DISTRIBUTION_CODEX_IMAGE`、`CORE_DISTRIBUTION_CLAUDE_IMAGE`、`CORE_DISTRIBUTION_MCODE_IMAGE` | 使用现有 Harness 镜像，而不是构建这些镜像；值必须是以不可变 `sha256:` 镜像 ID 表示的现有镜像。三个变量必须全部设置或全部不设置；每个镜像都必须包含由该提交构建的守护进程 |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | 原生安装器目录；请参阅[原生安装器](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | `~/.oac` 下的输出目录。默认值：`~/.oac/build/core-distribution` |
@@ -61,9 +61,9 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 **Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@0.153.4-linux-x64`（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
 
 ```sh
-export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/package
-make build-agents-runtime
-docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/agents-runtime"
+export CODEX_CLI_DIR=/absolute/path/to/package
+make build-codex-runtime
+docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/codex-runtime"
 ```
 
 该脚本会检查软件包版本，为 Linux amd64 构建 `oac-daemon`，并准备一个仅包含守护进程、未修改的 `codex` 和 `codex-code-mode-host` 可执行文件、相关资源和 `services/core/deploy/codex/Dockerfile` 的上下文。Runtime 镜像不包含 `codex-code-mode-host`，只有 agent-host 镜像安装它。
@@ -95,7 +95,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 **Agent-host 和沙箱镜像。** 使用上述三个 Harness 镜像的输入：
 
 ```sh
-export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
+export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
 bash scripts/build-agent-host-images.sh
 ```
 

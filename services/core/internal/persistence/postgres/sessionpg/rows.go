@@ -42,10 +42,10 @@ func TurnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) 
 	return p, err
 }
 
-// DeviceLookup parses a tenant and the internal identifier of one of its
+// ResourceLookup parses a tenant and the internal identifier of one of its
 // resources, such as a device, Session or Environment; a malformed one is
 // sessions.ErrInvalidInput.
-func DeviceLookup(tenantID, id string) (sqlc.GetDeviceParams, error) {
+func ResourceLookup(tenantID, id string) (sqlc.GetDeviceParams, error) {
 	var p sqlc.GetDeviceParams
 	var err error
 	if p.TenantID, err = parseID(tenantID); err != nil {
@@ -76,7 +76,7 @@ func sessionFromRow(row sqlc.Session) (sessions.Session, error) {
 	session.Creator = creator
 	configuration, err := jsonobject.Normalize(row.Configuration)
 	if err != nil {
-		return sessions.Session{}, fmt.Errorf("decode session configuration: %w: %w", sessions.ErrInvalidInput, err)
+		return sessions.Session{}, fmt.Errorf("decode session configuration: %w", err)
 	}
 	session.Configuration = configuration
 	if err := json.Unmarshal(row.Metadata, &session.Metadata); err != nil {
@@ -110,7 +110,7 @@ func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration 
 	}
 	configuration, err = jsonobject.Normalize(configuration)
 	if err != nil {
-		return sessions.Environment{}, fmt.Errorf("decode environment configuration: %w: %w", sessions.ErrInvalidInput, err)
+		return sessions.Environment{}, fmt.Errorf("decode environment configuration: %w", err)
 	}
 	return sessions.Environment{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),

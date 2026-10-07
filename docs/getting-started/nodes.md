@@ -27,18 +27,9 @@ Node installation and removal require root. Web's command uses `sudo` unless the
 
 ### The command
 
-This is the command Web generates, with this installation's values:
+Copy the current command from **Nodes → Add node**. It includes this installation's address, checksum and enrollment token. Before downloading, it checks Linux amd64, Python 3.9+ and the required tools. Temporary download failures retry up to three attempts. If checksum verification fails, copy a fresh command from Web and retry.
 
-```sh
- (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
-printf '\n==> Downloading node installer...\n' &&
-curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
-printf '==> Verifying node installer...\n' &&
-printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
-```
-
-- It downloads the installer into a private temporary directory, checks its SHA-256, and runs it with `sudo`, or directly in a root shell.
+- It downloads into the invoking account's private `~/.oac/node-bootstrap` directory, checks SHA-256, and runs with `sudo`, or directly in a root shell. Each retry clears the unfinished download while holding a lock; verified `<sha256>.pyz` files remain available to installers.
 - The token reaches the installer on standard input, so it never appears in a process argument, an environment variable or sudo's log.
 - The leading space keeps the command out of the shell history where `HISTCONTROL` ignores such lines (the Debian and Ubuntu default).
 
@@ -46,7 +37,7 @@ The installer shows each phase as it runs and, once Core confirms the node, a su
 
 ### Host requirements
 
-- Linux amd64 with systemd; Python 3.9+, `curl` and `sha256sum`; root or sudo.
+- Linux amd64 with systemd; Python 3.9+, `curl`, `sha256sum` and `flock`; root or sudo.
 - SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
 - microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
@@ -88,7 +79,7 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 - Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It refuses, without changing anything, when the node's retained identity belongs to another Core address or installation.
 - A command that already expired, or was used on another host, fails at once with `Core rejected the node configuration read (HTTP 401)`: generate a new command and run it within 10 minutes.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it.
-- Downloads resume where they stopped. A download that brings less than 64 KiB in a minute stops, keeping what it has; run the command again.
+- Failed or interrupted downloads discard their temporary files. A rerun downloads missing files from the beginning and reuses verified complete files. A transfer that brings less than 64 KiB in a minute stops; check the network and retry.
 - The Docker Runtime image is about 500 MB. On a slow link, load it first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
 - Interrupting the installer, or closing its terminal, stops it; run the command again to continue.
 

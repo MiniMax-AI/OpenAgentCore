@@ -34,7 +34,7 @@ func (e *Execution) WithConnection(ctx context.Context, tenant, environment stri
 		if err != nil {
 			return err
 		}
-		lookup, err := DeviceLookup(tenant, current.SessionID)
+		lookup, err := ResourceLookup(tenant, current.SessionID)
 		if err != nil {
 			return err
 		}
@@ -45,7 +45,7 @@ func (e *Execution) WithConnection(ctx context.Context, tenant, environment stri
 }
 
 func (e *Execution) WithDeviceBinding(ctx context.Context, tenant, session string, apply func(context.Context, sessions.DeviceBindingTx, sessions.LockedSession) error) error {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return err
 	}

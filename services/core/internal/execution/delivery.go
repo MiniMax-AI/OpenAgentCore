@@ -53,24 +53,24 @@ func abort(peer *runtimegateway.Session, ref proto.AssignmentRef, runID string) 
 	_ = send(context.Background(), peer, ref, proto.TypePromptCancel, runID, proto.PromptCancelPayload{})
 }
 
-func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, first int64, prepared *preparedStart) (result Result, status string) {
+func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, runID string, input proto.MessageInput, first int64, prepared *preparedStart) (result Result, status string) {
 	changed, unsubscribeChanges := d.notifications.subscribe(tenantID, sessionID)
 	defer unsubscribeChanges()
 	status = sessions.TurnFailed
 	result.AppliedThrough = first
-	subscription, err := peer.SubscribeDurable(request.RunID, request.Assignment)
+	subscription, err := peer.SubscribeDurable(runID, request.Assignment)
 	if err != nil {
 		result.ErrorCode = "device_disconnected"
 		return
 	}
 	upstream := subscription.Events
-	defer peer.Unsubscribe(request.RunID)
+	defer peer.Unsubscribe(runID)
 	defer func() {
 		if status == sessions.TurnFailed {
-			abort(peer, request.Assignment, request.RunID)
+			abort(peer, request.Assignment, runID)
 		}
 	}()
-	journal := &journal{writer: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, next: 1,
+	journal := &journal{writer: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, next: 1,
 		observeSubagents: request.ObserveSubagentIdentities}
 	defer func() {
 		finishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -85,12 +85,11 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			result.ErrorCode, status = "event_stream_incomplete", sessions.TurnFailed
 		}
 	}()
-	var preparationEvents <-chan proto.Envelope
+	preparationEvents := prepared.sub.Events
 	var executorRetried, nativeObserved bool
 	inputStarted := time.Now()
 	firstTextObserved := false
-	preparationEvents = prepared.sub.Events
-	if err = prepared.start(ctx, request); err != nil {
+	if err = prepared.start(ctx, runID, input); err != nil {
 		result.ErrorCode = "delivery_unknown"
 		return
 	}
@@ -103,7 +102,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{assignment: request.Assignment, kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
+	functions := &functionExchange{assignment: request.Assignment, kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -122,7 +121,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				result.ErrorCode = "preparation_interrupted"
 				return
 			}
-			started, err := prepared.started(env, request.RunID)
+			started, err := prepared.started(env, runID)
 			if err != nil {
 				var rejection *preparationRejection
 				if errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionStart && rejection.code == "executor_unavailable" && !executorRetried && !nativeObserved && cancelReply == nil {
@@ -135,7 +134,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 						result.ErrorCode = "device_disconnected"
 						return
 					}
-					replacement, prepareErr := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, request.RunID, request, sessions.TurnInProgress)
+					replacement, prepareErr := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, runID, request, sessions.TurnInProgress)
 					if prepareErr != nil {
 						result.ErrorCode = "executor_recovery_failed"
 						return
@@ -143,7 +142,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					prepared = replacement
 					defer prepared.close()
 					preparationEvents = prepared.sub.Events
-					if prepared.start(ctx, request) != nil {
+					if prepared.start(ctx, runID, input) != nil {
 						result.ErrorCode = "delivery_unknown"
 						return
 					}
@@ -199,7 +198,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			nativeObserved = true
 			if !firstTextObserved && hasText(env) {
 				firstTextObserved = true
-				recordFirstText(ctx, sessionID, request.RunID, inputStarted)
+				recordFirstText(ctx, sessionID, runID, inputStarted)
 			}
 			writeErr := journal.observe(ctx, env)
 			if result.mergeObservation(env) != nil {
@@ -276,7 +275,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				}
 				continue
 			}
-			turn, err := d.SessionsReader.GetTurn(ctx, tenantID, sessionID, request.RunID)
+			turn, err := d.SessionsReader.GetTurn(ctx, tenantID, sessionID, runID)
 			if err != nil {
 				result.ErrorCode = "execution_state_unavailable"
 				if ctx.Err() != nil {
@@ -289,7 +288,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if !turn.CancelRequestedAt.IsZero() {
-				cancelReply = requestCancellation(cancelCtx, peer, request.Assignment, request.RunID)
+				cancelReply = requestCancellation(cancelCtx, peer, request.Assignment, runID)
 				cancelSent = time.Now()
 				continue
 			}
@@ -301,7 +300,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				continue
 			}
 			if pending == nil {
-				inputs, err := d.SessionsReader.ListTurnInputs(ctx, tenantID, sessionID, request.RunID, result.AppliedThrough, 1)
+				inputs, err := d.SessionsReader.ListTurnInputs(ctx, tenantID, sessionID, runID, result.AppliedThrough, 1)
 				if err != nil {
 					result.ErrorCode = "execution_state_unavailable"
 					if ctx.Err() != nil {
@@ -336,7 +335,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}
-				if send(ctx, peer, request.Assignment, proto.TypePromptSteer, request.RunID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
+				if send(ctx, peer, request.Assignment, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
 					result.ErrorCode = "input_outcome_unknown"
 					return
 				}

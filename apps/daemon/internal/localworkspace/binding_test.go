@@ -26,7 +26,7 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	}
 	b.networkAccess = "disabled"
 	b.capabilityRoot = t.TempDir()
-	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: "agents-api-" + session, StrictResume: true, ReleaseOnCompletion: true}
+	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: "agents-api-" + session}
 }
 
 func TestBindingRejectsScopeOverrides(t *testing.T) {
@@ -40,9 +40,8 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 		"other Environment": func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString()}
 		},
-		"other Session":     func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
-		"none":              func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
-		"non-strict resume": func(r *proto.PromptRequestPayload) { r.StrictResume = false },
+		"other Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
+		"none":          func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := valid
@@ -93,14 +92,6 @@ func TestBindingPrepareRejectsOtherWorkspaceRoot(t *testing.T) {
 	}
 	if _, err := b.Prepare(t.Context(), configured); err != nil {
 		t.Fatal("bound workspace root rejected", err)
-	}
-}
-
-func TestBindingAllowsRetainedExecutor(t *testing.T) {
-	b, req := testBinding(t)
-	req.ReleaseOnCompletion = false
-	if _, err := b.Configure(req); err != nil {
-		t.Fatal(err)
 	}
 }
 

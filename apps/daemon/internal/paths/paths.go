@@ -1,6 +1,6 @@
 // Package paths resolves on-disk locations for oac-daemon state under
-// ~/.oac/daemon/<profile>/ — one subdir per profile so several
-// devices on one host never collide.
+// ~/.oac/daemon/<profile>/ — one subdir per profile so "test"
+// and "prod" servers can be connected in parallel without colliding.
 //
 // Files are 0o600, parent dir 0o700. These functions only resolve
 // paths — callers do the I/O.
@@ -50,7 +50,7 @@ func Root() (string, error) {
 	return filepath.Join(home, ".oac"), nil
 }
 
-// ProfileDir returns ~/.oac/daemon/<profile>. It is not created.
+// ProfileDir returns ~/.oac/daemon/<profile>. It is not created here.
 func ProfileDir(profile string) (string, error) {
 	if err := ValidateProfile(profile); err != nil {
 		return "", err

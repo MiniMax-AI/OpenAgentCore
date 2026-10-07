@@ -21,7 +21,7 @@ import { enrolledNode, enrollmentProgress, formatCountdown, progressSteps, type 
 import { sandboxConsoleConfigQuery } from "./sandbox-queries";
 
 /** The host requirements open by default until this browser has shown them once. */
-const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
+const REQUIREMENTS_SEEN = "oac-web.node-requirements-seen";
 function requirementsSeen(): boolean {
   try { return window.localStorage.getItem(REQUIREMENTS_SEEN) === "1"; } catch { return false; }
 }
@@ -293,7 +293,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} autoFocus
           extra={!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null} /> : null}
         {/* The installer keeps partial downloads and exits 130 on Ctrl-C; the token lasts until the countdown ends. */}
-        {command ? <p className="sandbox-command-note">{t("If the command is interrupted or the download stalls, run the same command again: the download resumes.")}</p> : null}
+        {command ? <p className="sandbox-command-note">{t("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")}</p> : null}
         {/* One live region for the whole flow; only its contents change, so each change is announced. */}
         <div role="status" aria-label={t("Registration progress")}>
           {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{t("{{name}} · Connected", { name: node.name })}</div>

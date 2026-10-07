@@ -24,7 +24,7 @@ func TestNativeMCodeHistoryIsolation(t *testing.T) {
 	}
 	for name, id := range map[string]string{"foreign": foreign, "missing": "00000000-0000-4000-8000-000000000000"} {
 		t.Run(name, func(t *testing.T) {
-			req := executionRequest(t)
+			req := testRequest(t)
 			if json.Unmarshal(raw, &req) != nil {
 				t.Fatal("invalid private options")
 			}

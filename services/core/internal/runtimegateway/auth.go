@@ -71,8 +71,8 @@ func (a *Authenticator) AuthenticateBearer(ctx context.Context, deviceID, bearer
 	}
 	storedHash := rt.CredentialHash
 	if storedHash == "" {
-		// No credential was issued, or someone wiped it out-of-band.
-		// Fail closed.
+		// No credential was issued, or someone wiped it
+		// out-of-band. Fail closed.
 		return AuthenticatedRuntime{}, ErrAuthBadCredential
 	}
 	presented := runtimedevice.HashCredential(bearer)

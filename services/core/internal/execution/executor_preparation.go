@@ -18,7 +18,6 @@ func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegatew
 	if err != nil {
 		return nil, err
 	}
-	request.RunID, request.ConversationID, request.Input = "", "", nil
 	if err = send(ctx, peer, request.Assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session, Configuration: request}); err == nil {
 		err = d.awaitTurnExecutor(ctx, tenant, session, turn, expectedStatus, prepared)
 	}

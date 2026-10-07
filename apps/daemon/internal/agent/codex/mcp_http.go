@@ -21,12 +21,13 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 	if bindings == nil {
 		return nil, nil, nil
 	}
-	return mcpServersFromBindings(bindings)
+	return mcpServersFromBindings(bindings, localworkspace.MCPStdioCommand)
 }
 
-// mcpServersFromBindings renders resolved bindings, with each credential in a
-// private environment variable.
-func mcpServersFromBindings(bindings []agent.MCPBinding) (map[string]mcpServerConfig, []string, error) {
+// mcpServersFromBindings renders resolved bindings, each stdio binding with
+// the command and arguments stdio gives it and each credential in a private
+// environment variable.
+func mcpServersFromBindings(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (string, []string)) (map[string]mcpServerConfig, []string, error) {
 	servers := make(map[string]mcpServerConfig, len(bindings))
 	var env []string
 	for _, binding := range bindings {
@@ -35,7 +36,7 @@ func mcpServersFromBindings(bindings []agent.MCPBinding) (map[string]mcpServerCo
 		}
 		server := mcpServerConfig{Name: binding.ServerLabel, URL: binding.ServerURL, Required: binding.Required, EnabledTools: binding.AllowedTools, ApproveTools: binding.ConnectionOrigin == "environment"}
 		if binding.Stdio != nil {
-			server.Command, server.Args = localworkspace.MCPStdioCommand(*binding.Stdio)
+			server.Command, server.Args = stdio(*binding.Stdio)
 		}
 		if binding.BearerToken != nil {
 			server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
@@ -71,7 +72,6 @@ func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
 		return errors.New("codex: cannot write public MCP configuration")
 	}
 	for _, feature := range []string{"plugins", "apps"} {
-		plan.EnableFeatures = slices.DeleteFunc(plan.EnableFeatures, func(value string) bool { return value == feature })
 		if !slices.Contains(plan.DisableFeatures, feature) {
 			plan.DisableFeatures = append(plan.DisableFeatures, feature)
 		}
