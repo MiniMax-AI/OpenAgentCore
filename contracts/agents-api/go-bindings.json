@@ -624,6 +624,7 @@
     "order": ["id", "turn_id", "type", "status", "sender_agent_id", "recipient_agent_ids"]
   },
   "WebSearchAction": {
+    "marshal_union": true,
     "sources": ["#/components/schemas/WebSearchActionResource"],
     "order": ["type", "query", "queries", "url", "pattern"]
   },

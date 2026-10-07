@@ -3,6 +3,8 @@ package v1
 
 import "encoding/json"
 
+import "fmt"
+
 // APIError projects Error.
 type APIError struct {
 	Message      string          `json:"message" binding:"required"`
@@ -936,6 +938,47 @@ type WebSearchAction struct {
 	Queries []string `json:"queries,omitempty" extensions:"x-nullable"`
 	URL     *string  `json:"url,omitempty" extensions:"x-nullable"`
 	Pattern *string  `json:"pattern,omitempty" extensions:"x-nullable"`
+}
+
+func (value WebSearchAction) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "search":
+		return json.Marshal(struct {
+			Type    string   `json:"type"`
+			Query   *string  `json:"query"`
+			Queries []string `json:"queries"`
+		}{
+			Type:    value.Type,
+			Query:   value.Query,
+			Queries: value.Queries,
+		})
+	case "open_page":
+		return json.Marshal(struct {
+			Type string  `json:"type"`
+			URL  *string `json:"url"`
+		}{
+			Type: value.Type,
+			URL:  value.URL,
+		})
+	case "find_in_page":
+		return json.Marshal(struct {
+			Type    string  `json:"type"`
+			URL     *string `json:"url"`
+			Pattern *string `json:"pattern"`
+		}{
+			Type:    value.Type,
+			URL:     value.URL,
+			Pattern: value.Pattern,
+		})
+	case "other":
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{
+			Type: value.Type,
+		})
+	default:
+		return nil, fmt.Errorf("invalid WebSearchAction type %q", value.Type)
+	}
 }
 
 // reasoningResponse projects ReasoningResource.
