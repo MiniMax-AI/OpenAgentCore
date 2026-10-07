@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/google/uuid"
 )
 
@@ -49,10 +50,10 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	provider := &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://api.minimax.cn/anthropic", APIKey: strings.TrimSpace(string(key))}
 	for name, value := range map[string]string{
-		"ANTHROPIC_BASE_URL": "https://api.minimax.cn/anthropic", "ANTHROPIC_AUTH_TOKEN": strings.TrimSpace(string(key)),
-		"ANTHROPIC_API_KEY": "", "CLAUDE_CODE_OAUTH_TOKEN": "", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL": "MiniMax-M3", "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M3", "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M3",
+		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL":         "MiniMax-M3", "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M3", "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M3",
 	} {
 		t.Setenv(name, value)
 	}
@@ -89,7 +90,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
 		id := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, RequireExistingNativeSession: resume != "", ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3"}
+		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, RequireExistingNativeSession: resume != "", ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}

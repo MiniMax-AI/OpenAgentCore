@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -57,7 +58,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	t.Cleanup(server.Close)
 	handler := NewHandler(HandlerConfig{Authenticator: auth, Registry: registry, PublicWSURL: "ws" + strings.TrimPrefix(server.URL, "http") + "/agent-daemon/ws", Log: func(format string, args ...any) { _, _ = fmt.Fprintf(capture, format+"\n", args...) }})
 	RegisterRoutes(router, handler)
-	mcpBearerStartDaemon(t, root, daemon, native, provider, fixture.caFile, server.URL, id, runner, capture)
+	mcpBearerStartDaemon(t, root, daemon, native, fixture.caFile, server.URL, id, runner, capture)
 	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 	defer cancel()
 	peer, err := registry.WaitForDevice(ctx, id, 30*time.Second)
@@ -91,7 +92,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
 		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-" + assignment.SessionID, AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-" + assignment.SessionID, AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://api.minimax.cn/v1", APIKey: provider}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 		sub, err := peer.SubscribeDurable(runID, assignment)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")
