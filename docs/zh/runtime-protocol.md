@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 2b5d80e228532628ebf3fac18c37b32bc20ce235833bef96e9f4e2bb78a8b7ae
+source_hash: baa81e7d48db878d926a64ff627ff55c66e85ed564833ce731fd2cf164b66f18
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -188,7 +188,7 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 ## 工作区操作 {#workspace-operations}
 
-无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 可以从绑定的本地文件系统提供读取，不启动 Harness 进程。profile 仅在本地 close 成功后发布 `released`；清理错误保留所有权并报告 `cleanup_unconfirmed`。factory 失败且清理未确认时，将 resource 与 error 一起返回，wrapper 保留两者。清理重试成功后发布已确认释放；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认清理。
+无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 从绑定的本地工作区提供读取，不启动 Harness 进程。profile 仅在本地 close 成功后发布 `released`；清理错误保留所有权并报告 `cleanup_unconfirmed`。清理重试成功后发布已确认释放；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认清理。
 
 `workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果最多携带 1024 个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。
 

@@ -11,15 +11,6 @@ import (
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-// Prepare connects the native harness without creating a thread or starting model
-// work. req supplies configuration and a stable state key, but no RunID or Prompt.
-// owner owns the entire harness lifetime, including the eventual Session; it must
-// not be a disposable readiness-request context. Initialization/readiness use their
-// existing operation-local deadlines. Close an unused preparation explicitly.
-func Prepare(owner context.Context, req proto.PromptRequestPayload) (*Prepared, error) {
-	return newPreparation(owner, req, defaultSessionConfig())
-}
-
 func newSession(parent context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope, cfg sessionConfig) (*Session, error) {
 	if out == nil {
 		return nil, errors.New("codex: nil out channel")

@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -167,31 +166,6 @@ func cancellationRequest() proto.PromptRequestPayload {
 }
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {
-	if mode == "cancellation-wait" {
-		emit(bridgeEvent{Type: "delta", Delta: "partial"})
-		if !scanner.Scan() {
-			return
-		}
-		var cancel map[string]any
-		if json.Unmarshal(scanner.Bytes(), &cancel) != nil || cancel["type"] != "turn_cancel" {
-			os.Exit(9)
-		}
-		// These valid observations were in flight when cancellation started.
-		emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
-		emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: request.Resume, Usage: json.RawMessage(usageFixture)})
-		emit(bridgeEvent{Type: "delta", Delta: "tail"})
-		for {
-			if _, err := os.Stat(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "release")); err == nil {
-				break
-			}
-			time.Sleep(time.Millisecond)
-		}
-		_, _ = os.Stderr.WriteString(strings.Repeat("x", 2*1024*1024))
-		emit(bridgeEvent{Type: "delta", Delta: "drained"})
-		emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
-		emit(bridgeEvent{Type: "error", Code: "cancelled"})
-		return
-	}
 	if mode != "cancellation-before-identity" {
 		id := request.Resume
 		if mode == "cancellation-wrong-identity" {

@@ -61,7 +61,8 @@ func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.R
 // what caps admits, and without what needs a local workspace.
 func viewInfo(info proto.SupportedAgentKind, caps agent.ViewCapabilities) proto.SupportedAgentKind {
 	c := &info.Capabilities
-	c.LocalEnvironment, c.WorkspaceOutputExport = proto.CapabilitySupported, proto.CapabilityUnsupported
+	c.LocalEnvironment = proto.CapabilitySupported
+	c.WorkspaceReadPreparation, c.WorkspaceOutputExport = proto.CapabilityUnsupported, proto.CapabilityUnsupported
 	c.EnvironmentNone, c.FunctionTools, c.FunctionResultImages, c.ToolSearch = caps.EnvironmentNone, caps.FunctionTools, caps.FunctionResultImages, caps.ToolSearch
 	return info
 }
