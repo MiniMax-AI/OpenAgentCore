@@ -99,6 +99,10 @@ func initializationEnvironment(configured map[string]string) []string {
 	return result
 }
 
+// InitializationGrace is how long a cancelled setup step may run before it is
+// killed.
+const InitializationGrace = 250 * time.Millisecond
+
 // The shared process owner settles the leader and descendants. Readers finish
 // before return; output is discarded with constant memory, never put in errors.
 func runInitializationProcess(ctx context.Context, binary string, args []string, directory string, env []string) error {
@@ -111,7 +115,7 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 		return &dispatch.InitializationFailure{}
 	}
 	process, err := clirunner.Start(clirunner.StartOptions{Parent: operation, Binary: binary, Args: args,
-		Dir: directory, Env: env, KillTimeout: 250 * time.Millisecond})
+		Dir: directory, Env: env, KillTimeout: InitializationGrace})
 	if err != nil {
 		return ErrInitializationUnconfirmed
 	}

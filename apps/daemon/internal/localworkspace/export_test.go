@@ -68,7 +68,7 @@ func TestNativeExportMissingOutputsAndBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = f.Truncate(artifactFileBytes + 1); err != nil {
+	if err = f.Truncate(ExportFileBytes + 1); err != nil {
 		t.Fatal(err)
 	}
 	f.Close()

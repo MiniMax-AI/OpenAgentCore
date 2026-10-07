@@ -16,13 +16,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// ValidPath reports whether p is a workspace path as the API addresses it:
+// slash-separated plain names below the workspace, without a backslash, NUL,
+// CR or LF.
+func ValidPath(p string) bool {
+	return p != "." && len(p) <= 4096 && fs.ValidPath(p) && !strings.ContainsAny(p, "\\\x00\r\n")
+}
+
 // Logical API paths stay slash-separated on every host. os.Root anchors API
 // file operations to the selected workspace; it does not constrain native tools.
 func nativeAPIPath(path string) (string, error) {
 	if path == "" {
 		return ".", nil
 	}
-	if path == "." || len(path) > 4096 || !fs.ValidPath(path) || strings.ContainsAny(path, "\\\x00\r\n") {
+	if !ValidPath(path) {
 		return "", fs.ErrInvalid
 	}
 	return filepath.Localize(path)
@@ -144,9 +151,14 @@ func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte)
 	return dispatch.WorkspaceWriteResult{SizeBytes: int64(len(data))}, nil
 }
 
-const artifactFileBytes int64 = 200 << 20
-const artifactBatchBytes int64 = 500 << 20
-const artifactEntries = 4096
+// The bounds of an output export: each file's bytes, the export's bytes, its
+// entries and its directory depth.
+const (
+	ExportFileBytes  int64 = 200 << 20
+	ExportBatchBytes int64 = 500 << 20
+	ExportEntries          = 4096
+	ExportDepth            = 64
+)
 
 type nativeExport struct {
 	ctx     context.Context
@@ -189,20 +201,20 @@ func (x *nativeExport) walk(path string, depth int) error {
 	if err := x.ctx.Err(); err != nil {
 		return err
 	}
-	if depth > 64 || len(path) > 4096 {
+	if depth > ExportDepth || len(path) > 4096 {
 		return errors.New("workspace export exceeds traversal bound")
 	}
 	dir, err := openNativePath(x.root, path)
 	if err != nil {
 		return err
 	}
-	entries, err := dir.ReadDir(artifactEntries + 1)
+	entries, err := dir.ReadDir(ExportEntries + 1)
 	_ = dir.Close()
 	if err != nil && err != io.EOF {
 		return err
 	}
 	x.entries += len(entries)
-	if x.entries > artifactEntries {
+	if x.entries > ExportEntries {
 		return errors.New("workspace export exceeds entry bound")
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
@@ -246,7 +258,7 @@ func (x *nativeExport) append(path string) error {
 		return err
 	}
 	size := before.Size()
-	if !before.Mode().IsRegular() || size < 0 || size > artifactFileBytes || size > artifactBatchBytes-x.bytes {
+	if !before.Mode().IsRegular() || size < 0 || size > ExportFileBytes || size > ExportBatchBytes-x.bytes {
 		return errors.New("workspace export exceeds file bound")
 	}
 	x.bytes += size

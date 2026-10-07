@@ -3,8 +3,6 @@ package localworkspace
 import (
 	"context"
 	"errors"
-	"io/fs"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -16,7 +14,7 @@ const WriteMaxBytes = proto.WorkspaceWriteMaxBytes
 // WriteWorkspaceFile starts only after the caller supplies the complete bounded
 // body. Core must persist mutation ownership before invoking this operation.
 func (b *Binding) WriteWorkspaceFile(ctx context.Context, path string, data []byte) (result dispatch.WorkspaceWriteResult, err error) {
-	if len(data) > WriteMaxBytes || len(path) > 4096 || path == "." || !fs.ValidPath(path) || strings.ContainsAny(path, "\\\x00\r\n") {
+	if len(data) > WriteMaxBytes || !ValidPath(path) {
 		return result, dispatch.ErrWorkspaceWriteInvalid
 	}
 	if ctx.Err() != nil {

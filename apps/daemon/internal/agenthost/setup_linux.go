@@ -11,15 +11,12 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
-
-// setupGraceMillis is the grace a cancelled setup step gets before KILL, as
-// the guest's.
-const setupGraceMillis = 250
 
 // strongestScope is the strongest process scope caps declare.
 func strongestScope(caps sp.Capabilities) (sp.Scope, error) {
@@ -102,7 +99,7 @@ func (o *environment) run(ctx context.Context, id sandboxwire.ID, program string
 			}
 		case <-cancelled:
 			cancelled = nil
-			if err := op.Cancel(late, setupGraceMillis); err != nil {
+			if err := op.Cancel(late, uint32(localworkspace.InitializationGrace/time.Millisecond)); err != nil {
 				return o.lose(err)
 			}
 		case <-late.Done():

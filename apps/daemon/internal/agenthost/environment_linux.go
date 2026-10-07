@@ -23,6 +23,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -43,10 +44,6 @@ const (
 	toolEnvironmentBytes  = 1 << 20
 	// writeBound bounds a workspace write, which dispatch never cancels.
 	writeBound = time.Minute
-	// The export bounds are the guest's.
-	exportFileBytes  = 200 << 20
-	exportBatchBytes = 500 << 20
-	exportEntries    = 4096
 )
 
 // sandboxBaseline is the environment of the sandbox image that a Session's
@@ -486,7 +483,7 @@ func checkPluginCredentials(tree agentcapabilities.Tree) error {
 
 func (o *environment) installFile(ctx context.Context, w *world, target string, data []byte) error {
 	relative, ok := strings.CutPrefix(target, sandboxWorkspace+"/")
-	if !ok || !validPath(relative) || len(data) > proto.RuntimePrepareMaxBytes {
+	if !ok || !localworkspace.ValidPath(relative) || len(data) > proto.RuntimePrepareMaxBytes {
 		return agentcapabilities.ErrInvalid
 	}
 	workspace, err := w.directory(ctx, w.root, sandboxWorkspace, false)
@@ -516,7 +513,7 @@ func (o *environment) initialize(ctx context.Context, w *world, initialization s
 	cwd := sandboxWorkspace
 	if input.CWD != "" && input.CWD != sandboxWorkspace {
 		relative, ok := strings.CutPrefix(input.CWD, sandboxWorkspace+"/")
-		if !ok || !validPath(relative) {
+		if !ok || !localworkspace.ValidPath(relative) {
 			return agentcapabilities.ErrInvalid
 		}
 		cwd = input.CWD
@@ -602,7 +599,7 @@ func (o *environment) ListWorkspaceDirectory(ctx context.Context, p string, limi
 	switch {
 	case o.id == "":
 		return result, dispatch.ErrWorkspaceReadUnavailable
-	case p != "" && !validPath(p) || limit < 1:
+	case p != "" && !localworkspace.ValidPath(p) || limit < 1:
 		return result, dispatch.ErrWorkspaceReadInvalid
 	}
 	if err := o.acquire(ctx); err != nil {
@@ -655,7 +652,7 @@ func (o *environment) ListWorkspaceDirectory(ctx context.Context, p string, limi
 func (o *environment) WriteWorkspaceFile(ctx context.Context, p string, data []byte) (dispatch.WorkspaceWriteResult, error) {
 	var result dispatch.WorkspaceWriteResult
 	switch {
-	case len(data) > proto.WorkspaceWriteMaxBytes || !validPath(p):
+	case len(data) > proto.WorkspaceWriteMaxBytes || !localworkspace.ValidPath(p):
 		return result, dispatch.ErrWorkspaceWriteInvalid
 	case o.id == "":
 		return result, dispatch.ErrEnvironmentUnavailable
@@ -733,6 +730,7 @@ func (o *environment) ExportOutputs(ctx context.Context, out io.Writer) error {
 	return archive.Close()
 }
 
+// export is the guest's output export over File; PR6 deletes the guest copy.
 type export struct {
 	w       *world
 	archive *tar.Writer
@@ -741,19 +739,19 @@ type export struct {
 }
 
 func (x *export) walk(ctx context.Context, dir sandboxfs.NodeRef, name string, depth int) error {
-	if depth > 64 || len(name) > 4096 {
+	if depth > localworkspace.ExportDepth {
 		return errors.New("workspace export exceeds traversal bound")
 	}
-	entries, err := x.w.sorted(ctx, dir, exportEntries)
+	entries, err := x.w.sorted(ctx, dir, localworkspace.ExportEntries)
 	if err != nil {
 		return err
 	}
-	if x.entries += len(entries); x.entries > exportEntries {
+	if x.entries += len(entries); x.entries > localworkspace.ExportEntries {
 		return errors.New("workspace export exceeds entry bound")
 	}
 	for _, e := range entries {
 		child := name + "/" + string(e.Name)
-		if !validPath(child) {
+		if !localworkspace.ValidPath(child) {
 			return fs.ErrInvalid
 		}
 		switch e.Entry.Attr.Mode & sandboxfs.ModeType {
@@ -784,7 +782,7 @@ func (x *export) append(ctx context.Context, e sandboxfs.Entry, name string) err
 		return err
 	}
 	size := int64(before.Attr.Size)
-	if !isType(before.Attr, sandboxfs.ModeRegular) || size > exportFileBytes || size > exportBatchBytes-x.bytes {
+	if !isType(before.Attr, sandboxfs.ModeRegular) || size > localworkspace.ExportFileBytes || size > localworkspace.ExportBatchBytes-x.bytes {
 		return errors.New("workspace export exceeds file bound")
 	}
 	x.bytes += size

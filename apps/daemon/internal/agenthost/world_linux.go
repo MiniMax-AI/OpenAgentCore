@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
@@ -124,20 +125,13 @@ func isErrno(err error, errno sandboxfs.Errno) bool {
 
 func isType(a sandboxfs.Attr, t uint32) bool { return a.Mode&sandboxfs.ModeType == t }
 
-// validPath reports whether p is a relative path as the guest accepts a
-// workspace or installation path: plain names without a backslash, NUL, CR
-// or LF.
-func validPath(p string) bool {
-	return p != "." && len(p) <= 4096 && fs.ValidPath(p) && !strings.ContainsAny(p, "\\\x00\r\n")
-}
-
 // components splits a path below a directory into its names; "", "." and
 // "/" name the directory itself.
 func components(p string) ([]string, error) {
 	if p = strings.Trim(p, "/"); p == "" || p == "." {
 		return nil, nil
 	}
-	if !validPath(p) {
+	if !localworkspace.ValidPath(p) {
 		return nil, fs.ErrInvalid
 	}
 	return strings.Split(p, "/"), nil
