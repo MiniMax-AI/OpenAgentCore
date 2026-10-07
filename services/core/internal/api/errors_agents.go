@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 )
@@ -13,7 +14,10 @@ func writeAgentsError(w http.ResponseWriter, r *http.Request, err error) {
 	if writeTextValueError(w, r, err) || writeAuditSourceError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
 		return
 	}
+	var provider *v1.ModelProviderError
 	switch {
+	case errors.As(err, &provider):
+		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", provider.Error())
 	case errors.Is(err, agents.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.")
 	case errors.Is(err, agents.ErrInvalidInput):

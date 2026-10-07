@@ -6,13 +6,13 @@ import (
 )
 
 func TestParseProviderValidatesFrozenBundle(t *testing.T) {
-	valid := map[string]any{"protocol": "responses", "base_url": "https://model.example/v1", "api_key": "fixture-upstream-key", "context_window": int32(64000), "max_output_tokens": int32(4096)}
+	valid := map[string]any{"protocol": "responses", "base_url": "https://model.example/api", "api_key": "fixture-upstream-key", "context_window": int32(64000), "max_output_tokens": int32(4096)}
 	for _, protocol := range []Protocol{Anthropic, Responses, ChatCompletions} {
 		t.Run(string(protocol), func(t *testing.T) {
 			raw := copyBundle(valid)
 			raw["protocol"] = string(protocol)
 			got, err := ParseProvider(raw)
-			want := Provider{Protocol: protocol, BaseURL: "https://model.example/v1", APIKey: "fixture-upstream-key", ContextWindow: 64000, MaxOutputTokens: 4096}
+			want := Provider{Protocol: protocol, BaseURL: "https://model.example/api", APIKey: "fixture-upstream-key", ContextWindow: 64000, MaxOutputTokens: 4096}
 			if err != nil || got != want {
 				t.Fatalf("bundle changed or rejected: %v", err)
 			}
@@ -42,6 +42,29 @@ func TestParseProviderValidatesFrozenBundle(t *testing.T) {
 	for _, raw := range []any{nil, []any{}, "provider", map[string]any{}} {
 		if _, err := ParseProvider(raw); !errors.Is(err, ErrConfiguration) {
 			t.Fatalf("invalid root accepted: %v", err)
+		}
+	}
+}
+
+func TestAnthropicBaseURLExcludesVersionPath(t *testing.T) {
+	for _, tc := range []struct {
+		protocol Protocol
+		baseURL  string
+		valid    bool
+	}{
+		{Anthropic, "https://model.example", true},
+		{Anthropic, "https://model.example/", true},
+		{Anthropic, "https://model.example/anthropic", true},
+		{Anthropic, "https://model.example/v1beta", true},
+		{Anthropic, "https://model.example/v1", false},
+		{Anthropic, "https://model.example/v1/", false},
+		{Anthropic, "https://model.example/anthropic/v1//", false},
+		{Responses, "https://model.example/v1", true},
+		{ChatCompletions, "https://model.example/v1/", true},
+	} {
+		err := Provider{Protocol: tc.protocol, BaseURL: tc.baseURL, APIKey: "fixture-upstream-key"}.Validate()
+		if tc.valid != (err == nil) || err != nil && !errors.Is(err, ErrConfiguration) {
+			t.Fatalf("%s %s: %v", tc.protocol, tc.baseURL, err)
 		}
 	}
 }

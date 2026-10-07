@@ -10,7 +10,7 @@ describe("saved Agent execution defaults", () => {
       harness: "codex",
       harness_config: { model_reasoning_effort: "high" },
       model_provider: {
-        protocol, base_url: "https://model.example/v1", api_key_configured: true,
+        protocol, base_url: "https://model.example", api_key_configured: true,
       },
     };
     const client = new OpenAIAgentsClient({
@@ -23,7 +23,7 @@ describe("saved Agent execution defaults", () => {
       }) as typeof fetch,
     });
     const provider: ModelProviderInput = {
-      protocol, base_url: "https://model.example/v1", api_key: "write-only-fixture",
+      protocol, base_url: "https://model.example", api_key: "write-only-fixture",
     };
     const agent = await client.createAgent({ model: "example-model", x_agents_core: { harness: "codex", harness_config: { model_reasoning_effort: "high" }, model_provider: provider } });
     expect(agent.x_agents_core).toEqual(safe);

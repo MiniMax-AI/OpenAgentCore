@@ -16,6 +16,10 @@ func TestModelProviderErrorMessagesAndPrecedence(t *testing.T) {
 			p.Protocol = "private"
 			p.APIKey = ""
 		}},
+		{"anthropic version path", "claude_sdk", "model_provider_base_url_invalid", "base_url", "an anthropic base_url excludes the /v1 version path", func(p *ModelProviderInput) {
+			p.Protocol = "anthropic"
+			p.BaseURL = "https://example.test/anthropic/v1/"
+		}},
 		{"protocol before key", "codex", "model_provider_protocol_unsupported", "protocol", "unsupported model provider protocol", func(p *ModelProviderInput) { p.Protocol = "private"; p.APIKey = "" }},
 		{"key", "claude_sdk", "model_provider_api_key_invalid", "api_key", "invalid model provider API key", func(p *ModelProviderInput) { p.Protocol = "anthropic"; p.APIKey = "" }},
 		{"context before output", "codex", "model_provider_token_limits_invalid", "context_window", "invalid model token limits", func(p *ModelProviderInput) { p.ContextWindow = -1; p.MaxOutputTokens = -2 }},

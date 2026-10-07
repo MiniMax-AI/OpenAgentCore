@@ -58,6 +58,7 @@ type Reader interface {
 	// GetAgentWithModelProvider reads the Agent and its opened model provider
 	// bundle from one snapshot. The bundle is nil when the Agent has none.
 	// Opening one without a credential key is credentialcrypto.ErrUnavailable;
-	// a bundle that fails to open is an internal error.
+	// a bundle that fails to open is an internal error, and one that opens but
+	// no longer validates returns its *v1.ModelProviderError.
 	GetAgentWithModelProvider(ctx context.Context, tenantID, agentID string) (Agent, *v1.ModelProviderInput, error)
 }

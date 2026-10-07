@@ -12,7 +12,7 @@ class AcceptanceSettingsTests(unittest.TestCase):
     def setUp(self):
         self.models = {
             harness: {"model": "fixture", "model_provider": {
-                "protocol": protocol, "base_url": "https://model.example/v1", "api_key": "private-key",
+                "protocol": protocol, "base_url": "https://model.example", "api_key": "private-key",
                 "context_window": 64000, "max_output_tokens": 4096,
             }} for harness, protocol in acceptance.CAMPAIGN.items()
         }

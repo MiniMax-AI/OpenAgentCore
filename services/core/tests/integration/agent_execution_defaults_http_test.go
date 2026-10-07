@@ -89,9 +89,9 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	modelOnly := `{"agent_id":"` + agentID + `","agent":{"model":"model-override"},"environment":{"type":"openai_hosted"}}`
 	sid := id(call("POST", "/v1/agents/sessions", modelOnly, uuid.NewString(), 201))
 	assertSnapshot(sid, "model-override", "https://saved.example/v1", "saved-canary")
-	replacement := `{"agent_id":"` + agentID + `","environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/v1","api_key":"override-canary"}}}`
+	replacement := `{"agent_id":"` + agentID + `","environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/api","api_key":"override-canary"}}}`
 	sid = id(call("POST", "/v1/agents/sessions", replacement, uuid.NewString(), 201))
-	assertSnapshot(sid, "model-original", "https://override.example/v1", "override-canary")
+	assertSnapshot(sid, "model-original", "https://override.example/api", "override-canary")
 	for _, protocol := range []string{"anthropic", "chat_completions"} {
 		crossProtocol := strings.Replace(replacement, `"protocol":"responses"`, `"protocol":"`+protocol+`"`, 1)
 		call("POST", "/v1/agents/sessions", crossProtocol, uuid.NewString(), 400)
@@ -100,9 +100,9 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	call("POST", "/v1/agents/sessions", crossHarness, uuid.NewString(), 400)
 	assertSnapshot(sessionID, "model-original", "https://saved.example/v1", "saved-canary")
 	// Switching to another harness requires a complete native provider bundle.
-	nativeHarness := strings.TrimSuffix(crossHarness, "}") + `,"x_agents_core":{"model_provider":{"protocol":"anthropic","base_url":"https://override.example/v1","api_key":"override-canary"}}}`
+	nativeHarness := strings.TrimSuffix(crossHarness, "}") + `,"x_agents_core":{"model_provider":{"protocol":"anthropic","base_url":"https://override.example/api","api_key":"override-canary"}}}`
 	created := id(call("POST", "/v1/agents/sessions", nativeHarness, uuid.NewString(), 201))
-	assertSnapshot(created, "model-override", "https://override.example/v1", "override-canary")
+	assertSnapshot(created, "model-override", "https://override.example/api", "override-canary")
 	reads := sessionAdapter(st)
 	resolved, err := reads.GetSession(t.Context(), tenant, created)
 	frozen, providerErr := reads.SessionModelExecution(t.Context(), tenant, created)
@@ -123,9 +123,9 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	nullProvider := strings.TrimSuffix(body, "}") + `,"x_agents_core":{"model_provider":null}}`
 	sid = id(call("POST", "/v1/agents/sessions", nullProvider, uuid.NewString(), 201))
 	assertSnapshot(sid, "model-original", "https://saved.example/v1", "saved-canary")
-	call("POST", "/v1/agents/"+agentID, `{"model":"model-new","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/v1","api_key":"override-canary"}}}`, "", 200)
+	call("POST", "/v1/agents/"+agentID, `{"model":"model-new","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/api","api_key":"override-canary"}}}`, "", 200)
 	fresh := id(call("POST", "/v1/agents/sessions", body, uuid.NewString(), 201))
-	assertSnapshot(fresh, "model-new", "https://override.example/v1", "override-canary")
+	assertSnapshot(fresh, "model-new", "https://override.example/api", "override-canary")
 	call("DELETE", "/v1/agents/"+agentID, "", "", 200)
 	if id(call("POST", "/v1/agents/sessions", body, key, 201)) != sessionID {
 		t.Fatal("retry created another Session")
@@ -133,7 +133,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	call("POST", "/v1/agents/sessions", body, uuid.NewString(), 404)
 	st = NewWithCredentialCipher(pool, cipher)
 	assertSnapshot(sessionID, "model-original", "https://saved.example/v1", "saved-canary")
-	assertSnapshot(fresh, "model-new", "https://override.example/v1", "override-canary")
+	assertSnapshot(fresh, "model-new", "https://override.example/api", "override-canary")
 	inline := `{"agent":{"model":"inline-model"},"environment":{"type":"openai_hosted"}}`
 	inlineKey := uuid.NewString()
 	sid = id(call("POST", "/v1/agents/sessions", inline, inlineKey, 201))
@@ -167,4 +167,51 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 		t.Fatal("preparation extension sent deployment credentials to a user machine")
 	}
 
+}
+
+// An Agent whose saved provider an earlier release accepted but validation
+// now rejects still reads, and a Session that inherits the provider is
+// refused with the validation error rather than an internal one.
+func TestAgentExecutionDefaultsRejectInvalidSavedProvider(t *testing.T) {
+	_, pool := testStore(t)
+	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{19}, 32))
+	st := NewWithCredentialCipher(pool, cipher)
+	tenant, token := uuid.NewString(), uuid.NewString()
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "invalid-saved-provider", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
+	handler, err := publicHandler(t, st, auth, "claude_sdk", withHarnesses([]string{"claude_sdk"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", uuid.NewString())
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+	w := call("POST", "/v1/agents", `{"model":"fixture","x_agents_core":{"harness":"claude_sdk","model_provider":{"protocol":"anthropic","base_url":"https://saved.example/anthropic","api_key":"saved-canary"}}}`)
+	var agent struct {
+		ID string `json:"id"`
+	}
+	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &agent) != nil {
+		t.Fatalf("create Agent: %d %s", w.Code, w.Body)
+	}
+	stale, _ := json.Marshal(v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://saved.example/anthropic/v1", APIKey: "saved-canary"})
+	sealed, err := cipher.SealAgentModelExecution(stale, tenant, agent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE agent_model_execution SET encrypted_config = $1 WHERE agent_id = $2", sealed, agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if w := call("GET", "/v1/agents/"+agent.ID, ""); w.Code != 200 {
+		t.Fatalf("read Agent: %d %s", w.Code, w.Body)
+	}
+	const rejection = `{"error":{"message":"an anthropic base_url excludes the /v1 version path","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
+	if w := call("POST", "/v1/agents/sessions", `{"agent_id":"`+agent.ID+`","environment":{"type":"openai_hosted"}}`); w.Code != 400 || w.Body.String() != rejection {
+		t.Fatalf("inherited Session: %d %s", w.Code, w.Body)
+	}
 }

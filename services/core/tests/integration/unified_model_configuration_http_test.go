@@ -72,7 +72,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	const path = "/core/v1/harnesses/codex/model-configuration"
 	const high = `{"model_reasoning_effort":"high"}`
 	const low = `{"model_reasoning_effort":"low"}`
-	const provider = `{"protocol":"responses","base_url":"https://deployment.example/v1","api_key":"deployment-canary"}`
+	const provider = `{"protocol":"responses","base_url":"https://deployment.example/api","api_key":"deployment-canary"}`
 	setDefault := func(model, native string) {
 		t.Helper()
 		body := `{"model":"` + model + `","harness_config":` + native + `,"model_provider":` + provider + `}`
@@ -84,7 +84,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 			t.Fatal("model configuration identity changed")
 		}
 		equalJSON(view["harness_config"], native)
-		equalJSON(view["model_provider"], `{"protocol":"responses","base_url":"https://deployment.example/v1","api_key_configured":true}`)
+		equalJSON(view["model_provider"], `{"protocol":"responses","base_url":"https://deployment.example/api","api_key_configured":true}`)
 	}
 	create := func(body, retry string) string {
 		t.Helper()
@@ -183,7 +183,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	// Disabling tools cannot enable a non-native model protocol.
 	for _, protocol := range []string{"anthropic", "chat_completions"} {
 		t.Run("non-native protocol "+protocol, func(t *testing.T) {
-			incompatible := `{"protocol":"` + protocol + `","base_url":"https://model.example/v1","api_key":"rejected-canary"}`
+			incompatible := `{"protocol":"` + protocol + `","base_url":"https://model.example","api_key":"rejected-canary"}`
 			agent := `{"model":"fixed-model","tools":[{"type":"web_search","mode":"disabled"}]}`
 			call("POST", "/v1/agents/sessions", token, `{"agent":`+agent+`,"environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":`+incompatible+`}}`, uuid.NewString(), 400)
 			saved := strings.TrimSuffix(agent, "}") + `,"x_agents_core":{"harness":"codex","model_provider":` + incompatible + `}}`

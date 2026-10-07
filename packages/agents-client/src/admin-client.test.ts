@@ -220,7 +220,7 @@ describe("AdminClient response contracts", () => {
 
   it("projects saved OpenAgentCore defaults, including the safe provider view, and rejects secrets", async () => {
     const saved = { id: resourceId, object: "agent", model: "model", name: null, instructions: null, metadata: {}, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [], created_at: 1, updated_at: 1 };
-    const provider = { protocol: "anthropic", base_url: "https://provider.test/v1", context_window: 200000, max_output_tokens: 8000, api_key_configured: true };
+    const provider = { protocol: "anthropic", base_url: "https://provider.test/anthropic", context_window: 200000, max_output_tokens: 8000, api_key_configured: true };
     // Core omits the extension, or returns each default only when saved.
     for (const core of [undefined, null, {}, { harness: "mcode" }, { model_provider: provider }, { harness: "mcode", model_provider: provider },
       { model_provider: { protocol: "responses", base_url: "https://provider.test", api_key_configured: true } }]) {
