@@ -163,3 +163,61 @@ func TestBootstrapRejectsLowSpaceBeforeNetwork(t *testing.T) {
 		t.Fatal("low-space failure left staging")
 	}
 }
+
+func TestBootstrapExplainsUnexecutableInstaller(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX executable permissions")
+	}
+	var buffer bytes.Buffer
+	z := gzip.NewWriter(&buffer)
+	tw := tar.NewWriter(z)
+	data := []byte("#!/bin/sh\nexit 0\n")
+	if err := tw.WriteHeader(&tar.Header{Name: "oac-daemon", Mode: 0600, Size: int64(len(data))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(data); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive := buffer.Bytes()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%x\n", sha256.Sum256(archive))
+			return
+		}
+		w.Write(archive)
+	}))
+	defer server.Close()
+	home := t.TempDir()
+	output, err := bootstrapCommand(t, server.URL, home).CombinedOutput()
+	if err == nil || !bytes.Contains(output, []byte("Cannot start the native installer")) {
+		t.Fatalf("%v: %s", err, output)
+	}
+	if _, err := os.Stat(filepath.Join(home, "native-download", "staging")); !os.IsNotExist(err) {
+		t.Fatal("staging remains")
+	}
+}
+
+func TestWindowsBootstrapChecksArchiveToolBeforeDownload(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows archive prerequisite")
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
+	defer server.Close()
+	home := filepath.Join(t.TempDir(), "runtime")
+	command := bootstrapCommand(t, server.URL, home)
+	command.Env = append(command.Env, "SystemRoot="+t.TempDir())
+	output, err := command.CombinedOutput()
+	if err == nil || !bytes.Contains(output, []byte("tar.exe is required")) || requests.Load() != 0 {
+		t.Fatalf("%v: %s", err, output)
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatal("home created before prerequisite check")
+	}
+}
