@@ -10,26 +10,21 @@ import (
 
 func (*fakeProvider) ProviderOperations() providercontract.Operations {
 	return providercontract.Operations{
-		"Create":                   {State: providercontract.Supported},
-		"GetInfo":                  {State: providercontract.Supported},
-		"Renew":                    {State: providercontract.Supported},
-		"Kill":                     {State: providercontract.Supported},
-		"RunCommand":               {State: providercontract.Supported},
-		"Initial":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"NewCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"GetCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Suspend":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Resume":                   {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"KillCompute":              {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DeleteSnapshot":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"RunCommandCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ResumeCompute":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ObservationProviderType":  {State: providercontract.Supported},
-		"ResolveObservationSource": {State: providercontract.Supported},
-		"Observe":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ObserveBatch":             {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DiscoverSelection":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"VerifyCredential":         {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Create":            {State: providercontract.Supported},
+		"GetInfo":           {State: providercontract.Supported},
+		"Renew":             {State: providercontract.Supported},
+		"Kill":              {State: providercontract.Supported},
+		"RunCommand":        {State: providercontract.Supported},
+		"Initial":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"NewCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"GetCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Suspend":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Resume":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"KillCompute":       {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"DeleteSnapshot":    {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"RunCommandCompute": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"ResumeCompute":     {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Observe":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 	}
 }
 func (*fakeProvider) Initial(context.Context, sandbox.Reference) (sandbox.Compute, error) {
@@ -62,46 +57,22 @@ func (*fakeProvider) ResumeCompute(context.Context, sandbox.Reference, sandbox.C
 func (*fakeProvider) Observe(context.Context, runtimeobs.Target) (runtimeobs.Sample, error) {
 	return runtimeobs.Sample{}, &providercontract.UnsupportedError{Operation: "Observe", Reason: "fixture_operation_not_supported"}
 }
-func (*fakeProvider) ObserveBatch(context.Context, []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
-	return nil, &providercontract.UnsupportedError{Operation: "ObserveBatch", Reason: "fixture_operation_not_supported"}
-}
-func (*fakeProvider) DiscoverSelection(context.Context, sandbox.Selection) (sandbox.Selection, error) {
-	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "fixture_operation_not_supported"}
-}
-func (*fakeProvider) VerifyCredential(context.Context, []sandbox.Reference) error {
-	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "fixture_operation_not_supported"}
-}
 func (*observationProvider) ProviderOperations() providercontract.Operations {
 	return providercontract.Operations{
-		"Create":                   {State: providercontract.Supported},
-		"GetInfo":                  {State: providercontract.Supported},
-		"Renew":                    {State: providercontract.Supported},
-		"Kill":                     {State: providercontract.Supported},
-		"RunCommand":               {State: providercontract.Supported},
-		"Initial":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"NewCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"GetCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Suspend":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Resume":                   {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"KillCompute":              {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DeleteSnapshot":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"RunCommandCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ResumeCompute":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ObservationProviderType":  {State: providercontract.Supported},
-		"ResolveObservationSource": {State: providercontract.Supported},
-		"Observe":                  {State: providercontract.Supported},
-		"ObserveBatch":             {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DiscoverSelection":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"VerifyCredential":         {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Create":            {State: providercontract.Supported},
+		"GetInfo":           {State: providercontract.Supported},
+		"Renew":             {State: providercontract.Supported},
+		"Kill":              {State: providercontract.Supported},
+		"RunCommand":        {State: providercontract.Supported},
+		"Initial":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"NewCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"GetCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Suspend":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Resume":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"KillCompute":       {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"DeleteSnapshot":    {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"RunCommandCompute": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"ResumeCompute":     {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Observe":           {State: providercontract.Supported},
 	}
-}
-
-func (*fakeProvider) ObservationProviderType() string { return "fixture" }
-func (p *fakeProvider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
-	return p, nil
-}
-
-func (*observationProvider) ObservationProviderType() string { return "fixture" }
-func (p *observationProvider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
-	return p, nil
 }

@@ -171,7 +171,7 @@ func buildGeneration(registry *providerconfig.Registry, config providerconfig.Co
 	if err != nil {
 		return node.GenerationProvider{}, err
 	}
-	return node.GenerationProvider{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, Provider: built.Provider, Probe: built.Probe, Close: closeProvider}, nil
+	return node.GenerationProvider{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, Provider: built.Provider, Probe: built.Probe, Quiescent: built.Quiescent, Close: closeProvider}, nil
 }
 
 type generationJournal struct {
