@@ -34,23 +34,24 @@ func strongestScope(caps sp.Capabilities) (sp.Scope, error) {
 // run runs one setup step in the sandbox as the Process operation id, in the
 // strongest scope the service declares, discards its output and returns once
 // it has settled: nil when it exited 0, an InitializationFailure when it
-// could not start or exited 1 to 255, and an error otherwise. When ctx ends
-// first, run cancels the step and waits closeBound for it to settle. A step
-// that may run unobserved quarantines the owner.
+// could not start or exited 1 to 255, dispatch.ErrEnvironmentUnavailable when
+// the service is unreachable or refused it before any effect, and an error
+// otherwise. When ctx ends first, run cancels the step and waits closeBound
+// for it to settle. A step that may run unobserved quarantines the owner.
 func (o *environment) run(ctx context.Context, id sandboxwire.ID, program string, args []string, env map[string]string, cwd string) error {
 	rw, err := o.open(ctx, sandboxlink.ServiceProcess, sp.Version)
 	if err != nil {
-		return err
+		return dispatch.ErrEnvironmentUnavailable
 	}
 	c := sp.NewClient(rw)
 	defer c.Close()
 	d, err := c.Describe(ctx)
 	if err != nil {
-		return err
+		return dispatch.ErrEnvironmentUnavailable
 	}
 	scope, err := strongestScope(d.Capabilities)
 	if err != nil {
-		return err
+		return dispatch.ErrEnvironmentUnavailable
 	}
 	spec := sp.ProcessSpec{Executable: []byte(program), Argv: [][]byte{[]byte(program)}, Cwd: []byte(cwd), Umask: 0o022, IOMode: sp.IOPipes, Scope: scope}
 	for _, arg := range args {
@@ -67,7 +68,7 @@ func (o *environment) run(ctx context.Context, id sandboxwire.ID, program string
 	if err != nil {
 		var f *sp.Failure
 		if errors.As(err, &f) && f.Effect == sandboxwire.EffectNone {
-			return err
+			return dispatch.ErrEnvironmentUnavailable
 		}
 		return o.lose(err)
 	}

@@ -219,6 +219,9 @@ func runtimePreparationResult(err error, size int) proto.RuntimePrepareResultPay
 	if err == nil {
 		return proto.RuntimePrepareResultPayload{Outcome: "completed", SizeBytes: size}
 	}
+	if errors.Is(err, ErrEnvironmentUnavailable) {
+		return rejectedRuntimePreparation("resource_unavailable")
+	}
 	var initialization *InitializationFailure
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && errors.As(err, &initialization) {
 		code := 0

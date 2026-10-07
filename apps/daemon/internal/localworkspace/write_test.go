@@ -61,7 +61,7 @@ func TestNativeFileAdmission(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := b.WriteWorkspaceFile(ctx, "cancelled", nil); !errors.Is(err, dispatch.ErrWorkspaceWriteUnavailable) {
+	if _, err := b.WriteWorkspaceFile(ctx, "cancelled", nil); !errors.Is(err, dispatch.ErrEnvironmentUnavailable) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(b.workspace, "cancelled")); !os.IsNotExist(err) {

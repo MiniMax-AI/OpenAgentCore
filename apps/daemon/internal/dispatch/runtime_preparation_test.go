@@ -328,6 +328,7 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	}{
 		{nil, "completed", ""},
 		{agentcapabilities.ErrInvalid, "failed", "runtime_preparation_failed"},
+		{ErrEnvironmentUnavailable, "rejected", "resource_unavailable"},
 		{context.DeadlineExceeded, "unknown", "runtime_preparation_unconfirmed"},
 		{errors.Join(agentcapabilities.ErrInvalid, context.Canceled), "unknown", "runtime_preparation_unconfirmed"},
 		{errors.New("private native diagnostic"), "unknown", "runtime_preparation_unconfirmed"},

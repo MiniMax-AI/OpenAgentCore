@@ -377,13 +377,15 @@ func (o *environment) Prepare(ctx context.Context, r proto.PromptRequestPayload)
 }
 
 // ApplyRuntimePreparation applies one runtime_prepare transfer to the
-// sandbox. A setup step runs as the Process operation named transfer.
+// sandbox. A setup step runs as the Process operation named transfer. A
+// failure to reach the sandbox before any effect is
+// dispatch.ErrEnvironmentUnavailable.
 func (o *environment) ApplyRuntimePreparation(ctx context.Context, transfer uuid.UUID, input proto.RuntimePreparePayload, data []byte) error {
 	if o.id == "" || input.EnvironmentID != o.id || input.SessionID != o.session || !proto.ValidRuntimePrepareRequest(input) || input.Step != "begin" {
 		return agentcapabilities.ErrInvalid
 	}
 	if err := o.acquire(ctx); err != nil {
-		return err
+		return dispatch.ErrEnvironmentUnavailable
 	}
 	defer o.release()
 	if o.uncertain {
@@ -391,7 +393,7 @@ func (o *environment) ApplyRuntimePreparation(ctx context.Context, transfer uuid
 	}
 	w, err := o.attach(ctx)
 	if err != nil {
-		return err
+		return dispatch.ErrEnvironmentUnavailable
 	}
 	defer o.done(w)
 	identity := o.identity()
@@ -654,7 +656,7 @@ func (o *environment) WriteWorkspaceFile(ctx context.Context, p string, data []b
 	case len(data) > proto.WorkspaceWriteMaxBytes || !validPath(p):
 		return result, dispatch.ErrWorkspaceWriteInvalid
 	case o.id == "":
-		return result, dispatch.ErrWorkspaceWriteUnavailable
+		return result, dispatch.ErrEnvironmentUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, writeBound)
 	defer cancel()
@@ -667,12 +669,12 @@ func (o *environment) WriteWorkspaceFile(ctx context.Context, p string, data []b
 	}
 	w, err := o.attach(ctx)
 	if err != nil {
-		return result, dispatch.ErrWorkspaceWriteUnavailable
+		return result, dispatch.ErrEnvironmentUnavailable
 	}
 	defer o.done(w)
 	workspace, err := w.directory(ctx, w.root, sandboxWorkspace, false)
 	if err != nil {
-		return result, dispatch.ErrWorkspaceWriteUnavailable
+		return result, dispatch.ErrEnvironmentUnavailable
 	}
 	parent, err := w.directory(ctx, workspace, path.Dir(p), true)
 	if err == nil {

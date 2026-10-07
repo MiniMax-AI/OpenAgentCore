@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -192,6 +193,24 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 		if _, err := os.Lstat(path.Join(sandboxWorkspace, "notes", name)); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("%s exists: %v", name, err)
 		}
+	}
+}
+
+// TestUnreachableSandboxRejectsRuntimePreparation checks that a
+// runtime_prepare whose owner cannot reach the sandbox ends rejected, which
+// leaves the Router free to run another Session's and to shut down.
+func TestUnreachableSandboxRejectsRuntimePreparation(t *testing.T) {
+	var dials atomic.Int32
+	dm := newDaemon(t, newViewFixture(t).cfg, deps{dial: countingDial(&dials), tasks: noTasks})
+	configure := proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure"}}
+	for _, b := range []Binding{newBinding(newResource()), newBinding(newResource())} {
+		dm.assign(t, b)
+		if r := dm.runtimePrepare(t, b, configure, nil); r.Outcome != "rejected" || r.ErrorCode != "resource_unavailable" {
+			t.Fatalf("runtime_prepare is %+v, want rejected with resource_unavailable", r)
+		}
+	}
+	if err := dm.shutdown(); err != nil || dials.Load() != 2 {
+		t.Fatalf("Shutdown after %d dials: %v", dials.Load(), err)
 	}
 }
 

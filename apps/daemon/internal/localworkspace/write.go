@@ -20,7 +20,7 @@ func (b *Binding) WriteWorkspaceFile(ctx context.Context, path string, data []by
 		return result, dispatch.ErrWorkspaceWriteInvalid
 	}
 	if ctx.Err() != nil {
-		return result, dispatch.ErrWorkspaceWriteUnavailable
+		return result, dispatch.ErrEnvironmentUnavailable
 	}
 	w := b.writer
 	if !w.mu.TryLock() {

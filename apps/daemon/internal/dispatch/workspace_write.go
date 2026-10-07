@@ -163,7 +163,7 @@ func workspaceWriteResult(write WorkspaceWriteResult, err error, size int) proto
 		err  error
 		code string
 	}{
-		{ErrWorkspaceWriteUnavailable, "resource_unavailable"},
+		{ErrEnvironmentUnavailable, "resource_unavailable"},
 		{ErrWorkspaceWriteBusy, "write_capacity"},
 		{ErrWorkspaceWriteInvalid, "invalid_request"},
 		{ErrWorkspaceWriteRejected, "write_rejected"},

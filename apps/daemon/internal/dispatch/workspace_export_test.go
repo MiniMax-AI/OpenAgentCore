@@ -46,7 +46,7 @@ func (stubEnvironment) ListWorkspaceDirectory(context.Context, string, int) (Wor
 	return WorkspaceDirectoryResult{}, ErrWorkspaceReadUnavailable
 }
 func (stubEnvironment) WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error) {
-	return WorkspaceWriteResult{}, ErrWorkspaceWriteUnavailable
+	return WorkspaceWriteResult{}, ErrEnvironmentUnavailable
 }
 func (e stubEnvironment) ExportOutputs(_ context.Context, w io.Writer) error {
 	archive := tar.NewWriter(w)

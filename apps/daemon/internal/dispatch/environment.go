@@ -58,6 +58,12 @@ type WorkspaceWriteResult struct {
 	SizeBytes int64
 }
 
+// ErrEnvironmentUnavailable reports that the owner could not reach the
+// Environment's resources and the operation had no effect. The Router ends a
+// workspace_write or runtime_prepare that returns it rejected with
+// resource_unavailable.
+var ErrEnvironmentUnavailable = errors.New("environment unavailable")
+
 var (
 	ErrWorkspaceReadUnavailable = errors.New("workspace read unavailable")
 	ErrWorkspaceReadInvalid     = errors.New("workspace read invalid")
@@ -66,11 +72,10 @@ var (
 	// missing, a regular file or a symbolic link; the link was not followed.
 	ErrWorkspaceNotDirectory = errors.New("workspace path is not a directory")
 
-	ErrWorkspaceWriteUnavailable = errors.New("workspace write unavailable")
-	ErrWorkspaceWriteBusy        = errors.New("workspace write busy")
-	ErrWorkspaceWriteInvalid     = errors.New("workspace write invalid")
-	ErrWorkspaceWriteRejected    = errors.New("workspace write rejected")
-	ErrWorkspaceWriteUncertain   = errors.New("workspace write outcome uncertain")
+	ErrWorkspaceWriteBusy      = errors.New("workspace write busy")
+	ErrWorkspaceWriteInvalid   = errors.New("workspace write invalid")
+	ErrWorkspaceWriteRejected  = errors.New("workspace write rejected")
+	ErrWorkspaceWriteUncertain = errors.New("workspace write outcome uncertain")
 )
 
 // Known Files.create destination refusals. Both wrap ErrWorkspaceWriteRejected:

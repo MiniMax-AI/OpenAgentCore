@@ -111,7 +111,7 @@ func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte)
 	}
 	root, err := os.OpenRoot(b.workspace)
 	if err != nil {
-		return result, dispatch.ErrWorkspaceWriteUnavailable
+		return result, dispatch.ErrEnvironmentUnavailable
 	}
 	defer root.Close()
 	if err = root.MkdirAll(filepath.Dir(local), 0700); err != nil {
