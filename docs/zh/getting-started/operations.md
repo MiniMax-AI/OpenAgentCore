@@ -1,7 +1,7 @@
 ---
-title: "管理你的安装"
+title: "运维"
 source: docs/getting-started/operations.md
-source_hash: c26691a77709f2657dad76cbb63148c625e11c4f47dd55480143158399420a02
+source_hash: 5a14d994e1926ad016a10eb4d6211882e16b0187c874025e6922452f62dbd926
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。

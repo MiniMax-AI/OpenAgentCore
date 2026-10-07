@@ -33,6 +33,9 @@ var (
 	// ErrSandboxResetSessionBusy reports a hosted Session an automatic reset
 	// does not archive yet because it has active work.
 	ErrSandboxResetSessionBusy = errors.New("the hosted Session is busy")
+	// ErrNoLink reports that the installation public URL gives no sandbox Link
+	// URL: it is neither https nor http on a loopback host.
+	ErrNoLink = errors.New("the sandbox Link needs an https public URL, or an http one on a loopback host")
 )
 
 // GenerationStaleError rejects a change whose expected generation is not the

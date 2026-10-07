@@ -144,7 +144,7 @@ docker run --rm --network none --entrypoint /bin/sh \
 
 OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
 pnpm --filter @oac/web... install --frozen-lockfile
-OAC_WEB_OPENAI_HOSTED_SESSIONS=1 OAC_WEB_ENVIRONMENT_FILES=1 pnpm build:web
+pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
 cp services/web/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"

@@ -2,17 +2,15 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
@@ -27,31 +25,17 @@ import (
 )
 
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
-	idFile := filepath.Join(t.TempDir(), "installation.id")
-	if err := os.WriteFile(idFile, []byte(uuid.NewString()+"\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{}, nil) != nil {
+		t.Fatal("sandbox manager started without an installation ID")
 	}
-	t.Setenv("OAC_INSTALLATION_ID_FILE", idFile)
-	digest := sha256.Sum256([]byte("synthetic-admin"))
-	path := filepath.Join(t.TempDir(), "core-key-digests.json")
-	if err := os.WriteFile(path, []byte(`["`+hex.EncodeToString(digest[:])+`"]`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", path)
-	if _, err := configureManagedNodes(nil, nil, providers.Builtin(), "", nil); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
-		t.Fatal("sandbox manager started without a public URL", err)
-	}
-	m, err := configureManagedNodes(nil, nil, providers.Builtin(), "https://core.example", func(context.Context) error { return nil })
+	origin, err := deployment.NewPublicOrigin("https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
+	m := configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{InstallationID: uuid.NewString(), PublicOrigin: &origin}, func(context.Context) error { return nil })
 	defer m.close()
-	if m.setup == nil || m.admin == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil {
+	if m.setup == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil || m.setup.runtimeAPI != "https://core.example/api/v1" {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
-	}
-	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", "")
-	if _, err := configureManagedNodes(nil, nil, providers.Builtin(), "https://core.example", nil); err == nil {
-		t.Fatal("setup accepted without admin authentication")
 	}
 }
 
@@ -182,7 +166,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	id := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, publicURL: "https://core.example"}
+	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, runtimeAPI: "https://core.example/api/v1"}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})

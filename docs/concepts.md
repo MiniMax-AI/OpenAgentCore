@@ -1,5 +1,5 @@
 ---
-title: "Concepts and ownership"
+title: "Concepts"
 ---
 
 A Project is the execution tenant in OpenAgentCore. Applications use its API keys; operators manage the installation with a separate Core key. The [API index](./api/index.md) maps each caller to its namespace and credential.

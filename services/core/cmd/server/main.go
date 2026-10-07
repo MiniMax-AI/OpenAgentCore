@@ -36,7 +36,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
@@ -44,6 +43,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/coremetricspg"
@@ -72,53 +72,39 @@ import (
 )
 
 func main() {
+	config, err := processconfig.Load()
 	if len(os.Args) > 1 && os.Args[1] == "check-config" {
-		if err := processconfig.Check(); err != nil {
+		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
 		return
 	}
-	if err := run(); err != nil {
+	if err == nil {
+		err = run(config)
+	}
+	if err != nil {
 		log.Bg().Error("oac-core startup failed", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	if err := processconfig.Check(); err != nil {
-		return err
+func run(config processconfig.Config) error {
+	log.Init(config.Log)
+	log.Bg().Info("Core process configuration loaded from the process environment")
+	if file := config.RuntimeHistory.File; file != "" {
+		log.Bg().Info("Core auxiliary configuration", "setting", "OAC_HISTORY_SETTINGS_FILE", "path", file)
 	}
-	log.Init(log.ConfigFromEnv())
-	public, err := processconfig.PublicURL()
-	if err != nil {
-		return err
-	}
-	concurrency, err := processconfig.ExecutionConcurrency()
-	if err != nil {
-		return err
-	}
-	logConfigurationSources()
-	databaseURL, err := databaseurl.FromEnvironment()
-	if err != nil {
-		return err
-	}
-	if databaseURL == "" {
-		return errors.New("OAC_DATABASE_URL is required")
-	}
-	credentialKey, err := credentialCipher()
-	if err != nil {
-		return err
-	}
+	credentialKey := config.CredentialKey
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	migrating, cancelMigration := context.WithTimeout(ctx, 2*time.Minute)
-	err = migrations.Apply(migrating, databaseURL)
+	err := migrations.Apply(migrating, config.DatabaseURL)
 	cancelMigration()
 	if err != nil {
 		return fmt.Errorf("Agents API database migration failed: %w", err)
 	}
-	pool, err := pgxpool.New(ctx, databaseURL)
+	pool, err := pgxpool.New(ctx, config.DatabaseURL)
 	if err != nil {
 		return errors.New("invalid Agents API database configuration")
 	}
@@ -128,15 +114,7 @@ func run() error {
 	if err := pool.Ping(ready); err != nil {
 		return errors.New("Agents API database connection failed")
 	}
-	engine, err := processconfig.DefaultHarness()
-	if err != nil {
-		return err
-	}
-	kinds, err := processconfig.Harnesses(engine)
-	if err != nil {
-		return err
-	}
-	oauthClient, err := oauthRefreshClient()
+	oauthClient, err := oauthrefresh.NewClient(config.OAuthTrustedOrigins)
 	if err != nil {
 		return err
 	}
@@ -173,6 +151,10 @@ func run() error {
 		return err
 	}
 	sandboxProviders := providers.Builtin()
+	var public string
+	if config.PublicOrigin != nil {
+		public = config.PublicOrigin.String()
+	}
 	// The placement rules are built once: the provider declarations and the
 	// public URL never change while Core runs.
 	placementRules, err := placement.NewRules(sandboxProviders, public)
@@ -189,34 +171,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	installation, err := installationFacts(public)
-	if err != nil {
-		return err
-	}
-	metricsSource := &coreMetricsSource{store: coremetricspg.New(units), pool: pool}
-	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
-	auditRetention, err := writeAuditRetention()
-	if err != nil {
-		return err
-	}
-	auditCleanupCtx, cancelAuditCleanup := context.WithCancel(ctx)
-	auditCleanupDone := make(chan struct{})
-	go func() {
-		defer close(auditCleanupDone)
-		runWriteAuditCleanup(auditCleanupCtx, auditStore, auditRetention, metrics)
-	}()
-	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
-	managedNodes, err := configureManagedNodes(deploymentService, deploymentStore, sandboxProviders, public, func(ctx context.Context) error {
+	managedNodes := configureManagedNodes(deploymentService, deploymentStore, sandboxProviders, config, func(ctx context.Context) error {
 		if worker == nil {
 			return errors.New("sandbox execution owner is unavailable")
 		}
 		return worker.CheckOwnership(ctx)
 	})
-	if err != nil {
-		return err
-	}
 	defer managedNodes.close()
 	var managed *execution.RuntimeProvider
 	observationSources := map[string]runtimeobs.SourceResolver{}
@@ -228,7 +190,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	history, err := runtimeHistory(ctx, units, public != "")
+	history, err := runtimeHistory(ctx, units, config.RuntimeHistory, config.PublicOrigin != nil)
 	if err != nil {
 		return err
 	}
@@ -249,23 +211,7 @@ func run() error {
 			closeRuntimeHistory(closeCtx, history.Exporter)
 		}
 	}()
-	cleanupCtx, cancelCleanup := context.WithCancel(ctx)
-	cleanupDone := make(chan struct{})
-	go func() {
-		defer close(cleanupDone)
-		runHistoryCleanup(cleanupCtx, history.Prune, metrics)
-	}()
-	defer func() { cancelCleanup(); <-cleanupDone }()
-	var keyAdmin *api.DeploymentAuthenticator
-	if managedNodes != nil {
-		keyAdmin = managedNodes.admin
-	} else {
-		keyAdmin, err = deploymentAdminAuthenticator()
-		if err != nil {
-			return err
-		}
-	}
-	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, projectStore); err != nil {
+	if err := api.ValidateCredentialSeparation(ctx, config.CoreKeys, projectStore); err != nil {
 		return err
 	}
 	historyService, err := runtimehistory.NewService(sessionStore, history.Reader)
@@ -277,11 +223,8 @@ func run() error {
 	var linkRelay *relay.Relay
 	var executorURL string
 	var nativeInstaller *api.NativeInstaller
-	if public != "" {
-		executorURL, err = runtimeWebSocketURL(public)
-		if err != nil {
-			return err
-		}
+	if origin := config.PublicOrigin; origin != nil {
+		executorURL = origin.DaemonWebSocket()
 		links := runtimegateway.NewLinkAuthority(sessionStore)
 		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, sessionStore, links, executorURL)
 		if err != nil {
@@ -291,14 +234,14 @@ func run() error {
 		linkRelay = relay.New(links)
 		defer linkRelay.Close()
 		var catalog *nativeinstaller.Catalog
-		if directory := os.Getenv("OAC_NATIVE_INSTALLER_DIR"); directory != "" {
-			catalog, err = nativeinstaller.Load(directory, buildRevision)
+		if config.NativeInstallers != "" {
+			catalog, err = nativeinstaller.Load(config.NativeInstallers, buildRevision)
 			if err != nil {
 				return err
 			}
 		}
 		if buildRevision != "" {
-			nativeInstaller = &api.NativeInstaller{Version: buildRevision, Catalog: catalog}
+			nativeInstaller = &api.NativeInstaller{Version: buildRevision, Base: origin.InstallerBase(), Catalog: catalog}
 		}
 	}
 	var deploymentExecution *deployment.ExecutionOperations
@@ -308,7 +251,7 @@ func run() error {
 			Sessions:        sessionService,
 			SessionsReader:  sessionStore,
 			Links:           linkRelay,
-			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
+			ManagedRuntimes: managed, MaxConcurrentExecutions: config.ExecutionConcurrency}
 		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {
 			return err
@@ -339,46 +282,40 @@ func run() error {
 			}
 		}()
 	}
-	if history.SampleInterval == 0 {
-		metrics.StopJob("runtime_sampler")
-	}
-	if history.SampleInterval > 0 {
-		if worker == nil {
-			return errors.New("Runtime history periodic sampling requires the execution worker")
-		}
-		sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{
-			Interval: history.SampleInterval,
-			Report: func(result runtimeobs.SweepResult) {
-				sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-				sampleErr := worker.CheckOwnership(sampleCtx)
-				if sampleErr == nil {
-					_, sampleErr = deploymentStore.SampleHostHistory(sampleCtx)
-				}
-				cancel()
-				if !result.Complete {
-					sampleErr = errors.New("incomplete Runtime sampling sweep")
-				}
-				metrics.ReportJob("runtime_sampler", result.CompletedAt, metricPtr(int64(result.Observed)), metricPtr(int64(result.Failed)), sampleErr)
-				fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
-				if result.Complete {
-					log.Bg().Debug("Runtime history sampling sweep complete", fields...)
-				} else {
-					log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
-				}
-			},
-		})
+	// Sampling runs only with the Worker, which owns every sweep.
+	sampling := coremetrics.Periodic{ID: "runtime_sampler", Every: history.SampleInterval}
+	if worker != nil {
+		sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{})
 		if err != nil {
 			return err
 		}
-		samplerCtx, cancelSampler := context.WithCancel(ctx)
-		samplerDone := make(chan error, 1)
-		go func() { defer metrics.StopJob("runtime_sampler"); samplerDone <- sampler.Run(samplerCtx) }()
-		defer func() {
-			cancelSampler()
-			<-samplerDone
-		}()
+		sampling.Run = func(ctx context.Context) (*int64, int64, error) {
+			result := sampler.Sweep(ctx)
+			sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			err := worker.CheckOwnership(sampleCtx)
+			if err == nil {
+				_, err = deploymentStore.SampleHostHistory(sampleCtx)
+			}
+			cancel()
+			fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
+			if !result.Complete {
+				log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
+				err = errors.New("incomplete Runtime sampling sweep")
+			} else {
+				log.Bg().Debug("Runtime history sampling sweep complete", fields...)
+			}
+			return metricPtr(int64(result.Observed)), int64(result.Failed), err
+		}
 	}
-	metricsSource.worker, metricsSource.registry = worker, registry
+	metricsSource := &coreMetricsSource{store: coremetricspg.New(units), pool: pool, worker: worker, registry: registry}
+	metrics, err := coremetrics.New(processStartedAt, buildRevision, metricsSource, sampling,
+		prune("history_cleanup", 2*time.Second, history.Prune),
+		prune("audit_cleanup", 5*time.Second, func(ctx context.Context) (int64, error) {
+			return auditStore.DeleteExpiredWriteOperations(ctx, time.Now().Add(-config.WriteAuditRetention), 1000)
+		}))
+	if err != nil {
+		return err
+	}
 	metricsCtx, cancelMetrics := context.WithCancel(ctx)
 	metricsDone := make(chan struct{})
 	go func() { defer close(metricsDone); metrics.Run(metricsCtx) }()
@@ -389,8 +326,8 @@ func run() error {
 		return err
 	}
 	deps := api.Dependencies{
-		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
-		Installation: installation, InstallationBindings: deploymentService,
+		Engine: config.DefaultHarness, Harnesses: config.Harnesses, CoreKeys: config.CoreKeys,
+		Installation: installationFacts(config), InstallationBindings: deploymentService,
 		Projects: projectService, ProjectsReader: projectStore,
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
@@ -445,8 +382,7 @@ func run() error {
 		}
 		handler = serverHandler(handler, &routes)
 	}
-	addr := serverAddress()
-	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: config.Addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
 	select {

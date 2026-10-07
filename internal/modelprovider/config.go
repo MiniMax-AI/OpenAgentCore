@@ -31,15 +31,11 @@ type Provider struct {
 
 var ErrConfiguration = errors.New("invalid model provider configuration")
 
-// Valid is the single vocabulary of supported upstream protocol formats.
-func (p Protocol) Valid() bool {
-	switch p {
-	case Anthropic, Responses, ChatCompletions:
-		return true
-	default:
-		return false
-	}
-}
+// Protocols is the single vocabulary of supported upstream protocol formats.
+// The Harness catalog generator projects it to the TypeScript client.
+func Protocols() []Protocol { return []Protocol{Anthropic, Responses, ChatCompletions} }
+
+func (p Protocol) Valid() bool { return slices.Contains(Protocols(), p) }
 
 // ValidBasePath reports whether a base URL's path suits the protocol. The
 // anthropic routes begin with the version path, so an anthropic base URL

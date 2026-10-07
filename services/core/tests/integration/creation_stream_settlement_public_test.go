@@ -170,7 +170,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	created.ended(t, 5*time.Second)
 
 	connect(first.Session.Environment.ID)
-	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
+	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{messageInput("later")}); err != nil {
 		t.Fatal(err)
 	}
 	if current, err := sessionAdapter(s).GetSession(t.Context(), tenant, first.Session.ID); err != nil || !current.PendingInput {

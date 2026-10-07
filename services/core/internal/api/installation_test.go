@@ -19,7 +19,7 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
 	public, id := "https://core.example", "5b7c0f3e-0000-4000-8000-000000000001"
-	settings := &InstallationConfiguration{Path: "/home/alice/.oac/core/config.json", Settings: []InstallationSetting{{Key: "ports.core", Value: 8091, Default: 8091, Changeable: true, Restarts: []string{"core"}}}}
+	settings := InstallationConfiguration{Settings: []InstallationSetting{{Key: "ports.core", Value: 8091, Default: 8091, Changeable: true, Restarts: []string{"core"}}}}
 	fakes.installationBindings.addressBindings = func(context.Context) (deployment.AddressBindings, error) {
 		return deployment.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
 	}
@@ -40,7 +40,7 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	var body map[string]any
 	if result.Code != http.StatusOK || json.Unmarshal(result.Body.Bytes(), &body) != nil || body["object"] != "core.installation" ||
 		body["public_url"] != public || body["address_bindings"].(map[string]any)["nodes_on_other_address"] != float64(1) ||
-		body["configuration"].(map[string]any)["path"] != "/home/alice/.oac/core/config.json" {
+		body["configuration"].(map[string]any)["settings"].([]any)[0].(map[string]any)["key"] != "ports.core" {
 		t.Fatal(result.Code, result.Body.String())
 	}
 }

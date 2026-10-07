@@ -4,8 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -608,9 +606,7 @@ func TestCreationAudit(t *testing.T) {
 	pool := pgtest.Open(t)
 	_, service := creationService(t, pool, nil)
 	tenant := uuid.NewString()
-	sum := sha256.Sum256([]byte(uuid.NewString()))
-	digest := hex.EncodeToString(sum[:])
-	source := writeaudit.Source{KeyID: "static:" + digest, Prefix: digest[:8], Name: "test key", Kind: "static", TenantID: uuid.NewString(), RequestID: uuid.NewString(), TraceID: uuid.NewString()}
+	source := writeaudit.Source{KeyID: uuid.NewString(), Prefix: "pc_aaaaaaaa", Name: "test key", Kind: "issued", TenantID: uuid.NewString(), RequestID: uuid.NewString(), TraceID: uuid.NewString()}
 	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "audited", InitialInputs: []sessions.Input{messageInput("first")},
 		Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}
 	if _, err := service.CreateSession(writeaudit.WithSource(t.Context(), source), tenant, input); !errors.Is(err, writeaudit.ErrInvalidSource) {

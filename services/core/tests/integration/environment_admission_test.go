@@ -51,7 +51,7 @@ func submitEnvironmentAdmission(ctx context.Context, h *dispatchHarness, worker 
 }
 
 func environmentAdmissionInputs() []sessions.Input {
-	return []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}}
+	return []sessions.Input{messageInput("first"), messageInput("second")}
 }
 
 func awaitEnvironmentAdmission(t *testing.T, result <-chan environmentAdmissionResult) environmentAdmissionResult {

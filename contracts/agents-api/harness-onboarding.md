@@ -1,5 +1,5 @@
 ---
-title: "Add a native Harness to OpenAgentCore"
+title: "Add a Harness"
 ---
 
 A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that runs the model and tool loop. A **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. This document is the Runtime–Harness protocol: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. [Harness capabilities](./harness-capabilities.md) records what each current Harness supports.

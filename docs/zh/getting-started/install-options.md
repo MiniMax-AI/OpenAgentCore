@@ -1,7 +1,7 @@
 ---
-title: "安装选项与高级部署"
+title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: 2e7717f76a46694af3c1ef33a56b195c0a321f54fd7318b488179b4b4c61f336
+source_hash: 6acbb4205e95aa5ad2f36fbfb3656a785b8d420c2ff754b81ae9cc7e07f10482
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。

@@ -43,8 +43,6 @@ export const sessions = {
     waitingLabel: "Session 在等待什么",
     exactTokens: "{{tokens}} 个 Token",
     open: "打开 Session {{id}}",
-    unrecognized: "无法识别的 Session",
-    unrecognizedHelp: "Core 列出了一个控制台无法读取的 Session，例如带有未知字段。除 ID 外不显示其他内容。",
     more: "显示更多",
   },
   detail: {

@@ -1,5 +1,5 @@
 ---
-title: "Operate your installation"
+title: "Operations"
 ---
 
 The installation operator owns the Core host, its storage and its availability. Node hosts run their own services; see [Nodes](./nodes.md). Settings are described in the [configuration reference](../configuration.md).

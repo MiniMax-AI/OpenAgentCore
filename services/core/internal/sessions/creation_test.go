@@ -422,7 +422,7 @@ func TestCreateSession(t *testing.T) {
 		}
 		want := []string{"UpsertSession create", "LockSkills skill_a", "ReadSkillVersion skill_a 3", "SaveModelExecution https://model.example/v1",
 			"SaveExecutionConfiguration available " + uuid.Nil.String(), "SaveInitialFiles 1", "SaveSetup skill_a@3", "CreateEnvironment",
-			"LoadEnvironmentInput", `CreateInputReservation <key> [{"kind":"message","payload":{"text":"hi"}}] initial`, "LoadEnvironmentInput",
+			"LoadEnvironmentInput", `CreateInputReservation <key> [{"kind":"message","payload":` + hi + `}] initial`, "LoadEnvironmentInput",
 			"PruneChanges", "AuditCreation session:session environment:environment:session", "LoadSession"}
 		if strings.Join(calls, "\n") != strings.Join(want, "\n") {
 			t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(calls, "\n"), strings.Join(want, "\n"))

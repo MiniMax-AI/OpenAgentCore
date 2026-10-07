@@ -26,9 +26,6 @@ var (
 	// ErrPublicURLUnreachable rejects selection and admission when the provider
 	// requires a reachable public origin and the installation is loopback.
 	ErrPublicURLUnreachable = errors.New("This sandbox provider needs a reachable HTTPS public URL before they can connect to Core.")
-	// ErrNoLink reports that the installation public URL gives no Link URL:
-	// it is neither https nor http on a loopback host.
-	ErrNoLink = errors.New("the sandbox Link needs an https public URL, or an http one on a loopback host")
 	// ErrNodesPreparing rejects placement while no node serves the target
 	// generation and at least one is preparing it.
 	ErrNodesPreparing = errors.New("sandbox nodes are preparing the target generation")
@@ -231,26 +228,6 @@ func CheckRestore(restore Restore) error {
 		return ErrNodeUnavailable
 	}
 	return nil
-}
-
-// LinkURL derives the Link URL from the installation public URL: wss:// for
-// an https origin, and ws:// for an http origin on a loopback host, which
-// only peers in Core's own network namespace can dial. Any other origin has
-// no Link and returns ErrNoLink.
-func LinkURL(publicURL string) (string, error) {
-	u, err := url.Parse(publicURL)
-	switch {
-	case err != nil:
-		return "", ErrNoLink
-	case u.Scheme == "https":
-		u.Scheme = "wss"
-	case u.Scheme == "http" && LoopbackOrigin(publicURL):
-		u.Scheme = "ws"
-	default:
-		return "", ErrNoLink
-	}
-	u.Path = "/api/v1/sandbox-link"
-	return u.String(), nil
 }
 
 // LoopbackOrigin reports whether a validated origin names a loopback host,

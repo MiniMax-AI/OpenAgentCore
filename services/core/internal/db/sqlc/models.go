@@ -8,14 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AdminAssetCopy struct {
-	TargetTenantID pgtype.UUID `json:"target_tenant_id"`
-	IdempotencyKey string      `json:"idempotency_key"`
-	RequestHash    []byte      `json:"request_hash"`
-	Result         []byte      `json:"result"`
-	AuditID        pgtype.UUID `json:"audit_id"`
-}
-
 type AdminAuditLog struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
@@ -25,18 +17,9 @@ type AdminAuditLog struct {
 	Action            string             `json:"action"`
 	ResourceType      string             `json:"resource_type"`
 	ResourceID        string             `json:"resource_id"`
-	ResultIds         []byte             `json:"result_ids"`
 	RequestID         string             `json:"request_id"`
 	TraceID           string             `json:"trace_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-}
-
-type AdminResourceOwner struct {
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	ResourceType string      `json:"resource_type"`
-	ResourceID   string      `json:"resource_id"`
-	ParentID     string      `json:"parent_id"`
-	AuditID      pgtype.UUID `json:"audit_id"`
 }
 
 type Agent struct {

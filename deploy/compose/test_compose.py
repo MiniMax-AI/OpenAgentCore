@@ -79,7 +79,7 @@ class ComposeTests(unittest.TestCase):
             with self.subTest(public_url=value):
                 configured = self.render(value)
                 expected = value or 'http://localhost:8080'
-                for name, setting in (('core', 'OAC_PUBLIC_URL'), ('web', 'OAC_WEB_ORIGIN')):
+                for name, setting in (('core', 'OAC_PUBLIC_URL'), ('web', 'OAC_PUBLIC_URL')):
                     self.assertEqual(configured['services'][name]['environment'][setting], expected)
                 self.assertEqual(
                     {service: [item.get('target') for item in spec.get('volumes', [])]

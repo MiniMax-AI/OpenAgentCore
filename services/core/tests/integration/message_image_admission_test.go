@@ -14,7 +14,7 @@ import (
 
 func imageAdmissionBatch() []sessions.Input {
 	return []sessions.Input{
-		{Kind: "message", Payload: json.RawMessage(`{"text":"do not partially admit"}`)},
+		messageInput("do not partially admit"),
 		{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="}]}]}`)},
 	}
 }

@@ -45,7 +45,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{` + deletionAgent + `,"environment":` + environment + `}`)}
 		if initial {
-			input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
+			input.InitialInputs = []sessions.Input{messageInput("reserved")}
 		}
 		session, err := s.CreateSession(ctx, tenant, input)
 		if err != nil {
@@ -59,7 +59,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	turn := func(to ...string) string {
 		t.Helper()
 		session := create(none, false)
-		receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"work"}`))
+		receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", messageText("work"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -84,7 +84,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	}
 	reserve := func(session sessions.Session) sessions.EnvironmentInputReservation {
 		t.Helper()
-		reservation, err := sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}})
+		reservation, err := sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, session.ID, "later", []sessions.Input{messageInput("later")})
 		if err != nil || reservation.State != sessions.EnvironmentInputPending {
 			t.Fatal(reservation, err)
 		}

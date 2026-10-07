@@ -1,10 +1,10 @@
 import type {
-  CoreProjectReader,
   SavedAgent,
   Vault,
   VaultCredential,
 } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import { listAllCollectionPages } from "../../lib/collection-pagination";
 import i18n from "../../i18n";
 
@@ -40,7 +40,7 @@ export interface SessionVaultPlan {
 
 const CREDENTIAL_READ_CONCURRENCY = 4;
 
-export async function loadVaultCatalog(core: Pick<CoreProjectReader, "listVaults" | "listVaultCredentials">, signal?: AbortSignal): Promise<VaultCatalog> {
+export async function loadVaultCatalog(core: Pick<ProjectClient, "listVaults" | "listVaultCredentials">, signal?: AbortSignal): Promise<VaultCatalog> {
   const vaults = await listAllCollectionPages(
     (options) => core.listVaults(options),
     signal,

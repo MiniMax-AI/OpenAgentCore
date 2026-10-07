@@ -9,14 +9,21 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-func TestValidateCoreURL(t *testing.T) {
+func TestPublicOrigin(t *testing.T) {
 	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]", "http://core.example", "http://core:8091", "http://10.0.0.5:8080"} {
-		if err := ValidateCoreURL(value); err != nil {
+		if origin, err := NewPublicOrigin(value); err != nil || origin.String() != value {
 			t.Errorf("valid Core URL %q rejected: %v", value, err)
+		}
+	}
+	for value, socket := range map[string]string{"https://core.example": "wss://core.example/api/v1/agent-daemon/ws", "http://[::1]:8091": "ws://[::1]:8091/api/v1/agent-daemon/ws"} {
+		origin, err := NewPublicOrigin(value)
+		if err != nil || origin.DaemonWebSocket() != socket || origin.API() != value+"/v1" || origin.RuntimeAPI() != value+"/api/v1" || origin.InstallerBase() != value+"/api/v1/agent-daemon/install/" {
+			t.Errorf("addresses derived from %q: %+v %v", value, origin, err)
 		}
 	}
 	for _, value := range []string{
@@ -26,8 +33,37 @@ func TestValidateCoreURL(t *testing.T) {
 		"https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example",
 		"https://core.example.", "https://bücher.example", "https://core.example:0443",
 	} {
-		if err := ValidateCoreURL(value); !errors.Is(err, ErrInvalidInput) {
+		if _, err := NewPublicOrigin(value); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("invalid Core URL %q accepted: %v", value, err)
+		}
+	}
+}
+
+func TestPublicOriginSandboxLink(t *testing.T) {
+	for value, want := range map[string]string{
+		"https://core.example":      "wss://core.example/api/v1/sandbox-link",
+		"https://core.example:8443": "wss://core.example:8443/api/v1/sandbox-link",
+		"https://127.0.0.1:8443":    "wss://127.0.0.1:8443/api/v1/sandbox-link",
+		"http://localhost:8080":     "ws://localhost:8080/api/v1/sandbox-link",
+		"http://127.0.0.1:8080":     "ws://127.0.0.1:8080/api/v1/sandbox-link",
+		"http://[::1]:8080":         "ws://[::1]:8080/api/v1/sandbox-link",
+		"http://core.example":       "",
+		"http://10.0.0.1:8080":      "",
+		"http://host.localhost":     "",
+	} {
+		origin, err := NewPublicOrigin(value)
+		if err != nil {
+			t.Fatal(value, err)
+		}
+		got, err := origin.SandboxLink()
+		if want == "" {
+			if !errors.Is(err, ErrNoLink) || got != "" {
+				t.Errorf("SandboxLink(%q) = %q, %v; want ErrNoLink", value, got, err)
+			}
+			continue
+		}
+		if err != nil || got != want || sandboxlink.CheckRelayURL(got) != nil {
+			t.Errorf("SandboxLink(%q) = %q, %v; want %q", value, got, err, want)
 		}
 	}
 }
