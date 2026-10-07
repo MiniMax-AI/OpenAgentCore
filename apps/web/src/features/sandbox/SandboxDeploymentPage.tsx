@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { InitializeSandboxDeployment, UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@oac/agents-client";
+import { deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxDeployment, type StartSandboxReset } from "@oac/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -80,7 +80,7 @@ function DeploymentConfiguration() {
     return false;
   }
   async function initialize(input: InitializeSandboxDeployment) {
-    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && input.provider !== "e2b" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
+    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
   }
   async function update(input: UpdateSandboxDeployment) {
     return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true, true);
@@ -94,7 +94,7 @@ function DeploymentConfiguration() {
 
   return <>
     <DeploymentHeader actions={<>
-      {snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
+      {snapshot?.deployment.mode === "nodes" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
       <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy} label={t("Refresh sandbox state")} />
     </>} />
     <div className="console-page-body sandbox-content">

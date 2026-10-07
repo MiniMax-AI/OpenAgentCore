@@ -111,7 +111,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
           const { deployment } = snapshot;
           setCleanup({ node: {
             name: target.name || target.id, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
-            provider: deployment.provider, oldAddress: onOldAddress(target, deployment.core_url) ? target.core_url : null,
+            oldAddress: onOldAddress(target, deployment.core_url) ? target.core_url : null,
           }, open: true });
         }
       }
@@ -124,7 +124,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const nodesConfirmed = confirmed && compatible && !inventoryOlder && !query.isError && !snapshot?.nodesError;
   const nodes = snapshot?.nodes ?? [];
   const allocations = snapshot?.allocations ?? [];
-  const hostedNodes = Boolean(snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b");
+  const hostedNodes = snapshot?.deployment.mode === "nodes";
+  // Nodes share the deployment's Provider, which declares whether sandboxes suspend.
+  const suspends = Boolean(snapshot?.deployment.suspension);
   // Getting started asks for Add node on arrival. A request the first settled read cannot
   // serve (no own-machines deployment, active reset, a failed read) is dropped, so the
   // dialog never opens later on its own.
@@ -198,6 +200,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         client={client}
         node={editTarget}
         size={snapshot ? sandboxSize(snapshot.deployment) : null}
+        suspends={suspends}
         onClose={() => setEditTarget(null)}
         onSaved={() => {
           const saved = editTarget;
@@ -223,7 +226,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     <NodesPageHeader headingRef={heading} count={hostedNodes && nodesConfirmed ? nodes.length : undefined} actions={actions} />
     <div className="console-page-body sandbox-content">
       {status}
-      {snapshot && !hostedNodes ? <EmptyState icon={Server} title={tSandboxNav(snapshot.deployment.provider === "e2b" ? "cloud" : "unconfigured")} action={<button className="button outline" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{tSandboxNav("open")}</button>} /> : null}
+      {snapshot && !hostedNodes ? <EmptyState icon={Server} title={tSandboxNav(snapshot.deployment.mode === "direct" ? "cloud" : "unconfigured")} action={<button className="button outline" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{tSandboxNav("open")}</button>} /> : null}
       {snapshot?.deployment.reset && hostedNodes ? <p role="status">{tSandboxNav("reset")}</p> : null}
       {snapshot?.deployment.provider ? <>
         {staleNodes.length ? <p className="sandbox-notice sandbox-address-warning" role="status">{staleNodes.length === 1
@@ -231,7 +234,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
           : t("{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.", { count: staleNodes.length, names: new Intl.ListFormat(i18n.resolvedLanguage, { type: "conjunction" }).format(staleNodes) })}</p> : null}
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
-            ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!nodesConfirmed} disabled={busy || loading || removing || !nodesConfirmed} suspends={snapshot.deployment.provider === "microsandbox"} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
+            ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!nodesConfirmed} disabled={busy || loading || removing || !nodesConfirmed} suspends={suspends} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
             : nodesConfirmed ? <EmptyState icon={Server} title={t("Add your first node")} hint={t("No nodes registered. Add a node to provide hosted capacity.")} /> : null}
         </section> : null}
       </> : null}

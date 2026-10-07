@@ -249,6 +249,17 @@ type ConfigurationRequirements struct {
 	CredentialVerification providercontract.Support
 }
 
+// DeploymentPolicy is the deployment declaration. Disk declares independent
+// disk limits; Runtime requires a pinned Runtime release, and RuntimeError is
+// the fixed reason for rejecting one otherwise. DefaultResources is the size
+// setup proposes, or nil when the Provider's configuration selects it.
+type DeploymentPolicy struct {
+	RuntimeError     string     `json:"-"`
+	Disk             bool       `json:"disk"`
+	Runtime          bool       `json:"runtime"`
+	DefaultResources *Resources `json:"default_resources"`
+}
+
 // Configuration is an adapter-owned typed value, never a request or response DTO.
 // Implementations must exclude secrets from JSON and safe diagnostic output.
 type Configuration interface {

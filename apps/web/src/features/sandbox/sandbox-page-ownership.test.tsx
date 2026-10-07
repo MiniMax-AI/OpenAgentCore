@@ -18,7 +18,7 @@ function cache(provider: SandboxDeployment["provider"]) {
   const client = new QueryClient({ defaultOptions: { queries: { enabled: false, retry: false, gcTime: Infinity } } });
   const deployment: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {},
     installation_id: "install", owner_epoch: 1, generation: 2, provider, core_url: "https://core.example",
-    mode: provider === "e2b" ? "direct" : "nodes", reset: null, resources: { allocations: 0, pending: 0 }, suspension: null,
+    mode: provider === "" ? "" : provider === "e2b" ? "direct" : "nodes", reset: null, resources: { allocations: 0, pending: 0 }, suspension: null,
     rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null },
   };
   const config: SandboxConsoleConfig = { node_installer: false, node_installer_sha256: "", node_artifacts: [] };

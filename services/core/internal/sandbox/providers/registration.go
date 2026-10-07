@@ -8,7 +8,8 @@ import (
 )
 
 // ValidateRegistration checks wiring before configuration parsing or construction.
-// Only configuration requirements and operation declarations are read.
+// Only configuration requirements and operation declarations are read, and the
+// resource validator only for a declared default size, after every other check.
 func ValidateRegistration(a Adapter) error {
 	invalid := func(field string) error {
 		return fmt.Errorf("%w: invalid registration %s", providercontract.ErrContract, field)
@@ -54,6 +55,9 @@ func ValidateRegistration(a Adapter) error {
 	// registration may declare checkpoint support.
 	if operations["Initial"].State == providercontract.Supported && a.Mode != "nodes" {
 		return invalid("checkpoint support outside nodes mode")
+	}
+	if a.Policy.DefaultResources != nil && a.ValidateResources(*a.Policy.DefaultResources) != nil {
+		return invalid("default resources")
 	}
 	return nil
 }
