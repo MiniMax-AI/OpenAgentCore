@@ -7,13 +7,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// SupportsExecution reports whether the daemon advertises MiniMax Code execution:
-// the operator sets OAC_RUNTIME_MCODE_AGENTS_API=1 and the native version is the
-// qualified one. Otherwise discovery reports only availability.
-func SupportsExecution(version string) bool {
-	return os.Getenv("OAC_RUNTIME_MCODE_AGENTS_API") == "1" && version == SupportedVersion
-}
-
 func validateExecutionRequest(req proto.PromptRequestPayload) error {
 	if !req.DisableExecutionEnvironment || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
 		return fmt.Errorf("mcode: unsupported execution configuration")

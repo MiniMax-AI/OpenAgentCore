@@ -138,7 +138,7 @@ type installReceipt struct {
 }
 
 func initialize(root string, release releaseIdentity, fetch func() (map[string][]byte, error)) (err error) {
-	ctx, _ := log.StartBackgroundTrace(context.Background(), "installation.init")
+	ctx, _ := log.StartBackgroundTrace(context.Background())
 	logger := log.With("component", "oac-init", "revision", release.revision)
 	started := time.Now()
 	step, stepStarted := "prepare_directories", started

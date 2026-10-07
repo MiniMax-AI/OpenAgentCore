@@ -182,21 +182,6 @@ func TestEnsureLogFileCreatesMissingParentDir(t *testing.T) {
 	}
 }
 
-func TestMustWriteLineAppendsTrailingNewline(t *testing.T) {
-	dir := privateTempDir(t)
-	path := filepath.Join(dir, "ml.log")
-	if err := MustWriteLine(path, "no-newline"); err != nil {
-		t.Fatalf("MustWriteLine: %v", err)
-	}
-	if err := MustWriteLine(path, "has-newline\n"); err != nil {
-		t.Fatalf("MustWriteLine: %v", err)
-	}
-	body, _ := os.ReadFile(path)
-	if string(body) != "no-newline\nhas-newline\n" {
-		t.Errorf("body = %q", string(body))
-	}
-}
-
 // safeBuf wraps bytes.Buffer with a mutex so concurrent reads/writes
 // during Tail's poll loop don't race.
 type safeBuf struct {

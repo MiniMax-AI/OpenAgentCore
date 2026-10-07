@@ -18,23 +18,22 @@ const preparationRecords = 64
 // All mutable fields are protected by Router.mu. owns includes resources whose
 // cancellation is underway; a slow close cannot bypass the capacity bound.
 type preparationState struct {
-	capabilities      proto.AgentKindCapabilities
-	executor          *executorState
-	requestID         string
-	trace             string
-	fingerprint       [32]byte
-	startFingerprint  [32]byte
-	status            proto.PreparationStatusPayload
-	deadline          time.Time
-	timer             *time.Timer
-	ctx               context.Context
-	cancel            context.CancelFunc
-	environmentID     string
-	busy              bool
-	owns              bool
-	closeErr          error
-	workspaceReadOnly bool
-	handoff           *preparedHandoff
+	capabilities     proto.AgentKindCapabilities
+	executor         *executorState
+	requestID        string
+	trace            string
+	fingerprint      [32]byte
+	startFingerprint [32]byte
+	status           proto.PreparationStatusPayload
+	deadline         time.Time
+	timer            *time.Timer
+	ctx              context.Context
+	cancel           context.CancelFunc
+	environmentID    string
+	busy             bool
+	owns             bool
+	closeErr         error
+	handoff          *preparedHandoff
 }
 
 func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope) error {
@@ -102,7 +101,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), workspaceReadOnly: true, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
 	r.preparations[p.status.Handle], r.preparationRequests[p.requestID] = p, p
 	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true) })
@@ -210,7 +209,7 @@ func (r *Router) prunePreparationsLocked() {
 
 func (r *Router) publishPreparation(p *preparationState, status proto.PreparationStatusPayload) {
 	r.mu.Lock()
-	if p.workspaceReadOnly && status.Revision != p.status.Revision {
+	if p.executor == nil && status.Revision != p.status.Revision {
 		r.mu.Unlock()
 		return
 	}
@@ -223,7 +222,7 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 	go func() {
 		defer r.shutdownWG.Done()
 		// A failed terminal notification must not restart incomplete cleanup.
-		if !r.sendPreparation(p.requestID, p.trace, status) && (!p.workspaceReadOnly || status.State == "preparing" || status.State == "ready") {
+		if !r.sendPreparation(p.requestID, p.trace, status) && (p.executor != nil || status.State == "preparing" || status.State == "ready") {
 			r.releasePreparation(p, "failed", "status_delivery_failed", false)
 		}
 	}()

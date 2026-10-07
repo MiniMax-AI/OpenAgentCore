@@ -22,7 +22,7 @@ func TestReadPreparationRetryCannotPublishStaleStatus(t *testing.T) {
 	timer := time.NewTimer(time.Hour)
 	defer timer.Stop()
 	r := &Router{sender: sender, shutdownCh: make(chan struct{})}
-	p := &preparationState{workspaceReadOnly: true, owns: true, ctx: ctx, cancel: cancel, timer: timer,
+	p := &preparationState{owns: true, ctx: ctx, cancel: cancel, timer: timer,
 		status: proto.PreparationStatusPayload{Handle: "reader", Revision: 2, State: "ready"}}
 	// A prepare retry captures this snapshot before the release settles.
 	snapshot := p.status
