@@ -95,7 +95,8 @@ func (e *Execution) ListAssignmentReleases(ctx context.Context, runtimes []strin
 	}
 	releases := make([]sessions.AssignmentRelease, 0, len(rows))
 	for _, row := range rows {
-		releases = append(releases, sessions.AssignmentRelease{RuntimeID: optionalID(row.RuntimeID), Assignment: assignmentRef(row.SessionID, row.AssignmentID, row.Epoch), RemoveHome: row.RemoveHome})
+		releases = append(releases, sessions.AssignmentRelease{RuntimeID: optionalID(row.RuntimeID), Assignment: assignmentRef(row.SessionID, row.AssignmentID, row.Epoch), RemoveHome: row.RemoveHome,
+			Resource: linkResource(row.ResourceTenantID, row.ResourceEnvironmentID, row.ResourceKind, row.ResourceID, row.ResourceGeneration)})
 	}
 	return releases, nil
 }

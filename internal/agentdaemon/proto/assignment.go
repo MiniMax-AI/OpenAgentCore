@@ -1,5 +1,12 @@
 package proto
 
+import (
+	"errors"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+)
+
 // Assignment traffic binds a Session to the Runtime that runs it. Envelope.ID
 // correlates a request with its assignment_status, and Envelope.Assignment
 // names the assignment on both.
@@ -53,9 +60,27 @@ func (r AssignmentRef) Valid() bool {
 }
 
 // AssignmentBindPayload is what the Runtime fences the Session's frames with.
-// EnvironmentID is empty for a Session without an Environment.
+// EnvironmentID is empty for a Session without an Environment. Resource and
+// AttachGrant come together, only to an agent host whose Environment has a
+// Link resource: the agent host attaches to Resource with AttachGrant, which
+// is secret.
 type AssignmentBindPayload struct {
-	EnvironmentID string `json:"environment_id,omitempty"`
+	EnvironmentID string                     `json:"environment_id,omitempty"`
+	Resource      *sandboxbootstrap.Resource `json:"resource,omitempty"`
+	AttachGrant   []byte                     `json:"attach_grant,omitempty"`
+}
+
+// Validate checks that Resource and AttachGrant come together and that
+// Resource is a resource of the Environment.
+func (p AssignmentBindPayload) Validate() error {
+	if p.Resource == nil && len(p.AttachGrant) == 0 {
+		return nil
+	}
+	if p.Resource == nil || len(p.AttachGrant) == 0 || len(p.AttachGrant) > sandboxlink.MaxGrantBytes ||
+		p.Resource.Validate() != nil || p.Resource.EnvironmentID != p.EnvironmentID {
+		return errors.New("assignment_bind requires a valid resource of its Environment with an attach grant")
+	}
+	return nil
 }
 
 // AssignmentReleasePayload asks the Runtime to remove the Session's native

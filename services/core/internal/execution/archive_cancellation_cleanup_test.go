@@ -18,6 +18,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
@@ -118,7 +119,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
 				credentials, heartbeat := testSessions(t, pool, testCredentialCipher(t))
-				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, credentials, wsURL)
+				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, credentials, runtimegateway.NewLinkAuthority(credentials), wsURL)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -171,7 +172,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal("Kill bypassed durable cleanup ownership", allocation, err)
 				}
 			}}
-			lifecycle := &runtimeLifecycle{sessions: sessionReader, sessionExecution: leased.Sessions, deployment: leased.Deployment, deployments: deployments, reader: reader, lease: leased.Lease, registry: registry, config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
+			lifecycle := &runtimeLifecycle{sessions: sessionReader, sessionExecution: leased.Sessions, deployment: leased.Deployment, deployments: deployments, reader: reader, lease: leased.Lease, registry: registry, links: relay.New(nil), config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
 			if checkpoint {
 				lifecycle.config.Provider = waitingCleanupCheckpoint{beforeKill: provider.beforeKill}
 			}

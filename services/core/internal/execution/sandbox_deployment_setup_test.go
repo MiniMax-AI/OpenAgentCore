@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -25,7 +26,7 @@ func TestDeferredSandboxDeploymentLoadsOnceBeforeNodeCreation(t *testing.T) {
 	var selected atomic.Bool
 	var loads atomic.Int32
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
 		loads.Add(1)
 		if !selected.Load() {
 			return nil, nil
@@ -70,7 +71,7 @@ func TestDeferredSandboxDeploymentLoadsOnceBeforeNodeCreation(t *testing.T) {
 
 func TestDeferredSandboxDeploymentShutdownCancelsLoad(t *testing.T) {
 	entered := make(chan struct{})
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(uuid.NewString(), func(ctx context.Context) (*RuntimeProvider, error) {
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(uuid.NewString(), func(ctx context.Context) (*RuntimeProvider, error) {
 		close(entered)
 		<-ctx.Done()
 		return nil, ctx.Err()
@@ -95,7 +96,7 @@ func TestDeferredSandboxProviderFailureKeepsRecoveryAvailable(t *testing.T) {
 	available := false
 	loadErr := ErrExecutionUnavailable
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
 		if !available {
 			return nil, loadErr
 		}
@@ -127,7 +128,7 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 	id := uuid.NewString()
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
 	rejected := errors.New("candidate provider unavailable")
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil },
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil },
 		func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error) {
 			return PreparedRuntimeDeployment{}, rejected
 		}))
@@ -159,7 +160,7 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 func TestSandboxCandidateValidationDoesNotHoldManagerLock(t *testing.T) {
 	id := uuid.NewString()
 	entered, release := make(chan struct{}), make(chan struct{})
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil },
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil },
 		func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error) {
 			close(entered)
 			<-release
@@ -192,7 +193,7 @@ func TestCommittedSandboxCandidatePublishesAfterShutdown(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

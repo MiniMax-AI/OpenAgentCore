@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -134,7 +135,7 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			lease.inner = owner.Lease
 			id := uuid.NewString()
 			service, reader := unusedSessions(t)
-			dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+			dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, Links: relay.New(nil), ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
@@ -174,6 +175,7 @@ func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
 		{"missing Session reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service}, bound, "execution worker requires the Session reader"},
 		{"missing Session operations", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{}, "execution requires the Session execution operations"},
 		{"missing deployment", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, bound, "execution worker requires the deployment execution operations"},
+		{"missing Link relay", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Sessions: owner.Sessions, Deployment: owner.Deployment}, "execution worker requires the Link relay"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			lease := &closeCountingLease{t: t}
@@ -193,7 +195,7 @@ func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	id := uuid.NewString()
 	// The Worker's first reconciliation scans the Session work.
 	reader, service := testSessions(t, pool, nil)
-	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, Links: relay.New(nil), ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 	if err != nil {
 		t.Fatal(err)

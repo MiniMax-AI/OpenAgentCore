@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -102,7 +103,7 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
 	})
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +224,7 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 		}
 		published = append(published, generation)
 	}
-	m, err := newRuntimeManager(owner, deployments, adapter, nil, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, deployments, adapter, nil, runtimegateway.NewRegistry(), relay.New(nil), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +259,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 		return deployment.Snapshot{Record: deployment.Record{InstallationID: id, WebManaged: true, Generation: 1}}, nil
 	}}
 	deployments, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
-	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +281,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 func TestSandboxResetChangesReturnViewReadAfterCommit(t *testing.T) {
 	owner, deployments, reader := resetManager(t)
 	id := initializeE2BDeployment(t, owner)
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

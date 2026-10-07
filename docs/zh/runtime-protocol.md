@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 9ef338b2da6b53a2d5290527ebff5bb119c8c85f4fdeef8dd2cf8bde3ec16e0d
+source_hash: 0714986591e8fb4901ec0d594beac4f3501d84663473ec3087d961e9c6efda5f
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -120,9 +120,9 @@ Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替�
 
 每个 Session frame 都携带分配：`execution_prepare`、`execution_start` 和 `execution_release`；`prompt_cancel`、`prompt_steer`、`function_result`、`permission_decision` 和 `prompt_for_user_choice_decision`；`runtime_prepare`、`workspace_read`、`workspace_write` 和 `workspace_export` 的每个 frame；以及 `environment_quiesce` 和 `environment_resume`。回复回显请求的分配，Run 的 frame 携带启动它的分配；Core 拒绝指明其他分配的回复或 Run frame。heartbeat 不携带分配。
 
-在一条连接上执行 Session 的第一个操作之前，包括没有 Turn 的 Environment 初始化和文件操作，Core 发送带 Session 的 Environment ID 的 `assignment_bind`，并等待 `assignment_status` `bound`。重复绑定同一分配仍得到 `bound`。Runtime 只在其已绑定的分配下准入 Session frame：较旧的 epoch 或已释放的分配以 `assignment_stale` 失败；其他分配、Session 或 Environment 以 `assignment_conflict` 失败。已启动 Run 的 frame，包括其取消回执，在释放前仍可在启动它的分配下准入。Runtime 已记录回执的重复函数结果或决策只在应用它的分配下得到回答；其他分配以 `assignment_conflict` 失败。
+在一条连接上执行 Session 的第一个操作之前，包括没有 Turn 的 Environment 初始化和文件操作，Core 发送带 Session 的 Environment ID 的 `assignment_bind`，并等待 `assignment_status` `bound`。当 Runtime 是 agent host 且 Environment 有存活的 [Link](./sandbox-link-protocol.md) resource 时，绑定还携带 `resource` 和 `attach_grant`：前者是该 resource，形式与[引导输入](./sandbox-bootstrap.md#launch-input)中的相同；后者是 base64 编码的 grant，agent host 凭它在此分配和 epoch 下打开该 resource generation 上的服务。grant 是机密。Core 不向其他任何 Runtime 发送这两个字段。只带其中一个字段、或带其他 Environment 的 resource 的绑定以 `invalid_request` 失败。以相同的 Environment、resource 和 grant 重复绑定同一分配仍得到 `bound`；该分配的其他绑定以 `assignment_conflict` 失败。Runtime 只在其已绑定的分配下准入 Session frame：较旧的 epoch 或已释放的分配以 `assignment_stale` 失败；其他分配、Session 或 Environment 以 `assignment_conflict` 失败。已启动 Run 的 frame，包括其取消回执，在释放前仍可在启动它的分配下准入。Runtime 已记录回执的重复函数结果或决策只在应用它的分配下得到回答；其他分配以 `assignment_conflict` 失败。
 
-Core 先记录释放并推进 epoch，再发送任何消息。删除 Session 以 `remove_home: true` 释放其分配；释放其 Environment 发送 `false`。删除从不吊销共享的 Runtime 凭据。`assignment_release` 立即约束该分配。随后 Runtime 停止 Session 的工作：仍在接收内容、或已提交但尚未应用的传输以 `assignment_stale` 结束；它释放只读准备，并等待每个 workspace 读取、写入、导出和 Runtime 准备发送结果。它关闭 Session 的 Executor，并在要求时删除原生 home；此后才回复 `released` 或 `home_removed`。未完成的清理回复 `failed` 和 `cleanup_unconfirmed`，同一 epoch 的重试会重复清理。声明 `home_removal` 不支持的 Runtime 以 `unsupported_operation` 回答 `remove_home: true`，Core 只要求它释放。Core 根据匹配的 `released` 或 `home_removed` 记录释放已应用；没有 Runtime 能处理该释放时立即记录：发给无授权 Runtime 的释放在记录时即结清，吊销 Runtime 会结清它的释放。Core 在 Runtime 连接时重发所有未确认的释放；失败的释放退避重试，等待最久的释放先发送，因此失败的释放不会拖延其他释放。已 quiesce 的 Runtime 只准入释放和匹配的 `environment_resume`，后者携带使其 quiesce 的分配。
+Core 先记录释放并推进 epoch，再发送任何消息；记录即撤回该分配的 attach grant。随后 Core 让 relay 吊销 Environment 的 Link resource 的当前 generation，使凭该 grant 打开的 attachment 在 Runtime 收到释放之前关闭。删除 Session 以 `remove_home: true` 释放其分配；释放其 Environment 发送 `false`。删除从不吊销共享的 Runtime 凭据。`assignment_release` 立即约束该分配。随后 Runtime 停止 Session 的工作：仍在接收内容、或已提交但尚未应用的传输以 `assignment_stale` 结束；它释放只读准备，并等待每个 workspace 读取、写入、导出和 Runtime 准备发送结果。它关闭 Session 的 Executor，并在要求时删除原生 home；此后才回复 `released` 或 `home_removed`。未完成的清理回复 `failed` 和 `cleanup_unconfirmed`，同一 epoch 的重试会重复清理。声明 `home_removal` 不支持的 Runtime 以 `unsupported_operation` 回答 `remove_home: true`，Core 只要求它释放。Core 根据匹配的 `released` 或 `home_removed` 记录释放已应用；没有 Runtime 能处理该释放时立即记录：发给无授权 Runtime 的释放在记录时即结清，吊销 Runtime 会结清它的释放。Core 在 Runtime 连接时重发所有未确认的释放；失败的释放退避重试，等待最久的释放先发送，因此失败的释放不会拖延其他释放。已 quiesce 的 Runtime 只准入释放和匹配的 `environment_resume`，后者携带使其 quiesce 的分配。
 
 Runtime 对无法路由的 Core frame 回复 `protocol_error`，回显请求 ID，并携带其类型和错误码。
 

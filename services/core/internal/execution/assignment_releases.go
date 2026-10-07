@@ -103,10 +103,15 @@ func (r releaseRetries) keep(releases []sessions.AssignmentRelease) {
 }
 
 // releaseAssignment sends one release and records its acknowledgement. Home
-// removal is requested only from a Runtime that declares it.
+// removal is requested only from a Runtime that declares it. The committed
+// release already denies the assignment's grant; the relay closes the
+// attachments it opened before the Runtime receives the release.
 func (w *Worker) releaseAssignment(ctx context.Context, release sessions.AssignmentRelease) bool {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	if release.Resource.Kind != "" {
+		w.dispatcher.Links.RevokeResource(release.Resource.Ref())
+	}
 	peer, err := w.dispatcher.authorizedPeer(ctx, release.RuntimeID)
 	if err != nil {
 		return false

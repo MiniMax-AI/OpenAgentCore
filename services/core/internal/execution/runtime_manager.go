@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -24,6 +25,7 @@ type runtimeManager struct {
 	deploymentReader    deployment.Reader
 	lease               Ownership
 	registry            *runtimegateway.Registry
+	links               *relay.Relay
 	config              RuntimeProvider
 	setupInstallationID string
 	loadDeployment      func(context.Context) (*RuntimeProvider, error)
@@ -89,7 +91,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 		n = &runtimeNode{lifecycle: &runtimeLifecycle{
 			sessions: m.sessions, sessionExecution: m.sessionExecution,
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
-			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
+			lease: m.lease, registry: m.registry, links: m.links, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
 			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
 		}}

@@ -30,10 +30,12 @@ func (q *Queries) GetAgentHostCredential(ctx context.Context, id pgtype.UUID) (G
 
 const getLinkAssignment = `-- name: GetLinkAssignment :one
 SELECT b.session_id, b.runtime_id, b.epoch, b.desired_state = 'bound' AS bound,
-    d.agent_host AND d.revoked_at IS NULL AS agent_host, d.credential_revision,
+    (d.agent_host AND d.revoked_at IS NULL)::boolean AS agent_host, d.credential_revision,
     r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
-    r.id AS resource_id, r.generation AS resource_generation
+    r.id AS resource_id, r.generation AS resource_generation,
+    (COALESCE(s.configuration->'environment'->'network'->>'access', 'enabled') = 'enabled')::boolean AS network_enabled
 FROM session_runtime_assignments b
+JOIN sessions s ON s.id = b.session_id
 JOIN devices d ON d.id = b.runtime_id
 LEFT JOIN environments e ON e.session_id = b.session_id
 LEFT JOIN sandbox_resources r ON r.environment_id = e.id AND r.live
@@ -45,17 +47,18 @@ type GetLinkAssignmentRow struct {
 	RuntimeID             pgtype.UUID `json:"runtime_id"`
 	Epoch                 int64       `json:"epoch"`
 	Bound                 bool        `json:"bound"`
-	AgentHost             pgtype.Bool `json:"agent_host"`
+	AgentHost             bool        `json:"agent_host"`
 	CredentialRevision    int64       `json:"credential_revision"`
 	ResourceTenantID      pgtype.UUID `json:"resource_tenant_id"`
 	ResourceEnvironmentID pgtype.UUID `json:"resource_environment_id"`
 	ResourceKind          pgtype.Text `json:"resource_kind"`
 	ResourceID            pgtype.UUID `json:"resource_id"`
 	ResourceGeneration    pgtype.Int8 `json:"resource_generation"`
+	NetworkEnabled        bool        `json:"network_enabled"`
 }
 
-// The assignment with its Runtime's Attach authority and the live Link
-// resource of its Session's Environment.
+// The assignment with its Runtime's Attach authority, the live Link resource
+// of its Session's Environment and that Environment's network access.
 func (q *Queries) GetLinkAssignment(ctx context.Context, assignmentID pgtype.UUID) (GetLinkAssignmentRow, error) {
 	row := q.db.QueryRow(ctx, getLinkAssignment, assignmentID)
 	var i GetLinkAssignmentRow
@@ -71,33 +74,31 @@ func (q *Queries) GetLinkAssignment(ctx context.Context, assignmentID pgtype.UUI
 		&i.ResourceKind,
 		&i.ResourceID,
 		&i.ResourceGeneration,
+		&i.NetworkEnabled,
 	)
 	return i, err
 }
 
 const getSandboxServeAuthority = `-- name: GetSandboxServeAuthority :one
-SELECT tenant_id, environment_id, generation, credential_hash FROM sandbox_resources
-WHERE kind = $1 AND id = $2 AND live
+SELECT tenant_id, environment_id, kind, generation, credential_hash FROM sandbox_resources
+WHERE id = $1 AND live
 `
-
-type GetSandboxServeAuthorityParams struct {
-	Kind string      `json:"kind"`
-	ID   pgtype.UUID `json:"id"`
-}
 
 type GetSandboxServeAuthorityRow struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	EnvironmentID  pgtype.UUID `json:"environment_id"`
+	Kind           string      `json:"kind"`
 	Generation     int64       `json:"generation"`
 	CredentialHash pgtype.Text `json:"credential_hash"`
 }
 
-func (q *Queries) GetSandboxServeAuthority(ctx context.Context, arg GetSandboxServeAuthorityParams) (GetSandboxServeAuthorityRow, error) {
-	row := q.db.QueryRow(ctx, getSandboxServeAuthority, arg.Kind, arg.ID)
+func (q *Queries) GetSandboxServeAuthority(ctx context.Context, id pgtype.UUID) (GetSandboxServeAuthorityRow, error) {
+	row := q.db.QueryRow(ctx, getSandboxServeAuthority, id)
 	var i GetSandboxServeAuthorityRow
 	err := row.Scan(
 		&i.TenantID,
 		&i.EnvironmentID,
+		&i.Kind,
 		&i.Generation,
 		&i.CredentialHash,
 	)

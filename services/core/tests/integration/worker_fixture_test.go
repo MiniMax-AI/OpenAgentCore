@@ -5,10 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -73,6 +75,9 @@ func startOwnedWorkerErr(ctx context.Context, s *Store, dispatcher *execution.Di
 	owned.DeploymentReader = deploymentStore(s)
 	owned.Sessions = service
 	owned.SessionsReader = sessionAdapter(s)
+	if owned.Links == nil {
+		owned.Links = relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+	}
 	return execution.StartWorker(ctx, &owned, owner)
 }
 

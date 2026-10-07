@@ -26,7 +26,7 @@ tar -C "$repo_root" -cf - \
   go.mod go.sum \
   contracts/agents-api/v1 \
   contracts/agents-api/openapi.go contracts/agents-api/openapi.yaml contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml \
-  internal/agentdaemon/proto \
+  internal/agentdaemon/proto internal/sandboxlink internal/sandboxwire internal/sandboxbootstrap internal/sandboxfs \
   internal/runtimefs internal/runtimebootstrap internal/agentnetwork internal/agentbundle internal/agentcapabilities internal/agentplugin internal/agentskill internal/harnessconfig internal/modelprovider internal/providerassets internal/obs/log services/core \
   | tar -C "$build_context" -xf -
 

@@ -6,9 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 )
 
 // frameFor returns the last frame of kind correlated with id.
@@ -166,5 +169,41 @@ func TestUnknownEnvelopeGetsCorrelatedProtocolError(t *testing.T) {
 	var got proto.ProtocolErrorPayload
 	if !ok || frame.DecodePayload(&got) != nil || got != (proto.ProtocolErrorPayload{Type: "future_operation", ErrorCode: proto.UnsupportedOperation}) || frame.Assignment != ref("s") {
 		t.Fatalf("protocol_error = %+v %+v", frame, got)
+	}
+}
+
+func TestAssignmentBindCarriesLink(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+	environment := uuid.NewString()
+	resource := &sandboxbootstrap.Resource{TenantID: uuid.NewString(), EnvironmentID: environment, Kind: "allocation", ID: uuid.NewString(), Generation: 1}
+	other := *resource
+	other.EnvironmentID = uuid.NewString()
+	bind := func(id string, payload proto.AssignmentBindPayload) proto.AssignmentStatusPayload {
+		if err := h.router.Handle(t.Context(), scoped(t, "s", proto.TypeAssignmentBind, id, payload)); err != nil {
+			t.Fatal(err)
+		}
+		return waitAssignmentStatus(t, h.sender, id)
+	}
+	for id, payload := range map[string]proto.AssignmentBindPayload{
+		"no grant":          {EnvironmentID: environment, Resource: resource},
+		"no resource":       {EnvironmentID: environment, AttachGrant: []byte("grant")},
+		"other environment": {EnvironmentID: environment, Resource: &other, AttachGrant: []byte("grant")},
+	} {
+		if got := bind(id, payload); got.ErrorCode != "invalid_request" {
+			t.Fatalf("%s: bind = %+v", id, got)
+		}
+	}
+	link := proto.AssignmentBindPayload{EnvironmentID: environment, Resource: resource, AttachGrant: []byte("grant")}
+	if got := bind("bind", link); got.State != proto.AssignmentBound {
+		t.Fatalf("bind = %+v", got)
+	}
+	if got := bind("again", link); got.State != proto.AssignmentBound {
+		t.Fatalf("identical bind = %+v", got)
+	}
+	changed := link
+	changed.AttachGrant = []byte("other grant")
+	if got := bind("changed", changed); got.ErrorCode != proto.AssignmentConflict {
+		t.Fatalf("bind with another grant = %+v", got)
 	}
 }
