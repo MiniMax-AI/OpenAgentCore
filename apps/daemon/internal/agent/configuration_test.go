@@ -26,10 +26,6 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		calls++
 		return nil, expected
 	})
-	registry.RegisterPreparation("fixture", true, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
-		calls++
-		return nil, expected
-	})
 	configuration.Providers[0].Protocol = "anthropic"
 	copy, err := registry.Configuration("fixture")
 	if err != nil {
@@ -38,11 +34,9 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	copy.Providers[0].Protocol = "anthropic"
 	factory, _ := registry.Resolve("fixture")
 	executor, _ := registry.ResolveExecutor("fixture")
-	preparation, _ := registry.ResolvePreparation("fixture")
 	entries := []func(proto.PromptRequestPayload) error{
 		func(req proto.PromptRequestPayload) error { _, err := factory(t.Context(), req, nil); return err },
 		func(req proto.PromptRequestPayload) error { _, err := executor(t.Context(), req); return err },
-		func(req proto.PromptRequestPayload) error { _, err := preparation(t.Context(), req); return err },
 	}
 	for _, entry := range entries {
 		responses := &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://provider.example", APIKey: "private-sentinel"}
@@ -62,7 +56,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 			t.Fatal("bound declaration was lost or mutated", err)
 		}
 	}
-	if calls != 3 {
+	if calls != 2 {
 		t.Fatal("unexpected native calls", calls)
 	}
 	if _, err := registry.Configuration("missing"); err == nil {

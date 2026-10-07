@@ -35,7 +35,10 @@ func TestForPresentsTheHostLoader(t *testing.T) {
 	if !slices.Equal(fragment.Masks, []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/ld.so.cache"}}) {
 		t.Fatalf("masks = %+v", fragment.Masks)
 	}
+	unsupported := proto.CapabilityUnsupported
 	view := agent.View{Proxy: agent.ViewProxyNone, LocalExec: []string{fragment.Overlays[0].Path},
+		Capabilities: agent.ViewCapabilities{EnvironmentNone: unsupported, Skills: unsupported, FunctionTools: unsupported,
+			FunctionResultImages: unsupported, ToolSearch: unsupported, StdioMCP: unsupported},
 		Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
 			return nil, nil
 		}}

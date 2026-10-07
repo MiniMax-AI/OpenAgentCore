@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"sync"
@@ -43,6 +44,13 @@ type viewWorld interface {
 	Lost() <-chan struct{}
 	Err() error
 }
+
+// noWorld is the world of an empty-root view, which has none to stop or lose.
+type noWorld struct{}
+
+func (noWorld) Stop() error           { return nil }
+func (noWorld) Lost() <-chan struct{} { return nil }
+func (noWorld) Err() error            { return nil }
 
 // closeLive closes the live view. It runs when the Session's context ends.
 func (s *session) closeLive() {
@@ -145,9 +153,9 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 	startCtx, cancel := context.WithCancel(s.ctx)
 	defer cancel()
 	defer context.AfterFunc(opts.Parent, cancel)()
-	view := s.plan.view
+	x := s.plan.executables
 	var scope sandboxprocess.Scope
-	if len(view.Shims) > 0 || len(view.ShimPaths) > 0 {
+	if len(x.Names) > 0 || len(x.Paths) > 0 || len(x.Aliases) > 0 {
 		var err error
 		if scope, err = s.processScope(startCtx); err != nil {
 			s.release(lv)
@@ -166,8 +174,14 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		s.release(lv)
 		return nil, fmt.Errorf("%w: stdio: %w", ErrLaunch, err)
 	}
-	world := worldfs.New(s.openFile)
-	spec := s.spec(world, opts, child)
+	// An empty-root view has no world.
+	var world viewWorld = noWorld{}
+	var serve sessionview.World
+	if !s.plan.request.DisableExecutionEnvironment {
+		w := worldfs.New(s.openFile)
+		world, serve = w, w.Serve
+	}
+	spec := s.spec(serve, opts, child)
 	// The gateway serves from the view's network hook until the view has ended.
 	var stopGateway func()
 	spec.Network.Setup = func(netns *os.File) (err error) {
@@ -361,11 +375,11 @@ func (h *ownedView) end(waitErr error) {
 	h.s.release(h.lv)
 }
 
-// spec builds the view: the closure and home directories, the agent
-// host's /etc files and CA directory, the adapter's overlays and masks, and
-// the shim.
-func (s *session) spec(world *worldfs.World, opts clirunner.StartOptions, stdio [3]*os.File) sessionview.Spec {
-	view := s.plan.view
+// spec builds the view over world: the closure and home directories, the
+// agent host's /etc files and CA directory, the adapter's overlays and masks,
+// and the shim under each name and path of the process broker's table.
+func (s *session) spec(world sessionview.World, opts clirunner.StartOptions, stdio [3]*os.File) sessionview.Spec {
+	view, x := s.plan.view, s.plan.executables
 	var private []sessionview.PrivateDir
 	for _, m := range view.Closure {
 		private = append(private, sessionview.PrivateDir{Name: m.Name, HostDir: m.HostDir, Exec: true})
@@ -387,10 +401,11 @@ func (s *session) spec(world *worldfs.World, opts clirunner.StartOptions, stdio 
 		overlays = append(overlays, sessionview.Overlay{Path: m.Path, Source: source})
 	}
 	return sessionview.Spec{
-		World:    world.Serve,
+		World:    world,
 		Private:  private,
 		Overlays: overlays,
-		Shim:     sessionview.Shim{Binary: s.cfg.Shim, Names: view.Shims, Paths: view.ShimPaths},
+		Shim: sessionview.Shim{Binary: s.cfg.Shim, Names: slices.Concat(slices.Sorted(maps.Keys(x.Names)), slices.Sorted(maps.Keys(x.Aliases))),
+			Paths: slices.Sorted(maps.Keys(x.Paths))},
 		Process: sessionview.Process{Path: opts.Binary, Args: append([]string{opts.Binary}, opts.Args...), Env: opts.Env,
 			Dir: opts.Dir, UID: s.uid, GID: s.uid, Stdin: stdio[0], Stdout: stdio[1], Stderr: stdio[2],
 			Grace: opts.KillTimeout},

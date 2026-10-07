@@ -27,7 +27,6 @@ var ErrUnsupportedKind = errors.New("agent: unsupported agent_kind")
 type Registry struct {
 	mu             sync.RWMutex
 	factories      map[string]Factory
-	preparers      map[string]PreparationFactory
 	executors      map[string]ExecutorFactory
 	views          map[string]View
 	kinds          map[string]proto.SupportedAgentKind
@@ -37,7 +36,6 @@ type Registry struct {
 func NewRegistry() *Registry {
 	return &Registry{
 		factories:      make(map[string]Factory),
-		preparers:      make(map[string]PreparationFactory),
 		executors:      make(map[string]ExecutorFactory),
 		views:          make(map[string]View),
 		kinds:          make(map[string]proto.SupportedAgentKind),
@@ -98,16 +96,6 @@ func (r *Registry) ResolveExecutor(kind string) (ExecutorFactory, error) {
 		return nil, fmt.Errorf("agent: executor unavailable for %q", kind)
 	}
 	return factory, nil
-}
-
-func (r *Registry) ResolvePreparation(kind string) (PreparationFactory, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	f := r.preparers[kind]
-	if f == nil {
-		return nil, fmt.Errorf("agent: preparation unavailable for %q", kind)
-	}
-	return f, nil
 }
 
 // Configuration returns an owned declaration for registry wrappers. Wrappers

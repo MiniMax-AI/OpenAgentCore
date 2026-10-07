@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 		os.Exit(processshim.Relay())
 	}
 	// The shim runs with the Harness's environment, so it comes first.
-	if filepath.Base(os.Args[0]) == "sh" {
+	if base := filepath.Base(os.Args[0]); base == "sh" || strings.HasPrefix(base, "oac-mcp-") {
 		os.Exit(processshim.Run(processshim.SocketPath))
 	}
 	if os.Getenv(harnessEnv) != "" {
@@ -71,13 +71,18 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 // register declares kind with view, or without one when view is nil.
 func register(reg *agent.Registry, kind string, view *agent.View) {
 	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
+		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}
 	declaration := agent.Declaration{Info: info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
 	reg.Register(declaration, agent.Runtime{Info: info, View: view,
 		Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, errors.New("not used")
 		}})
+}
+
+// declared declares every view capability as s.
+func declared(s proto.CapabilitySupport) agent.ViewCapabilities {
+	return agent.ViewCapabilities{EnvironmentNone: s, Skills: s, FunctionTools: s, FunctionResultImages: s, ToolSearch: s, StdioMCP: s}
 }
 
 // request is a Session request the agent host admits.
@@ -142,7 +147,10 @@ func leftEntries(t *testing.T, cfg Config) []string {
 // binds each request to the Session its state key names and records the
 // latest Executor the agent host opened for each Session.
 type daemon struct {
-	router   *dispatch.Router
+	router *dispatch.Router
+	// mcp is the installed MCP that the Environment's preparation resolves
+	// into each request; the wire does not carry it.
+	mcp      []proto.EnvironmentMCP
 	mu       sync.Mutex
 	frames   map[string]chan proto.Envelope // by envelope ID
 	bindings map[string]Binding             // by Session ID
@@ -153,6 +161,11 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 	t.Helper()
 	dm := &daemon{frames: map[string]chan proto.Envelope{}, bindings: map[string]Binding{}, opened: map[string]*session{}}
 	reg := registry(cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+		if dm.mcp != nil {
+			local := *req.LocalEnvironment
+			local.MCP = dm.mcp
+			req.LocalEnvironment = &local
+		}
 		e, err := open(ctx, cfg, req, dm.bind, d)
 		if s, ok := e.(*session); ok {
 			dm.mu.Lock()

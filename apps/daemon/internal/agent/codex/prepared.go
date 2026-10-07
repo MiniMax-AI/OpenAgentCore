@@ -6,11 +6,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// Prepared owns a connected native resource until Start transfers it to a Session.
+// Prepared owns a connected native resource until start transfers it to a Session
+// or an Executor takes it.
 // It observes owner cancellation and RPC exit, not continuous executor readiness.
 type Prepared struct {
 	mu                           sync.Mutex
@@ -25,19 +25,9 @@ type Prepared struct {
 	transferred                  chan struct{}
 }
 
-var _ agent.PreparedCancellation = (*Prepared)(nil)
-
-// Start consumes the preparation once. ctx bounds only this start operation;
+// start consumes the preparation once. ctx bounds only this start operation;
 // cancellation after return does not cancel the transferred Session. The original
 // owner context remains its lifetime context. On success the Session owns out.
-func (p *Prepared) Start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
-	session, err := p.start(ctx, runID, prompt, out)
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
-}
-
 func (p *Prepared) start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (*Session, error) {
 	if out == nil || strings.TrimSpace(runID) == "" || prompt.Validate() != nil {
 		return nil, errors.New("codex: start requires a run identity, prompt and output channel")
@@ -76,7 +66,7 @@ func (p *Prepared) start(ctx context.Context, runID string, prompt proto.Message
 }
 
 // Close waits for unused teardown and plan cleanup, including another caller's
-// ongoing Close. After successful Start it is inert; use
+// ongoing Close. After a successful start it is inert; use
 // the returned Session's cancellation path to release the transferred resource.
 func (p *Prepared) Close() error {
 	p.mu.Lock()
@@ -92,31 +82,6 @@ func (p *Prepared) Close() error {
 		p.plan.Cleanup()
 	}
 	return err
-}
-
-// Cancel fences Start and cancels the resource even after transfer.
-func (p *Prepared) Cancel(ctx context.Context) error {
-	p.mu.Lock()
-	p.closed = true
-	started := p.started
-	p.mu.Unlock()
-	if started {
-		if err := p.session.Cancel(ctx); err != nil {
-			return err
-		}
-		select {
-		case <-p.session.waitDone:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return p.Close()
-}
-
-// CancellationOutcome returns observed state, not a guarantee of final output or quiescence.
-func (p *Prepared) CancellationOutcome() proto.DonePayload {
-	return p.session.CancellationOutcome()
 }
 
 func (p *Prepared) watchOwner() {

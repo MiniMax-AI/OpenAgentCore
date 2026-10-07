@@ -3,12 +3,14 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"path"
 	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -33,6 +35,8 @@ func TestViewValidate(t *testing.T) {
 		"unclean view path":           func(v *agent.View) { v.Masks[0].Path = "/etc/../etc/harness" },
 		"duplicate shim":              func(v *agent.View) { v.Shims = append(v.Shims, "git") },
 		"shim named as the relay":     func(v *agent.View) { v.Shims = append(v.Shims, agent.ViewRelayName) },
+		"shim named as an alias":      func(v *agent.View) { v.Shims = append(v.Shims, path.Base(agent.ViewAlias(0))) },
+		"undeclared capability":       func(v *agent.View) { v.Capabilities.StdioMCP = proto.CapabilityUnspecified },
 		"forwarded assignment":        func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "A=B") },
 		"forwarded broker variable":   func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "PATH") },
 		"forwarded proxy variable":    func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "https_proxy") },
@@ -90,11 +94,17 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 	withBearer.BearerToken = &token
 	withHeaders.HTTPHeaders = map[string]string{"X-Api-Key": token}
 	remote.ServerURL = "https://mcp.example.com/docs"
+	alias := agent.MCPBinding{ServerLabel: "tools", Transport: "stdio", Stdio: &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(1)}}}
+	command, misplaced := alias, alias
+	command.Stdio = &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "node", Args: []string{"tools.js"}}}
+	misplaced.Stdio = &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(0)}}
 	for name, c := range map[string]struct {
 		req proto.PromptRequestPayload
 		mcp []agent.MCPBinding
 	}{
-		"gateway":            {req: gatewayRequest, mcp: []agent.MCPBinding{gateway}},
+		"gateway":            {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, alias}},
+		"stdio command":      {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, command}},
+		"another alias":      {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, misplaced}},
 		"model key":          {req: request("http://127.0.0.1:4101", token)},
 		"model endpoint":     {req: request("https://api.example.com", modelprovider.Placeholder)},
 		"request MCP":        {req: requestMCP},
@@ -129,6 +139,9 @@ func validView(t *testing.T) agent.View {
 		ShimPaths:  []string{"/bin/sh"},
 		ForwardEnv: []string{"GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
+		Capabilities: agent.ViewCapabilities{EnvironmentNone: proto.CapabilityUnsupported, Skills: proto.CapabilitySupported,
+			FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilityUnsupported, ToolSearch: proto.CapabilityUnsupported,
+			StdioMCP: proto.CapabilityUnsupported},
 		Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
 			return nil, errors.New("not started")
 		},

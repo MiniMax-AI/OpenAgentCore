@@ -79,10 +79,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 			runtime.View = discoverView(options)
 		}
 	}
-	if workspace != nil {
-		runtime.Preparation = NewPreparationFactory(*workspace)
-		runtime.WorkspaceReadPreparation = true
-	}
 	fmt.Fprintf(options.Stdout, "mcode preflight ok (%s)\n", version)
 	return runtime
 }

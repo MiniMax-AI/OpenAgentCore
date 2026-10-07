@@ -34,11 +34,14 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -61,11 +64,9 @@ type DiscoveryOptions struct {
 
 // Runtime binds one discovered descriptor to its native factories.
 type Runtime struct {
-	Info                     proto.SupportedAgentKind
-	Session                  Factory
-	Preparation              PreparationFactory
-	Executor                 ExecutorFactory
-	WorkspaceReadPreparation bool
+	Info     proto.SupportedAgentKind
+	Session  Factory
+	Executor ExecutorFactory
 	// View declares how the Harness runs in an agent-host Session view.
 	// A nil View means the agent host rejects the kind with ErrUnsupportedOperation.
 	View *View
@@ -80,9 +81,6 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 	if runtime.Executor != nil {
 		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
 	}
-	if runtime.Preparation != nil {
-		r.RegisterPreparation(runtime.Info.Kind, runtime.WorkspaceReadPreparation, runtime.Preparation)
-	}
 	if runtime.View != nil {
 		r.RegisterView(runtime.Info.Kind, *runtime.View)
 	}
@@ -92,7 +90,26 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 // view: the sandbox world at /, the closure, home and shims under
 // ViewPrivateRoot, and a loopback-only network whose model, MCP and proxy
 // endpoints belong to the Session's credential gateway. The declaration is
-// data; the agent host builds each view from it and the Session.
+// data; the agent host builds each view from it and the Session, and admits a
+// request only when the view declares each capability the request uses.
+//
+// Environment none. A request with DisableExecutionEnvironment runs in an
+// empty-root view: a read-only, noexec tmpfs root that holds only the
+// mountpoints for the closure, the home, the agent host's runtime files,
+// ViewProcRoot, ViewDevRoot and the overlays. It has no world, no shims, no
+// Link attachment and no sandbox network, so the generic proxy refuses every
+// request; the cgroup, the isolation and the gateway stay. The Harness runs in
+// ViewPrivateRoot/ViewHomeName/ViewWorkName. A request with neither
+// LocalEnvironment nor DisableExecutionEnvironment is an incomplete binding,
+// and the agent host rejects it.
+//
+// Environment. The Harness's environment is exactly the Env the adapter
+// passes to ViewSession.Launch, which it derives from its installation and the
+// request's typed fields; the request carries no environment values. A process
+// in the sandbox keeps only the Harness variables that View.ForwardEnv
+// declares, and the daemon's own environment reaches neither. Model and MCP
+// credentials stay in the gateway's protected configuration: the agent host
+// adds none to either environment or to a capability tree the view exposes.
 
 // The view layout. This is its one definition: sessionview builds views from
 // it, and View.Validate keeps declarations out of the trees it reserves.
@@ -109,10 +126,22 @@ const (
 	// ViewRelayName is the process relay's name in the shim directory, which
 	// no shim takes.
 	ViewRelayName = "oac-process-shim"
+	// ViewWorkName is the working directory under the home in an empty-root
+	// view.
+	ViewWorkName = "work"
 	// ViewProcRoot and ViewDevRoot are the view's own /proc and minimal /dev.
 	ViewProcRoot = "/proc"
 	ViewDevRoot  = "/dev"
 )
+
+// viewAliasPrefix starts every stdio MCP alias name, which no shim takes.
+const viewAliasPrefix = "oac-mcp-"
+
+// ViewAlias is the view path of the alias of the stdio binding at index i of
+// ViewSession.MCP, in the shim directory.
+func ViewAlias(i int) string {
+	return ViewPrivateRoot + "/" + ViewShimName + "/" + viewAliasPrefix + strconv.Itoa(i)
+}
 
 // ViewReserved reports whether the view path p is at or beneath a tree the
 // view builds itself: ViewPrivateRoot, ViewProcRoot or ViewDevRoot.
@@ -137,7 +166,8 @@ var (
 var ErrInvalidView = errors.New("agent: invalid view declaration")
 
 // ErrViewHandoff rejects a view request that carries a model provider other
-// than the Session's gateway, MCP outside ViewSession.MCP or an MCP credential.
+// than the Session's gateway, MCP outside ViewSession.MCP, an MCP credential
+// that the gateway does not hold, or a stdio binding other than its alias.
 var ErrViewHandoff = errors.New("agent: view request carries a connection outside the Session's gateway")
 
 // ViewSession.Launch and ViewSession.Spawn outcomes.
@@ -176,7 +206,28 @@ type View struct {
 	// environment wins over a forwarded variable of the same name.
 	ForwardEnv []string
 	Proxy      ViewProxy
-	Executor   ViewExecutorFactory
+	// Capabilities declares what the view supports.
+	Capabilities ViewCapabilities
+	Executor     ViewExecutorFactory
+}
+
+// ViewCapabilities declares, field by field, what a view supports. Each field
+// is set explicitly.
+type ViewCapabilities struct {
+	// EnvironmentNone runs a request with DisableExecutionEnvironment in an
+	// empty-root view.
+	EnvironmentNone proto.CapabilitySupport
+	// Skills runs a request with resolved Skills (LocalEnvironment.Skills).
+	Skills proto.CapabilitySupport
+	// FunctionTools, FunctionResultImages and ToolSearch mean what the
+	// proto.AgentKindCapabilities fields of the same names mean.
+	FunctionTools        proto.CapabilitySupport
+	FunctionResultImages proto.CapabilitySupport
+	ToolSearch           proto.CapabilitySupport
+	// StdioMCP runs stdio MCP bindings under their aliases. A stdio binding
+	// whose CredentialAuthority is not "none" is rejected with ErrViewHandoff
+	// whatever the view declares.
+	StdioMCP proto.CapabilitySupport
 }
 
 // ViewMount presents HostDir at ViewPrivateRoot/<Name>.
@@ -236,13 +287,19 @@ type ViewSession struct {
 	// MCP is the Session's effective MCP, resolved once from the public
 	// declarations and the installed Environment MCP. Each HTTP binding's
 	// ServerURL is its loopback gateway URL, and it carries no BearerToken and
-	// no HTTPHeaders; the gateway adds them. A stdio binding is as resolved and
-	// runs in the sandbox through the declared shims. A view Executor takes MCP
-	// only from here.
+	// no HTTPHeaders; the gateway adds them. The stdio binding at index i runs
+	// in the sandbox under its alias:
+	// its Stdio is exactly {Server: {Name: ServerLabel, Type: "stdio",
+	// Command: ViewAlias(i)}}, and the Harness runs the alias without
+	// arguments. The process broker runs the binding's frozen command, args
+	// and CWD for it, a relative CWD in the installation's package root, as it
+	// runs a shim's process and with nothing from the Harness's argv, working
+	// directory or environment. A view Executor takes MCP only from here.
 	MCP []MCPBinding
 	// Launch replaces clirunner.Start. Each call builds one view and runs
-	// Binary, which must be a LocalExec path, in it. Dir is a world path,
-	// OwnProcessGroup is true, and Env is the complete Harness environment.
+	// Binary, which must be a LocalExec path, in it. Dir is a world path, or
+	// the work directory in an empty-root view; OwnProcessGroup is true, and
+	// Env is the complete Harness environment.
 	// Cancel sends TERM to every process in the view and closes the view after
 	// KillTimeout; a Cancel after the Harness exited leaves its exit as it was.
 	// When the Harness exits while other processes remain, the view sends them
@@ -269,8 +326,8 @@ type ViewSession struct {
 
 // checkViewHandoff enforces, before the factory runs, that the view request
 // reaches the network only through the Session's gateway: the model provider
-// is the gateway with the placeholder key, and MCP arrives only in session.MCP
-// and without credentials.
+// is the gateway with the placeholder key, and MCP arrives only in session.MCP,
+// without credentials and with stdio only under its alias.
 func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, session ViewSession) error {
 	if provider := prepared.Provider; provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
 		return fmt.Errorf("%w: the model provider is not the Session's gateway", ErrViewHandoff)
@@ -278,9 +335,11 @@ func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.Pre
 	if req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) > 0) {
 		return fmt.Errorf("%w: MCP outside ViewSession.MCP", ErrViewHandoff)
 	}
-	for _, binding := range session.MCP {
-		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL, true)) {
-			return fmt.Errorf("%w: MCP binding %q is not a credential-free gateway endpoint", ErrViewHandoff, binding.ServerLabel)
+	for i, binding := range session.MCP {
+		alias := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: binding.ServerLabel, Type: "stdio", Command: ViewAlias(i)}}
+		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL, true)) ||
+			(binding.Transport == "stdio" && (binding.Stdio == nil || !reflect.DeepEqual(*binding.Stdio, alias))) {
+			return fmt.Errorf("%w: MCP binding %q is not a credential-free gateway endpoint or alias", ErrViewHandoff, binding.ServerLabel)
 		}
 	}
 	return nil
@@ -311,6 +370,12 @@ func (v View) Validate() error {
 	}
 	if v.Proxy != ViewProxyNone && v.Proxy != ViewProxyEnv {
 		return invalidView("proxy %d", v.Proxy)
+	}
+	c := reflect.ValueOf(v.Capabilities)
+	for i := range c.NumField() {
+		if s := c.Field(i).Interface().(proto.CapabilitySupport); s != proto.CapabilitySupported && s != proto.CapabilityUnsupported {
+			return invalidView("capability %s is not declared", c.Type().Field(i).Name)
+		}
 	}
 	names := map[string]bool{ViewShimName: true, ViewHomeName: true, ViewRunName: true}
 	for _, m := range v.Closure {
@@ -348,7 +413,7 @@ func (v View) Validate() error {
 		}
 	}
 	for i, n := range v.Shims {
-		if !isPathComponent(n) || n == ViewRelayName || slices.Contains(v.Shims[:i], n) {
+		if !isPathComponent(n) || n == ViewRelayName || strings.HasPrefix(n, viewAliasPrefix) || slices.Contains(v.Shims[:i], n) {
 			return invalidView("shim %q", n)
 		}
 	}
@@ -455,7 +520,7 @@ func (r *Registry) ResolveView(kind string) (View, error) {
 
 // Model configuration has one shared contract, authored in
 // internal/harnessconfig/harness.go. RegisterKind requires that declaration;
-// RegisterExecutor and RegisterPreparation inherit it. Every registered entry
+// RegisterExecutor inherits it. Every registered entry
 // validates model, provider and native parameters before calling native code.
 // The declaration belongs to the adapter and is also consumed by Core. Keep
 // adapter field rules and rendering private. That shared contract owns frozen
@@ -580,34 +645,6 @@ type WorkspaceWriter interface {
 	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
 }
 
-// Separate preparation for qualified workspace access and direct-call paths.
-
-// Prepared owns native resources until Start returns a non-nil Session. The
-// preparation owner context spans the eventual Session; Start's context is local
-// to that operation. A nil Session leaves preparation cleanup with the caller.
-type Prepared interface {
-	// Start transfers output ownership only when it returns a non-nil Session.
-	// A nil Session leaves the caller as the sole owner of closing out, and the
-	// implementation must not retain or write to it after Start returns.
-	Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (Session, error)
-	// Close retains unused ownership on error; callers may retry settlement.
-	Close() error
-}
-
-// PreparedCancellation is required for executable preparations and follows the
-// same native resource across Start. Read-only preparations need only Prepared.
-type PreparedCancellation interface {
-	Prepared
-	Session
-	// Cancel returns after local cleanup and all output writes have stopped.
-	// An error retains ownership so callers can retry this exact object serially.
-	Cancel(context.Context) error
-}
-
-// A factory may return both a resource and an error when construction failed but
-// cleanup remains unconfirmed. The caller must retain and close that resource.
-type PreparationFactory func(context.Context, proto.PromptRequestPayload) (Prepared, error)
-
 // Direct-call factory and registration. These use the existing Registry behavior.
 
 // Factory builds a Session for one prompt_request. out is the upstream
@@ -642,11 +679,9 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 		}
 		return f(ctx, req, out)
 	}
-	delete(r.preparers, kind)
 	delete(r.executors, kind)
 	delete(r.views, kind)
 	info.Capabilities.Preparation = proto.CapabilityUnsupported
-	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityUnsupported
 	r.kinds[kind] = info
 }
 
@@ -670,28 +705,5 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		return factory(ctx, req)
 	}
 	info.Capabilities.Preparation = proto.CapabilitySupported
-	r.kinds[kind] = info
-}
-
-// RegisterPreparation installs a separate execution-only path.
-func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare PreparationFactory) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	info, exists := r.kinds[kind]
-	if !exists || prepare == nil {
-		panic("agent.Registry.RegisterPreparation: registered kind and factory required")
-	}
-	configuration, declared := r.configurations[kind]
-	if !declared {
-		panic("agent.Registry.RegisterPreparation: configuration required")
-	}
-	r.preparers[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Prepared, error) {
-		if _, err := configuration.Prepare(req); err != nil {
-			return nil, err
-		}
-		return prepare(ctx, req)
-	}
-	info.Capabilities.Preparation = proto.CapabilitySupported
-	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityFromBool(workspaceRead)
 	r.kinds[kind] = info
 }

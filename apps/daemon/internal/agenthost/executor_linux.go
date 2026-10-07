@@ -45,10 +45,11 @@ func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.R
 	reg := agent.NewRegistry()
 	for _, info := range harnesses.SupportedAgentKinds() {
 		configuration, err := harnesses.Configuration(info.Kind)
-		if _, viewErr := harnesses.ResolveView(info.Kind); err != nil || viewErr != nil {
+		view, viewErr := harnesses.ResolveView(info.Kind)
+		if err != nil || viewErr != nil {
 			continue
 		}
-		reg.RegisterKind(viewInfo(info), configuration, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		reg.RegisterKind(viewInfo(info, view.Capabilities), configuration, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, unsupported("a direct prompt run")
 		})
 		reg.RegisterExecutor(info.Kind, factory)
@@ -56,14 +57,13 @@ func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.R
 	return reg
 }
 
-// viewInfo is info as views run the kind: in the Session's Environment, and
-// without what admission rejects or what needs a local workspace.
-func viewInfo(info proto.SupportedAgentKind) proto.SupportedAgentKind {
+// viewInfo is info as views run the kind: in the Session's Environment, with
+// what caps admits, and without what needs a local workspace.
+func viewInfo(info proto.SupportedAgentKind, caps agent.ViewCapabilities) proto.SupportedAgentKind {
 	c := &info.Capabilities
 	c.LocalEnvironment = proto.CapabilitySupported
-	for _, field := range []*proto.CapabilitySupport{&c.EnvironmentNone, &c.ToolSearch, &c.FunctionTools, &c.FunctionResultImages, &c.WorkspaceOutputExport} {
-		*field = proto.CapabilityUnsupported
-	}
+	c.WorkspaceReadPreparation, c.WorkspaceOutputExport = proto.CapabilityUnsupported, proto.CapabilityUnsupported
+	c.EnvironmentNone, c.FunctionTools, c.FunctionResultImages, c.ToolSearch = caps.EnvironmentNone, caps.FunctionTools, caps.FunctionResultImages, caps.ToolSearch
 	return info
 }
 
@@ -118,8 +118,14 @@ func open(ctx context.Context, cfg Config, req proto.PromptRequestPayload, bind 
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
+	// The attachment opens on first use. A Session with environment none,
+	// whose binding names no sandbox, never uses it.
 	s.link = newLinkOwner(d.dial, b, sandboxwire.NewID(), s.fail)
-	if err := checkBinding(s.link.request(sandboxlink.ServiceFile, sandboxfs.Version, sandboxwire.ID{}), env); err != nil {
+	if req.DisableExecutionEnvironment {
+		if b.SessionID.IsZero() {
+			return nil, invalidSession("binding: no Session ID")
+		}
+	} else if err := checkBinding(s.link.request(sandboxlink.ServiceFile, sandboxfs.Version, sandboxwire.ID{}), env); err != nil {
 		return nil, err
 	}
 	if s.plan, err = admit(cfg, roots, req, env, s.openNetwork); err != nil {

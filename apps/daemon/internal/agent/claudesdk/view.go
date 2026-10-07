@@ -58,14 +58,18 @@ func newView(probe Config, info RuntimeInfo) (*agent.View, error) {
 	if err != nil {
 		return nil, err
 	}
-	view := declareView(probe, node, root, filepath.ToSlash(bridge), filepath.ToSlash(info.NativePath), loader)
+	view := declareView(probe, info, node, root, filepath.ToSlash(bridge), loader)
 	if err := view.Validate(); err != nil {
 		return nil, err
 	}
 	return view, nil
 }
 
-func declareView(probe Config, node, root, bridge, native string, loader viewloader.Fragment) *agent.View {
+// declareView declares the view of the install that info describes. The view
+// runs the bridge in workspace mode, so its functions follow the probe as a
+// workspace Runtime's do.
+func declareView(probe Config, info RuntimeInfo, node, root, bridge string, loader viewloader.Fragment) *agent.View {
+	native := filepath.ToSlash(info.NativePath)
 	nodeMount := agent.ViewMount{Name: "node", HostDir: filepath.Dir(node)}
 	bundle := agent.ViewMount{Name: "claude-sdk", HostDir: root}
 	layout := viewLayout{node: nodeMount.Path() + "/" + filepath.Base(node), bridge: bundle.Path() + "/" + bridge, libraries: loader.LibraryPath}
@@ -78,6 +82,14 @@ func declareView(probe Config, node, root, bridge, native string, loader viewloa
 		Shims:      []string{"bash", "rg", "git"},
 		ForwardEnv: []string{"CLAUDECODE", "GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
+		Capabilities: agent.ViewCapabilities{
+			EnvironmentNone:      proto.CapabilityUnsupported,
+			Skills:               proto.CapabilityUnsupported,
+			FunctionTools:        proto.CapabilityFromBool(info.SupportsWorkspaceFunctions()),
+			FunctionResultImages: proto.CapabilityFromBool(info.SupportsFunctionResultImages()),
+			ToolSearch:           proto.CapabilityFromBool(info.SupportsWorkspaceToolSearch()),
+			StdioMCP:             proto.CapabilityUnsupported,
+		},
 	}
 	loader.AddTo(view)
 	view.Executor = newViewExecutorFactory(probe, layout)
@@ -110,12 +122,6 @@ func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.V
 	environment := req.LocalEnvironment
 	if environment == nil || !workspacePathSyntax(environment.WorkspaceRoot) || req.DisableExecutionEnvironment || view.Launch == nil || view.Proxy == "" {
 		return startRequest{}, nil, errors.New("claudesdk: a view Executor requires the sandbox workspace, Launch and the gateway proxy")
-	}
-	if environment.Capabilities || len(environment.Skills) != 0 || environment.CapabilityRoot != "" {
-		return startRequest{}, nil, fmt.Errorf("%w: installed Capabilities in an agent-host view", agent.ErrUnsupportedOperation)
-	}
-	if (environment.NetworkAccess != "" && environment.NetworkAccess != "enabled") || len(environment.AllowedDomains) != 0 {
-		return startRequest{}, nil, fmt.Errorf("%w: restricted network in an agent-host view", agent.ErrUnsupportedOperation)
 	}
 	servers, err := viewMCP(view.MCP)
 	if err != nil {

@@ -32,11 +32,11 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 			}
 			t.Setenv("USER_SELECTED", "must-not-resolve-from-daemon")
 			t.Setenv("MODEL_SECRET", "must-not-forward")
-			resource, err := NewPreparationFactory(c)(t.Context(), req)
+			resource, err := NewExecutorFactory(&c)(t.Context(), req)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = resource.Close() })
+			t.Cleanup(func() { _ = resource.Close(context.Background()) })
 			raw, err := os.ReadFile(record + ".session")
 			if err != nil {
 				t.Fatal(err)
@@ -117,18 +117,18 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	if err := os.WriteFile(c.Binary, []byte(strings.Replace(string(script), "HELPER=prepared", "HELPER=prepared-mcp-cancel", 1)), 0700); err != nil {
 		t.Fatal(err)
 	}
-	resource, err := NewPreparationFactory(c)(t.Context(), req)
+	resource, err := NewExecutorFactory(&c)(t.Context(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 16)
-	session, err := resource.Start(ctx, "run", proto.TextInput("invoke and wait"), out)
+	session, err := resource.StartTurn(ctx, "run", proto.TextInput("invoke and wait"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = resource.(*prepared).Cancel(context.Background()) })
+	t.Cleanup(func() { _ = resource.Close(context.Background()) })
 	select {
 	case event := <-out:
 		var call proto.ToolCallPayload
@@ -191,11 +191,11 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 			item.BearerToken = &value
 		}
 		req.LocalEnvironment.MCP = []proto.EnvironmentMCP{item}
-		resource, err := NewPreparationFactory(c)(t.Context(), req)
+		resource, err := NewExecutorFactory(&c)(t.Context(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = resource.Close() })
+		t.Cleanup(func() { _ = resource.Close(context.Background()) })
 		raw, err := os.ReadFile(record + ".session")
 		if err != nil {
 			t.Fatal(err)
@@ -220,7 +220,7 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 		} else if len(server.Headers) != 0 {
 			t.Fatal("anonymous MCP inherited credentials")
 		}
-		dataDir := resource.(*prepared).session.opts.DataDir
+		dataDir := resource.(*executor).opts.DataDir
 		for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
 			body, err := os.ReadFile(filepath.Join(dataDir, name))
 			if err != nil && !os.IsNotExist(err) {

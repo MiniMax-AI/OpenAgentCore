@@ -29,7 +29,6 @@ type RuntimeInitialFile struct {
 type RuntimeInitialization struct {
 	Action   string            `json:"action"`
 	Env      map[string]string `json:"env,omitempty"`
-	Network  string            `json:"network,omitempty"`
 	Packages []string          `json:"packages,omitempty"`
 	Command  string            `json:"command,omitempty"`
 	CWD      string            `json:"cwd,omitempty"`
@@ -179,9 +178,6 @@ func validWorkspacePath(value string, allowRoot bool) bool {
 }
 
 func validRuntimeInitialization(p RuntimeInitialization) bool {
-	if p.Network != "" && p.Network != "enabled" && p.Network != "disabled" {
-		return false
-	}
 	if p.CWD != "" && !validWorkspacePath(p.CWD, true) {
 		return false
 	}
@@ -197,7 +193,7 @@ func validRuntimeInitialization(p RuntimeInitialization) bool {
 		}
 		return true
 	case "npm", "python":
-		if p.Env != nil || p.Command != "" || p.CWD != "" || len(p.Packages) == 0 || len(p.Packages) > 1000 || p.Network == "" {
+		if p.Env != nil || p.Command != "" || p.CWD != "" || len(p.Packages) == 0 || len(p.Packages) > 1000 {
 			return false
 		}
 		for _, value := range p.Packages {
@@ -207,7 +203,7 @@ func validRuntimeInitialization(p RuntimeInitialization) bool {
 		}
 		return true
 	case "setup":
-		return p.Env == nil && p.Packages == nil && p.Network != "" && p.Command != "" && utf8.ValidString(p.Command) && !strings.ContainsRune(p.Command, 0)
+		return p.Env == nil && p.Packages == nil && p.Command != "" && utf8.ValidString(p.Command) && !strings.ContainsRune(p.Command, 0)
 	default:
 		return false
 	}

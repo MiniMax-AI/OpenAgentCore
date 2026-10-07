@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 12984c6ca7c8fb3166ce33bfe83bc86894124e5ce2427c4d1f8fe0c09666159e
+source_hash: d23b13d16a6de898b81c94e07ed3b2c32a2ea36dd70caaf17479bf2bc824595c
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -72,8 +72,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 | `Steerer` | 明确实现或 Unsupported | 额外的非持久化活动 Turn 输入 |
 | `FunctionResultSubmitter` | 明确实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
 | `PermissionResponder`、`UserChoiceResponder` | 明确实现或 Unsupported | 响应精确发出的身份；未知或已过期的交互与 Unsupported 保持区分 |
-| `WorkspaceReader`、`WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn、Executor 和 Prepared 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
-| `Prepared`、`PreparedCancellation` | 对可执行准备进行真实实现 | 在 Start、取消和未使用清理之间保持资源和输出的所有权 |
+| `WorkspaceReader`、`WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
 | 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
 
 每个适配器的 `contracts.go` 都包含针对每个小型接口的单项编译时断言。不要嵌入会让未来接口看起来已经实现的默认实现。添加契约时，还必须在通用完整性检查中进行分类，并在每个公共适配器中添加明确断言；该检查遵循已编写的 Harness 目录。
@@ -118,8 +117,8 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 - 错误表示结算尚未确认，既不释放所有权，也不释放容量。调用方截止时间只会停止等待，不会停止受跟踪的清理。必须串行重试同一个清理目标；清理失败会阻止替换并保留其资源槽位。
 - `Executor.Close` 独立于 Turn 结果确认资源退役：不可变的 Turn 错误不得阻止在其工作和输出已经停止后关闭原生传输层。
 - 结算必须包含所属的后台工作，并在失败后保留精确的原生清理目标。原生终止由适配器负责；仅有批量清理确认并不能证明已达到静默状态。
-- 每个 `Session`（包括直接调用工厂的结果）都要声明 `CancellationOutcome`。`Turn` 和 `PreparedCancellation` 继承该声明。快照保留已观察到的原生身份、Usage 和输出，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
-- 直接调用的 `Session.Cancel` 请求取消；输出关闭表示拆卸开始。可执行准备中的 `PreparedCancellation.Cancel` 会等待本地清理和输出写入停止。Turn 结算仍需要 `AwaitSettlement` 和所需的任何 `Executor.Close`；取消请求成功或其快照都不能替代这些等待。
+- 每个 `Session`（包括直接调用工厂的结果）都要声明 `CancellationOutcome`。`Turn` 继承该声明。快照保留已观察到的原生身份、Usage 和输出，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
+- 直接调用的 `Session.Cancel` 请求取消；输出关闭表示拆卸开始。Turn 结算仍需要 `AwaitSettlement` 和所需的任何 `Executor.Close`；取消请求成功或其快照都不能替代这些等待。
 
 **Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的 64 帧通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入、函数和交互准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算等待时间为十秒，回执发送预算为五秒；超时不能证明已达到静默状态。
 
@@ -151,7 +150,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂、准备工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序安装工厂：
 
@@ -159,8 +158,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 | --- | --- | --- |
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind、可用性、版本、`AgentKindCapabilities`、模型配置声明和直接调用工厂。它会重置其他注册项，因此必须首先调用。 |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期；据此派生 `Preparation` 能力 |
-| 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | 可选：针对已认定合格的工作区操作的独立只读工作区准备 |
-| 4 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
+| 3 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
 
 直接调用的 `agent.Factory` 委托给同一个 Executor 实现。
 
@@ -205,7 +203,7 @@ profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受
 
 ## 原生模型配置 {#native-model-configuration}
 
-[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个适配器在 `internal/harnessconfig/<kind>` 中提供一个 `Configuration`，供 Core 组合和 Runtime 的 `RegisterKind` 使用。直接调用工厂、准备路径和 Executor 路径都会在产生原生副作用之前通过该声明进行验证，而 Registry 包装器会将声明与工厂保留在一起。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
+[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个适配器在 `internal/harnessconfig/<kind>` 中提供一个 `Configuration`，供 Core 组合和 Runtime 的 `RegisterKind` 使用。直接调用工厂和 Executor 路径都会在产生原生副作用之前通过该声明进行验证，而 Registry 包装器会将声明与工厂保留在一起。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
 
 每个请求都指定非空的 `model` 和一个 `model_provider`；缺少任一项的请求，包括显式 null 或空值，都会在产生任何原生副作用之前被准备阶段拒绝。因此空声明不接受任何请求。未知协议格式和重复协议声明会导致注册失败。
 
@@ -237,7 +235,7 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 
 | 边界 | 测试 |
 | --- | --- |
-| Codex 复用、取消和未确认清理 | `codex/executor_test.go`、`terminal_cleanup_test.go`、`prepared_cancel_test.go` |
+| Codex 复用、取消和未确认清理 | `codex/executor_test.go`、`terminal_cleanup_test.go` |
 | Codex 输入回执和严格恢复 | `codex/function_write_receipt_test.go`、`function_receipt_test.go`、`resume_test.go`、`recovery_test.go` |
 | Claude 输入所有权、取消和准备清理 | `claudesdk/executor_test.go`、`cancellation_test.go`、`preparation_test.go` |
 | MiniMax 取消退役、Start 失败和清理重试 | `mcode/executor_test.go`、`executor_backpressure_test.go` |
@@ -276,6 +274,7 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 | `ShimPaths` | 绑定 shim 的视图路径；每个路径在沙箱中运行相同路径 |
 | `ForwardEnv` | 在沙箱中运行的进程保留的 Harness 变量 |
 | `Proxy` | `ViewProxyEnv` 或 `ViewProxyNone` |
+| `Capabilities` | 视图运行的功能（[能力](#capabilities)） |
 | `Executor` | 在 Session 的视图中准备其 Executor 的 `ViewExecutorFactory` |
 
 `View.Validate` 在不访问主机的情况下检查声明：
@@ -284,10 +283,28 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 - closure 名称是单个路径分量，且不是 `bin`、`home` 和 `run`，这三个由 agent host 用于 shim、Session home 和进程 relay；
 - shim 路径、overlay 和 mask 互不重叠，也不与 `/` 重叠，并且不进入视图自己构建的树：`/.oac`、`/proc` 和 `/dev`（`ViewReserved`）；
 - 每个 `LocalExec` 条目都位于某个 closure 目录或某个 `Exec` overlay 中；
-- shim 名称和 `ForwardEnv` 名称各自唯一，没有 shim 名为 `oac-process-shim`（该名称属于进程 relay），变量名不含 `=`，且 `ForwardEnv` 不指定视图或 broker 设置的变量（[环境](#environment)）；
+- shim 名称和 `ForwardEnv` 名称各自唯一，没有 shim 名为 `oac-process-shim`（该名称属于进程 relay）或以 `oac-mcp-` 开头（该前缀属于 [stdio 别名](#stdio-mcp)），变量名不含 `=`，且 `ForwardEnv` 不指定视图或 broker 设置的变量（[环境](#environment)）；
+- 每个 `Capabilities` 字段都是 `proto.CapabilitySupported` 或 `proto.CapabilityUnsupported`；
 - `Proxy` 是两个取值之一，且 `Executor` 非 nil。
 
 `harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。
+
+### 能力 {#capabilities}
+
+`View.Capabilities` 声明视图运行的每项功能。只有当视图支持请求使用的每项功能时，agent host 才会在产生任何副作用之前准入该请求。agent host 交给 dispatch 的 registry 据此推导 `EnvironmentNone`、`FunctionTools`、`FunctionResultImages` 和 `ToolSearch`。
+
+| 字段 | 使用该功能的请求 |
+| --- | --- |
+| `EnvironmentNone` | 设置了 `DisableExecutionEnvironment`（[Environment none](#environment-none)） |
+| `Skills` | 带有已解析的 Skills（`LocalEnvironment.Skills`） |
+| `FunctionTools`、`FunctionResultImages`、`ToolSearch` | 使用 `AgentKindCapabilities` 中同名的功能 |
+| `StdioMCP` | 带有 stdio MCP 绑定（[Stdio MCP](#stdio-mcp)） |
+
+无论视图如何声明，agent host 都以 `ErrUnsupportedOperation` 拒绝没有严格恢复的请求、已安装的 Capabilities 未经任何准备解析的请求，以及带受限网络的请求，因为只有 Provider 的工作负载网络边界才能约束进程自己的 socket。它以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
+
+### Environment none {#environment-none}
+
+设置了 `DisableExecutionEnvironment` 的请求在空根视图中运行：`/` 是只读、noexec 的 tmpfs，只包含 closure、Session home、agent host 运行时文件、`/proc`、`/dev` 和 overlay 的挂载点。它没有沙箱文件、没有 shim、没有 Link 附着，也没有沙箱网络，因此通用代理拒绝每个请求；cgroup、隔离和网关保持不变。请求不携带 `LocalEnvironment`，Harness 在 `/.oac/home/work`（`ViewWorkName`）中运行。请求本身已经表达了这一配置，因此线协议没有对应字段。既没有 `LocalEnvironment` 也没有 `DisableExecutionEnvironment` 的请求是不完整的绑定，agent host 会拒绝它。
 
 ### 可执行文件 {#executables}
 
@@ -299,19 +316,23 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 
 ### 环境 {#environment}
 
-`Launch` 在 `StartOptions.Env` 中接收完整的 Harness 环境。agent host 自身的环境从不传入，因此视图适配器不从 `os.Environ()` 开始构造。在沙箱中运行的进程获得 broker 的环境：来自 Harness 的 `ForwardEnv` 变量、Environment 固定的沙箱值（`HOME`、`PATH`、`TMPDIR` 和 `LANG`）以及 Environment 的工具环境。broker 是工具环境的唯一归属，视图适配器不向 Harness 传递任何工具环境。
+`Launch` 在 `StartOptions.Env` 中接收完整的 Harness 环境，适配器根据自己的安装和请求的类型化字段推导该环境；请求不携带任何环境值。agent host 自身的环境从不传入，因此视图适配器不从 `os.Environ()` 开始构造。在沙箱中运行的进程获得 broker 的环境：来自 Harness 的 `ForwardEnv` 变量、Environment 固定的沙箱值（`HOME`、`PATH`、`TMPDIR` 和 `LANG`）以及 Environment 的工具环境。broker 是工具环境的唯一归属，视图适配器不向 Harness 传递任何工具环境。agent host 只把模型和 MCP 凭据保存在网关受保护的配置中，从不把它们加入 Harness 的环境、Process spec 或视图暴露的能力树。
 
 `ForwardEnv` 从不指定视图或 broker 设置的变量：`HOME`、`PATH`、`TMPDIR`、`LANG`、`LD_LIBRARY_PATH`，以及任意大小写的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 和 `NO_PROXY`。当 Environment 的工具环境也设置了某个转发变量时，以工具环境的值为准。
 
 ### 端点与代理 {#endpoints-and-proxy}
 
-调用工厂之前，agent host 将请求的 `model_provider` 指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header；网关添加声明的凭据和 header。stdio 绑定保持解析结果，并通过声明的 shim 在沙箱中运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
+调用工厂之前，agent host 将请求的 `model_provider` 指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。只有 HTTP 绑定进入网关：每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header，网关添加声明的凭据和 header。stdio 绑定在其[别名](#stdio-mcp)下运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
 
-Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：模型提供商缺失或不是带占位凭据的网关、请求在 `ViewSession.MCP` 之外携带 MCP，或 HTTP 绑定不是不含凭据的 loopback 端点。
+Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：模型提供商缺失或不是带占位凭据的网关、请求在 `ViewSession.MCP` 之外携带 MCP、HTTP 绑定不是不含凭据的 loopback 端点，或 stdio 绑定不是其别名。
 
 使用 `ViewProxyEnv` 时，`ViewSession.Proxy` 是网关的代理 URL。适配器将 `HTTPS_PROXY` 和 `HTTP_PROXY` 设为该值，将 `NO_PROXY` 设为 `127.0.0.1,localhost`，每个变量都设置大写和小写两种形式。只有在确认 Harness 在本地发出的每个请求都遵循这些变量之后，才声明 `ViewProxyEnv`。忽略这些变量的请求会连接失败，因为视图没有出站路由。
 
 使用 `ViewProxyNone` 时，`ViewSession.Proxy` 为空，视图没有通用代理。准入以 `ErrUnsupportedOperation` 拒绝启用了需要代理的功能的请求。由提供商执行的 Web 工具保持提供商来源。
+
+### Stdio MCP {#stdio-mcp}
+
+stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 的绑定恰好是 `Stdio: {Server: {Name: ServerLabel, Type: "stdio", Command: agent.ViewAlias(i)}}`，即 `/.oac/bin` 下带 `oac-mcp-` 前缀的名称，Harness 不带参数运行该路径。进程 broker 把别名映射到绑定冻结的 command、args 和 `CWD`（相对 `CWD` 以安装的 package 根目录为基准），并像运行 shim 的进程一样运行它，不使用 Harness 的 argv、工作目录或环境中的任何内容。凭据权限不是 `none` 的 stdio 绑定会以 `ErrViewHandoff` 被拒绝。
 
 ### Home {#home}
 
@@ -346,8 +367,9 @@ Registry 在调用工厂之前对每个视图请求检查一次，并在以下�
 | `ForwardEnv` | 在沙箱中运行的进程保留每个声明的变量，且不保留任何其他 Harness 变量。 |
 | `Proxy` | 使用 `ViewProxyEnv` 时，每个本地请求（例如网页抓取、下载和更新检查）都经过代理。使用 `ViewProxyNone` 时，启用需要代理的功能的请求会被拒绝。 |
 | `Home` | 原生历史和配置保存在 `/.oac/home` 下，同一 Session 中后续的 Executor 从中继续。 |
+| `Capabilities` | 每项受支持的功能都通过 dispatch 运行一个 Turn：空根视图中的 Environment none、Skills、函数调用及其结果、工具搜索，以及每个以别名运行的 stdio 绑定。 |
 
-`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 为每个 Harness 运行一个 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。每个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
+`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 运行每个 Harness 的 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。第一个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。视图声明函数工具时，第二个 Turn 在新的 Executor 中运行，该 Executor 恢复 Session 的原生历史并调用一个函数；测试通过 dispatch 返回文本、图片、文本组成的结果，回答必须报告两段文本。视图声明工具搜索时，另一个 Session 中的 Turn 用工具搜索找到延迟加载的函数并调用它。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
 
 ## 原生参考 {#native-references}
 

@@ -15,6 +15,7 @@ import (
 
 // Spec declares one view and the process it runs.
 type Spec struct {
+	// World serves the view's root. A nil World makes the root empty: a read-only, noexec tmpfs that holds only the mountpoints.
 	World    World
 	Private  []PrivateDir
 	Overlays []Overlay
@@ -121,9 +122,6 @@ type Exit struct {
 }
 
 func (s *Spec) validate() error {
-	if s.World == nil {
-		return invalid("world is required")
-	}
 	if !filepath.IsAbs(s.CgroupParent) || filepath.Clean(s.CgroupParent) != s.CgroupParent {
 		return invalid("cgroup parent %q must be absolute and clean", s.CgroupParent)
 	}

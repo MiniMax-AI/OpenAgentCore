@@ -21,7 +21,7 @@ func TestWorkspaceCommandsRequirePackagedFeatureOnlyWhenRequested(t *testing.T) 
 		config := preparationFixture(t, "old-command-runtime")
 		req := preparationRequest()
 		req.ObserveToolObservations = observed
-		resource, err := NewPreparationFactory(config)(t.Context(), req)
+		resource, err := NewExecutorFactory(config)(t.Context(), req)
 		if observed {
 			if err == nil || !strings.Contains(err.Error(), "workspace command observations") {
 				t.Fatal("old bridge accepted requested command observations", err)
@@ -33,7 +33,7 @@ func TestWorkspaceCommandsRequirePackagedFeatureOnlyWhenRequested(t *testing.T) 
 			if err != nil {
 				t.Fatal("old bridge changed opt-out behavior", err)
 			}
-			if err := resource.Close(); err != nil {
+			if err := resource.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -45,16 +45,16 @@ func TestWorkspaceCommandFramesKeepStartIdentityAndObservedOutput(t *testing.T) 
 		config := preparationFixture(t, "commands-success")
 		req := preparationRequest()
 		req.ObserveToolObservations = observed
-		resource, err := NewPreparationFactory(config)(t.Context(), req)
+		resource, err := NewExecutorFactory(config)(t.Context(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resource.Close()
+		defer resource.Close(context.Background())
 		if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
 			t.Fatal("preparation submitted a command")
 		}
 		out := make(chan proto.Envelope, 16)
-		s, err := resource.Start(t.Context(), "actual-command-run", proto.TextInput("hello"), out)
+		s, err := resource.StartTurn(t.Context(), "actual-command-run", proto.TextInput("hello"), out)
 		if err != nil {
 			t.Fatal(err)
 		}
