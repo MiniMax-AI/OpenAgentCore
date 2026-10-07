@@ -22,9 +22,13 @@ type recSender struct {
 	mu      sync.Mutex
 	frames  []proto.Envelope
 	failNow bool
+	hold    func(proto.Envelope) // runs before a frame is sent
 }
 
 func (s *recSender) Send(_ context.Context, env proto.Envelope) error {
+	if s.hold != nil {
+		s.hold(env)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failNow {

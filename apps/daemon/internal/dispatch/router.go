@@ -55,7 +55,7 @@ type Router struct {
 	runtimePreparation  *runtimePreparationTransfer
 	workspaceWrite      *workspaceUpload
 	workspaceExport     *workspaceExport
-	workspaceReads      map[string]workspaceRead
+	workspaceReads      map[string]struct{}
 	localWorkspace      *localworkspace.Binding
 	sessionEnvironments bool
 	removeHome          func(sessionID string) error

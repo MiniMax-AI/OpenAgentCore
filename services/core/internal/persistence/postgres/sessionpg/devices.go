@@ -192,11 +192,17 @@ func (s *Store) RevokeDevice(ctx context.Context, tenant, device string) error {
 	if err != nil {
 		return err
 	}
-	n, err := s.units.Queries().RevokeDevice(ctx, sqlc.RevokeDeviceParams(lookup))
-	if err == nil && n == 0 {
-		return sessions.ErrNotFound
-	}
-	return err
+	return s.units.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := sqlc.New(tx)
+		n, err := q.RevokeDevice(ctx, sqlc.RevokeDeviceParams(lookup))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return sessions.ErrNotFound
+		}
+		return q.SettleRevokedRuntimeReleases(ctx, lookup.ID)
+	})
 }
 
 func (s *Store) TouchDevice(ctx context.Context, device string) (bool, error) {
@@ -296,6 +302,9 @@ func (t *SessionTx) LoadDevice(ctx context.Context, device string) (bool, error)
 // that release is already recorded. A Session without an assignment has
 // nothing to release.
 func (t *SessionTx) ReleaseAssignment(ctx context.Context, removeHome bool) error {
+	if err := t.q.LockAssignmentRuntime(ctx, t.session); err != nil {
+		return err
+	}
 	return t.q.ReleaseSessionAssignment(ctx, sqlc.ReleaseSessionAssignmentParams{SessionID: t.session, RemoveHome: removeHome})
 }
 

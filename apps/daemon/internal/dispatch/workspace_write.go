@@ -13,13 +13,11 @@ import (
 )
 
 // Router.mu protects this single bounded transfer for the dedicated Environment.
-// done closes once its result is sent.
 type workspaceUpload struct {
 	envelope  proto.Envelope
 	request   proto.WorkspaceWritePayload
 	data      []byte
 	ready     chan struct{}
-	done      chan struct{}
 	finished  bool
 	apply     bool
 	uncertain bool
@@ -80,11 +78,12 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 			}
 		}
-		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{}), done: make(chan struct{})}
+		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{})}
 		r.workspaceWrite = u
+		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
-		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u)
+		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u, done)
 		return r.sendWorkspaceWrite(ctx, env, proto.WorkspaceWriteResultPayload{Outcome: "ready"})
 	}
 	u := r.workspaceWrite
@@ -112,9 +111,9 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 	return nil
 }
 
-func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload) {
+func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, done func()) {
 	defer r.shutdownWG.Done()
-	defer close(u.done)
+	defer done()
 	timer := time.NewTimer(120 * time.Second)
 	defer timer.Stop()
 	select {

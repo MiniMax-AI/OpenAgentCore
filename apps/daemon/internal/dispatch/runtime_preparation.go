@@ -17,13 +17,11 @@ const runtimePreparationTimeout = 120 * time.Second
 
 // Router.mu protects one connection-local transfer. Partial installation data
 // belongs to the bound Environment and is never removed by transfer cleanup.
-// done closes once its result is sent.
 type runtimePreparationTransfer struct {
 	envelope  proto.Envelope
 	request   proto.RuntimePreparePayload
 	data      []byte
 	ready     chan struct{}
-	done      chan struct{}
 	cancel    context.CancelFunc
 	finished  bool
 	apply     bool
@@ -74,12 +72,13 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimePreparationTimeout)
 		u := &runtimePreparationTransfer{
 			envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
-			ready: make(chan struct{}), done: make(chan struct{}), cancel: cancel,
+			ready: make(chan struct{}), cancel: cancel,
 		}
 		r.runtimePreparation = u
+		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
-		go r.runRuntimePreparationTransfer(owner, u, r.localWorkspace.ApplyRuntimePreparation)
+		go r.runRuntimePreparationTransfer(owner, u, r.localWorkspace.ApplyRuntimePreparation, done)
 		if err := r.sendRuntimePrepareResult(ctx, env, proto.RuntimePrepareResultPayload{Outcome: "ready"}); err != nil {
 			cancel()
 			return err
@@ -138,9 +137,10 @@ func (r *Router) finishRuntimePreparationTransferLocked(u *runtimePreparationTra
 
 // apply must return only after its local mutations stop. Cancellation requests
 // shutdown, but cannot release ownership while that call is still running.
-func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, proto.RuntimePreparePayload, []byte) error) {
+// done runs once the result is sent.
+func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, proto.RuntimePreparePayload, []byte) error, done func()) {
 	defer r.shutdownWG.Done()
-	defer close(u.done)
+	defer done()
 	defer u.cancel()
 	select {
 	case <-u.ready:

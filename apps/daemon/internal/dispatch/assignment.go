@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -13,6 +14,10 @@ type assignmentState struct {
 	ref           proto.AssignmentRef
 	environmentID string
 	released      bool
+	// work counts the Session's admitted reads, writes, exports and Runtime
+	// preparations until each has sent its terminal result. A release waits
+	// for it, and the released assignment admits no more.
+	work sync.WaitGroup
 }
 
 // admitLocked returns why ref admits no new work of sessionID in
@@ -28,6 +33,14 @@ func (r *Router) admitLocked(ref proto.AssignmentRef, sessionID, environmentID s
 		return proto.AssignmentConflict
 	}
 	return ""
+}
+
+// trackWorkLocked counts work that ref admitted until the returned func runs,
+// after the work has sent its terminal result. Router.mu must be held.
+func (r *Router) trackWorkLocked(ref proto.AssignmentRef) func() {
+	work := &r.assignments[ref.SessionID].work
+	work.Add(1)
+	return work.Done
 }
 
 // admitRunLocked admits a frame for the run, which ref must have started.
@@ -90,7 +103,8 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		r.mu.Unlock()
 		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus("", code))
 	}
-	work, preparations := r.fenceSessionWorkLocked(ref.SessionID)
+	preparations := r.fenceSessionWorkLocked(ref.SessionID)
+	work := &r.assignments[ref.SessionID].work
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
@@ -98,9 +112,7 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		for _, p := range preparations {
 			r.releasePreparation(p, "failed", proto.AssignmentStale, true, false)
 		}
-		for _, done := range work {
-			<-done
-		}
+		work.Wait()
 		state, code := proto.AssignmentReleased, ""
 		err := r.closeSessionExecutor(ref.SessionID)
 		if err == nil && input.RemoveHome {
@@ -117,34 +129,18 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 	return nil
 }
 
-// fenceSessionWorkLocked ends the Session's admitted work outside its
-// Executor. A transfer still receiving its body ends without applying it, and
-// a transfer that already committed checks the released assignment before it
-// applies. It returns the work the release waits for and the read-only
-// preparations it releases, whose release also cancels their exports.
-// Router.mu must be held.
-func (r *Router) fenceSessionWorkLocked(sessionID string) ([]chan struct{}, []*preparationState) {
-	var work []chan struct{}
-	if u := r.workspaceWrite; u != nil && u.envelope.Assignment.SessionID == sessionID {
-		if !u.finished {
-			u.finished = true
-			close(u.ready)
-		}
-		work = append(work, u.done)
+// fenceSessionWorkLocked ends the Session's transfers: one still receiving
+// its body ends without applying it, and one that already committed checks the
+// released assignment before it applies. It returns the read-only preparations
+// the release releases, which also cancels their exports. Router.mu must be
+// held.
+func (r *Router) fenceSessionWorkLocked(sessionID string) []*preparationState {
+	if u := r.workspaceWrite; u != nil && u.envelope.Assignment.SessionID == sessionID && !u.finished {
+		u.finished = true
+		close(u.ready)
 	}
-	if u := r.runtimePreparation; u != nil && u.envelope.Assignment.SessionID == sessionID {
-		if !u.finished {
-			r.finishRuntimePreparationTransferLocked(u, false)
-		}
-		work = append(work, u.done)
-	}
-	if u := r.workspaceExport; u != nil && u.request.Assignment.SessionID == sessionID {
-		work = append(work, u.done)
-	}
-	for _, read := range r.workspaceReads {
-		if read.sessionID == sessionID {
-			work = append(work, read.done)
-		}
+	if u := r.runtimePreparation; u != nil && u.envelope.Assignment.SessionID == sessionID && !u.finished {
+		r.finishRuntimePreparationTransferLocked(u, false)
 	}
 	var preparations []*preparationState
 	for _, p := range r.preparations {
@@ -152,7 +148,7 @@ func (r *Router) fenceSessionWorkLocked(sessionID string) ([]chan struct{}, []*p
 			preparations = append(preparations, p)
 		}
 	}
-	return work, preparations
+	return preparations
 }
 
 // closeSessionExecutor ends the Session's Executor: it abandons a pending

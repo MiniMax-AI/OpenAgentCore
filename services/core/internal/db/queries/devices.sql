@@ -12,15 +12,17 @@ LEFT JOIN runtime_allocations a ON a.device_id = d.id
 WHERE d.id = $1;
 
 -- name: RevokeDevice :execrows
+UPDATE devices SET revoked_at = COALESCE(revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
+WHERE tenant_id = $1 AND id = $2;
+
+-- name: SettleRevokedRuntimeReleases :exec
 -- No Runtime is left to act on a revoked device's releases, so revocation
--- settles them.
-WITH settled AS (
-    UPDATE session_runtime_assignments b SET applied_epoch = b.epoch
-    WHERE b.runtime_id = sqlc.arg(id) AND b.desired_state = 'released'
-    AND EXISTS (SELECT 1 FROM devices d WHERE d.tenant_id = sqlc.arg(tenant_id) AND d.id = sqlc.arg(id))
-)
-UPDATE devices v SET revoked_at = COALESCE(v.revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
-WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(id);
+-- settles them. It runs after the revocation in the same transaction: the
+-- revocation holds the device row, which a release locks before it reads the
+-- device's authority, so every release is either seen here or sees the
+-- revocation.
+UPDATE session_runtime_assignments SET applied_epoch = epoch
+WHERE runtime_id = $1 AND desired_state = 'released';
 
 -- name: TouchDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
@@ -61,6 +63,12 @@ AND (d.environment_id IS NULL OR EXISTS (
 
 -- name: RememberNativeSession :execrows
 UPDATE session_runtime_assignments SET native_session_id = $2 WHERE session_id = $1;
+
+-- name: LockAssignmentRuntime :exec
+-- Locks the device row of the Session's Runtime before a release reads its
+-- authority; see SettleRevokedRuntimeReleases.
+SELECT 1 FROM session_runtime_assignments b JOIN devices d ON d.id = b.runtime_id
+WHERE b.session_id = $1 FOR SHARE OF d;
 
 -- name: ReleaseSessionAssignment :exec
 -- An identical release keeps its epoch; a release that adds home removal

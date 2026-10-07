@@ -13,12 +13,6 @@ import (
 
 const workspaceReadCapacity = 4
 
-// workspaceRead is one admitted read; done closes once its result is sent.
-type workspaceRead struct {
-	sessionID string
-	done      chan struct{}
-}
-
 func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) error {
 	// Never echo an unbounded correlation ID onto the shared connection.
 	if len(env.ID) > proto.WorkspaceReadMaxIDBytes {
@@ -48,15 +42,15 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead(code))
 	}
 	if r.workspaceReads == nil {
-		r.workspaceReads = make(map[string]workspaceRead)
+		r.workspaceReads = make(map[string]struct{})
 	}
-	read := workspaceRead{sessionID: env.Assignment.SessionID, done: make(chan struct{})}
-	r.workspaceReads[env.ID] = read
+	r.workspaceReads[env.ID] = struct{}{}
+	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
 		defer r.shutdownWG.Done()
-		defer close(read.done)
+		defer done()
 		defer func() { r.mu.Lock(); delete(r.workspaceReads, env.ID); r.mu.Unlock() }()
 		// Observer loss does not discard an admitted native wait or replay it.
 		operation, cancel := context.WithTimeout(context.WithoutCancel(ctx), 12*time.Second)

@@ -18,7 +18,11 @@ import (
 
 type exportSender struct{ replies chan proto.Envelope }
 
+// Send fails with a canceled context, as the connection does.
 func (s exportSender) Send(ctx context.Context, env proto.Envelope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case s.replies <- env:
 		return nil
@@ -187,4 +191,26 @@ func TestWorkspaceExportCancelUnblocksWriterAndReleasesCapacity(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("export cancellation did not release capacity")
+}
+
+func TestCanceledExportAnswersTheRequestCoreAwaits(t *testing.T) {
+	r, s, request := exporterRouter(t, "normal")
+	preparation, release := context.WithCancel(context.Background())
+	r.mu.Lock()
+	r.preparations[request.Handle].ctx = preparation
+	r.mu.Unlock()
+	id := uuid.NewString()
+	sendExport(t, r, id, request)
+	first := readExport(t, s)
+	if first.Outcome != "chunk" {
+		t.Fatal(first)
+	}
+	// Core asks for the next chunk as the preparation that owns the export is released.
+	r.mu.Lock()
+	release()
+	r.workspaceExport.requests <- proto.WorkspaceExportPayload{Step: "next", Offset: int64(len(first.Data))}
+	r.mu.Unlock()
+	if got := readExport(t, s); got.Outcome != "failed" && got.Outcome != "chunk" {
+		t.Fatal("the canceled export answered with", got)
+	}
 }

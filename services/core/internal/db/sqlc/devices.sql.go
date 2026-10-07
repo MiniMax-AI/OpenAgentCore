@@ -248,6 +248,18 @@ func (q *Queries) ListPendingAssignmentReleases(ctx context.Context, runtimeIds 
 	return items, nil
 }
 
+const lockAssignmentRuntime = `-- name: LockAssignmentRuntime :exec
+SELECT 1 FROM session_runtime_assignments b JOIN devices d ON d.id = b.runtime_id
+WHERE b.session_id = $1 FOR SHARE OF d
+`
+
+// Locks the device row of the Session's Runtime before a release reads its
+// authority; see SettleRevokedRuntimeReleases.
+func (q *Queries) LockAssignmentRuntime(ctx context.Context, sessionID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockAssignmentRuntime, sessionID)
+	return err
+}
+
 const releaseSessionAssignment = `-- name: ReleaseSessionAssignment :exec
 UPDATE session_runtime_assignments b
 SET desired_state = 'released', epoch = b.epoch + 1, remove_home = b.remove_home OR $1::boolean,
@@ -286,13 +298,8 @@ func (q *Queries) RememberNativeSession(ctx context.Context, arg RememberNativeS
 }
 
 const revokeDevice = `-- name: RevokeDevice :execrows
-WITH settled AS (
-    UPDATE session_runtime_assignments b SET applied_epoch = b.epoch
-    WHERE b.runtime_id = $2 AND b.desired_state = 'released'
-    AND EXISTS (SELECT 1 FROM devices d WHERE d.tenant_id = $1 AND d.id = $2)
-)
-UPDATE devices v SET revoked_at = COALESCE(v.revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
-WHERE v.tenant_id = $1 AND v.id = $2
+UPDATE devices SET revoked_at = COALESCE(revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
+WHERE tenant_id = $1 AND id = $2
 `
 
 type RevokeDeviceParams struct {
@@ -300,14 +307,27 @@ type RevokeDeviceParams struct {
 	ID       pgtype.UUID `json:"id"`
 }
 
-// No Runtime is left to act on a revoked device's releases, so revocation
-// settles them.
 func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, revokeDevice, arg.TenantID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const settleRevokedRuntimeReleases = `-- name: SettleRevokedRuntimeReleases :exec
+UPDATE session_runtime_assignments SET applied_epoch = epoch
+WHERE runtime_id = $1 AND desired_state = 'released'
+`
+
+// No Runtime is left to act on a revoked device's releases, so revocation
+// settles them. It runs after the revocation in the same transaction: the
+// revocation holds the device row, which a release locks before it reads the
+// device's authority, so every release is either seen here or sees the
+// revocation.
+func (q *Queries) SettleRevokedRuntimeReleases(ctx context.Context, runtimeID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, settleRevokedRuntimeReleases, runtimeID)
+	return err
 }
 
 const touchDevice = `-- name: TouchDevice :execrows

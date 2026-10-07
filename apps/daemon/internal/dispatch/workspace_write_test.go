@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -205,4 +206,38 @@ func TestReleaseFencesUnfinishedWorkspaceWrite(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(workspace, "file")); !os.IsNotExist(err) {
 		t.Fatal("a released assignment's write applied", err)
 	}
+}
+
+func TestReleaseWaitsUntilTheWriteResultIsSent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sender, request, workspace := localWriterRouter(t)
+		sent := make(chan struct{})
+		sender.hold = func(env proto.Envelope) {
+			var result proto.WorkspaceWriteResultPayload
+			if env.Type == proto.TypeWorkspaceWriteResult && env.DecodePayload(&result) == nil && result.Outcome == "completed" {
+				<-sent
+			}
+		}
+		id := uuid.NewString()
+		for _, step := range []proto.WorkspaceWritePayload{request, {Step: "chunk", Data: []byte("abc")}, {Step: "commit"}} {
+			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, step)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// The write has applied and released its owner; its result is not sent yet.
+		synctest.Wait()
+		release(t, r, preparationSessionID, "release", 2, false)
+		synctest.Wait()
+		if hasFrame(sender, proto.TypeAssignmentStatus, "release") {
+			t.Error("the release replied before the write's result was sent")
+		}
+		close(sent)
+		if got := waitAssignmentStatus(t, sender, "release"); got.State != proto.AssignmentReleased {
+			t.Fatal(got)
+		}
+		waitWorkspaceWrite(t, sender, id, "completed")
+		if data, err := os.ReadFile(filepath.Join(workspace, "file")); err != nil || string(data) != "abc" {
+			t.Fatal("the committed write did not apply", err)
+		}
+	})
 }

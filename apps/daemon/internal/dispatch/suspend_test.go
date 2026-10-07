@@ -43,7 +43,7 @@ func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 		"active":     func(r *Router) { r.sessions["run"] = &sessionState{ctxCancel: func() {}} },
 		"preparing":  func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
 		"receipt":    func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
-		"read":       func(r *Router) { r.workspaceReads = map[string]workspaceRead{"read": {}} },
+		"read":       func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
 		"write":      func(r *Router) { r.workspaceWrite = &workspaceUpload{} },
 		"export":     func(r *Router) { r.workspaceExport = &workspaceExport{} },
 		"permission": func(r *Router) { r.permIndex["permission"] = "run" },

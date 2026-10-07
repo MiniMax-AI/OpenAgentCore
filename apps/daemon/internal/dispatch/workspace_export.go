@@ -9,12 +9,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// workspaceExport is one admitted export; done closes once it ends.
+// workspaceExport is one admitted export.
 type workspaceExport struct {
 	request  proto.Envelope
 	requests chan proto.WorkspaceExportPayload
 	cancel   context.CancelFunc
-	done     chan struct{}
 }
 
 func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) error {
@@ -59,45 +58,57 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	}
 	owner, stop := r.shutdownContext(p.ctx)
 	owner, cancel := context.WithTimeout(owner, 180*time.Second)
-	u = &workspaceExport{request: env, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }, done: make(chan struct{})}
+	u = &workspaceExport{request: env, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }}
 	u.requests <- request
 	r.workspaceExport = u
+	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
-	go r.runWorkspaceExport(owner, u)
+	go r.runWorkspaceExport(owner, u, done)
 	return nil
 }
 
-func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport) {
+// runWorkspaceExport answers each request it admitted, even once the export is
+// canceled, and runs done after its last result is sent.
+func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, done func()) {
 	defer r.shutdownWG.Done()
-	defer close(u.done)
+	defer done()
+	// A result has its own send budget, independent of the export's cancellation.
+	send := func(result proto.WorkspaceExportResultPayload) error {
+		return r.sendWorkspaceExport(context.WithoutCancel(ctx), u.request, result)
+	}
 	reader, writer := io.Pipe()
-	done := make(chan struct{})
+	exported := make(chan struct{})
 	go func() {
-		defer close(done)
+		defer close(exported)
 		err := r.localWorkspace.ExportOutputs(ctx, writer)
 		_ = writer.CloseWithError(err)
 	}()
+	var offset int64
 	defer func() {
 		u.cancel()
 		_ = reader.Close()
-		<-done
+		<-exported
 		r.mu.Lock()
 		if r.workspaceExport == u {
 			r.workspaceExport = nil
 		}
 		r.mu.Unlock()
+		select {
+		case <-u.requests:
+			_ = send(proto.WorkspaceExportResultPayload{Outcome: "failed", Offset: offset, ErrorCode: "export_failed"})
+		default:
+		}
 	}()
 	// Closing the reader unblocks a pending pipe read on cancellation or shutdown.
 	stopRead := context.AfterFunc(ctx, func() { _ = reader.CloseWithError(ctx.Err()) })
 	defer stopRead()
-	var offset int64
 	buffer := make([]byte, proto.WorkspaceExportChunkBytes)
 	for {
 		select {
 		case request := <-u.requests:
 			if request.Offset != offset {
-				_ = r.sendWorkspaceExport(ctx, u.request, proto.WorkspaceExportResultPayload{Outcome: "failed", Offset: offset, ErrorCode: "invalid_request"})
+				_ = send(proto.WorkspaceExportResultPayload{Outcome: "failed", Offset: offset, ErrorCode: "invalid_request"})
 				return
 			}
 		case <-ctx.Done():
@@ -116,14 +127,14 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport) {
 		}
 		if result.Outcome == "completed" {
 			// The next owner may start immediately after receiving completion.
-			<-done
+			<-exported
 			r.mu.Lock()
 			if r.workspaceExport == u {
 				r.workspaceExport = nil
 			}
 			r.mu.Unlock()
 		}
-		if r.sendWorkspaceExport(ctx, u.request, result) != nil || result.Outcome != "chunk" {
+		if send(result) != nil || result.Outcome != "chunk" {
 			return
 		}
 	}

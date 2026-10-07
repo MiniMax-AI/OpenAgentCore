@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -13,8 +14,8 @@ import (
 // runAssignmentReleases delivers each released assignment to its connected
 // Runtime until the Runtime acknowledges it, so a Runtime that reconnects
 // receives the releases it missed. Releases run one per Session, bounded like
-// executions. A failed release backs off, so it cannot hold a slot that later
-// releases need.
+// executions. A failed release backs off, and the release due longest goes
+// first, so failing releases cannot hold the slots that others need.
 func (w *Worker) runAssignmentReleases(ctx context.Context) error {
 	type outcome struct {
 		ref          proto.AssignmentRef
@@ -43,10 +44,9 @@ func (w *Worker) runAssignmentReleases(ctx context.Context) error {
 			return err
 		}
 		retries.keep(releases)
-		now := time.Now()
-		for _, release := range releases {
+		for _, release := range retries.due(releases, time.Now()) {
 			ref := release.Assignment
-			if active[ref.SessionID] || len(active) >= w.executionConcurrency() || !retries.due(ref, now) {
+			if active[ref.SessionID] || len(active) >= w.executionConcurrency() {
 				continue
 			}
 			active[ref.SessionID] = true
@@ -68,8 +68,16 @@ type releaseRetry struct {
 	delay time.Duration
 }
 
-func (r releaseRetries) due(ref proto.AssignmentRef, now time.Time) bool {
-	return !now.Before(r[ref].at)
+// due returns the releases whose backoff has passed, the one due longest
+// first; a release never attempted is due from the start.
+func (r releaseRetries) due(releases []sessions.AssignmentRelease, now time.Time) []sessions.AssignmentRelease {
+	due := slices.DeleteFunc(slices.Clone(releases), func(release sessions.AssignmentRelease) bool {
+		return now.Before(r[release.Assignment].at)
+	})
+	slices.SortStableFunc(due, func(a, b sessions.AssignmentRelease) int {
+		return r[a.Assignment].at.Compare(r[b.Assignment].at)
+	})
+	return due
 }
 
 func (r releaseRetries) record(ref proto.AssignmentRef, acknowledged bool, now time.Time) {
