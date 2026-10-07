@@ -14,7 +14,7 @@ import (
 )
 
 func testAttachment() Attachment {
-	return Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
+	return Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: WorldExport}}}
 }
 
 // describer answers Describe and counts the calls.
@@ -174,7 +174,7 @@ func TestSuccessorWaitsForPredecessor(t *testing.T) {
 		acquire, settle func(*Client) error
 	}{
 		{"Attach then Detach",
-			func(c *Client) error { _, err := c.Attach(ctx, &AttachRequest{Export: "world"}); return err },
+			func(c *Client) error { _, err := c.Attach(ctx, &AttachRequest{Export: WorldExport}); return err },
 			func(c *Client) error { _, err := c.Detach(ctx, &DetachRequest{}); return err }},
 		{"Open then Release",
 			func(c *Client) error {
@@ -233,7 +233,7 @@ func TestSupersededWaiterEnds(t *testing.T) {
 	srv.awaitPredecessor = func() { waiting <- struct{}{} }
 	a := testAttachment()
 	first, _ := serveStream(t, srv, a, 1)
-	go first.Attach(ctx, &AttachRequest{Export: "world"})
+	go first.Attach(ctx, &AttachRequest{Export: WorldExport})
 	<-svc.entered
 
 	second, secondServed := serveStream(t, srv, a, 2)
@@ -279,7 +279,7 @@ func TestFenceOutlivesLease(t *testing.T) {
 	a := testAttachment()
 	a.Lease = lease
 	first, _ := serveStream(t, srv, a, 1)
-	go first.Attach(ctx, &AttachRequest{Export: "world"})
+	go first.Attach(ctx, &AttachRequest{Export: WorldExport})
 	<-svc.entered
 
 	second, secondServed := serveStream(t, srv, a, 2)

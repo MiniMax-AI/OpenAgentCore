@@ -8,14 +8,13 @@ import (
 	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 )
 
 // World serves one Session's world to one view. It is Linux-only.
 type World struct{}
 
 // New returns a world that fails to serve on this platform.
-func New(sandboxlink.ExportID, Dial) *World { return &World{} }
+func New(Dial) *World { return &World{} }
 
 // Serve reports ErrUnsupported.
 func (w *World) Serve(context.Context, *os.File, sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {

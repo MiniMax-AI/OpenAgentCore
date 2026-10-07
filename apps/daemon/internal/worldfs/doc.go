@@ -1,6 +1,6 @@
 // Package worldfs serves a Session's world, the sandbox file system, as the FUSE file system a sessionview launcher mounts at the view's root. Every kernel request becomes at most one File request (see internal/sandboxfs), apart from the redial and lock recovery described below, so processes in the view read and write sandbox files natively; nothing on the agent host shows through, and nothing is created in the sandbox to support the view.
 //
-// [World.Serve] implements [sessionview.World]. Within the context sessionview.Start passes, it dials the attachment's File stream, checks Describe, attaches the export and presents the view's mountpoints; it then serves the launcher's /dev/fuse connection with go-fuse's raw API.
+// [World.Serve] implements [sessionview.World]. Within the context sessionview.Start passes, it dials the attachment's File stream, checks Describe, attaches the world export (sandboxfs.WorldExport) and presents the view's mountpoints; it then serves the launcher's /dev/fuse connection with go-fuse's raw API.
 //
 // # Mapping
 //

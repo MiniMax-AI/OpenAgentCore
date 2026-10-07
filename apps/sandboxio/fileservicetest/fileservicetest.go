@@ -16,9 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// Export is the export the service serves.
-const Export = fileservice.Export
-
 // Server serves one attachment, whose state survives lost streams as it does behind Link.
 type Server struct {
 	dir string
@@ -71,7 +68,7 @@ func (s *Server) Dial(ctx context.Context) (io.ReadWriteCloser, error) {
 		ID:               s.id,
 		ServerInstanceID: s.svc.InstanceID(),
 		Lease:            context.Background(),
-		Exports:          []sandboxlink.ExportGrant{{ID: Export}},
+		Exports:          []sandboxlink.ExportGrant{{ID: sandboxfs.WorldExport}},
 	}
 	s.binds++
 	go s.files.Serve(context.Background(), server, a, s.binds)

@@ -242,7 +242,7 @@ func TestViewEditsWorkspace(t *testing.T) {
 	}
 	copyFile(t, self, filepath.Join(harness, "harness"))
 
-	w := worldfs.New(fileservicetest.Export, srv.Dial)
+	w := worldfs.New(srv.Dial)
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
 		World:         w.Serve,
 		StagingParent: t.TempDir(),

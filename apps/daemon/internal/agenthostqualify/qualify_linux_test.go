@@ -284,7 +284,7 @@ func (sb *sandbox) files(t *testing.T, cfg agenthost.Config, f func(ctx context.
 	}
 	c := sandboxfs.NewClient(st)
 	defer c.Close()
-	attached, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world"})
+	attached, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	if err != nil {
 		t.Fatal(err)
 	}

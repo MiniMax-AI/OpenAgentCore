@@ -34,14 +34,13 @@ const (
 // World serves one Session's world to one view.
 type World struct{ fs *frontend }
 
-// New returns a world that attaches export through the streams dial opens.
-func New(export sandboxlink.ExportID, dial Dial) *World {
+// New returns a world that attaches the world export through the streams dial opens.
+func New(dial Dial) *World {
 	ctx, cancel := context.WithCancel(context.Background())
 	drainCtx, stopDrain := context.WithCancel(ctx)
 	return &World{fs: &frontend{
 		RawFileSystem: fuse.NewDefaultRawFileSystem(),
 
-		export:    export,
 		dial:      dial,
 		ctx:       ctx,
 		cancel:    cancel,
@@ -94,7 +93,6 @@ type frontend struct {
 	// RawFileSystem answers what the File protocol has no request for, as the Mapping table in the package documentation lists.
 	fuse.RawFileSystem
 
-	export sandboxlink.ExportID
 	dial   Dial
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -162,7 +160,7 @@ func (f *frontend) serve(ctx context.Context, dev *os.File, mount sessionview.Wo
 	return p, nil
 }
 
-// attach connects, checks the service's declarations, attaches the export and presents the mountpoints.
+// attach connects, checks the service's declarations, attaches the world export and presents the mountpoints.
 func (f *frontend) attach(ctx context.Context, mps []sessionview.Mountpoint) (sessionview.Presentation, *fuse.MountOptions, error) {
 	c, d, err := f.connect(ctx)
 	if err != nil {
@@ -178,11 +176,11 @@ func (f *frontend) attach(ctx context.Context, mps []sessionview.Mountpoint) (se
 	case maxIO == 0 || f.caps.MaxWalkComponents == 0 || f.caps.MaxReadDirBytes == 0:
 		return sessionview.Presentation{}, nil, fmt.Errorf("%w: describe: read, write, walk or directory limit too small", ErrIncompatible)
 	}
-	a, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: f.export})
+	a, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	if err != nil {
 		var fail *sandboxfs.Failure
 		f.maybe = !errors.As(err, &fail) || fail.Effect != sandboxwire.EffectNone
-		return sessionview.Presentation{}, nil, fmt.Errorf("%w: attach %s: %w", ErrConnect, f.export, err)
+		return sessionview.Presentation{}, nil, fmt.Errorf("%w: attach %s: %w", ErrConnect, sandboxfs.WorldExport, err)
 	}
 	f.attached = true
 	f.root = f.newInode(a.Root.Node)

@@ -18,13 +18,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/worldfs"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 )
-
-// worldExport is the File service export that holds the sandbox's world, as
-// docs/sandbox-bootstrap.md defines it.
-const worldExport sandboxlink.ExportID = "world"
 
 // liveView is the Session's one live view slot.
 type liveView struct {
@@ -171,7 +166,7 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		s.release(lv)
 		return nil, fmt.Errorf("%w: stdio: %w", ErrLaunch, err)
 	}
-	world := worldfs.New(worldExport, s.openFile)
+	world := worldfs.New(s.openFile)
 	spec := s.spec(world, opts, child)
 	// The gateway serves from the view's network hook until the view has ended.
 	var stopGateway func()

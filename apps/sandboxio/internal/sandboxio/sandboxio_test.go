@@ -148,7 +148,7 @@ func TestServesEachProtocolThroughTheRelay(t *testing.T) {
 	}
 	files := sandboxfs.NewClient(stream)
 	defer files.Close()
-	attached, err := files.Attach(ctx, &sandboxfs.AttachRequest{Export: "world"})
+	attached, err := files.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	if err != nil {
 		t.Fatal(err)
 	}

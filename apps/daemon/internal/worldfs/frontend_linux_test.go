@@ -99,7 +99,7 @@ func newServer(t *testing.T) (*fileservicetest.Server, *counts, string) {
 // attached returns a frontend attached through dial as Serve leaves it, but neither mounted nor draining.
 func attached(t *testing.T, dial Dial) *frontend {
 	t.Helper()
-	f := New(fileservicetest.Export, dial).fs
+	f := New(dial).fs
 	if _, _, err := f.attach(context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +311,7 @@ func TestUncertainAttachIsDetached(t *testing.T) {
 		<-attaching
 		cancel()
 	}()
-	if _, _, err := New(fileservicetest.Export, srv.Dial).Serve(ctx, nil, sessionview.WorldMount{}); !errors.Is(err, context.Canceled) || errors.Is(err, ErrAttachmentDirty) {
+	if _, _, err := New(srv.Dial).Serve(ctx, nil, sessionview.WorldMount{}); !errors.Is(err, context.Canceled) || errors.Is(err, ErrAttachmentDirty) {
 		t.Fatalf("Serve = %v, want the cancellation without ErrAttachmentDirty", err)
 	}
 	rw, err := srv.Dial(context.Background())
@@ -359,7 +359,7 @@ func TestAbortBoundedWhenTransportBlocks(t *testing.T) {
 	var jam atomic.Bool
 	free := make(chan struct{})
 	t.Cleanup(func() { close(free) })
-	w := New(fileservicetest.Export, func(ctx context.Context) (io.ReadWriteCloser, error) {
+	w := New(func(ctx context.Context) (io.ReadWriteCloser, error) {
 		rw, err := srv.Dial(ctx)
 		if err != nil {
 			return nil, err
@@ -477,7 +477,7 @@ func TestUnsafeLockRecoveryFails(t *testing.T) {
 
 // Serve gives up when Start's context ends, even while Describe gets no answer, and Stop then returns at once.
 func TestServeEndsWithItsContext(t *testing.T) {
-	w := New(fileservicetest.Export, func(context.Context) (io.ReadWriteCloser, error) {
+	w := New(func(context.Context) (io.ReadWriteCloser, error) {
 		c, s := net.Pipe()
 		go io.Copy(io.Discard, s) // reads requests and never answers
 		t.Cleanup(func() { s.Close() })

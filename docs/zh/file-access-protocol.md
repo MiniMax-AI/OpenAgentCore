@@ -1,7 +1,7 @@
 ---
 title: "文件访问协议"
 source: docs/file-access-protocol.md
-source_hash: 3e1e5dbf10dfdafc918004bf6de2e0f562ec2ed19df1e1441ce49f2cc9c588a3
+source_hash: 848d891def538f4a4dc78448089348f470c45a7e55ab07eb96f07a9f727e6fb4
 ---
 
 文件访问协议定义 Runtime 如何读取和修改沙箱中的文件。沙箱内的 Sandbox I/O 服务提供该协议，Runtime 是其客户端。它是一个 node 与 handle 协议，形态仿照 FUSE 低层操作：lookup 获取 node 引用，open 在客户端选择的 ID 下创建 handle，读写携带偏移量，目录读取从 cookie 处继续，锁与沙箱自身的进程协同生效。第 1 阶段仅提供 [Uncached](#uncached-profile) profile，没有变更 stream。
@@ -61,7 +61,7 @@ stream 失败时，每个进行中的请求以 `Unknown` 和 `EffectPossible` �
 
 ### Linux 服务 {#the-linux-service}
 
-`fileservice.New(root)` 将绝对目录 `root` 作为唯一 export `world` 提供，`Describe` 仅向被授予 `world` 的 attachment 列出它。`oac-sandbox-io` 传入 `/`；其下一切内容的隔离由 Provider 的沙箱设置负责，如[沙箱引导](./sandbox-bootstrap.md#responsibilities-and-readiness)所述，服务不在 export 内部强制任何边界。`New` 将进程 umask 设为零，并将其有效 UID 和 GID 报告为 `Identity`。`InstanceID` 返回交给 Link 的 `ServerInstanceID`，`Close` 释放所有 attachment。
+`fileservice.New(root)` 将绝对目录 `root` 作为其唯一的 export，即 [world export](#attach) 提供，`Describe` 仅向被授予它的 attachment 列出它。`oac-sandbox-io` 传入 `/`；其下一切内容的隔离由 Provider 的沙箱设置负责，如[沙箱引导](./sandbox-bootstrap.md#responsibilities-and-readiness)所述，服务不在 export 内部强制任何边界。`New` 将进程 umask 设为零，并将其有效 UID 和 GID 报告为 `Identity`。`InstanceID` 返回交给 Link 的 `ServerInstanceID`，`Close` 释放所有 attachment。
 
 - 每个 node 持有一个 `O_PATH|O_NOFOLLOW` 描述符。在一个 attachment 中，一个 node 对应一个 mount ID、设备和 inode，因此硬链接共享一个 node，而 bind mount 与其源保持为两个 node。mount ID 来自带 `STATX_MNT_ID` 的 `statx`，在早于 5.8 的内核上来自 `/proc/self/fdinfo/<fd>` 的 `mnt_id` 行。
 - lookup 在父 node 的描述符上用 `openat` 和 `O_NOFOLLOW` 打开一个路径组件。symlink（包括 `/proc/<pid>/cwd` 这类 proc magic link）是独立的 node，绝不被遍历：`Lookup` 和 `Readlink` 返回链接本身，对其执行目录操作以 `Errno` `NotDirectory` 失败，`Open` 以 `SymlinkLoop` 失败。
@@ -214,6 +214,8 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 ### Attach {#attach}
 
 `Attach` 按 `ExportID` 选择一个 export；它从不接受 server 路径。该 export 必须是 attachment 的 Link 绑定在 `Attachment.Exports` 中授予的 export（参见[沙箱 Link 协议](./sandbox-link-protocol.md)），只读授权仅允许 `ReadOnly` attach；否则 `Attach` 以 `Unauthorized` 失败。已授予但服务未声明的 export 以 `InvalidArgument` 失败，`Detach` 之前的第二次 `Attach` 也是如此。只读 attachment 上每个修改文件的请求都以 `Errno` `ReadOnlyFilesystem` 失败：`SetAttr`、`Create`、`Write`、`Mkdir`、`Unlink`、`Rmdir`、`Rename`、`Link`、`Symlink`，以及用于写入或带 `OpenTruncate` 的 `Open`。
+
+协议定义了一个 export ID：`world`（`sandboxfs.WorldExport`），即沙箱世界的 export，也就是沙箱中的进程从其 `/` 看到的文件系统；agent host 为其视图的 FUSE world（`worldfs`）attach 该 export。
 
 ### 名称与路径 {#names-and-paths}
 
