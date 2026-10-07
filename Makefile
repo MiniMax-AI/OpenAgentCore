@@ -39,7 +39,6 @@ check-openapi:
 	python3 scripts/generate-public-api.test.py
 
 openapi:
-	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS)
 	@set -e; root="$${OAC_DEV_HOME:-$$HOME/.oac}/build"; mkdir -p "$$root"; \
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
 	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --swag-roots "$$output/roots.go"; \

@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 7b56bd48dd80dc6b04909d0ee82fc873ff51bf4daeb8fbdd1570ad66a9349cd0
+source_hash: 61cd594bb0bd475b019c916e099b6e8de935b4e5cb1cde7a39f620818097900b
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -18,7 +18,7 @@ Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[publi
 
 运行 `make openapi` 重新生成公共 Go 类型、路由清单和三个 OpenAPI 文档。`scripts/generate-public-api.py` 读取仓库内经过校验和验证的官方源文件，无需网络。它选择 Agents、Vaults、Files 和 Skills，并跟随 schema 引用，保留联合类型、可空性、必填字段和约束。Core 在 `v1/` 中的扩展类型继续由 Go 定义，在生成时加入公共 schema。内部 `/core/v1` 和 `/api/v1` 文档由处理函数注解生成。`make check-openapi` 检查生成结果是否最新并测试生成器；`make check-go` 也会运行此检查。
 
-公共契约是官方 API 加上 Core 扩展。标准字段生成到 `v1/official.gen.go`；已有存储或自定义 JSON 编码需要特定表示时，由 `go-bindings.json` 控制其 Go 表示。部分带判别字段的联合类型也从 schema 生成 JSON 序列化代码，保留每个分支必需的可空字段。其他联合类型序列化、请求准入和状态转换仍由实现代码负责。契约测试验证公共 schema 保留官方定义、扩展位于 `x_agents_core` 中，且所有文档与注册路由一致。官方客户端和原始 HTTP 测试验证行为。生成 schema 不代表某个尚未实现的功能已经得到验证；下方缺口仍然适用。升级上游时，在比对和兼容性测试后一起更新 OpenAPI 和 SDK 固定版本。
+公共契约是官方 API 加上 Core 扩展。标准字段生成到 `v1/official.gen.go`；`go-bindings.json` 只列出 Core 使用的类型，仅在已有存储或自定义 JSON 编码需要时覆盖 Go 表示或字段顺序。未覆盖的字段遵循官方 schema，相同结构复用同一个 Go 类型。部分带判别字段的联合类型也从 schema 生成 JSON 序列化代码，保留每个分支必需的可空字段。其他联合类型序列化、请求准入和状态转换仍由实现代码负责。契约测试验证公共 schema 保留官方定义、扩展位于 `x_agents_core` 中，且所有文档与注册路由一致。官方客户端和原始 HTTP 测试验证行为。生成 schema 不代表某个尚未实现的功能已经得到验证；下方缺口仍然适用。升级上游时，在比对和兼容性测试后一起更新 OpenAPI 和 SDK 固定版本。
 
 官方源文件与已有服务存在以下已记录的差异：Agents 鉴权错误的 `code` 可以为 null；Files 空页的 `first_id` 和 `last_id` 为 null；File 资源的 `expires_at` 和 `status_details` 可以为 null。源文件将这些字段声明为非空。官方客户端响应验证器只对这些指定字段允许 null，其余部分按 OpenAPI 3.1 响应 schema 验证。源文件中的 Files 和 Skills 操作未声明错误响应，因此这些错误体使用上游共享的 `ErrorResponse` schema。[传输语义](wire-semantics.md)和原始 HTTP 测试验证服务行为；发布的 schema 保留官方定义。
 
