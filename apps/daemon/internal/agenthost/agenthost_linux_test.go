@@ -70,13 +70,15 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: reg, Shim: exe, CADir: dir}
 }
 
-// register declares kind with view, or without one when view is nil.
+// register declares kind with view, or without one when view is nil, as
+// Config.Harnesses holds it.
 func register(reg *agent.Registry, kind string, view *agent.View) {
 	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 		LocalEnvironment: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
-	declaration := agent.Declaration{Info: info,
-		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
-	reg.Register(declaration, agent.Runtime{Info: info, View: view}, agent.EnvironmentSupport{Local: true, None: true})
+	reg.RegisterKind(info, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}})
+	if view != nil {
+		reg.RegisterView(kind, *view)
+	}
 }
 
 // request is a Session request the agent host admits.

@@ -113,7 +113,8 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 			if runtime == nil || runtime.View == nil {
 				t.Fatalf("%s declares no agent-host view; discovery reported why above", kind)
 			}
-			reg.Register(declaration, *runtime, agent.EnvironmentSupport{Local: true, None: true})
+			reg.RegisterKind(runtime.Info, declaration.Configuration)
+			reg.RegisterView(kind, *runtime.View)
 			qualify(t, h, cfg, sb, kind, runtime.Info.Capabilities, sessionModel(t, raw, key))
 		})
 	}

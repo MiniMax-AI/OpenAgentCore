@@ -32,8 +32,10 @@ type Config struct {
 	// RuntimeID and Credential authenticate the agent host to the relay.
 	RuntimeID  sandboxwire.ID
 	Credential []byte
-	// Harnesses holds the Harness declarations. A kind runs only when it
-	// declares an agent.View.
+	// Harnesses holds the Harness declarations as their adapters state
+	// them, registered with RegisterKind and RegisterView: Registry composes
+	// them with the Environments the agent host serves. A kind runs only
+	// when it declares an agent.View.
 	Harnesses *agent.Registry
 	// Shim is the absolute host path of the static oac-process-shim binary.
 	Shim string

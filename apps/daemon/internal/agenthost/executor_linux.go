@@ -42,7 +42,8 @@ func (h *Host) openExecutor(ctx context.Context, req proto.PromptRequestPayload)
 }
 
 // registry registers each kind in harnesses that declares a view, with
-// factory as its Executor factory, in a local Environment and with
+// factory as its Executor factory. It composes each declaration once, with
+// the Environments the agent host serves: a local Environment and
 // environment none.
 func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.Registry {
 	reg := agent.NewRegistry()

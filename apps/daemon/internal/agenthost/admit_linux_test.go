@@ -164,6 +164,10 @@ func TestRegistryRunsKindsWithViews(t *testing.T) {
 	var kinds []string
 	for _, info := range (&Host{cfg: f.cfg}).Registry().SupportedAgentKinds() {
 		kinds = append(kinds, info.Kind)
+		if caps := info.Capabilities; !caps.LocalEnvironment.IsSupported() || !caps.EnvironmentNone.IsSupported() ||
+			!caps.WorkspaceReadPreparation.IsSupported() || !caps.WorkspaceOutputExport.IsSupported() {
+			t.Errorf("%s does not run in the Environments the agent host serves: %+v", info.Kind, caps)
+		}
 	}
 	slices.Sort(kinds)
 	if !slices.Equal(kinds, []string{"masked", "shimmed", "viewed"}) {
