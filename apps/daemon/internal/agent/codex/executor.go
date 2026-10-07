@@ -26,7 +26,11 @@ type Executor struct {
 }
 
 func PrepareExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-	return newExecutor(ctx, req, defaultSessionConfig())
+	e, err := newExecutor(ctx, req, defaultSessionConfig())
+	if e == nil {
+		return nil, err
+	}
+	return e, err
 }
 
 func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {

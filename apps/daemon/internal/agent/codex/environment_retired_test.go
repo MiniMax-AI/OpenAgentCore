@@ -11,9 +11,9 @@ import (
 )
 
 func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
-	req, cfg, root := preparationFixture(t)
+	req, _, root := preparationFixture(t)
 	req.WorkspaceReadOnly = true
-	prepared, err := newExecutor(t.Context(), req, cfg)
+	prepared, err := PrepareExecutor(t.Context(), req)
 	if err == nil || prepared != nil {
 		t.Fatal("read-only request admitted", err)
 	}
