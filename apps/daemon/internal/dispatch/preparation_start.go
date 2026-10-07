@@ -33,12 +33,12 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "unknown_preparation")
 	}
-	if p.workspaceReadOnly {
+	if p.executor == nil {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "read_only_preparation")
 	}
 	owner := p.executor
-	if owner == nil || owner.id != input.ExecutorID {
+	if owner.id != input.ExecutorID {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "unknown_executor")
 	}

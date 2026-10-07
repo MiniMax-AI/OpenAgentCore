@@ -151,7 +151,7 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string, argv [
 	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, daemonize.ErrStaleOrCorrupt) {
 		return fmt.Errorf("connect: check pidfile: %w", err)
 	}
-	// Stale pidfile → remove so WritePIDFile starts clean.
+	// Stale pidfile → remove so Spawn starts clean.
 	_ = daemonize.RemovePIDFile(pidPath)
 
 	if err := daemonize.EnsureLogFile(logPath); err != nil {

@@ -11,8 +11,6 @@ ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_MCODE_NODE=/usr/local/bin/node \
     OAC_RUNTIME_MCODE_BIN=/opt/mcode-harness/native/cli.js \
     OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs \
-    OAC_RUNTIME_MCODE_AGENTS_API=1 \
-    OAC_RUNTIME_MCODE_WORKSPACE=managed \
     OAC_RUNTIME_WORKSPACE=/environment/workspace \
     OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization \
     OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages

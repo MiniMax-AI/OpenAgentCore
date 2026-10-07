@@ -132,7 +132,7 @@ func startNativeEngineDaemon(t *testing.T, h *dispatchHarness, home, binary, eng
 	}
 	old, _ := h.registry.LookupDevice(h.device.ID)
 	cmd := exec.Command(binary, "connect", "--profile", "execution")
-	cmd.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, "OAC_RUNTIME_MCODE_AGENTS_API=1")
+	cmd.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home)
 	cmd.Stdout, cmd.Stderr = log, log
 	if err = cmd.Start(); err != nil {
 		log.Close()

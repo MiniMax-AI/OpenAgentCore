@@ -6,7 +6,7 @@ Native tools run with the daemon user's permissions; the outer sandbox provides 
 
 ## Native pin and readiness
 
-The adapter accepts only `@minimax-ai/code` `0.4.12` ([`version.go`](../../../../apps/daemon/internal/agent/mcode/version.go)), built from the upstream source revision in [`source.json`](../../../../packages/mcode-harness/source.json) and run with Node.js 22. The daemon advertises MiniMax execution only when `OAC_RUNTIME_MCODE_AGENTS_API=1` and the version matches ([`execution.go`](../../../../apps/daemon/internal/agent/mcode/execution.go)); the native installer and the Runtime image set it. MiniMax Code runs on Linux and macOS.
+The adapter accepts only `@minimax-ai/code` `0.4.12` ([`version.go`](../../../../apps/daemon/internal/agent/mcode/version.go)), built from the upstream source revision in [`source.json`](../../../../packages/mcode-harness/source.json) and run with Node.js 22. MiniMax Code runs on Linux and macOS.
 
 Workspace execution also requires the companion's readiness report: private protocol 2, the pinned native version and the pinned source revision ([`workspace_readiness.go`](../../../../apps/daemon/internal/agent/mcode/workspace_readiness.go)). An older companion is rejected even when the upstream version matches.
 
@@ -47,7 +47,7 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 | Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
 | Programs | `/usr/local/bin/oac-daemon` and the companion at `/opt/mcode-harness` (native CLI at `native/cli.js`, bridge at `bridge.mjs`) |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE`, `OAC_RUNTIME_MCODE_AGENTS_API=1`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build runs the companion's `check.mjs` and the native `--version`. The combined Runtime image uses this image as its base. Sandboxes run it with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

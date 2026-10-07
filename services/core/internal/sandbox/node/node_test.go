@@ -120,7 +120,8 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	if _, err := LoadIdentity(dir); err == nil {
+	if release, err := lockDirectory(dir); err == nil {
+		release()
 		t.Fatal("running node did not retain lifetime identity lock")
 	}
 	r := reference()
@@ -218,7 +219,7 @@ func TestAgentRejectsDuplicateSequenceAndRetainsEpoch(t *testing.T) {
 	if reads != 1 {
 		t.Fatalf("replayed operation %d", reads)
 	}
-	persisted, e := LoadIdentity(dir)
+	persisted, e := readIdentity(dir)
 	if e != nil || persisted.OwnerEpoch != 9 {
 		t.Fatalf("epoch not retained: %+v %v", persisted.Identity, e)
 	}
