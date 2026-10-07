@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
@@ -467,15 +468,16 @@ func initializationFailed(err error) error {
 	return &dispatch.InitializationFailure{}
 }
 
-// checkPluginCredentials keeps a plugin's literal MCP headers out of the
-// world: the agent host does not install a plugin that declares them.
+// checkPluginCredentials refuses a plugin whose MCP server declares literal
+// headers, which would put a credential in the world, or is a stdio server
+// that takes credentials from the Environment, which no view runs.
 func checkPluginCredentials(tree agentcapabilities.Tree) error {
 	bundle, err := agentplugin.Inspect(tree.Files)
 	if err != nil {
 		return agentcapabilities.ErrInvalid
 	}
 	for _, server := range bundle.MCP {
-		if len(server.HTTPHeaders) != 0 {
+		if len(server.HTTPHeaders) != 0 || server.Type == "stdio" && agent.EnvironmentMCPCredentials(server) {
 			return agentcapabilities.ErrInvalid
 		}
 	}

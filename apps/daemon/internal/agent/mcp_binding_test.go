@@ -28,12 +28,14 @@ func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
 	local := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{
 		{Server: agentplugin.MCPServer{Name: "stdio", Type: "stdio", Command: "node", Args: []string{"tool.js"}}, PackageRoot: "plugins/proof", InstallationRoot: "/private/installed"},
 		{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", HTTPHeaders: map[string]string{"X-Selected": "literal"}}, BearerToken: &token},
+		{Server: agentplugin.MCPServer{Name: "configured", Type: "stdio", Command: "node", EnvVars: []string{"TOOL_TOKEN"}}, PackageRoot: "plugins/proof", InstallationRoot: "/private/installed"},
 	}}
 	got, err := ResolveMCPBindings(proto.PromptRequestPayload{LocalEnvironment: local})
-	if err != nil || len(got) != 2 {
+	if err != nil || len(got) != 3 {
 		t.Fatal("installed bindings unavailable", err)
 	}
-	if got[0].ConnectionOrigin != "environment" || got[0].CredentialAuthority != "none" || got[0].Stdio.PackageRoot != "plugins/proof" || got[0].Required || got[0].AllowedTools != nil || got[1].CredentialAuthority != "environment_configuration" {
+	if got[0].ConnectionOrigin != "environment" || got[0].CredentialAuthority != "none" || got[0].Stdio.PackageRoot != "plugins/proof" || got[0].Required || got[0].AllowedTools != nil ||
+		got[1].CredentialAuthority != "environment_configuration" || got[2].CredentialAuthority != "environment_configuration" {
 		t.Fatal("installed identity or authority changed")
 	}
 	got[0].Stdio.Server.Args[0] = "mutated"

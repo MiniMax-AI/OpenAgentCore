@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 // MCPBinding is the Runtime's transient effective declaration. Adapters project
@@ -25,6 +26,14 @@ type MCPBinding struct {
 	HTTPHeaders         map[string]string
 	// Stdio retains the installed package identity for the fixed Runtime launcher.
 	Stdio *proto.EnvironmentMCP
+}
+
+// EnvironmentMCPCredentials reports whether an installed MCP server takes
+// credentials from the Environment's configuration: a bearer token variable,
+// literal headers or environment variables. Its binding's credential
+// authority is environment_configuration.
+func EnvironmentMCPCredentials(server agentplugin.MCPServer) bool {
+	return server.BearerTokenEnvVar != "" || len(server.HTTPHeaders) > 0 || len(server.EnvVars) > 0
 }
 
 // ResolveMCPBindings combines public declarations with the frozen installation.
@@ -59,7 +68,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if declaration.BearerTokenEnvVar != "" && installed.BearerToken == nil {
 				return nil, errors.New("environment MCP credential unavailable")
 			}
-			if installed.BearerToken != nil || len(declaration.HTTPHeaders) > 0 || len(declaration.EnvVars) > 0 {
+			if installed.BearerToken != nil || EnvironmentMCPCredentials(declaration) {
 				item.CredentialAuthority = "environment_configuration"
 			}
 			if declaration.Type == "stdio" {

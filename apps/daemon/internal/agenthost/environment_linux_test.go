@@ -11,8 +11,10 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -23,6 +25,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -30,10 +33,11 @@ import (
 )
 
 // TestEnvironmentOwnerServesTheSandbox prepares an Environment with a Skill
-// and a setup step through runtime_prepare, reopens it on a new Router
-// without initializing it again, quiesces and resumes it, and checks that a
-// File mutation whose outcome is unknown is never replayed. It runs with the
-// view suite; see the comment there.
+// and a setup step through runtime_prepare, refuses a plugin whose MCP server
+// it cannot serve, reopens the Environment on a new Router without
+// initializing it again, quiesces and resumes it, and checks that a File
+// mutation whose outcome is unknown is never replayed. It runs with the view
+// suite; see the comment there.
 func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if os.Getenv(gateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a throwaway container; see the view suite", gateEnv)
@@ -76,17 +80,28 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	req.LocalEnvironment.Capabilities = true
 
 	// Prepare as Core does: configure, a setup step that sees the tool
-	// environment, the Skill and finalize, then the Executor.
+	// environment, the Skill and finalize, then the Executor. A plugin whose
+	// stdio MCP server takes credentials from the Environment fails first,
+	// before anything of it is staged.
 	first := &daemon{host: h}
 	first.route(t, reg)
 	first.assign(t, b)
+	plugin := agentplugin.Metadata{Type: "inline", Name: "package", Description: "Package proof."}
+	configured := archive(t, "package", map[string][]byte{".codex-plugin/plugin.json": []byte(`{"name":"package","description":"Package proof."}`),
+		".mcp.json": []byte(`{"mcpServers":{"local":{"command":"python3","env_vars":["PROBE"]}}}`)})
+	if r := first.runtimePrepare(t, b, proto.RuntimePreparePayload{Action: "plugin", Plugin: &plugin}, configured); r.Outcome != "failed" {
+		t.Fatalf("runtime_prepare of a plugin whose stdio server takes Environment credentials: %+v, want failed", r)
+	}
+	if _, err := os.Lstat(path.Join(agentcapabilities.Directory, "plugins")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the refused plugin was staged: %v", err)
+	}
 	for _, step := range []struct {
 		begin proto.RuntimePreparePayload
 		data  []byte
 	}{
 		{proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure", Env: map[string]string{"PROBE": "probe-value"}}}, nil},
 		{proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: `printf '%s\n' "$PROBE" >> setup.txt`}}, nil},
-		{proto.RuntimePreparePayload{Action: "skill", Skill: &skill}, skillArchive(t, manifest)},
+		{proto.RuntimePreparePayload{Action: "skill", Skill: &skill}, archive(t, "probe-skill", map[string][]byte{"SKILL.md": manifest})},
 		{proto.RuntimePreparePayload{Action: "finalize", Sources: req.LocalEnvironment.CapabilitySources}, nil},
 	} {
 		if r := first.runtimePrepare(t, b, step.begin, step.data); r.Outcome != "completed" {
@@ -227,18 +242,21 @@ func checkSetup(t *testing.T) {
 	}
 }
 
-func skillArchive(t *testing.T, manifest []byte) []byte {
+// archive zips files below the archive root root.
+func archive(t *testing.T, root string, files map[string][]byte) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	w := zip.NewWriter(&b)
-	f, err := w.Create("probe-skill/SKILL.md")
-	if err == nil {
-		_, err = f.Write(manifest)
+	for _, name := range slices.Sorted(maps.Keys(files)) {
+		f, err := w.Create(root + "/" + name)
+		if err == nil {
+			_, err = f.Write(files[name])
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err == nil {
-		err = w.Close()
-	}
-	if err != nil {
+	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return b.Bytes()
