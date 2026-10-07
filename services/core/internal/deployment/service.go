@@ -64,12 +64,8 @@ func (s *Service) view(snapshot Snapshot) (View, error) {
 		result.Configuration = configurationJSON(record.Public)
 		result.Metadata = configurationJSON(record.Metadata)
 		result.CredentialConfigured = d.CredentialStored
-		checkpoint, err := s.registry.SupportsCheckpoint(d.Provider)
-		if err != nil {
+		if result.Suspension, err = s.suspension(d.Provider); err != nil {
 			return View{}, err
-		}
-		if checkpoint {
-			result.Suspension = &Suspension{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 		}
 	}
 	if d.Reset != nil {
@@ -111,23 +107,19 @@ func (s *Service) setup(d Record) (Setup, error) {
 	if err != nil {
 		return Setup{}, ErrConflict
 	}
-	return s.describe(result, d.IdleSeconds, d.RetentionSeconds)
+	return s.describe(result)
 }
 
 // describe adds the provider's declared operations, suspension policy and
 // credential use.
-func (s *Service) describe(setup Setup, idleSeconds, retentionSeconds int64) (Setup, error) {
+func (s *Service) describe(setup Setup) (Setup, error) {
 	adapter, err := s.registry.Lookup(setup.Provider)
 	if err != nil {
 		return Setup{}, err
 	}
 	setup.Operations = adapter.Operations()
-	checkpoint, err := s.registry.SupportsCheckpoint(setup.Provider)
-	if err != nil {
+	if setup.Suspension, err = s.suspension(setup.Provider); err != nil {
 		return Setup{}, err
-	}
-	if checkpoint {
-		setup.Suspension = &Suspension{IdleSeconds: idleSeconds, RetentionSeconds: retentionSeconds}
 	}
 	setup.UsesCredential, err = s.registry.UsesCredential(setup.Provider)
 	if err != nil {
@@ -254,7 +246,17 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 		return Setup{}, err
 	}
 	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}
-	return s.describe(result, description.IdleSeconds, description.RetentionSeconds)
+	return s.describe(result)
+}
+
+// suspension returns Core's idle suspension policy for a provider that
+// declares checkpoint support, and nil for any other provider.
+func (s *Service) suspension(provider string) (*Suspension, error) {
+	checkpoint, err := s.registry.SupportsCheckpoint(provider)
+	if err != nil || !checkpoint {
+		return nil, err
+	}
+	return &Suspension{IdleSeconds: 5 * 60, RetentionSeconds: 24 * 60 * 60}, nil
 }
 
 // validateSelection rejects a selection its provider cannot normalize.

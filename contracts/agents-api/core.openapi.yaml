@@ -1272,7 +1272,7 @@ definitions:
       suspension:
         allOf:
           - $ref: '#/definitions/deployment.Suspension'
-        description: Idle suspension policy; microsandbox only, otherwise null.
+        description: Idle suspension policy; null unless the selected Provider declares checkpoint support.
         x-nullable: true
     type: object
   projects.APIKey:

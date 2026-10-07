@@ -21,8 +21,7 @@ WHERE singleton = true;
 
 -- name: CompleteSandboxReset :exec
 UPDATE runtime_deployment SET provider_kind = '', backend_fingerprint = '', mode = '',
-    specification = '{}', idle_seconds = 0, retention_seconds = 0,
-    provider_config = '{}'::jsonb, provider_metadata = '{}'::jsonb, provider_credential = NULL,
+    specification = '{}', provider_config = '{}'::jsonb, provider_metadata = '{}'::jsonb, provider_credential = NULL,
     generation = generation + 1, owner_epoch = owner_epoch + 1,
     reset_clear = NULL, reset_requested_at = NULL,
     reset_deadline_at = NULL, reset_forced_at = NULL, reset_audit = NULL,

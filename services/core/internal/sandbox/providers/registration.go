@@ -2,7 +2,6 @@ package providers
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -51,16 +50,10 @@ func ValidateRegistration(a Adapter) error {
 	if err := sandbox.ValidateOperations(operations); err != nil {
 		return err
 	}
-	// The current common lifecycle admits checkpoint suspension only on nodes,
-	// and creates its policy whenever checkpoint support is declared.
-	if operations["Initial"].State == providercontract.Supported {
-		const maximumSeconds = int64((1<<63 - 1) / time.Second)
-		if a.Mode != "nodes" || a.IdleSeconds < 1 || a.RetentionSeconds < 1 ||
-			a.IdleSeconds > maximumSeconds || a.RetentionSeconds > maximumSeconds {
-			return invalid("checkpoint policy")
-		}
-	} else if a.IdleSeconds != 0 || a.RetentionSeconds != 0 {
-		return invalid("non-checkpoint policy")
+	// The common lifecycle suspends only node allocations, so only a nodes
+	// registration may declare checkpoint support.
+	if operations["Initial"].State == providercontract.Supported && a.Mode != "nodes" {
+		return invalid("checkpoint support outside nodes mode")
 	}
 	return nil
 }
