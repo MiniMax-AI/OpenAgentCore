@@ -87,6 +87,27 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	if err := peer.Bind(ctx, assignment, ""); err != nil {
 		t.Fatal("built daemon did not bind the Session's assignment")
 	}
+	// reconnect drops the connection: the daemon's Router closes the Session's
+	// Executor on shutdown, so the next Run starts a fresh native process.
+	reconnect := func() {
+		t.Helper()
+		old := peer
+		old.Close("cold continuation")
+		for peer == old {
+			next, err := registry.WaitForDevice(ctx, id, 30*time.Second)
+			if err != nil {
+				t.Fatal("built daemon did not reconnect through the real gateway")
+			}
+			if next == old {
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			peer = next
+		}
+		if err := peer.Bind(ctx, assignment, ""); err != nil {
+			t.Fatal("built daemon did not bind the Session's assignment again")
+		}
+	}
 	run := func(prompt, resume string, expected map[string]string) *mcpBearerTurn {
 		t.Helper()
 		turn := &mcpBearerTurn{}
@@ -100,7 +121,8 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		defer peer.Unsubscribe(runID)
 		control := mcpBearerStart(t, ctx, peer, assignment, request, runID, proto.TextInput(prompt))
 		mcpBearerCollectTurn(t, ctx, sub, runID, turn, expected, token, provider)
-		control.release()
+		peer.UnsubscribePreparation(control.id)
+		reconnect()
 		turn.NativeLaunches = mcpBearerReleased(t, root)
 		turn.BearerEnvironmentReference = mcpBearerConfigReference(t, root, token)
 		return turn
@@ -178,14 +200,6 @@ func (c *mcpBearerControl) await(state string) {
 			c.t.Fatal("prepared Run admission timed out")
 		}
 	}
-}
-
-// release closes the Executor, so the next Run starts a fresh native process.
-func (c *mcpBearerControl) release() {
-	c.t.Helper()
-	defer c.peer.UnsubscribePreparation(c.id)
-	c.send(proto.TypeExecutionRelease, proto.ExecutionReleasePayload{Handle: c.status.Handle})
-	c.await("released")
 }
 
 func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, runID string, turn *mcpBearerTurn, expected map[string]string, secrets ...string) {
