@@ -122,7 +122,7 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		return nil, unsupported("a Session without a frozen model provider")
 	}
 	provider := *req.ModelProvider
-	if err := provider.Validate(); err != nil {
+	if err := provider.Validate(false); err != nil {
 		return nil, invalidSession("model provider: %v", err)
 	}
 	bindings, err := agent.ResolveMCPBindings(req)

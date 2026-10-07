@@ -20,6 +20,6 @@ func resolvedSessionModelProvider(provider *v1.ModelProviderInput, engine string
 	if err := provider.ValidateHarness(engine); err != nil {
 		return nil, err
 	}
-	return &modelprovider.Provider{Protocol: modelprovider.Protocol(provider.Protocol), BaseURL: provider.BaseURL, APIKey: provider.APIKey,
-		ContextWindow: provider.ContextWindow, MaxOutputTokens: provider.MaxOutputTokens}, nil
+	resolved := provider.Provider()
+	return &resolved, nil
 }
