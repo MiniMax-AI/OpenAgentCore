@@ -240,7 +240,7 @@ func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway 
 		h.broker, brokerErr = processbroker.Start(processbroker.Config{
 			Relay:       relay,
 			Executables: s.plan.executables,
-			Environment: processbroker.Environment{Pass: s.plan.view.ForwardEnv, Sandbox: s.in.Environment.Sandbox, Tool: s.in.Environment.Tool},
+			Environment: processbroker.Environment{Pass: s.plan.view.ForwardEnv, Sandbox: s.env.Sandbox, Tool: s.env.Tool},
 			Scope:       scope,
 			Dial:        s.openProcess,
 			CancelGrace: opts.KillTimeout,
@@ -345,7 +345,7 @@ func (h *ownedView) end(waitErr error) {
 	<-h.watched
 	if h.broker != nil {
 		if err := h.broker.Close(); err != nil {
-			h.s.ended(fmt.Errorf("%w: close process broker: %w", ErrTeardown, err), false)
+			h.s.fail(fmt.Errorf("%w: close process broker: %w", ErrTeardown, err))
 		}
 	}
 	if errors.Is(waitErr, sessionview.ErrCleanup) {

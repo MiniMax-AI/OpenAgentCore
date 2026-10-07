@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -85,12 +86,13 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	cfg := newConfig(t, reg, upstream.Certificate())
 	cfg.RelayURL = sb.url
 	cfg.ViewCgroups = sessionviewtest.CgroupParent(t)
+	logged := &failures{}
+	cfg.Log = slog.New(logged)
 	closure := t.TempDir()
 	if err := os.Chmod(closure, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	copyExecutable(t, filepath.Join(closure, "harness"))
-	executors := make(chan *testExecutor, 1)
 	register(reg, "test", &agent.View{
 		Closure:   []agent.ViewMount{{Name: "harness", HostDir: closure}},
 		Masks:     []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
@@ -102,13 +104,8 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			e := &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
-				env: []string{harnessEnv + "=1", modelEnv + "=" + provider.BaseURL, caEnv + "=" + cfg.CADir}}
-			select {
-			case executors <- e:
-			default:
-			}
-			return e, nil
+			return &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
+				env: []string{harnessEnv + "=1", modelEnv + "=" + provider.BaseURL, caEnv + "=" + cfg.CADir}}, nil
 		},
 	})
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
@@ -117,7 +114,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer h.Close()
+	defer func() { h.Close() }()
 	workspace, err := os.MkdirTemp("/tmp", "agenthost-workspace-")
 	if err != nil {
 		t.Fatal(err)
@@ -126,10 +123,18 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	if err := os.Chmod(workspace, 0o777); err != nil {
 		t.Fatal(err)
 	}
+	req := request("test", workspace, upstream.URL, upstreamKey)
+	// Each subtest's daemon drives its Sessions over the relay.
+	newRun := func(t *testing.T) *daemon { return newDaemon(t, cfg, deps{dial: relayDial(cfg), tasks: taskUIDs}) }
+	beat := filepath.Join(workspace, "beat")
+	beating := func() bool {
+		_, err := os.Stat(beat)
+		return err == nil
+	}
 
 	t.Run("one Session", func(t *testing.T) {
-		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), 2*time.Second)
-		r := s.turn(t, "check")
+		d, b := newRun(t), sb.bind(cfg.RuntimeID, 2*time.Second)
+		r := d.turn(t, b, req, "check")
 		for _, name := range harnessChecks {
 			if msg, ok := r.Checks[name]; !ok || msg != "" {
 				t.Errorf("%s: %q", name, msg)
@@ -139,11 +144,11 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			t.Errorf("Harness: %s; stderr %s", r.Exit, r.Stderr)
 		}
 		// The Turn waited for its Harness, so no view runs.
-		e := <-executors
-		if _, err := e.session.Spawn(clirunner.StartOptions{Binary: harnessPath, Dir: e.dir, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNoLiveView) {
+		s := d.session(b)
+		if _, err := s.spawn(clirunner.StartOptions{Binary: harnessPath, Dir: workspace, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNoLiveView) {
 			t.Errorf("Spawn after the Harness exited = %v, want ErrNoLiveView", err)
 		}
-		if _, err := e.session.Spawn(clirunner.StartOptions{Binary: "/bin/sh", Dir: e.dir, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNotLocalExec) {
+		if _, err := s.spawn(clirunner.StartOptions{Binary: "/bin/sh", Dir: workspace, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNotLocalExec) {
 			t.Errorf("Spawn of a binary outside LocalExec = %v, want ErrNotLocalExec", err)
 		}
 		select {
@@ -159,43 +164,70 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		}
 		// Only renewal keeps the attachment past its 2 second lease.
 		time.Sleep(3 * time.Second)
-		if r := s.turn(t, "touch"); r.Checks["touch"] != "" || r.Exit != "" {
+		if r := d.turn(t, b, req, "touch"); r.Checks["touch"] != "" || r.Exit != "" {
 			t.Errorf("touch after the first lease: %+v", r)
 		}
 		if data, err := os.ReadFile(filepath.Join(workspace, "touched")); err != nil || string(data) != "renewed" {
 			t.Errorf("the file written after the first lease holds %q, %v", data, err)
 		}
-		close(s.in)
-		if err := s.wait(t); err != nil {
-			t.Fatalf("Run = %v", err)
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
 		}
-		if err := sb.renew(t, cfg, s.binding); !errors.Is(err, sandboxlink.LeaseExpired) {
-			t.Errorf("Renew after teardown = %v, want LeaseExpired for a closed attachment", err)
+		if err := sb.renew(t, cfg, s.link.attachment, b); !errors.Is(err, sandboxlink.LeaseExpired) {
+			t.Errorf("Renew after Close = %v, want LeaseExpired for a closed attachment", err)
+		}
+		if err := logged.take(); err != nil {
+			t.Errorf("logged %v", err)
 		}
 		checkReleased(t, cfg)
 	})
 
 	t.Run("a command runs in the sandbox through the shim", func(t *testing.T) {
-		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
-		if r := s.turn(t, "shim"); r.Stdout != "42\n" || r.Code != 3 {
+		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		if r := d.turn(t, b, req, "shim"); r.Stdout != "42\n" || r.Code != 3 {
 			t.Errorf("the forwarded command printed %q and exited %d, want 42 and 3; stderr %s", r.Stdout, r.Code, r.Stderr)
 		}
-		close(s.in)
-		if err := s.wait(t); err != nil {
-			t.Fatalf("Run = %v", err)
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
+		}
+		checkReleased(t, cfg)
+	})
+
+	t.Run("two Sessions run at once", func(t *testing.T) {
+		d, waiting, other := newRun(t), sb.bind(cfg.RuntimeID, time.Minute), sb.bind(cfg.RuntimeID, time.Minute)
+		run := d.start(t, waiting, req, "wait")
+		defer os.Remove(beat)
+		until(t, "the Harness to run", beating)
+		// A Subagent runs in the live view.
+		p, err := d.session(waiting).spawn(clirunner.StartOptions{Binary: harnessPath, Args: []string{"touch"}, Dir: workspace,
+			Env: []string{harnessEnv + "=1"}, OwnProcessGroup: true})
+		if err != nil {
+			t.Fatalf("Spawn in the live view: %v", err)
+		}
+		out, _ := io.ReadAll(p.Stdout)
+		if err := p.Wait(); err != nil || string(out) != "{\"touch\":\"\"}\n" {
+			t.Errorf("the spawned process printed %q and ended with %v", out, err)
+		}
+		if r := d.turn(t, other, req, "shim"); r.Stdout != "42\n" || r.Code != 3 {
+			t.Errorf("the other Session's command printed %q and exited %d; stderr %s", r.Stdout, r.Code, r.Stderr)
+		}
+		// Cancelling the waiting Turn ends it with its view.
+		d.handle(t, proto.TypePromptCancel, run, proto.PromptCancelPayload{})
+		d.done(t, run)
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
+		}
+		if err := logged.take(); err != nil {
+			t.Errorf("logged %v", err)
 		}
 		checkReleased(t, cfg)
 	})
 
 	t.Run("a lost relay fails the Session", func(t *testing.T) {
-		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
-		s.send(t, "wait")
-		beat := filepath.Join(workspace, "beat")
+		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		run := d.start(t, b, req, "wait")
 		defer os.Remove(beat)
-		until(t, "the Harness to run", func() bool {
-			_, err := os.Stat(beat)
-			return err == nil
-		})
+		until(t, "the Harness to run", beating)
 		relays := processesWith(processshim.RelayArgs)
 		if len(relays) != 1 {
 			t.Fatalf("%d process relays run, want 1", len(relays))
@@ -203,34 +235,85 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		if err := syscall.Kill(relays[0], syscall.SIGKILL); err != nil {
 			t.Fatal(err)
 		}
-		err := s.wait(t)
-		if !errors.Is(err, ErrProcessBroker) || !errors.Is(err, processbroker.ErrRelayLost) || errors.Is(err, ErrTeardown) {
-			t.Errorf("Run = %v, want ErrProcessBroker with ErrRelayLost", err)
+		d.done(t, run)
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
+		}
+		if err := logged.take(); !errors.Is(err, ErrProcessBroker) || !errors.Is(err, processbroker.ErrRelayLost) || errors.Is(err, ErrTeardown) {
+			t.Errorf("logged %v, want ErrProcessBroker with ErrRelayLost", err)
 		}
 		checkReleased(t, cfg)
 	})
 
 	t.Run("a restarted sandbox service fails the Session", func(t *testing.T) {
-		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
-		s.send(t, "wait")
-		beat := filepath.Join(workspace, "beat")
-		for deadline := time.Now().Add(wait); ; time.Sleep(50 * time.Millisecond) {
-			if _, err := os.Stat(beat); err == nil {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatal("the Harness never wrote to the world")
-			}
-		}
+		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		run := d.start(t, b, req, "wait")
+		defer os.Remove(beat)
+		until(t, "the Harness to write to the world", beating)
 		sb.stop()
 		sb.start(t)
-		err := s.wait(t)
-		t.Logf("Run = %v", err)
-		if !errors.Is(err, ErrLink) && !errors.Is(err, ErrWorld) {
-			t.Errorf("Run = %v, want ErrLink or ErrWorld", err)
+		d.done(t, run)
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
 		}
-		if errors.Is(err, ErrTeardown) {
-			t.Errorf("teardown incomplete: %v", err)
+		err := logged.take()
+		t.Logf("logged %v", err)
+		if !errors.Is(err, ErrLink) && !errors.Is(err, ErrWorld) || errors.Is(err, ErrTeardown) {
+			t.Errorf("logged %v, want ErrLink or ErrWorld and a complete teardown", err)
+		}
+		checkReleased(t, cfg)
+	})
+
+	t.Run("a home survives a restart", func(t *testing.T) {
+		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		if r := d.turn(t, b, req, "check"); r.Checks["home"] != "" {
+			t.Fatalf("home: %q", r.Checks["home"])
+		}
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
+		}
+		dir := sessionDir(filepath.Join(sessionsDir(cfg.StateDir), b.SessionID.String()))
+		owner := func() uint32 {
+			var st syscall.Stat_t
+			if err := syscall.Stat(dir.entry(homeEntry, "probe"), &st); err != nil {
+				t.Fatal(err)
+			}
+			return st.Uid
+		}
+		first := owner()
+		// An agent host that crashed leaves the transient entries, and a
+		// process outside the views holds the first uid.
+		for _, name := range []string{etcEntry, maskEntry, stagingEntry} {
+			if err := os.Mkdir(dir.entry(name), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		holder := exec.Command("/bin/sleep", "60")
+		holder.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: first, Gid: first}}
+		if err := holder.Start(); err != nil {
+			t.Fatal(err)
+		}
+		h.Close()
+		if h, err = Open(cfg); err != nil {
+			t.Fatalf("Open after a restart: %v", err)
+		}
+		if left := leftEntries(t, cfg); len(left) != 0 {
+			t.Errorf("Open kept the transient entries %v", left)
+		}
+		d = newRun(t)
+		if r := d.turn(t, b, req, "home"); r.Checks["home kept"] != "" || r.Exit != "" {
+			t.Errorf("the reopened Session: %+v", r)
+		}
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
+		}
+		if second := owner(); second == first {
+			t.Errorf("the reopened Session's home is owned by uid %d, want a fresh uid", second)
+		}
+		holder.Process.Kill()
+		holder.Wait()
+		if err := logged.take(); err != nil {
+			t.Errorf("logged %v", err)
 		}
 		checkReleased(t, cfg)
 	})
@@ -402,10 +485,14 @@ func (sb *sandbox) stop() {
 	}
 }
 
-func (sb *sandbox) grant(b Binding, runtimeID sandboxwire.ID, lease time.Duration) {
+// bind returns the binding of a new Session on the resource, granted to
+// runtimeID for lease.
+func (sb *sandbox) bind(runtimeID sandboxwire.ID, lease time.Duration) Binding {
+	b := newBinding(sb.resource)
 	sb.auth.AddGrant(b.AttachGrant, sandboxlinktest.Grant{RuntimeID: runtimeID, Resource: b.Resource, SessionID: b.SessionID,
 		AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch, Lease: lease,
 		Services: []sandboxlink.Service{sandboxlink.ServiceFile, sandboxlink.ServiceProcess, sandboxlink.ServiceNetwork}})
+	return b
 }
 
 func (sb *sandbox) dial(t *testing.T, cfg Config) *sandboxlink.AttachLink {
@@ -423,16 +510,14 @@ func (sb *sandbox) dial(t *testing.T, cfg Config) *sandboxlink.AttachLink {
 // peer, so that an Open reaches it.
 func (sb *sandbox) ready(t *testing.T, cfg Config) {
 	t.Helper()
-	probe, _, _ := newSession(sb.resource, proto.PromptRequestPayload{})
-	b := probe.Binding
-	sb.grant(b, cfg.RuntimeID, time.Minute)
+	b, attachment := sb.bind(cfg.RuntimeID, time.Minute), sandboxwire.NewID()
 	link := sb.dial(t, cfg)
 	defer link.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
 	for {
 		st, _, err := link.OpenService(ctx, sandboxlink.Open{Service: sandboxlink.ServiceFile, Version: sandboxfs.Version, Resource: b.Resource,
-			AttachmentID: b.AttachmentID, SessionID: b.SessionID, AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch, AttachGrant: b.AttachGrant})
+			AttachmentID: attachment, SessionID: b.SessionID, AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch, AttachGrant: b.AttachGrant})
 		if err == nil {
 			st.Close()
 			break
@@ -442,99 +527,43 @@ func (sb *sandbox) ready(t *testing.T, cfg Config) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if err := link.CloseAttachment(ctx, b.AttachmentID); err != nil {
+	if err := link.CloseAttachment(ctx, attachment); err != nil {
 		t.Fatal(err)
 	}
 }
 
 // renew renews b's attachment from a fresh link.
-func (sb *sandbox) renew(t *testing.T, cfg Config, b Binding) error {
+func (sb *sandbox) renew(t *testing.T, cfg Config, attachment sandboxwire.ID, b Binding) error {
 	link := sb.dial(t, cfg)
 	defer link.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
-	_, err := link.Renew(ctx, sandboxlink.RenewAttachment{AttachmentID: b.AttachmentID, AttachGrant: b.AttachGrant})
+	_, err := link.Renew(ctx, sandboxlink.RenewAttachment{AttachmentID: attachment, AttachGrant: b.AttachGrant})
 	return err
 }
 
-// sessionRun is a running Session under test.
-type sessionRun struct {
-	binding Binding
-	in      chan Input
-	out     chan proto.Envelope
-	done    chan error
-}
-
-func startSession(t *testing.T, h *Host, sb *sandbox, req proto.PromptRequestPayload, lease time.Duration) *sessionRun {
-	s, in, out := newSession(sb.resource, req)
-	sb.grant(s.Binding, h.cfg.RuntimeID, lease)
-	r := &sessionRun{binding: s.Binding, in: in, out: out, done: make(chan error, 1)}
-	go func() {
-		r.done <- h.Run(context.Background(), s)
-	}()
+// turn runs a Turn in mode on b's Session and returns its report.
+func (dm *daemon) turn(t *testing.T, b Binding, req proto.PromptRequestPayload, mode string) report {
+	t.Helper()
+	sent := dm.done(t, dm.start(t, b, req, mode))
+	var r report
+	if len(sent) != 2 || sent[0].Type != proto.TypeOutputMessage || json.Unmarshal(sent[0].Payload, &r) != nil {
+		t.Fatalf("the %s Turn sent %d envelopes, the first a %s, want its report and its Done", mode, len(sent), sent[0].Type)
+	}
 	return r
 }
 
-func (r *sessionRun) send(t *testing.T, mode string) {
-	t.Helper()
-	select {
-	case r.in <- Input{RunID: mode, Message: proto.TextInput(mode)}:
-	case err := <-r.done:
-		t.Fatalf("Run ended before the %s Turn: %v", mode, err)
-	case <-time.After(wait):
-		t.Fatalf("Run took no %s Turn", mode)
-	}
-}
-
-// turn runs a Turn in mode and returns its report, which its Done follows.
-func (r *sessionRun) turn(t *testing.T, mode string) report {
-	t.Helper()
-	r.send(t, mode)
-	var rep report
-	if err := json.Unmarshal(r.next(t, mode).Payload, &rep); err != nil {
-		t.Fatal(err)
-	}
-	if e := r.next(t, mode); e.Type != proto.TypeDone {
-		t.Fatalf("the %s Turn sent %s after its report, want its Done", mode, e.Type)
-	}
-	return rep
-}
-
-func (r *sessionRun) next(t *testing.T, mode string) proto.Envelope {
-	t.Helper()
-	select {
-	case e := <-r.out:
-		return e
-	case err := <-r.done:
-		t.Fatalf("Run ended during the %s Turn: %v", mode, err)
-	case <-time.After(wait):
-		t.Fatalf("the %s Turn sent nothing", mode)
-	}
-	return proto.Envelope{}
-}
-
-func (r *sessionRun) wait(t *testing.T) error {
-	t.Helper()
-	select {
-	case err := <-r.done:
-		return err
-	case <-time.After(3 * wait):
-		t.Fatal("Run did not return")
-		return nil
-	}
-}
-
-// checkReleased checks that no Session directory, view cgroup, mount or
-// running process with a Session uid remains.
+// checkReleased checks that no transient entry, view cgroup, mount or running
+// process with a Session uid remains.
 func checkReleased(t *testing.T, cfg Config) {
 	t.Helper()
-	if left := leftSessions(t, cfg); len(left) != 0 {
-		t.Errorf("%d Session directories remain", len(left))
+	if left := leftEntries(t, cfg); len(left) != 0 {
+		t.Errorf("transient entries remain: %v", left)
 	}
 	if left := sessionviewtest.Cgroups(t, cfg.ViewCgroups); len(left) != 0 {
 		t.Errorf("view cgroups remain: %v", left)
 	}
-	mounts, err := os.ReadFile("/proc/self/mountinfo")
+	mounts, err := os.ReadFile("/proc/thread-self/mountinfo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -723,6 +752,14 @@ func runHarness(args []string) int {
 		}
 	case "touch":
 		checks["touch"] = func() error { return os.WriteFile("touched", []byte("renewed"), 0o644) }
+	case "home":
+		checks["home kept"] = func() error {
+			name := agent.ViewPrivateRoot + "/" + agent.ViewHomeName + "/probe"
+			if data, err := os.ReadFile(name); err != nil || string(data) != "x" {
+				return fmt.Errorf("%s holds %q, %v", name, data, err)
+			}
+			return nil
+		}
 	case "shim":
 		// /bin/sh is the shim, so the command runs in the sandbox.
 		cmd := exec.Command("/bin/sh", "-c", "echo $((6*7)); exit 3")

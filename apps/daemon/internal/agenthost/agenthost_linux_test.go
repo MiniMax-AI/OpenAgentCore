@@ -7,12 +7,18 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -64,7 +70,8 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 
 // register declares kind with view, or without one when view is nil.
 func register(reg *agent.Registry, kind string, view *agent.View, connection ...string) {
-	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
+	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
 	declaration := agent.Declaration{Info: info, ConnectionOptions: connection,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
 	reg.Register(declaration, agent.Runtime{Info: info, View: view,
@@ -79,18 +86,19 @@ func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 		AgentKind:        kind,
 		StrictResume:     true,
 		AgentOptions:     map[string]any{"model": "m", "model_provider": map[string]any{"protocol": "anthropic", "base_url": baseURL, "api_key": key}},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: workspace, NetworkAccess: "enabled"},
+		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"},
 	}
 }
 
-// newSession returns a Session for req on a fresh attachment of resource.
-func newSession(resource sandboxlink.ResourceRef, req proto.PromptRequestPayload) (Session, chan Input, chan proto.Envelope) {
-	in, out := make(chan Input), make(chan proto.Envelope, 16)
-	return Session{
-		Binding: Binding{Resource: resource, AttachmentID: sandboxwire.NewID(), SessionID: sandboxwire.NewID(),
-			AssignmentID: sandboxwire.NewID(), AssignmentEpoch: 1, AttachGrant: []byte("grant-" + sandboxwire.NewID().String())},
-		Request: req, Input: in, Output: out,
-	}, in, out
+// newBinding returns the binding of a new Session on resource.
+func newBinding(resource sandboxlink.ResourceRef) Binding {
+	return Binding{Resource: resource, SessionID: sandboxwire.NewID(), AssignmentID: sandboxwire.NewID(), AssignmentEpoch: 1,
+		AttachGrant: []byte("grant-" + sandboxwire.NewID().String())}
+}
+
+// bindTo binds every request to b.
+func bindTo(b Binding) func(proto.PromptRequestPayload) (Binding, Environment, error) {
+	return func(proto.PromptRequestPayload) (Binding, Environment, error) { return b, Environment{}, nil }
 }
 
 func newResource() sandboxlink.ResourceRef {
@@ -106,14 +114,217 @@ func countingDial(n *atomic.Int32) dialFunc {
 	}
 }
 
-// leftSessions lists what remains under the state directory's sessions.
-func leftSessions(t *testing.T, cfg Config) []os.DirEntry {
+// leftEntries lists what remains in the Session directories other than
+// their homes.
+func leftEntries(t *testing.T, cfg Config) []string {
 	t.Helper()
-	entries, err := os.ReadDir(sessionsDir(cfg.StateDir))
+	dirs, err := os.ReadDir(sessionsDir(cfg.StateDir))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(err)
 	}
-	return entries
+	var left []string
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(filepath.Join(sessionsDir(cfg.StateDir), dir.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if e.Name() != homeEntry {
+				left = append(left, filepath.Join(dir.Name(), e.Name()))
+			}
+		}
+	}
+	return left
+}
+
+// daemon drives Sessions through a dispatch Router, as the daemon does. It
+// binds each request to the Session its state key names and records the
+// latest Executor the agent host opened for each Session.
+type daemon struct {
+	router   *dispatch.Router
+	mu       sync.Mutex
+	frames   map[string]chan proto.Envelope // by envelope ID
+	bindings map[string]Binding             // by Session ID
+	opened   map[string]*session            // by Session ID
+}
+
+func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
+	t.Helper()
+	dm := &daemon{frames: map[string]chan proto.Envelope{}, bindings: map[string]Binding{}, opened: map[string]*session{}}
+	reg := registry(cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+		e, err := open(ctx, cfg, req, dm.bind, d)
+		if s, ok := e.(*session); ok {
+			dm.mu.Lock()
+			dm.opened[strings.TrimPrefix(req.AgentStateKey, stateKeyPrefix)] = s
+			dm.mu.Unlock()
+		}
+		return e, err
+	})
+	var err error
+	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, SessionEnvironments: true, Log: slog.New(slog.DiscardHandler)}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { dm.shutdown() })
+	return dm
+}
+
+// stateKeyPrefix and the Session ID make the state key dispatch requires.
+const stateKeyPrefix = "agents-api-"
+
+func (dm *daemon) bind(req proto.PromptRequestPayload) (Binding, Environment, error) {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	b, ok := dm.bindings[strings.TrimPrefix(req.AgentStateKey, stateKeyPrefix)]
+	if !ok {
+		return Binding{}, Environment{}, fmt.Errorf("%w: no binding", ErrInvalidSession)
+	}
+	return b, Environment{}, nil
+}
+
+func (dm *daemon) Send(_ context.Context, e proto.Envelope) error {
+	dm.frame(e.ID) <- e
+	return nil
+}
+
+func (dm *daemon) frame(id string) chan proto.Envelope {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	ch := dm.frames[id]
+	if ch == nil {
+		ch = make(chan proto.Envelope, 64)
+		dm.frames[id] = ch
+	}
+	return ch
+}
+
+// handle hands the Router an envelope from Core.
+func (dm *daemon) handle(t *testing.T, typ, id string, payload any) {
+	t.Helper()
+	e, err := proto.NewEnvelope(typ, id, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := dm.router.Handle(context.Background(), e); err != nil {
+		t.Fatalf("%s: %v", typ, err)
+	}
+}
+
+// next returns the next envelope sent with id.
+func (dm *daemon) next(t *testing.T, id string) proto.Envelope {
+	t.Helper()
+	select {
+	case e := <-dm.frame(id):
+		return e
+	case <-time.After(time.Minute):
+		t.Fatalf("nothing sent for %s", id)
+		return proto.Envelope{}
+	}
+}
+
+// prepare prepares an Executor of b's Session for req. It returns the
+// request ID and the preparation's first status other than preparing.
+func (dm *daemon) prepare(t *testing.T, b Binding, req proto.PromptRequestPayload) (string, proto.PreparationStatusPayload) {
+	t.Helper()
+	session := b.SessionID.String()
+	dm.mu.Lock()
+	dm.bindings[session] = b
+	dm.mu.Unlock()
+	req.AgentStateKey = stateKeyPrefix + session
+	id := sandboxwire.NewID().String()
+	dm.handle(t, proto.TypeExecutionPrepare, id, proto.ExecutionPreparePayload{SessionID: session, Configuration: req})
+	for {
+		var p proto.PreparationStatusPayload
+		if err := dm.next(t, id).DecodePayload(&p); err != nil {
+			t.Fatal(err)
+		}
+		if p.State != "preparing" {
+			return id, p
+		}
+	}
+}
+
+// start prepares b's Session for req and starts a Turn whose input is text.
+// It returns the Turn's RunID once the Turn has started.
+func (dm *daemon) start(t *testing.T, b Binding, req proto.PromptRequestPayload, text string) string {
+	t.Helper()
+	id, p := dm.prepare(t, b, req)
+	if p.State != "ready" {
+		t.Fatalf("the preparation is %s (%s), want ready", p.State, p.ErrorCode)
+	}
+	run := "run-" + id
+	dm.handle(t, proto.TypeExecutionStart, id, proto.ExecutionStartPayload{Handle: p.Handle, ExecutorID: p.ExecutorID, RunID: run, Input: proto.TextInput(text)})
+	for {
+		if err := dm.next(t, id).DecodePayload(&p); err != nil {
+			t.Fatal(err)
+		}
+		switch p.State {
+		case "starting":
+		case "started":
+			return run
+		default:
+			t.Fatalf("the start is %s (%s), want started", p.State, p.ErrorCode)
+		}
+	}
+}
+
+// done returns what the Turn sends up to its Done.
+func (dm *daemon) done(t *testing.T, run string) []proto.Envelope {
+	t.Helper()
+	var sent []proto.Envelope
+	for {
+		e := dm.next(t, run)
+		if sent = append(sent, e); e.Type == proto.TypeDone {
+			return sent
+		}
+	}
+}
+
+// session returns the latest Executor the agent host opened for b's Session.
+func (dm *daemon) session(b Binding) *session {
+	dm.mu.Lock()
+	defer dm.mu.Unlock()
+	return dm.opened[b.SessionID.String()]
+}
+
+// shutdown shuts the Router down, which closes every Executor, and returns
+// what their Close returned.
+func (dm *daemon) shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	return dm.router.Shutdown(ctx)
+}
+
+// failures records each error the agent host logs.
+type failures struct {
+	mu   sync.Mutex
+	errs []error
+}
+
+func (f *failures) Enabled(context.Context, slog.Level) bool { return true }
+
+func (f *failures) Handle(_ context.Context, r slog.Record) error {
+	r.Attrs(func(a slog.Attr) bool {
+		if err, ok := a.Value.Any().(error); ok {
+			f.mu.Lock()
+			f.errs = append(f.errs, err)
+			f.mu.Unlock()
+		}
+		return true
+	})
+	return nil
+}
+
+func (f *failures) WithAttrs([]slog.Attr) slog.Handler { return f }
+
+func (f *failures) WithGroup(string) slog.Handler { return f }
+
+// take returns the errors recorded since the last take, joined.
+func (f *failures) take() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	err := errors.Join(f.errs...)
+	f.errs = nil
+	return err
 }
 
 // noTasks lists no running task.

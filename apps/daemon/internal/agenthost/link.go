@@ -29,7 +29,7 @@ const (
 	closeBound = 10 * time.Second
 )
 
-// linkOwner owns the Session's Link attachment. It dials the relay when a
+// linkOwner owns an Executor's Link attachment. It dials the relay when a
 // stream is first needed and again after the link drops, pins the service
 // instance the first Opened reports, renews the lease before it passes, and
 // fails the Session on any Link failure that is not retryable and on the
@@ -37,7 +37,10 @@ const (
 type linkOwner struct {
 	dial    dialFunc
 	binding Binding
-	fail    func(error)
+	// attachment is the attachment's ID. An attachment that has closed is
+	// never reopened, so each Executor opens its own.
+	attachment sandboxwire.ID
+	fail       func(error)
 
 	dialMu sync.Mutex // serializes dials
 	mu     sync.Mutex
@@ -52,14 +55,15 @@ type linkOwner struct {
 	stop    context.CancelFunc
 }
 
-func newLinkOwner(dial dialFunc, b Binding, fail func(error)) *linkOwner {
-	return &linkOwner{dial: dial, binding: b, fail: fail}
+func newLinkOwner(dial dialFunc, b Binding, attachment sandboxwire.ID, fail func(error)) *linkOwner {
+	return &linkOwner{dial: dial, binding: b, attachment: attachment, fail: fail}
 }
 
-// open is the Open that carries b for service.
-func (b Binding) open(service sandboxlink.Service, version uint16, expected sandboxwire.ID) sandboxlink.Open {
+// request is the Open of service on the attachment.
+func (l *linkOwner) request(service sandboxlink.Service, version uint16, expected sandboxwire.ID) sandboxlink.Open {
+	b := l.binding
 	return sandboxlink.Open{Service: service, Version: version, Resource: b.Resource, ExpectedServerInstanceID: expected,
-		AttachmentID: b.AttachmentID, SessionID: b.SessionID, AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch,
+		AttachmentID: l.attachment, SessionID: b.SessionID, AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch,
 		AttachGrant: b.AttachGrant}
 }
 
@@ -88,13 +92,13 @@ func (l *linkOwner) current(ctx context.Context) (*sandboxlink.AttachLink, error
 	return link, nil
 }
 
-// open opens a stream of service on the Session's attachment.
+// open opens a stream of service on the attachment.
 func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, version uint16) (sandboxlink.Stream, error) {
 	l.mu.Lock()
 	closing := l.closing
 	l.mu.Unlock()
 	if closing {
-		return nil, fmt.Errorf("%w: open %s: the Session is ending", ErrLink, service)
+		return nil, fmt.Errorf("%w: open %s: the Executor is closing", ErrLink, service)
 	}
 	link, err := l.current(ctx)
 	if err != nil {
@@ -103,12 +107,12 @@ func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, versi
 	l.mu.Lock()
 	if l.closing {
 		l.mu.Unlock()
-		return nil, fmt.Errorf("%w: open %s: the Session is ending", ErrLink, service)
+		return nil, fmt.Errorf("%w: open %s: the Executor is closing", ErrLink, service)
 	}
 	l.opened = true
 	expected := l.instance
 	l.mu.Unlock()
-	st, opened, err := link.OpenService(ctx, l.binding.open(service, version, expected))
+	st, opened, err := link.OpenService(ctx, l.request(service, version, expected))
 	if err != nil {
 		return nil, l.observe("open "+service.String(), err)
 	}
@@ -139,7 +143,7 @@ func (l *linkOwner) observe(op string, err error) error {
 }
 
 // report fails the Session with err unless close has begun: from then on the
-// Session's own close of the attachment explains whatever the Link reports.
+// Executor's own close of the attachment explains whatever the Link reports.
 func (l *linkOwner) report(err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -157,7 +161,7 @@ func retryable(err error) bool {
 
 // closed is the link's OnAttachmentClosed. It never blocks.
 func (l *linkOwner) closed(c sandboxlink.AttachmentClosed) {
-	if c.AttachmentID == l.binding.AttachmentID {
+	if c.AttachmentID == l.attachment {
 		l.report(fmt.Errorf("%w: attachment: the relay closed the attachment (reason %d)", ErrLink, c.Reason))
 	}
 }
@@ -211,13 +215,17 @@ func (l *linkOwner) renewOnce(ctx context.Context) (sandboxlink.AttachmentRenewe
 	if err != nil {
 		return sandboxlink.AttachmentRenewed{}, err
 	}
-	return link.Renew(ctx, sandboxlink.RenewAttachment{AttachmentID: l.binding.AttachmentID, AttachGrant: l.binding.AttachGrant})
+	return link.Renew(ctx, sandboxlink.RenewAttachment{AttachmentID: l.attachment, AttachGrant: l.binding.AttachGrant})
 }
 
 // close stops renewal, closes the attachment when an Open may have created
-// it, and closes the link. Later opens fail.
+// it, and closes the link. Later opens fail, and later closes do nothing.
 func (l *linkOwner) close() error {
 	l.mu.Lock()
+	if l.closing {
+		l.mu.Unlock()
+		return nil
+	}
 	l.closing = true
 	opened, renewer, stop := l.opened, l.renewer, l.stop
 	l.mu.Unlock()
@@ -231,7 +239,7 @@ func (l *linkOwner) close() error {
 		for {
 			var link *sandboxlink.AttachLink
 			if link, err = l.current(ctx); err == nil {
-				err = link.CloseAttachment(ctx, l.binding.AttachmentID)
+				err = link.CloseAttachment(ctx, l.attachment)
 			}
 			if err == nil || !retryable(err) || !sleep(ctx, retryWait) {
 				break
