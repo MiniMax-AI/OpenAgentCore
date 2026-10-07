@@ -20,7 +20,7 @@ A Runtime connects in this order:
 
 The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding; [assignments](#session-assignments) fence which Session a frame may act for.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding; [assignments](#session-assignments) fence which Session a frame may act for.
 
 ## Capability declarations
 
@@ -51,7 +51,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
-`permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
+Core has no admission rule for `usage` and `resume`.
 
 The `execution_prepare` configuration carries the Session's model configuration and the opt-ins Core sets for each Run:
 
@@ -83,13 +83,10 @@ Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgen
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
 | Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
 | Run ID | One execution attempt; `Envelope.id` for output, cancellation, active input and functions |
-| Interaction ID | `permission_request.payload.request_id` or `prompt_for_user_choice.payload.ask_id`; these request envelopes still carry the Run ID |
 | Delivery ID / input ID / call ID | Resolve attempt, active-input receipt and native function identity; never interchangeable |
 | Transfer ID / suspension ID | Connection-local transfer correlation / persisted suspension-attempt fencing |
 
-Decision and permission-cancel envelopes use the interaction ID. Cancellation and function-result acknowledgements use the Run ID. Every application decision receipt also matches the delivery ID. A reply without the required correlation cannot establish acceptance.
-
-User-choice decisions carry `question_answers`: an explicit `question_id` and an `answers` array for each provided answer. The IDs must belong to the emitted questions and cannot repeat. Question order and display headers do not identify answers; an omitted question stays unanswered, and an empty array is an explicit non-answer. Cancellation carries `cancelled: true` without answers. Shared validation rejects other shapes before native submission.
+Cancellation and function-result acknowledgements use the Run ID and match the delivery ID. A reply without the required correlation cannot establish acceptance.
 
 ## Message families
 
@@ -101,8 +98,7 @@ The linked source files define the required fields, validators, limits and finit
 | Any frame the Runtime cannot route | `protocol_error` | [Session assignments](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/assignment.go) |
 | `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
-| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go), [write](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go), [export](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
@@ -116,7 +112,7 @@ Usage frames and the final usage snapshot each carry the cumulative measurement 
 
 An assignment binds one Session to the Runtime that runs it. `Envelope.assignment` names it as `session_id`, `assignment_id` and `epoch`, and is the only place a frame carries it. Core advances the epoch whenever it changes the assignment's desired state, so a lower epoch is stale.
 
-Every Session frame carries the assignment: `execution_prepare`, `execution_start` and `execution_release`; `prompt_cancel`, `prompt_steer`, `function_result`, `permission_decision` and `prompt_for_user_choice_decision`; every frame of `runtime_prepare`, `workspace_read`, `workspace_write` and `workspace_export`; and `environment_quiesce` and `environment_resume`. A reply echoes its request's assignment, and a Run's frames carry the assignment that started it; Core rejects a reply or Run frame that names another. Heartbeats carry none.
+Every Session frame carries the assignment: `execution_prepare`, `execution_start` and `execution_release`; `prompt_cancel`, `prompt_steer` and `function_result`; every frame of `runtime_prepare`, `workspace_read`, `workspace_write` and `workspace_export`; and `environment_quiesce` and `environment_resume`. A reply echoes its request's assignment, and a Run's frames carry the assignment that started it; Core rejects a reply or Run frame that names another. Heartbeats carry none.
 
 Before a Session's first operation on a connection, including Environment initialization and file work without a Turn, Core sends `assignment_bind` with the Session's Environment ID and waits for `assignment_status` `bound`. When the Runtime is an agent host and the Environment has a live [Link](./sandbox-link-protocol.md) resource, the bind also carries `resource`, that resource as the [bootstrap input](./sandbox-bootstrap.md#launch-input) names it, and `attach_grant`, the base64 grant with which the agent host opens services on that resource generation under this assignment and epoch. The grant is secret. Core sends neither field to any other Runtime. A bind with only one of them, or with a resource of another Environment, fails with `invalid_request`. A repeated bind of the same assignment with the same Environment, resource and grant is `bound` again; any other bind of it fails with `assignment_conflict`. The Runtime admits a Session frame only under the assignment it bound: an older epoch, or a released one, fails with `assignment_stale`; another assignment, Session or Environment fails with `assignment_conflict`. A started Run's frames, including its cancellation receipt, stay admissible under the assignment that started it until the release. A repeated function result or decision whose receipt the Runtime already recorded is answered only under the assignment that applied it; another fails with `assignment_conflict`.
 
@@ -173,7 +169,7 @@ No generic receipt exists for every envelope. A successful send does not prove t
 
 ## Failures, retries and cleanup
 
-Transport and execution outcomes are separate. Core's only Run subscription entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event channel closes. Disconnection and subscriber overflow close it with an explicit observation error and fabricate no `error` or `done`. Core keeps the durable truth and reconciles from confirmed facts. The Runtime keeps cleanup ownership until native work, input receipts, interactions and child work have settled.
+Transport and execution outcomes are separate. Core's only Run subscription entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event channel closes. Disconnection and subscriber overflow close it with an explicit observation error and fabricate no `error` or `done`. Core keeps the durable truth and reconciles from confirmed facts. The Runtime keeps cleanup ownership until native work, input receipts, function results and child work have settled.
 
 The public Turn status is a separate projection. [`execution/delivery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/delivery.go) records an unsuccessful orchestration attempt as `failed`, including `delivery_unknown` after an unconfirmed send and `event_stream_incomplete` after a subscription failure; a closed subscription can replace the send reason with `event_stream_incomplete`. Both mean the native effect is unknown: a public `failed` status does not prove that the Harness failed, that no side effect occurred or that cleanup completed. Keep the observation reason and any native evidence distinct.
 
@@ -200,7 +196,7 @@ Core stores accepted values in the Turn outcome as `engine_error_code` and `engi
 
 ## Workspace operations
 
-A workspace read that needs no running Turn uses the read-only preparation profile: `execution_prepare` with `workspace_read_only`, which requires the `workspace_read_preparation` capability. It accepts only the bound Environment and resource identity; execution options, model and MCP credentials, native Session continuation and model or tool input are excluded, and the owner rejects `execution_start`. The Runtime serves it from its bound local workspace without starting a Harness process. The profile publishes `released` only after local close succeeds; a cleanup error keeps ownership and reports `cleanup_unconfirmed`. A successful cleanup retry publishes the confirmed release; a stale status snapshot never publishes success. A release request, HTTP disconnect or remote socket closure alone does not confirm cleanup.
+A workspace read that needs no running Turn uses the read-only preparation profile: `execution_prepare` with `workspace_read_only`, which requires the `workspace_read_preparation` capability. It accepts only the bound Environment and resource identity; execution options, model and MCP credentials, native Session continuation and model or tool input are excluded, and the owner rejects `execution_start`. The Runtime serves it from its bound local workspace without starting a Harness process. The profile publishes `released` after the Runtime drops the preparation's ownership; a stale status snapshot never publishes success. A release request, HTTP disconnect or remote socket closure alone does not confirm the release.
 
 `workspace_read` lists one workspace-relative directory (an empty path selects the root) of an existing preparation handle, or the Run it was transferred to, on the same authenticated device connection, with the exact frozen Environment identity; callers cannot supply sockets, credentials or workspace roots. A result carries at most `max_entries` (1 to 1024) single-component UTF-8 names of at most 255 bytes each, the entry kind, regular-file sizes and explicit truncation, and is returned only after directory access and handle cleanup settle. There is no snapshot, recursion or pagination at this layer.
 

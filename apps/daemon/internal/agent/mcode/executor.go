@@ -70,7 +70,7 @@ func startExecutor(ctx context.Context, req proto.PromptRequestPayload, binary s
 }
 
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*executor, error) {
-	bootstrap, err := launch(ctx, req, opts, binary, nil)
+	bootstrap, err := launch(ctx, req, opts, binary)
 	if err != nil {
 		return nil, err
 	}
@@ -133,14 +133,14 @@ func (e *executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	default:
 	}
 	req := e.req
-	req.RunID, req.Input = runID, proto.TextInput(text)
+	req.RunID = runID
 	s := newTurnSession(e.connection.process.Context(), req, e.opts, e.connection, out)
 	s.executor, s.sessionID, s.nativeModel = e, e.nativeSession, e.model
 	s.settled, s.inputDone = make(chan struct{}), make(chan struct{})
 	s.outputContext, s.outputCancel = context.WithCancel(context.Background())
 	e.active = s
 	e.connection.setCurrent(s)
-	go s.runExecutorTurn()
+	go s.runExecutorTurn(text)
 	go func() {
 		select {
 		case <-ctx.Done():

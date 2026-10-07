@@ -14,7 +14,7 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan.Cleanup()
-	if len(plan.ExtraConfig) != 1 || plan.ExtraConfig[0][0] != "model_provider" {
+	if want := [][2]string{{"tools.experimental_request_user_input.enabled", "false"}, {"model_provider", `"` + oacProviderSlug + `"`}}; !reflect.DeepEqual(plan.ExtraConfig, want) {
 		t.Fatal("native settings without ExecutionControls", plan.ExtraConfig)
 	}
 	for _, search := range []string{"disabled", "cached", "live"} {
@@ -24,7 +24,7 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			plan.Cleanup()
-			want := [][2]string{{"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}, {"model_provider", `"` + oacProviderSlug + `"`}}
+			want := [][2]string{{"tools.experimental_request_user_input.enabled", "false"}, {"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}, {"model_provider", `"` + oacProviderSlug + `"`}}
 			if !reflect.DeepEqual(plan.ExtraConfig, want) {
 				t.Fatalf("config = %v, want %v", plan.ExtraConfig, want)
 			}

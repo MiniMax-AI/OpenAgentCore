@@ -6,21 +6,6 @@ import (
 	"errors"
 )
 
-// RequiredAction contains the supported variants of the Session action union.
-type RequiredAction struct {
-	Type          string `json:"type" enums:"function_call,environment_connection" binding:"required"`
-	Arguments     any    `json:"arguments,omitempty"`
-	CallID        string `json:"call_id,omitempty"`
-	Name          string `json:"name,omitempty"`
-	TurnID        string `json:"turn_id,omitempty"`
-	EnvironmentID string `json:"environment_id,omitempty"`
-}
-
-type EnvironmentConnectionAction struct {
-	EnvironmentID string `json:"environment_id" binding:"required"`
-	Type          string `json:"type" enums:"environment_connection" binding:"required"`
-}
-
 // MarshalJSON preserves required null function arguments without exposing function fields on connection actions.
 func (a RequiredAction) MarshalJSON() ([]byte, error) {
 	switch a.Type {

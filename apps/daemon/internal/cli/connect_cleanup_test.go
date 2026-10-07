@@ -113,10 +113,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	}
 	owner := &cleanupExecutor{retry: make(chan struct{}), confirm: make(chan struct{})}
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-		prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, errors.New("unexpected legacy factory")
-		})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	var factories atomic.Int32
 	registry.RegisterExecutor("cleanup", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		factories.Add(1)

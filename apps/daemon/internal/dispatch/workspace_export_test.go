@@ -51,7 +51,7 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 		f.Close()
 	}
 	environment, session := uuid.NewString(), capabilityRef.SessionID
-	binding, err := localworkspace.New(environment, session, workspace)
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 	}
 	bindAssignment(r, capabilityRef, environment)
 	handle := uuid.NewString()
-	r.preparations[handle] = &preparationState{request: proto.Envelope{Assignment: capabilityRef}, workspaceReadOnly: true, environmentID: environment, owns: true, ctx: context.Background(), deadline: time.Now().Add(time.Hour), status: proto.PreparationStatusPayload{State: "ready"}}
+	r.preparations[handle] = &preparationState{request: proto.Envelope{Assignment: capabilityRef}, environmentID: environment, owns: true, ctx: context.Background(), deadline: time.Now().Add(time.Hour), status: proto.PreparationStatusPayload{State: "ready"}}
 	t.Cleanup(func() {
 		r.mu.Lock()
 		delete(r.preparations, handle)

@@ -24,17 +24,6 @@ type SessionEvents interface {
 	SessionStreamSnapshot(context.Context, string, string) (sessions.Session, int64, error)
 }
 
-// @Summary Stream live Session events
-// @Description Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. When a hosted Environment fails to provision, the stream sends agent.session.environment.failed, an error event (environment_error/sandbox_error with the safe step and exit-status reason, never command output) and agent.session.failed, then ends. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
-// @Description Active streams revalidate the original Project key every second before output; revocation, Project archival or authentication unavailability closes the stream. Authentication checks use a five-second timeout.
-// @Tags Events
-// @Produce text/event-stream
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Success 200 {object} v1.SessionEvent
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/events [get]
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	id, tenant := chi.URLParam(r, "session_id"), tenantID(r)
 	session, err := h.SessionsReader.GetSession(r.Context(), tenant, id)

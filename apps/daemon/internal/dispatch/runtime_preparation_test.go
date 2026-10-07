@@ -36,7 +36,7 @@ var capabilityRef = proto.AssignmentRef{SessionID: "0b6f1f3e-6f0a-4d38-9c1e-2f5d
 func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
 	t.Helper()
 	environment, session := uuid.NewString(), capabilityRef.SessionID
-	binding, err := localworkspace.New(environment, session, t.TempDir())
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

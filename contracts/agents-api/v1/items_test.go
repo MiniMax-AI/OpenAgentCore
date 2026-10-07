@@ -155,3 +155,38 @@ func TestReasoningResponsesCarryBothKeys(t *testing.T) {
 	}{Agent{ID: "agent", Reasoning: Reasoning{Effort: &low}}})
 	expectField(t, fields(t, stored["agent"]), "reasoning", `{"effort":"low"}`)
 }
+
+func TestStoredSearchItemRoundTripPreservesPayload(t *testing.T) {
+	for _, raw := range []string{
+		`{"id":"search","turn_id":"turn","type":"web_search_call","status":"completed","action":{"type":"search","query":"reference"}}`,
+		`{"id":"search","turn_id":"turn","type":"web_search_call","status":"completed","action":{"type":"search"}}`,
+		`{"id":"search","turn_id":"turn","type":"web_search_call","status":"in_progress"}`,
+	} {
+		var item Item
+		if err := json.Unmarshal([]byte(raw), &item); err != nil {
+			t.Fatal(err)
+		}
+		stored, err := item.MarshalStored()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(stored) != raw {
+			t.Fatalf("stored replay changed: %s, want %s", stored, raw)
+		}
+		wire := fields(t, item)
+		if item.Action == nil {
+			expectField(t, wire, "action", "null")
+		} else {
+			var action map[string]json.RawMessage
+			if err := json.Unmarshal(wire["action"], &action); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := action["query"]; !ok {
+				t.Fatal("wire query is missing")
+			}
+			if _, ok := action["queries"]; !ok {
+				t.Fatal("wire queries is missing")
+			}
+		}
+	}
+}

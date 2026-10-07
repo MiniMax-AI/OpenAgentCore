@@ -17,7 +17,6 @@ type HeartbeatStatus struct {
 type KindCapabilities struct {
 	SubagentObservations  bool `json:"subagent_observations,omitempty"`
 	Streaming             bool `json:"streaming,omitempty"`
-	Permissions           bool `json:"permissions,omitempty"`
 	Usage                 bool `json:"usage,omitempty"`
 	Resume                bool `json:"resume,omitempty"`
 	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`

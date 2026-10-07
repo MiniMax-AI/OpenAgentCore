@@ -74,10 +74,7 @@ func register(reg *agent.Registry, kind string, view *agent.View) {
 		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}
 	declaration := agent.Declaration{Info: info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
-	reg.Register(declaration, agent.Runtime{Info: info, View: view,
-		Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, errors.New("not used")
-		}})
+	reg.Register(declaration, agent.Runtime{Info: info, View: view})
 }
 
 // declared declares every view capability as s.

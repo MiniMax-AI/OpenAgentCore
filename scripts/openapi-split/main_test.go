@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,10 +10,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestSeparatesTheThreeNamespaces(t *testing.T) {
+func TestInternalContractsAndExtensionDefinitions(t *testing.T) {
 	d := t.TempDir()
 	input := filepath.Join(d, "combined.yaml")
-	project := filepath.Join(d, "project.yaml")
+	project := filepath.Join(d, "extensions.json")
 	core := filepath.Join(d, "core.yaml")
 	machine := filepath.Join(d, "runtime.yaml")
 	raw := `swagger: "2.0"
@@ -71,12 +72,10 @@ securityDefinitions:
 	if err := os.WriteFile(input, []byte(raw), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(input, project, core, machine); err != nil {
+	if err := run(input, project, core, machine, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, check := range []struct{ path, base, own, other, definition, absent string }{
-		{project, "/v1", "/agents/sessions", "/core/v1/sandbox/nodes", "Session", "Node"},
-		{project, "/v1", "/agents/sessions", "/api/v1/sandbox-node/identity", "Session", "NodeIdentity"},
 		{core, "/", "/core/v1/sandbox/nodes", "/agents/sessions", "Node", "Session"},
 		{core, "/", "/core/v1/sandbox/nodes", "/api/v1/sandbox-node/identity", "Node", "NodeIdentity"},
 		{machine, "/", "/api/v1/sandbox-node/identity", "/core/v1/sandbox/nodes", "NodeIdentity", "Node"},
@@ -99,8 +98,19 @@ securityDefinitions:
 			t.Fatal("reference closure was not preserved")
 		}
 	}
-	// Every document keeps only the schemes its operations use.
-	for path, want := range map[string]string{project: "BearerAuth", core: "DeploymentAdminAuth", machine: "NodeAuth"} {
+	rawDefinitions, err := os.ReadFile(project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var definitions map[string]any
+	if err := json.Unmarshal(rawDefinitions, &definitions); err != nil {
+		t.Fatal(err)
+	}
+	if len(definitions) != 4 {
+		t.Fatalf("missing extension dependencies: %v", definitions)
+	}
+	// Every internal document keeps only the schemes its operations use.
+	for path, want := range map[string]string{core: "DeploymentAdminAuth", machine: "NodeAuth"} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)

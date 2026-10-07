@@ -19,12 +19,7 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
 	public, id := "https://core.example", "5b7c0f3e-0000-4000-8000-000000000001"
-	settings, err := ParseInstallationConfiguration([]byte(`{"path":"/home/alice/.oac/core/config.json","apply_command":"/home/alice/.oac/core/oac apply",
-		"applied_at":"2026-09-25T09:30:00Z","settings":[{"key":"ports.core","value":8091,"default":8091,"changeable":true,"sensitive":false,"restarts":["core"]},
-		{"key":"core.runtime_history.headers","value":null,"default":null,"configured":true,"changeable":true,"sensitive":true,"restarts":["core"]}]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	settings := &InstallationConfiguration{Path: "/home/alice/.oac/core/config.json", Settings: []InstallationSetting{{Key: "ports.core", Value: 8091, Default: 8091, Changeable: true, Restarts: []string{"core"}}}}
 	fakes.installationBindings.addressBindings = func(context.Context) (deployment.AddressBindings, error) {
 		return deployment.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
 	}
@@ -47,19 +42,6 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 		body["public_url"] != public || body["address_bindings"].(map[string]any)["nodes_on_other_address"] != float64(1) ||
 		body["configuration"].(map[string]any)["path"] != "/home/alice/.oac/core/config.json" {
 		t.Fatal(result.Code, result.Body.String())
-	}
-}
-
-func TestInstallationSnapshotCannotCarryASensitiveValue(t *testing.T) {
-	for _, setting := range []string{
-		`{"key":"core.runtime_history.headers","value":{"authorization":"secret"},"default":null,"configured":true,"changeable":true,"sensitive":true,"restarts":["core"]}`,
-		`{"key":"core.runtime_history.headers","value":null,"default":null,"changeable":true,"sensitive":true,"restarts":["core"]}`,
-		`{"key":"ports.core","value":8091,"default":8091,"changeable":true,"sensitive":false,"restarts":["core"],"unknown":true}`,
-	} {
-		raw := `{"path":"/c/config.json","apply_command":"/c/oac apply","applied_at":"2026-09-25T09:30:00Z","settings":[` + setting + `]}`
-		if _, err := ParseInstallationConfiguration([]byte(raw)); err == nil || strings.Contains(err.Error(), "secret") {
-			t.Fatal("accepted", setting, err)
-		}
 	}
 }
 

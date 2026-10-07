@@ -54,7 +54,7 @@ func TestRegistryResolvesOnlyDeclaredViews(t *testing.T) {
 	declared := validView(t)
 	for kind, view := range map[string]*agent.View{"with_view": &declared, "without_view": nil} {
 		info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
-		reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Session: stubFactory(kind), View: view})
+		reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, View: view})
 	}
 	if _, err := reg.ResolveView("without_view"); !errors.Is(err, agent.ErrUnsupportedOperation) {
 		t.Fatalf("ResolveView without a view = %v, want ErrUnsupportedOperation", err)
@@ -76,7 +76,7 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 		Info:          info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Responses)}}},
 	}
-	reg.Register(declaration, agent.Runtime{Info: info, Session: stubFactory("viewed"), View: &declared})
+	reg.Register(declaration, agent.Runtime{Info: info, View: &declared})
 	view, err := reg.ResolveView("viewed")
 	if err != nil {
 		t.Fatal(err)

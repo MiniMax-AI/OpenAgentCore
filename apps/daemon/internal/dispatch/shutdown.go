@@ -37,7 +37,7 @@ func (r *Router) Shutdown(ctx context.Context) error {
 		// Prepared release claims exist before this signal can interrupt output.
 		close(r.shutdownCh)
 	}
-	preparations := r.closePendingPreparationsLocked()
+	r.closePendingPreparationsLocked()
 	executors := r.closeIdleExecutorsLocked()
 	attempt := &shutdownAttempt{done: make(chan struct{})}
 	r.shutdownAttempt = attempt
@@ -46,9 +46,6 @@ func (r *Router) Shutdown(ctx context.Context) error {
 	r.mu.Unlock()
 
 	r.closeIdleExecutors(executors)
-	for _, p := range preparations {
-		go func() { defer r.shutdownWG.Done(); r.closePreparationResource(p) }()
-	}
 	go r.runShutdownAttempt(attempt, victims)
 	return waitShutdown(ctx, attempt)
 }
@@ -116,7 +113,6 @@ func waitShutdown(ctx context.Context, attempt *shutdownAttempt) error {
 
 type sessionCancellation struct {
 	runID   string
-	handoff *preparedHandoff
 	release *preparedRelease
 	attempt *preparedReleaseAttempt
 }
@@ -127,7 +123,7 @@ func (r *Router) sessionCancellationsLocked() []sessionCancellation {
 	victims := make([]sessionCancellation, 0, len(r.sessions))
 	for _, state := range r.sessions {
 		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
-		victims = append(victims, sessionCancellation{runID: state.runID, handoff: state.preparedHandoff, release: release, attempt: attempt})
+		victims = append(victims, sessionCancellation{runID: state.runID, release: release, attempt: attempt})
 	}
 	return victims
 }

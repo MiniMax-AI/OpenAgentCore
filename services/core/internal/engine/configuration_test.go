@@ -17,7 +17,7 @@ func TestProviderDeclarationsAgreeWithAdmission(t *testing.T) {
 			for _, protocol := range []string{"responses", "anthropic", "unknown"} {
 				provider, supported := declared.Provider(protocol)
 				input := v1.ModelProviderInput{Protocol: protocol, BaseURL: "https://example.test", APIKey: "private-fixture", ContextWindow: 100, MaxOutputTokens: 20}
-				if (input.ValidateHarness(kind) == nil) != supported || (v1.ValidateModelProtocol(protocol, kind) == nil) != supported {
+				if (input.ValidateHarness(kind) == nil) != supported {
 					t.Fatalf("protocol %q disagrees with validation", protocol)
 				}
 				if !supported {

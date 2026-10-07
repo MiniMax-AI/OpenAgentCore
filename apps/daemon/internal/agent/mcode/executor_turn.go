@@ -10,10 +10,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func (s *Session) runExecutorTurn() {
+func (s *Session) runExecutorTurn(prompt string) {
 	err := s.captureSubagentBaseline()
 	if err == nil {
-		err = s.executePrompt()
+		err = s.executePrompt(prompt)
 	}
 	if errors.Is(err, errTurnCancelled) {
 		err = nil
@@ -26,11 +26,7 @@ func (s *Session) runExecutorTurn() {
 	// prompt completion. No successor starts until all callers have settled.
 	s.operations.Wait()
 	if !s.req.DisableSubagents && s.subagentHistoryReady {
-		childErr := s.settleSubagents()
-		s.mu.Lock()
-		s.subagentSettlementError = childErr
-		s.mu.Unlock()
-		if childErr != nil {
+		if childErr := s.settleSubagents(); childErr != nil {
 			err = childErr
 		}
 	}
@@ -42,7 +38,7 @@ func (s *Session) runExecutorTurn() {
 	s.mu.Lock()
 	// ACP and native history cancellation do not prove detached tool cleanup.
 	// Retire the owner and settle its workers before acknowledging cancellation.
-	if s.cancelled || s.inputUncertain || len(s.permissions) != 0 || len(s.questions) != 0 {
+	if s.cancelled || s.inputUncertain {
 		reusable = false
 	}
 	if s.inputUncertain && err == nil {
@@ -51,7 +47,6 @@ func (s *Session) runExecutorTurn() {
 	metadata := map[string]any{proto.DoneMetaAgentSessionType: "mcode", proto.DoneMetaAgentSessionID: s.sessionID}
 	s.outcome = proto.DonePayload{Content: s.content.String(), Metadata: metadata, SourceCompletedAtMS: s.rootCompletedAtMS}
 	outcome := s.outcome
-	s.permissions, s.questions = map[string]pendingPermission{}, map[string]pendingQuestion{}
 	s.mu.Unlock()
 	if !reusable {
 		// Unknown quiescence invalidates this owner. A successful settlement
@@ -99,9 +94,6 @@ func (s *Session) captureSubagentBaseline() error {
 }
 
 func (s *Session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {
-	if s.settled == nil {
-		return agent.TurnSettlement{}, fmt.Errorf("mcode: Turn has no Executor owner")
-	}
 	select {
 	case <-s.settled:
 		return s.settlement, s.settlementErr
@@ -110,7 +102,7 @@ func (s *Session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, er
 	}
 }
 
-func (s *Session) cancelTurn(ctx context.Context) error {
+func (s *Session) Cancel(ctx context.Context) error {
 	e := s.executor
 	e.mu.Lock()
 	if e.active != s {

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"io"
 	"strings"
 	"time"
 
@@ -23,21 +22,19 @@ type preparationState struct {
 	executor     *executorState
 	// request is the execution_prepare's ID, trace and assignment, which
 	// every status echoes.
-	request           proto.Envelope
-	fingerprint       [32]byte
-	startFingerprint  [32]byte
-	status            proto.PreparationStatusPayload
-	deadline          time.Time
-	timer             *time.Timer
-	ctx               context.Context
-	cancel            context.CancelFunc
-	prepared          io.Closer
-	environmentID     string
-	busy              bool
-	owns              bool
-	closeErr          error
-	workspaceReadOnly bool
-	handoff           *preparedHandoff
+	request          proto.Envelope
+	fingerprint      [32]byte
+	startFingerprint [32]byte
+	status           proto.PreparationStatusPayload
+	deadline         time.Time
+	timer            *time.Timer
+	ctx              context.Context
+	cancel           context.CancelFunc
+	environmentID    string
+	busy             bool
+	owns             bool
+	closeErr         error
+	handoff          *preparedHandoff
 }
 
 func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope) error {
@@ -109,10 +106,10 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: caps, request: proto.Envelope{ID: env.ID, Trace: env.Trace, Assignment: env.Assignment}, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, request: proto.Envelope{ID: env.ID, Trace: env.Trace, Assignment: env.Assignment}, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
 	r.preparations[p.status.Handle], r.preparationRequests[p.request.ID] = p, p
-	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })
+	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true) })
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go r.prepareExecution(p)
@@ -123,30 +120,30 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 func (r *Router) prepareExecution(p *preparationState) {
 	defer r.shutdownWG.Done()
 	if !r.sendPreparation(p.request, proto.PreparationStatusPayload{Handle: p.status.Handle, Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}) {
-		r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
+		r.releasePreparation(p, "failed", "status_delivery_failed", false)
 	}
 	r.mu.Lock()
 	p.busy = false
 	ready := p.status.State == "preparing" && p.ctx.Err() == nil && !r.closed
 	if ready {
-		p.prepared = localDirectoryPreparation{}
 		p.status.State, p.status.Revision = "ready", p.status.Revision+1
-	} else if p.status.State == "preparing" {
-		p.status.State, p.status.ErrorCode, p.status.Revision = "failed", "preparation_failed", p.status.Revision+1
-	}
-	status := p.status
-	if !ready {
-		p.busy = true
+	} else {
+		if p.status.State == "preparing" {
+			p.status.State, p.status.ErrorCode, p.status.Revision = "failed", "preparation_failed", p.status.Revision+1
+		}
+		// A release or shutdown during readiness left ownership to this return.
+		p.owns = false
 		p.cancel()
 		p.timer.Stop()
 	}
+	status := p.status
 	r.mu.Unlock()
 	if !ready {
-		r.closePreparationResource(p)
+		r.publishPreparation(p, status)
 		return
 	}
 	if !r.sendPreparation(p.request, status) {
-		r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
+		r.releasePreparation(p, "failed", "status_delivery_failed", false)
 	}
 }
 
@@ -162,11 +159,11 @@ func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) e
 	if !valid {
 		return r.rejectPreparation(env, "unknown_preparation")
 	}
-	r.releasePreparation(p, "released", "", true, true)
+	r.releasePreparation(p, "released", "", true)
 	return nil
 }
 
-func (r *Router) releasePreparation(p *preparationState, state, code string, publish, retryHandoff bool) {
+func (r *Router) releasePreparation(p *preparationState, state, code string, publish bool) {
 	r.mu.Lock()
 	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
@@ -177,48 +174,21 @@ func (r *Router) releasePreparation(p *preparationState, state, code string, pub
 		r.abandonExecutorAdmission(p, state, code, publish)
 		return
 	}
-	if p.handoff != nil {
-		if active := r.sessions[p.status.RunID]; active != nil && active.preparedHandoff == p.handoff {
-			if state == "expired" && p.handoff.published {
-				r.mu.Unlock()
-				return
-			}
-			switch p.status.State {
-			case "preparing", "ready", "starting", "started":
-				p.status.State, p.status.ErrorCode, p.status.Revision = state, code, p.status.Revision+1
-				p.timer.Stop()
-			}
-			r.claimPreparedReleaseLocked(active, true, "", retryHandoff)
-			status := p.status
-			r.mu.Unlock()
-			if publish {
-				r.publishPreparation(p, status)
-			}
-			return
-		}
-	}
-	closeResource := false
 	switch p.status.State {
-	case "preparing", "ready", "starting":
+	case "preparing", "ready":
 		p.status.State, p.status.ErrorCode, p.status.Revision = state, code, p.status.Revision+1
 		p.cancel()
 		p.timer.Stop()
 	}
-	if p.owns && !p.busy {
-		if p.workspaceReadOnly && state == "released" && p.status.ErrorCode == "cleanup_unconfirmed" {
-			p.status.State, p.status.ErrorCode, p.status.Revision = state, "", p.status.Revision+1
-		}
-		p.busy = true
-		closeResource = true
-		r.shutdownWG.Add(1)
+	// A busy preparation drops ownership and reports when readiness returns.
+	// Dropping ownership here always reports it.
+	report := !p.busy && (publish || p.owns)
+	if !p.busy {
+		p.owns = false
 	}
 	status := p.status
-	settled := !p.owns && !p.busy
 	r.mu.Unlock()
-	if closeResource {
-		go func() { defer r.shutdownWG.Done(); r.closePreparationResource(p) }()
-	}
-	if publish && (!p.workspaceReadOnly || settled) {
+	if report {
 		r.publishPreparation(p, status)
 	}
 }
@@ -244,11 +214,9 @@ func (r *Router) prunePreparationsLocked() {
 
 func (r *Router) publishPreparation(p *preparationState, status proto.PreparationStatusPayload) {
 	r.mu.Lock()
-	if p.workspaceReadOnly {
-		if status.Revision != p.status.Revision || (p.owns && (p.busy || status.State == "released" || status.State == "expired") && status.State != "preparing" && status.State != "ready") {
-			r.mu.Unlock()
-			return
-		}
+	if p.executor == nil && status.Revision != p.status.Revision {
+		r.mu.Unlock()
+		return
 	}
 	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
@@ -259,8 +227,8 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 	go func() {
 		defer r.shutdownWG.Done()
 		// A failed terminal notification must not restart incomplete cleanup.
-		if !r.sendPreparation(p.request, status) && (!p.workspaceReadOnly || status.State == "preparing" || status.State == "ready") {
-			r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
+		if !r.sendPreparation(p.request, status) && (p.executor != nil || status.State == "preparing" || status.State == "ready") {
+			r.releasePreparation(p, "failed", "status_delivery_failed", false)
 		}
 	}()
 }

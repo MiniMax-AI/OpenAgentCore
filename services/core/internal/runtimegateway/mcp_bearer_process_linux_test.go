@@ -86,7 +86,7 @@ func (w *mcpBearerLog) snapshot() []byte {
 	return bytes.Clone(w.data.Bytes())
 }
 
-func mcpBearerStartDaemon(t *testing.T, root, daemon, native, provider, caFile, base, id, runner string, log *mcpBearerLog) {
+func mcpBearerStartDaemon(t *testing.T, root, daemon, native, caFile, base, id, runner string, log *mcpBearerLog) {
 	t.Helper()
 	for _, dir := range []string{"home", "tmp", "runtime/daemon/execution"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0700); err != nil {
@@ -107,12 +107,12 @@ for argument in "$@"; do
     break
   fi
 done
-exec "$OAC_TEST_MCP_BEARER_NATIVE" -c 'model_provider="minimax_validation"' -c 'model_providers.minimax_validation.name="MiniMax validation"' -c 'model_providers.minimax_validation.base_url="https://api.minimax.cn/v1"' -c 'model_providers.minimax_validation.env_key="MINIMAX_VALIDATION_KEY"' -c 'model_providers.minimax_validation.wire_api="responses"' "$@"
+exec "$OAC_TEST_MCP_BEARER_NATIVE" "$@"
 `
 	if err := os.WriteFile(wrapper, []byte(script), 0700); err != nil {
 		t.Fatal("cannot create owned native wrapper")
 	}
-	env := []string{"HOME=" + filepath.Join(root, "home"), "TMPDIR=" + filepath.Join(root, "tmp"), "OAC_RUNTIME_HOME=" + filepath.Join(root, "runtime"), "OAC_RUNTIME_CODEX_BIN=" + wrapper, "MINIMAX_VALIDATION_KEY=" + provider, "SSL_CERT_FILE=" + caFile, "OAC_TEST_MCP_BEARER_NATIVE=" + native, "OAC_TEST_MCP_BEARER_STARTS=" + filepath.Join(root, "native-starts"), "OAC_TEST_MCP_BEARER_ARGV=" + filepath.Join(root, "native-argv")}
+	env := []string{"HOME=" + filepath.Join(root, "home"), "TMPDIR=" + filepath.Join(root, "tmp"), "OAC_RUNTIME_HOME=" + filepath.Join(root, "runtime"), "OAC_RUNTIME_CODEX_BIN=" + wrapper, "SSL_CERT_FILE=" + caFile, "OAC_TEST_MCP_BEARER_NATIVE=" + native, "OAC_TEST_MCP_BEARER_STARTS=" + filepath.Join(root, "native-starts"), "OAC_TEST_MCP_BEARER_ARGV=" + filepath.Join(root, "native-argv")}
 	for _, name := range []string{"PATH", "LANG", "LC_ALL", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"} {
 		if value, ok := os.LookupEnv(name); ok {
 			env = append(env, name+"="+value)

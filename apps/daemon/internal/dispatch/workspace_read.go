@@ -79,7 +79,7 @@ func (r *Router) workspaceResourceLocked(ref proto.AssignmentRef, request proto.
 	}
 	s := r.sessions[request.RunID]
 	if s == nil || s.assignment != ref || s.environmentID != request.EnvironmentID || s.session == nil ||
-		!r.interactionRouteOpenLocked(s) {
+		!r.runRouteOpenLocked(s) {
 		return nil, "resource_unavailable"
 	}
 	if r.localWorkspace != nil {

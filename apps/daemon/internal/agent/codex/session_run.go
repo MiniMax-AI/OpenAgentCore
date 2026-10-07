@@ -9,29 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func (s *Session) run(plan SessionPlan, req proto.PromptRequestPayload) {
-	defer close(s.waitDone)
-	defer s.stopCodexInteractionTimers()
-	defer s.stopFunctionCalls()
-	defer s.cleanup()
-	defer s.closeRunOutput()
-
-	if err := s.startNative(s.cancelCtx, plan, req); err != nil {
-		s.emitTerminal(err.Error(), true)
-		return
-	}
-
-	// Block until terminal handlers close the RPC child or cancellation arrives.
-	select {
-	case <-s.rpc.Done():
-		if !s.cancelled.Load() && s.cancelCtx.Err() == nil {
-			s.emitTerminal("codex: connection closed before the run completed", true)
-		}
-	case <-s.cancelCtx.Done():
-		_ = s.rpc.Close()
-	}
-}
-
 func (s *Session) startNative(ctx context.Context, plan SessionPlan, req proto.PromptRequestPayload) error {
 	if s.currentThreadID() == "" {
 		if err := s.resolveThread(req, plan); err != nil {

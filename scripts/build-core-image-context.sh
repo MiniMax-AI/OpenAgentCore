@@ -13,8 +13,8 @@ if [[ "$context" != /* ]]; then
 fi
 
 mkdir -p "$context/bin" "$context/e2b" "$context/native-installers"
-GOOS=linux GOARCH=amd64 OAC_DEV_CORE_BUILD_DIR="$context/bin" "$repo_root/scripts/build-core.sh"
+GOOS=linux GOARCH="${GOARCH:-amd64}" OAC_DEV_CORE_BUILD_DIR="$context/bin" "$repo_root/scripts/build-core.sh"
 E2B_PROVIDER_BUILD_DIR="$context/e2b-build" "$repo_root/scripts/build-e2b-provider.sh"
-tar -xzf "$context/e2b-build/oac-e2b-provider-linux-amd64.tar.gz" --strip-components=1 -C "$context/e2b"
+tar -xzf "$context/e2b-build/oac-e2b-provider-linux-${GOARCH:-amd64}.tar.gz" --strip-components=1 -C "$context/e2b"
 rm -rf "$context/e2b-build"
 cp "$repo_root/deploy/distribution/Dockerfile" "$context/Dockerfile"

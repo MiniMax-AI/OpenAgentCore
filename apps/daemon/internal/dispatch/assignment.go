@@ -120,7 +120,7 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 	go func() {
 		defer r.shutdownWG.Done()
 		for _, p := range preparations {
-			r.releasePreparation(p, "failed", proto.AssignmentStale, true, false)
+			r.releasePreparation(p, "failed", proto.AssignmentStale, true)
 		}
 		work.Wait()
 		state, code := proto.AssignmentReleased, ""
@@ -154,7 +154,7 @@ func (r *Router) fenceSessionWorkLocked(sessionID string) []*preparationState {
 	}
 	var preparations []*preparationState
 	for _, p := range r.preparations {
-		if p.executor == nil && p.workspaceReadOnly && p.owns && p.request.Assignment.SessionID == sessionID {
+		if p.executor == nil && p.owns && p.request.Assignment.SessionID == sessionID {
 			preparations = append(preparations, p)
 		}
 	}

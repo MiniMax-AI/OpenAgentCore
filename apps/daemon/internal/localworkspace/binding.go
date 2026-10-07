@@ -3,11 +3,9 @@ package localworkspace
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -24,14 +22,6 @@ type Binding struct {
 	writer         *fileWriter
 	capabilityMu   sync.Mutex
 	capabilityRoot string
-}
-
-func New(environment, session, workspace string) (*Binding, error) {
-	root, err := paths.Root()
-	if err != nil {
-		return nil, err
-	}
-	return newNativeBinding(environment, session, workspace, filepath.Join(root, "capabilities"))
 }
 
 // NewWithCapabilityDirectory freezes paths selected by the Runtime operator.

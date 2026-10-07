@@ -96,7 +96,7 @@ The [Session and Turn diagnostics reads](./session-diagnostics.md) return these 
 | `execution_interrupted` | Core execution interrupted |
 | `delivery_unconfirmed` | `delivery_unknown`, `input_outcome_unknown`, `cancel_unconfirmed`, `cancel_outcome_unavailable`, `function_result_unconfirmed` |
 | `input_rejected` | `invalid_input`, `input_not_applied`, `message_input_unsupported`, and the exact steering outcomes `input_invalid_input`, `input_run_inactive`, `input_input_conflict`, `input_input_limit`, `input_unsupported`, `input_rejected`, `input_not_ready`, `input_busy` |
-| `executor_protocol_error` | `invalid_executor_result`, `interaction_not_supported`, `execution_state_unavailable`, `execution_state_changed`, `function_call_invalid`, `function_result_invalid` |
+| `executor_protocol_error` | `invalid_executor_result`, `execution_state_unavailable`, `execution_state_changed`, `function_call_invalid`, `function_result_invalid` |
 | `core_storage_failed` | `event_persistence_failed`, `artifact_capture_failed` |
 | `internal_error` | Unknown or malformed outcome; no raw value is returned |
 | `environment_connection_timeout` | Initial input connection deadline expired |
