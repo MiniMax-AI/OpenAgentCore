@@ -89,8 +89,8 @@ func newView(binary string, codeModeHost bool) agent.View {
 		Capabilities: agent.ViewCapabilities{
 			EnvironmentNone:      proto.CapabilityUnsupported,
 			Skills:               proto.CapabilityUnsupported,
-			FunctionTools:        proto.CapabilityUnsupported,
-			FunctionResultImages: proto.CapabilityUnsupported,
+			FunctionTools:        proto.CapabilitySupported,
+			FunctionResultImages: proto.CapabilitySupported,
 			ToolSearch:           proto.CapabilityUnsupported,
 			StdioMCP:             proto.CapabilityUnsupported,
 		},

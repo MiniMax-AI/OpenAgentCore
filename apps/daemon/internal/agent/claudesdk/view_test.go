@@ -150,7 +150,7 @@ func resolveTestView(t *testing.T) agent.View {
 	}
 	lib := agent.ViewMount{Name: viewloader.MountName, HostDir: filepath.Join(root, "lib")}
 	loader := viewloader.Fragment{Closure: []agent.ViewMount{lib}, Overlays: []agent.ViewOverlay{{Path: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(root, "lib", "ld.so"), Exec: true}}, LibraryPath: lib.Path()}
-	declared := declareView(probe, probe.Node, filepath.Join(root, "bundle"), "dist/main.js", "native/claude", loader)
+	declared := declareView(probe, RuntimeInfo{NativePath: "native/claude"}, probe.Node, filepath.Join(root, "bundle"), "dist/main.js", loader)
 	registry := agent.NewRegistry()
 	registry.Register(Declaration, agent.Runtime{Info: Declaration.Info, Session: NewFactory(probe), View: declared})
 	view, err := registry.ResolveView(Declaration.Info.Kind)
