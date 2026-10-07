@@ -95,22 +95,26 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 	if err != nil {
 		return nil, fmt.Errorf("%w: admit: %w", ErrUnsupported, err)
 	}
-	local := req.LocalEnvironment
+	caps, local := view.Capabilities, req.LocalEnvironment
 	switch {
-	case req.DisableExecutionEnvironment:
-		return nil, unsupported("a Session without an execution environment")
-	case local == nil:
-		return nil, unsupported("a Session without a workspace")
-	case !isViewPath(local.WorkspaceDirectory):
+	case local == nil && !req.DisableExecutionEnvironment:
+		return nil, invalidSession("a Session with neither a workspace nor environment none is an incomplete binding")
+	case req.DisableExecutionEnvironment && !caps.EnvironmentNone.IsSupported():
+		return nil, unsupported("environment none")
+	case local != nil && !isViewPath(local.WorkspaceDirectory):
 		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
 	case !req.StrictResume:
 		return nil, unsupported("a Session without strict resume")
-	case local.Capabilities || len(local.Skills) > 0 || local.CapabilityRoot != "":
-		return nil, unsupported("installed Capabilities and skills")
-	case local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0:
+	case local != nil && local.Capabilities && local.CapabilityRoot == "":
+		return nil, unsupported("installed Capabilities that no preparation resolved")
+	case local != nil && len(local.Skills) > 0 && !caps.Skills.IsSupported():
+		return nil, unsupported("Skills")
+	case local != nil && (local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0):
 		return nil, unsupported("a restricted workspace network")
-	case len(req.FunctionTools) > 0 || req.ToolSearch:
-		return nil, unsupported("function tools and their discovery")
+	case len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported():
+		return nil, unsupported("function tools")
+	case req.ToolSearch && !caps.ToolSearch.IsSupported():
+		return nil, unsupported("tool search")
 	case len(view.Shims) > 0 && !hasPATH(env):
 		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}
@@ -126,8 +130,11 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		return nil, invalidSession("MCP: %v", err)
 	}
 	for _, b := range bindings {
-		if b.Transport != "http" {
-			return nil, unsupported("%s MCP server %q", b.Transport, b.ServerLabel)
+		switch {
+		case b.Transport == "stdio" && b.CredentialAuthority != "none":
+			return nil, fmt.Errorf("%w: admit: %w: stdio MCP server %q needs a credential", ErrUnsupported, agent.ErrViewHandoff, b.ServerLabel)
+		case b.Transport == "stdio" && !caps.StdioMCP.IsSupported():
+			return nil, unsupported("stdio MCP server %q", b.ServerLabel)
 		}
 	}
 	if err := checkLayout(cfg, view); err != nil {

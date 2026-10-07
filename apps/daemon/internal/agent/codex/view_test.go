@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -119,7 +120,8 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 		t.Fatalf("outside file changed: %q, %v", body, err)
 	}
 
-	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{}}}
+	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
 	if _, err := view.Executor(t.Context(), req, session); !errors.Is(err, agent.ErrUnsupportedOperation) || len(launched) != 1 {
 		t.Fatalf("stdio MCP: launches %d, err %v", len(launched), err)
 	}

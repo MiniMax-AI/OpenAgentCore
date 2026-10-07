@@ -130,7 +130,15 @@ func (i viewInstall) view() agent.View {
 		Shims:     []string{"git", "rg"},
 		ShimPaths: []string{"/bin/bash"},
 		Proxy:     agent.ViewProxyNone,
-		Executor:  i.executor,
+		Capabilities: agent.ViewCapabilities{
+			EnvironmentNone:      proto.CapabilityUnsupported,
+			Skills:               proto.CapabilityUnsupported,
+			FunctionTools:        proto.CapabilityUnsupported,
+			FunctionResultImages: proto.CapabilityUnsupported,
+			ToolSearch:           proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilityUnsupported,
+		},
+		Executor: i.executor,
 	}
 	i.loader.AddTo(&view)
 	return view
@@ -149,12 +157,6 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	local := req.LocalEnvironment
 	if !req.StrictResume || local == nil || req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view runs Agents API execution in a writable Environment workspace", agent.ErrUnsupportedOperation)
-	}
-	if local.NetworkAccess != "enabled" || len(local.AllowedDomains) != 0 {
-		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view requires unrestricted workspace network", agent.ErrUnsupportedOperation)
-	}
-	if len(local.Skills) != 0 {
-		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view does not install Capabilities", agent.ErrUnsupportedOperation)
 	}
 	workspace := local.WorkspaceRoot
 	if !path.IsAbs(workspace) || path.Clean(workspace) != workspace || workspace == "/" {

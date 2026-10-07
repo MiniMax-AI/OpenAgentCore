@@ -34,11 +34,13 @@
 // Host.Registry's Executor factory prepares an Executor of the Session that
 // its bind function binds the request to. It admits the request before any
 // effect: the kind must declare an agent.View, the request must use only
-// what a view runs and no function tools, and when the view declares shim
-// names, which run on the sandbox PATH, the Session's Environment must set
-// PATH. The registry's Info marks what admission rejects, and what needs a
-// local workspace, unsupported. The factory then allocates the Executor's
-// uid, skipping each uid that a running thread holds as its real,
+// what the view's agent.ViewCapabilities declare, and when the view declares
+// shim names, which run on the sandbox PATH, the Session's Environment must
+// set PATH. A Session without strict resume, with a restricted network, or
+// with a stdio MCP server that needs a credential is rejected whatever the
+// view declares. The registry's Info follows the declarations and marks what
+// needs a local workspace unsupported. The factory then allocates the
+// Executor's uid, skipping each uid that a running thread holds as its real,
 // effective, saved or file-system uid; this check only detects a conflict
 // and never ends a process. It prepares the Session directory under
 // Config.StateDir, rewrites the request so the model provider and HTTP MCP

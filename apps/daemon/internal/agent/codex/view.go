@@ -86,6 +86,14 @@ func newView(binary string, codeModeHost bool) agent.View {
 		ShimPaths:  []string{"/bin/bash"},
 		ForwardEnv: slices.Clone(viewForwardEnv),
 		Proxy:      agent.ViewProxyEnv,
+		Capabilities: agent.ViewCapabilities{
+			EnvironmentNone:      proto.CapabilityUnsupported,
+			Skills:               proto.CapabilityUnsupported,
+			FunctionTools:        proto.CapabilityUnsupported,
+			FunctionResultImages: proto.CapabilityUnsupported,
+			ToolSearch:           proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilityUnsupported,
+		},
 		Executor: func(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
 			cfg := defaultSessionConfig()
 			cfg.codexBinary = binary
@@ -128,9 +136,6 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	local := req.LocalEnvironment
 	if local == nil || req.DisableExecutionEnvironment || !path.IsAbs(local.WorkspaceRoot) {
 		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace", agent.ErrUnsupportedOperation)
-	}
-	if local.Capabilities || len(local.Skills) > 0 {
-		return SessionPlan{}, fmt.Errorf("%w: codex: Capabilities and skills in a view", agent.ErrUnsupportedOperation)
 	}
 	if !filepath.IsAbs(view.Home.Host) || !path.IsAbs(view.Home.View) {
 		return SessionPlan{}, errors.New("codex: view home must be absolute")

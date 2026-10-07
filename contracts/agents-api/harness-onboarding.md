@@ -274,6 +274,7 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 | `ShimPaths` | View paths the shim is bound over; each runs the same path in the sandbox |
 | `ForwardEnv` | Harness variables that a process run in the sandbox keeps |
 | `Proxy` | `ViewProxyEnv` or `ViewProxyNone` |
+| `Capabilities` | What the view runs ([Capabilities](#capabilities)) |
 | `Executor` | The `ViewExecutorFactory` that prepares the Session's Executor in its view |
 
 `View.Validate` checks the declaration without touching the host:
@@ -282,10 +283,28 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 - closure names are single path components other than `bin`, `home` and `run`, which the agent host uses for the shims, the Session home and the process relay;
 - shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc` and `/dev` (`ViewReserved`);
 - each `LocalExec` entry lies in a closure directory or an `Exec` overlay;
-- shim names and `ForwardEnv` names are unique, no shim is named `oac-process-shim`, which is the process relay's, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
+- shim names and `ForwardEnv` names are unique, no shim is named `oac-process-shim`, which is the process relay's, or starts with `oac-mcp-`, which [stdio aliases](#stdio-mcp) use, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
+- every `Capabilities` field is `proto.CapabilitySupported` or `proto.CapabilityUnsupported`;
 - `Proxy` is one of the two values and `Executor` is non-nil.
 
 `harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view.
+
+### Capabilities
+
+`View.Capabilities` declares each feature the view runs, and the agent host admits a request before any effect only when the view supports each feature the request uses. The registry the agent host gives dispatch derives `EnvironmentNone`, `FunctionTools`, `FunctionResultImages` and `ToolSearch` from it.
+
+| Field | A request that uses it |
+| --- | --- |
+| `EnvironmentNone` | Sets `DisableExecutionEnvironment` ([Environment none](#environment-none)) |
+| `Skills` | Has resolved Skills (`LocalEnvironment.Skills`) |
+| `FunctionTools`, `FunctionResultImages`, `ToolSearch` | Uses the feature of the same `AgentKindCapabilities` name |
+| `StdioMCP` | Has a stdio MCP binding ([Stdio MCP](#stdio-mcp)) |
+
+Whatever the view declares, the agent host rejects with `ErrUnsupportedOperation` a request without strict resume, one whose installed Capabilities no preparation resolved, and one with a restricted network, because only the Provider's workload network boundary can contain a process's own sockets. It rejects a stdio binding that needs a credential with `ErrViewHandoff`.
+
+### Environment none
+
+A request with `DisableExecutionEnvironment` runs in an empty-root view: a read-only, noexec tmpfs at `/` that holds only the mountpoints for the closure, the Session home, the agent host's runtime files, `/proc`, `/dev` and the overlays. It has no sandbox files, no shims, no Link attachment and no sandbox network, so the generic proxy refuses every request; the cgroup, the isolation and the gateway stay. The request carries no `LocalEnvironment`, and the Harness runs in `/.oac/home/work` (`ViewWorkName`). The request already expresses the profile, so the wire has no field for it. A request with neither `LocalEnvironment` nor `DisableExecutionEnvironment` is an incomplete binding, and the agent host rejects it.
 
 ### Executables
 
@@ -297,19 +316,23 @@ The agent host derives the process broker's table from the declaration: `/.oac/b
 
 ### Environment
 
-`Launch` takes the complete Harness environment in `StartOptions.Env`. The agent host's own environment never passes through, so a view adapter does not start from `os.Environ()`. A process run in the sandbox gets the broker's environment: the `ForwardEnv` variables from the Harness, the Environment's fixed sandbox values (`HOME`, `PATH`, `TMPDIR` and `LANG`) and the Environment's tool environment. The broker is the only home of the tool environment, and a view adapter passes none of it to the Harness.
+`Launch` takes the complete Harness environment in `StartOptions.Env`, which the adapter derives from its installation and the request's typed fields; the request carries no environment values. The agent host's own environment never passes through, so a view adapter does not start from `os.Environ()`. A process run in the sandbox gets the broker's environment: the `ForwardEnv` variables from the Harness, the Environment's fixed sandbox values (`HOME`, `PATH`, `TMPDIR` and `LANG`) and the Environment's tool environment. The broker is the only home of the tool environment, and a view adapter passes none of it to the Harness. The agent host keeps model and MCP credentials only in the gateway's protected configuration and adds none to the Harness's environment, a Process spec or a capability tree the view exposes.
 
 `ForwardEnv` never names a variable the view or the broker sets: `HOME`, `PATH`, `TMPDIR`, `LANG`, `LD_LIBRARY_PATH`, or `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` in any case. When the Environment's tool environment also sets a forwarded variable, the tool environment's value wins.
 
 ### Endpoints and proxy
 
-Before it calls the factory, the agent host points the request's `model_provider` at the Session's [credential gateway](./model-execution.md#credential-gateway): `base_url` is `http://127.0.0.1:<port>` with no path and `api_key` is `modelprovider.Placeholder`. It resolves the Session's MCP once, from the public declarations and the installed Environment MCP, into `ViewSession.MCP`, and removes both from the request. Each HTTP binding points at its gateway URL and carries no bearer and no headers; the gateway adds the declared credential and headers. A stdio binding is as resolved and runs in the sandbox through the declared shims. A view Executor takes MCP only from `ViewSession.MCP` and never resolves the request. The adapter renders the provider and the bindings as it does for a local Harness and never sees a real credential.
+Before it calls the factory, the agent host points the request's `model_provider` at the Session's [credential gateway](./model-execution.md#credential-gateway): `base_url` is `http://127.0.0.1:<port>` with no path and `api_key` is `modelprovider.Placeholder`. It resolves the Session's MCP once, from the public declarations and the installed Environment MCP, into `ViewSession.MCP`, and removes both from the request. Only HTTP bindings go to the gateway: each points at its gateway URL and carries no bearer and no headers, and the gateway adds the declared credential and headers. A stdio binding runs under its [alias](#stdio-mcp). A view Executor takes MCP only from `ViewSession.MCP` and never resolves the request. The adapter renders the provider and the bindings as it does for a local Harness and never sees a real credential.
 
-The Registry checks each view request once, before the factory, and rejects it with `ErrViewHandoff` when its model provider is missing or is not the gateway with the placeholder, when it carries MCP outside `ViewSession.MCP`, or when an HTTP binding is not a credential-free loopback endpoint.
+The Registry checks each view request once, before the factory, and rejects it with `ErrViewHandoff` when its model provider is missing or is not the gateway with the placeholder, when it carries MCP outside `ViewSession.MCP`, when an HTTP binding is not a credential-free loopback endpoint, or when a stdio binding is not its alias.
 
 With `ViewProxyEnv`, `ViewSession.Proxy` is the gateway's proxy URL. The adapter sets `HTTPS_PROXY` and `HTTP_PROXY` to it and `NO_PROXY` to `127.0.0.1,localhost`, each in upper and lower case. Declare `ViewProxyEnv` only after qualifying that every request the Harness makes locally honours these variables. A request that ignores them fails to connect, because the view has no route out.
 
 With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic proxy. Admission rejects a request that enables a feature needing one with `ErrUnsupportedOperation`. Web tools that the provider executes keep provider origin.
+
+### Stdio MCP
+
+A stdio binding runs in the sandbox under its alias. The binding at index `i` of `ViewSession.MCP` has exactly `Stdio: {Server: {Name: ServerLabel, Type: "stdio", Command: agent.ViewAlias(i)}}`, a name under `/.oac/bin` with the `oac-mcp-` prefix, and the Harness runs that path without arguments. The process broker maps the alias to the binding's frozen command, args and `CWD`, a relative `CWD` resolving against the installation's package root, and runs it as it runs a shim's process, with nothing from the Harness's argv, working directory or environment. A stdio binding whose credential authority is not `none` is rejected with `ErrViewHandoff`.
 
 ### Home
 
@@ -344,6 +367,7 @@ Run the adapter's Turns, cancellation and continuation in a view, then qualify e
 | `ForwardEnv` | A process run in the sandbox keeps each declared variable and no other Harness variable. |
 | `Proxy` | With `ViewProxyEnv`, every local request, such as web fetches, downloads and update checks, goes through the proxy. With `ViewProxyNone`, a request enabling a feature that needs it is rejected. |
 | `Home` | Native history and configuration stay under `/.oac/home`, and a later Executor in the same Session continues from them. |
+| `Capabilities` | Each supported feature runs a Turn through dispatch: environment none in the empty-root view, Skills, function calls and results, tool search, and each stdio binding under its alias. |
 
 `scripts/qualify-agent-host.sh` runs one Turn per Harness through the daemon's dispatch against the [agent-host and sandbox images](../../docs/maintainers.md#runtime-images-and-helpers). The `agenthostqualify` test binary runs as the agent host with the [agent-host container's flags](../../docs/configuration.md#agent-host-container), and the sandbox image serves the sandbox. Each Turn writes a file and reports the output and exit status of a failing command whose values only the sandbox's tool environment holds. The Link runs over WSS with a CA the test generates. The test also checks the cgroup v2 delegation: the container's own read-only cgroup fails with `ErrUnsupported`, and in a delegated directory the agent host ends a cgroup left behind with `cgroup.kill`. Set `OAC_AGENT_HOST_IMAGE` and `OAC_SANDBOX_IMAGE` to the two images, `OAC_QUALIFY_KEY_FILE` to the model key's file and, for each Harness to qualify, `OAC_QUALIFY_CLAUDE_SDK`, `OAC_QUALIFY_CODEX` or `OAC_QUALIFY_MCODE` to its `model` and `model_provider` without `api_key`. The gateway dials model providers directly, so on a host whose only egress is an HTTP proxy, set `OAC_QUALIFY_PROXY` to it and the test tunnels the providers' hosts through it.
 
