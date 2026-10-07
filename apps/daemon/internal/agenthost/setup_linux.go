@@ -36,7 +36,7 @@ func strongestScope(caps sp.Capabilities) (sp.Scope, error) {
 // otherwise. When ctx ends first, run cancels the step and waits closeBound
 // for it to settle. A step that may run unobserved quarantines the owner.
 func (o *environment) run(ctx context.Context, id sandboxwire.ID, program string, args []string, env map[string]string, cwd string) error {
-	rw, err := o.open(ctx, sandboxlink.ServiceProcess, sp.Version)
+	rw, err := o.link.open(ctx, sandboxlink.ServiceProcess, sp.Version)
 	if err != nil {
 		return dispatch.ErrEnvironmentUnavailable
 	}

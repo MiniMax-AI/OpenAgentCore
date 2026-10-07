@@ -214,7 +214,7 @@ func (o *environment) attach(ctx context.Context) (*world, error) {
 	lost := new(atomic.Bool)
 	// The link calls fail under its lock, so fail only records the loss.
 	o.link, o.lost = newLinkOwner(o.d.dial, o.binding, sandboxwire.NewID(), func(error) { lost.Store(true) }), lost
-	st, err := o.open(ctx, sandboxlink.ServiceFile, sandboxfs.Version)
+	st, err := o.link.open(ctx, sandboxlink.ServiceFile, sandboxfs.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -222,18 +222,6 @@ func (o *environment) attach(ctx context.Context) (*world, error) {
 		return nil, fmt.Errorf("%w: attach the world: %w", ErrWorld, err)
 	}
 	return o.world, nil
-}
-
-// open opens a stream of service on the owner's attachment.
-func (o *environment) open(ctx context.Context, service sandboxlink.Service, version uint16) (io.ReadWriteCloser, error) {
-	st, err := o.link.open(ctx, service, version)
-	if err != nil {
-		return nil, err
-	}
-	if o.d.stream != nil {
-		return o.d.stream(service, st), nil
-	}
-	return st, nil
 }
 
 // drain closes the owner's attachment. It keeps the attachment when the

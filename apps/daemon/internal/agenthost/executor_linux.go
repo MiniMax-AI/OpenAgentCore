@@ -23,8 +23,6 @@ import (
 type deps struct {
 	dial  dialFunc
 	tasks listTasks
-	// stream wraps each stream an Environment owner opens; nil keeps it.
-	stream func(sandboxlink.Service, io.ReadWriteCloser) io.ReadWriteCloser
 }
 
 // Registry returns the kinds the agent host runs, for the daemon's dispatch

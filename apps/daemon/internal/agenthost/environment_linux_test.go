@@ -59,8 +59,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	cfg := Config{StateDir: t.TempDir(), RelayURL: sb.url, RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: harnesses}
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
 	sb.ready(t, cfg)
-	p := &probe{}
-	h := &Host{cfg: cfg, owners: owners{d: deps{dial: relayDial(cfg), stream: p.stream}}}
+	h := &Host{cfg: cfg, owners: owners{d: deps{dial: relayDial(cfg)}}}
 	// The factory records what the owner prepared: admission does not run
 	// Skills in views yet.
 	prepared := make(chan preparedExecutor, 4)
@@ -130,7 +129,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 
 	// Reopen: a new Router checks the completed installation and neither
 	// changes the world nor runs a step.
-	p.reset(0)
+	p := h.probe(t, b, 0)
 	second := &daemon{host: h}
 	second.route(t, reg)
 	id, status := second.prepare(t, b, req)
@@ -140,8 +139,8 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if got := <-prepared; len(got.req.LocalEnvironment.Skills) != 1 || got.env.Tool["PROBE"] != "probe-value" {
 		t.Fatalf("the reopened Executor's Environment is %+v, %+v", got.req.LocalEnvironment, got.env)
 	}
-	if n := p.counts(); n.mutations != 0 || n.processes != 0 {
-		t.Fatalf("the reopen sent %d File mutations and opened %d Process streams", n.mutations, n.processes)
+	if requests, mutations := p.counts(); requests == 0 || mutations != 0 {
+		t.Fatalf("the reopen sent %d File requests, %d of them mutations, on the probed world", requests, mutations)
 	}
 	checkSetup(t)
 
@@ -160,7 +159,6 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if err := second.router.Resume(ref(b), suspension, second); err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
-	p.reset(0)
 	id, status = second.prepare(t, b, req)
 	if status.State != "ready" {
 		t.Fatalf("the resumed preparation is %s (%s), want ready", status.State, status.ErrorCode)
@@ -168,14 +166,14 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if r := second.read(t, b, status.Handle); r.Outcome != "completed" || !lists(r.Directory, "setup.txt") {
 		t.Fatalf("the resumed read is %+v", r)
 	}
-	if p.counts().files != 1 {
-		t.Fatalf("the resumed read opened %d File streams, want 1", p.counts().files)
+	if h.drained(t, b) {
+		t.Fatal("the resumed owner served the read without an attachment")
 	}
 	second.release(t, b, id, status.Handle)
 
 	// An uncertain File mutation quarantines the owner: no later write or
-	// runtime_prepare on any Router sends one again.
-	p.reset(sandboxfs.OpLink)
+	// runtime_prepare on any Router opens an attachment to send one again.
+	h.probe(t, b, sandboxfs.OpLink)
 	if r := second.write(t, b, "notes/uncertain.txt", []byte("uncertain")); r.Outcome != "unknown" {
 		t.Fatalf("the interrupted write is %+v, want unknown", r)
 	}
@@ -185,12 +183,11 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if !h.drained(t, b) {
 		t.Fatal("the owner kept its attachment after the Router shut down")
 	}
-	p.reset(0)
 	third := &daemon{host: h}
 	third.route(t, reg)
 	third.assign(t, b)
-	if r := third.write(t, b, "notes/uncertain.txt", []byte("uncertain")); r.Outcome != "unknown" {
-		t.Fatalf("the write after an uncertain one is %+v, want unknown", r)
+	if r := third.write(t, b, "notes/uncertain.txt", []byte("uncertain")); r.Outcome != "unknown" || !h.drained(t, b) {
+		t.Fatalf("the write after an uncertain one is %+v, want unknown without an attachment", r)
 	}
 	// An unknown outcome fences the Router's transfers, so the next one runs
 	// on another.
@@ -198,11 +195,8 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	fourth := &daemon{host: h}
 	fourth.route(t, reg)
 	fourth.assign(t, b)
-	if r := fourth.runtimePrepare(t, b, proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/file.txt"}}, []byte("file")); r.Outcome != "unknown" {
-		t.Fatalf("the runtime_prepare after an uncertain write is %+v, want unknown", r)
-	}
-	if n := p.counts(); n.files != 0 || n.mutations != 0 {
-		t.Fatalf("the quarantined owner opened %d File streams and sent %d mutations", n.files, n.mutations)
+	if r := fourth.runtimePrepare(t, b, proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/file.txt"}}, []byte("file")); r.Outcome != "unknown" || !h.drained(t, b) {
+		t.Fatalf("the runtime_prepare after an uncertain write is %+v, want unknown without an attachment", r)
 	}
 	for _, name := range []string{"uncertain.txt", "file.txt"} {
 		if _, err := os.Lstat(path.Join(sandboxWorkspace, "notes", name)); !errors.Is(err, fs.ErrNotExist) {
@@ -262,9 +256,9 @@ func archive(t *testing.T, root string, files map[string][]byte) []byte {
 	return b.Bytes()
 }
 
-// drained reports whether b's Session's Environment owner holds no
-// attachment.
-func (h *Host) drained(t *testing.T, b Binding) bool {
+// owner returns b's Session's Environment owner, acquired; the caller
+// releases it.
+func (h *Host) owner(t *testing.T, b Binding) *environment {
 	t.Helper()
 	h.owners.mu.Lock()
 	o := h.owners.m[b.SessionID]
@@ -275,8 +269,45 @@ func (h *Host) drained(t *testing.T, b Binding) bool {
 	if err := o.acquire(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	return o
+}
+
+// drained reports whether b's Session's Environment owner holds no
+// attachment.
+func (h *Host) drained(t *testing.T, b Binding) bool {
+	t.Helper()
+	o := h.owner(t, b)
 	defer o.release()
 	return o.link == nil
+}
+
+// probe attaches b's Session's Environment owner as attach does, over a
+// probed File stream, and returns the probe. The probe breaks the stream
+// before it sends the first request of armed; zero arms none.
+func (h *Host) probe(t *testing.T, b Binding, armed sandboxfs.Op) *probed {
+	t.Helper()
+	o := h.owner(t, b)
+	defer o.release()
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	// The File service attaches one world per attachment.
+	if err := o.drain(); err != nil {
+		t.Fatal(err)
+	}
+	lost := new(atomic.Bool)
+	o.link, o.lost = newLinkOwner(o.d.dial, o.binding, sandboxwire.NewID(), func(error) { lost.Store(true) }), lost
+	st, err := o.link.open(ctx, sandboxlink.ServiceFile, sandboxfs.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &probed{ReadWriteCloser: st}
+	if o.world, err = attachWorld(ctx, p, &o.uncertain); err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	p.requests, p.mutations, p.armed = 0, 0, armed
+	p.mu.Unlock()
+	return p
 }
 
 // runtimePrepare sends one runtime_prepare transfer of data on b's Session
@@ -362,47 +393,22 @@ func lists(d *proto.WorkspaceDirectoryResult, name string) bool {
 	return false
 }
 
-// probe observes the streams an Environment owner opens: it counts File
-// streams, File mutations and Process streams, and breaks the File stream
-// that sends the next request of an armed operation before sending it.
-type probe struct {
-	mu    sync.Mutex
-	n     probeCounts
-	armed sandboxfs.Op
+// probed counts the File requests and mutations sent on a stream and breaks
+// it before it sends the first request of armed.
+type probed struct {
+	io.ReadWriteCloser
+	mu                  sync.Mutex
+	requests, mutations int
+	armed               sandboxfs.Op
 }
-
-type probeCounts struct{ files, mutations, processes int }
 
 var mutations = map[sandboxfs.Op]bool{sandboxfs.OpSetAttr: true, sandboxfs.OpCreate: true, sandboxfs.OpWrite: true, sandboxfs.OpFsync: true,
 	sandboxfs.OpMkdir: true, sandboxfs.OpUnlink: true, sandboxfs.OpRmdir: true, sandboxfs.OpRename: true, sandboxfs.OpLink: true, sandboxfs.OpSymlink: true}
 
-// reset clears the counts and arms op; zero arms none.
-func (p *probe) reset(op sandboxfs.Op) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.n, p.armed = probeCounts{}, op
-}
-
-func (p *probe) counts() probeCounts {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.n
-}
-
-func (p *probe) stream(service sandboxlink.Service, st io.ReadWriteCloser) io.ReadWriteCloser {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if service == sandboxlink.ServiceProcess {
-		p.n.processes++
-		return st
-	}
-	p.n.files++
-	return &probed{ReadWriteCloser: st, p: p}
-}
-
-type probed struct {
-	io.ReadWriteCloser
-	p *probe
+func (s *probed) counts() (requests, mutations int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.requests, s.mutations
 }
 
 // Write sees one whole frame per call, as sandboxwire.WriteFrame writes it.
@@ -412,15 +418,16 @@ func (s *probed) Write(b []byte) (int, error) {
 		return 0, err
 	}
 	op := sandboxfs.Op(f.Type)
-	s.p.mu.Lock()
+	s.mu.Lock()
+	s.requests++
 	if mutations[op] {
-		s.p.n.mutations++
+		s.mutations++
 	}
-	broken := op == s.p.armed
+	broken := op == s.armed
 	if broken {
-		s.p.armed = 0
+		s.armed = 0
 	}
-	s.p.mu.Unlock()
+	s.mu.Unlock()
 	if broken {
 		s.Close()
 		return 0, errors.New("the probe broke the stream")
