@@ -38,7 +38,7 @@ Windows PowerShell:
 irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
 ```
 
-The default console address is `http://localhost:8080`. For access from other machines, pass the origin they can reach; if a reverse proxy already serves this host, use its HTTPS address:
+When binding to all IPv4 addresses, the installer uses the private address of the default route if available; otherwise the console address is `http://localhost:8080`. To choose another reachable origin, pass `--public-url`; if a reverse proxy already serves this host, use its HTTPS address:
 
 ```sh
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --public-url https://core.example

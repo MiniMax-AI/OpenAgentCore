@@ -97,6 +97,12 @@ class ComposeTests(unittest.TestCase):
             ['docker', 'compose', '--env-file', os.devnull, '-f', str(self.compose_file),
              'config', '--format', 'json'], env=env))
         self.assertEqual(ports(configured), {'web': [('0.0.0.0', '9080')]})
+        env['OAC_HOST'] = '::1'
+        configured = json.loads(subprocess.check_output(
+            ['docker', 'compose', '--env-file', os.devnull, '-f', str(self.compose_file),
+             'config', '--format', 'json'], env=env))
+        self.assertEqual(ports(configured), {'web': [('::1', '9080')]})
+
 
     def test_platform_network_injection_keeps_the_file_valid(self):
         # Dokploy isolated deployments attach a project network to every service.

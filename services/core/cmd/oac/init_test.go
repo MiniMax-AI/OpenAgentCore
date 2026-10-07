@@ -43,7 +43,7 @@ func snapshot(t *testing.T, root string) map[string]string {
 		}
 		data, err := os.ReadFile(path)
 		relative, _ := filepath.Rel(root, path)
-		saved[relative] = string(data)
+		saved[filepath.ToSlash(relative)] = string(data)
 		return err
 	}); err != nil {
 		t.Fatal(err)

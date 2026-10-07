@@ -16,7 +16,7 @@ from helper_contract_generated import PROTOCOL_VERSION, SDK_VERSION
 SOURCE = Path('/source/services/core/tools/e2b-provider')
 OUTPUT = Path('/output')
 NAME = 'oac-e2b-provider'
-BASE = 'python:3.12.12-slim-bookworm@sha256:2986c55feb36e6cae00fa1fefb454283e4b33f35e75ff8bdd123b134130be301'
+BASE = next(line.split()[1] for line in (SOURCE / 'Build.Dockerfile').read_text().splitlines() if line.startswith('FROM '))
 
 
 def checked(args, **options):

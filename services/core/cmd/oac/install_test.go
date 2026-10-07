@@ -144,7 +144,7 @@ func TestInstallRecoversRecognizedStageAndPreservesUnknownData(t *testing.T) {
 			os.Mkdir(stage, 0o700)
 			os.WriteFile(filepath.Join(stage, "partial"), []byte("untouched"), 0o600)
 			if owned {
-				os.WriteFile(filepath.Join(stage, ".oac-installer"), []byte(f.options.dir), 0o600)
+				os.Mkdir(filepath.Join(stage, stageMarker(f.options.dir)), 0o700)
 			}
 			err := f.run()
 			if owned && err != nil {
@@ -210,7 +210,7 @@ func TestInstallerInterruptedProcess(t *testing.T) {
 		err := withLock(root, func() error {
 			stage := root + ".staging"
 			os.Mkdir(stage, 0o700)
-			os.WriteFile(filepath.Join(stage, ".oac-installer"), []byte(root), 0o600)
+			os.Mkdir(filepath.Join(stage, stageMarker(root)), 0o700)
 			os.WriteFile(filepath.Join(stage, "ready"), nil, 0o600)
 			time.Sleep(time.Minute)
 			return nil

@@ -109,6 +109,16 @@ func (i installer) install(ctx context.Context, o installOptions) error {
 	}
 	if o.publicURL == "" {
 		o.publicURL = "http://localhost:" + strconv.Itoa(o.port)
+		if o.host == "0.0.0.0" {
+			// UDP connect selects a route without transmitting a packet.
+			if route, err := net.DialTimeout("udp4", "1.1.1.1:53", time.Second); err == nil {
+				address := route.LocalAddr().(*net.UDPAddr).IP
+				route.Close()
+				if address.IsPrivate() {
+					o.publicURL = "http://" + net.JoinHostPort(address.String(), strconv.Itoa(o.port))
+				}
+			}
+		}
 	}
 	u, err := url.Parse(o.publicURL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
@@ -180,10 +190,11 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		if err := os.Mkdir(stage, 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(stage, ".oac-installer"), []byte(o.dir), 0o600); err != nil {
+		defer os.RemoveAll(stage)
+		// Directory creation publishes ownership atomically, including on Windows.
+		if err := os.Mkdir(filepath.Join(stage, stageMarker(o.dir)), 0o700); err != nil {
 			return err
 		}
-		defer os.RemoveAll(stage)
 		working = stage
 		repository := os.Getenv("OAC_REPOSITORY")
 		if repository == "" {
@@ -263,7 +274,7 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 			return err
 		}
 		working = o.dir
-		_ = os.Remove(filepath.Join(o.dir, ".oac-installer"))
+		_ = os.Remove(filepath.Join(o.dir, stageMarker(o.dir)))
 	}
 	fmt.Println("Starting services...")
 	// Initialize subdirectories before Compose creates containers mounting them.
@@ -316,15 +327,16 @@ func cleanStage(stage, owner string) error {
 		return err
 	}
 	if len(entries) > 0 {
-		marker := filepath.Join(stage, ".oac-installer")
+		marker := filepath.Join(stage, stageMarker(owner))
 		info, err := os.Lstat(marker)
-		if err != nil || !info.Mode().IsRegular() {
+		if err != nil || !info.IsDir() {
 			return errors.New("unrecognized staging directory; preserve it and choose another installation directory")
 		}
-		contents, err := os.ReadFile(marker)
-		if err != nil || string(contents) != owner {
-			return errors.New("staging directory belongs to another installation")
+		contents, err := os.ReadDir(marker)
+		if err != nil || len(contents) != 0 {
+			return errors.New("invalid staging ownership marker")
 		}
+
 	}
 	return os.RemoveAll(stage)
 }
@@ -343,4 +355,8 @@ func verifyCompose(dir string) error {
 		return errors.New("Compose checksum mismatch; restore the matching release configuration")
 	}
 	return nil
+}
+
+func stageMarker(owner string) string {
+	return fmt.Sprintf(".oac-installer-%x", sha256.Sum256([]byte(owner)))
 }
