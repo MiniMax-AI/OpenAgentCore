@@ -137,9 +137,6 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	if local == nil || req.DisableExecutionEnvironment || !path.IsAbs(local.WorkspaceRoot) {
 		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace", agent.ErrUnsupportedOperation)
 	}
-	if local.Capabilities || len(local.Skills) > 0 {
-		return SessionPlan{}, fmt.Errorf("%w: codex: Capabilities and skills in a view", agent.ErrUnsupportedOperation)
-	}
 	if !filepath.IsAbs(view.Home.Host) || !path.IsAbs(view.Home.View) {
 		return SessionPlan{}, errors.New("codex: view home must be absolute")
 	}
