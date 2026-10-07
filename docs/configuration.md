@@ -7,7 +7,7 @@ Every setting of a Core installation has exactly one home, in one of three categ
 | Category | Examples | Home | Change it with | Takes effect |
 | --- | --- | --- | --- | --- |
 | [Process settings](#process-settings) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, Runtime history | `.env` in the installation directory (default `~/.oac/core`) | Edit `.env`, then run `oac apply` | `oac apply` recreates the services that read the changed settings |
-| [Secrets](#compose-installations) | Database password, credential encryption key, installation ID, Core key and the Core key digest derived from it | `secrets/` in the Compose data volume, one copy each | Initialization generates them once; `oac rotate-core-key` replaces the Core key and its digest | `oac rotate-core-key` restarts Core and Web |
+| [Secrets](#compose-installations) | Database password, credential encryption key, installation ID, agent-host identity, Core key and the Core key digest derived from it | `secrets/` in the Compose data volume, one copy each | Initialization generates them once; `oac rotate-core-key` replaces the Core key and its digest | `oac rotate-core-key` restarts Core and Web |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; nodes prepare Runtime changes asynchronously |
 
 Web's **System** page shows the installation's addresses, the default models, the sandbox configuration and, under **Startup settings**, the process settings Core loaded. No configuration file defines Projects or API keys.
@@ -111,6 +111,7 @@ The initialization service generates secrets and the installation ID once, then 
 | `secrets/database/` | Generated database password | PostgreSQL and Core |
 | `secrets/core/` | Credential encryption key, installation ID and Core key digest | Core |
 | `secrets/web/` | Generated Core sign-in key | Web |
+| `secrets/agent-host/` | `identity.json`, the agent host's Runtime ID and credential | Core, which registers the agent host from it, and the agent host |
 | `state/` | Private Provider state, mounted in Core at `/state`. Each adapter owns a subdirectory; E2B uses `e2b/`, with no group or other access | Core |
 | `node-payload/` | Verified node installation metadata | Web |
 
@@ -134,7 +135,7 @@ The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolat
 
 ## Agent-host container
 
-The agent host runs each Session's Harness outside the sandbox, in a view of its own ([Run in an agent-host view](../contracts/agents-api/harness-onboarding.md#run-in-an-agent-host-view)). Its container runs the [agent-host image](./maintainers.md#runtime-images-and-helpers) as root and needs Linux 5.14 or newer with cgroup v2:
+The agent host runs each Session's Harness outside the sandbox, in a view of its own ([Run in an agent-host view](../contracts/agents-api/harness-onboarding.md#run-in-an-agent-host-view)). A Compose installation runs it as the `agent-host` service in Core's network namespace, where it reaches Core at `http://127.0.0.1:8091`, with the data volume's `secrets/agent-host/` mounted read-only. Its container runs the [agent-host image](./maintainers.md#runtime-images-and-helpers) as root and needs Linux 5.14 or newer with cgroup v2:
 
 | Requirement | Docker flag | Used for |
 | --- | --- | --- |
@@ -169,7 +170,7 @@ The installer creates `~/.oac/core` by default (`$HOME/.oac/core` on Windows). I
 
 The sibling `<install-dir>.lock` directory remains for synchronization; `<install-dir>.staging` holds unpublished installation files. Neither contains service data. On Unix the installer creates private directories with mode `0700` and configuration files with mode `0600`.
 
-The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `database`, `core` and `web`. Core applies database migrations when it starts. Web serves the console and forwards `/v1` and `/api/v1` to Core; it is the only service with a published port, `OAC_WEB_PORT`. No service receives a Docker socket.
+The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `database`, `core`, `agent-host` and `web`. Core applies database migrations when it starts. Web serves the console and forwards `/v1` and `/api/v1` to Core; it is the only service with a published port, `OAC_WEB_PORT`. No service receives a Docker socket.
 
 ## Appendix: Core environment without the installer
 
@@ -184,6 +185,7 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 | `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | Required. `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
 | `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL`. Core refuses an ID other than the one its database recorded |
+| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`: one JSON object, `{"runtime_id": "<canonical UUID>", "credential": "<string>"}`. Required with `OAC_PUBLIC_URL`, and only with it. When Core starts it registers the agent host with that ID and credential, which the agent host presents as written; a new credential fences the Links the old one authenticated, and a revoked agent host stays revoked |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
 | `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 

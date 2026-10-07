@@ -9,7 +9,7 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 | 类别 | 示例 | 归属位置 | 修改方式 | 生效方式 |
 | --- | --- | --- | --- | --- |
 | [进程设置](#process-settings) | 公共 URL、端口、日志、Harness、执行并发度、审计保留期、OAuth 来源、Runtime 历史记录 | 安装目录中的 `.env`（默认 `~/.oac/core`） | 编辑 `.env`，然后运行 `oac apply` | `oac apply` 会重新创建读取了这些已更改设置的服务 |
-| [机密信息](#compose-installations) | 数据库密码、凭据加密密钥、安装 ID、Core 密钥及由其派生的 Core 密钥摘要 | Compose 数据卷中的 `secrets/`，每项一份 | 初始化时一次性生成；`oac rotate-core-key` 替换 Core 密钥及其摘要 | `oac rotate-core-key` 会重启 Core 和 Web |
+| [机密信息](#compose-installations) | 数据库密码、凭据加密密钥、安装 ID、agent-host 身份、Core 密钥及由其派生的 Core 密钥摘要 | Compose 数据卷中的 `secrets/`，每项一份 | 初始化时一次性生成；`oac rotate-core-key` 替换 Core 密钥及其摘要 | `oac rotate-core-key` 会重启 Core 和 Web |
 | [运行时设置](#runtime-settings-web) | 沙箱后端和大小、节点、项目和密钥、默认模型、执行器凭据 | Core 的 PostgreSQL 数据库 | 在 Web 中修改，或使用 Core 密钥调用 Core API（`/core/v1`） | 保存时无需重启 Core；节点会异步准备 Runtime 变更 |
 
 Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置，并在 **Startup settings** 下以只读方式显示 Core 加载的进程设置。没有任何配置文件定义项目或 API 密钥。
@@ -115,6 +115,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `secrets/database/` | 生成的数据库密码 | PostgreSQL 和 Core |
 | `secrets/core/` | 凭据加密密钥、安装 ID 和 Core 密钥摘要 | Core |
 | `secrets/web/` | 生成的 Core 登录密钥 | Web |
+| `secrets/agent-host/` | `identity.json`，即 agent host 的 Runtime ID 和凭据 | Core（据此注册 agent host）和 agent host |
 | `state/` | 私有 Provider 状态，在 Core 中挂载到 `/state`。每个适配器拥有一个子目录；E2B 使用 `e2b/`，不允许组或其他用户访问 | Core |
 | `node-payload/` | 已验证的节点安装元数据 | Web |
 
@@ -138,7 +139,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ## Agent-host 容器 {#agent-host-container}
 
-agent host 在沙箱之外、在每个 Session 自己的视图中运行该 Session 的 Harness（见[在 agent-host 视图中运行](../../contracts/agents-api/zh/harness-onboarding.md#run-in-an-agent-host-view)）。它的容器以 root 运行 [agent-host 镜像](maintainers.md#runtime-images-and-helpers)，需要 Linux 5.14 或更高版本以及 cgroup v2：
+agent host 在沙箱之外、在每个 Session 自己的视图中运行该 Session 的 Harness（见[在 agent-host 视图中运行](../../contracts/agents-api/zh/harness-onboarding.md#run-in-an-agent-host-view)）。Compose 安装把它作为 `agent-host` 服务运行在 Core 的网络命名空间中，它通过 `http://127.0.0.1:8091` 访问 Core，并以只读方式挂载数据卷的 `secrets/agent-host/`。它的容器以 root 运行 [agent-host 镜像](maintainers.md#runtime-images-and-helpers)，需要 Linux 5.14 或更高版本以及 cgroup v2：
 
 | 要求 | Docker 参数 | 用途 |
 | --- | --- | --- |
@@ -173,7 +174,7 @@ agent host 为镜像的 `/opt/oac/harnesses.json` 所安装、且声明了视图
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。
 
-Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
+Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core`、`agent-host` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
@@ -188,6 +189,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 | `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | 必填。`/run/oac/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
 | `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它 |
+| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`：一个 JSON 对象，`{"runtime_id": "<canonical UUID>", "credential": "<string>"}`。设置 `OAC_PUBLIC_URL` 时必须设置，且只能与它一同设置。Core 启动时用该 ID 和凭据注册 agent host，agent host 按原样出示该凭据；新凭据会隔离旧凭据认证过的 Link，已吊销的 agent host 保持吊销 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS`、`OAC_HISTORY_SETTINGS_FILE`、`OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | 对应的[进程设置](#settings)。Web 也读取三个日志设置 |
 | `OAC_PROVIDER_ROOT` | 适配器构件的绝对根目录。Core 镜像设置为 `/opt/oac`。每个适配器都拥有此根目录下的辅助路径。当其中的 `native-installers/` 目录包含 `catalog.json` 时，Core 在核对该目录清单与自身发行版后提供自托管守护进程安装程序。适配器状态位于 `/state`，即数据卷的 [`state/`](#compose-installations) |
 

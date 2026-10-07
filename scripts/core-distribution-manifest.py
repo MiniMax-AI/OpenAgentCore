@@ -364,7 +364,7 @@ def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", off
 def manifest(bundle, stage):
     bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
     metadata = json.loads((stage / "ingress/node-payload/manifest.json").read_text())
-    for name in ("core", "web", "database", "ingress"):
+    for name in ("core", "web", "database", "ingress", "agent-host"):
         config, digest = image_identities(bundle / "images" / (name + ".tar"),
                                          (stage / (name + ".id")).read_text().strip())
         metadata["images"][name] = config

@@ -77,7 +77,7 @@ def verify_draft(release, tag, revision):
         raise ValueError("Release draft identity changed")
 
 
-IMAGE_NAMES = ("core", "web", "runtime", "ingress")
+IMAGE_NAMES = ("core", "web", "runtime", "ingress", "agent-host")
 
 
 def registry_manifest(reference):

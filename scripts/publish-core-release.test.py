@@ -381,7 +381,7 @@ class RegistryTests(unittest.TestCase):
             self.remote_images[ref] = {'config': {'digest': self.configs[arch]}}
         if command[1:4] == ['buildx', 'imagetools', 'create']:
             ref = command[5]; name = ref.rsplit('/', 1)[1].split(':')[0]
-            arches = ('amd64',) if name == 'runtime' else ('amd64', 'arm64')
+            arches = ('amd64', 'arm64') if name in ('core', 'web', 'ingress') else ('amd64',)
             self.remote_images[ref] = {'manifests': [{'platform': {'os': 'linux', 'architecture': arch}, 'digest': self.digests[arch]} for arch in arches]}
 
     def output(self, command, **kwargs):
@@ -398,7 +398,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_publishes_and_reuses_verified_multiarch_indexes(self):
         result = self.publish()
-        self.assertEqual(len(self.pushes()), 7)
+        self.assertEqual(len(self.pushes()), 8)
         self.assertEqual(result['ingress']['digest'], 'ghcr.io/minimax-ai/openagentcore/ingress@' + self.index_digest)
         self.assertEqual(len(self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3']['manifests']), 2)
         self.run.reset_mock(); self.publish(); self.assertEqual(self.pushes(), [])
@@ -406,8 +406,8 @@ class RegistryTests(unittest.TestCase):
     def test_latest_updates_after_all_version_indexes(self):
         self.publish(floating_latest=True)
         creates = [c.args[0][5] for c in self.run.call_args_list if c.args[0][1:4] == ['buildx', 'imagetools', 'create']]
-        self.assertTrue(all(ref.endswith(':v1.2.3') for ref in creates[:4]))
-        self.assertTrue(all(ref.endswith(':latest') for ref in creates[4:]))
+        self.assertTrue(all(ref.endswith(':v1.2.3') for ref in creates[:5]))
+        self.assertTrue(all(ref.endswith(':latest') for ref in creates[5:]))
 
     def test_conflicting_platform_prevents_every_push(self):
         self.remote_images['ghcr.io/minimax-ai/openagentcore/web:v1.2.3-arm64'] = {'config': {'digest': 'different'}}

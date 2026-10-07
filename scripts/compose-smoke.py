@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Exercise the Compose installation in an isolated Docker project.
 
-Core, Web and the gateway image are built from this checkout. Web serves a
-placeholder page instead of the console build. Node metadata comes from the
-release pinned in deploy/compose/smoke-pins.json.
+Core, Web, the agent host and the gateway image are built from this checkout.
+Web serves a placeholder page instead of the console build, and the agent host
+has the daemon but no Harness. Node metadata comes from the release pinned in
+deploy/compose/smoke-pins.json.
 """
 
 import hashlib
@@ -62,7 +63,7 @@ def build_images(directory, tag):
         subprocess.run(['go', 'build', '-trimpath', '-ldflags', '-X main.buildRevision=' + build_revision,
                         '-o', str(output), './' + package], cwd=ROOT, env=go_env, check=True)
 
-    contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress')}
+    contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress', 'agent-host')}
     core = contexts['core']
     for name, package in (('oac-core', 'server'), ('oac-core-device', 'device'),
                           ('oac-core-environment-key', 'environment-key'), ('oac', 'oac')):
@@ -83,6 +84,13 @@ def build_images(directory, tag):
     payload_revision = prepare_pinned_payload(ingress / 'node-payload')
     go_build('services/core/cmd/oac', ingress / 'oac', payload_revision)
     (ingress / 'Dockerfile').write_bytes((ROOT / 'deploy/distribution/Ingress.Dockerfile').read_bytes())
+    # The agent-host image's daemon and manifest paths, without its Harnesses.
+    agent_host = contexts['agent-host']
+    go_build('apps/daemon/cmd/oac-daemon', agent_host / 'oac-daemon')
+    (agent_host / 'harnesses.json').write_text('{"node": "/usr/local/bin/node", "harnesses": {}}\n')
+    base = re.search(r'^FROM (\S+)', (ROOT / 'deploy/distribution/Dockerfile').read_text(), re.M).group(1)
+    (agent_host / 'Dockerfile').write_text(f'FROM {base}\nCOPY oac-daemon /opt/oac/bin/\nCOPY harnesses.json /opt/oac/\n'
+                                           'ENTRYPOINT ["/opt/oac/bin/oac-daemon"]\n')
     for path in directory.glob('image-*/**/*'):
         path.chmod(0o755 if path.is_dir() or os.access(path, os.X_OK) else 0o644)
     images = {}
@@ -115,7 +123,7 @@ def main():
     override.write_text(json.dumps({'services': {'init': {'network_mode': 'none'}}}))
     env = {**os.environ, 'COMPOSE_PROGRESS': 'plain',
            'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0',
-           **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
+           **{'OAC_IMAGE_' + name.upper().replace('-', '_'): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
     command = ['docker', 'compose', '--env-file', os.devnull, '-p', project,
                '-f', str(rendered), '-f', str(override)]

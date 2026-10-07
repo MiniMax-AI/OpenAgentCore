@@ -22,20 +22,22 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
 
 1. Create a development database. Core applies the migrations when it starts.
 
-2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`:
+2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`, and the agent-host identity Core registers:
 
    ```sh
    umask 077; mkdir -p ~/.oac/dev
    openssl rand -hex 32 > ~/.oac/dev/core.key
    printf '["%s"]\n' "$(tr -d '\n' < ~/.oac/dev/core.key | sha256sum | cut -d' ' -f1)" > ~/.oac/dev/core-key-digests.json
+   python3 -c 'import json, secrets, uuid; print(json.dumps({"runtime_id": str(uuid.uuid4()), "credential": secrets.token_urlsafe(32)}))' > ~/.oac/dev/agent-host.json
    ```
 
-3. Start Core. `OAC_PUBLIC_URL` enables the Runtime gateway and the Worker; without it Core executes nothing. The [Core environment table](../../docs/configuration.md#appendix-core-environment-without-the-installer) lists every variable.
+3. Start Core. `OAC_PUBLIC_URL` enables the Runtime gateway and the Worker, and requires the agent-host identity; without it Core executes nothing. The [Core environment table](../../docs/configuration.md#appendix-core-environment-without-the-installer) lists every variable.
 
    ```sh
    OAC_DATABASE_URL='postgres://oac:…@127.0.0.1:5432/oac_dev' \
    OAC_CORE_KEY_DIGESTS_FILE="$HOME/.oac/dev/core-key-digests.json" \
    OAC_PUBLIC_URL=http://127.0.0.1:8091 \
+   OAC_AGENT_HOST_IDENTITY_FILE="$HOME/.oac/dev/agent-host.json" \
    go run ./services/core/cmd/server
    ```
 

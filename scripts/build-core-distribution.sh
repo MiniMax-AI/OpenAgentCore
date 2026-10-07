@@ -149,39 +149,27 @@ cp -R apps/web/dist "$stage/web/dist"
 cp services/web/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"
 
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/" \
+  ./apps/daemon/cmd/oac-daemon ./apps/daemon/cmd/oac-process-shim ./apps/sandboxio/cmd/oac-sandbox-io
 cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
-codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
-claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"
-mcode_image="${CORE_DISTRIBUTION_MCODE_IMAGE:-}"
-if [[ -n "$codex_image$claude_image$mcode_image" ]]; then
-  if [[ -z "$codex_image" || -z "$claude_image" || -z "$mcode_image" ]]; then
-    printf 'Provide all three CORE_DISTRIBUTION_*_IMAGE inputs or none\n' >&2
-    exit 1
-  fi
-else
-  : "${CODEX_CLI_DIR:?Set the extracted pinned Codex Linux x64 package directory}"
-  : "${MCODE_HARNESS_BUILD_DIR:?Set the existing built pinned MiniMax Code companion directory}"
-  export CLAUDE_SDK_BUILD_DIR="$stage/claude-sdk"
-  scripts/build-claude-sdk-runtime.sh
-  for harness in codex claude mcode; do
-    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "scripts/build-$harness-runtime.sh"
-    build_image "$harness" "$stage/$harness"
-  done
-  codex_image="$(cat "$stage/codex.id")"
-  claude_image="$(cat "$stage/claude.id")"
-  mcode_image="$(cat "$stage/mcode.id")"
-fi
-for image in "$codex_image" "$claude_image" "$mcode_image"; do
-  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$stage/oac-sandbox-io" "$source_dir"
-done
+: "${CODEX_CLI_DIR:?Set the extracted pinned Codex Linux x64 package directory}"
+: "${MCODE_HARNESS_BUILD_DIR:?Set the existing built pinned MiniMax Code companion directory}"
+export CLAUDE_SDK_BUILD_DIR="$stage/claude-sdk"
+scripts/build-claude-sdk-runtime.sh
+# Each Harness payload is its Runtime image's context and, laid out as
+# scripts/build-agent-host-images.sh lays it out, part of the agent host's.
 tag_suffix="${stage##*.}"
 for harness in codex claude mcode; do
-  image_variable="${harness}_image"
+  AGENTS_RUNTIME_BUILD_DIR="$stage/agent-host/$harness" bash "scripts/build-$harness-runtime.sh"
+  build_image "$harness" "$stage/agent-host/$harness"
+  image="$(cat "$stage/$harness.id")"
+  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$stage/oac-sandbox-io" "$source_dir"
   tag="oac-distribution:$harness-$revision-$tag_suffix"
-  docker image tag "${!image_variable}" "$tag"
+  docker image tag "$image" "$tag"
   image_tags+=("$tag")
 done
+cp "$stage/oac-daemon" "$stage/oac-process-shim" "$stage/agent-host/"
+build_image agent-host --target agent-host --file deploy/distribution/AgentHost.Dockerfile "$stage/agent-host"
 mkdir "$stage/combined"
 cp deploy/distribution/Runtime.Dockerfile "$stage/combined/Dockerfile"
 build_image runtime \
@@ -198,7 +186,7 @@ fi
 docker image inspect --format '{{.Id}}' "$database_image" > "$stage/database.id"
 docker run --rm --network none --entrypoint postgres "$(cat "$stage/database.id")" --version \
   | python3 -c 'import sys; value=sys.stdin.read(); assert value.startswith("postgres (PostgreSQL) 16."), "Distribution requires PostgreSQL 16"'
-for name in core web runtime database; do
+for name in core web runtime database agent-host; do
   image="$(cat "$stage/$name.id")"
   python3 scripts/core-distribution-manifest.py verify-image "$image"
   docker image save --output "$bundle/images/$name.tar" "$image"
@@ -257,7 +245,7 @@ if [[ -d "$stage/native-artifacts" ]]; then mv "$stage/native-artifacts/"* "$out
 mv "$bundle" "$output_dir/"
 
 # Core, Web and initialization also run natively in ARM64 Linux containers.
-# Node and hosted Runtime payloads above remain linux/amd64.
+# Node, hosted Runtime and agent-host payloads above remain linux/amd64.
 export GOARCH=arm64
 arm_bundle="$stage/oac-$revision-linux-arm64"
 mkdir -p "$arm_bundle/images"
