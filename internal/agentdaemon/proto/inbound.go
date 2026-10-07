@@ -147,7 +147,6 @@ type ErrorPayload struct {
 type DonePayload struct {
 	// SourceCompletedAtMS freezes the native root completion before child settlement.
 	SourceCompletedAtMS *int64         `json:"source_completed_at_ms,omitempty"`
-	Transcript          string         `json:"transcript,omitempty"`
 	Usage               Usage          `json:"usage,omitzero"`
 	Metadata            map[string]any `json:"metadata,omitempty"`
 }
@@ -194,9 +193,6 @@ type SupportedAgentKind struct {
 // supported_agent_kinds establishes no engine availability or capabilities.
 // HomeRemoval declares whether assignment_release accepts RemoveHome.
 type HeartbeatPayload struct {
-	Timestamp           int64                `json:"ts"`
-	ActiveRequests      int                  `json:"active_requests"`
-	DaemonVersion       string               `json:"daemon_version,omitempty"`
 	SupportedAgentKinds []SupportedAgentKind `json:"supported_agent_kinds,omitempty"`
 	HomeRemoval         CapabilitySupport    `json:"home_removal"`
 }

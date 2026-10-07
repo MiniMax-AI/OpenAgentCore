@@ -147,7 +147,7 @@ func (s *suspendedRouter) reconnectSuspension(ctx context.Context, dial transpor
 
 func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, boot *transport.BootstrapResponse, discovery agentCLIDiscovery) {
 	conn.StartHeartbeats(ctx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: s.registry.SupportedAgentKinds(), HomeRemoval: proto.CapabilityUnsupported}
+		return proto.HeartbeatPayload{SupportedAgentKinds: s.registry.SupportedAgentKinds(), HomeRemoval: proto.CapabilityUnsupported}
 	}, obslog.Bg())
 }
 

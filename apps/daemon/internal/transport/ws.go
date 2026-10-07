@@ -192,7 +192,7 @@ func (c *Conn) Close() error {
 // StartHeartbeats kicks off a ticker that calls payloadFn every
 // interval and Sends the resulting HeartbeatPayload. Returns
 // immediately. Caller-controlled because the heartbeat carries fields
-// (active_requests, supported_agent_kinds) only the agent layer knows.
+// (supported_agent_kinds, home_removal) only the agent layer knows.
 // Nil logger falls back to log.Bg().
 func (c *Conn) StartHeartbeats(parentCtx context.Context, interval time.Duration, payloadFn func() proto.HeartbeatPayload, logger *slog.Logger) {
 	if interval <= 0 || payloadFn == nil {
