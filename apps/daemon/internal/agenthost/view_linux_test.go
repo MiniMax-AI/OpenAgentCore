@@ -3,6 +3,7 @@
 package agenthost
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,15 +13,18 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -35,6 +39,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
@@ -61,6 +66,8 @@ const (
 	harnessEnv   = "OAC_AGENTHOST_HARNESS"
 	modelEnv     = "OAC_AGENTHOST_MODEL"
 	caEnv        = "OAC_AGENTHOST_CA"
+	proxyEnv     = "OAC_AGENTHOST_PROXY"
+	aliasEnv     = "OAC_AGENTHOST_ALIAS"
 	harnessPath  = "/.oac/harness/harness"
 	upstreamKey  = "sk-agenthost-upstream"
 	wait         = 20 * time.Second
@@ -93,16 +100,26 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	copyExecutable(t, filepath.Join(closure, "harness"))
+	caps := declared(proto.CapabilityUnsupported)
+	caps.EnvironmentNone, caps.StdioMCP = proto.CapabilitySupported, proto.CapabilitySupported
 	register(reg, "test", &agent.View{
 		Closure:      []agent.ViewMount{{Name: "harness", HostDir: closure}},
 		Masks:        []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
 		LocalExec:    []string{harnessPath},
 		ShimPaths:    []string{"/bin/sh"},
-		Proxy:        agent.ViewProxyNone,
-		Capabilities: declared(proto.CapabilityUnsupported),
+		ForwardEnv:   []string{"KEEP"},
+		Proxy:        agent.ViewProxyEnv,
+		Capabilities: caps,
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
-			return &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
-				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir}}, nil
+			e := &testExecutor{session: s, dir: workDir,
+				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir, proxyEnv + "=" + s.Proxy}}
+			if req.LocalEnvironment != nil {
+				e.dir = req.LocalEnvironment.WorkspaceRoot
+			}
+			for _, b := range s.MCP {
+				e.env = append(e.env, aliasEnv+"="+b.Stdio.Server.Command)
+			}
+			return e, nil
 		},
 	})
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
@@ -172,6 +189,58 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		}
 		if err := sb.renew(t, cfg, s.link.attachment, b); !errors.Is(err, sandboxlink.LeaseExpired) {
 			t.Errorf("Renew after Close = %v, want LeaseExpired for a closed attachment", err)
+		}
+		if err := logged.take(); err != nil {
+			t.Errorf("logged %v", err)
+		}
+		checkReleased(t, cfg)
+	})
+
+	t.Run("environment none runs in an empty root", func(t *testing.T) {
+		var dials atomic.Int32
+		d, b := newDaemon(t, cfg, deps{dial: countingDial(&dials), tasks: taskUIDs}), Binding{SessionID: sandboxwire.NewID()}
+		none := request("test", "", upstream.URL, upstreamKey)
+		none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
+		r := d.turn(t, b, none, "none")
+		for _, name := range []string{"empty root", "work directory", "model through the gateway", "no direct route", "no sandbox network"} {
+			if msg, ok := r.Checks[name]; !ok || msg != "" {
+				t.Errorf("%s: %q", name, msg)
+			}
+		}
+		if r.Exit != "" {
+			t.Errorf("Harness: %s; stderr %s", r.Exit, r.Stderr)
+		}
+		select {
+		case <-keyed:
+		default:
+		}
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
+		}
+		if dials.Load() != 0 {
+			t.Errorf("the Session dialled the relay %d times", dials.Load())
+		}
+		if err := logged.take(); err != nil {
+			t.Errorf("logged %v", err)
+		}
+		checkReleased(t, cfg)
+	})
+
+	t.Run("a stdio MCP server runs its frozen command under its alias", func(t *testing.T) {
+		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		pkg := filepath.Join(workspace, "pkg")
+		if err := os.Mkdir(pkg, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		d.mcp = []proto.EnvironmentMCP{{InstallationRoot: workspace, PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/sh",
+			Args: []string{"-c", `printf '%s %s %s %s\n' "$0" "$#" "$(pwd -P)" "${KEEP-unset}"; exec /bin/sleep 1000`, "frozen"}}}}
+		// The Harness exits while the alias's process runs on.
+		if r := d.turn(t, b, req, "alias"); r.Stdout != "frozen 0 "+pkg+" unset\n" || r.Exit != "" {
+			t.Errorf("the alias printed %q; exit %q, stderr %s", r.Stdout, r.Exit, r.Stderr)
+		}
+		until(t, "the alias's process to end with the view", func() bool { return len(processesWith([]string{"/bin/sleep", "1000"})) == 0 })
+		if err := d.shutdown(); err != nil {
+			t.Fatalf("Shutdown = %v", err)
 		}
 		if err := logged.take(); err != nil {
 			t.Errorf("logged %v", err)
@@ -672,6 +741,38 @@ func (t *testTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, e
 
 var harnessChecks = []string{"world rename", "model through the gateway", "no direct route", "world is noexec", "masks", "home", "passwd", "CA directory"}
 
+// workDir is where the Harness of an empty-root view runs.
+const workDir = agent.ViewPrivateRoot + "/" + agent.ViewHomeName + "/" + agent.ViewWorkName
+
+// gatewayChecks pass only when the Harness reaches the model through the
+// Session's gateway and nothing else.
+var gatewayChecks = map[string]func() error{
+	"model through the gateway": func() error {
+		req, _ := http.NewRequest("POST", os.Getenv(modelEnv)+"/v1/messages", strings.NewReader("{}"))
+		req.Header.Set("X-Api-Key", modelprovider.Placeholder)
+		resp, err := (&http.Client{Timeout: wait}).Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if body, _ := io.ReadAll(resp.Body); resp.StatusCode != http.StatusOK || string(body) != "answer" {
+			return fmt.Errorf("answered %d %q", resp.StatusCode, body)
+		}
+		return nil
+	},
+	"no direct route": func() error {
+		c, err := net.DialTimeout("tcp", "192.0.2.1:80", 2*time.Second)
+		if err == nil {
+			c.Close()
+			return errors.New("connected outside the gateway")
+		}
+		if !errors.Is(err, syscall.ENETUNREACH) {
+			return fmt.Errorf("dial: %v, want ENETUNREACH", err)
+		}
+		return nil
+	},
+}
+
 // runHarness runs inside the view, in the workspace, and prints a JSON map
 // from each check to its failure, empty when it passed.
 func runHarness(args []string) int {
@@ -687,30 +788,6 @@ func runHarness(args []string) int {
 					return err
 				}
 				return os.Rename("staged", "renamed")
-			},
-			"model through the gateway": func() error {
-				req, _ := http.NewRequest("POST", os.Getenv(modelEnv)+"/v1/messages", strings.NewReader("{}"))
-				req.Header.Set("X-Api-Key", modelprovider.Placeholder)
-				resp, err := (&http.Client{Timeout: wait}).Do(req)
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-				if body, _ := io.ReadAll(resp.Body); resp.StatusCode != http.StatusOK || string(body) != "answer" {
-					return fmt.Errorf("answered %d %q", resp.StatusCode, body)
-				}
-				return nil
-			},
-			"no direct route": func() error {
-				c, err := net.DialTimeout("tcp", "192.0.2.1:80", 2*time.Second)
-				if err == nil {
-					c.Close()
-					return errors.New("connected outside the gateway")
-				}
-				if !errors.Is(err, syscall.ENETUNREACH) {
-					return fmt.Errorf("dial: %v, want ENETUNREACH", err)
-				}
-				return nil
 			},
 			"world is noexec": func() error {
 				if err := exec.Command("/bin/true").Run(); !errors.Is(err, fs.ErrPermission) {
@@ -747,6 +824,62 @@ func runHarness(args []string) int {
 				return nil
 			},
 		}
+		maps.Copy(checks, gatewayChecks)
+	case "none":
+		checks = map[string]func() error{
+			"empty root": func() error {
+				var st unix.Statfs_t
+				if err := unix.Statfs("/", &st); err != nil || st.Type != unix.TMPFS_MAGIC || st.Flags&unix.ST_RDONLY == 0 {
+					return fmt.Errorf("root: type %#x flags %#x, %v", st.Type, st.Flags, err)
+				}
+				for _, p := range []string{"/bin", agent.ViewPrivateRoot + "/" + agent.ViewRunName} {
+					if _, err := os.Lstat(p); !errors.Is(err, fs.ErrNotExist) {
+						return fmt.Errorf("%s: %v, want none", p, err)
+					}
+				}
+				if shims, err := os.ReadDir(agent.ViewPrivateRoot + "/" + agent.ViewShimName); err != nil || len(shims) != 0 {
+					return fmt.Errorf("shims %v, %v", shims, err)
+				}
+				return nil
+			},
+			"work directory": func() error {
+				if wd, err := os.Getwd(); err != nil || wd != workDir {
+					return fmt.Errorf("cwd %q, %v", wd, err)
+				}
+				return os.WriteFile("probe", []byte("x"), 0o600)
+			},
+			"no sandbox network": func() error {
+				proxy, err := url.Parse(os.Getenv(proxyEnv))
+				if err != nil {
+					return err
+				}
+				resp, err := (&http.Client{Timeout: wait, Transport: &http.Transport{Proxy: http.ProxyURL(proxy)}}).Get("http://sandbox.test/")
+				if err != nil {
+					return err
+				}
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusForbidden {
+					return fmt.Errorf("the proxy answered %d, want 403", resp.StatusCode)
+				}
+				return nil
+			},
+		}
+		maps.Copy(checks, gatewayChecks)
+	case "alias":
+		// The alias ignores the Harness's arguments, directory and environment.
+		cmd := exec.Command(os.Getenv(aliasEnv), "ignored")
+		cmd.Dir, cmd.Env = "/", append(os.Environ(), "KEEP=harness")
+		out, err := cmd.StdoutPipe()
+		if err == nil {
+			err = cmd.Start()
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 125
+		}
+		line, _ := bufio.NewReader(out).ReadString('\n')
+		fmt.Print(line)
+		return 0
 	case "touch":
 		checks["touch"] = func() error { return os.WriteFile("touched", []byte("renewed"), 0o644) }
 	case "home":

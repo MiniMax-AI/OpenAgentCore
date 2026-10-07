@@ -118,8 +118,14 @@ func open(ctx context.Context, cfg Config, req proto.PromptRequestPayload, bind 
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
+	// The attachment opens on first use. A Session with environment none,
+	// whose binding names no sandbox, never uses it.
 	s.link = newLinkOwner(d.dial, b, sandboxwire.NewID(), s.fail)
-	if err := checkBinding(s.link.request(sandboxlink.ServiceFile, sandboxfs.Version, sandboxwire.ID{}), env); err != nil {
+	if req.DisableExecutionEnvironment {
+		if b.SessionID.IsZero() {
+			return nil, invalidSession("binding: no Session ID")
+		}
+	} else if err := checkBinding(s.link.request(sandboxlink.ServiceFile, sandboxfs.Version, sandboxwire.ID{}), env); err != nil {
 		return nil, err
 	}
 	if s.plan, err = admit(cfg, roots, req, env, s.openNetwork); err != nil {

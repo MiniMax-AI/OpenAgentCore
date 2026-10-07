@@ -37,6 +37,8 @@ type launchSpec struct {
 	UID      uint32
 	GID      uint32
 	Grace    time.Duration
+	// EmptyRoot holds the mountpoints of an empty root, which the launcher creates; it is nil for a world.
+	EmptyRoot []Mountpoint
 }
 
 // command is what a process of the view runs.
@@ -50,7 +52,7 @@ type command struct {
 type msgKind uint8
 
 const (
-	msgMounted  msgKind = iota + 1 // launcher: the world is mounted; carries the /dev/fuse and netns fds
+	msgMounted  msgKind = iota + 1 // launcher: the root is mounted; carries the world's /dev/fuse fd, if any, then the netns fd
 	msgProceed                     // daemon: the world serves and the network is set up; carries the mount targets
 	msgStarted                     // launcher: the process runs
 	msgFailed                      // launcher: construction failed

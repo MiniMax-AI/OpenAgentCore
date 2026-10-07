@@ -49,6 +49,19 @@ type Executables struct {
 	// Paths maps an absolute view path the shim is bound over, such as
 	// /bin/bash, to its remote executable.
 	Paths map[string]string
+	// Aliases maps a name in the view's shim directory to the command it
+	// runs. Nothing of the shim's argv, working directory or environment
+	// reaches that command.
+	Aliases map[string]Command
+}
+
+// Command is an alias's frozen command. Its executable may also be a path
+// relative to Dir, which is an absolute sandbox path.
+type Command struct {
+	Executable string
+	// Args follow argv[0], which is Executable.
+	Args []string
+	Dir  string
 }
 
 // Environment is the remote environment policy. A name set in more than one
@@ -95,11 +108,23 @@ func (c *Config) validate() error {
 	_, path1 := c.Environment.Sandbox["PATH"]
 	_, path2 := c.Environment.Tool["PATH"]
 	for name, remote := range c.Executables.Names {
-		if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
+		if !validName(name) {
 			return invalid("executable name %q", name)
 		}
 		if err := checkRemote(remote, path1 || path2); err != nil {
 			return invalid("executable %q: %v", name, err)
+		}
+	}
+	for name, cmd := range c.Executables.Aliases {
+		switch {
+		case !validName(name):
+			return invalid("alias name %q", name)
+		case !path.IsAbs(cmd.Dir):
+			return invalid("alias %q: working directory %q is not absolute", name, cmd.Dir)
+		case cmd.Executable == "":
+			return invalid("alias %q: empty executable", name)
+		case !strings.Contains(cmd.Executable, "/") && !(path1 || path2):
+			return invalid("alias %q: remote name %q needs PATH in the sandbox or tool environment", name, cmd.Executable)
 		}
 	}
 	for local, remote := range c.Executables.Paths {
@@ -125,6 +150,11 @@ func checkRemote(remote string, havePATH bool) error {
 	return nil
 }
 
+// validName reports whether name can be a file in the view's shim directory.
+func validName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\x00")
+}
+
 func validEnvName(name string) bool {
 	return name != "" && !strings.ContainsAny(name, "=\x00")
 }
@@ -133,21 +163,25 @@ func underPrivate(p string) bool {
 	return p == agent.ViewPrivateRoot || strings.HasPrefix(p, agent.ViewPrivateRoot+"/")
 }
 
-// resolve returns the remote executable for the shim's exec path. A relative
-// path resolves against cwd; resolution is lexical, because the view's
-// symlinks are not the broker's to follow.
-func (x Executables) resolve(execPath, cwd string) (string, bool) {
+// resolve returns the remote executable for the shim's exec path, and the
+// frozen command when the path is an alias. A relative path resolves against
+// cwd; resolution is lexical, because the view's symlinks are not the
+// broker's to follow.
+func (x Executables) resolve(execPath, cwd string) (string, *Command, bool) {
 	p := execPath
 	if !path.IsAbs(p) {
 		p = path.Join(cwd, p)
 	}
 	p = path.Clean(p)
 	if name, ok := strings.CutPrefix(p, agent.ViewPrivateRoot+"/"+agent.ViewShimName+"/"); ok {
+		if cmd, ok := x.Aliases[name]; ok {
+			return cmd.Executable, &cmd, true
+		}
 		remote, ok := x.Names[name]
-		return remote, ok
+		return remote, nil, ok
 	}
 	remote, ok := x.Paths[p]
-	return remote, ok
+	return remote, nil, ok
 }
 
 // privateMarker is the view prefix no value may carry into the sandbox.

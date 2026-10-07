@@ -185,6 +185,9 @@ func (v *View) launch(spec *Spec) error {
 		Command: command{Path: spec.Process.Path, Args: spec.Process.Args, Env: spec.Process.Env, Dir: spec.Process.Dir},
 		UID:     spec.Process.UID, GID: spec.Process.GID, Grace: spec.Process.Grace,
 	}
+	if spec.World == nil {
+		ls.EmptyRoot = spec.mountpoints()
+	}
 	// A launcher that dies early breaks the pipe; the handshake reports that.
 	go func() {
 		_ = gob.NewEncoder(specW).Encode(ls)
@@ -233,20 +236,31 @@ func (v *View) handshake(ctx context.Context, spec *Spec) error {
 	if m.Kind == msgFailed {
 		return m.Fail.err()
 	}
-	if m.Kind != msgMounted || len(files) != 2 {
+	want := 2
+	if spec.World == nil {
+		want = 1
+	}
+	if m.Kind != msgMounted || len(files) != want {
 		closeFiles(files)
 		return &Error{Kind: ErrLauncher, Op: "mount", Err: fmt.Errorf("unexpected message %d with %d files", m.Kind, len(files))}
 	}
-	v.dev = files[0]
-	netns := files[1]
+	netns := files[want-1]
 	defer netns.Close()
 	mps := spec.mountpoints()
-	world, present, err := spec.World(ctx, v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps})
-	if err != nil {
-		return &Error{Kind: ErrWorld, Op: "serve", Err: err}
+	if spec.World == nil {
+		// The empty root presents each mountpoint at its own path.
+		for _, m := range mps {
+			v.present.Targets = append(v.present.Targets, m.Path)
+		}
+	} else {
+		v.dev = files[0]
+		world, present, err := spec.World(ctx, v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps})
+		if err != nil {
+			return &Error{Kind: ErrWorld, Op: "serve", Err: err}
+		}
+		v.world, v.present = world, present
 	}
-	v.world, v.present = world, present
-	targets, err := targetsOf(mps, present)
+	targets, err := targetsOf(mps, v.present)
 	if err != nil {
 		return &Error{Kind: ErrWorld, Op: "present", Err: err}
 	}

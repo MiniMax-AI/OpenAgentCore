@@ -773,6 +773,31 @@ func TestSeccompProgram(t *testing.T) {
 	}
 }
 
+func TestEmptyRootView(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	spec := f.spec(nil, "empty")
+	spec.World, spec.Shim, spec.Process.Dir = nil, Shim{}, "/.oac/home"
+	// The launcher inherits the umask; it must not narrow the empty root.
+	umask := unix.Umask(0o077)
+	v, err := Start(context.Background(), spec)
+	unix.Umask(umask)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if v.Relay() != nil {
+		t.Error("an empty root without a shim has a relay")
+	}
+	out, err := io.ReadAll(v.Stdout())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exit, err := v.Wait(); err != nil || exit != (Exit{}) {
+		t.Fatalf("Wait = %+v, %v; output %s", exit, err, out)
+	}
+}
+
 func TestStartRejectsInvalidSpec(t *testing.T) {
 	for name, spec := range map[string]Spec{
 		"relative overlay":            {Overlays: []Overlay{{Path: "etc/resolv.conf", Source: "/etc/hosts"}}},
@@ -1251,6 +1276,34 @@ func runHelper(mode string) int {
 		}
 		return 0
 	case "noop":
+		return 0
+	case "empty":
+		var errs []error
+		var st unix.Statfs_t
+		if err := unix.Statfs("/", &st); err != nil || st.Type != unix.TMPFS_MAGIC || st.Flags&(unix.ST_RDONLY|unix.ST_NOEXEC) != unix.ST_RDONLY|unix.ST_NOEXEC {
+			errs = append(errs, fmt.Errorf("root: type %#x flags %#x, %v", st.Type, st.Flags, err))
+		}
+		for dir, want := range map[string][]string{"/": {".oac", "dev", "etc", "proc"}, "/.oac": {"bin", "harness", "home"}, "/.oac/bin": nil, "/etc": {"oac-overlay"}} {
+			entries, err := os.ReadDir(dir)
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			if err != nil || !slices.Equal(names, want) {
+				errs = append(errs, fmt.Errorf("%s holds %v, %v", dir, names, err))
+			}
+		}
+		if err := os.WriteFile("/x", nil, 0o644); !errors.Is(err, syscall.EROFS) {
+			errs = append(errs, fmt.Errorf("write /x: %v, want EROFS", err))
+		}
+		if wd, err := os.Getwd(); wd != "/.oac/home" || err != nil {
+			errs = append(errs, fmt.Errorf("cwd %q, %v", wd, err))
+		}
+		errs = append(errs, fileHas("/etc/oac-overlay/greeting", "from the overlay"))
+		if err := errors.Join(errs...); err != nil {
+			fmt.Println(err)
+			return 1
+		}
 		return 0
 	case "identity":
 		sigs := make(chan os.Signal, 1)

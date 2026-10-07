@@ -35,17 +35,19 @@
 // its bind function binds the request to. It admits the request before any
 // effect: the kind must declare an agent.View, the request must use only
 // what the view's agent.ViewCapabilities declare, and when the view declares
-// shim names, which run on the sandbox PATH, the Session's Environment must
-// set PATH. A Session without strict resume, with a restricted network, or
-// with a stdio MCP server that needs a credential is rejected whatever the
-// view declares. The registry's Info follows the declarations and marks what
-// needs a local workspace unsupported. The factory then allocates the
+// shim names or a stdio MCP server's command is a bare name, both of which
+// run on the sandbox PATH, the Session's Environment must set PATH. A
+// Session without strict resume, with a restricted network, or with a stdio
+// MCP server that needs a credential is rejected whatever the view declares.
+// The registry's Info follows the declarations and marks what needs a local
+// workspace unsupported. The factory then allocates the
 // Executor's uid, skipping each uid that a running thread holds as its real,
 // effective, saved or file-system uid; this check only detects a conflict
 // and never ends a process. It prepares the Session directory under
 // Config.StateDir, rewrites the request so the model provider and HTTP MCP
-// reach the network only through the Session's gateway, and calls the
-// view's Executor factory. Each ViewSession.Launch gives the Session home to
+// reach the network only through the Session's gateway and each stdio MCP
+// server runs under its alias, agent.ViewAlias, and calls the view's
+// Executor factory. Each ViewSession.Launch gives the Session home to
 // the Executor's uid and builds one sessionview view, of which one at a time
 // is live, over the world that worldfs serves from the attachment's File
 // service, with the gateway listening in the view's network namespace.
@@ -55,13 +57,20 @@
 // the shims' commands over the attachment's Process service in the
 // strongest scope the service declares, with the view's ForwardEnv and the
 // Session's Environment, and cancels a forwarded process whose shim is lost
-// with the launch's kill timeout as its grace.
+// with the launch's kill timeout as its grace. An alias runs its stdio MCP
+// server's frozen command, arguments and working directory, a relative one
+// in the installation's package root, with only the Session's Environment.
+//
+// A Session with environment none has no sandbox. Its views are empty-root
+// views: no world, no shims, no process broker and no sandbox network, so
+// the gateway's generic proxy refuses every request, and the Harness runs in
+// the home's work directory. Such a Session never opens its Link attachment.
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
 // hosts, resolv.conf and nsswitch.conf, the agent host's CA directory at its
 // host path, then the adapter's overlays and masks and the process shim with
-// its relay. Everything else is the world.
+// its relay. Everything else is the world, or nothing in an empty-root view.
 //
 // The Session directory, StateDir/sessions/<Session ID>, stays root-owned
 // and private. Its home holds the Harness's native history and persists

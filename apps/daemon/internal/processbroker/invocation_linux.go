@@ -137,23 +137,29 @@ func message(msg string) []byte {
 // here, before the relay acknowledges the shim.
 func (inv *invocation) prepare() *processshim.Result {
 	b, req := inv.b, inv.open.Request
-	remote, ok := b.cfg.Executables.resolve(string(req.ExecPath), string(req.Cwd))
+	remote, alias, ok := b.cfg.Executables.resolve(string(req.ExecPath), string(req.Cwd))
 	if !ok {
 		return refuse(processshim.ExitNotFound, "%s: not a declared sandbox executable", req.ExecPath)
 	}
-	if underPrivate(path.Clean(string(req.Cwd))) {
+	argv, cwd, environ := req.Argv, req.Cwd, req.Env
+	if alias != nil {
+		argv, cwd, environ = [][]byte{[]byte(alias.Executable)}, []byte(alias.Dir), nil
+		for _, a := range alias.Args {
+			argv = append(argv, []byte(a))
+		}
+	} else if underPrivate(path.Clean(string(req.Cwd))) {
 		return refuse(processshim.ExitCannotRun, "%s: the working directory is private to the Session", req.Cwd)
 	}
 	inv.log = inv.log.With("executable", remote)
-	env, dropped := b.cfg.Environment.compose(req.Env)
+	env, dropped := b.cfg.Environment.compose(environ)
 	if len(dropped) > 0 {
 		inv.log.Info("environment entries naming the private directory dropped", "names", dropped)
 	}
 	spec := sp.ProcessSpec{
 		Executable: []byte(remote),
-		Argv:       req.Argv,
+		Argv:       argv,
 		Env:        env,
-		Cwd:        req.Cwd,
+		Cwd:        cwd,
 		Umask:      req.Umask,
 		IOMode:     sp.IOPipes,
 		Scope:      b.cfg.Scope,
