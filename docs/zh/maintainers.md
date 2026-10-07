@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: e3435d01696a172a0a0bcd5acecf4167410389f2c249730c9333f5d24027248d
+source_hash: aaadeb3a5e99b8d926e9f78b7fc41c7aba808e0d2af58969119e67954f9d7a58
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -198,7 +198,7 @@ Go 模块和工作区输入会选择后端、API（包括容器）、原生和�
 
 `CI review and Feishu notification` 工作流在 PR 合入 main 后运行。矩阵中的 **Code review** 和 **Docs review** 使用独立的 LLM 上下文，并设置 `fail-fast: false`。两者读取合并后的提交和 PR 差异。代码审查检查实现、仓库规则和已有 CI 结果，不触发新一轮测试。文档审查会核对行为变化与文档是否一致，即使没有修改文档；修改文档时，还会检查矛盾、重复维护的事实、CONTRIBUTING 规定的主题归属及中英文含义。每项问题包含文件和行号、依据及最小修改建议。审查只读取仓库，不修改文件。
 
-每项审查返回结构化结果（`ok`、`issues` 或 `incomplete`）及中文摘要，作为 Actions 构建产物保留七天。**Combined Feishu notification** 等待两项审查结束，通过已有的 `FEISHU_WEBHOOK_URL` 发送一张包含两份结果的 Card 2.0 卡片；可选的 `FEISHU_WEBHOOK_SECRET` 用于签名。只有通知 job 能读取 webhook 密钥。审查失败、报告缺失或格式无效时标为未完成，另一项已有的结果照常展示。某项审查失败时，通知 job 仍会运行。只有飞书返回 `code=0` 才确认送达；请求失败或送达状态不明时不自动重试，以免重复发消息。每项审查的执行超时为 25 分钟。审查和发送失败不会阻止合并；关闭未合并的 PR 不触发此流程。持有通知凭据时，工作流只检出合并后的提交。
+每项审查返回结构化结果（`ok`、`issues` 或 `incomplete`）及分项中文结论，作为 Actions 构建产物保留七天。**Combined Feishu notification** 等待两项审查结束，通过已有的 `FEISHU_WEBHOOK_URL` 发送一张包含两份结果的 Card 2.0 卡片；可选的 `FEISHU_WEBHOOK_SECRET` 用于签名。卡片固定分为 PR 信息、行为变化、代码与仓库规则、CI 结果和文档审查，各区之间使用分隔线。未发现问题时标题为绿色，发现问题时为红色，审查未完成且尚未发现问题时为黄色。只有通知 job 能读取 webhook 密钥。审查失败、报告缺失或格式无效时标为未完成，另一项已有的结果照常展示。某项审查失败时，通知 job 仍会运行。只有飞书返回 `code=0` 才确认送达；请求失败或送达状态不明时不自动重试，以免重复发消息。每项审查的执行超时为 25 分钟。审查和发送失败不会阻止合并；关闭未合并的 PR 不触发此流程。持有通知凭据时，工作流只检出合并后的提交。
 
 浏览器作业各自拥有独立的固定数据和服务；对共享可变固定数据增加 worker 数不安全。失败的浏览器作业保留报告与 trace 七天。原生失败阶段摘要保留七天，详细输出留在 Actions 日志中；凭据和临时安装目录不上传。成功的原生归档仅用于显式手动打包或发布时上传，不重新压缩已压缩的归档。发布分发产物保留现有恢复策略；失败发布可以按前述方式复用原构建。
 
