@@ -22,9 +22,8 @@ function message(error: unknown): string {
 
 /**
  * System owns each harness's deployment default model configuration.
- * New Core-hosted Sessions and Sessions without an environment inherit it
- * when no explicit Session or Agent model configuration takes precedence.
- * Self-hosted Sessions bring their own configuration. Whether a harness is enabled, and
+ * New Sessions inherit it when no explicit Session or Agent model
+ * configuration takes precedence. Whether a harness is enabled, and
  * which is the default, is Core's startup configuration and only shown here.
  * A write replaces the whole model configuration and needs the API key every time; the
  * key lives only in the open form's state, never in the query cache, storage

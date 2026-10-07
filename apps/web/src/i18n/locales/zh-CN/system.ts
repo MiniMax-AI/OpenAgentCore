@@ -40,7 +40,7 @@ export const system: TranslationShape<typeof english> = {
   },
   models: {
     title: "默认模型配置",
-    help: "新建的 Core 托管会话和无环境会话使用这些默认设置，应用显式提供的设置优先。自托管会话需自行提供配置；已有会话保留原配置。",
+    help: "未自带模型服务的新建会话使用这些默认设置，应用显式提供的设置优先；已有会话保留原配置。",
     loadFailed: "无法加载默认模型配置。",
     refreshFailed: "刷新失败，显示的是上次加载的默认模型配置。",
     none: "Core 没有报告任何执行框架。",
