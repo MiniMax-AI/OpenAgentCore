@@ -81,6 +81,7 @@ RULES = (
     (("scripts/build-claude", "scripts/check-claude", "scripts/build-mcode", "scripts/prepare-release-runtimes.sh"),
      SCRIPTS, ("harness", "native", "backend", "distribution")),
     (("scripts/build-agents-runtime.sh",), (".sh",), ("backend", "native", "distribution")),
+    (("scripts/build-agent-host-images.sh", "scripts/qualify-agent-host.sh"), (".sh",), ("distribution",)),
     (("scripts/generate-harness-catalog", "scripts/harness-catalog/", "scripts/openapi-split/", "scripts/patch-agents-openapi.py",
       "scripts/extract-agents-api-upstream.py"), SCRIPTS, JOBS),
     (("scripts/check-sqlc.py", "scripts/go-test-shard.py"), (".py",), ("backend",)),

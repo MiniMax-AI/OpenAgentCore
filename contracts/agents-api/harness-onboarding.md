@@ -248,6 +248,8 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 
 An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
 
+The agent-host image uses the same contract. `deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`, and `agent.ManifestEnvironment` activates it from there through `Installation.Environment`. A Harness the agent host runs is added there too.
+
 ## Native process ownership
 
 The daemon's `clirunner` offers opt-in Unix process-group ownership for adapters whose SDK launches a native child; unsupported hosts reject this mode before launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
@@ -344,6 +346,8 @@ Run the adapter's Turns, cancellation and continuation in a view, then qualify e
 | `ForwardEnv` | A process run in the sandbox keeps each declared variable and no other Harness variable. |
 | `Proxy` | With `ViewProxyEnv`, every local request, such as web fetches, downloads and update checks, goes through the proxy. With `ViewProxyNone`, a request enabling a feature that needs it is rejected. |
 | `Home` | Native history and configuration stay under `/.oac/home`, and a later Executor in the same Session continues from them. |
+
+`scripts/qualify-agent-host.sh` runs one Turn per Harness through the daemon's dispatch against the [agent-host and sandbox images](../../docs/maintainers.md#runtime-images-and-helpers). The `agenthostqualify` test binary runs as the agent host with the [agent-host container's flags](../../docs/configuration.md#agent-host-container), and the sandbox image serves the sandbox. Each Turn writes a file and reports the output and exit status of a failing command whose values only the sandbox's tool environment holds. The Link runs over WSS with a CA the test generates. The test also checks the cgroup v2 delegation: the container's own read-only cgroup fails with `ErrUnsupported`, and in a delegated directory the agent host ends a cgroup left behind with `cgroup.kill`. Set `OAC_AGENT_HOST_IMAGE` and `OAC_SANDBOX_IMAGE` to the two images, `OAC_QUALIFY_KEY_FILE` to the model key's file and, for each Harness to qualify, `OAC_QUALIFY_CLAUDE_SDK`, `OAC_QUALIFY_CODEX` or `OAC_QUALIFY_MCODE` to its `model` and `model_provider` without `api_key`. The gateway dials model providers directly, so on a host whose only egress is an HTTP proxy, set `OAC_QUALIFY_PROXY` to it and the test tunnels the providers' hosts through it.
 
 ## Native references
 

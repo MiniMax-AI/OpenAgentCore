@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: cfab5d1ad336c809b2b27bc870b02934f54184f3778e2c5d770a945c6830e097
+source_hash: a7a566c288258949acdded98e14dc14e102faaf453393bcfd95d43a25bef652d
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -66,7 +66,7 @@ make build-agents-runtime
 docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/agents-runtime"
 ```
 
-该脚本会检查软件包版本，为 Linux amd64 构建 `oac-daemon`，并准备一个仅包含守护进程、未修改的原生可执行文件、相关资源和 `services/core/deploy/codex/Dockerfile` 的上下文。
+该脚本会检查软件包版本，为 Linux amd64 构建 `oac-daemon`，并准备一个仅包含守护进程、未修改的 `codex` 和 `codex-code-mode-host` 可执行文件、相关资源和 `services/core/deploy/codex/Dockerfile` 的上下文。Runtime 镜像不包含 `codex-code-mode-host`，只有 agent-host 镜像安装它。
 
 **Claude Code Runtime 镜像。** 必须使用 Node 20 或更高版本以及 pnpm。
 
@@ -91,6 +91,15 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 `scripts/prepare-release-runtimes.sh` 会根据固定版本配置运行配套程序构建。
 
 分发包将三个 Harness 镜像合并到一个 Runtime 镜像（`deploy/distribution/Runtime.Dockerfile`）中：以携带守护进程的 MiniMax Code 镜像为基础，并复制入 Codex 可执行文件及资源和 Claude SDK 包。构建过程会验证每个镜像都携带由同一提交构建的守护进程。
+
+**Agent-host 和沙箱镜像。** 使用上述三个 Harness 镜像的输入：
+
+```sh
+export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
+bash scripts/build-agent-host-images.sh
+```
+
+该脚本将三个 Runtime 镜像构建器的产物准备到同一个上下文中，加入静态的 `oac-daemon`、`oac-process-shim` 和 `oac-sandbox-io`，并将 `deploy/distribution/AgentHost.Dockerfile` 的两个目标分别构建为 `OAC_AGENT_HOST_IMAGE`（默认 `oac-agent-host:dev`）和 `OAC_SANDBOX_IMAGE`（默认 `oac-sandbox:dev`）。其余参数（例如 `--label`）会传给两次 `docker build`。agent-host 镜像把每个 Harness 安装在 `/opt/oac/harnesses` 下各自的目录中，`/opt/oac/harnesses.json` 是这些位置的唯一记录；agent host 通过 `agent.ManifestEnvironment` 读取它。沙箱镜像具有 Runtime 镜像的基础层和软件包，不含守护进程和 Harness，并以 UID/GID 1000 运行 `oac-sandbox-io --bootstrap-file <path>`。[认定视图资格](../../contracts/agents-api/zh/harness-onboarding.md#qualify-the-view)会运行这两个镜像；[Agent-host 容器](configuration.md#agent-host-container)列出 agent host 的需求。CI 和发布流程都不构建它们。
 
 **E2B 辅助程序。**
 

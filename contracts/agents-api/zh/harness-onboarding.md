@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: b448a3dd208f7ddf5e15a202b794d9e774f034ff3a2ee099e386abc2ebf1b471
+source_hash: 82787672338b502a32b22201c8c82c87c354a73a94e0ae0e5281e9c0a57eed79
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -250,6 +250,8 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 
 适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
 
+agent-host 镜像使用同一契约。`deploy/distribution/AgentHost.Dockerfile` 把每个 Harness 安装在各自的目录中并列入镜像的清单 `/opt/oac/harnesses.json`，`agent.ManifestEnvironment` 再通过 `Installation.Environment` 从那里激活它。由 agent host 运行的 Harness 也要添加到这里。
+
 ## 原生进程所有权 {#native-process-ownership}
 
 daemon 的 `clirunner` 为 SDK 会启动原生子进程的适配器提供可选的 Unix 进程组所有权；不支持的主机会在启动前拒绝此模式。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
@@ -346,6 +348,8 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 | `ForwardEnv` | 在沙箱中运行的进程保留每个声明的变量，且不保留任何其他 Harness 变量。 |
 | `Proxy` | 使用 `ViewProxyEnv` 时，每个本地请求（例如网页抓取、下载和更新检查）都经过代理。使用 `ViewProxyNone` 时，启用需要代理的功能的请求会被拒绝。 |
 | `Home` | 原生历史和配置保存在 `/.oac/home` 下，同一 Session 中后续的 Executor 从中继续。 |
+
+`scripts/qualify-agent-host.sh` 针对 [agent-host 和沙箱镜像](../../../docs/zh/maintainers.md#runtime-images-and-helpers)，通过守护进程的 dispatch 为每个 Harness 运行一个 Turn。`agenthostqualify` 测试二进制以 [agent-host 容器的参数](../../../docs/zh/configuration.md#agent-host-container)作为 agent host 运行，沙箱镜像提供沙箱。每个 Turn 写入一个文件，并报告一个失败命令的输出和退出状态，这两个值只存在于沙箱的工具环境中。Link 通过 WSS 运行，使用测试生成的 CA。测试还会检查 cgroup v2 委派：容器自己的只读 cgroup 以 `ErrUnsupported` 失败；在委派目录中，agent host 用 `cgroup.kill` 结束遗留的 cgroup。将 `OAC_AGENT_HOST_IMAGE` 和 `OAC_SANDBOX_IMAGE` 设为这两个镜像，将 `OAC_QUALIFY_KEY_FILE` 设为模型密钥文件，并为每个要认定的 Harness 将 `OAC_QUALIFY_CLAUDE_SDK`、`OAC_QUALIFY_CODEX` 或 `OAC_QUALIFY_MCODE` 设为其 `model` 和不含 `api_key` 的 `model_provider`。网关直接连接模型提供商，因此在唯一出口是 HTTP 代理的主机上，将 `OAC_QUALIFY_PROXY` 设为该代理，测试会通过它为提供商的主机建立隧道。
 
 ## 原生参考 {#native-references}
 

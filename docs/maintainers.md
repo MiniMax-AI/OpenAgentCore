@@ -64,7 +64,7 @@ make build-agents-runtime
 docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/agents-runtime"
 ```
 
-The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources and `services/core/deploy/codex/Dockerfile`.
+The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified `codex` and `codex-code-mode-host` executables, their resources and `services/core/deploy/codex/Dockerfile`. The Runtime image leaves out `codex-code-mode-host`, which only the agent-host image installs.
 
 **Claude Code Runtime image.** Node 20 or newer and pnpm are required.
 
@@ -89,6 +89,15 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 `scripts/prepare-release-runtimes.sh` runs the companion build from the pins.
 
 The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude SDK bundle copied in. It verifies that each image carries the daemon built from the same commit.
+
+**Agent-host and sandbox images.** With the inputs of the three Harness images above:
+
+```sh
+export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
+bash scripts/build-agent-host-images.sh
+```
+
+The script runs the three Runtime image builders into one context, adds the static `oac-daemon`, `oac-process-shim` and `oac-sandbox-io`, and builds both targets of `deploy/distribution/AgentHost.Dockerfile` as `OAC_AGENT_HOST_IMAGE` (default `oac-agent-host:dev`) and `OAC_SANDBOX_IMAGE` (default `oac-sandbox:dev`). Further arguments, such as `--label`, go to both `docker build` calls. The agent-host image installs each Harness in its own directory under `/opt/oac/harnesses`, and `/opt/oac/harnesses.json` is the only record of where; the agent host reads it with `agent.ManifestEnvironment`. The sandbox image has the Runtime images' base and packages and no daemon or Harness, and runs `oac-sandbox-io --bootstrap-file <path>` as UID/GID 1000. [Qualify the view](../contracts/agents-api/harness-onboarding.md#qualify-the-view) runs both; [Agent-host container](./configuration.md#agent-host-container) lists what the agent host needs. Neither CI nor the release builds them.
 
 **E2B helper.**
 

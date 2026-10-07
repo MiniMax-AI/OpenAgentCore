@@ -59,7 +59,7 @@ Every other variant stays unclassified.
 
 ## Runtime image
 
-[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` executable and `codex-resources`.
+[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` and `codex-code-mode-host` executables and `codex-resources`. The image leaves out `codex-code-mode-host`, which only the agent-host image installs.
 
 | Item | Value |
 | --- | --- |
