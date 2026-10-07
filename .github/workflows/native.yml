@@ -63,6 +63,14 @@ jobs:
         run: |
           go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/daemon/cmd/oac-daemon
           node --test scripts/build-native-installer.test.mjs
+      - name: Build and test the shared Core installer
+        run: |
+          go build -o "$RUNNER_TEMP/oac${{ runner.os == 'Windows' && '.exe' || '' }}" ./services/core/cmd/oac
+          go test ./services/core/cmd/oac -count=1 -timeout=3m
+      - name: Exercise the Windows Core launcher
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./deploy/test_install.ps1 -Binary "$env:RUNNER_TEMP/oac.exe"
       - name: Verify native download bootstrap and recovery
         run: go test ./services/core/internal/nativeinstaller -count=1 -timeout=3m
       - name: Native filesystem, authentication and process lifecycle
@@ -163,3 +171,17 @@ jobs:
           path: ${{ runner.temp }}/native-ci-diagnostics/
           retention-days: 7
           if-no-files-found: ignore
+
+  core-intel-mac:
+    name: Core installer (macOS Intel)
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test ./services/core/cmd/oac -count=1 -timeout=3m
+      - run: go build -o "$RUNNER_TEMP/oac" ./services/core/cmd/oac

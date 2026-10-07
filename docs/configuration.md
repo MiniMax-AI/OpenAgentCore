@@ -9,7 +9,7 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 | [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, Runtime history export | `.env` in the installation directory (default `~/.oac/core`) | Edit `.env`, then run `oac apply` | `oac apply` recreates the services that read the changed settings |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; nodes prepare Runtime changes asynchronously |
 
-Web's **System** page shows the installation's addresses, the default models, the sandbox configuration and, under **Startup settings**, the process settings Core loaded. Secrets live in [`data/secrets/`](#installation-directory), one copy each. No configuration file defines Projects or API keys.
+Web's **System** page shows the installation's addresses, the default models, the sandbox configuration and, under **Startup settings**, the process settings Core loaded. Secrets live in [`secrets/`](#compose-installations), one copy each. No configuration file defines Projects or API keys.
 
 ## Process settings {#process-settings-configjson}
 
@@ -23,9 +23,8 @@ Installer flags in [installation options](./getting-started/install-options.md) 
 
 1. It runs `oac-core check-config` with the `.env` you edited and changes nothing if a value is invalid.
 2. It runs `docker compose up -d --wait`. Compose recreates only the services whose configuration changed.
-3. If the check fails, no container is recreated. See [stop and restart](./getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 
-`docker compose ps` shows the services. Domain state is `data/domain/status.json`.
+Use `docker compose ps` to check the services. See [stop and restart](./getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 
 ### Changing the public URL {#changing-the-public-url}
 
@@ -44,7 +43,7 @@ To change it, point the reverse proxy at the new address first, then edit `OAC_P
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OAC_PUBLIC_URL` | `http://localhost:8080` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
-| `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. `install.sh` sets `0.0.0.0` |
+| `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. The installer sets `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
@@ -81,7 +80,7 @@ Core approves a node's capacity when you generate its Add node command: **Sandbo
 
 ### Default models
 
-Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](../contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
+Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/core/credential.key` and never returns them. [Model execution](../contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
 
 ## Compose installations
 
@@ -100,7 +99,7 @@ The initialization service generates secrets and the installation ID once, then 
 
 Initialization prepares this directory; application services receive their secret directories read-only. `docker compose exec web oac-web core-key` prints the Core key to the operator terminal without writing it to container logs. Database passwords and credential encryption keys are never printed.
 
-`OAC_DATA_DIR` selects the directory and defaults to `./data` beside the Compose file. Preserve it together with that project's definition and public URL. Removing only the secret directories does not reset an installation; initialization refuses to start over an existing database. Core also binds the installation ID to its database. Runtime settings continue to live in [Core's database](#runtime-settings-web).
+The named Docker volume `<project>_data` contains these paths. Docker manages Linux ownership on every host; each service mounts only its required subdirectories. Preserve this volume together with the project definition and public URL. Removing only the secret directories does not reset an installation; initialization refuses to start over an existing database. Core also binds the installation ID to its database. Runtime settings continue to live in [Core's database](#runtime-settings-web).
 
 ## Docker node configuration
 
@@ -118,37 +117,31 @@ The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolat
 
 ## Installation directory
 
-The installer creates the installation directory, `~/.oac/core` by default, with mode `0700`. Secret files are `0600`.
+The installer creates `~/.oac/core` by default (`$HOME/.oac/core` on Windows). Its files contain process settings and the native operator command; persistent service data lives in the [Compose data volume](#compose-installations).
 
 | Path | Content | Changed by |
 | --- | --- | --- |
-| `.env` | [Process settings](#process-settings-configjson). The file you edit | You, then `oac apply` |
-| `compose.yaml` | The release's service definition. Do not edit them | The release |
-| `oac` | The [management command](./getting-started/operations.md#the-oac-command), copied from the Core image | The installer |
-| `data/secrets/web/core.key` | The [Core key](./getting-started/operations.md#core-key) | `oac rotate-core-key` |
-| `data/secrets/core/credential.key` | Encryption key for what Core stores sealed in the database | Nothing. Keep it with the database |
-| `data/secrets/core/core-key-digests.json` | SHA-256 of the Core key | `oac rotate-core-key` |
-| `data/secrets/database/password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created |
-| `data/database/` | PostgreSQL data | PostgreSQL |
-| `data/node-payload/` | Node files Web serves at `/node-install/` | Initialization |
-| `data/state/` | Private Provider state, including E2B receipts | Core |
-| `.oac.lock` | The installation lock | Mutating `oac` commands |
+| `.env` | Process settings and the stable Compose project name | You, then `oac apply` |
+| `compose.yaml`, `compose-sha256sums.txt` | Verified release service definition | The release |
+| `oac` (`oac.exe` on Windows) | Native management command | The installer |
 
-The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `database`, `core` and `web`. Core applies database migrations when it starts. `web` serves the console and forwards `/v1` and `/api/v1` to Core, and it is the only service with a published port, `OAC_WEB_PORT`. No service receives a Docker socket. Apart from Docker's storage, nothing is written outside the installation directory.
+The sibling `<install-dir>.lock` directory remains for synchronization; `<install-dir>.staging` holds unpublished installation files. Neither contains service data. On Unix the installer creates private directories with mode `0700` and configuration files with mode `0600`.
+
+The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `database`, `core` and `web`. Core applies database migrations when it starts. Web serves the console and forwards `/v1` and `/api/v1` to Core; it is the only service with a published port, `OAC_WEB_PORT`. No service receives a Docker socket.
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. Compose interpolates `.env` into the service environment. Compose must be 2.26.0 or newer. If you run Core yourself, set these variables; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).
+Core reads its process environment. Compose interpolates `.env` into it and mounts secrets at the container paths below. When running Core directly, set the file variables to absolute paths readable by the Core process; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).
 
 | Variable | Set from |
 | --- | --- |
 | `OAC_PUBLIC_URL` | The public origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
 | `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | PostgreSQL without a password |
-| `OAC_DATABASE_PASSWORD_FILE` | `data/secrets/database/password`. The URL must then carry no password |
-| `OAC_CREDENTIAL_KEY_FILE` | `data/secrets/core/credential.key` |
-| `OAC_CORE_KEY_DIGESTS_FILE` | `data/secrets/core/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
-| `OAC_INSTALLATION_ID_FILE` | `data/secrets/core/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded |
+| `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |
+| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CORE_KEY_DIGESTS_FILE` | `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
+| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching [process settings](#settings). `oac-core check-config` validates them without starting Core |
 | `OAC_HISTORY_SETTINGS_FILE` | Optional Runtime history file. Sensitive; the installation report says only whether it is set |
 | `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | Logging; Web reads the same three |
@@ -162,7 +155,7 @@ Invalid explicit OAuth trusted origins stop Core at startup. Entries must be HTT
 
 ## Appendix: Web environment without the installer
 
-Compose sets these for Web. Set them yourself only when you run the console without Compose. Of the installation's secrets, Web receives only `data/secrets/web/core.key`.
+Compose sets these for Web. Set them yourself only when you run the console without Compose. Compose mounts the data volume's `secrets/web/` at `/run/oac` and sets `OAC_WEB_CORE_KEY_FILE=/run/oac/core.key`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

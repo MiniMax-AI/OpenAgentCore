@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: e697e320a2df0c130cb004f5e8bbda50deff6515ef7727bea066fc0d4f688b7d
+source_hash: 8eeef9a9742c5fd8a0bf27a5a31870a77dec59a436518dbe9d34770527c021a2
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置。共有两类：
@@ -11,7 +11,7 @@ Core 安装的每项设置都恰好只有一个归属位置。共有两类：
 | [进程设置](#process-settings-configjson) | 公共 URL、端口、日志、Harness、执行并发度、审计保留期、OAuth 来源、Runtime 历史记录导出 | 安装目录中的 `.env`（默认 `~/.oac/core`） | 编辑 `.env`，然后运行 `oac apply` | `oac apply` 会重新创建读取了这些已更改设置的服务 |
 | [运行时设置](#runtime-settings-web) | 沙箱后端和大小、节点、项目和密钥、默认模型、执行器凭据 | Core 的 PostgreSQL 数据库 | 在 Web 中修改，或使用 Core 密钥调用 Core API（`/core/v1`） | 保存时无需重启 Core；节点会异步准备 Runtime 变更 |
 
-Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置，并在 **Startup settings** 下以只读方式显示 Core 加载的进程设置。机密信息存放在 [`data/secrets/`](#installation-directory) 中，每项仅保存一份。没有任何配置文件定义项目或 API 密钥。
+Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置，并在 **Startup settings** 下以只读方式显示 Core 加载的进程设置。机密信息存放在 [`secrets/`](#compose-installations) 中，每项仅保存一份。没有任何配置文件定义项目或 API 密钥。
 
 ## 进程设置 {#process-settings-configjson}
 
@@ -25,9 +25,8 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 1. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时什么都不改。
 2. 它运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务。
-3. 校验失败时，不会重新创建任何容器。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 
-`docker compose ps` 展示服务。域名状态在 `data/domain/status.json`。
+用 `docker compose ps` 检查服务。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 
 ### 更改公共 URL {#changing-the-public-url}
 
@@ -48,7 +47,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OAC_PUBLIC_URL` | `http://localhost:8080` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[修改公开 URL](#changing-the-public-url) |
-| `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。`install.sh` 设置为 `0.0.0.0` |
+| `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。安装器设置为 `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
@@ -85,7 +84,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ### 默认模型 {#default-models}
 
-在 **System** → **Default model configuration** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
+在 **System** → **Default model configuration** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/core/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
 
 ## Compose 安装 {#compose-installations}
 
@@ -104,7 +103,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 初始化会准备该目录；应用服务以只读方式接收各自的机密目录。`docker compose exec web oac-web core-key` 把 Core 密钥打印到运维人员终端，不写入容器日志。数据库密码和凭据加密密钥绝不打印。
 
-`OAC_DATA_DIR` 选择该目录，默认是 Compose 文件旁的 `./data`。必须将该项目的定义和公共 URL 与该目录一同保留。仅删除机密目录不会重置安装；如果数据库已经存在，初始化会拒绝重新开始。Core 还会将安装 ID 与其数据库绑定。运行时设置仍存储在 [Core 的数据库](#runtime-settings-web)中。
+上述路径位于 Docker 命名卷 `<project>_data` 中。所有宿主机平台都由 Docker 管理 Linux 文件权限；每个服务只挂载需要的子目录。数据卷必须和项目定义、公共 URL 一同保留。仅删除机密目录不会重置安装；数据库已存在时初始化会拒绝重建。Core 也会校验安装 ID 与数据库的绑定。运行时设置仍保存在 [Core 数据库](#runtime-settings-web)中。
 
 ## Docker 节点配置 {#docker-node-configuration}
 
@@ -122,37 +121,31 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ## 安装目录 {#installation-directory}
 
-安装程序会创建安装目录，默认路径为 `~/.oac/core`，权限模式为 `0700`。机密文件为 `0600`。
+安装目录默认为 `~/.oac/core`（Windows 为 `$HOME/.oac/core`）。其中保存进程设置和原生管理命令；服务持久数据位于 [Compose 数据卷](#compose-installations)。
 
 | 路径 | 内容 | 修改者 |
 | --- | --- | --- |
-| `.env` | [进程设置](#process-settings-configjson)。由你编辑的文件 | 你，然后运行 `oac apply`；托管域名设置写入 `OAC_PUBLIC_URL` |
-| `compose.yaml` | 发行版的服务定义。不要编辑 | 发行版 |
-| `oac` | [管理命令](getting-started/operations.md#the-oac-command)，从 Core 镜像复制 | 安装程序 |
-| `data/secrets/web/core.key` | [Core 密钥](getting-started/operations.md#core-key) | `oac rotate-core-key` |
-| `data/secrets/core/credential.key` | 加密 Core 在数据库中封存内容的密钥 | 无。必须与数据库一同保留 |
-| `data/secrets/core/core-key-digests.json` | Core 密钥的 SHA-256 | `oac rotate-core-key` |
-| `data/secrets/database/password` | PostgreSQL 密码 | 无。PostgreSQL 仅在创建数据库时读取 |
-| `data/database/` | PostgreSQL 数据 | PostgreSQL |
-| `data/node-payload/` | Web 在 `/node-install/` 提供的节点文件 | 初始化 |
-| `data/state/` | 私有 Provider 状态，包括 E2B 回执 | Core |
-| `.oac.lock` | 安装锁 | 会修改安装状态的 `oac` 命令 |
+| `.env` | 进程设置和固定的 Compose 项目名 | 用户修改后运行 `oac apply` |
+| `compose.yaml`、`compose-sha256sums.txt` | 已校验的发行版服务定义 | 发行流程 |
+| `oac`（Windows 为 `oac.exe`） | 原生管理命令 | 安装程序 |
 
-Compose 项目名为 `oac-<10 hex digits>`。服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。`web` 提供控制台并把 `/v1` 和 `/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。除 Docker 存储外，不会向安装目录之外写入任何内容。
+同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。
+
+Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
-Core 只读取其环境。Compose 把 `.env` 插值进服务环境。Compose 必须为 2.26.0 或更高版本。如果你自行运行 Core，请设置这些变量；见[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md)。
+Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密文件挂载到下表中的容器路径。直接运行 Core 时，将文件变量设为 Core 进程可读取的绝对路径；见[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md)。
 
 | 变量 | 设置来源 |
 | --- | --- |
 | `OAC_PUBLIC_URL` | `public_url`，或 Core 的回环源地址。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url`、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生。未设置时，Core 不运行 Runtime 网关，也不执行任何 Session |
 | `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
 | `OAC_DATABASE_URL` | 该安装不含密码的 PostgreSQL URL，并将 `core.database_pool` 作为 `pool_*` 查询参数附加到其中 |
-| `OAC_DATABASE_PASSWORD_FILE` | `data/secrets/database/password`。此时 URL 不得包含密码 |
-| `OAC_CREDENTIAL_KEY_FILE` | `data/secrets/core/credential.key` |
-| `OAC_CORE_KEY_DIGESTS_FILE` | `data/secrets/core/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
-| `OAC_INSTALLATION_ID_FILE` | `data/secrets/core/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL` 和 `OAC_CORE_KEY_DIGESTS_FILE`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它，因此必须将两者一同保留 |
+| `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`。此时 URL 不得包含密码 |
+| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CORE_KEY_DIGESTS_FILE` | `/run/oac/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
+| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL` 和 `OAC_CORE_KEY_DIGESTS_FILE`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它，因此必须将两者一同保留 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS` | 对应的[进程设置](#settings)。`oac-core check-config` 会在不启动 Core 的情况下校验它们 |
 | `OAC_HISTORY_SETTINGS_FILE` | 可选的 Runtime 历史文件。敏感；安装报告只说明它是否已设置 |
 | `OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | `log.*`；Web 也读取这三个设置 |
@@ -166,7 +159,7 @@ Core 会记录所加载文件的路径，但绝不记录环境变量的值或文
 
 ## 附录：没有安装程序时的 Web 环境 {#appendix-web-environment-without-the-installer}
 
-Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时才自行设置。该安装的机密信息中，Web 只收到 `data/secrets/web/core.key`。
+Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时才自行设置。Compose 把数据卷的 `secrets/web/` 挂载到 `/run/oac`，并设置 `OAC_WEB_CORE_KEY_FILE=/run/oac/core.key`。
 
 | 变量 | 默认值 | 含义 |
 | --- | --- | --- |

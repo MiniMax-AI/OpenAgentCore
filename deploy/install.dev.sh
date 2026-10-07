@@ -47,8 +47,7 @@ if [[ "$install_dir" != /* ]]; then
   exit 1
 fi
 
-mkdir -p "$install_dir/data"
-chmod 700 "$install_dir/data"
+mkdir -p "$install_dir"
 build="$install_dir/image-build"
 rm -rf "$build"
 mkdir -p "$build"
@@ -115,7 +114,6 @@ PY
 umask 077
 cat >"$install_dir/.env" <<EOF
 COMPOSE_PROJECT_NAME=oac-local
-OAC_DATA_DIR=$install_dir/data
 OAC_HOST=$host_address
 OAC_WEB_PORT=$web_port
 OAC_IMAGE_CORE=$tag/core:dev

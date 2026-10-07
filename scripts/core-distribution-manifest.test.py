@@ -143,6 +143,13 @@ class DistributionTests(unittest.TestCase):
             digest, name = line.split("  ", 1)
             self.assertEqual(digest, distribution.sha256(self.bundle / name))
 
+    def test_arm_archive_uses_explicit_platform_validation(self):
+        path = self.stage / "arm.tar"
+        config, digest = image_archive(path, "core", architecture="arm64")
+        self.assertEqual(distribution.image_identities(path, config, "arm64"), (config, digest))
+        with self.assertRaisesRegex(ValueError, "unexpected platform"):
+            distribution.image_identities(path, config, "amd64")
+
     def test_built_image_records_the_id_each_docker_store_resolves(self):
         config, manifest, other = ("sha256:" + digit * 64 for digit in "123")
         metadata = self.stage / "build.json"
@@ -163,7 +170,7 @@ class DistributionTests(unittest.TestCase):
                         mock.patch("builtins.print") as output:
                     if expected.startswith("sha256:"):
                         distribution.built_image(metadata)
-                        verify.assert_called_once_with(expected)
+                        verify.assert_called_once_with(expected, "amd64")
                         output.assert_called_once_with(expected)
                     else:
                         with self.assertRaisesRegex(ValueError, expected):
