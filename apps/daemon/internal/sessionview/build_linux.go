@@ -118,7 +118,16 @@ func emptyRoot(staging string, mps []Mountpoint) error {
 	}
 	defer unix.Close(mnt)
 	mkdir := func(rel string) error {
-		if err := unix.Mkdirat(mnt, rel, 0o755); err != nil && err != unix.EEXIST {
+		err := unix.Mkdirat(mnt, rel, 0o755)
+		if err == unix.EEXIST {
+			return nil
+		}
+		if err == nil {
+			// The daemon's umask must not narrow the path the view's identity
+			// searches.
+			err = unix.Fchmodat(mnt, rel, 0o755, 0)
+		}
+		if err != nil {
 			return &Error{Kind: ErrLauncher, Op: "mkdir", Path: "/" + rel, Err: err}
 		}
 		return nil

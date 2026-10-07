@@ -778,7 +778,10 @@ func TestEmptyRootView(t *testing.T) {
 	f := newFixture(t)
 	spec := f.spec(nil, "empty")
 	spec.World, spec.Shim, spec.Process.Dir = nil, Shim{}, "/.oac/home"
+	// The launcher inherits the umask; it must not narrow the empty root.
+	umask := unix.Umask(0o077)
 	v, err := Start(context.Background(), spec)
+	unix.Umask(umask)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
