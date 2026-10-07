@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const savedProviderFixture = `{"protocol":"responses","base_url":"https://example.test/v1","api_key":"saved-provider-secret","context_window":100000,"max_output_tokens":8000}`
+const savedProviderFixture = `{"protocol":"responses","base_url":"https://example.test/api","api_key":"saved-provider-secret","context_window":100000,"max_output_tokens":8000}`
 
 type savedProviderStore struct {
 	saved    agents.Agent
@@ -75,7 +75,7 @@ func TestSavedProviderReadRedaction(t *testing.T) {
 
 func assertSavedProviderRedacted(t *testing.T, raw string) {
 	t.Helper()
-	if strings.Contains(raw, "saved-provider-secret") || strings.Contains(raw, `"api_key":`) || !strings.Contains(raw, `"api_key_configured":true`) || !strings.Contains(raw, `"base_url":"https://example.test/v1"`) {
+	if strings.Contains(raw, "saved-provider-secret") || strings.Contains(raw, `"api_key":`) || !strings.Contains(raw, `"api_key_configured":true`) || !strings.Contains(raw, `"base_url":"https://example.test/api"`) {
 		t.Fatalf("incorrect safe provider view: %s", raw)
 	}
 }

@@ -35,7 +35,7 @@ func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
 		}
 		return w
 	}
-	body := `{"agent":{"model":"actual-model","x_agents_core":{"harness":"codex"}},"environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://example.com/v1","api_key":"model-http-canary"}}}`
+	body := `{"agent":{"model":"actual-model","x_agents_core":{"harness":"codex"}},"environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://example.com/api","api_key":"model-http-canary"}}}`
 	key := uuid.NewString()
 	w := call("POST", "/v1/agents/sessions", body, key)
 	if w.Code != 201 {

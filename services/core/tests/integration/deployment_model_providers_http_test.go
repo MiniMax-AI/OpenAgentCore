@@ -88,7 +88,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		return provider.APIKey
 	}
 	const path = "/core/v1/harnesses/codex/model-configuration"
-	codexDefault := `{"model":"fixture","model_provider":{"protocol":"responses","base_url":"https://deployment.example/v1","api_key":"deployment-canary"}}`
+	codexDefault := `{"model":"fixture","model_provider":{"protocol":"responses","base_url":"https://deployment.example/api","api_key":"deployment-canary"}}`
 
 	// Only the Core key manages defaults.
 	call("GET", "/core/v1/harnesses", projectKey, "", 401)
@@ -113,11 +113,11 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	call("GET", path, coreKey, "", 404)
 	call("PUT", "/core/v1/harnesses/other/model-configuration", coreKey, codexDefault, 404)
 	for _, invalid := range []string{
-		`{"protocol":"responses","base_url":"http://deployment.example/v1","api_key":"invalid-canary"}`,
-		`{"protocol":"unknown","base_url":"https://deployment.example/v1","api_key":"invalid-canary"}`,
-		`{"protocol":"responses","base_url":"https://deployment.example/v1"}`,
-		`{"protocol":"responses","base_url":"https://deployment.example/v1","api_key":"invalid-canary","api_key_configured":true}`,
-		`{"protocol":"responses","base_url":"https://deployment.example/v1","api_key":"invalid-canary","context_window":-1}`,
+		`{"protocol":"responses","base_url":"http://deployment.example/api","api_key":"invalid-canary"}`,
+		`{"protocol":"unknown","base_url":"https://deployment.example/api","api_key":"invalid-canary"}`,
+		`{"protocol":"responses","base_url":"https://deployment.example/api"}`,
+		`{"protocol":"responses","base_url":"https://deployment.example/api","api_key":"invalid-canary","api_key_configured":true}`,
+		`{"protocol":"responses","base_url":"https://deployment.example/api","api_key":"invalid-canary","context_window":-1}`,
 	} {
 		call("PUT", path, coreKey, `{"model":"fixture","model_provider":`+invalid+`}`, 400)
 	}
@@ -144,10 +144,10 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 			t.Fatal("private observation field exposed", field)
 		}
 	}
-	if text(saved["object"]) != "core.model_configuration" || text(saved["harness"]) != "codex" || text(providerView(saved)["base_url"]) != "https://deployment.example/v1" || string(providerView(saved)["api_key_configured"]) != "true" || text(saved["updated_at"]) == "" {
+	if text(saved["object"]) != "core.model_configuration" || text(saved["harness"]) != "codex" || text(providerView(saved)["base_url"]) != "https://deployment.example/api" || string(providerView(saved)["api_key_configured"]) != "true" || text(saved["updated_at"]) == "" {
 		t.Fatalf("unexpected provider view: %v", saved)
 	}
-	if retrieved := call("GET", path, coreKey, "", 200); text(providerView(retrieved)["base_url"]) != "https://deployment.example/v1" {
+	if retrieved := call("GET", path, coreKey, "", 200); text(providerView(retrieved)["base_url"]) != "https://deployment.example/api" {
 		t.Fatal("retrieved view differs")
 	}
 
@@ -193,7 +193,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		t.Fatal("hosted Session did not freeze the deployment default")
 	}
 	projection, err := sessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, hostedID)
-	if err != nil || projection.ModelProvider.Source != "deployment" || projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil || projection.ModelProvider.Configuration.BaseURL != "https://deployment.example/v1" {
+	if err != nil || projection.ModelProvider.Source != "deployment" || projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil || projection.ModelProvider.Configuration.BaseURL != "https://deployment.example/api" {
 		t.Fatal("deployment selection not recorded", projection, err)
 	}
 	call("PUT", path, coreKey, strings.Replace(codexDefault, "deployment.example", "changed.example", 1), 200)
@@ -303,7 +303,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	defaults := deploymentDefaults(t, st)
 	setDefault := func(key string) {
 		t.Helper()
-		if _, err := defaults.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: key}, Model: "fixture"}}); err != nil {
+		if _, err := defaults.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/api", APIKey: key}, Model: "fixture"}}); err != nil {
 			t.Fatal(err)
 		}
 	}

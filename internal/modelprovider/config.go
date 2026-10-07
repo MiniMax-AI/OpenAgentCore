@@ -60,12 +60,19 @@ func (p Protocol) Valid() bool {
 	}
 }
 
+// ValidBasePath reports whether a base URL's path suits the protocol. The
+// anthropic routes begin with the version path, so an anthropic base URL
+// excludes it: a path ending in "/v1", or "/v1/", would reach "/v1/v1/messages".
+func (p Protocol) ValidBasePath(path string) bool {
+	return p != Anthropic || !strings.HasSuffix(strings.TrimRight(path, "/"), "/v1")
+}
+
 func (p Provider) Validate() error {
 	if !p.Protocol.Valid() {
 		return ErrConfiguration
 	}
 	u, err := url.Parse(p.BaseURL)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") {
+	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") || !p.Protocol.ValidBasePath(u.Path) {
 		return ErrConfiguration
 	}
 	// Remote providers require HTTPS. Runtime-local providers may use loopback

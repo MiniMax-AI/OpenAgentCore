@@ -201,7 +201,7 @@ async function setup(store, core) {
   const api = productAPI(store, core);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
-  const provider = await put("providers", { name: "Moonshot", base_url: "https://provider.example/v1", api_key: "provider-secret" });
+  const provider = await put("providers", { name: "Moonshot", base_url: "https://provider.example/anthropic", api_key: "provider-secret" });
   const model = await put("models", {
     name: "Kimi",
     model: "kimi-k2.6",
@@ -264,7 +264,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
     { type: "skill_reference", skill_id: "skill_review" },
   ]);
   assert.deepEqual(calls[0].body.x_agents_core.model_provider, {
-    protocol: "anthropic", base_url: "https://provider.example/v1", api_key: "provider-secret",
+    protocol: "anthropic", base_url: "https://provider.example/anthropic", api_key: "provider-secret",
   });
   assert.equal(JSON.stringify(first).includes("provider-secret"), false);
   assert.equal(calls[0].body.agent.tools.length, 1);

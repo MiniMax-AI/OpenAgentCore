@@ -89,9 +89,9 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	modelOnly := `{"agent_id":"` + agentID + `","agent":{"model":"model-override"},"environment":{"type":"openai_hosted"}}`
 	sid := id(call("POST", "/v1/agents/sessions", modelOnly, uuid.NewString(), 201))
 	assertSnapshot(sid, "model-override", "https://saved.example/v1", "saved-canary")
-	replacement := `{"agent_id":"` + agentID + `","environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/v1","api_key":"override-canary"}}}`
+	replacement := `{"agent_id":"` + agentID + `","environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/api","api_key":"override-canary"}}}`
 	sid = id(call("POST", "/v1/agents/sessions", replacement, uuid.NewString(), 201))
-	assertSnapshot(sid, "model-original", "https://override.example/v1", "override-canary")
+	assertSnapshot(sid, "model-original", "https://override.example/api", "override-canary")
 	for _, protocol := range []string{"anthropic", "chat_completions"} {
 		crossProtocol := strings.Replace(replacement, `"protocol":"responses"`, `"protocol":"`+protocol+`"`, 1)
 		call("POST", "/v1/agents/sessions", crossProtocol, uuid.NewString(), 400)
@@ -100,9 +100,9 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	call("POST", "/v1/agents/sessions", crossHarness, uuid.NewString(), 400)
 	assertSnapshot(sessionID, "model-original", "https://saved.example/v1", "saved-canary")
 	// Switching to another harness requires a complete native provider bundle.
-	nativeHarness := strings.TrimSuffix(crossHarness, "}") + `,"x_agents_core":{"model_provider":{"protocol":"anthropic","base_url":"https://override.example/v1","api_key":"override-canary"}}}`
+	nativeHarness := strings.TrimSuffix(crossHarness, "}") + `,"x_agents_core":{"model_provider":{"protocol":"anthropic","base_url":"https://override.example/api","api_key":"override-canary"}}}`
 	created := id(call("POST", "/v1/agents/sessions", nativeHarness, uuid.NewString(), 201))
-	assertSnapshot(created, "model-override", "https://override.example/v1", "override-canary")
+	assertSnapshot(created, "model-override", "https://override.example/api", "override-canary")
 	reads := sessionAdapter(st)
 	resolved, err := reads.GetSession(t.Context(), tenant, created)
 	frozen, providerErr := reads.SessionModelExecution(t.Context(), tenant, created)
@@ -123,9 +123,9 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	nullProvider := strings.TrimSuffix(body, "}") + `,"x_agents_core":{"model_provider":null}}`
 	sid = id(call("POST", "/v1/agents/sessions", nullProvider, uuid.NewString(), 201))
 	assertSnapshot(sid, "model-original", "https://saved.example/v1", "saved-canary")
-	call("POST", "/v1/agents/"+agentID, `{"model":"model-new","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/v1","api_key":"override-canary"}}}`, "", 200)
+	call("POST", "/v1/agents/"+agentID, `{"model":"model-new","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://override.example/api","api_key":"override-canary"}}}`, "", 200)
 	fresh := id(call("POST", "/v1/agents/sessions", body, uuid.NewString(), 201))
-	assertSnapshot(fresh, "model-new", "https://override.example/v1", "override-canary")
+	assertSnapshot(fresh, "model-new", "https://override.example/api", "override-canary")
 	call("DELETE", "/v1/agents/"+agentID, "", "", 200)
 	if id(call("POST", "/v1/agents/sessions", body, key, 201)) != sessionID {
 		t.Fatal("retry created another Session")
@@ -133,7 +133,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	call("POST", "/v1/agents/sessions", body, uuid.NewString(), 404)
 	st = NewWithCredentialCipher(pool, cipher)
 	assertSnapshot(sessionID, "model-original", "https://saved.example/v1", "saved-canary")
-	assertSnapshot(fresh, "model-new", "https://override.example/v1", "override-canary")
+	assertSnapshot(fresh, "model-new", "https://override.example/api", "override-canary")
 	inline := `{"agent":{"model":"inline-model"},"environment":{"type":"openai_hosted"}}`
 	inlineKey := uuid.NewString()
 	sid = id(call("POST", "/v1/agents/sessions", inline, inlineKey, 201))
