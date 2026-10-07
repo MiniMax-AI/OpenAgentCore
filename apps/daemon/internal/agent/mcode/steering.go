@@ -18,16 +18,14 @@ func (s *Session) Steer(ctx context.Context, input proto.PromptSteerPayload) err
 
 // Native acceptance belongs to the active ACP Turn; it does not promise model consumption.
 func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
-	if s.executor != nil {
-		s.mu.Lock()
-		if s.closing || s.cancelled {
-			s.mu.Unlock()
-			return agent.ErrSteeringInactive
-		}
-		s.operations.Add(1)
+	s.mu.Lock()
+	if s.closing || s.cancelled {
 		s.mu.Unlock()
-		defer s.operations.Done()
+		return agent.ErrSteeringInactive
 	}
+	s.operations.Add(1)
+	s.mu.Unlock()
+	defer s.operations.Done()
 	text, err := input.Input.TextOnly()
 	if strings.TrimSpace(input.InputID) == "" || err != nil {
 		return agent.ErrSteeringRejected
@@ -62,7 +60,7 @@ func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerP
 	var stopped error
 	select {
 	case frame = <-response:
-	case <-s.inputSettlementDone():
+	case <-s.inputDone:
 		stopped = fmt.Errorf("mcode: run ended with unknown input outcome")
 	case <-s.exited:
 		stopped = fmt.Errorf("mcode: input transport closed")
@@ -101,13 +99,6 @@ func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerP
 	}
 	s.steeringTurn = result.TurnID
 	return nil
-}
-
-func (s *Session) inputSettlementDone() <-chan struct{} {
-	if s.inputDone != nil {
-		return s.inputDone
-	}
-	return s.finished
 }
 
 func (s *Session) CancellationOutcome() proto.DonePayload {

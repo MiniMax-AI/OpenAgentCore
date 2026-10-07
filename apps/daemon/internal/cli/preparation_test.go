@@ -14,9 +14,7 @@ func TestPreparationRegistrationFollowsNativeSupport(t *testing.T) {
 	for _, supported := range []bool{false, true} {
 		reg := agent.NewRegistry()
 		info := proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(supported)})}
-		runtime := agent.Runtime{Info: info, Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, nil
-		}}
+		runtime := agent.Runtime{Info: info}
 		if supported {
 			runtime.Preparation = func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return nil, nil }
 			runtime.WorkspaceReadPreparation = true
@@ -35,11 +33,9 @@ func TestPreparationRegistrationFollowsNativeSupport(t *testing.T) {
 				t.Fatal("heartbeat registry lost preparation")
 			}
 		}
-		reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, nil
-		})
+		reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{})
 		if _, err := reg.ResolvePreparation("codex"); err == nil {
-			t.Fatal("factory replacement retained stale preparation")
+			t.Fatal("kind replacement retained stale preparation")
 		}
 	}
 }

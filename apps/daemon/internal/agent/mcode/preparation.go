@@ -28,8 +28,7 @@ func NewPreparationFactory(config WorkspaceConfig) agent.PreparationFactory {
 			}
 			return nil, err
 		}
-		e := value.(*executor)
-		return &prepared{executor: e, session: newTurnSession(ctx, req, e.opts, e.connection, nil)}, nil
+		return &prepared{executor: value.(*executor)}, nil
 	}
 }
 

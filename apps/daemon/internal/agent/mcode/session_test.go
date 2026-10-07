@@ -23,7 +23,8 @@ func testRequest(t *testing.T) proto.PromptRequestPayload {
 	}, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 }
 
-func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan proto.Envelope) {
+// helperRequest selects a protocol fixture scenario as the native CLI.
+func helperRequest(t *testing.T, scenario string, resume bool) proto.PromptRequestPayload {
 	t.Helper()
 	req := testRequest(t)
 	if resume {
@@ -39,21 +40,54 @@ func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("OAC_RUNTIME_MCODE_BIN", binary)
+	return req
+}
+
+// prepareExecutor prepares req without its Turn input; cleanup closes the
+// Executor and reaps its CLI.
+func prepareExecutor(t *testing.T, ctx context.Context, req proto.PromptRequestPayload) (*executor, error) {
+	t.Helper()
+	req.RunID, req.Input = "", nil
+	value, err := NewExecutorFactory(nil)(ctx, req)
+	if value == nil {
+		return nil, err
+	}
+	e := value.(*executor)
+	t.Cleanup(func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := e.Close(cleanup); err != nil {
+			t.Error("CLI was not reaped:", err)
+		}
+	})
+	return e, err
+}
+
+// startTurn prepares an Executor for req and starts req.Input as its Turn.
+func startTurn(t *testing.T, ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (*Session, error) {
+	t.Helper()
+	e, err := prepareExecutor(t, ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	turn, err := e.StartTurn(ctx, req.RunID, req.Input, out)
+	if err != nil {
+		return nil, err
+	}
+	return turn.(*Session), nil
+}
+
+func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan proto.Envelope) {
+	t.Helper()
+	req := helperRequest(t, scenario, resume)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 	out := make(chan proto.Envelope, 32)
-	session, err := newSession(ctx, req, out, binary)
+	session, err := startTurn(t, ctx, req, out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_ = session.Cancel(context.Background())
-		select {
-		case <-session.exited:
-		case <-time.After(3 * time.Second):
-			t.Error("CLI was not reaped")
-		}
-	})
 	return session, out
 }
 
@@ -148,33 +182,40 @@ func TestResumeSelectsModelWhenNativeSelectorIsMissing(t *testing.T) {
 }
 
 func TestSessionFailuresAreReported(t *testing.T) {
-	for _, scenario := range []string{"malformed", "exit", "rpc-error", "unknown-model"} {
+	for _, scenario := range []string{"malformed", "exit", "unknown-model"} {
 		t.Run(scenario, func(t *testing.T) {
-			_, out := helperSession(t, scenario, false)
-			reported := false
-			for event := range out {
-				if event.Type == proto.TypeError {
-					reported = true
-				}
-			}
-			if !reported {
-				t.Fatal("failure was not emitted")
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			if e, err := prepareExecutor(t, ctx, helperRequest(t, scenario, false)); err == nil || e != nil {
+				t.Fatal("preparation failure was not reported", err)
 			}
 		})
 	}
+	t.Run("rpc-error", func(t *testing.T) {
+		_, out := helperSession(t, "rpc-error", false)
+		reported := false
+		for event := range out {
+			if event.Type == proto.TypeError {
+				reported = true
+			}
+		}
+		if !reported {
+			t.Fatal("failure was not emitted")
+		}
+	})
 }
 
-func TestCancelStopsWaitingCLI(t *testing.T) {
-	session, out := helperSession(t, "hang", false)
-	if err := session.Cancel(context.Background()); err != nil {
-		t.Fatal(err)
+func TestPreparationCancellationStopsWaitingCLI(t *testing.T) {
+	req := helperRequest(t, "hang", false)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	time.AfterFunc(100*time.Millisecond, cancel)
+	started := time.Now()
+	if e, err := prepareExecutor(t, ctx, req); err == nil || e != nil {
+		t.Fatal("cancelled preparation retained the CLI", err)
 	}
-	select {
-	case <-session.exited:
-	case <-time.After(3 * time.Second):
+	if time.Since(started) > 3*time.Second {
 		t.Fatal("cancel hung")
-	}
-	for range out {
 	}
 }
 

@@ -47,7 +47,7 @@ func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {
 	if err != nil || strings.Contains(string(raw), "session/prompt") {
 		t.Fatalf("preparation consumed input: %q %v", raw, err)
 	}
-	if p.session.opts.Dir != r.LocalEnvironment.WorkspaceRoot || p.session.opts.DataDir == r.LocalEnvironment.WorkspaceRoot {
+	if p.executor.opts.Dir != r.LocalEnvironment.WorkspaceRoot || p.executor.opts.DataDir == r.LocalEnvironment.WorkspaceRoot {
 		t.Fatal("native cwd must use the workspace without moving Session state")
 	}
 	out := make(chan proto.Envelope)
@@ -86,7 +86,7 @@ func TestPreparedWorkspaceHasOneInputAndOutputOwner(t *testing.T) {
 		if e.Type == proto.TypeDone {
 			done++
 			select {
-			case <-p.session.exited:
+			case <-p.executor.connection.exited:
 				t.Fatal("successful Turn disposed the reusable native owner")
 			default:
 			}
@@ -136,9 +136,9 @@ func TestPreparedSubagentsReleaseUnusedOwner(t *testing.T) {
 				t.Fatal(err)
 			}
 			p := resource.(*prepared)
-			// The fixture only implements preparation. Enable execution cancellation's
-			// child branch after initialization to verify unused owners never enter it.
-			p.session.req.DisableSubagents = false
+			// The fixture only implements preparation. Enable the owner's child
+			// branch after initialization to verify unused owners never enter it.
+			p.executor.req.DisableSubagents = false
 			ended := make(chan error, 1)
 			go func() {
 				if method == "close" {
@@ -153,7 +153,7 @@ func TestPreparedSubagentsReleaseUnusedOwner(t *testing.T) {
 					t.Fatal(err)
 				}
 			case <-ctx.Done():
-				p.session.process.Cancel()
+				p.executor.connection.process.Cancel()
 				t.Fatal("unused owner did not close")
 			}
 			raw, err := os.ReadFile(record)

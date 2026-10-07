@@ -169,9 +169,9 @@ func TestPreparedSessionConcurrentStartAndClose(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-begin
-			s, err := p.start(t.Context(), "run", proto.TextInput("prompt"), make(chan proto.Envelope, 8))
+			s, err := p.Start(t.Context(), "run", proto.TextInput("prompt"), make(chan proto.Envelope, 8))
 			if err == nil {
-				started <- s
+				started <- s.(*Session)
 			}
 		}()
 	}

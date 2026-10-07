@@ -219,7 +219,7 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 		} else if len(server.Headers) != 0 {
 			t.Fatal("anonymous MCP inherited credentials")
 		}
-		dataDir := resource.(*prepared).session.opts.DataDir
+		dataDir := resource.(*prepared).executor.opts.DataDir
 		for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
 			body, err := os.ReadFile(filepath.Join(dataDir, name))
 			if err != nil && !os.IsNotExist(err) {

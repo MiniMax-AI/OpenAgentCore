@@ -189,12 +189,21 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 func TestExecutorStartFailureOwnership(t *testing.T) {
 	t.Run("validation", func(t *testing.T) {
 		e, record := executorFixture(t, "executor-reuse", true)
-		out := make(chan proto.Envelope, 1)
-		turn, err := e.StartTurn(t.Context(), "", proto.TextInput("invalid"), out)
-		if err == nil || turn != nil {
-			t.Fatal("invalid Start acquired output")
+		image := "data:image/png;base64,iVBORw0KGgo="
+		for _, invalid := range []struct {
+			id, reason string
+			input      proto.MessageInput
+		}{
+			{"", "requires live context, identity", proto.TextInput("invalid")},
+			{"attachment", "does not support image input", proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image", ImageURL: &image}}}}},
+		} {
+			out := make(chan proto.Envelope, 1)
+			turn, err := e.StartTurn(t.Context(), invalid.id, invalid.input, out)
+			if err == nil || turn != nil || !strings.Contains(err.Error(), invalid.reason) {
+				t.Fatal("invalid Start acquired output", err)
+			}
+			close(out)
 		}
-		close(out)
 		raw, _ := os.ReadFile(record)
 		if strings.Contains(string(raw), "session/prompt") {
 			t.Fatal("invalid input was sent")

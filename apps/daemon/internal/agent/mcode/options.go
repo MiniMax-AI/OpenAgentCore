@@ -26,9 +26,6 @@ func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
 	if err := validateExecutionRequest(req); err != nil {
 		return result, err
 	}
-	if req.Input.HasImages() {
-		return result, fmt.Errorf("mcode: ACP does not support attachments")
-	}
 	dataDir, err := agent.StateDir("mcode", req.AgentStateKey)
 	if err != nil {
 		return result, err

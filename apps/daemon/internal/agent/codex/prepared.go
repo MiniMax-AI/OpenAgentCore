@@ -30,14 +30,6 @@ var _ agent.PreparedCancellation = (*Prepared)(nil)
 // cancellation after return does not cancel the transferred Session. The original
 // owner context remains its lifetime context. On success the Session owns out.
 func (p *Prepared) Start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
-	session, err := p.start(ctx, runID, prompt, out)
-	if err != nil {
-		return nil, err
-	}
-	return session, nil
-}
-
-func (p *Prepared) start(ctx context.Context, runID string, prompt proto.MessageInput, out chan<- proto.Envelope) (*Session, error) {
 	if out == nil || strings.TrimSpace(runID) == "" || prompt.Validate() != nil {
 		return nil, errors.New("codex: start requires a run identity, prompt and output channel")
 	}

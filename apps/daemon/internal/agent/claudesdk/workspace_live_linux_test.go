@@ -138,7 +138,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 				}
 			}
 		} else {
-			running, err = NewFactory(config)(ctx, req, out)
+			running, err = startSingleTurn(ctx, config, req, out)
 		}
 		if err != nil {
 			if name == "missing-history" && running == nil && strings.Contains(err.Error(), "history_unavailable") {

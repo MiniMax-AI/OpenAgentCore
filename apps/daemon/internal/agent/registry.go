@@ -20,13 +20,10 @@ var ErrUnknownPermission = errors.New("agent: unknown permission id")
 // ErrUnknownPermission.
 var ErrUnknownAsk = errors.New("agent: unknown ask id")
 
-var ErrUnsupportedKind = errors.New("agent: unsupported agent_kind")
-
-// Registry maps agent_kind → Factory and keeps the daemon-advertised
-// capability descriptor for each kind. Safe for concurrent use.
+// Registry keeps the daemon-advertised capability descriptor and execution
+// factories for each agent_kind. Safe for concurrent use.
 type Registry struct {
 	mu             sync.RWMutex
-	factories      map[string]Factory
 	preparers      map[string]PreparationFactory
 	executors      map[string]ExecutorFactory
 	kinds          map[string]proto.SupportedAgentKind
@@ -35,7 +32,6 @@ type Registry struct {
 
 func NewRegistry() *Registry {
 	return &Registry{
-		factories:      make(map[string]Factory),
 		preparers:      make(map[string]PreparationFactory),
 		executors:      make(map[string]ExecutorFactory),
 		kinds:          make(map[string]proto.SupportedAgentKind),
@@ -43,37 +39,13 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Resolve returns the factory for kind, or wraps ErrUnsupportedKind.
-func (r *Registry) Resolve(kind string) (Factory, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	f, ok := r.factories[kind]
-	if !ok {
-		return nil, fmt.Errorf("%w: %q", ErrUnsupportedKind, kind)
-	}
-	return f, nil
-}
-
-// Kinds returns the list of registered kinds sorted lexicographically.
-func (r *Registry) Kinds() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]string, 0, len(r.factories))
-	for k := range r.factories {
-		out = append(out, k)
-	}
-	slices.Sort(out)
-	return out
-}
-
 // SupportedAgentKinds returns the daemon-advertised capability
 // descriptors sorted by kind so heartbeat payloads are stable.
 func (r *Registry) SupportedAgentKinds() []proto.SupportedAgentKind {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make([]proto.SupportedAgentKind, 0, len(r.factories))
-	for kind := range r.factories {
-		info := r.kinds[kind]
+	out := make([]proto.SupportedAgentKind, 0, len(r.kinds))
+	for _, info := range r.kinds {
 		out = append(out, info)
 	}
 	slices.SortFunc(out, func(a, b proto.SupportedAgentKind) int {

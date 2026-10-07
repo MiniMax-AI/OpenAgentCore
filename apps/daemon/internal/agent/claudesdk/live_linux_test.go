@@ -142,7 +142,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 			request.AgentOptions["system_prompt"] = "Call lookup exactly once as requested, then report both result parts and any prior verification value. Never retry a failed tool."
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a synthetic verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}
-		running, err := NewFactory(config)(ctx, request, out)
+		running, err := startSingleTurn(ctx, config, request, out)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -268,7 +268,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 				proof.SessionID, _ = payload.Metadata[proto.DoneMetaAgentSessionID].(string)
 			}
 		}
-		// Done reports the Turn outcome; the direct factory closes its Executor
+		// Done reports the Turn outcome; startSingleTurn closes its Executor
 		// after output settlement. Verify release at that boundary.
 		if _, err := s.AwaitSettlement(ctx); err != nil {
 			t.Fatal(err)
@@ -276,7 +276,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 		select {
 		case <-s.process.Done():
 		case <-time.After(5 * time.Second):
-			t.Fatal("direct factory retained its process after settlement")
+			t.Fatal("single-Turn Executor retained its process after settlement")
 		}
 		if !steeringAt.IsZero() {
 			receipt := <-steeringReply

@@ -10,10 +10,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func (s *Session) runExecutorTurn() {
+func (s *Session) runExecutorTurn(prompt string) {
 	err := s.captureSubagentBaseline()
 	if err == nil {
-		err = s.executePrompt()
+		err = s.executePrompt(prompt)
 	}
 	if errors.Is(err, errTurnCancelled) {
 		err = nil
@@ -26,11 +26,7 @@ func (s *Session) runExecutorTurn() {
 	// prompt completion. No successor starts until all callers have settled.
 	s.operations.Wait()
 	if !s.req.DisableSubagents && s.subagentHistoryReady {
-		childErr := s.settleSubagents()
-		s.mu.Lock()
-		s.subagentSettlementError = childErr
-		s.mu.Unlock()
-		if childErr != nil {
+		if childErr := s.settleSubagents(); childErr != nil {
 			err = childErr
 		}
 	}
@@ -99,9 +95,6 @@ func (s *Session) captureSubagentBaseline() error {
 }
 
 func (s *Session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {
-	if s.settled == nil {
-		return agent.TurnSettlement{}, fmt.Errorf("mcode: Turn has no Executor owner")
-	}
 	select {
 	case <-s.settled:
 		return s.settlement, s.settlementErr
@@ -110,7 +103,7 @@ func (s *Session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, er
 	}
 }
 
-func (s *Session) cancelTurn(ctx context.Context) error {
+func (s *Session) Cancel(ctx context.Context) error {
 	e := s.executor
 	e.mu.Lock()
 	if e.active != s {

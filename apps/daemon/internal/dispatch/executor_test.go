@@ -80,9 +80,7 @@ func executorRequest() proto.ExecutionPreparePayload {
 
 // registerExecutorKind registers info for prepared execution only.
 func registerExecutorKind(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.ExecutorFactory) {
-	reg.RegisterKind(info, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("prepared execution must not use the direct Session factory")
-	})
+	reg.RegisterKind(info, harnessconfig.Configuration{})
 	reg.RegisterExecutor(info.Kind, factory)
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
@@ -230,9 +228,7 @@ func TestExecutorPreInputFailureConfirmsCloseBeforeRetrySignal(t *testing.T) {
 func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, *recSender) {
 	t.Helper()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("unexpected legacy factory")
-	})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	registry.RegisterExecutor("reusable", factory)
 	sender := &recSender{}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, IdleTimeout: time.Minute})
