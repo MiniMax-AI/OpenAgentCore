@@ -35,7 +35,7 @@ type preparedStart struct {
 
 func newPreparedStart(peer *runtimegateway.Session, ref proto.AssignmentRef) (*preparedStart, error) {
 	id := uuid.NewString()
-	sub, err := peer.SubscribePreparation(id)
+	sub, err := peer.SubscribePreparation(id, ref)
 	if err != nil {
 		return nil, err
 	}

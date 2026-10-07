@@ -17,6 +17,7 @@ func exportReply(t *testing.T, s *Session, id string, result proto.WorkspaceExpo
 	if err != nil {
 		t.Fatal(err)
 	}
+	env.Assignment = testAssignment
 	s.dispatch(env)
 }
 

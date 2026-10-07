@@ -44,7 +44,7 @@ func TestArchivedReceiptTracksDeliveryBeyondDoneAndRejectsNewWork(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	subscription, err := peer.SubscribeDurable("run")
+	subscription, err := peer.SubscribeDurable("run", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}

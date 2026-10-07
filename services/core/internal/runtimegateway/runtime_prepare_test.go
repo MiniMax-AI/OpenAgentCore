@@ -57,6 +57,7 @@ func finishCapabilities(t *testing.T, done <-chan capabilityOutcome) capabilityO
 }
 func replyCapabilities(s *Session, id string, result proto.RuntimePrepareResultPayload) {
 	reply, _ := proto.NewEnvelope(proto.TypeRuntimePrepareResult, id, result)
+	reply.Assignment = testAssignment
 	s.dispatch(reply)
 }
 func noCapabilityFrame(t *testing.T, s *Session) {

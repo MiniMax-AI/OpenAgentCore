@@ -128,5 +128,5 @@ func (x *initializationTransfer) receive(env proto.Envelope) (proto.Envelope, er
 			result.SizeBytes = len(x.data)
 		}
 	}
-	return proto.NewEnvelope(proto.TypeRuntimePrepareResult, env.ID, result)
+	return env.Reply(proto.TypeRuntimePrepareResult, result)
 }

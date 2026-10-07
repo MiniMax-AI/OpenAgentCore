@@ -58,7 +58,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	defer unsubscribeChanges()
 	status = sessions.TurnFailed
 	result.AppliedThrough = first
-	subscription, err := peer.SubscribeDurable(request.RunID)
+	subscription, err := peer.SubscribeDurable(request.RunID, request.Assignment)
 	if err != nil {
 		result.ErrorCode = "device_disconnected"
 		return

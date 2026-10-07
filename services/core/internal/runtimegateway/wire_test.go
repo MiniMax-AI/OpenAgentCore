@@ -159,7 +159,7 @@ func TestWireScenarios(t *testing.T) {
 			c.connect()
 			// Subscribing before any frame also observes that a failed
 			// preparation produces no Run result.
-			run, err := c.session.SubscribeDurable(prototest.RunID)
+			run, err := c.session.SubscribeDurable(prototest.RunID, prototest.Assignment)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -211,7 +211,7 @@ func (c *coreSide) coreSends(frame proto.Envelope) {
 		}
 		return
 	case proto.TypeExecutionPrepare:
-		sub, err := c.session.SubscribePreparation(frame.ID)
+		sub, err := c.session.SubscribePreparation(frame.ID, frame.Assignment)
 		if err != nil {
 			t.Fatal(err)
 		}

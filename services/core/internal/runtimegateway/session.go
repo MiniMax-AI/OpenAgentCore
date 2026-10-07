@@ -123,7 +123,7 @@ type Session struct {
 	workspaceExports  map[string]chan proto.Envelope
 
 	ackMu      sync.Mutex
-	ackWaiters map[string]chan proto.InteractionDecisionAckPayload
+	ackWaiters map[string]chan proto.Envelope
 
 	// sendCh feeds the WS write loop. Capacity is bounded so a slow
 	// peer can't queue unbounded outbound frames; once full, Send
@@ -165,7 +165,7 @@ func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *R
 		assignments:       map[string]proto.AssignmentRef{},
 		assignmentReplies: map[string]chan proto.Envelope{},
 		preparations:      map[string]*preparationSubscription{},
-		ackWaiters:        map[string]chan proto.InteractionDecisionAckPayload{},
+		ackWaiters:        map[string]chan proto.Envelope{},
 		sendCh:            make(chan proto.Envelope, 64),
 		closed:            make(chan struct{}),
 	}
@@ -305,7 +305,7 @@ func (s *Session) SendAndWaitInteractionAck(ctx context.Context, env proto.Envel
 	if deliveryID == "" {
 		return proto.InteractionDecisionAckPayload{}, errors.New("agentdaemon gateway: interaction delivery id is required")
 	}
-	waiter := make(chan proto.InteractionDecisionAckPayload, 1)
+	waiter := make(chan proto.Envelope, 1)
 	s.ackMu.Lock()
 	if _, exists := s.ackWaiters[deliveryID]; exists {
 		s.ackMu.Unlock()
@@ -319,27 +319,20 @@ func (s *Session) SendAndWaitInteractionAck(ctx context.Context, env proto.Envel
 		s.ackMu.Unlock()
 	}()
 
-	if err := s.Send(ctx, env); err != nil {
-		return proto.InteractionDecisionAckPayload{}, err
-	}
+	// The exchange prefers an ack that raced the deadline; treating an
+	// already-applied decision as retryable can trigger a contradictory second
+	// human response.
 	waitCtx, cancel := context.WithTimeout(ctx, InteractionAckTimeout)
 	defer cancel()
-	select {
-	case ack := <-waiter:
-		return ack, nil
-	case <-s.closed:
-		return proto.InteractionDecisionAckPayload{}, ErrSessionClosed
-	case <-waitCtx.Done():
-		// If the ack raced the deadline, prefer the application receipt;
-		// treating an already-applied decision as retryable can trigger a
-		// contradictory second human response.
-		select {
-		case ack := <-waiter:
-			return ack, nil
-		default:
-			return proto.InteractionDecisionAckPayload{}, waitCtx.Err()
-		}
+	reply, err := s.exchangeFrame(waitCtx, env, waiter)
+	if err != nil {
+		return proto.InteractionDecisionAckPayload{}, err
 	}
+	var ack proto.InteractionDecisionAckPayload
+	if reply.DecodePayload(&ack) != nil {
+		return proto.InteractionDecisionAckPayload{}, errors.New("agentdaemon gateway: invalid interaction decision ack")
+	}
+	return ack, nil
 }
 
 // writeLoop is the single writer goroutine that gorilla/websocket
@@ -559,7 +552,7 @@ func (s *Session) dispatch(env proto.Envelope) {
 			return
 		}
 		select {
-		case waiter <- ack:
+		case waiter <- env:
 		default:
 		}
 		return

@@ -64,3 +64,44 @@ func TestDeletionReleaseReachesReconnectedRuntime(t *testing.T) {
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "release acknowledged", func() bool { return applied() == 2 })
 }
+
+// TestRevocationSettlesUndeliverableReleases checks that a release whose
+// Runtime was revoked is settled with the revocation instead of staying
+// pending: no Runtime is left to act on it.
+func TestRevocationSettlesUndeliverableReleases(t *testing.T) {
+	h := newDispatchHarness(t)
+	ctx := t.Context()
+	second, err := h.s.CreateSession(ctx, h.tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "second", Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bindSessionDevice(t, h.s, h.tenant, second.ID, h.device.ID); err != nil {
+		t.Fatal(err)
+	}
+	service := sessionService(t, h.s)
+	settled := func(session string) bool {
+		var epoch, applied int64
+		if err := h.s.pool.QueryRow(ctx, "SELECT epoch, applied_epoch FROM session_runtime_assignments WHERE session_id=$1", session).Scan(&epoch, &applied); err != nil {
+			t.Fatal(err)
+		}
+		return epoch == 2 && applied == 2
+	}
+	if err := service.DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if settled(h.session.ID) {
+		t.Fatal("a release to an authorized Runtime was settled before delivery")
+	}
+	if err := service.RevokeDevice(ctx, h.tenant, h.device.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !settled(h.session.ID) {
+		t.Fatal("revocation left the Runtime's release pending")
+	}
+	if err := service.DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: second.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if !settled(second.ID) {
+		t.Fatal("a release to a revoked Runtime was left pending")
+	}
+}

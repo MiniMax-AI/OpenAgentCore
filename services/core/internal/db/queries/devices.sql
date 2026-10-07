@@ -12,8 +12,15 @@ LEFT JOIN runtime_allocations a ON a.device_id = d.id
 WHERE d.id = $1;
 
 -- name: RevokeDevice :execrows
-UPDATE devices SET revoked_at = COALESCE(revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
-WHERE tenant_id = $1 AND id = $2;
+-- No Runtime is left to act on a revoked device's releases, so revocation
+-- settles them.
+WITH settled AS (
+    UPDATE session_runtime_assignments b SET applied_epoch = b.epoch
+    WHERE b.runtime_id = sqlc.arg(id) AND b.desired_state = 'released'
+    AND EXISTS (SELECT 1 FROM devices d WHERE d.tenant_id = sqlc.arg(tenant_id) AND d.id = sqlc.arg(id))
+)
+UPDATE devices v SET revoked_at = COALESCE(v.revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
+WHERE v.tenant_id = sqlc.arg(tenant_id) AND v.id = sqlc.arg(id);
 
 -- name: TouchDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
@@ -57,10 +64,12 @@ UPDATE session_runtime_assignments SET native_session_id = $2 WHERE session_id =
 
 -- name: ReleaseSessionAssignment :exec
 -- An identical release keeps its epoch; a release that adds home removal
--- advances it.
-UPDATE session_runtime_assignments
-SET desired_state = 'released', epoch = epoch + 1, remove_home = remove_home OR sqlc.arg(remove_home)::boolean
-WHERE session_id = sqlc.arg(session_id) AND (desired_state = 'bound' OR (sqlc.arg(remove_home)::boolean AND NOT remove_home));
+-- advances it. A release whose Runtime has no authority is settled, since no
+-- Runtime can act on it.
+UPDATE session_runtime_assignments b
+SET desired_state = 'released', epoch = b.epoch + 1, remove_home = b.remove_home OR sqlc.arg(remove_home)::boolean,
+    applied_epoch = CASE WHEN EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = b.runtime_id) THEN b.applied_epoch ELSE b.epoch + 1 END
+WHERE b.session_id = sqlc.arg(session_id) AND (b.desired_state = 'bound' OR (sqlc.arg(remove_home)::boolean AND NOT b.remove_home));
 
 -- name: ListPendingAssignmentReleases :many
 SELECT session_id, runtime_id, assignment_id, epoch, remove_home FROM session_runtime_assignments

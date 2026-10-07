@@ -62,7 +62,7 @@ func (s *Session) PrepareRuntime(ctx context.Context, id string, ref proto.Assig
 		if err != nil || len(encoded) > proto.RuntimePrepareMaxFrameBytes {
 			return unknown, errors.New("agentdaemon gateway: invalid Runtime frame")
 		}
-		reply, err := s.exchangeChunkFrame(ctx, env, replies)
+		reply, err := s.exchangeFrame(ctx, env, replies)
 		if err != nil {
 			return unknown, err
 		}

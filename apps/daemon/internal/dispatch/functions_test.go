@@ -95,6 +95,17 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	if a := submit("one", "call", "changed", "conflict"); a.Applied || a.ErrorCode != "decision_conflict" {
 		t.Fatal(a)
 	}
+	// The cached receipt answers only the assignment that applied the result.
+	foreign := scoped(t, "one", proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "foreign"})
+	foreign.Assignment.AssignmentID = "foreign"
+	if err := router.Handle(t.Context(), foreign); err != nil {
+		t.Fatal(err)
+	}
+	frames = sender.snapshot()
+	var foreignAck proto.InteractionDecisionAckPayload
+	if last := frames[len(frames)-1]; last.DecodePayload(&foreignAck) != nil || foreignAck.Applied || foreignAck.ErrorCode != proto.AssignmentConflict || last.Assignment != foreign.Assignment {
+		t.Fatal(last, foreignAck)
+	}
 
 	for _, mutation := range []string{"image", "order", "success"} {
 		result := proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: mutation}

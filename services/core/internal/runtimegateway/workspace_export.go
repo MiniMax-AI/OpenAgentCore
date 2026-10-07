@@ -79,34 +79,25 @@ func (r *workspaceExportReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	env.Assignment = r.ref
-	if err = r.peer.Send(r.ctx, env); err != nil {
+	reply, err := r.peer.exchangeFrame(r.ctx, env, r.replies)
+	if err != nil {
 		return 0, err
 	}
-	select {
-	case env, ok := <-r.replies:
-		if !ok {
-			return 0, ErrSessionClosed
-		}
-		var result proto.WorkspaceExportResultPayload
-		if len(env.Payload) > proto.WorkspaceExportMaxFrameBytes || env.DecodePayload(&result) != nil || result.Offset != r.offset {
-			return 0, errors.New("agentdaemon gateway: invalid export receipt")
-		}
-		if result.Outcome == "completed" && len(result.Data) == 0 && result.ErrorCode == "" {
-			r.completed = true
-			return 0, io.EOF
-		}
-		if result.Outcome != "chunk" || result.ErrorCode != "" || len(result.Data) == 0 || len(result.Data) > proto.WorkspaceExportChunkBytes || int64(len(result.Data)) > proto.WorkspaceExportMaxBytes-r.offset {
-			return 0, errors.New("agentdaemon gateway: workspace export incomplete")
-		}
-		r.data = result.Data
-		r.offset += int64(len(result.Data))
-		r.request = proto.WorkspaceExportPayload{Step: "next", Offset: r.offset}
-		return r.Read(p)
-	case <-r.ctx.Done():
-		return 0, r.ctx.Err()
-	case <-r.peer.closed:
-		return 0, ErrSessionClosed
+	var result proto.WorkspaceExportResultPayload
+	if len(reply.Payload) > proto.WorkspaceExportMaxFrameBytes || reply.DecodePayload(&result) != nil || result.Offset != r.offset {
+		return 0, errors.New("agentdaemon gateway: invalid export receipt")
 	}
+	if result.Outcome == "completed" && len(result.Data) == 0 && result.ErrorCode == "" {
+		r.completed = true
+		return 0, io.EOF
+	}
+	if result.Outcome != "chunk" || result.ErrorCode != "" || len(result.Data) == 0 || len(result.Data) > proto.WorkspaceExportChunkBytes || int64(len(result.Data)) > proto.WorkspaceExportMaxBytes-r.offset {
+		return 0, errors.New("agentdaemon gateway: workspace export incomplete")
+	}
+	r.data = result.Data
+	r.offset += int64(len(result.Data))
+	r.request = proto.WorkspaceExportPayload{Step: "next", Offset: r.offset}
+	return r.Read(p)
 }
 
 func (s *Session) dispatchWorkspaceExport(env proto.Envelope) {

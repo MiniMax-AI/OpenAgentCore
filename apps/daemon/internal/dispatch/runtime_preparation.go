@@ -17,11 +17,13 @@ const runtimePreparationTimeout = 120 * time.Second
 
 // Router.mu protects one connection-local transfer. Partial installation data
 // belongs to the bound Environment and is never removed by transfer cleanup.
+// done closes once its result is sent.
 type runtimePreparationTransfer struct {
 	envelope  proto.Envelope
 	request   proto.RuntimePreparePayload
 	data      []byte
 	ready     chan struct{}
+	done      chan struct{}
 	cancel    context.CancelFunc
 	finished  bool
 	apply     bool
@@ -72,7 +74,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimePreparationTimeout)
 		u := &runtimePreparationTransfer{
 			envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
-			ready: make(chan struct{}), cancel: cancel,
+			ready: make(chan struct{}), done: make(chan struct{}), cancel: cancel,
 		}
 		r.runtimePreparation = u
 		r.shutdownWG.Add(1)
@@ -138,6 +140,7 @@ func (r *Router) finishRuntimePreparationTransferLocked(u *runtimePreparationTra
 // shutdown, but cannot release ownership while that call is still running.
 func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, proto.RuntimePreparePayload, []byte) error) {
 	defer r.shutdownWG.Done()
+	defer close(u.done)
 	defer u.cancel()
 	select {
 	case <-u.ready:
@@ -145,12 +148,17 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 	case <-ctx.Done():
 	}
 	r.mu.Lock()
-	admitted := u.apply && !r.closed && ctx.Err() == nil
+	// A release of the assignment before the preparation applies fences it.
+	fenced := r.admitLocked(u.envelope.Assignment, u.request.SessionID, u.request.EnvironmentID)
+	admitted := u.apply && !r.closed && ctx.Err() == nil && fenced == ""
 	u.finished = true
 	data := u.data
 	u.data = nil
 	r.mu.Unlock()
 	result := rejectedRuntimePreparation("invalid_request")
+	if fenced != "" {
+		result = rejectedRuntimePreparation(fenced)
+	}
 	if admitted {
 		result = runtimePreparationResult(apply(ctx, u.request, data), u.request.SizeBytes)
 	}

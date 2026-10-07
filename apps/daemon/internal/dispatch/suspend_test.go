@@ -43,7 +43,7 @@ func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 		"active":     func(r *Router) { r.sessions["run"] = &sessionState{ctxCancel: func() {}} },
 		"preparing":  func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
 		"receipt":    func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
-		"read":       func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
+		"read":       func(r *Router) { r.workspaceReads = map[string]workspaceRead{"read": {}} },
 		"write":      func(r *Router) { r.workspaceWrite = &workspaceUpload{} },
 		"export":     func(r *Router) { r.workspaceExport = &workspaceExport{} },
 		"permission": func(r *Router) { r.permIndex["permission"] = "run" },
@@ -128,6 +128,12 @@ func TestResumeRequiresExactSuspensionAndAssignment(t *testing.T) {
 	}
 	if err := r.Resume(foreign, request, sender); err == nil {
 		t.Fatal("foreign assignment reopened admission")
+	}
+	// Another bound assignment did not quiesce the Runtime.
+	other := proto.AssignmentRef{SessionID: "other", AssignmentID: "other", Epoch: 1}
+	bindAssignment(r, other, "env")
+	if err := r.Resume(other, request, sender); !errors.Is(err, AssignmentError(proto.AssignmentConflict)) {
+		t.Fatalf("other assignment resume = %v", err)
 	}
 	if err := r.Resume(suspendRef, request, sender); err != nil {
 		t.Fatal(err)

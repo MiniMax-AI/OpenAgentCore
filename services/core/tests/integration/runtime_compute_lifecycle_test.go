@@ -248,7 +248,7 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 			if env.Type == proto.TypeEnvironmentQuiesce {
 				kind = proto.TypeEnvironmentQuiesced
 			}
-			reply, _ := proto.NewEnvelope(kind, env.ID, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: !reject})
+			reply, _ := env.Reply(kind, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: !reject})
 			if conn.WriteJSON(reply) != nil {
 				return
 			}

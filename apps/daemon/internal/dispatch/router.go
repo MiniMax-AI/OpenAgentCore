@@ -36,6 +36,7 @@ type Router struct {
 
 	admission           sync.RWMutex
 	suspension          *proto.EnvironmentSuspendPayload
+	suspendedBy         proto.AssignmentRef // the assignment that quiesced
 	mu                  sync.Mutex
 	assignments         map[string]*assignmentState // SessionID → assignment
 	sessions            map[string]*sessionState    // RunID → state
@@ -54,7 +55,7 @@ type Router struct {
 	runtimePreparation  *runtimePreparationTransfer
 	workspaceWrite      *workspaceUpload
 	workspaceExport     *workspaceExport
-	workspaceReads      map[string]struct{}
+	workspaceReads      map[string]workspaceRead
 	localWorkspace      *localworkspace.Binding
 	sessionEnvironments bool
 	removeHome          func(sessionID string) error
@@ -64,6 +65,7 @@ type appliedInteractionDecision struct {
 	requestID   string
 	kind        string
 	fingerprint [32]byte
+	assignment  proto.AssignmentRef
 	recordedAt  time.Time
 }
 

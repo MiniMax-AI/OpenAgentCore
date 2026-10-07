@@ -92,7 +92,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		turns = append(turns, turn)
 		runID := uuid.NewString()
 		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
-		sub, err := peer.SubscribeDurable(runID)
+		sub, err := peer.SubscribeDurable(runID, assignment)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")
 		}
@@ -141,7 +141,7 @@ type mcpBearerControl struct {
 func mcpBearerStart(t *testing.T, ctx context.Context, peer *Session, assignment proto.AssignmentRef, request proto.PromptRequestPayload, runID string, input proto.MessageInput) *mcpBearerControl {
 	t.Helper()
 	c := &mcpBearerControl{t: t, ctx: ctx, peer: peer, assignment: assignment, id: uuid.NewString()}
-	events, err := peer.SubscribePreparation(c.id)
+	events, err := peer.SubscribePreparation(c.id, assignment)
 	if err != nil {
 		t.Fatal("cannot subscribe to the preparation")
 	}

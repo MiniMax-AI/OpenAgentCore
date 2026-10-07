@@ -56,6 +56,7 @@ func TestWorkspaceWriteChunksAndCorrelatesReceipt(t *testing.T) {
 		foreign, _ := proto.NewEnvelope(proto.TypeWorkspaceWriteResult, uuid.NewString(), result)
 		s.dispatch(foreign)
 		reply, _ := proto.NewEnvelope(proto.TypeWorkspaceWriteResult, id, result)
+		reply.Assignment = testAssignment
 		s.dispatch(reply)
 		if p.Step == "commit" {
 			break
@@ -110,6 +111,12 @@ func TestWorkspaceWriteRejectsPrematureOrContradictoryReceipts(t *testing.T) {
 	for _, reason := range []string{"", proto.WorkspaceWriteReasonDirectory, proto.WorkspaceWriteReasonUnsafe, "future_reason"} {
 		if !validWorkspaceWriteResult(proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: reason}, "completed", 0, 4) {
 			t.Fatal("known rejection refused", reason)
+		}
+	}
+	// A release that fences the write settles it as rejected.
+	for _, code := range []string{proto.AssignmentStale, proto.AssignmentConflict} {
+		if !validWorkspaceWriteResult(proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: code}, "ready", 0, 4) {
+			t.Fatal("assignment rejection refused", code)
 		}
 	}
 	if validWorkspaceWriteResult(proto.WorkspaceWriteResultPayload{Outcome: "received", Offset: 1}, "received", 2, 4) {

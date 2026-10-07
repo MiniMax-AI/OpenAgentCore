@@ -13,11 +13,13 @@ import (
 )
 
 // Router.mu protects this single bounded transfer for the dedicated Environment.
+// done closes once its result is sent.
 type workspaceUpload struct {
 	envelope  proto.Envelope
 	request   proto.WorkspaceWritePayload
 	data      []byte
 	ready     chan struct{}
+	done      chan struct{}
 	finished  bool
 	apply     bool
 	uncertain bool
@@ -78,7 +80,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 			}
 		}
-		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{})}
+		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{}), done: make(chan struct{})}
 		r.workspaceWrite = u
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
@@ -112,6 +114,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 
 func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload) {
 	defer r.shutdownWG.Done()
+	defer close(u.done)
 	timer := time.NewTimer(120 * time.Second)
 	defer timer.Stop()
 	select {
@@ -120,12 +123,17 @@ func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload) {
 	case <-timer.C:
 	}
 	r.mu.Lock()
-	apply := u.apply && !r.closed
+	// A release of the assignment before the write applies fences it.
+	fenced := r.admitLocked(u.envelope.Assignment, u.request.SessionID, u.request.EnvironmentID)
+	apply := u.apply && !r.closed && fenced == ""
 	u.finished = true
 	data := u.data
 	u.data = nil
 	r.mu.Unlock()
 	result := rejectedWorkspaceWrite("invalid_request")
+	if fenced != "" {
+		result = rejectedWorkspaceWrite(fenced)
+	}
 	if apply {
 		write, err := r.localWorkspace.WriteWorkspaceFile(ctx, u.request.Path, data)
 		result = workspaceWriteResult(write, err, u.request.SizeBytes)

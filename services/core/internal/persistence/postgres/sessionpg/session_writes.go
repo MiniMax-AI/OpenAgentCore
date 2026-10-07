@@ -36,16 +36,18 @@ type deletionTx struct {
 }
 
 func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
-	if err := t.ReleaseAssignment(ctx, true); err != nil {
-		return err
-	}
 	if err := t.q.DeleteSessionArtifacts(ctx, t.session); err != nil {
 		return err
 	}
 	if err := t.q.ReleaseUnallocatedRuntimePlacement(ctx, t.session); err != nil {
 		return err
 	}
-	return t.q.MarkSessionDeleted(ctx, t.session)
+	if err := t.q.MarkSessionDeleted(ctx, t.session); err != nil {
+		return err
+	}
+	// The release follows the deletion, which ends an Environment Runtime's
+	// authority and so settles its release.
+	return t.ReleaseAssignment(ctx, true)
 }
 
 func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {

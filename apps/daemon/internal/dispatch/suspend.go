@@ -58,7 +58,7 @@ func (r *Router) Quiesce(ctx context.Context, ref proto.AssignmentRef, request p
 			return ErrRouterBusy
 		}
 	}
-	r.suspension = &request
+	r.suspension, r.suspendedBy = &request, ref
 	for _, p := range r.preparations {
 		if p.timer != nil {
 			p.timer.Stop()
@@ -82,9 +82,8 @@ func (r *Router) Quiesce(ctx context.Context, ref proto.AssignmentRef, request p
 }
 
 // Resume opens admission only after the caller authenticated a new connection
-// and Core confirmed the exact suspension identity on that connection. ref
-// names the assignment, which a release during the suspension may have
-// advanced.
+// and Core confirmed the exact suspension identity on that connection under the
+// assignment that quiesced.
 func (r *Router) Resume(ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload, sender Sender) error {
 	r.admission.Lock()
 	defer r.admission.Unlock()
@@ -96,11 +95,11 @@ func (r *Router) Resume(ref proto.AssignmentRef, request proto.EnvironmentSuspen
 	if sender == nil || r.suspension == nil || !r.suspension.SameSuspension(request) {
 		return errors.New("dispatch: suspension identity mismatch")
 	}
-	if a := r.assignments[ref.SessionID]; !ref.Valid() || a == nil || a.ref.AssignmentID != ref.AssignmentID || ref.Epoch > a.ref.Epoch {
+	if ref != r.suspendedBy {
 		return AssignmentError(proto.AssignmentConflict)
 	}
 	r.sender = sender
-	r.suspension = nil
+	r.suspension, r.suspendedBy = nil, proto.AssignmentRef{}
 	for _, owner := range r.executors {
 		r.scheduleExecutorIdleLocked(owner)
 	}

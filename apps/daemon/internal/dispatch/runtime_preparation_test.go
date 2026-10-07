@@ -183,7 +183,7 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 			case "export":
 				r.workspaceExport = &workspaceExport{}
 			case "read":
-				r.workspaceReads = map[string]struct{}{"read": {}}
+				r.workspaceReads = map[string]workspaceRead{"read": {}}
 			case "run":
 				r.sessions["run"] = &sessionState{}
 			case "executor":
@@ -254,7 +254,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := proto.RuntimePreparePayload{Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
-	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), done: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)
@@ -334,7 +334,7 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := capabilityBegin(environment, session, []byte("abc"))
-	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), done: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)

@@ -45,7 +45,7 @@ func (s *Session) WriteWorkspaceFile(ctx context.Context, id string, ref proto.A
 			return empty, errors.New("agentdaemon gateway: invalid write frame")
 		}
 		env.Assignment = ref
-		reply, err := s.exchangeChunkFrame(ctx, env, replies)
+		reply, err := s.exchangeFrame(ctx, env, replies)
 		if err != nil {
 			return empty, err
 		}
@@ -79,7 +79,7 @@ func validWorkspaceWriteResult(r proto.WorkspaceWriteResultPayload, expected str
 			return false
 		}
 		switch r.ErrorCode {
-		case "invalid_request", "resource_unavailable", "write_capacity", "write_unsupported", "write_rejected":
+		case "invalid_request", "resource_unavailable", "write_capacity", "write_unsupported", "write_rejected", proto.AssignmentStale, proto.AssignmentConflict:
 			return true
 		default:
 			return false

@@ -19,7 +19,7 @@ func TestSuspendAcknowledgementSurvivesImmediateConnectionClose(t *testing.T) {
 			done <- err
 		}()
 		request := <-s.sendCh
-		reply, _ := proto.NewEnvelope(proto.TypeEnvironmentQuiesced, request.ID, proto.EnvironmentSuspendResultPayload{EnvironmentID: "env", SuspendID: "attempt", Accepted: true})
+		reply, _ := request.Reply(proto.TypeEnvironmentQuiesced, proto.EnvironmentSuspendResultPayload{EnvironmentID: "env", SuspendID: "attempt", Accepted: true})
 		s.dispatch(reply)
 		s.Close("parked")
 		if err := <-done; err != nil {
@@ -40,7 +40,7 @@ func TestSuspendControlRejectsForeignIdentityAndDoesNotReplay(t *testing.T) {
 			done <- err
 		}()
 		request := <-s.sendCh
-		reply, _ := proto.NewEnvelope(proto.TypeEnvironmentResumed, request.ID, result)
+		reply, _ := request.Reply(proto.TypeEnvironmentResumed, result)
 		s.dispatch(reply)
 		if err := <-done; err == nil {
 			t.Fatal("foreign receipt accepted")

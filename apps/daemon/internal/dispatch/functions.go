@@ -75,6 +75,6 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		}
 		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, code, "function result was not applied")
 	}
-	r.rememberAppliedInteractionDecision(env.ID, kind, fingerprint)
+	r.rememberAppliedInteractionDecision(env, kind, fingerprint)
 	return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, true, "", "")
 }

@@ -26,8 +26,20 @@ func assignmentReply(env proto.Envelope) (proto.Envelope, bool) {
 	return reply, err == nil
 }
 
-// assignmentFrame answers an assignment_bind and reports whether env was one.
+// observe remembers the assignment env names. The fixture Runtime writes its
+// frames under it, as a Runtime echoes its request's assignment.
+func (h *dispatchHarness) observe(env proto.Envelope) {
+	if env.Assignment.Valid() {
+		h.writeMu.Lock()
+		h.assignment = env.Assignment
+		h.writeMu.Unlock()
+	}
+}
+
+// assignmentFrame observes env, answers an assignment_bind and reports whether
+// env was one.
 func (h *dispatchHarness) assignmentFrame(env proto.Envelope) bool {
+	h.observe(env)
 	reply, ok := assignmentReply(env)
 	if !ok {
 		return false

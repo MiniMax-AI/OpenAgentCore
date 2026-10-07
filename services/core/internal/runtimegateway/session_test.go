@@ -206,7 +206,7 @@ func TestSession_DispatchDeliversToSubscriber(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	sub, err := sess.SubscribeDurable("run-1")
+	sub, err := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -232,7 +232,7 @@ func TestSession_DoneFrameAutoUnsubscribes(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	sub, _ := sess.SubscribeDurable("run-1")
+	sub, _ := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
 	env, _ := proto.NewEnvelope(proto.TypeDone, "run-1", proto.DonePayload{Content: "ok"})
 	raw, _ := jsonMarshal(env)
@@ -267,7 +267,7 @@ func TestSession_PermissionRequestIndexedInRegistry(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	sub, err := sess.SubscribeDurable("run-1")
+	sub, err := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
@@ -304,7 +304,7 @@ func TestSession_PermissionRequestIndexedInRegistry(t *testing.T) {
 
 func TestSession_CloseReportsUnknownWithoutExecutionEvents(t *testing.T) {
 	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
-	sub, err := sess.SubscribeDurable("run")
+	sub, err := sess.SubscribeDurable("run", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ func TestSession_PermissionRequiresPayloadIdentity(t *testing.T) {
 	reg := NewRegistry()
 	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, reg, nil)
 	defer sess.Close("test done")
-	sub, err := sess.SubscribeDurable("run")
+	sub, err := sess.SubscribeDurable("run", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}

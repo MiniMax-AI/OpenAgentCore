@@ -61,8 +61,8 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 }
 
 // handleAssignmentRelease fences the assignment, then settles the Session's
-// Executor and removes its home before it replies. A retry at the same epoch
-// repeats the cleanup.
+// work and Executor and removes its home before it replies. A retry at the
+// same epoch repeats the cleanup.
 func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope) error {
 	var input proto.AssignmentReleasePayload
 	ref, code := env.Assignment, ""
@@ -90,10 +90,17 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		r.mu.Unlock()
 		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus("", code))
 	}
+	work, preparations := r.fenceSessionWorkLocked(ref.SessionID)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
 		defer r.shutdownWG.Done()
+		for _, p := range preparations {
+			r.releasePreparation(p, "failed", proto.AssignmentStale, true, false)
+		}
+		for _, done := range work {
+			<-done
+		}
 		state, code := proto.AssignmentReleased, ""
 		err := r.closeSessionExecutor(ref.SessionID)
 		if err == nil && input.RemoveHome {
@@ -108,6 +115,44 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		_ = r.reply(sendCtx, env, proto.TypeAssignmentStatus, assignmentStatus(state, code))
 	}()
 	return nil
+}
+
+// fenceSessionWorkLocked ends the Session's admitted work outside its
+// Executor. A transfer still receiving its body ends without applying it, and
+// a transfer that already committed checks the released assignment before it
+// applies. It returns the work the release waits for and the read-only
+// preparations it releases, whose release also cancels their exports.
+// Router.mu must be held.
+func (r *Router) fenceSessionWorkLocked(sessionID string) ([]chan struct{}, []*preparationState) {
+	var work []chan struct{}
+	if u := r.workspaceWrite; u != nil && u.envelope.Assignment.SessionID == sessionID {
+		if !u.finished {
+			u.finished = true
+			close(u.ready)
+		}
+		work = append(work, u.done)
+	}
+	if u := r.runtimePreparation; u != nil && u.envelope.Assignment.SessionID == sessionID {
+		if !u.finished {
+			r.finishRuntimePreparationTransferLocked(u, false)
+		}
+		work = append(work, u.done)
+	}
+	if u := r.workspaceExport; u != nil && u.request.Assignment.SessionID == sessionID {
+		work = append(work, u.done)
+	}
+	for _, read := range r.workspaceReads {
+		if read.sessionID == sessionID {
+			work = append(work, read.done)
+		}
+	}
+	var preparations []*preparationState
+	for _, p := range r.preparations {
+		if p.executor == nil && p.workspaceReadOnly && p.owns && p.request.Assignment.SessionID == sessionID {
+			preparations = append(preparations, p)
+		}
+	}
+	return work, preparations
 }
 
 // closeSessionExecutor ends the Session's Executor: it abandons a pending

@@ -74,11 +74,11 @@ func (s *Session) exchangeAssignment(ctx context.Context, typ string, ref proto.
 	s.assignmentReplies[id] = replies
 	s.assignmentMu.Unlock()
 	defer func() { s.assignmentMu.Lock(); delete(s.assignmentReplies, id); s.assignmentMu.Unlock() }()
-	reply, err := s.exchangeChunkFrame(ctx, env, replies)
+	reply, err := s.exchangeFrame(ctx, env, replies)
 	if err != nil {
 		return status, err
 	}
-	if reply.Type != proto.TypeAssignmentStatus || reply.Assignment != ref || reply.DecodePayload(&status) != nil || !validAssignmentStatus(typ, status) {
+	if reply.Type != proto.TypeAssignmentStatus || reply.DecodePayload(&status) != nil || !validAssignmentStatus(typ, status) {
 		return proto.AssignmentStatusPayload{}, errors.New("agentdaemon gateway: invalid assignment status")
 	}
 	return status, nil

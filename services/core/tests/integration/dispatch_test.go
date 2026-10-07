@@ -27,6 +27,7 @@ import (
 
 type dispatchHarness struct {
 	writeMu      sync.Mutex
+	assignment   proto.AssignmentRef // the latest assignment Core named; writeMu guards it
 	admissions   map[string]fixtureAdmission
 	t            *testing.T
 	s            *Store
@@ -145,6 +146,9 @@ func (h *dispatchHarness) write(run, kind string, payload any) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
+	if kind != proto.TypeHeartbeat {
+		env.Assignment = h.assignment
+	}
 	if err = h.conn.WriteJSON(env); err != nil {
 		h.t.Fatal(err)
 	}
@@ -158,6 +162,7 @@ func (h *dispatchHarness) read(kind string) proto.Envelope {
 		if err := h.conn.ReadJSON(&env); err != nil {
 			h.t.Fatal(err)
 		}
+		h.observe(env)
 		if kind != proto.TypeAssignmentBind && h.assignmentFrame(env) {
 			continue
 		}

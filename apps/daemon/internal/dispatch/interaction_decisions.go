@@ -83,7 +83,7 @@ func (r *Router) handlePermissionDecision(ctx context.Context, env proto.Envelop
 		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "runtime_error", err.Error())
 	}
 	r.dropPermission(state, env.ID)
-	r.rememberAppliedInteractionDecision(env.ID, proto.TypePermissionDecision, fingerprint)
+	r.rememberAppliedInteractionDecision(env, proto.TypePermissionDecision, fingerprint)
 	return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, true, "", "")
 }
 
@@ -179,7 +179,7 @@ func (r *Router) handlePromptForUserChoiceDecision(ctx context.Context, env prot
 		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "runtime_error", err.Error())
 	}
 	r.dropAsk(state, env.ID)
-	r.rememberAppliedInteractionDecision(env.ID, proto.TypePromptForUserChoiceDecision, fingerprint)
+	r.rememberAppliedInteractionDecision(env, proto.TypePromptForUserChoiceDecision, fingerprint)
 	return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, true, "", "")
 }
 
@@ -191,15 +191,19 @@ func (r *Router) replayAppliedInteractionDecision(ctx context.Context, env proto
 	if !ok {
 		return false, nil
 	}
+	// The receipt answers only the assignment that applied the decision.
+	if applied.assignment != env.Assignment {
+		return true, r.sendInteractionDecisionAck(ctx, env, deliveryID, false, proto.AssignmentConflict, "The decision was applied under another assignment.")
+	}
 	if applied.requestID != env.ID || applied.kind != kind || applied.fingerprint != fingerprint {
 		return true, r.sendInteractionDecisionAck(ctx, env, deliveryID, false, "decision_conflict", "request was already applied with a different decision")
 	}
 	return true, r.sendInteractionDecisionAck(ctx, env, deliveryID, true, "", "")
 }
 
-func (r *Router) rememberAppliedInteractionDecision(requestID, kind string, fingerprint [32]byte) {
+func (r *Router) rememberAppliedInteractionDecision(env proto.Envelope, kind string, fingerprint [32]byte) {
 	now := time.Now().UTC()
-	key := appliedInteractionDecisionKey(requestID, kind)
+	key := appliedInteractionDecisionKey(env.ID, kind)
 	r.mu.Lock()
 	if len(r.applied) >= 1024 {
 		cutoff := now.Add(-time.Hour)
@@ -216,7 +220,7 @@ func (r *Router) rememberAppliedInteractionDecision(requestID, kind string, fing
 		}
 	}
 	r.applied[key] = appliedInteractionDecision{
-		requestID: requestID, kind: kind, fingerprint: fingerprint, recordedAt: now,
+		requestID: env.ID, kind: kind, fingerprint: fingerprint, assignment: env.Assignment, recordedAt: now,
 	}
 	r.mu.Unlock()
 }

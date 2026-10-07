@@ -13,10 +13,16 @@ import (
 // runAssignmentReleases delivers each released assignment to its connected
 // Runtime until the Runtime acknowledges it, so a Runtime that reconnects
 // receives the releases it missed. Releases run one per Session, bounded like
-// executions.
+// executions. A failed release backs off, so it cannot hold a slot that later
+// releases need.
 func (w *Worker) runAssignmentReleases(ctx context.Context) error {
+	type outcome struct {
+		ref          proto.AssignmentRef
+		acknowledged bool
+	}
 	active := make(map[string]bool)
-	done := make(chan string, w.executionConcurrency())
+	retries := releaseRetries{}
+	done := make(chan outcome, w.executionConcurrency())
 	var running sync.WaitGroup
 	ctx, stop := context.WithCancel(ctx)
 	defer func() { stop(); running.Wait() }()
@@ -26,8 +32,9 @@ func (w *Worker) runAssignmentReleases(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case session := <-done:
-			delete(active, session)
+		case result := <-done:
+			delete(active, result.ref.SessionID)
+			retries.record(result.ref, result.acknowledged, time.Now())
 			continue
 		case <-ticker.C:
 		}
@@ -35,34 +42,70 @@ func (w *Worker) runAssignmentReleases(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		retries.keep(releases)
+		now := time.Now()
 		for _, release := range releases {
-			session := release.Assignment.SessionID
-			if active[session] || len(active) >= w.executionConcurrency() {
+			ref := release.Assignment
+			if active[ref.SessionID] || len(active) >= w.executionConcurrency() || !retries.due(ref, now) {
 				continue
 			}
-			active[session] = true
+			active[ref.SessionID] = true
 			running.Add(1)
 			go func() {
 				defer running.Done()
-				w.releaseAssignment(ctx, release)
-				done <- session
+				done <- outcome{ref: ref, acknowledged: w.releaseAssignment(ctx, release)}
 			}()
+		}
+	}
+}
+
+// releaseRetries holds each failed release's next attempt. The delay doubles
+// from a second up to a minute.
+type releaseRetries map[proto.AssignmentRef]releaseRetry
+
+type releaseRetry struct {
+	at    time.Time
+	delay time.Duration
+}
+
+func (r releaseRetries) due(ref proto.AssignmentRef, now time.Time) bool {
+	return !now.Before(r[ref].at)
+}
+
+func (r releaseRetries) record(ref proto.AssignmentRef, acknowledged bool, now time.Time) {
+	if acknowledged {
+		delete(r, ref)
+		return
+	}
+	delay := min(max(2*r[ref].delay, time.Second), time.Minute)
+	r[ref] = releaseRetry{at: now.Add(delay), delay: delay}
+}
+
+// keep forgets releases that are no longer pending for a connected Runtime.
+func (r releaseRetries) keep(releases []sessions.AssignmentRelease) {
+	pending := make(map[proto.AssignmentRef]bool, len(releases))
+	for _, release := range releases {
+		pending[release.Assignment] = true
+	}
+	for ref := range r {
+		if !pending[ref] {
+			delete(r, ref)
 		}
 	}
 }
 
 // releaseAssignment sends one release and records its acknowledgement. Home
 // removal is requested only from a Runtime that declares it.
-func (w *Worker) releaseAssignment(ctx context.Context, release sessions.AssignmentRelease) {
+func (w *Worker) releaseAssignment(ctx context.Context, release sessions.AssignmentRelease) bool {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	peer, err := w.dispatcher.authorizedPeer(ctx, release.RuntimeID)
 	if err != nil {
-		return
+		return false
 	}
 	supported, known := peer.RemovesHomes()
 	if !known {
-		return
+		return false
 	}
 	removeHome := release.RemoveHome && supported
 	want := proto.AssignmentReleased
@@ -72,9 +115,11 @@ func (w *Worker) releaseAssignment(ctx context.Context, release sessions.Assignm
 	status, err := peer.Release(ctx, release.Assignment, removeHome)
 	if err != nil || status.State != want {
 		log.Warn(ctx, "Runtime assignment release unconfirmed", "session_id", release.Assignment.SessionID, "runtime_id", release.RuntimeID, "error_code", status.ErrorCode)
-		return
+		return false
 	}
 	if err := w.dispatcher.sessionExecution.AcknowledgeAssignmentRelease(ctx, release.Assignment); err != nil {
 		log.Warn(ctx, "Runtime assignment release not recorded", "session_id", release.Assignment.SessionID, "runtime_id", release.RuntimeID)
+		return false
 	}
+	return true
 }

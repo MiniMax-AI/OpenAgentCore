@@ -9,10 +9,12 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+// workspaceExport is one admitted export; done closes once it ends.
 type workspaceExport struct {
 	request  proto.Envelope
 	requests chan proto.WorkspaceExportPayload
 	cancel   context.CancelFunc
+	done     chan struct{}
 }
 
 func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) error {
@@ -57,7 +59,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	}
 	owner, stop := r.shutdownContext(p.ctx)
 	owner, cancel := context.WithTimeout(owner, 180*time.Second)
-	u = &workspaceExport{request: env, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }}
+	u = &workspaceExport{request: env, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }, done: make(chan struct{})}
 	u.requests <- request
 	r.workspaceExport = u
 	r.shutdownWG.Add(1)
@@ -68,6 +70,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 
 func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport) {
 	defer r.shutdownWG.Done()
+	defer close(u.done)
 	reader, writer := io.Pipe()
 	done := make(chan struct{})
 	go func() {

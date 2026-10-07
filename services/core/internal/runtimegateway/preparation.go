@@ -14,8 +14,9 @@ type preparationSubscription struct {
 
 // SubscribePreparation correlates private control responses without registering
 // a Run. Unsubscribe on abandonment; a terminal resource status closes the stream.
-// This subscription belongs to this physical daemon connection only.
-func (s *Session) SubscribePreparation(requestID string) (*Subscription, error) {
+// This subscription belongs to this physical daemon connection only. ref is the
+// assignment that prepares.
+func (s *Session) SubscribePreparation(requestID string, ref proto.AssignmentRef) (*Subscription, error) {
 	s.preparationMu.Lock()
 	defer s.preparationMu.Unlock()
 	if s.IsClosed() {
@@ -25,7 +26,7 @@ func (s *Session) SubscribePreparation(requestID string) (*Subscription, error) 
 		return nil, errors.New("agentdaemon gateway: invalid, duplicate or excess preparation subscription")
 	}
 	ch := make(chan proto.Envelope, 16)
-	sub := &Subscription{Events: ch, ch: ch}
+	sub := &Subscription{Events: ch, ch: ch, ref: ref}
 	s.preparations[requestID] = &preparationSubscription{sub: sub}
 	return sub, nil
 }
@@ -60,14 +61,11 @@ func (s *Session) dispatchPreparation(env proto.Envelope) {
 	}
 	p.sub.mu.Lock()
 	defer p.sub.mu.Unlock()
-	select {
-	case p.sub.ch <- env:
+	if p.sub.deliverLocked(env) {
 		switch status.State {
 		case "started", "released", "expired", "failed":
 			p.sub.closeLocked(nil)
 		}
-	default:
-		p.sub.closeLocked(ErrSubscriberOverflow)
 	}
 	if p.sub.closed {
 		delete(s.preparations, env.ID)
