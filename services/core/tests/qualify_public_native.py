@@ -18,6 +18,8 @@ from jsonschema import Draft202012Validator
 
 from official_hosted_functions_native import verify_hosted_functions
 from official_hosted_structured_native import verify_hosted_structured
+from official_native_policies import verify_native_policies
+from official_native_steering import verify_native_steering
 from official_pending_actions_native import verify_pending_actions
 from official_workspace_images_native import verify_workspace_images
 from official_schema import ResponseValidator
@@ -152,13 +154,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--settings", required=True, help="Private JSON with agent, model_provider and environment")
     parser.add_argument("--foreign-key-file", required=True, help="Private key of a different Project")
-    parser.add_argument("--suite", required=True, choices=("none", "functions", "pending-actions", "images", "structured", "composition"))
+    parser.add_argument("--suite", required=True, choices=("none", "functions", "tool-search", "policies", "steering", "pending-actions", "images", "structured", "composition"))
     parser.add_argument("--evidence", required=True, type=Path, help="New evidence file under ~/.oac")
     parser.add_argument("--compose-directory", type=Path, help="Owned installation to restart for cold recovery")
     parser.add_argument("--compose-project", help="Exact owned Compose project; required with --compose-directory")
     args = parser.parse_args()
     assert bool(args.compose_directory) == bool(args.compose_project), "Supply both Compose selectors or neither"
-    assert args.suite != "pending-actions" or args.compose_directory is None, "Pending actions tests client reconnect, not process restart"
+    assert args.suite not in {"pending-actions", "policies", "steering"} or args.compose_directory is None, "This suite does not qualify process restart"
     evidence = args.evidence
     assert evidence.is_absolute() and not evidence.exists(), "Use a new absolute evidence path"
     assert evidence.parent.resolve().is_relative_to((Path.home() / ".oac").resolve()), "Evidence belongs under ~/.oac"
@@ -240,12 +242,15 @@ def main():
             raise AssertionError("Environment did not connect; use a separate sandbox for each Session")
 
         session_options = {"environment": environment, "extra_body": {"x_agents_core": {"model_provider": provider}}}
-        suites = {"none": verify_none, "functions": verify_hosted_functions, "pending-actions": verify_pending_actions,
+        suites = {"none": verify_none, "functions": verify_hosted_functions, "tool-search": verify_hosted_functions,
+                  "policies": verify_native_policies, "steering": verify_native_steering, "pending-actions": verify_pending_actions,
                   "images": verify_workspace_images, "structured": verify_hosted_structured, "composition": verify_composition}
         try:
             kwargs = {"ready": ready, "record": record}
-            if args.suite != "pending-actions":
+            if args.suite not in {"pending-actions", "policies", "steering"}:
                 kwargs["restart"] = restart
+            if args.suite == "tool-search":
+                kwargs["deferred"] = True
             checks = suites[args.suite](client, foreign, http, agent, session_options, **kwargs)
             report.update(status="passed", checks=checks)
             if restart is not None:

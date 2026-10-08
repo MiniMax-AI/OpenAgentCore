@@ -71,6 +71,35 @@ class QualificationTests(unittest.TestCase):
             self.run_suite(suite)
         self.assertFalse(self.evidence.exists())
 
+    def test_active_policy_suites_cannot_claim_process_restart(self):
+        for name in ("policies", "steering"):
+            with self.subTest(suite=name):
+                argv = [name if value == "none" else value for value in self.argv]
+                argv += ["--compose-directory", str(self.root), "--compose-project", "owned-qualification"]
+                with patch("sys.argv", argv), patch.object(qualification.subprocess, "run") as run:
+                    with self.assertRaisesRegex(AssertionError, "does not qualify process restart"):
+                        qualification.main()
+                    run.assert_not_called()
+
+    def test_deferred_variant_is_explicit_and_policy_failures_do_not_pass(self):
+        self.settings["environment"] = {"type": "openai_hosted"}
+        (self.root / "settings.json").write_text(json.dumps(self.settings))
+        for name, target in (("tool-search", "verify_hosted_functions"), ("policies", "verify_native_policies"), ("steering", "verify_native_steering")):
+            with self.subTest(suite=name):
+                argv = [name if value == "none" else value for value in self.argv]
+                def suite(*args, **kwargs):
+                    self.assertEqual(kwargs.get("deferred", False), name == "tool-search")
+                    self.assertEqual("restart" in kwargs, name == "tool-search")
+                    kwargs["record"]({"unverified": ["native policy behavior"]})
+                    raise AssertionError("native admission blocked")
+                with patch("sys.argv", argv), patch.object(qualification, target, suite):
+                    with self.assertRaisesRegex(AssertionError, "native admission blocked"):
+                        qualification.main()
+                proof = json.loads(self.evidence.read_text())
+                self.assertEqual((proof["status"], proof["cold_recovery"]), ("failed", "unverified"))
+                self.assertEqual(proof["proof"]["unverified"], ["native policy behavior"])
+                self.evidence.unlink()
+
     def test_custom_workspace_uses_physical_tools_and_logical_public_file_paths(self):
         client = MagicMock()
         session = SimpleNamespace(status="idle", required_actions=[], environment=SimpleNamespace(
@@ -112,6 +141,20 @@ class QualificationTests(unittest.TestCase):
                 qualification.verify_hosted_structured(client, client, http, self.settings["agent"], options,
                     ready=lambda session: None, restart=None, record=lambda proof: None)
             self.assertEqual(bodies[-1]["x_agents_core"], self.settings["agent"]["x_agents_core"])
+            selected = {**self.settings["agent"], "x_agents_core": {"harness": "claude_sdk"}}
+            with self.assertRaises(BadRequestError):
+                qualification.verify_hosted_functions(client, client, http, selected, options,
+                    ready=lambda session: None, restart=None, record=lambda proof: None, deferred=True)
+            tools = bodies[-1]["agent"]["tools"]
+            self.assertEqual(sum(tool["type"] == "tool_search" for tool in tools), 1)
+            self.assertTrue(next(tool for tool in tools if tool["type"] == "function")["defer_loading"])
+            self.assertEqual(bodies[-1]["x_agents_core"]["model_provider"], self.settings["model_provider"])
+            selected["x_agents_core"] = {"harness": "mcode"}
+            with self.assertRaises(BadRequestError):
+                qualification.verify_native_steering(client, client, http, selected, options,
+                    ready=lambda session: None, record=lambda proof: None)
+            self.assertEqual(bodies[-1]["environment"], options["environment"])
+            self.assertEqual(bodies[-1]["agent"], selected)
 
     def test_restart_requires_a_running_host_and_observed_new_process(self):
         (self.root / "compose.yaml").write_text("services: {}\n")
