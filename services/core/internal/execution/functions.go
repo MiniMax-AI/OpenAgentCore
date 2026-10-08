@@ -53,7 +53,6 @@ type functionExchange struct {
 	sessions              *sessions.ExecutionOperations
 	tenant, session, turn string
 	assignment            proto.AssignmentRef
-	kind                  string
 	tools                 []proto.FunctionTool
 	callID                string
 	reply                 <-chan functionReply
@@ -77,7 +76,7 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	return f.unlessCancelling(ctx, err)
 }
 
-func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Session) error {
+func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Session, declaration proto.Declaration) error {
 	if f.reply != nil || len(f.tools) == 0 {
 		return nil
 	}
@@ -93,7 +92,7 @@ func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Sessi
 		if err != nil {
 			return err
 		}
-		if err := validateDelivery(peer, f.kind, proto.Selection{FunctionResult: &result}); err != nil {
+		if err := proto.ValidateSelection(declaration, proto.Selection{FunctionResult: &result}); err != nil {
 			return err
 		}
 		env, err := proto.NewEnvelope(proto.TypeFunctionResult, f.turn, result)

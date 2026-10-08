@@ -141,13 +141,3 @@ func admitSession(peer *runtimegateway.Session, engine string, snapshot Snapshot
 	selection.Messages = messages
 	return declaration, proto.ValidateSelection(declaration, selection)
 }
-
-// validateDelivery checks a message or function result delivered to a running
-// Turn against the peer's declaration.
-func validateDelivery(peer *runtimegateway.Session, engine string, selection proto.Selection) error {
-	declaration, err := runtimeDeclaration(peer, engine)
-	if err != nil {
-		return err
-	}
-	return proto.ValidateSelection(declaration, selection)
-}

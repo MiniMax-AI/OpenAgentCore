@@ -120,7 +120,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if _, err := d.sessionExecution.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		return sessions.Turn{}, err
 	}
-	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, turnID, text, through, prepared)
+	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, declaration, turnID, text, through, prepared)
 	return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
 }
 

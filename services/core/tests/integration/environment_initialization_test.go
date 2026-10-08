@@ -74,7 +74,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				t.Fatal(err)
 			}
 			registry := runtimegateway.NewRegistry()
-			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
+			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry, Links: runtimegateway.NewLinkAuthority(sessionAdapter(s))})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
 			link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
