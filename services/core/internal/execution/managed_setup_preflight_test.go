@@ -95,9 +95,6 @@ else:
 
 func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "e2b")
-	if err := os.MkdirAll(state, 0700); err != nil {
-		t.Fatal(err)
-	}
 	helper := filepath.Join(t.TempDir(), "provider")
 	requests := filepath.Join(state, "requests")
 	script := "#!/bin/sh\ncat >>" + requests + "\necho >>" + requests + "\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"\",\"DeploymentValid\":true,\"TemplateBuild\":{\"Status\":\"ready\",\"CPUs\":4,\"MemoryMiB\":4096,\"RootDiskMiB\":24063}}'\n"
@@ -109,8 +106,14 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	s := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setupInstallationID: id, setups: &fakeDeploymentSetups{t: t}}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	candidate, err := s.prepareDeployment(t.Context(), selection)
+	if err != nil {
+		t.Fatalf("fresh installation cannot prepare E2B: %v", err)
+	}
+	if info, err := os.Lstat(state); err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
+		t.Fatalf("adapter did not create private state: %v %v", info, err)
+	}
 	disk := int32(24063)
-	if err != nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild == nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.CPUs != 4 || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.MemoryMiB != 4096 ||
+	if candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild == nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.CPUs != 4 || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.MemoryMiB != 4096 ||
 		*candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.RootDiskMiB != disk || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.Status != "ready" {
 		t.Fatalf("validated build was not recorded: %+v %v", candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild, err)
 	}

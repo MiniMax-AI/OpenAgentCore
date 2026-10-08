@@ -33,7 +33,7 @@ The boundary has version 1. The request and credentials arrive on standard input
 
 ## Receipts and state directory
 
-`OAC_E2B_STATE_DIR` ([configuration](../../../../docs/configuration.md#appendix-core-environment-without-the-installer)) must already exist, be owned by the helper's user and grant no group or other access. Keep it on durable private storage across Core upgrades and restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
+The Go adapter creates its private subdirectory under the installation's [Provider state root](../../../../docs/configuration.md#compose-installations) when constructing the Provider. An existing path must be a directory owned by the helper's user with no group or other access; it is never replaced or repaired. Keep it on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Creating an empty directory restores no receipt: missing receipts still cannot authorize recreation, credential replacement or successful cleanup. Never delete receipts after an uncertain call.
 
 A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out. Core tracks the helper's actual exit, and a credential change waits for running helpers without killing them. Helper exit never proves that a remote Create settled. Core serializes lifecycle requests per allocation and never replays Create.
 
