@@ -22,9 +22,9 @@ const LOCKOUT_SECONDS = 30;
 
 let state;
 const hex = (c) => c.repeat(64);
-/** The Runtime release this fixture's distribution manifest describes. */
-const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${hex("1")}`, image_manifest_digest: `sha256:${hex("2")}`, microsandbox_ref: `oac-runtime@sha256:${hex("3")}`, runtime_sha256: hex("4"), firmware_sha256: hex("5") };
-const manifest = { platform: "linux/amd64", source_commit: release.source_commit, images: { runtime: release.image_id }, image_manifest_digests: { runtime: release.image_manifest_digest }, runtime_ref: release.microsandbox_ref, microsandbox: { runtime_sha256: release.runtime_sha256, firmware_sha256: release.firmware_sha256 }, artifacts: {} };
+/** The fixture distribution includes each provider's native identities. */
+const manifest = { platform: "linux/amd64", source_commit: "c0ffee".padEnd(40, "0"), images: { runtime: `sha256:${hex("1")}` }, image_manifest_digests: { runtime: `sha256:${hex("2")}` }, runtime_ref: `oac-runtime@sha256:${hex("3")}`, microsandbox: { runtime_sha256: hex("4"), firmware_sha256: hex("5") }, artifacts: {} };
+const release = { source_commit: manifest.source_commit, artifacts: { image_id: manifest.images.runtime, image_manifest_digest: manifest.image_manifest_digests.runtime } };
 
 /**
  * config.json's public_url. "public": an HTTPS address, so applications get an API base URL;

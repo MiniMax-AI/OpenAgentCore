@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 72427ef3933ee3c9f7bde17f506c72945b33df9320508fc1a47d08cb89920922
+source_hash: e5a3c062ddffa395cb5832df3cbd2b30b30f04dfa0917911b375331cff070b76
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -60,18 +60,21 @@ microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environme
 
 ### Runtime 发行版 {#runtime-release}
 
-Docker 和 microsandbox 使用一个经过验证发行包中的每个字段：
+`runtime` 恰好包含 `source_commit` 和 `artifacts`。`source_commit` 是标识发行包的 40 字符小写提交 SHA。`artifacts` 是字符串映射，恰好包含所选适配器声明的标识；缺失、多余、空字符串、null 或格式错误的条目均被拒绝。E2B 省略 `runtime`，通过 `configuration.template` 选择其不可变构建。
 
-| 字段 | 标识 |
-| --- | --- |
-| `source_commit` | 由 40 个字符组成的小写提交 SHA |
-| `image_id` | Docker 镜像配置 ID：`sha256:` 加 64 个小写十六进制字符 |
-| `image_manifest_digest` | OCI 镜像清单摘要，格式相同 |
-| `microsandbox_ref` | `oac-runtime@sha256:` 加 64 个小写十六进制字符 |
-| `runtime_sha256` | 原生 microsandbox Runtime 二进制文件的 SHA-256 |
-| `firmware_sha256` | 匹配固件的 SHA-256 |
+| 适配器 | 制品键 | 标识 |
+| --- | --- | --- |
+| Docker | `image_id` | Docker 镜像配置 ID：`sha256:` 加 64 个小写十六进制字符 |
+| Docker | `image_manifest_digest` | OCI 镜像清单摘要，格式相同 |
+| microsandbox | `microsandbox_ref` | `oac-runtime@sha256:` 加 64 个小写十六进制字符 |
+| microsandbox | `runtime_sha256` | 原生 microsandbox Runtime 二进制文件的 SHA-256，表示为 64 个小写十六进制字符 |
+| microsandbox | `firmware_sha256` | 匹配固件的 SHA-256，表示为 64 个小写十六进制字符 |
 
-请从匹配的发行清单中复制这些标识。镜像配置 ID 和 OCI 清单摘要标识不同的对象，绝不能相互替代。节点安装程序会在注册前根据载荷验证已保存的发行版，并保留其导入的精确本地镜像标识。
+适配器的部署策略声明每个键、其验证模式及其在发行清单中的选择路径。生成的安装器和客户端契约通过该声明从匹配的发行包复制并验证标识。镜像配置 ID 和 OCI 清单摘要标识不同的对象，绝不能相互替代。节点安装程序会在注册前根据载荷验证已保存的发行版，并保留其导入的精确本地镜像标识。
+
+规范摘要是规范 JSON 的 SHA-256：依次为 `provider`、`resources` 和存在时的 `runtime`；Runtime 字段依次为 `source_commit`、`artifacts`，其中制品键按字典顺序排序。制品映射的插入顺序不会改变摘要。
+
+存储的规范及其节点固定标识遵循[安装版本策略](../../../docs/zh/getting-started/operations.md#installation-version-policy)。Schema 变更会拒绝当前选择或任何保留代次中不兼容的 Runtime 发行版，回滚会拒绝目标 schema 无法解释的制品规范。拒绝操作保留规范、摘要、节点和代次历史，绝不重写这些标识。
 
 ### E2B 配置 {#e2b-configuration}
 
@@ -192,7 +195,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 | 字段 | E2B | Docker | microsandbox |
 | --- | --- | --- | --- |
 | 部署 `specification.resources` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` |
-| 部署 `specification.runtime` | 不存在；`configuration.template` 用于选择构建 | 完整的[发行版](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 | 完整的[发行版](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 |
+| 部署 `specification.runtime` | 不存在；`configuration.template` 用于选择构建 | Docker [发行制品](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 | microsandbox [发行制品](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 |
 | 部署 `metadata.template_build` | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 | 不存在：`metadata` 为空 |
 | 部署 `suspension` | `null`；Core 不暂停 E2B 沙箱 | `null` | `{idle_seconds, retention_seconds}` |
 | 部署 `resources.allocations`、`resources.pending` | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 | 所有节点的总数 |

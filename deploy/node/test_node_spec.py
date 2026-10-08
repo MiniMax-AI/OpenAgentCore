@@ -15,10 +15,8 @@ class SpecificationTests(unittest.TestCase):
     def setUp(self):
         self.args = argparse.Namespace(core_url="https://core.example", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe", provider=None)
         self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}, "runtime": {
-            "source_commit": "a" * 40, "image_id": "sha256:" + "b" * 64,
-            "image_manifest_digest": "sha256:" + "c" * 64,
-            "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64,
-            "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
+            "source_commit": "a" * 40, "artifacts": {"image_id": "sha256:" + "b" * 64,
+            "image_manifest_digest": "sha256:" + "c" * 64}}}
         self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),
                      "core_url": self.args.core_url, "max_active": 2, "max_retained": 8}
@@ -104,9 +102,32 @@ class SpecificationTests(unittest.TestCase):
         result = node_spec.fetch(self.args, "", self.retained, mock.Mock(return_value=self.response()))
         self.assertEqual((result["max_active"], result["max_retained"]), (3, 9))
 
+    def test_release_selects_only_declared_provider_artifacts(self):
+        manifest = {"source_commit": "a" * 40,
+                    "images": {"runtime": "sha256:" + "b" * 64},
+                    "image_manifest_digests": {"runtime": "sha256:" + "c" * 64},
+                    "runtime_ref": "oac-runtime@sha256:" + "d" * 64,
+                    "microsandbox": {"runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
+        self.assertEqual(node_spec.release("docker", manifest), self.spec["runtime"])
+        micro = node_spec.release("microsandbox", manifest)
+        self.assertEqual(micro, {"source_commit": "a" * 40, "artifacts": {
+            "microsandbox_ref": manifest["runtime_ref"], **manifest["microsandbox"]}})
+        del manifest["images"]
+        del manifest["image_manifest_digests"]
+        self.assertEqual(node_spec.release("microsandbox", manifest), micro)
+        with self.assertRaises(KeyError):
+            node_spec.release("docker", manifest)
+        for field in manifest["microsandbox"]:
+            for invalid in (None, "", "A" * 64, "e" * 64 + "\n"):
+                changed = copy.deepcopy(manifest)
+                changed["microsandbox"][field] = invalid
+                with self.subTest(field=field, invalid=invalid), self.assertRaises(ValueError):
+                    node_spec.release("microsandbox", changed)
+
     def test_digest_is_independent_of_response_object_key_order(self):
         reordered = copy.deepcopy(self.spec)
         reordered["runtime"] = dict(reversed(list(reordered["runtime"].items())))
+        reordered["runtime"]["artifacts"] = dict(reversed(list(reordered["runtime"]["artifacts"].items())))
         reordered["resources"] = dict(reversed(list(reordered["resources"].items())))
         self.assertEqual(node_spec.digest("docker", reordered), node_spec.digest("docker", self.spec))
 

@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 4c74de8583bc8f0b85b91a338357899a1bcc03d8b2bd7063e6c71dd0430e717b
+source_hash: fb06cedf8bb6172b5864589d6a2148c8f75252520183481f3ceaca7bb97f3701
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
@@ -9,6 +9,8 @@ source_hash: 4c74de8583bc8f0b85b91a338357899a1bcc03d8b2bd7063e6c71dd0430e717b
 ## 帧与版本 {#frames-and-version}
 
 每个帧都是一个 JSON 文本消息，其 `version` 等于 `node.ProtocolVersion`；两端都会拒绝任何其他版本，并且没有回退解码器。成员名必须精确且唯一：未知成员、大小写别名、重复项和意外的空值都会被拒绝。控制帧（`hello`、`welcome`、`heartbeat`、`heartbeat_ack`、`retention`、`retention_ack`）最多为 32 KiB；`request` 和 `response` 帧最多为 1 MiB。无效帧会关闭连接。
+
+连接传递代次编号和不透明的规范摘要，不传递 [Runtime 发行版对象](./sandbox-deployment.md#runtime-release)。HTTP 配置提供规范。本地 Provider 配置及准备、回收、丢弃和租约身份日志绑定该精确规范及其摘要。加载配置时，在发布 Provider、修改日志或删除文件之前拒绝不兼容的发行版形状；绝不接管或改写另一安装版本的状态。参见[安装版本策略](../../../docs/zh/getting-started/operations.md#installation-version-policy)。
 
 ## 连接 {#connection}
 

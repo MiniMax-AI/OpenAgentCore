@@ -21,6 +21,7 @@ RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/node"))
 import provider_assets
+import node_spec
 
 ARTIFACTS = {item["path"]: item["suffix"] for items in provider_assets.CATALOG.values() for item in items}
 
@@ -329,6 +330,9 @@ def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", off
             "firmware_sha256": sha256(stage / "core/microsandbox/libkrunfw.so.5.6.1"),
         },
     }
+    for provider, policy in node_spec._CONTRACT["providers"].items():
+        if policy["artifacts"]:
+            node_spec.release(provider, metadata)
     payload = stage / "ingress/node-payload"
     payload.mkdir(parents=True)
     (payload / "manifest.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")

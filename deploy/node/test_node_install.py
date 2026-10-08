@@ -84,7 +84,7 @@ class NodeInstallTests(unittest.TestCase):
         resources = {"cpus": 3, "memory_mib": 6144}
         if self.args.provider == "microsandbox":
             resources.update(root_disk_mib=10240, environment_disk_mib=12288)
-        spec = {"resources": resources, "runtime": node_spec.release(self.manifest)}
+        spec = {"resources": resources, "runtime": node_spec.release(self.args.provider, self.manifest)}
         configuration = {"installation_id": self.args.installation_id, "provider": self.args.provider,
                          "core_url": self.args.core_url, "generation": 1, "specification": spec, "max_active": 2, "max_retained": 8,
                          "specification_digest": node_spec.digest(self.args.provider, spec)}
@@ -198,7 +198,7 @@ class NodeInstallTests(unittest.TestCase):
             self.install()
         self.assertEqual((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).read_bytes(), payloads[installer.provider_assets.artifacts("docker", ("node",))[0]])
         config = json.loads((self.root / "provider.json").read_text())
-        self.assertEqual(config["specification"]["runtime"], node_spec.release(self.manifest))
+        self.assertEqual(config["specification"]["runtime"], node_spec.release(self.args.provider, self.manifest))
         self.assertEqual(json.loads((self.root / "registered.json").read_text())["source_commit"], old_source)
         self.assertIn("releases/" + old_source + "/runtime/seccomp.json", fetched)
         if provider == "microsandbox":
@@ -470,6 +470,22 @@ class NodeInstallTests(unittest.TestCase):
         with self.assertRaisesRegex(node_spec.SpecificationError, 'Retained Docker image differs'):
             self.install()
         self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
+
+    def test_old_provider_release_is_rejected_before_setup_mutation(self):
+        self.install()
+        path = self.root / "provider.json"
+        stored = installer.private_json(path)
+        release = stored["specification"]["runtime"]
+        release.update(release.pop("artifacts"))
+        release.update(microsandbox_ref=self.manifest["runtime_ref"], **self.manifest["microsandbox"])
+        installer.node_generations.atomic_json(path, stored)
+        before = {str(file.relative_to(self.root)): file.read_bytes() for file in self.root.rglob("*") if file.is_file()}
+        self.calls.clear()
+        with self.assertRaisesRegex(ValueError, "Invalid release fields"):
+            installer.configure_node(self.root, self.args, "once")
+        after = {str(file.relative_to(self.root)): file.read_bytes() for file in self.root.rglob("*") if file.is_file()}
+        self.assertEqual(after, before)
+        self.assertEqual(self.calls, [])
 
     def test_wrong_loaded_runtime_cannot_register_or_write_provider_config(self):
         for observed in ('sha256:' + 'f' * 64 + ' linux/amd64', self.manifest['images']['runtime'] + ' linux/arm64'):

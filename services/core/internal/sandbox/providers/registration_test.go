@@ -14,12 +14,7 @@ import (
 func validRegistrationSpec() sandbox.DeploymentSpec {
 	return sandbox.DeploymentSpec{
 		Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048},
-		Runtime: &sandbox.RuntimeRelease{
-			SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64),
-			ImageManifestDigest: "sha256:" + strings.Repeat("c", 64),
-			MicrosandboxRef:     "oac-runtime@sha256:" + strings.Repeat("d", 64),
-			RuntimeSHA256:       strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64),
-		},
+		Runtime:   &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), Artifacts: map[string]string{"image_id": "sha256:" + strings.Repeat("b", 64), "image_manifest_digest": "sha256:" + strings.Repeat("c", 64)}},
 	}
 }
 
@@ -32,6 +27,19 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 	}{
 		{"missing Runtime input policy", func(a *Adapter) { a.Policy = sandbox.DeploymentPolicy{} }},
 		{"contradictory Runtime input policy", func(a *Adapter) { a.Policy.RuntimeError = "Runtime rejected" }},
+		{"invalid artifact name", func(a *Adapter) {
+			a.Policy.Artifacts = map[string]sandbox.ArtifactRule{"private-token": {Pattern: "[a-z]+", ManifestPath: []string{"archive"}}}
+		}},
+		{"invalid artifact pattern", func(a *Adapter) {
+			a.Policy.Artifacts = map[string]sandbox.ArtifactRule{"archive": {Pattern: "[", ManifestPath: []string{"archive"}}}
+		}},
+		{"empty artifact identity", func(a *Adapter) {
+			a.Policy.Artifacts = map[string]sandbox.ArtifactRule{"archive": {Pattern: "[a-z]*", ManifestPath: []string{"archive"}}}
+		}},
+		{"missing artifact selector", func(a *Adapter) { a.Policy.Artifacts = map[string]sandbox.ArtifactRule{"archive": {Pattern: "[a-z]+"}} }},
+		{"empty artifact selector key", func(a *Adapter) {
+			a.Policy.Artifacts = map[string]sandbox.ArtifactRule{"archive": {Pattern: "[a-z]+", ManifestPath: []string{""}}}
+		}},
 		{"missing mode", func(a *Adapter) { a.Mode = "" }},
 		{"unknown mode", func(a *Adapter) { a.Mode = "private-token" }},
 		{"missing local constructor", func(a *Adapter) { a.BuildLocal = nil }},

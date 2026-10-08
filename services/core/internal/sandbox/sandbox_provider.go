@@ -246,14 +246,21 @@ type ConfigurationRequirements struct {
 }
 
 // DeploymentPolicy is the deployment declaration. Disk declares independent
-// disk limits; Runtime requires a pinned Runtime release, and RuntimeError is
-// the fixed reason for rejecting one otherwise. DefaultResources is the size
+// disk limits; Artifacts requires exactly the declared immutable identities,
+// and RuntimeError is the fixed reason for rejecting a release otherwise. DefaultResources is the size
 // setup proposes, or nil when the Provider's configuration selects it.
 type DeploymentPolicy struct {
-	RuntimeError     string     `json:"-"`
-	Disk             bool       `json:"disk"`
-	Runtime          bool       `json:"runtime"`
-	DefaultResources *Resources `json:"default_resources"`
+	RuntimeError     string                  `json:"-"`
+	Disk             bool                    `json:"disk"`
+	Artifacts        map[string]ArtifactRule `json:"artifacts"`
+	DefaultResources *Resources              `json:"default_resources"`
+}
+
+// ArtifactRule declares one pinned identity and where the distribution manifest
+// authors it. ManifestPath is an object-key path, not a filesystem path.
+type ArtifactRule struct {
+	Pattern      string   `json:"pattern"`
+	ManifestPath []string `json:"manifest_path"`
 }
 
 // Configuration is an adapter-owned typed value, never a request or response DTO.

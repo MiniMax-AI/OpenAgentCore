@@ -746,14 +746,10 @@ export type RuntimeObservationMode = (typeof runtimeObservationModeValues)[numbe
 export const runtimeObservationStatusValues = ["observed", "unsupported", "unavailable"] as const;
 export type RuntimeObservationStatus = (typeof runtimeObservationStatusValues)[number];
 export interface RuntimeRelease {
-  firmware_sha256: string;
-  image_id: string;
-  image_manifest_digest: string;
-  microsandbox_ref: string;
-  runtime_sha256: string;
+  artifacts: Record<string, string>;
   source_commit: string;
 }
-export const runtimeReleaseFields = ["firmware_sha256", "image_id", "image_manifest_digest", "microsandbox_ref", "runtime_sha256", "source_commit"] as const;
+export const runtimeReleaseFields = ["artifacts", "source_commit"] as const;
 export interface SandboxAllocationList {
   data: NodeAllocation[];
 }

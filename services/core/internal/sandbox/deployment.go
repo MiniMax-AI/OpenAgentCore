@@ -63,23 +63,20 @@ func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error
 	return nil
 }
 
-// RuntimeRelease preserves the identities of one verified distribution. Docker
-// may address the same archive by config ID or OCI manifest digest; microsandbox
-// has its own imported OCI identity. These are not interchangeable hashes.
+// RuntimeRelease pins the immutable artifact identities declared by an adapter.
 type RuntimeRelease struct {
-	SourceCommit        string `json:"source_commit" binding:"required"`
-	ImageID             string `json:"image_id" binding:"required"`
-	ImageManifestDigest string `json:"image_manifest_digest" binding:"required"`
-	MicrosandboxRef     string `json:"microsandbox_ref" binding:"required"`
-	RuntimeSHA256       string `json:"runtime_sha256" binding:"required"`
-	FirmwareSHA256      string `json:"firmware_sha256" binding:"required"`
+	SourceCommit string            `json:"source_commit" binding:"required"`
+	Artifacts    map[string]string `json:"artifacts" binding:"required"`
 }
 
-func (r RuntimeRelease) Validate() error {
-	values := reflect.ValueOf(r)
-	for i, rule := range runtimeContract {
-		if !regexp.MustCompile("^(?:" + rule.Pattern + ")$").MatchString(values.Field(i).String()) {
-			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: Runtime must reference one immutable distribution", ErrInvalid)}
+func (r RuntimeRelease) validate(artifacts map[string]ArtifactRule) error {
+	invalid := &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: Runtime must reference one immutable distribution", ErrInvalid)}
+	if !regexp.MustCompile("^(?:"+sourceCommitPattern+")$").MatchString(r.SourceCommit) || len(r.Artifacts) != len(artifacts) {
+		return invalid
+	}
+	for name, rule := range artifacts {
+		if !regexp.MustCompile("^(?:" + rule.Pattern + ")$").MatchString(r.Artifacts[name]) {
+			return invalid
 		}
 	}
 	return nil
@@ -95,7 +92,7 @@ func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy)
 	if err := s.Resources.ValidatePolicy(provider, policy); err != nil {
 		return err
 	}
-	if !policy.Runtime {
+	if len(policy.Artifacts) == 0 {
 		if s.Runtime != nil {
 			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
 		}
@@ -104,7 +101,7 @@ func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy)
 	if s.Runtime == nil {
 		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
 	}
-	return s.Runtime.Validate()
+	return s.Runtime.validate(policy.Artifacts)
 }
 
 func (s DeploymentSpec) Digest(provider string) string {

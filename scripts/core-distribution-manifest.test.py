@@ -218,6 +218,15 @@ class DistributionTests(unittest.TestCase):
         for name in ("source_commit", "platform", "artifacts", "runtime_ref", "microsandbox"):
             self.assertEqual(bundled[name], full[name])
         self.assertEqual(list(bundled["images"]), ["runtime"])
+        self.assertNotIn("runtime_release", bundled)
+
+    def test_node_payload_checks_generated_provider_artifact_declarations(self):
+        policy = distribution.node_spec._CONTRACT["providers"]["docker"]
+        artifacts = dict(policy["artifacts"], required_extra={"pattern": "[0-9a-f]{64}", "manifest_path": ["unpublished_identity"]})
+        with mock.patch.dict(policy, artifacts=artifacts):
+            with self.assertRaises(KeyError):
+                self.manifest()
+        self.assertFalse((self.stage / "ingress/node-payload/manifest.json").exists())
 
     def test_oci_manifest_identity_is_distinct_from_docker_config_identity(self):
         self.manifest()

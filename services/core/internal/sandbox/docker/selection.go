@@ -5,7 +5,10 @@ import (
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{Runtime: true, DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
+	return sandbox.DeploymentPolicy{Artifacts: map[string]sandbox.ArtifactRule{
+		"image_id":              {Pattern: "sha256:[0-9a-f]{64}", ManifestPath: []string{"images", "runtime"}},
+		"image_manifest_digest": {Pattern: "sha256:[0-9a-f]{64}", ManifestPath: []string{"image_manifest_digests", "runtime"}},
+	}, DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 }
 
 func ValidateResources(r sandbox.Resources) error { return r.ValidatePolicy("docker", Policy()) }

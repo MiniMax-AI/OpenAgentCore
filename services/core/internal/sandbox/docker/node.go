@@ -32,7 +32,7 @@ func decodeNative(config sandbox.NodeConfig) (Native, error) {
 		return entry, errors.New("invalid managed Docker node configuration")
 	}
 	release := config.Specification.Runtime
-	if entry.Image != release.ImageID && entry.Image != release.ImageManifestDigest {
+	if entry.Image != release.Artifacts["image_id"] && entry.Image != release.Artifacts["image_manifest_digest"] {
 		return entry, errors.New("Docker Runtime image differs from the deployment release")
 	}
 	return entry, nil

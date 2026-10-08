@@ -58,18 +58,21 @@ microsandbox configures the CPUs, memory, a managed root disk and a separate own
 
 ### Runtime release
 
-Docker and microsandbox use every field of one verified distribution:
+`runtime` contains exactly `source_commit` and `artifacts`. `source_commit` is a lowercase 40-character commit SHA identifying the distribution. `artifacts` is a string map containing exactly the identities declared by the selected adapter; missing, extra, empty, null or malformed entries are rejected. E2B omits `runtime` and selects its immutable build through `configuration.template`.
 
-| Field | Identity |
-| --- | --- |
-| `source_commit` | Lowercase 40-character commit SHA |
-| `image_id` | Docker image configuration ID: `sha256:` and 64 lowercase hex characters |
-| `image_manifest_digest` | OCI image manifest digest, in the same form |
-| `microsandbox_ref` | `oac-runtime@sha256:` and 64 lowercase hex characters |
-| `runtime_sha256` | SHA-256 of the native microsandbox runtime binary |
-| `firmware_sha256` | SHA-256 of the matching firmware |
+| Adapter | Artifact key | Identity |
+| --- | --- | --- |
+| Docker | `image_id` | Docker image configuration ID: `sha256:` and 64 lowercase hex characters |
+| Docker | `image_manifest_digest` | OCI image manifest digest, in the same form |
+| microsandbox | `microsandbox_ref` | `oac-runtime@sha256:` and 64 lowercase hex characters |
+| microsandbox | `runtime_sha256` | SHA-256 of the native microsandbox runtime binary, as 64 lowercase hex characters |
+| microsandbox | `firmware_sha256` | SHA-256 of the matching firmware, as 64 lowercase hex characters |
 
-Copy these identities from the matching distribution manifest. An image configuration ID and an OCI manifest digest identify different objects and never substitute for each other. The node installer verifies the saved release against its payload before registration and keeps the exact local image identity it imports.
+The adapter's deployment policy declares each key, its validation pattern and its selector in the distribution manifest. The generated installer and client contracts use that declaration to copy and validate the identities from the matching distribution. An image configuration ID and an OCI manifest digest identify different objects and never substitute for each other. The node installer verifies the saved release against its payload before registration and keeps the exact local image identity it imports.
+
+The specification digest is SHA-256 over canonical JSON: `provider`, then `resources`, then `runtime` when present; the Runtime fields are `source_commit`, then `artifacts`, whose keys are sorted lexicographically. An artifact map's insertion order does not change the digest.
+
+Stored specifications and their node pins follow the [installation version policy](../../docs/getting-started/operations.md#installation-version-policy). Schema changes reject an incompatible Runtime release in either the current selection or any retained generation, and rollback rejects artifact specifications that the target schema cannot interpret. Rejection preserves specifications, digests, nodes and generation history; it never rewrites these identities.
 
 ### E2B configuration
 
@@ -190,7 +193,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | Field | E2B | Docker | microsandbox |
 | --- | --- | --- | --- |
 | Deployment `specification.resources` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` |
-| Deployment `specification.runtime` | Absent; `configuration.template` selects the build | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
+| Deployment `specification.runtime` | Absent; `configuration.template` selects the build | The Docker [release artifacts](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The microsandbox [release artifacts](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
 | Deployment `metadata.template_build` | The build as Core read it when the selection was saved | Absent: `metadata` is empty | Absent: `metadata` is empty |
 | Deployment `suspension` | `null`; Core does not suspend E2B sandboxes | `null` | `{idle_seconds, retention_seconds}` |
 | Deployment `resources.allocations`, `resources.pending` | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes | Totals across all nodes |
