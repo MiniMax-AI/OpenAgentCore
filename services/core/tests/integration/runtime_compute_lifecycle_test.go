@@ -440,6 +440,11 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	if f.provider.captures != 0 {
 		t.Fatal("never-used Session suspended")
 	}
+	// Before placement there is no agent host to ask, which is not a sandbox fault.
+	var diagnostic string
+	if err := f.store.pool.QueryRow(t.Context(), `SELECT observation_error FROM runtime_allocations WHERE id=$1`, owner.ID).Scan(&diagnostic); err != nil || diagnostic != "" {
+		t.Fatalf("unplaced Session observed as %q: %v", diagnostic, err)
+	}
 	completed := f.complete(owner)
 	suspended := f.phase(tenant, env.ID, "suspended")
 	if f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.computes) != 0 || len(f.provider.snapshots) != 1 {
