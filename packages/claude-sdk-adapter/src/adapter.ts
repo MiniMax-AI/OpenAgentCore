@@ -125,7 +125,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if(canUseTool) options.canUseTool=(...args)=>turns.track(()=>canUseTool(...args));
     }
     if (request.type === "prepare" || request.type === "executor_prepare") {
-      warm = await startup({ options, initializeTimeoutMs: 15000 });
+      warm = await startup({ options });
       stream = warm.query(turns ?? inputs);
       const initialized = await stream.initializationResult();
       const hooksRequested = Object.values(options.hooks ?? {}).some(matchers => matchers?.some(matcher => matcher.hooks.length > 0));
@@ -151,7 +151,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       } else await emit({ type: "prepared" });
     } else if (profile) {
       if (inputs.hasInput) throw new Error("MCP input released before initialization");
-      warm = await startup({ options, initializeTimeoutMs: 15000 });
+      warm = await startup({ options });
       stream = warm.query(turns ?? inputs);
       const initialized = await stream.initializationResult();
       if (initialized.hooks_applied !== true || children.length !== 1) throw new Error("MCP initialization unavailable");

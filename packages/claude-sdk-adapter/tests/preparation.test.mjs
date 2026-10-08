@@ -17,8 +17,7 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "@anthropic-ai/claude-agent-sdk") return {url:"data:text/javascript,"+encodeURIComponent(sdk),shortCircuit:true};
   return next(specifier,context);
 }});
-globalThis.startupFixture = async ({options, initializeTimeoutMs}) => {
-  assert.equal(initializeTimeoutMs,15000);
+globalThis.startupFixture = async ({options}) => {
   assert.equal(options.model,"fixed-model");
   assert.equal(options.env.UNSELECTED_CANARY,"must-not-inherit");
   assert.equal(options.env.HOME,process.env.HOME);
