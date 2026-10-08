@@ -279,6 +279,13 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 				continue
 			}
 		case "turn/start":
+			if delay := os.Getenv("OAC_TEST_EXECUTOR_START_DELAY"); delay != "" {
+				duration, err := time.ParseDuration(delay)
+				if err != nil {
+					os.Exit(6)
+				}
+				time.Sleep(duration)
+			}
 			if executorMode != "" {
 				turnNumber++
 				currentTurn = fmt.Sprintf("fixture-turn-%d", turnNumber)
