@@ -1,6 +1,6 @@
 //go:build linux
 
-package providers
+package microsandbox
 
 import (
 	"fmt"
@@ -15,5 +15,5 @@ func hostCapacity(r sandbox.Resources) error {
 	if err := syscall.Sysinfo(&info); err != nil {
 		return fmt.Errorf("cannot verify node memory capacity")
 	}
-	return checkCapacity(r, runtime.NumCPU(), uint64(info.Totalram)*uint64(info.Unit))
+	return sandbox.CheckCapacity(r, runtime.NumCPU(), uint64(info.Totalram)*uint64(info.Unit))
 }

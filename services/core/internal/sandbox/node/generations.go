@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -363,7 +364,9 @@ func (m *GenerationManager) probeLoop() {
 		cancel()
 		m.mu.Lock()
 		g.refs--
+		changed := false
 		if !errors.Is(err, context.Canceled) {
+			state, diagnostic := g.state, g.diagnostic
 			g.state = "ready"
 			g.diagnostic = ""
 			if err != nil {
@@ -373,8 +376,14 @@ func (m *GenerationManager) probeLoop() {
 					g.repairing = true
 				}
 			}
+			changed = g.state != state || g.diagnostic != diagnostic
 		}
+		generation, diagnostic := g.value.Generation, g.diagnostic
 		m.mu.Unlock()
+		if err != nil && changed {
+			// The local error stays in this host's journal; it may name host paths.
+			log.Ctx(m.ctx).Warn("sandbox node generation provider unavailable; check local runtime configuration and permissions", "generation", generation, "diagnostic", diagnostic, "error", err)
+		}
 	}
 }
 

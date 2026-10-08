@@ -81,7 +81,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	built, closeProvider, err := registry.Build(config, providerconfig.LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true})
 	if err != nil {
 		return err
 	}

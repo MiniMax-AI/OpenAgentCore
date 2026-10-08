@@ -323,6 +323,40 @@ type DirectConfig struct {
 	Fence          *CallFence
 }
 
+// NodeConfig is a node's configuration for one deployment generation. Native
+// holds only the selected adapter's node-local settings, such as host paths;
+// that adapter alone decodes it, strictly. Resources and the Runtime release
+// are read from Specification, never copied into Native.
+type NodeConfig struct {
+	Specification  DeploymentSpec  `json:"specification"`
+	Generation     uint64          `json:"generation"`
+	CoreURL        string          `json:"core_url"`
+	Provider       string          `json:"provider"`
+	InstallationID string          `json:"installation_id"`
+	Native         json.RawMessage `json:"native"`
+}
+
+// LocalOptions supplies process-local context without changing persisted configuration.
+type LocalOptions struct {
+	// Standalone selects registration or execution without a generation manager.
+	Standalone bool
+	// GenerationStateDirectory is the node state directory when constructing a
+	// retained generation. It must be canonical and absolute, and Standalone
+	// must be false.
+	GenerationStateDirectory string
+}
+
+// Built is a constructed node adapter. Construction fills InstallationID and
+// SpecificationDigest; the adapter fills the rest.
+type Built struct {
+	SpecificationDigest                string
+	Provider                           SandboxProvider
+	InstallationID, BackendFingerprint string
+	Probe                              func(context.Context) error
+	// Quiescent is nil when no helper can outlive its caller.
+	Quiescent func() bool
+}
+
 // ConfigurationDiscoveryInput is a transient read-only request. Query is typed
 // and validated by the adapter; it cannot select a compute mutation.
 type ConfigurationDiscoveryInput struct {

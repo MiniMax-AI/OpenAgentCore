@@ -59,7 +59,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := registry.adapters["docker"]
-			a.BuildLocal = func(Config, LocalOptions, *Built) (func(), error) {
+			a.BuildLocal = func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error) {
 				t.Fatal("called local constructor")
 				return nil, nil
 			}
@@ -90,7 +90,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				{"resolve change", func() error { _, err := registry.ResolveChange(selection, selection); return err }},
 				{"credential", func() error { _, err := registry.WithCredential(selection, selection); return err }},
 				{"local build", func() error {
-					_, _, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, LocalOptions{Standalone: true})
+					_, _, err := registry.Build(sandbox.NodeConfig{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, sandbox.LocalOptions{Standalone: true})
 					return err
 				}},
 				{"direct build", func() error { _, err := registry.BuildDirect(sandbox.DirectConfig{Selection: selection}); return err }},
@@ -123,9 +123,9 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	}
 	const kind = "new-test-provider"
 	calls, closes := 0, 0
-	options := LocalOptions{GenerationStateDirectory: t.TempDir()}
+	options := sandbox.LocalOptions{GenerationStateDirectory: t.TempDir()}
 	a := registry.adapters["docker"]
-	a.BuildLocal = func(_ Config, got LocalOptions, built *Built) (func(), error) {
+	a.BuildLocal = func(_ sandbox.NodeConfig, got sandbox.LocalOptions, built *sandbox.Built) (func(), error) {
 		calls++
 		if got != options {
 			t.Fatalf("construction options = %+v, want %+v", got, options)
@@ -134,7 +134,7 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 		return func() { closes++ }, nil
 	}
 	registry.adapters[kind] = a
-	built, closeProvider, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options)
+	built, closeProvider, err := registry.Build(sandbox.NodeConfig{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options)
 	if err != nil || built.Provider == nil || calls != 1 {
 		t.Fatalf("node build: %v calls=%d", err, calls)
 	}

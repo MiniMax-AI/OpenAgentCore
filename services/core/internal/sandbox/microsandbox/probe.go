@@ -1,4 +1,4 @@
-package providers
+package microsandbox
 
 import (
 	"context"
@@ -15,53 +15,21 @@ import (
 	"sync"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/containerd/errdefs"
-	"github.com/moby/moby/client"
 )
 
-// Probes report the first failed check as its readiness class. Precedence runs
-// from the provider platform (Docker daemon or KVM), through Docker limit
-// support and host capacity for one sandbox of the deployment specification, to
-// the installed Runtime content (image or microsandbox artifacts). Unclassified
-// failures stay provider_unavailable. The returned text is local; only its class
-// is reported.
+// The probe reports its first failed check as its readiness class: KVM, then
+// host capacity for one sandbox of the deployment specification, then the
+// installed Runtime artifacts. Unclassified failures stay provider_unavailable.
+// The returned text is local; only its class is reported.
 
 // kvmDevice is replaceable only by tests.
 var kvmDevice = "/dev/kvm"
-
-func dockerProbe(c *client.Client, image string, resources sandbox.Resources) func(context.Context) error {
-	return func(ctx context.Context) error {
-		if _, err := c.Ping(ctx, client.PingOptions{}); err != nil {
-			return fmt.Errorf("%w: Docker daemon is unreachable", sandbox.ErrProviderUnavailable)
-		}
-		host, err := c.Info(ctx, client.InfoOptions{})
-		if err != nil {
-			return fmt.Errorf("%w: cannot inspect Docker host resource support", sandbox.ErrProviderUnavailable)
-		}
-		if !host.Info.MemoryLimit || !host.Info.CPUCfsQuota {
-			return fmt.Errorf("%w: Docker does not enforce CPU and memory limits", sandbox.ErrHostUnsupported)
-		}
-		if host.Info.MemTotal <= 0 {
-			return errors.New("Docker host memory capacity is unavailable")
-		}
-		if err := checkCapacity(resources, host.Info.NCPU, uint64(host.Info.MemTotal)); err != nil {
-			return err
-		}
-		if _, err = c.ImageInspect(ctx, image); errdefs.IsNotFound(err) {
-			return sandbox.ErrRuntimeImageUnavailable
-		} else if err != nil {
-			// The daemon did not answer; the image may still be present.
-			return fmt.Errorf("%w: cannot inspect the pinned Runtime image", sandbox.ErrProviderUnavailable)
-		}
-		return nil
-	}
-}
 
 // A successful Runtime integrity check is cached for this immutable
 // configuration. A failure is checked again on the next heartbeat, so repaired
 // artifacts recover without a restart. Lifecycle calls still verify the exact
 // artifact themselves.
-func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(context.Context) error {
+func microsandboxProbe(entry Config, resources sandbox.Resources) func(context.Context) error {
 	var integrity sync.Mutex
 	verified := false
 	return func(ctx context.Context) error {
@@ -100,7 +68,7 @@ func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(con
 	}
 }
 
-func verifyMicrosandboxArtifacts(entry Microsandbox) error {
+func verifyMicrosandboxArtifacts(entry Config) error {
 	for _, artifact := range []struct{ path, hash string }{{entry.RuntimePath, entry.RuntimeSHA256}, {entry.FirmwarePath, entry.FirmwareSHA256}} {
 		f, err := os.Open(artifact.path)
 		if err != nil {
@@ -118,7 +86,7 @@ func verifyMicrosandboxArtifacts(entry Microsandbox) error {
 
 // Image availability is checked on every retained-generation probe, after the
 // platform, capacity and local artifact checks.
-func microsandboxGenerationProbe(entry Microsandbox, probe func(context.Context) error) func(context.Context) error {
+func microsandboxGenerationProbe(entry Config, probe func(context.Context) error) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if err := probe(ctx); err != nil {
 			return err

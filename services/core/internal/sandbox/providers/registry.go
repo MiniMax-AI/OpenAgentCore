@@ -20,7 +20,7 @@ type Adapter struct {
 	NodeArtifacts         []providerassets.Artifact
 	Policy                sandbox.DeploymentPolicy
 	Configuration         sandbox.ConfigurationAdapter
-	BuildLocal            func(Config, LocalOptions, *Built) (func(), error)
+	BuildLocal            func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
 	BuildDirect           func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
 	Mode                  string
 	Operations            func() providercontract.Operations
@@ -40,16 +40,13 @@ func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
 		"docker": {
 			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
+			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: docker.BuildNode,
 			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 		},
 		"microsandbox": {
-			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy,
-				{Path: "native/bin/oac-microsandbox-provider", Suffix: "microsandbox-provider", Role: "runtime"},
-				{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
-				{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
-			Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
+			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
+			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: microsandbox.BuildNode,
 			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 		},
@@ -139,7 +136,7 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	if a.Mode == "direct" {
 		namespace = kind
 	}
-	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation)}, nil
+	return sandbox.Description{Mode: a.Mode, BackendFingerprint: sandbox.BackendFingerprint(kind, namespace+":"+installation)}, nil
 }
 
 // DeploymentContract projects the registered modes and policies into the node

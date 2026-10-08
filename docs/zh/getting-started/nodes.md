@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 24b505c131f398dc8340d4f32616152a7964a783cd4fc06cfdeb3ccd422448db
+source_hash: cd12954864bf9c15cf2d700fc3d9ebaf6126c0ab4297784850cfdd32b86ae656
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -125,9 +125,9 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 1. 使用与 Core 同一发行版本的 `oac-node`。
 2. 获取注册令牌：使用 **Add node** 命令中的令牌，或通过 Core 密钥调用 `POST /core/v1/sandbox/enrollment-tokens`。令牌一次性使用，包含批准的节点容量；响应的 `expires_at` 给出过期时间。在主机上存入权限为 `0600` 的文件。
 3. 使用令牌读取节点配置，不会消耗令牌：`GET /api/v1/sandbox-node/configuration`，带 `Authorization: Bearer <token>`。
-4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并为主机添加一个适配器对象：
-   - `docker`：`host`（显式 Unix 套接字）、`image`（本地导入的批准发行版 Runtime 镜像）、`network`、`extra_hosts`、绝对路径 `seccomp_file` 和 `nested_sandbox`。
-   - `microsandbox`：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`，以及对应的 `runtime_sha256` 和 `firmware_sha256`；`image`；沙箱的 `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib`；`network` 策略；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
+4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并添加 `native` 对象，写入该提供商的主机设置。适配器从 `specification` 读取沙箱规格、Runtime 镜像和产物哈希：
+   - Docker：[Docker 节点配置](../configuration.md#docker-node-configuration)中的字段，其中 `host` 是显式 Unix 套接字，`image` 是导入的 Runtime 镜像的本地 ID，`seccomp_file` 是绝对路径。
+   - microsandbox：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`；`network` 策略；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
 5. 使用真实绝对路径注册，然后通过主机服务管理器运行节点：
 
    ```sh
