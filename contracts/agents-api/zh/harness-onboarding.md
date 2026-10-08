@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 32b85617efe41a23bd25768a42fd7a57019c75ae723d07d8cc5106124709f402
+source_hash: 1fc4bf541841e7c955cbea4ff4d2d903132a744cfa37a972a918ff1e692e1cba
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -229,19 +229,24 @@ python services/core/tests/qualify_public_native.py \
 | `none` | 创建重试、外部历史拒绝、两个原生文本 Turn、历史回忆、SSE 顺序，以及 SDK/原始 Item 和 Turn 一致性 | `none` |
 | `pending-actions` | 查询和重连待处理调用、成功/错误结果、取消、精确目标拒绝、重试和持久化 Item | 声明支持函数工具的任意放置方式 |
 | `functions` | SDK handler、成功/错误、原生文件和 Artifact 字节、继续执行、待处理调用取消和租户隔离 | 工作区 |
+| `tool-search` | 延迟函数执行、已保存配置冻结及函数套件 | 声明支持延迟发现的工作区 |
+| `policies` | 保存/内联禁用控制、不支持的启用拒绝、Codex 原生参数拒绝及 verbosity | Claude Code 或 Codex 工作区 |
+| `steering` | 活跃消息投递、同一 Turn 归属、公共重试/冲突、跨租户拒绝及继续执行 | MiniMax Code 工作区 |
 | `images` | 初始和活动图像、图像结果、重试/原子拒绝、原生文件/Artifact、隔离和继续执行 | 声明支持图像和函数的工作区 |
-| `structured` | 保存和内联 schema、函数辅助原生文件、精确 JSON/SSE、取消和文本覆盖 | 声明支持结构化输出和函数的工作区 |
+| `structured` | 保存和内联 schema、函数辅助原生文件、精确 JSON/SSE、大整数、schema 准入、取消和文本覆盖 | 声明支持结构化输出和函数的工作区 |
 | `composition` | 冻结的源快照、初始字节、有序 setup、包、Skills、stdio MCP、继续执行和取消 | `openai_hosted` |
 
 对于 `composition`，设置中的 `environment` 必须恰好为 `{"type":"openai_hosted"}`；套件创建自己的 Template、文件和 Skill 来源。它检查初始二进制字节、有序 setup、npm 和 Python 包、上传的 Skill、插件 Skill 和目录 Skill，以及三个真实 stdio MCP 工具的身份、Item 和结果。更改或删除源资源后，它通过热继续执行验证冻结的准备结果；选用重启时，还通过现有的 Compose 验证 agent-host 重启流程进行检查。取消必须使 MCP 后代进程停止产生文件副作用。套件清理其创建的全部资源。
 
 私有所有者与凭据隔离仍为 `unverified`；肯定性的 canary 证据需要使用操作员拥有的资源独立验证。套件不请求当前契约拒绝的 `packages.system` 或 stdio MCP `env_vars`。
 
+`tool-search` 套件证明延迟回调通过 Core 执行；锁定的公共协议没有必需的发现事件，因此它不声称观察到了原生 ToolSearch 调用。`structured` 区分有损 schema 数字的拒绝与精确保留的大整数最终文本。`policies` 记录观察到的工具禁用行为，不代表网络隔离，也不能证明模型遵循了 verbosity；Codex 的 low/high 执行需要原生 catalog 支持，不支持的选择会使验收失败。`steering` 要求输入提交时原始原生 Turn 仍活跃。其公共幂等性检查不观察 ACP 重复回执，原生接收也不保证模型采用输入。各套件的证据保留这些限制。
+
 对于 `self_hosted`，选择自定义绝对 `workspace_directory`。运行器打印每个新 Session ID 后，使用该 Session 的公共安装命令连接独立的隔离机器或容器；运行器最多等待五分钟。多个 Session 不得共享工作区。独立的 `official_environment_files_native.py` 检查接受两个已连接的 self-hosted Session，通过 Environment owner 验证 Files.list 排序、分页和隔离。
 
-默认验证热继续执行，并将冷恢复记录为 `unverified`。验证冷继续执行时，额外传入指向所拥有安装的绝对目录的 `--compose-directory`，以及指定其精确项目名称的 `--compose-project`。运行器仅重启该项目的 `agent-host`，确认容器启动时间已改变，然后执行相同的历史断言。这不能证明 Core 重启或 sandbox 检查点恢复。`pending-actions` 套件重连的是公共客户端，而非 agent-host 进程，因此拒绝这些重启选项。仅在[声明和覆盖台账](./index.md#known-gaps) 支持时选择冷恢复；不支持的恢复仍是缺口，不能把跳过的检查记为成功。API 拒绝会使所选套件失败。
+默认验证热继续执行，并将冷恢复记录为 `unverified`。验证冷继续执行时，额外传入指向所拥有安装的绝对目录的 `--compose-directory`，以及指定其精确项目名称的 `--compose-project`。运行器仅重启该项目的 `agent-host`，确认容器启动时间已改变，然后执行相同的历史断言。这不能证明 Core 重启或 sandbox 检查点恢复。`pending-actions`、`policies` 和 `steering` 套件不验证进程重启，因此拒绝这些选项。仅在[声明和覆盖台账](./index.md#known-gaps) 支持时选择冷恢复；不支持的恢复仍是缺口，不能把跳过的检查记为成功。API 拒绝会使所选套件失败。
 
-使用锁定的 SDK 运行 `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py`，可在不调用模型的情况下检查凭据处理和所拥有的重启边界。现有确定性 Core 集成测试仍负责 schema 验证、原子准入、持久化回执和拒绝语义。真实模型结果仅证明所选套件、协议、Harness 和放置方式。Provider 生命周期、原生身份、凭据隔离、延迟发现和未选择的套件需要独立证据；仅通过 view 测试不能证明公共调用路径。
+使用锁定的 SDK 运行 `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py`，可在不调用模型的情况下检查凭据处理和所拥有的重启边界。现有确定性 Core 集成测试仍负责 schema 验证、原子准入、持久化回执和拒绝语义。真实模型结果仅证明所选套件、协议、Harness 和放置方式。Provider 生命周期、原生身份、凭据隔离和未选择的套件需要独立证据；仅通过 view 测试不能证明公共调用路径。
 
 ## 原生版本固定 {#native-version-pins}
 

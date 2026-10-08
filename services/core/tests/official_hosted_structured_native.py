@@ -1,9 +1,12 @@
 """Structured final answers after real native workspace/tool execution."""
 import importlib.metadata
+from decimal import Decimal
 import json
 from pathlib import Path
 import time
 import uuid
+
+from openai import BadRequestError
 
 from session_cleanup import delete_session
 
@@ -18,7 +21,7 @@ def verify_hosted_structured(client, foreign, http, agent_options, session_optio
     root = str(client.base_url).rstrip("/") + "/agents"
     headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
     other_headers = {**headers, "Authorization": "Bearer " + foreign.api_key}
-    proof = {"engine": agent_options["x_agents_core"]["harness"], "checks": [], "runs": [], "calls": []}
+    proof = {"engine": agent_options["x_agents_core"]["harness"], "model": agent_options["model"], "checks": [], "runs": [], "calls": []}
     owned = []
     saved = None
     schema = {"type": "object", "properties": {name: {"type": "string"} for name in ("memory", "path", "marker")},
@@ -83,8 +86,9 @@ def verify_hosted_structured(client, foreign, http, agent_options, session_optio
         answers = [i for i in stored if i["type"] == "message" and i.get("role") == "assistant" and i.get("phase") == "final_answer" and i["turn_id"] == turn.id]
         assert len(answers) == 1, answers
         answer = answers[0]
+        proof.setdefault("answers", []).append(answer)
         raw = answer["content"][0]["text"]
-        assert json.loads(raw) == expected, raw
+        assert json.loads(raw, parse_float=Decimal) == expected, raw
         if events:
             added = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.item.added" and e["item"]["id"] == answer["id"])
             done = next(i for i, e in enumerate(events) if e["type"] == "agent.session.turn.item.done" and e["item"]["id"] == answer["id"])
@@ -95,15 +99,16 @@ def verify_hosted_structured(client, foreign, http, agent_options, session_optio
             assert events[added]["item"]["status"] == "in_progress" and events[added]["item"]["content"] == []
             deltas = [e["delta"] for e in events if e["type"] == "agent.session.turn.output_text.delta" and e["item_id"] == answer["id"]]
             assert deltas and "".join(deltas) == raw, deltas
-        assert expected["path"].startswith(workspace + "/")
-        public_path = "/workspace" + expected["path"][len(workspace):]
-        artifacts = [a for a in sessions.artifacts.list(sid, limit=100) if a.path == public_path and a.turn_id == turn.id]
-        assert len(artifacts) == 1
-        with sessions.artifacts.with_streaming_response.content(artifacts[0].id, session_id=sid) as response:
-            assert response.read() == expected["memory"].encode()
-        assert any(f.path == public_path for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
-        assert http.get(root + "/sessions/" + sid + "/artifacts/" + artifacts[0].id + "/content", headers=other_headers).status_code == 404
-        proof.setdefault("answers", []).append(answer)
+        if "path" in expected:
+            assert expected["path"].startswith(workspace + "/")
+            public_path = "/workspace" + expected["path"][len(workspace):]
+            artifacts = [a for a in sessions.artifacts.list(sid, limit=100) if a.path == public_path and a.turn_id == turn.id]
+            assert len(artifacts) == 1
+            with sessions.artifacts.with_streaming_response.content(artifacts[0].id, session_id=sid) as response:
+                assert response.read() == expected["memory"].encode()
+            assert any(f.path == public_path for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
+            assert http.get(root + "/sessions/" + sid + "/artifacts/" + artifacts[0].id + "/content", headers=other_headers).status_code == 404
+        return raw
 
     def run(sid, text, handler=None):
         events = []
@@ -212,6 +217,56 @@ def verify_hosted_structured(client, foreign, http, agent_options, session_optio
         final(inline.id, inline.environment.id, terminal(inline.id, 1), {"memory": inline_memory, "path": path, "marker": "inline"}, events)
         assert inline.agent.text.format.to_dict() == output_format
         check("inline_schema_prepared_execution_native_file_and_final_json")
+        numeric_schema = {"type": "object", "properties": {"n": {"type": "integer"}},
+                          "required": ["n"], "additionalProperties": False}
+        exact_schema = {**numeric_schema, "properties": {"n": {"type": "integer", "const": 9007199254740992}}}
+        for source, selected_schema, number in (("saved", exact_schema, 9007199254740992),
+                                                ("inline", exact_schema, 9007199254740992),
+                                                ("inline", numeric_schema, 9007199254740993)):
+            selected_format = {"type": "json_schema", "schema": selected_schema}
+            if source == "saved":
+                client.beta.agents.update(saved.id, tools=[], text={"format": selected_format})
+                assert client.beta.agents.retrieve(saved.id).text.format.to_dict() == selected_format
+                numeric = sessions.create(agent_id=saved.id, **session_options)
+            else:
+                numeric = sessions.create(agent={**agent_options, "text": {"format": selected_format}}, **session_options)
+            owned.append(numeric.id)
+            ready(numeric)
+            assert sessions.retrieve(numeric.id).agent.text.format.to_dict() == selected_format
+            proof.setdefault("numeric", []).append({"source": source, "session": numeric.id, "format": selected_format,
+                                                     "expected_integer": number, "model_dependent_output": True})
+            events = run(numeric.id, f"Return the JSON object with key n and the exact integer {number}. Preserve every digit and use the required output format. Do not use workspace tools or public functions.")
+            raw = final(numeric.id, numeric.environment.id, terminal(numeric.id, 1), {"n": number}, events)
+            assert sessions.retrieve(numeric.id).agent.text.format.to_dict() == selected_format
+            proof["numeric"][-1]["raw_final_text"] = raw
+            check(source + ("_exact_binary64_schema_constant" if selected_schema is exact_schema else "_large_integer_final_text_sse_and_storage"))
+
+        # This is the selected Claude adapter's schema admission policy, not
+        # a restriction on other Harnesses' numeric output or saved resources.
+        if proof["engine"] == "claude_sdk":
+            unsafe_format = {"type": "json_schema", "schema": {**numeric_schema,
+                             "properties": {"n": {"type": "integer", "const": 9007199254740993}}}}
+            client.beta.agents.update(saved.id, tools=[], text={"format": unsafe_format})
+            assert client.beta.agents.retrieve(saved.id).text.format.to_dict() == unsafe_format
+            expected_error = {"type": "invalid_request_error", "code": "unsupported_or_invalid_configuration",
+                              "param": "agent.text.format", "message": "This runtime requires an object schema with lossless JSON numbers."}
+            for source, configuration in (("inline", {"agent": {**agent_options, "text": {"format": unsafe_format}}}),
+                                          ("saved", {"agent_id": saved.id})):
+                request = {**configuration, **session_options}
+                wire = {**{k: v for k, v in request.items() if k != "extra_body"}, **request.get("extra_body", {})}
+                response = http.post(root + "/sessions", headers=headers, json=wire)
+                if response.status_code == 201:
+                    owned.append(response.json()["id"])
+                assert response.status_code == 400 and response.json() == {"error": expected_error}, response.text
+                try:
+                    unexpected = sessions.create(**request)
+                except BadRequestError as error:
+                    assert error.status_code == 400 and error.body == expected_error, error.body
+                else:
+                    owned.append(unexpected.id)
+                    raise AssertionError("Lossy numeric schema was admitted")
+                proof.setdefault("numeric_rejections", []).append({"source": source, "format": unsafe_format, "error": response.json()})
+                check(source + "_lossy_numeric_schema_rejected_before_execution")
         proof.update(passed=True, items=items(sid), turns=[t.to_dict() for t in sessions.turns.list(sid, order="asc", limit=100).data])
         return proof["checks"]
     finally:
