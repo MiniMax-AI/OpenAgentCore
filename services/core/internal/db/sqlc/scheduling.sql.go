@@ -37,7 +37,7 @@ func (q *Queries) GetLatestSessionTurn(ctx context.Context, sessionID pgtype.UUI
 
 const listAgentHosts = `-- name: ListAgentHosts :many
 SELECT id, name FROM devices
-WHERE agent_host AND revoked_at IS NULL AND (tenant_id IS NULL OR tenant_id = $1)
+WHERE revoked_at IS NULL
 ORDER BY id
 `
 
@@ -46,9 +46,9 @@ type ListAgentHostsRow struct {
 	Name string      `json:"name"`
 }
 
-// The agent hosts that may run the tenant's Sessions; see GetAgentHost.
-func (q *Queries) ListAgentHosts(ctx context.Context, tenantID pgtype.UUID) ([]ListAgentHostsRow, error) {
-	rows, err := q.db.Query(ctx, listAgentHosts, tenantID)
+// The deployment's available agent hosts.
+func (q *Queries) ListAgentHosts(ctx context.Context) ([]ListAgentHostsRow, error) {
+	rows, err := q.db.Query(ctx, listAgentHosts)
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +75,7 @@ LEFT JOIN session_runtime_assignments b ON b.session_id = s.id
 WHERE r.state = 'pending' AND r.deadline > clock_timestamp()
 AND r.id > $1::uuid AND s.deleted_at IS NULL
 AND EXISTS (
-    SELECT 1 FROM devices d WHERE d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
-        AND d.revoked_at IS NULL AND d.id = ANY($2::uuid[])
+    SELECT 1 FROM devices d WHERE d.revoked_at IS NULL AND d.id = ANY($2::uuid[])
         AND (b.runtime_id IS NULL OR d.id = b.runtime_id)
 )
 ORDER BY r.id LIMIT 100
@@ -119,8 +118,7 @@ FROM turns t JOIN sessions s ON s.id = t.session_id
 WHERE t.status = ANY($1::text[]) AND t.id > $2::uuid
 AND (s.deleted_at IS NULL OR t.status <> 'queued')
 AND (NOT $3::boolean OR EXISTS (
-    SELECT 1 FROM devices d WHERE d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
-        AND d.revoked_at IS NULL AND d.id = ANY($4::uuid[])
+    SELECT 1 FROM devices d WHERE d.revoked_at IS NULL AND d.id = ANY($4::uuid[])
 ))
 ORDER BY t.id LIMIT 100
 `

@@ -85,12 +85,9 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				}
 				return
 			}
-			owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
+			_, err = w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 			if err != nil {
 				t.Fatal(err)
-			}
-			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
-				t.Fatal("preparation blocked authentication", err)
 			}
 			time.Sleep(350 * time.Millisecond)
 			if initializationState(t, s, tenant, env.ID) != "pending" || p.writes.Load() != 0 {

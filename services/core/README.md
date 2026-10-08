@@ -7,12 +7,11 @@
 | Package | Executable | Purpose |
 | --- | --- | --- |
 | `cmd/server` | `oac-core` | The HTTP service and execution Worker. It applies the embedded database migrations before serving |
-| `cmd/device` | `oac-core-device` | Provisions or revokes an [operator device profile](../../contracts/agents-api/machine-api.md#operator-device-profile) for `environment: none` engine hosts |
 | `cmd/environment-key` | `oac-core-environment-key` | The [break-glass executor credential command](../../contracts/agents-api/environment-executor-credentials.md#break-glass-command) |
 | `cmd/sandbox-node` | `oac-node` | The sandbox node program; see the [nodes guide](../../docs/getting-started/nodes.md) |
 | `cmd/specification-contract` | None | Regenerates the deployment contract projections of the node installer and the TypeScript client |
 
-`make build-core` builds the four executables into `~/.oac/build/oac-core`; [Standalone Core builds](../../docs/maintainers.md#standalone-core-builds) describes the build and its options. `make build-daemon` builds `oac-daemon`.
+`make build-core` builds `oac-core`, `oac-core-environment-key`, `oac-node` and `oac` into `~/.oac/build/oac-core`; [Standalone Core builds](../../docs/maintainers.md#standalone-core-builds) describes the build and its options. `make build-daemon` builds `oac-daemon`.
 
 ## Database
 
@@ -46,7 +45,7 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
    ```
 
 4. Create a Project and an API key with the Core key, as in [Script the Core API](../../docs/getting-started/operations.md#script-the-core-api), and call `/v1` with the key as in the [quickstart](../../docs/getting-started/quickstart.md).
-5. To run `environment: none` Sessions, provision an [operator device profile](../../contracts/agents-api/machine-api.md#operator-device-profile) for the Project's tenant and start `oac-daemon connect --profile default` on a host with a Harness installed. Self-hosted Sessions use the [self-hosted guide](../../docs/getting-started/self-hosted.md) instead.
+5. Start the [agent host](../../docs/configuration.md#agent-host-container) with the same identity file and Core origin. Core assigns Sessions to this deployment-scoped host; `environment: none` needs no sandbox. Self-hosted Sessions also need the sandbox connection described in the [self-hosted guide](../../docs/getting-started/self-hosted.md).
 
 ## Tests
 

@@ -69,7 +69,7 @@ func managedArchiveSession(t *testing.T, s *Store, input sessions.CreateSession)
 
 func archiveAllocation(t *testing.T, w *Store, tenant string, session sessions.Session, installation string) deployment.Allocation {
 	t.Helper()
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if status, err := sessionAdapter(s).GetManagedSessionArchive(ctx, tenant, session.ID); err != nil || status != result {
 		t.Fatal("status differs from committed archive", status, err)
 	}
-	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrInvalidInput) {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("archived Environment allocated after archive", err)
 	}
 	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
@@ -167,14 +167,11 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if !reflect.DeepEqual(history, adminMutationSnapshot(t, s, "sessions", "turns", "session_items", "session_artifacts", "source_files", "pg_largeobject", "pg_largeobject_metadata")) {
 		t.Fatal("archive changed persisted history or artifacts")
 	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-		t.Fatal("archive retained runtime authority", err)
-	}
 	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("archive discarded unknown Create ownership", err)
 	}
-	replay, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
-	if err != nil || !replay.Replayed || replay.ID != owner.ID || replay.DeviceID != owner.DeviceID || replay.State != "cleanup_pending" {
+	replay, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
+	if err != nil || !replay.Replayed || replay.ID != owner.ID || replay.State != "cleanup_pending" {
 		t.Fatal("late provisioning retry replaced archived allocation", replay, err)
 	}
 	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
@@ -245,10 +242,12 @@ func TestManagedSessionArchivePreservesFailuresAndRejectsSelfHosted(t *testing.T
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
+	host := registerAgentHost(t, s)
+	assignSession(t, s, session.ID, host.ID)
 	if _, err := s.pool.Exec(t.Context(), "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
-	if err := sessionExecution(t, w.lease).FailEnvironmentInitialization(t.Context(), sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}, sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
+	if err := sessionExecution(t, w.lease).FailEnvironmentInitialization(t.Context(), sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: host.ID}, sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
 		t.Fatal(err)
 	}
 	failed, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)

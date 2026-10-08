@@ -9,9 +9,8 @@ import (
 //
 //	GET  /agent-daemon/ws            — daemon dial-in (WS upgrade)
 //	POST /agent-daemon/bootstrap     — daemon first-call to fetch wsUrl + heartbeat cadence
-//	GET  /agent-daemon/device-status — daemon self-check
 //
-// All three accept the daemon credential described in
+// Both accept the daemon credential described in
 // contracts/agents-api/machine-api.md.
 func RegisterRoutes(r chi.Router, h *Handler) {
 	if h == nil {
@@ -20,6 +19,5 @@ func RegisterRoutes(r chi.Router, h *Handler) {
 	r.Route("/agent-daemon", func(r chi.Router) {
 		r.Get("/ws", h.WS)
 		r.Post("/bootstrap", h.Bootstrap)
-		r.Get("/device-status", h.DeviceStatus)
 	})
 }

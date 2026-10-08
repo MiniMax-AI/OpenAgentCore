@@ -56,12 +56,11 @@ func newLinkHarness(t *testing.T, configuration string) *linkHarness {
 	return &linkHarness{dispatchHarness: h}
 }
 
-// insertAllocation inserts a running allocation of device that is resource
-// and Serves with the credential.
-func insertAllocation(t *testing.T, s *Store, resource sandboxbootstrap.Resource, device string, serve []byte) {
+// insertAllocation inserts a running resource that Serves with the credential.
+func insertAllocation(t *testing.T, s *Store, resource sandboxbootstrap.Resource, serve []byte) {
 	t.Helper()
-	if _, err := s.pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,state,create_settled,deployment_generation,serve_credential_hash)
-		VALUES($1,$2,$3,$4,'running',true,(SELECT generation FROM runtime_deployment),$5)`, resource.ID, resource.EnvironmentID, device, uuid.NewString(), serveHash(serve)); err != nil {
+	if _, err := s.pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,provider_key,state,create_settled,deployment_generation,serve_credential_hash)
+		VALUES($1,$2,(SELECT installation_id FROM runtime_deployment),'running',true,(SELECT generation FROM runtime_deployment),$3)`, resource.ID, resource.EnvironmentID, serveHash(serve)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -232,7 +231,7 @@ func within[T any](t *testing.T, ch <-chan T) T {
 }
 
 // TestLinkAuthorityAgentHost serves an allocation and opens services on it
-// from a marked agent host, and checks that each part of the grant's
+// from an agent host, and checks that each part of the grant's
 // authority is current at every Open and renewal.
 func TestLinkAuthorityAgentHost(t *testing.T) {
 	l := newLinkHarness(t, hostedLinkSession)
@@ -247,14 +246,6 @@ func TestLinkAuthorityAgentHost(t *testing.T) {
 		if got := startLinkServe(t, l.link, l.serve, test.resource.Ref()).refused(t); got != test.want {
 			t.Fatalf("Serve of another resource refused with %v, want %v", got, test.want)
 		}
-	}
-	operator := uuid.NewString()
-	unmarked, err := sessionService(t, l.s).CreateDevice(t.Context(), l.tenant, "operator", runtimedevice.HashCredential(operator))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := l.attach(unmarked.ID, []byte(operator)); linkCode(err) != sandboxlink.AuthenticationFailed {
-		t.Fatal("an unmarked device attached", err)
 	}
 	link, err := l.attach(l.device.ID, []byte(l.credential))
 	if err != nil {
@@ -466,8 +457,8 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 
 // TestRegisteredAgentHostAuthenticates registers the agent host from its
 // identity file as Core's startup does. The Link route and the Runtime gateway
-// accept its credential, a second startup changes nothing, and another
-// device's ID is never taken over.
+// accept its credential, a second startup changes nothing, and rotation fences
+// the previous credential.
 func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	dir := t.TempDir()
@@ -495,8 +486,7 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	}
 	row := func() string {
 		var state string
-		if err := s.pool.QueryRow(t.Context(), `SELECT row(tenant_id IS NULL, environment_id IS NULL, executor_key_id IS NULL, agent_host,
-			credential_hash, credential_revision, revoked_at IS NULL, count(*) OVER ())::text FROM devices WHERE id = $1`, runtime).Scan(&state); err != nil {
+		if err := s.pool.QueryRow(t.Context(), `SELECT row(credential_hash, credential_revision, revoked_at IS NULL, count(*) OVER ())::text FROM devices WHERE id = $1`, runtime).Scan(&state); err != nil {
 			t.Fatal(err)
 		}
 		return state
@@ -505,7 +495,7 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 		t.Fatal(err)
 	}
 	registered := row()
-	if want := "(t,t,t,t," + runtimedevice.HashCredential(credential) + ",1,t,1)"; registered != want {
+	if want := "(" + runtimedevice.HashCredential(credential) + ",1,t,1)"; registered != want {
 		t.Fatalf("registered %s, want %s", registered, want)
 	}
 	if _, err := attachLink(t, startLinkRoute(t, s), runtime, []byte(credential)); err != nil {
@@ -518,12 +508,15 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 		t.Fatal("a second registration changed the agent host", err)
 	}
 
-	device, err := sessionService(t, s).CreateDevice(t.Context(), uuid.NewString(), "operator", runtimedevice.HashCredential(credential))
-	if err != nil {
+	rotated := uuid.NewString()
+	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), runtime, runtimedevice.HashCredential(rotated)); err != nil {
 		t.Fatal(err)
 	}
-	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), device.ID, config.AgentHostCredentialHash); err == nil {
-		t.Fatal("registration took over a tenant device")
+	if want := "(" + runtimedevice.HashCredential(rotated) + ",2,t,1)"; row() != want {
+		t.Fatal("rotation did not advance credential revision")
+	}
+	if _, err := runtimegateway.NewAuthenticator(sessionAdapter(s)).AuthenticateBearer(t.Context(), runtime, credential); !errors.Is(err, runtimegateway.ErrAuthBadCredential) {
+		t.Fatal("rotation retained previous credential", err)
 	}
 }
 
@@ -538,7 +531,7 @@ func TestInitializationBindsAgentHost(t *testing.T) {
 		t.Run(environment, func(t *testing.T) {
 			// Hosted work is admitted only on a configured deployment.
 			s, _ := configuredStore(t)
-			tenant, host := uuid.NewString(), registerAgentHost(t, s, "")
+			tenant, host := uuid.NewString(), registerAgentHost(t, s)
 			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 				Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":` + environment + `}`),
 				InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))
@@ -548,7 +541,7 @@ func TestInitializationBindsAgentHost(t *testing.T) {
 			resource, serve := fixtureLinkResource(t, s, tenant, session)
 			server := httptest.NewUnstartedServer(nil)
 			endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
+			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
 			if err != nil {
 				t.Fatal(err)
 			}

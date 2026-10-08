@@ -138,9 +138,6 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 			if err != nil || got.ID != owner.ID || got.State != wantState || got.CreateSettled != test.wantSettled {
 				t.Fatal("cleanup lost ownership or settlement", got, err)
 			}
-			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-				t.Fatal("cleanup retained execution authority", err)
-			}
 			p.mu.Lock()
 			creates, kills, remaining := p.creates, p.kills, len(p.resources)
 			p.mu.Unlock()

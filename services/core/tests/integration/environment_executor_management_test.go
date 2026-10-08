@@ -273,7 +273,7 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 		t.Fatal("internal facts serialize", string(raw), err)
 	}
 	// Existing target visibility is preserved: an expired self-hosted Environment
-	// is readable but never has runtime_device_authority; deletion removes it.
+	// is readable but never has device authority; deletion removes it.
 	if _, err = pool.Exec(ctx, "UPDATE environments SET status='expired' WHERE id=$1", env.ID); err != nil {
 		t.Fatal(err)
 	}

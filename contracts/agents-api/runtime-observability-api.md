@@ -39,7 +39,6 @@ The list has one row for every Session of every Project that is not deleted, inc
         "instance": {
           "kind": "managed_allocation",
           "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
-          "device_id": "2e434f4f-76aa-4e54-a707-4757036d90ef",
           "connection_generation": null
         },
         "lifecycle_state": "active",
@@ -115,7 +114,6 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 | --- | --- |
 | `kind` | `managed_allocation`, `self_hosted_connection` or `none`. |
 | `allocation_id` | The managed allocation, which identifies the compute of a managed Session; null otherwise. |
-| `device_id` | The Runtime device bound to the managed allocation, when there is one; null otherwise. |
 | `connection_generation` | Always null: Core does not observe self-hosted connections. |
 
 ### `cpu`

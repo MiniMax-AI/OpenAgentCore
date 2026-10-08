@@ -15,7 +15,7 @@ func enableEnvironmentExpiryDispatch(h *dispatchHarness) {
 
 func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 	h := newDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	enableEnvironmentExpiryDispatch(h)
 	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
 	var requests []proto.Envelope
@@ -48,7 +48,7 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 
 func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) {
 	h := newDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	enableEnvironmentExpiryDispatch(h)
 	lockedTenant, locked := newEnvironmentExpiryReservation(t, h.s)
 	otherTenant, other := newEnvironmentExpiryReservation(t, h.s)

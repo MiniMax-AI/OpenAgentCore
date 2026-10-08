@@ -67,9 +67,11 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 		} `json:"environment"`
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
-	s, _ := testStore(t)
+	var s *Store
 	if snapshot.Environment.Type == "openai_hosted" {
 		s, _ = configuredStore(t)
+	} else {
+		s, _ = newManagedTestStore(t)
 	}
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
@@ -78,7 +80,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := registerAgentHost(t, s, h.tenant)
+	host := registerAgentHost(t, s)
 	h.device, h.credential = sessions.ExecutionDevice{ID: host.ID, Name: "agent host"}, host.Credential
 	secret := h.credential
 	h.link = sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
@@ -92,7 +94,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +288,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	newStore, _ := testStore(t)
+	newStore := reopenStore(t, h.s)
 	h.s, h.owned = newStore, nil
 	bound, err := sessionAdapter(newStore).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {

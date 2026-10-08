@@ -130,7 +130,7 @@ func (f *fakeArchiveTx) FindAllocation(environment string) (Allocation, bool, er
 }
 
 func (f *fakeArchiveTx) RequestArchiveCleanup(current Allocation) error {
-	f.record("RequestArchiveCleanup " + current.DeviceID + " " + current.ID)
+	f.record("RequestArchiveCleanup " + current.ID)
 	return nil
 }
 
@@ -227,7 +227,7 @@ func TestArchiveSession(t *testing.T) {
 	managed := Record{InstallationID: "installation", Provider: "docker", Generation: 1}
 	hosted := &sessions.Environment{ID: "environment", Status: "connected", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 	expired := &sessions.Environment{ID: "environment", Status: "expired", Configuration: hosted.Configuration}
-	live := &Allocation{ID: "allocation", DeviceID: "device", ProviderKey: "installation", State: "running"}
+	live := &Allocation{ID: "allocation", ProviderKey: "installation", State: "running"}
 	settle := []string{"LoadEnvironmentInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput"}
 	expire := append([]string{"LoadEnvironmentInput", "ExpireEnvironment environment"}, settle[1:]...)
 	head := []string{"LoadDeployment", "LoadEnvironment", "FindAllocation environment"}
@@ -247,12 +247,12 @@ func TestArchiveSession(t *testing.T) {
 		calls       []string
 	}{
 		{"live allocation", sessions.LockedSession{}, hosted, live, nil,
-			join(head, expire, []string{"RequestArchiveCleanup device allocation", "RecordArchiveAudit", "LoadArchive"})},
+			join(head, expire, []string{"RequestArchiveCleanup allocation", "RecordArchiveAudit", "LoadArchive"})},
 		{"no allocation", sessions.LockedSession{}, hosted, nil, nil, join(head, expire, []string{"ReleasePlacement", "RecordArchiveAudit", "LoadArchive"})},
 		{"released allocation", sessions.LockedSession{}, hosted, &Allocation{ID: "allocation", ProviderKey: "previous", State: "released"}, nil,
 			join(head, expire, []string{"RecordArchiveAudit", "LoadArchive"})},
 		{"ended Environment", sessions.LockedSession{}, expired, live, nil,
-			join(head, settle, []string{"RequestArchiveCleanup device allocation", "RecordArchiveAudit", "LoadArchive"})},
+			join(head, settle, []string{"RequestArchiveCleanup allocation", "RecordArchiveAudit", "LoadArchive"})},
 		{"allocation of another installation", sessions.LockedSession{}, hosted, &Allocation{ID: "allocation", ProviderKey: "previous", State: "running"}, ErrConflict, head},
 		{"deleted Session", sessions.LockedSession{Deleted: true}, hosted, nil, sessions.ErrNotFound, nil},
 		{"no Environment", sessions.LockedSession{}, nil, nil, sessions.ErrInvalidInput, head[:2]},

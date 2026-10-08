@@ -11,7 +11,7 @@ import (
 
 func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T) {
 	h := newDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	enableWorkerEnvironment(t, h)
 	pending := unboundWorkerEnvironmentReservation(t, h)
 	bound := workerEnvironmentReservation(t, h)

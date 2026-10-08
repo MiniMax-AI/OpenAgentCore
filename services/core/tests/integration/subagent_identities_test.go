@@ -25,7 +25,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	journal := sessionExecution(t, w.lease)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	err := sessionExecution(t, w.lease).BindSessionDevice(ctx, tenant, session.ID, host.ID)
 	if err != nil {
 		t.Fatal(err)

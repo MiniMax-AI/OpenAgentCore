@@ -18,20 +18,12 @@ import (
 // deployment's agent host, the Runtime Sessions are placed on.
 type agentHost struct{ ID, Credential string }
 
-// registerAgentHost registers an agent host. Tests on the shared database pass
-// their tenant: a deployment-wide host would let the test's Worker list and
-// place every other test's Sessions, so the host serves only that tenant, as
-// the test's own deployment. A test on an isolated database passes "".
-func registerAgentHost(t testing.TB, s *Store, tenant string) agentHost {
+// registerAgentHost registers a deployment-wide agent host.
+func registerAgentHost(t testing.TB, s *Store) agentHost {
 	t.Helper()
 	host := agentHost{ID: uuid.NewString(), Credential: uuid.NewString()}
 	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), host.ID, runtimedevice.HashCredential(host.Credential)); err != nil {
 		t.Fatal(err)
-	}
-	if tenant != "" {
-		if _, err := s.pool.Exec(t.Context(), `UPDATE devices SET tenant_id = $2 WHERE id = $1`, host.ID, tenant); err != nil {
-			t.Fatal(err)
-		}
 	}
 	return host
 }

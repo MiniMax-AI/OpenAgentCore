@@ -45,7 +45,7 @@ type initializationPeer struct {
 func (p *initializationPeer) setRuntimeGateway(t *testing.T, s *Store, endpoint string, registry *runtimegateway.Registry, link *sandboxlinktest.Server) {
 	p.t, p.endpoint, p.registry, p.link, p.serving = t, endpoint, registry, link, nil
 	if p.host.ID == "" {
-		p.host = registerAgentHost(t, s, p.tenant)
+		p.host = registerAgentHost(t, s)
 	}
 }
 

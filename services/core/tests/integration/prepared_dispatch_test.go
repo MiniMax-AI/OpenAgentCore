@@ -135,7 +135,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 
 func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 	h, pending := preparedDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	result := runPreparedDispatch(h, parent, pending)

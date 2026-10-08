@@ -11,7 +11,7 @@ func TestSessionExecutionBindingRetainsStartedExecutionRequirement(t *testing.T)
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	foreign, _ := newTurnSession(t, s)
-	device := registerAgentHost(t, s, tenant)
+	device := registerAgentHost(t, s)
 	// The bind runs on an execution lease of its own, which closes before the
 	// pool does.
 	writer := executionWriter(t, s)

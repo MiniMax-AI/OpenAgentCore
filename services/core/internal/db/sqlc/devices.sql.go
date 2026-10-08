@@ -32,7 +32,7 @@ func (q *Queries) AcknowledgeAssignmentRelease(ctx context.Context, arg Acknowle
 
 const bindSessionDevice = `-- name: BindSessionDevice :one
 INSERT INTO session_runtime_assignments (session_id, runtime_id)
-SELECT s.id, d.id FROM sessions s JOIN devices d ON d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
+SELECT s.id, d.id FROM sessions s CROSS JOIN devices d
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.id = $3 AND d.revoked_at IS NULL
 AND (NOT EXISTS (SELECT 1 FROM environments e WHERE e.session_id = s.id) OR EXISTS (
     SELECT 1 FROM environments e JOIN sandbox_resources r ON r.environment_id = e.id
@@ -59,89 +59,48 @@ func (q *Queries) BindSessionDevice(ctx context.Context, arg BindSessionDevicePa
 	return runtime_id, err
 }
 
-const createDevice = `-- name: CreateDevice :one
-INSERT INTO devices (id, tenant_id, name, credential_hash)
-VALUES ($1, $2, $3, $4) RETURNING id
-`
-
-type CreateDeviceParams struct {
-	ID             pgtype.UUID `json:"id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	Name           string      `json:"name"`
-	CredentialHash pgtype.Text `json:"credential_hash"`
-}
-
-func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, createDevice,
-		arg.ID,
-		arg.TenantID,
-		arg.Name,
-		arg.CredentialHash,
-	)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getAgentHost = `-- name: GetAgentHost :one
 SELECT id, name FROM devices
-WHERE id = $2 AND agent_host AND revoked_at IS NULL AND (tenant_id IS NULL OR tenant_id = $1)
+WHERE id = $1 AND revoked_at IS NULL
 `
-
-type GetAgentHostParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
 
 type GetAgentHostRow struct {
 	ID   pgtype.UUID `json:"id"`
 	Name string      `json:"name"`
 }
 
-// An agent host that may run the tenant's Sessions: the deployment's own or
-// one of the tenant's.
-func (q *Queries) GetAgentHost(ctx context.Context, arg GetAgentHostParams) (GetAgentHostRow, error) {
-	row := q.db.QueryRow(ctx, getAgentHost, arg.TenantID, arg.ID)
+// A deployment agent host that may run Sessions.
+func (q *Queries) GetAgentHost(ctx context.Context, id pgtype.UUID) (GetAgentHostRow, error) {
+	row := q.db.QueryRow(ctx, getAgentHost, id)
 	var i GetAgentHostRow
 	err := row.Scan(&i.ID, &i.Name)
 	return i, err
 }
 
 const getDeviceCredential = `-- name: GetDeviceCredential :one
-SELECT d.id, d.name, d.credential_hash, COALESCE(a.node_id::text, '')::text AS runtime_node_id, COALESCE(a.id::text, '')::text AS runtime_allocation_id
-FROM runtime_device_authority d
-LEFT JOIN runtime_allocations a ON a.device_id = d.id
-WHERE d.id = $1
+SELECT id, name, credential_hash FROM devices
+WHERE id = $1 AND revoked_at IS NULL
 `
 
 type GetDeviceCredentialRow struct {
-	ID                  pgtype.UUID `json:"id"`
-	Name                string      `json:"name"`
-	CredentialHash      string      `json:"credential_hash"`
-	RuntimeNodeID       string      `json:"runtime_node_id"`
-	RuntimeAllocationID string      `json:"runtime_allocation_id"`
+	ID             pgtype.UUID `json:"id"`
+	Name           string      `json:"name"`
+	CredentialHash string      `json:"credential_hash"`
 }
 
 func (q *Queries) GetDeviceCredential(ctx context.Context, id pgtype.UUID) (GetDeviceCredentialRow, error) {
 	row := q.db.QueryRow(ctx, getDeviceCredential, id)
 	var i GetDeviceCredentialRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.CredentialHash,
-		&i.RuntimeNodeID,
-		&i.RuntimeAllocationID,
-	)
+	err := row.Scan(&i.ID, &i.Name, &i.CredentialHash)
 	return i, err
 }
 
 const getSessionDevice = `-- name: GetSessionDevice :one
 SELECT d.id, d.name, e.id AS session_environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.runtime_id AND (d.tenant_id = s.tenant_id OR (d.agent_host AND d.tenant_id IS NULL))
+JOIN devices d ON d.id = b.runtime_id
 LEFT JOIN environments e ON e.session_id = s.id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
-AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 `
 
 type GetSessionDeviceParams struct {
@@ -157,8 +116,7 @@ type GetSessionDeviceRow struct {
 	Epoch                int64       `json:"epoch"`
 }
 
-// The Session's bound Runtime: a device of its tenant or the deployment's
-// agent host, with the Session's Environment, which the assignment binds.
+// The Session's bound agent host and Environment.
 func (q *Queries) GetSessionDevice(ctx context.Context, arg GetSessionDeviceParams) (GetSessionDeviceRow, error) {
 	row := q.db.QueryRow(ctx, getSessionDevice, arg.TenantID, arg.ID)
 	var i GetSessionDeviceRow
@@ -177,10 +135,9 @@ SELECT d.id, d.name, b.native_session_id, e.id AS session_environment_id, b.assi
     EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.started_at IS NOT NULL) AS has_started_turn
 FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.runtime_id AND (d.tenant_id = s.tenant_id OR (d.agent_host AND d.tenant_id IS NULL))
+JOIN devices d ON d.id = b.runtime_id
 LEFT JOIN environments e ON e.session_id = s.id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
-AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 `
 
 type GetSessionExecutionBindingParams struct {
@@ -276,8 +233,7 @@ SELECT 1 FROM session_runtime_assignments b JOIN devices d ON d.id = b.runtime_i
 WHERE b.session_id = $1 FOR SHARE OF d
 `
 
-// Locks the device row of the Session's Runtime before a release reads its
-// authority; see SettleRevokedRuntimeReleases.
+// Locks the agent host before a release reads its authority.
 func (q *Queries) LockAssignmentRuntime(ctx context.Context, sessionID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, lockAssignmentRuntime, sessionID)
 	return err
@@ -286,7 +242,7 @@ func (q *Queries) LockAssignmentRuntime(ctx context.Context, sessionID pgtype.UU
 const releaseSessionAssignment = `-- name: ReleaseSessionAssignment :exec
 UPDATE session_runtime_assignments b
 SET desired_state = 'released', epoch = b.epoch + 1, remove_home = b.remove_home OR $1::boolean,
-    applied_epoch = CASE WHEN EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = b.runtime_id) THEN b.applied_epoch ELSE b.epoch + 1 END
+    applied_epoch = CASE WHEN EXISTS (SELECT 1 FROM devices d WHERE d.id = b.runtime_id AND d.revoked_at IS NULL) THEN b.applied_epoch ELSE b.epoch + 1 END
 WHERE b.session_id = $2 AND (b.desired_state = 'bound' OR ($1::boolean AND NOT b.remove_home))
 `
 
@@ -320,42 +276,9 @@ func (q *Queries) RememberNativeSession(ctx context.Context, arg RememberNativeS
 	return result.RowsAffected(), nil
 }
 
-const revokeDevice = `-- name: RevokeDevice :execrows
-UPDATE devices SET revoked_at = COALESCE(revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
-WHERE tenant_id = $1 AND id = $2
-`
-
-type RevokeDeviceParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) RevokeDevice(ctx context.Context, arg RevokeDeviceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, revokeDevice, arg.TenantID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const settleRevokedRuntimeReleases = `-- name: SettleRevokedRuntimeReleases :exec
-UPDATE session_runtime_assignments SET applied_epoch = epoch
-WHERE runtime_id = $1 AND desired_state = 'released'
-`
-
-// No Runtime is left to act on a revoked device's releases, so revocation
-// settles them. It runs after the revocation in the same transaction: the
-// revocation holds the device row, which a release locks before it reads the
-// device's authority, so every release is either seen here or sees the
-// revocation.
-func (q *Queries) SettleRevokedRuntimeReleases(ctx context.Context, runtimeID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, settleRevokedRuntimeReleases, runtimeID)
-	return err
-}
-
 const touchDevice = `-- name: TouchDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
-WHERE devices.id = $1 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = devices.id)
+WHERE id = $1 AND revoked_at IS NULL
 `
 
 func (q *Queries) TouchDevice(ctx context.Context, id pgtype.UUID) (int64, error) {

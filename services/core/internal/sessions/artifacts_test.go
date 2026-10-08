@@ -197,16 +197,6 @@ func (s *fakeArtifactStorage) WithInputs(context.Context, string, string, func(c
 	return nil
 }
 
-func (s *fakeArtifactStorage) CreateDevice(context.Context, string, DeviceRegistration) (ExecutionDevice, error) {
-	s.t.Fatal("unexpected call to CreateDevice")
-	return ExecutionDevice{}, nil
-}
-
-func (s *fakeArtifactStorage) RevokeDevice(context.Context, string, string) error {
-	s.t.Fatal("unexpected call to RevokeDevice")
-	return nil
-}
-
 func (s *fakeArtifactStorage) TouchDevice(context.Context, string) (bool, error) {
 	s.t.Fatal("unexpected call to TouchDevice")
 	return false, nil

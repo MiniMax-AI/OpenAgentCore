@@ -3,7 +3,6 @@ package sessionpg
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -63,12 +62,8 @@ func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup Lookup) err
 	return err
 }
 
-func (s *Store) ListAgentHosts(ctx context.Context, tenant string) ([]sessions.ExecutionDevice, error) {
-	id, err := parseID(tenant)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.units.Queries().ListAgentHosts(ctx, id)
+func (s *Store) ListAgentHosts(ctx context.Context) ([]sessions.ExecutionDevice, error) {
+	rows, err := s.units.Queries().ListAgentHosts(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -131,64 +126,8 @@ func (s *Store) GetDeviceCredential(ctx context.Context, device string) (runtime
 	}
 	return runtimedevice.Credential{
 		ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, Type: runtimedevice.RuntimeTypeAgentDaemon,
-		CredentialHash: row.CredentialHash, RuntimeNodeID: row.RuntimeNodeID, RuntimeAllocationID: row.RuntimeAllocationID,
+		CredentialHash: row.CredentialHash,
 	}, true, nil
-}
-
-// ArchivedCancellationReceipt is a read-only exception for the exact already
-// authenticated delivery. The ordinary credential view remains revoked; this
-// cannot authorize bootstrap, reconnect, dispatch, workspace access or renewal.
-// A marker records that archive caused the first revocation; timestamps alone
-// cannot distinguish an earlier ordinary cancel/revoke followed by archive.
-func (s *Store) ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error) {
-	if len(runIDs) == 0 || credentialHash == "" {
-		return runtimedevice.ArchivedCancellationReceipt{}, nil
-	}
-	id, err := parseID(device)
-	if err != nil {
-		return runtimedevice.ArchivedCancellationReceipt{}, err
-	}
-	row, err := s.units.Queries().GetArchivedCancellationReceipt(ctx, sqlc.GetArchivedCancellationReceiptParams{DeviceID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}, RunIds: runIDs, LimitSeconds: int32(runtimedevice.ArchivedCancellationReceiptLimit.Seconds())})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return runtimedevice.ArchivedCancellationReceipt{}, nil
-	}
-	if err != nil {
-		return runtimedevice.ArchivedCancellationReceipt{}, err
-	}
-	return runtimedevice.ArchivedCancellationReceipt{RunID: uuid.UUID(row.ID.Bytes).String(), Deadline: row.CancelRequestedAt.Time.Add(runtimedevice.ArchivedCancellationReceiptLimit)}, nil
-}
-
-func (s *Store) CreateDevice(ctx context.Context, tenant string, registration sessions.DeviceRegistration) (sessions.ExecutionDevice, error) {
-	tenantID, err := parseID(tenant)
-	if err != nil {
-		return sessions.ExecutionDevice{}, err
-	}
-	id, err := s.units.Queries().CreateDevice(ctx, sqlc.CreateDeviceParams{
-		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenantID,
-		Name: registration.Name, CredentialHash: pgtype.Text{String: registration.CredentialHash, Valid: true},
-	})
-	if err != nil {
-		return sessions.ExecutionDevice{}, fmt.Errorf("create execution device: %w", err)
-	}
-	return sessions.ExecutionDevice{ID: uuid.UUID(id.Bytes).String(), Name: registration.Name}, nil
-}
-
-func (s *Store) RevokeDevice(ctx context.Context, tenant, device string) error {
-	lookup, err := ResourceLookup(tenant, device)
-	if err != nil {
-		return err
-	}
-	return s.units.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		n, err := q.RevokeDevice(ctx, sqlc.RevokeDeviceParams(lookup))
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			return sessions.ErrNotFound
-		}
-		return q.SettleRevokedRuntimeReleases(ctx, lookup.ID)
-	})
 }
 
 func (s *Store) TouchDevice(ctx context.Context, device string) (bool, error) {
@@ -276,7 +215,7 @@ func (t *SessionTx) LoadDevice(ctx context.Context, device string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	_, err = t.q.GetAgentHost(ctx, sqlc.GetAgentHostParams{TenantID: t.tenant, ID: id})
+	_, err = t.q.GetAgentHost(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

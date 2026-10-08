@@ -435,7 +435,7 @@ describe("AdminClient project monitoring", () => {
     const observation = {
       id: sessionId, object: "agent.runtime_observation", session_id: sessionId, environment_id: resourceId,
       mode: "openai_hosted", provider_type: "docker",
-      instance: { kind: "managed_allocation", allocation_id: resourceId, device_id: keyId, connection_generation: null },
+      instance: { kind: "managed_allocation", allocation_id: resourceId, connection_generation: null },
       lifecycle_state: "active", status: "observed", reason: null,
       allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,
       cpu: { usage_seconds_total: 0, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
@@ -458,7 +458,7 @@ describe("AdminClient project monitoring", () => {
     const observation = {
       id: sessionId, object: "agent.runtime_observation", session_id: sessionId, environment_id: resourceId,
       mode: "openai_hosted", provider_type: "e2b",
-      instance: { kind: "managed_allocation", allocation_id: resourceId, device_id: keyId, connection_generation: null },
+      instance: { kind: "managed_allocation", allocation_id: resourceId, connection_generation: null },
       lifecycle_state: "active", status: "observed", reason: null,
       allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,
       cpu: { usage_seconds_total: null, capacity_cores: 2, usage_cores: null, utilization_ratio: 0.1955 },

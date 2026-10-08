@@ -36,10 +36,6 @@ type HandlerConfig struct {
 	// last_heartbeat_at fresh. nil tracks liveness in-process only.
 	Heartbeat HeartbeatTouch
 
-	// ArchivedCancellations reads the receipt that an archived Session's
-	// cancellation still owes a connection's delivery. nil drains nothing.
-	ArchivedCancellations ArchivedCancellationStore
-
 	// Links gives an agent host's binds their Link resource and attach grant.
 	// nil sends binds without them.
 	Links *LinkAuthority
@@ -133,7 +129,6 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := newSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
 	sess.heartbeat = h.cfg.Heartbeat
-	sess.archivedCancellations = h.cfg.ArchivedCancellations
 	sess.links = h.cfg.Links
 	sess.credentialHash = runtimedevice.HashCredential(token)
 	h.cfg.Log("agentdaemon gateway: ws upgrade ok, registering device_id=%s waiters=%d",
@@ -189,36 +184,6 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// DeviceStatus is a lightweight liveness probe the daemon hits before
-// the WS dial.
-func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
-	bearer := bearerFromAuthHeader(r)
-	if bearer == "" {
-		writeAuthError(w, http.StatusUnauthorized, "missing_bearer", "")
-		return
-	}
-	deviceID := r.URL.Query().Get("device_id")
-	if deviceID == "" {
-		writeAuthError(w, http.StatusBadRequest, "missing_device_id", "device_id query param required")
-		return
-	}
-	auth, err := h.cfg.Authenticator.AuthenticateBearer(r.Context(), deviceID, bearer)
-	if err != nil {
-		status, code := mapAuthError(err)
-		h.cfg.Log("agentdaemon gateway: device-status auth rejected device_id=%s code=%s status=%d err=%v",
-			deviceID, code, status, err)
-		writeAuthError(w, status, code, err.Error())
-		return
-	}
-	_, regErr := h.cfg.Registry.LookupDevice(auth.DeviceID)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"device_id": auth.DeviceID,
-		"online":    regErr == nil,
-	})
 }
 
 // ----------------------------------------------------------------------

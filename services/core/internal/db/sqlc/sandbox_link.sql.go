@@ -12,8 +12,8 @@ import (
 )
 
 const getAgentHostCredential = `-- name: GetAgentHostCredential :one
-SELECT COALESCE(credential_hash, '')::text AS credential_hash, credential_revision FROM devices
-WHERE id = $1 AND agent_host AND revoked_at IS NULL
+SELECT credential_hash, credential_revision FROM devices
+WHERE id = $1 AND revoked_at IS NULL
 `
 
 type GetAgentHostCredentialRow struct {
@@ -61,7 +61,7 @@ func (q *Queries) GetEnvironmentResource(ctx context.Context, arg GetEnvironment
 
 const getLinkAssignment = `-- name: GetLinkAssignment :one
 SELECT b.session_id, b.runtime_id, b.epoch, b.desired_state = 'bound' AS bound,
-    (d.agent_host AND d.revoked_at IS NULL)::boolean AS agent_host, d.credential_revision,
+    (d.revoked_at IS NULL)::boolean AS agent_host, d.credential_revision,
     r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
     r.id AS resource_id, r.generation AS resource_generation,
     (COALESCE(s.configuration->'environment'->'network'->>'access', 'enabled') = 'enabled')::boolean AS network_enabled
@@ -183,23 +183,21 @@ func (q *Queries) ListLiveSandboxResources(ctx context.Context) ([]ListLiveSandb
 }
 
 const registerAgentHost = `-- name: RegisterAgentHost :one
-INSERT INTO devices (id, name, credential_hash, agent_host)
-VALUES ($1, 'agent-host', $2, true)
+INSERT INTO devices (id, name, credential_hash)
+VALUES ($1, 'agent-host', $2)
 ON CONFLICT (id) DO UPDATE SET credential_hash = EXCLUDED.credential_hash,
     credential_revision = devices.credential_revision + (devices.credential_hash IS DISTINCT FROM EXCLUDED.credential_hash)::int
-WHERE devices.agent_host
 RETURNING id
 `
 
 type RegisterAgentHostParams struct {
 	ID             pgtype.UUID `json:"id"`
-	CredentialHash pgtype.Text `json:"credential_hash"`
+	CredentialHash string      `json:"credential_hash"`
 }
 
 // The deployment's agent host, with no tenant, Environment or executor key.
 // A new credential advances the revision, which fences the Links the old one
-// authenticated; a revocation stays. No row means the ID belongs to a device
-// that is not an agent host.
+// authenticated; a revocation stays.
 func (q *Queries) RegisterAgentHost(ctx context.Context, arg RegisterAgentHostParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, registerAgentHost, arg.ID, arg.CredentialHash)
 	var id pgtype.UUID

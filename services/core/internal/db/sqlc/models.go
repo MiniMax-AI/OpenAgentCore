@@ -54,18 +54,13 @@ type DeploymentModelProvider struct {
 }
 
 type Device struct {
-	ID                  pgtype.UUID        `json:"id"`
-	TenantID            pgtype.UUID        `json:"tenant_id"`
-	Name                string             `json:"name"`
-	CredentialHash      pgtype.Text        `json:"credential_hash"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	LastSeenAt          pgtype.Timestamptz `json:"last_seen_at"`
-	RevokedAt           pgtype.Timestamptz `json:"revoked_at"`
-	EnvironmentID       pgtype.UUID        `json:"environment_id"`
-	ExecutorKeyID       pgtype.UUID        `json:"executor_key_id"`
-	ArchiveCancelTurnID pgtype.UUID        `json:"archive_cancel_turn_id"`
-	AgentHost           bool               `json:"agent_host"`
-	CredentialRevision  int64              `json:"credential_revision"`
+	ID                 pgtype.UUID        `json:"id"`
+	Name               string             `json:"name"`
+	CredentialHash     string             `json:"credential_hash"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
+	RevokedAt          pgtype.Timestamptz `json:"revoked_at"`
+	CredentialRevision int64              `json:"credential_revision"`
 }
 
 type Environment struct {
@@ -218,7 +213,6 @@ type PublicExecutionTurn struct {
 type RuntimeAllocation struct {
 	ID                    pgtype.UUID        `json:"id"`
 	EnvironmentID         pgtype.UUID        `json:"environment_id"`
-	DeviceID              pgtype.UUID        `json:"device_id"`
 	ProviderKey           pgtype.UUID        `json:"provider_key"`
 	State                 string             `json:"state"`
 	CreateSettled         bool               `json:"create_settled"`
@@ -265,14 +259,6 @@ type RuntimeDeploymentGeneration struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	ProviderConfig   []byte             `json:"provider_config"`
 	ProviderMetadata []byte             `json:"provider_metadata"`
-}
-
-type RuntimeDeviceAuthority struct {
-	ID             pgtype.UUID `json:"id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	Name           string      `json:"name"`
-	EnvironmentID  pgtype.UUID `json:"environment_id"`
-	CredentialHash string      `json:"credential_hash"`
 }
 
 type RuntimeHistorySample struct {

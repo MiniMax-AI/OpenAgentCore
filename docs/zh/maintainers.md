@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 3c7850ae83a46b2869ccd4166b30618d70e0564067136589c9c4a91e21216e6e
+source_hash: 9d004eb3855c91d8e6059f81f1d7018be98c75daba44c347798b6a89c3c720c6
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -91,9 +91,9 @@ make check-microsandbox-provider
 
 ### 独立 Core 构建 {#standalone-core-builds}
 
-`make build-core` 会将 `oac-core`、`oac-core-device`、`oac-core-environment-key`、`oac-node` 和 `oac` 构建到 `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`（`OAC_DEV_CORE_BUILD_DIR` 可选择其他绝对目录）。构建过程仅将 `scripts/build-core.sh` 中列出的源文件集（Core 服务、其契约、所需的共享软件包以及根 Go 模块文件）复制到临时上下文，并使用禁用 CGO、只读模块和裁剪路径的方式构建。它不需要 Node、Docker 或其他应用程序。Core 新增共享依赖时，请将该软件包加入列表；绝不能复制整个仓库来使其完成编译。
+`make build-core` 会将 `oac-core`、`oac-core-environment-key`、`oac-node` 和 `oac` 构建到 `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`（`OAC_DEV_CORE_BUILD_DIR` 可选择其他绝对目录）。构建过程仅将 `scripts/build-core.sh` 中列出的源文件集（Core 服务、其契约、所需的共享软件包以及根 Go 模块文件）复制到临时上下文，并使用禁用 CGO、只读模块和裁剪路径的方式构建。它不需要 Node、Docker 或其他应用程序。Core 新增共享依赖时，请将该软件包加入列表；绝不能复制整个仓库来使其完成编译。
 
-`make docker-build-core` 会根据这五个命令和 E2B 辅助程序构建 `oac-core:dev` 镜像（`OAC_DEV_CORE_IMAGE` 可选择其他名称）。基础镜像是通过摘要固定的 `debian:bookworm-slim`，包含 CA 证书以及辅助程序所需的 glibc 运行时；默认用户的 UID/GID 为 65532，Core 监听 `:8091`。此本地构建目标生成 Linux amd64 镜像；[分发构建](#build-a-distribution)使用同一架构。对镜像或其构建进行更改时，除了相关的源代码检查外，还必须运行 `make check-core-container`：它会在只读根文件系统上针对该镜像运行官方客户端测试套件，并且需要 Linux Docker、非 root 用户，以及服务检查中的[测试数据库和固定版本 SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification)（`OAC_TEST_DATABASE_URL` 指向一个已应用迁移的 `oac_*_tests` 数据库，并设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`）。
+`make docker-build-core` 会根据这些命令和 E2B 辅助程序构建 `oac-core:dev` 镜像（`OAC_DEV_CORE_IMAGE` 可选择其他名称）。基础镜像是通过摘要固定的 `debian:bookworm-slim`，包含 CA 证书以及辅助程序所需的 glibc 运行时；默认用户的 UID/GID 为 65532，Core 监听 `:8091`。此本地构建目标生成 Linux amd64 镜像；[分发构建](#build-a-distribution)使用同一架构。对镜像或其构建进行更改时，除了相关的源代码检查外，还必须运行 `make check-core-container`：它会在只读根文件系统上针对该镜像运行官方客户端测试套件，并且需要 Linux Docker、非 root 用户，以及服务检查中的[测试数据库和固定版本 SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification)（`OAC_TEST_DATABASE_URL` 指向一个已应用迁移的 `oac_*_tests` 数据库，并设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`）。
 
 ## 发布版本 {#publish-a-version}
 

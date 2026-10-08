@@ -39,7 +39,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			h := newDispatchHarness(t)
 			candidate := h.message("candidate", "queued")
 			candidateSession := h.session.ID
-			_, pool := testStore(t)
+			pool := h.s.pool
 			cfg := pool.Config()
 			mutated := make(chan error, 1)
 			cfg.ConnConfig.Tracer = &beforeInputRead{run: func() {

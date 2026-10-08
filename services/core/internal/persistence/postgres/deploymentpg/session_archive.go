@@ -61,16 +61,8 @@ func (t *archiveTx) FindAllocation(environment string) (deployment.Allocation, b
 }
 
 func (t *archiveTx) RequestArchiveCleanup(current deployment.Allocation) error {
-	device, err := parseID(current.DeviceID)
-	if err != nil {
-		return err
-	}
 	id, err := parseID(current.ID)
 	if err != nil {
-		return err
-	}
-	// The release follows the revocation, which leaves no Runtime to deliver it to.
-	if _, err := t.q.RevokeArchivedRuntimeDevice(t.ctx, sqlc.RevokeArchivedRuntimeDeviceParams{TenantID: t.tenant, DeviceID: device, SessionID: t.session}); err != nil {
 		return err
 	}
 	if err := t.ReleaseAssignment(t.ctx, false); err != nil {

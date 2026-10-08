@@ -118,7 +118,6 @@ const mcpWorkerConfiguration = `{"agent":{"model":"gpt-5.5","tools":[{"type":"mc
 
 func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, string) {
 	t.Helper()
-	h.s, _ = testStore(t)
 	_, service, err := fixtureVaults(h.s)
 	if err != nil {
 		t.Fatal(err)

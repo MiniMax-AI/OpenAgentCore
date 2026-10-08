@@ -3,7 +3,6 @@ package sessionpg
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -99,10 +98,7 @@ func (s *Store) RegisterAgentHost(ctx context.Context, runtime, credentialHash s
 	if err != nil {
 		return err
 	}
-	_, err = s.units.Queries().RegisterAgentHost(ctx, sqlc.RegisterAgentHostParams{ID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("agent host %s is registered as another device", runtime)
-	}
+	_, err = s.units.Queries().RegisterAgentHost(ctx, sqlc.RegisterAgentHostParams{ID: id, CredentialHash: credentialHash})
 	return err
 }
 

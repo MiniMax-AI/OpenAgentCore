@@ -54,7 +54,7 @@ func TestCoreMetricsSnapshot(t *testing.T) {
 		t.Fatal("empty queue must not invent an age")
 	}
 	connected := uuid.NewString()
-	if _, err := pool.Exec(t.Context(), `INSERT INTO devices(id,tenant_id,name,credential_hash) VALUES($1,$2,'metrics',$3)`, connected, uuid.NewString(), strings.Repeat("a", 64)); err != nil {
+	if _, err := pool.Exec(t.Context(), `INSERT INTO devices(id,name,credential_hash) VALUES($1,'metrics',$2)`, connected, strings.Repeat("a", 64)); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM devices WHERE id=$1`, connected) })

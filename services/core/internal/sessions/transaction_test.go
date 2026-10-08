@@ -38,8 +38,6 @@ type fakeTx struct {
 	expireEnvironment        func() error
 	loadComputeSuspension    func() (bool, error)
 	loadPendingFileWrite     func() (bool, error)
-	loadBoundDevice          func() (bool, error)
-	insertEnvironmentDevice  func() error
 	loadSessionDevice        func() (ExecutionDevice, bool, error)
 	claimInitialization      func() (bool, error)
 	unclaimInitialization    func() (bool, error)
@@ -105,7 +103,6 @@ var (
 	_ EnvironmentTerminationTx = (*fakeTx)(nil)
 	_ InputStartTx             = (*fakeTx)(nil)
 	_ ComputeAdmissionTx       = (*fakeTx)(nil)
-	_ EnvironmentDeviceTx      = (*fakeTx)(nil)
 	_ InputProjectionTx        = (*fakeTx)(nil)
 	_ InitializationTx         = (*fakeTx)(nil)
 	_ ConnectionTx             = (*fakeTx)(nil)
@@ -210,16 +207,6 @@ func (f *fakeTx) LoadComputeSuspension(context.Context) (bool, error) {
 func (f *fakeTx) LoadPendingFileWrite(context.Context) (bool, error) {
 	f.record("LoadPendingFileWrite", f.loadPendingFileWrite != nil)
 	return f.loadPendingFileWrite()
-}
-
-func (f *fakeTx) LoadBoundDevice(context.Context) (bool, error) {
-	f.record("LoadBoundDevice", f.loadBoundDevice != nil)
-	return f.loadBoundDevice()
-}
-
-func (f *fakeTx) InsertEnvironmentDevice(_ context.Context, environment string, device ExecutionDevice, credentialHash string) error {
-	f.record("InsertEnvironmentDevice", f.insertEnvironmentDevice != nil, device.ID, device.Name, environment, credentialHash)
-	return f.insertEnvironmentDevice()
 }
 
 func (f *fakeTx) LoadJournalTurn(_ context.Context, turn string) (JournalTurn, bool, error) {

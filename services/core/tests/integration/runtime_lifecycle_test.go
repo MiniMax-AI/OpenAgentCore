@@ -177,9 +177,6 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	if err != nil || clean.State != "released" || p.kills != 1 {
 		t.Fatalf("deleted cleanup: %+v %v", clean, err)
 	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-		t.Fatal("cleanup did not revoke authority")
-	}
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
@@ -198,9 +195,6 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "cleanup_pending" || got.CreateSettled || p.creates != 1 {
 		t.Fatalf("unknown creation forgotten: %+v %v", got, err)
-	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-		t.Fatal("unknown allocation retains execution authority")
 	}
 	// A late completion is still owned and reclaimed on the next scan.
 	p.resources[owner.ID] = sandbox.Info{Reference: sandbox.Reference{TenantID: tenant, EnvironmentID: env.ID, AllocationID: owner.ID}, ProviderID: owner.ID, State: "running", BootstrapComplete: true}

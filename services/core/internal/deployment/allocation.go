@@ -21,7 +21,6 @@ type Allocation struct {
 	ComputeRetainedUntil *time.Time
 	ID, EnvironmentID    string
 	SessionID, TenantID  string
-	DeviceID             string
 	// ServeGeneration is the generation of the allocation's Link resource.
 	ServeGeneration uint64
 	// ProviderKey is the installation the allocation was provisioned for.
@@ -66,7 +65,7 @@ func (k AllocationKey) parse() (AllocationKey, error) {
 
 // NewAllocation is an allocation to store with its dedicated device.
 type NewAllocation struct {
-	ID, EnvironmentID, DeviceID, ProviderKey string
+	ID, EnvironmentID, ProviderKey string
 	// NodeID is empty when no node serves the allocation.
 	NodeID     string
 	Generation uint64

@@ -17,7 +17,7 @@ import (
 // Runtime its file writes name.
 func runtimeFileWriteHost(t *testing.T, s *Store, owner deployment.Allocation) string {
 	t.Helper()
-	host := registerAgentHost(t, s, owner.TenantID)
+	host := registerAgentHost(t, s)
 	assignSession(t, s, owner.SessionID, host.ID)
 	return host.ID
 }

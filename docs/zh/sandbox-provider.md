@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: c3c3217a3bf62e87cc09966d5cb46123bb52d751adcbe91c00b0466bb6f1a593
+source_hash: 6378777af8dce6438d8796b51f5b737837e2ce56092fe2c48baf0ba91c0e4aea
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -158,13 +158,13 @@ Node readiness 绑定到精确 generation、当前连接和 owner epoch。持久
 
 ### Allocation 生命周期 {#allocation-lifecycle}
 
-allocation、专用 daemon credential digest、Serve credential digest 和精确 Session binding 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或 provider name 推断。
+allocation 及其 Serve credential digest 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或 provider name 推断。
 
-配置 provider 后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
+配置 provider 后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。Worker 通过已认证的 [Link resource](sandbox-link-protocol.md) 观测 Environment 连接，与 allocation provisioning 独立。
 
 Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式删除和 snapshot retention 授权其清理。停止或缺失 container 不授权丢弃保留工作区或历史。禁用 provider 停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
 
-终结清理原子撤销 device authority、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时 provider outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
+终结清理原子撤销 allocation 的 Serve authority、释放 Session 的 agent-host assignment 并保留 home、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时 provider outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
 
 ### `oac-sandbox-io` {#oac-sandbox-io}
 

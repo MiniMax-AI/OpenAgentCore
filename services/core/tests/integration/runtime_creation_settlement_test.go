@@ -61,9 +61,6 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 			if err != nil || stored.State != "released" || !stored.CreateSettled {
 				t.Fatal("release not durable", err)
 			}
-			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-				t.Fatal("released credential retained authority", err)
-			}
 			value, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			if err != nil || value.Environment.Status != "failed" {
 				t.Fatal("environment not terminated", err)

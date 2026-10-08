@@ -14,6 +14,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // hostedEnvironment stores a fresh tenant's hosted Session with its pending
@@ -31,23 +33,23 @@ func hostedEnvironment(t *testing.T, pool *pgxpool.Pool) deployment.AllocationKe
 	return deployment.AllocationKey{TenantID: tenant.String(), EnvironmentID: environment.String()}
 }
 
-// credentialHash is the digest of a fresh device credential.
+// credentialHash is the digest of a fresh Serve credential.
 func credentialHash() string {
 	digest := sha256.Sum256([]byte(uuid.NewString()))
 	return hex.EncodeToString(digest[:])
 }
 
-// allocationRows reports the Environment's allocation state, device
-// revocation and status, and the Session's journal length.
-func allocationRows(t *testing.T, f fixture, key deployment.AllocationKey) (allocations int, state string, revoked bool, status string, changes int) {
+// allocationRows reports the allocation, assignment release, Environment
+// status and Session journal length.
+func allocationRows(t *testing.T, f fixture, key deployment.AllocationKey) (allocations int, state string, released bool, status string, changes int) {
 	t.Helper()
 	err := f.pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM runtime_allocations WHERE environment_id = e.id),
 		COALESCE((SELECT state FROM runtime_allocations WHERE environment_id = e.id), ''),
-		COALESCE((SELECT revoked_at IS NOT NULL FROM devices WHERE environment_id = e.id), false),
+		COALESCE((SELECT desired_state = 'released' FROM session_runtime_assignments WHERE session_id = e.session_id), false),
 		e.status,
 		(SELECT count(*) FROM session_events WHERE session_id = e.session_id)
-		FROM environments e WHERE e.id = $1`, key.EnvironmentID).Scan(&allocations, &state, &revoked, &status, &changes)
+		FROM environments e WHERE e.id = $1`, key.EnvironmentID).Scan(&allocations, &state, &released, &status, &changes)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +57,7 @@ func allocationRows(t *testing.T, f fixture, key deployment.AllocationKey) (allo
 }
 
 // Concurrent reservations of one Environment serialize on its Session: one
-// commits the allocation and its device, the others replay it, and another
+// commits the allocation, the others replay it, and another
 // installation conflicts.
 func TestConcurrentReservationsCommitOneAllocation(t *testing.T) {
 	f := newFixture(t)
@@ -67,13 +69,13 @@ func TestConcurrentReservationsCommitOneAllocation(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range results {
 		wg.Go(func() {
-			results[i], errs[i] = changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
+			results[i], errs[i] = changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
 		})
 	}
 	wg.Wait()
 	fresh := 0
 	for i, result := range results {
-		if errs[i] != nil || result.ID != results[0].ID || result.DeviceID != results[0].DeviceID {
+		if errs[i] != nil || result.ID != results[0].ID {
 			t.Fatal("reservations disagree", result, errs[i])
 		}
 		if !result.Replayed {
@@ -81,13 +83,13 @@ func TestConcurrentReservationsCommitOneAllocation(t *testing.T) {
 		}
 	}
 	var devices int
-	if err := f.pool.QueryRow(t.Context(), "SELECT count(*) FROM devices WHERE environment_id = $1", key.EnvironmentID).Scan(&devices); err != nil {
+	if err := f.pool.QueryRow(t.Context(), "SELECT count(*) FROM devices").Scan(&devices); err != nil {
 		t.Fatal(err)
 	}
-	if allocations, state, _, _, _ := allocationRows(t, f, key); fresh != 1 || allocations != 1 || devices != 1 || state != "creating" {
+	if allocations, state, _, _, _ := allocationRows(t, f, key); fresh != 1 || allocations != 1 || devices != 0 || state != "creating" {
 		t.Fatal("reservations committed more than one allocation", fresh, allocations, devices, state)
 	}
-	if _, err := changes.ReserveAllocation(t.Context(), key, uuid.NewString(), credentialHash(), credentialHash()); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := changes.ReserveAllocation(t.Context(), key, uuid.NewString(), credentialHash()); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("another installation replayed the allocation", err)
 	}
 }
@@ -100,12 +102,12 @@ func TestAllocationWritesNeedTheLease(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	key := hostedEnvironment(t, f.pool)
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
 	if err != nil {
 		t.Fatal(err)
 	}
 	unallocated := hostedEnvironment(t, f.pool)
-	if _, err := closed.ReserveAllocation(t.Context(), unallocated, installation, credentialHash(), credentialHash()); !errors.Is(err, pgunit.ErrLeaseClosed) {
+	if _, err := closed.ReserveAllocation(t.Context(), unallocated, installation, credentialHash()); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatal("reserved without the lease", err)
 	}
 	if allocations, _, _, _, _ := allocationRows(t, f, unallocated); allocations != 0 {
@@ -131,18 +133,29 @@ func TestAllocationWritesNeedTheLease(t *testing.T) {
 	}
 }
 
-// Cleanup revokes the device, settles the Session and requests cleanup in
-// one transaction: a failed settlement rolls the revocation back.
-func TestFailedCleanupSettlementRollsBackRevocation(t *testing.T) {
+// Cleanup releases the assignment, settles the Session and requests cleanup
+// in one transaction: a failed settlement rolls the release back.
+func TestFailedCleanupSettlementRollsBackAssignmentRelease(t *testing.T) {
 	f := newFixture(t)
-	changes, _ := f.execution(t)
+	changes, lease := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	key := hostedEnvironment(t, f.pool)
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if owner, err = changes.ObserveRunning(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	host := uuid.NewString()
+	if _, err := f.pool.Exec(t.Context(), `INSERT INTO devices(id, name, credential_hash) VALUES ($1, 'host', $2)`, host, credentialHash()); err != nil {
+		t.Fatal(err)
+	}
+	execution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := execution.BindSessionDevice(t.Context(), owner.TenantID, owner.SessionID, host); err != nil {
 		t.Fatal(err)
 	}
 	_, _, _, _, before := allocationRows(t, f, key)
@@ -153,8 +166,8 @@ func TestFailedCleanupSettlementRollsBackRevocation(t *testing.T) {
 	if _, err := changes.RequestCleanup(t.Context(), owner); err == nil {
 		t.Fatal("cleanup committed without the Session settlement")
 	}
-	if _, state, revoked, status, changed := allocationRows(t, f, key); state != "running" || revoked || status != "pending" || changed != before {
-		t.Fatal("failed cleanup left a partial commit", state, revoked, status, changed)
+	if _, state, released, status, changed := allocationRows(t, f, key); state != "running" || released || status != "pending" || changed != before {
+		t.Fatal("failed cleanup left a partial commit", state, released, status, changed)
 	}
 	if _, err := f.pool.Exec(t.Context(), "DROP TRIGGER fail_environment_update ON environments"); err != nil {
 		t.Fatal(err)
@@ -163,19 +176,24 @@ func TestFailedCleanupSettlementRollsBackRevocation(t *testing.T) {
 	if err != nil || pending.State != "cleanup_pending" {
 		t.Fatal(pending, err)
 	}
-	if _, state, revoked, status, changed := allocationRows(t, f, key); state != "cleanup_pending" || !revoked || status != "failed" || changed <= before {
-		t.Fatal("cleanup did not commit together", state, revoked, status, changed)
+	if _, state, released, status, changed := allocationRows(t, f, key); state != "cleanup_pending" || !released || status != "failed" || changed <= before {
+		t.Fatal("cleanup did not commit together", state, released, status, changed)
+	}
+	var removeHome, revoked bool
+	var epoch int64
+	if err := f.pool.QueryRow(t.Context(), `SELECT a.remove_home, a.epoch, d.revoked_at IS NOT NULL FROM session_runtime_assignments a JOIN devices d ON d.id = a.runtime_id WHERE a.session_id = $1`, owner.SessionID).Scan(&removeHome, &epoch, &revoked); err != nil || removeHome || revoked || epoch != 2 {
+		t.Fatal("cleanup changed host authority or home removal", removeHome, revoked, epoch, err)
 	}
 }
 
 // An allocation write commits only with the Session journal prune: a failed
-// prune rolls back a change and a reservation with its device.
+// prune rolls back a change and a reservation.
 func TestFailedPruneRollsBackTheAllocationWrite(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	key := hostedEnvironment(t, f.pool)
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,11 +208,11 @@ func TestFailedPruneRollsBackTheAllocationWrite(t *testing.T) {
 		t.Fatal("a failed prune kept the change", state)
 	}
 	unallocated := hostedEnvironment(t, f.pool)
-	if _, err := changes.ReserveAllocation(t.Context(), unallocated, installation, credentialHash(), credentialHash()); err == nil || !strings.Contains(err.Error(), "injected prune failure") {
+	if _, err := changes.ReserveAllocation(t.Context(), unallocated, installation, credentialHash()); err == nil || !strings.Contains(err.Error(), "injected prune failure") {
 		t.Fatal("a reservation committed without the prune", err)
 	}
 	var devices int
-	if err := f.pool.QueryRow(t.Context(), "SELECT count(*) FROM devices WHERE environment_id = $1", unallocated.EnvironmentID).Scan(&devices); err != nil {
+	if err := f.pool.QueryRow(t.Context(), "SELECT count(*) FROM devices").Scan(&devices); err != nil {
 		t.Fatal(err)
 	}
 	if allocations, _, _, _, _ := allocationRows(t, f, unallocated); allocations != 0 || devices != 0 {

@@ -114,7 +114,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 					t.Fatal("late readiness moved pin or erased serving readiness", n)
 				}
 			}
-			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: pending.Environment.ID}, first.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
+			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: pending.Environment.ID}, first.InstallationID, runtimedevice.HashCredential("runtime"))
 			if err != nil {
 				t.Fatal(err)
 			}
