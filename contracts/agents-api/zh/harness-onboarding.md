@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a571ca6ea6b43f89f1669be989ecaf52838181705ba5facbc4f66a72cccd9e57
+source_hash: cca9f9c4fc43a49fdc08af5e8eac860bf8d0bfaa11531d1aacd2e491499ced3d
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -226,7 +226,7 @@ python services/core/tests/qualify_public_native.py \
 
 | 套件 | 操作 | 放置方式 |
 | --- | --- | --- |
-| `none` | 创建重试、外部历史拒绝、两个原生文本 Turn、历史回忆、SSE 顺序，以及 SDK/原始 Item 和 Turn 一致性 | `none` |
+| `none` | 带初始输入的创建、重试和冲突保持单个 Turn，跨项目历史拒绝，两个原生文本 Turn，历史回忆，SSE 顺序，SDK／原始响应 schema 一致性与可空 usage 核算 | `none` |
 | `pending-actions` | 查询和重连待处理调用、成功/错误结果、取消、精确目标拒绝、重试和持久化 Item | 声明支持函数工具的任意放置方式 |
 | `functions` | SDK handler、成功/错误、原生文件和 Artifact 字节、继续执行、待处理调用取消和租户隔离 | 工作区 |
 | `images` | 初始和活动图像、图像结果、重试/原子拒绝、原生文件/Artifact、隔离和继续执行 | 声明支持图像和函数的工作区 |
@@ -235,6 +235,8 @@ python services/core/tests/qualify_public_native.py \
 对于 `self_hosted`，选择自定义绝对 `workspace_directory`。运行器打印每个新 Session ID 后，使用该 Session 的公共安装命令连接独立的隔离机器或容器；运行器最多等待五分钟。多个 Session 不得共享工作区。使用现有 Environment setup、包和能力断言单独验证准备语义。独立的 `official_environment_files_native.py` 检查接受两个已连接的 self-hosted Session，通过 Environment owner 验证 Files.list 排序、分页和隔离。
 
 默认验证热继续执行，并将冷恢复记录为 `unverified`。验证冷继续执行时，额外传入指向所拥有安装的绝对目录的 `--compose-directory`，以及指定其精确项目名称的 `--compose-project`。运行器仅重启该项目的 `agent-host`，确认容器启动时间已改变，然后执行相同的历史断言。这不能证明 Core 重启或 sandbox 检查点恢复。`pending-actions` 套件重连的是公共客户端，而非 agent-host 进程，因此拒绝这些重启选项。仅在[声明和覆盖台账](./index.md#known-gaps) 支持时选择冷恢复；不支持的恢复仍是缺口，不能把跳过的检查记为成功。API 拒绝会使所选套件失败。
+
+`none` 套件依据固定版本 schema 校验 Session、Turn、Item 和事件的必需字段及可空字段。原生 Turn 提供用量测量时，它会对比终止事件与已存储 Turn，并将测量值求和核对 Session 总量。未知用量保留为 `null`，每个受影响 Turn 都列入证据的 `proof.unverified`；套件通过不代表这些 Turn 已验证原生用量测量支持。
 
 使用锁定的 SDK 运行 `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py`，可在不调用模型的情况下检查凭据处理和所拥有的重启边界。现有确定性 Core 集成测试仍负责 schema 验证、原子准入、持久化回执和拒绝语义。真实模型结果仅证明所选套件、协议、Harness 和放置方式。Provider 生命周期、原生身份、凭据隔离、延迟发现和未选择的套件需要独立证据；仅通过 view 测试不能证明公共调用路径。
 

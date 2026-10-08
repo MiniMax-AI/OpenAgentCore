@@ -10,6 +10,18 @@ from openai import OpenAI
 from official_session_creation_stream import verify_creation_streams
 
 
+def verify_initial_input_retry(sessions, raw, endpoint, headers, request, session_id):
+    """Retry and conflict preserve the one Turn admitted by Session creation."""
+    turns = [turn.id for turn in sessions.turns.list(session_id)]
+    assert len(turns) == 1
+    reply = raw.post(endpoint, headers=headers, json=request)
+    assert reply.status_code == 201 and reply.json()["id"] == session_id
+    changed = raw.post(endpoint, headers=headers, json={**request, "input": "Changed " + uuid.uuid4().hex})
+    assert changed.status_code == 409
+    assert [turn.id for turn in sessions.turns.list(session_id)] == turns
+    return reply, changed
+
+
 def main():
     base, token, foreign, unsupported = sys.argv[1:]
     headers = {"Authorization": "Bearer " + token, "OpenAI-Beta": "agents=v1"}
@@ -56,16 +68,11 @@ def main():
             assert len(turns) == 1
             items = list(sessions.items.list(session.id, order="asc"))
             assert [item.content[0].text for item in items] == (["First"] if i == 0 else ["First", "Second"])
-            reply = raw.post(base + "/v1/agents/sessions", headers={**headers, **key},
-                             json={**configuration, "input": initial})
-            assert reply.status_code == 201 and reply.json()["id"] == session.id
-            assert [turn.id for turn in sessions.turns.list(session.id)] == [turns[0].id]
+            verify_initial_input_retry(sessions, raw, base + "/v1/agents/sessions", {**headers, **key},
+                                       {**configuration, "input": initial}, session.id)
             denied = raw.get(base + "/v1/agents/sessions/" + session.id,
                              headers={**headers, "Authorization": "Bearer " + foreign})
             assert denied.status_code == 404
-            changed = raw.post(base + "/v1/agents/sessions", headers={**headers, **key},
-                               json={**configuration, "input": "Changed"})
-            assert changed.status_code == 409
             sessions.events.create(session.id, events=[{"type": "agent.session.input.cancel"}])
             assert sessions.create(**configuration, input=initial, extra_headers=key).status == "idle"
             assert len(list(sessions.turns.list(session.id))) == 1
