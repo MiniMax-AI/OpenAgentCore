@@ -208,15 +208,43 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 | MiniMax native history binding | `mcode/session_test.go` |
 | Explicit refusals without native effects or fabricated results | `mcode/unsupported_test.go` |
 
+## Qualify the public path
+
+`services/core/tests/qualify_public_native.py` runs the pinned official SDK and raw HTTP assertions against an already installed, isolated Core deployment with its real agent host. It creates and deletes its own Sessions and uses the selected real model; it does not provision a deployment or replace the executor. Set `OPENAI_BASE_URL` to the deployment's `/v1` endpoint and `OPENAI_API_KEY` to its Project key. Supply a second Project's key in a private file. [Installation](../../docs/getting-started/install.md) owns deployment setup; [Projects and keys](./admin-api.md#projects-and-keys) owns credential issuance.
+
+The private settings JSON has exactly `agent`, `model_provider` and `environment`. `agent` contains `model` and an explicit `x_agents_core.harness`, with optional `harness_config` inside that extension. `model_provider` is the complete [provider bundle](./model-execution.md#session-override); `environment` is the public Session Environment input. Keep settings and foreign-key files absolute and mode 0600, outside the repository. Evidence must be a new absolute path under `~/.oac`; it contains public responses and check names, never the settings. The runner refuses to write evidence containing any of its three supplied credentials.
+
+```bash
+python services/core/tests/qualify_public_native.py \
+  --settings "$HOME/.oac/qualification/codex-none.json" \
+  --foreign-key-file "$HOME/.oac/qualification/foreign-project.key" \
+  --suite none \
+  --evidence "$HOME/.oac/qualification/codex-none-result.json"
+```
+
+| Suite | Operations | Placement |
+| --- | --- | --- |
+| `none` | Creation retry, foreign history rejection, two native text Turns, history recall, SSE ordering and SDK/raw Item and Turn parity | `none` |
+| `pending-actions` | Query/reconnect pending calls, success/error results, cancellation, exact target rejection, retries and durable Items | Any declared placement with function tools |
+| `functions` | SDK handlers, success/error, native file and Artifact bytes, continuation, pending cancellation and tenant isolation | Workspace |
+| `images` | Initial and active images, image results, retry/atomic rejection, native files/Artifacts, isolation and continuation | Workspace with declared image and function support |
+| `structured` | Saved and inline schema, function-assisted native files, exact JSON/SSE, cancellation and text override | Workspace with declared structured output and function support |
+
+For `self_hosted`, choose a custom absolute `workspace_directory`. When the runner prints each new Session ID, connect a separate isolated machine or container using that Session's public installation command; the runner waits up to five minutes. Multiple Sessions must not share a workspace. Use the existing Environment setup, package and capability assertions separately to qualify preparation semantics. The separate `official_environment_files_native.py` check accepts two already connected self-hosted Sessions and checks Files.list sorting, pagination and isolation through the Environment owner.
+
+Warm continuation is the default and records cold recovery as `unverified`. To qualify cold continuation, additionally pass `--compose-directory` with the owned installation's absolute directory and `--compose-project` with its exact project name. The runner restarts only that project's `agent-host`, confirms its container start time changed, and then runs the unchanged history assertions. This does not qualify a Core restart or a sandbox checkpoint restore. The `pending-actions` suite reconnects the public client, not the agent-host process, and rejects those restart options. Select cold recovery only where the [declaration and coverage ledger](./index.md#known-gaps) support it; unsupported recovery remains a gap, never a successful skipped check. An API rejection fails the selected suite.
+
+Run `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py` with the pinned SDK to check credential handling and the owned restart boundary without a model. Existing deterministic Core integration tests remain the authority for schema validation, atomic admission, durable receipts and rejection semantics. Real-model results qualify only the selected suite, protocol, Harness and placement. Provider lifecycle, native identity, credential isolation, deferred discovery and unselected suites need separate evidence; view-only results do not qualify the public path.
+
 ## Native installer participation
 
-An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
+An adapter supplies `agent.Installation` from `installation.go` in its own package: its registered kind and activation environment. The agent host uses this declaration to activate the packaged Harness. Adapters own native layout; validate the packaged content and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
 
-The agent-host image uses the same contract. `deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`, and `agent.ManifestEnvironment` activates it from there through `Installation.Environment`. A Harness the agent host runs is added there too.
+`deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`. `agent.ManifestEnvironment` activates it through `Installation.Environment`. Add each new Harness to that image and manifest; use the shared [image build](../../docs/maintainers.md#runtime-images-and-helpers) and [view qualification](#qualify-the-view) workflow.
 
 ## Native process ownership
 
-The daemon's `clirunner` starts every native child in its own Unix process group (a Job object on Windows); other hosts reject the launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
+The daemon's `clirunner` starts every native child in its own process group on Linux; other platforms return its typed unsupported error. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
 
 Owned output pipes stay readable after the leader exits. Consumers drain stdout and stderr before calling `Wait`, which joins the cached process result and closes the readers. `Done` reports leader reaping and group cleanup signals; it is not a native execution receipt or proof of persisted history. SDK adapters settle each Turn and drain its observations before publishing completion, and Executor close also closes the query and awaits the native child. Process groups are lifecycle supervision, not isolation or containment of descendants that leave the group.
 
@@ -328,8 +356,8 @@ Run the adapter's Turns, cancellation and continuation in a view, then qualify e
 
 ## Native references
 
-| Harness | Adapter | Native transport | Runtime guide |
-| --- | --- | --- | --- |
-| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) |
-| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) | [Claude Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) |
-| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/mcode/README.md) |
+| Harness | Adapter | Native transport |
+| --- | --- | --- |
+| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server |
+| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) |
+| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP and native workspace companion |

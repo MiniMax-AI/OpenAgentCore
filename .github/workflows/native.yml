@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       upload-artifacts:
-        description: Retain the three native installers for packaging
+        description: Retain the Linux amd64 installer for packaging
         type: boolean
         default: true
   workflow_call:
@@ -52,97 +52,56 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: ./.github/actions/node
-        with:
-          node-version: '22.22.0'
-          lockfiles: |
-            packages/claude-sdk-adapter/pnpm-lock.yaml
-            packages/mcode-harness/package-lock.json
-      - name: Build the native daemon and test bundle boundaries
-        id: build
-        run: |
-          go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/daemon/cmd/oac-daemon
-          if [[ "$RUNNER_OS" == Linux ]]; then
-            CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$RUNNER_TEMP/oac-sandbox-io" ./apps/sandboxio/cmd/oac-sandbox-io
-          fi
-          node --test scripts/build-native-installer.test.mjs
       - name: Build and test the shared Core installer
         run: |
           go build -o "$RUNNER_TEMP/oac${{ runner.os == 'Windows' && '.exe' || '' }}" ./services/core/cmd/oac
           go test ./services/core/cmd/oac -count=1 -timeout=3m
+      - name: Reject unsupported self-hosted installations
+        if: runner.os != 'Linux'
+        run: go test ./apps/daemon/internal/cli -run '^TestNativeUnsupportedPlatformPrecedesInputAndState$' -count=1 -timeout=3m
       - name: Exercise the Windows Core launcher
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./deploy/test_install.ps1 -Binary "$env:RUNNER_TEMP/oac.exe"
-      - name: Verify native download bootstrap and recovery
-        run: go test ./services/core/internal/nativeinstaller -count=1 -timeout=3m
-      - name: Native filesystem and process lifecycle
-        id: filesystem
-        run: >-
-          go test -race -count=1
-          ./internal/runtimefs
-          ./apps/daemon/internal/paths
-          ./apps/daemon/internal/daemonize
-          ./apps/daemon/internal/agent/clirunner
-      - name: Native Harness process ownership
-        id: harness
-        run: >-
-          go test -race -count=1
-          ./apps/daemon/internal/agent/codex
-          -run 'TestJSONRPCClientOwnsToolDescendants'
-      - name: Native installation
-        id: files
-        run: >-
-          go test -race -count=1
-          ./apps/daemon/internal/cli
-          -run 'TestNative'
-      - name: Build pinned native components
-        run: |
-          pnpm --dir packages/claude-sdk-adapter install --frozen-lockfile
-          pnpm --dir packages/claude-sdk-adapter build --outDir "$RUNNER_TEMP/claude-compiled"
-          pnpm --dir packages/claude-sdk-adapter --config.extend-node-path=false --filter @oac/claude-sdk-adapter deploy --prod "$RUNNER_TEMP/claude-runtime"
-          rm -rf "$RUNNER_TEMP/claude-runtime/dist"
-          mv "$RUNNER_TEMP/claude-compiled" "$RUNNER_TEMP/claude-runtime/dist"
-          # Reify the dedicated frozen export lock without pnpm's symlink layout.
-          # Flattening isolated package links changes Node dependency resolution.
-          rm -rf "$RUNNER_TEMP/claude-runtime/node_modules"
-          pnpm --dir "$RUNNER_TEMP/claude-runtime" install --prod --frozen-lockfile --config.node-linker=hoisted --ignore-scripts
-          npm install --prefix "$RUNNER_TEMP/native-tools" --no-save @openai/codex@0.153.4
-      - name: Restore or build the pinned MiniMax companion on Unix
-        if: runner.os != 'Windows'
-        uses: ./.github/actions/mcode-companion
-      - name: Package and exercise CLI-only installation, additions and reuse
-        id: package
-        run: |
-          if [[ "$RUNNER_OS" == Windows ]]; then
-            export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
-          fi
-          node scripts/build-native-installer-ci.mjs
-      - name: Bootstrap, authenticate, install and connect natively
-        id: onboarding
+      - uses: actions/setup-node@v6
         if: runner.os == 'Linux'
-        run: node scripts/native-onboarding-smoke.mjs
-      - name: Verify native Harness protocols without model requests
-        id: protocol
-        run: |
-          if [[ "$RUNNER_OS" == Windows ]]; then
-            export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
-          fi
-          node scripts/native-harness-smoke.mjs --codex-binary "$RUNNER_TEMP/native-installer/components/codex/bin/codex${{ runner.os == 'Windows' && '.exe' || '' }}" --claude-runtime "$RUNNER_TEMP/native-installer/components/claude"
-      - name: Archive the native distribution
-        run: |
-          cd "$RUNNER_TEMP"
-          tar -C native-installer -czf "oac-native-installer-${{ runner.os }}-${{ runner.arch }}.tar.gz" .
-      - uses: actions/upload-artifact@v6
-        if: inputs.upload-artifacts
         with:
-          name: oac-native-installer-${{ runner.os }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/oac-native-installer-*.tar.gz
+          node-version: '22'
+      - name: Build the Linux amd64 launcher and Sandbox I/O
+        if: runner.os == 'Linux'
+        id: build
+        run: |
+          CGO_ENABLED=0 go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon" ./apps/daemon/cmd/oac-daemon
+          CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$RUNNER_TEMP/oac-sandbox-io" ./apps/sandboxio/cmd/oac-sandbox-io
+          node --test scripts/build-native-installer.test.mjs scripts/build-native-catalog.test.mjs
+      - name: Verify download recovery and launcher installation
+        if: runner.os == 'Linux'
+        id: files
+        run: go test -race -count=1 ./services/core/internal/nativeinstaller ./apps/daemon/internal/cli ./apps/daemon/internal/daemonize ./apps/daemon/internal/agent/clirunner ./internal/runtimefs
+      - name: Prepare Sandbox I/O directories
+        if: runner.os == 'Linux'
+        run: sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /environment/workspace /environment/initialization /environment/packages /home/runtime
+      - name: Package and exercise launcher installation and reuse
+        if: runner.os == 'Linux'
+        id: package
+        run: node scripts/build-native-installer-ci.mjs
+      - name: Bootstrap, authenticate, install and connect
+        if: runner.os == 'Linux'
+        id: onboarding
+        run: node scripts/native-onboarding-smoke.mjs
+      - name: Archive the Linux amd64 installer
+        if: runner.os == 'Linux'
+        run: tar -C "$RUNNER_TEMP/native-installer" -czf "$RUNNER_TEMP/oac-native-installer-Linux-X64.tar.gz" .
+      - uses: actions/upload-artifact@v6
+        if: inputs.upload-artifacts && runner.os == 'Linux'
+        with:
+          name: oac-native-installer-Linux-X64
+          path: ${{ runner.temp }}/oac-native-installer-Linux-X64.tar.gz
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
       - name: Record failed native check phases
-        if: failure()
+        if: failure() && runner.os == 'Linux'
         env:
           PHASES: ${{ toJSON(steps) }}
           PLATFORM: ${{ matrix.platform }}
@@ -157,7 +116,7 @@ jobs:
           writeFileSync(join(dir, 'phases.json'), JSON.stringify({ platform: process.env.PLATFORM, phases }, null, 2));
           JS
       - name: Retain native failure diagnostics
-        if: failure()
+        if: failure() && runner.os == 'Linux'
         uses: actions/upload-artifact@v6
         with:
           name: native-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
@@ -178,3 +137,5 @@ jobs:
           go-version-file: go.mod
       - run: go test ./services/core/cmd/oac -count=1 -timeout=3m
       - run: go build -o "$RUNNER_TEMP/oac" ./services/core/cmd/oac
+      - name: Reject unsupported self-hosted installations
+        run: go test ./apps/daemon/internal/cli -run '^TestNativeUnsupportedPlatformPrecedesInputAndState$' -count=1 -timeout=3m

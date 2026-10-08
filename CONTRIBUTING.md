@@ -23,7 +23,6 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Provider registration and lifecycle | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Sandbox deployment, selection and administrative transitions | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Operator node tasks | [Nodes guide](docs/getting-started/nodes.md) |
-| Codex, Claude and MiniMax Runtime adapters and images | [Codex](services/core/deploy/codex/README.md), [Claude](services/core/deploy/claude/README.md), [MiniMax](services/core/deploy/mcode/README.md) |
 | Claude private SDK bridge | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
 | E2B template construction | [E2B template builder](services/core/deploy/e2b/README.md) |
 | E2B and microsandbox Provider helper implementation | [E2B helper](services/core/tools/e2b-provider/README.md), [microsandbox helper](services/core/tools/microsandbox-provider/README.md) |

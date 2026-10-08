@@ -1,15 +1,13 @@
 package integration
 
 import (
-	"database/sql"
-	"os"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -209,39 +207,42 @@ func TestGenerationMigrationBackfillsAndRejectsLossyDowngrade(t *testing.T) {
 }
 
 func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
-	s, w, view, input := webSpecificationFixture(t, "e2b")
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
-	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
-	input.ExpectedGeneration = 1
-	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
+	db, migrations := runtimeNamesMigrationSchema(t)
+	ctx := t.Context()
+	if _, err := migrations.UpTo(ctx, 81); err != nil {
 		t.Fatal(err)
 	}
-	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
-	defer db.Close()
-	migrations, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))
+	installation := uuid.NewString()
+	credential, err := pgtest.CredentialKey(t).SealSandboxDeployment([]byte("migration-provider-key"), installation, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = migrations.DownTo(t.Context(), 80); err == nil {
-		t.Fatal("downgrade erased old owned allocation")
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
 	}
-	// Earlier down migrations can commit before the generation guard vetoes
-	// downgrade. Restore the current schema before invoking current Store code.
-	if _, err = migrations.Up(t.Context()); err != nil {
+	exec(`UPDATE runtime_deployment SET installation_id=$1,backend_fingerprint=repeat('a',64),provider_kind='e2b',mode='direct',web_managed=true,generation=2,e2b_template='next-template',e2b_credential=$2`, installation, credential)
+	exec(`INSERT INTO runtime_deployment_generations(generation,provider_kind,specification,e2b_template) VALUES(1,'e2b','{}','old-template')`)
+	session, tenant, environment, device, allocation := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	exec(`INSERT INTO sessions(id,tenant_id,engine,idempotency_key,request_hash,configuration) VALUES($1,$2,'codex','old','old','{}')`, session, tenant)
+	exec(`INSERT INTO environments(id,session_id) VALUES($1,$2)`, environment, session)
+	exec(`INSERT INTO devices(id,tenant_id,name,credential_hash) VALUES($1,$2,'old',repeat('b',64))`, device, tenant)
+	exec(`INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,deployment_generation) VALUES($1,$2,$3,$4,1)`, allocation, environment, device, installation)
+	if _, err := migrations.DownTo(ctx, 80); err == nil || !strings.Contains(err.Error(), "retained ownership or node serving pins require generation routing") {
+		t.Fatal("downgrade erased old owned allocation", err)
+	}
+	exec(`UPDATE runtime_allocations SET state='released',create_settled=true,released_at=clock_timestamp() WHERE id=$1`, allocation)
+	var before, after string
+	if err := db.QueryRowContext(ctx, `SELECT (to_jsonb(a)-'deployment_generation')::text FROM runtime_allocations a WHERE id=$1`, allocation).Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = migrations.DownTo(t.Context(), 80); err != nil {
+	if _, err := migrations.DownTo(ctx, 80); err != nil {
 		t.Fatal("released history prevented safe downgrade", err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT to_jsonb(a)::text FROM runtime_allocations a WHERE id=$1`, allocation).Scan(&after); err != nil || after != before {
+		t.Fatal("downgrade changed released allocation history", err)
 	}
 }
 

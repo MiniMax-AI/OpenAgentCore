@@ -1,4 +1,4 @@
-"""Common real-harness acceptance for hosted functions and workspace execution."""
+"""Common real-Harness acceptance for public functions and workspace execution."""
 
 import importlib.metadata
 import json
@@ -9,22 +9,23 @@ import uuid
 from session_cleanup import delete_session
 
 
-def verify_hosted_functions(client, foreign, http, model, restart, evidence):
-    """restart(session_id, environment_id) restarts the operator-owned deployment."""
+def verify_hosted_functions(client, foreign, http, agent_options, session_options, ready, restart, record):
+    """Run against the selected workspace; restart, when supplied, restarts its agent host."""
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
     distribution = importlib.metadata.distribution("openai")
     source = json.loads(distribution.read_text("direct_url.json") or "{}")
     assert distribution.version == pin["sdk_version"] and source["vcs_info"]["commit_id"] == pin["commit"]
     sessions = client.beta.agents.sessions
+    workspace = session_options["environment"].get("workspace_directory", "/workspace").rstrip("/")
     endpoint = str(client.base_url).rstrip("/") + "/agents/sessions"
     headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
     marker = "function-memory-" + uuid.uuid4().hex
     private_error = "private-handler-" + uuid.uuid4().hex
     calls, observed, checks = [], [], []
-    session = sessions.create(agent={"model": model, "instructions": "Follow the requested tool calls exactly. Never repeat a failed call.", "tools": [{
+    session = sessions.create(agent={**agent_options, "instructions": "Follow the requested tool calls exactly. Never repeat a failed call.", "tools": [{
         "type": "function", "name": "lookup", "description": "Retrieve the requested test value.",
         "parameters": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"], "additionalProperties": False},
-    }]}, environment={"type": "openai_hosted"})
+    }]}, **session_options)
 
     def until(predicate, timeout=120):
         deadline = time.monotonic() + timeout
@@ -58,12 +59,14 @@ def verify_hosted_functions(client, foreign, http, model, restart, evidence):
         return terminals[0]["turn"]["id"], result[0]["item"]
 
     try:
+        ready(session)
+
         def success(arguments):
             assert arguments == {"key": "success"}
             calls.append(arguments)
             return marker
 
-        turn, result = invoke("Call lookup once with key success. Remember its returned string in conversation. Then use the native shell to create /workspace/outputs/function.txt containing exactly that string, with no newline. Do not call any other function.", "function-success", success)
+        turn, result = invoke(f"Call lookup once with key success. Remember its returned string in conversation. Then use the native shell to create {workspace}/outputs/function.txt containing exactly that string, with no newline. Do not call any other function.", "function-success", success)
         assert result["output"] == marker and "error" in result and result["error"] is None
         artifacts = list(sessions.artifacts.list(session.id, limit=100))
         output = [a for a in artifacts if a.turn_id == turn and a.path == "/workspace/outputs/function.txt"]
@@ -75,7 +78,8 @@ def verify_hosted_functions(client, foreign, http, model, restart, evidence):
         assert any(i["type"] == "function_call_output" and i.get("output") == marker for i in items())
         checks.append("same_turn_function_native_file_and_public_artifact")
 
-        restart(session.id, session.environment.id)
+        if restart is not None:
+            restart()
 
         def failure(arguments):
             assert arguments == {"key": "failure"}
@@ -87,7 +91,7 @@ def verify_hosted_functions(client, foreign, http, model, restart, evidence):
         messages = [i for i in items() if i["type"] == "message" and i["role"] == "assistant"]
         assert marker in "\n".join(p.get("text", "") for p in messages[-1]["content"])
         assert len(calls) == 2
-        checks.append("cold_history_continuation_and_public_handler_error")
+        checks.append(("cold" if restart is not None else "warm") + "_history_continuation_and_public_handler_error")
 
         sessions.events.create(session.id, events=[{"type": "agent.session.input.message", "input": [{"role": "user", "content": [{"type": "input_text", "text": "Call lookup once with key pending and wait for the result."}]}]}], idempotency_key="function-pending")
         until(lambda: sessions.retrieve(session.id).required_actions)
@@ -105,7 +109,7 @@ def verify_hosted_functions(client, foreign, http, model, restart, evidence):
         checks.append("pending_function_tenant_isolation_and_cancel_retry")
         proof = {"checks": checks, "session": session.id, "calls": calls, "events": observed, "items": items()}
         assert private_error not in json.dumps(proof)
-        Path(evidence).write_text(json.dumps(proof, indent=2))
+        record(proof)
         return checks
     finally:
         delete_session(sessions, session.id)

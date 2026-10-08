@@ -12,7 +12,7 @@ sandbox_image="${OAC_SANDBOX_IMAGE:-oac-sandbox:dev}"
 mkdir -p "$runtime_root/cache/oac-runtime-builds"
 context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/agent-host.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
-# The Runtime image builders check their pinned inputs and prepare each Harness's payload.
+# The payload preparers validate each Harness's pinned inputs.
 AGENTS_RUNTIME_BUILD_DIR="$context/codex" bash "$repo_root/scripts/build-codex-runtime.sh"
 AGENTS_RUNTIME_BUILD_DIR="$context/claude" bash "$repo_root/scripts/build-claude-runtime.sh"
 AGENTS_RUNTIME_BUILD_DIR="$context/mcode" bash "$repo_root/scripts/build-mcode-runtime.sh"

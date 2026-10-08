@@ -8,7 +8,7 @@ This guide is for maintainers who build and publish OpenAgentCore. To install Co
 
 A distribution is a matched set of release assets built from one commit: the control archive (the installer, the `oac` command, and the Core, Web, ingress, agent-host and PostgreSQL images), the Runtime image and node artifacts as separate files, and the native installers.
 
-Core, Web and ingress images are published as verified Linux amd64/arm64 indexes. The arm64 control archive contains those three images; Node, hosted Runtime, agent-host and offline payloads use Linux amd64. Release builders use QEMU for ARM image steps, including the E2B helper. Host `oac` binaries are built from the same command for Linux amd64/arm64, macOS amd64/arm64 and Windows amd64; launchers only select, verify and invoke them. Each version index is checked against its platform archives before floating tags move.
+Installation images and archives support Linux amd64. Host `oac` binaries remain available for Linux amd64/arm64, macOS amd64/arm64 and Windows amd64 to operate a Linux amd64 Docker engine; they do not enable arm64 execution or emulation. Each version index is checked against its platform archive before floating tags move.
 
 
 Build on Linux x86_64 with a glibc compatible with Debian 12, Docker, the Go version in `go.mod`, a C compiler (the microsandbox helper is a CGO build), Node, pnpm, Python 3.9 or newer, curl, tar, pigz and sha256sum. The source must be clean and committed. First prepare the pinned Codex package and MiniMax Code companion, then build:
@@ -45,7 +45,7 @@ A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distri
 
 ### Native installers
 
-Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object fixes the Node.js and Harness versions) and verified on every selected native check. Manual packaging runs and release checks upload `oac-native-installer-<OS>-<ARCH>.tar.gz` for seven days; ordinary PR and main checks do not upload successful packages. For a local distribution, download the three artifacts from a `native-check` run on that exact commit (a manual run or the release run; pull-request runs build the merge commit and do not match), then assemble the catalog from that checkout:
+Self-hosted machines use the Linux amd64 installer containing `oac-daemon`, `oac-sandbox-io` and matched build/platform metadata. `native-check` builds and exercises it without Node.js or Harness payloads. Manual packaging and release checks retain `oac-native-installer-Linux-X64.tar.gz` for seven days; ordinary PR checks do not upload successful packages. Download that artifact from the exact source commit and assemble the catalog from the same checkout:
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
@@ -56,50 +56,17 @@ The catalog records the commit, the Runtime protocol version, each archive's SHA
 
 ### Runtime images and helpers
 
-`make build-core-distribution` builds all of these except the sandbox image. Build one on its own to test a Harness image or a helper. Run every command from the repository root; default outputs go under `${OAC_DEV_HOME:-$HOME/.oac}/build`.
+`make build-core-distribution` builds the agent-host and sandbox targets of `deploy/distribution/AgentHost.Dockerfile`. Run commands from the repository root on Linux amd64; outputs default to `${OAC_DEV_HOME:-$HOME/.oac}/build`.
 
-**Codex Runtime image.** Extract the official npm package `@openai/codex@0.153.4-linux-x64` under `~/.oac` (for example with `npm pack --ignore-scripts` and `tar -xzf`), then:
-
-```sh
-export CODEX_CLI_DIR=/absolute/path/to/package
-make build-codex-runtime
-docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/codex-runtime"
-```
-
-The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified `codex` and `codex-code-mode-host` executables, their resources and `services/core/deploy/codex/Dockerfile`. The Runtime image leaves out `codex-code-mode-host`, which only the agent-host image installs.
-
-**Claude Code Runtime image.** Node 20 or newer and pnpm are required.
+Prepare the official pinned Codex Linux x64 package and the MiniMax companion with `scripts/prepare-release-runtimes.sh`, or supply `CODEX_CLI_DIR` and `MCODE_HARNESS_BUILD_DIR` for existing prepared inputs. `scripts/build-{codex,claude,mcode}-runtime.sh` validate and stage Harness payloads for both image builders; they do not build guest Runtime images. The Claude payload is a checksummed export of the pinned SDK and adapter:
 
 ```sh
 make build-claude-sdk-runtime
-make build-claude-runtime
-docker build --platform linux/amd64 -t oac-runtime:claude "${OAC_DEV_HOME:-$HOME/.oac}/build/claude-runtime"
-```
-
-The first step exports the adapter with the pinned Claude Agent SDK (`packages/claude-sdk-adapter/package.json`) as a checksummed archive for the host platform; the second verifies it and adds the daemon. The image step needs the `linux-x64-glibc` archive, so build both on Linux x86_64 with glibc. Keep the exported archive unchanged.
-
-**MiniMax Code Runtime image.** Build the companion from a checkout of the revision pinned in `packages/mcode-harness/source.json`, with the `@minimax-ai/code` npm package of the same version for native dependencies. The companion build runs on Linux x86_64 or macOS arm64 into a new directory; for the Linux Runtime image, build it on Linux x86_64 (macOS arm64 serves only the native installer):
-
-```sh
-MCODE_NATIVE_SOURCE=/absolute/minimax-code \
-MCODE_CLI_DIR=/absolute/node_modules/@minimax-ai/code \
-MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness bash scripts/build-mcode-harness.sh
-MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness bash scripts/build-mcode-runtime.sh
-docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/.oac}/build/mcode-runtime"
-```
-
-`scripts/prepare-release-runtimes.sh` runs the companion build from the pins.
-
-The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude SDK bundle copied in. It verifies that each image carries the daemon built from the same commit.
-
-**Agent-host and sandbox images.** With the inputs of the three Harness images above:
-
-```sh
 export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
 bash scripts/build-agent-host-images.sh
 ```
 
-The script runs the three Runtime image builders into one context, adds the static `oac-daemon`, `oac-process-shim` and `oac-sandbox-io`, and builds both targets of `deploy/distribution/AgentHost.Dockerfile` as `OAC_AGENT_HOST_IMAGE` (default `oac-agent-host:dev`) and `OAC_SANDBOX_IMAGE` (default `oac-sandbox:dev`). Further arguments, such as `--label`, go to both `docker build` calls. The agent-host image installs each Harness in its own directory under `/opt/oac/harnesses`, and `/opt/oac/harnesses.json` is the only record of where; the agent host reads it with `agent.ManifestEnvironment`. The sandbox image has the Runtime images' base and packages and no daemon or Harness, and runs `oac-sandbox-io --bootstrap-file <path>` as UID/GID 1000. [Qualify the view](../contracts/agents-api/harness-onboarding.md#qualify-the-view) runs both; [Agent-host container](./configuration.md#agent-host-container) lists what the agent host needs. The distribution builds the agent-host image from the payloads its Runtime image builders prepare, and publishes it; nothing in CI or the release builds the sandbox image.
+The script builds `OAC_AGENT_HOST_IMAGE` (default `oac-agent-host:dev`) and `OAC_SANDBOX_IMAGE` (default `oac-sandbox:dev`). Additional arguments, such as `--label`, go to both Docker builds. The agent-host image contains `oac-daemon`, `oac-process-shim` and each Harness under `/opt/oac/harnesses`; `/opt/oac/harnesses.json` owns their activation paths. The sandbox image contains system tools and `oac-sandbox-io`, which runs as UID/GID 1000, with no Harness or daemon. The distribution verifies its Sandbox I/O executable and ships this image through the node artifact's existing `runtime` slot. E2B templates extract Sandbox I/O from this same image. [Qualify the view](../contracts/agents-api/harness-onboarding.md#qualify-the-view) runs both images; [Agent-host container](./configuration.md#agent-host-container) owns the host requirements.
 
 **E2B helper.**
 
@@ -124,7 +91,7 @@ The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-pr
 
 `make build-core` builds `oac-core`, `oac-core-environment-key`, `oac-node` and `oac` into `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core` (`OAC_DEV_CORE_BUILD_DIR` selects another absolute directory). The build copies only the source set listed in `scripts/build-core.sh` (the Core service, its contracts, the shared packages it needs and the root Go module files) into a temporary context and builds with CGO disabled, read-only modules and trimmed paths. It needs no Node, Docker or other application. When Core gains a shared dependency, add that package to the list; never copy the whole repository to make it compile.
 
-`make docker-build-core` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. This local target builds Linux amd64; the [distribution build](#build-a-distribution) builds both architectures. Changes to the image or its build need `make check-core-container` in addition to the relevant source checks: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
+`make docker-build-core` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. This local target builds Linux amd64; the [distribution build](#build-a-distribution) uses the same architecture. Changes to the image or its build need `make check-core-container` in addition to the relevant source checks: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
 
 ## Publish a version
 
@@ -143,7 +110,7 @@ Distribution and Runtime archives use `pigz` level 6 with at most four compressi
 
 ### Container registry
 
-Version releases and manual `build-<full SHA>` drafts publish `ghcr.io/minimax-ai/openagentcore/<component>:<version>`, where `<component>` is `core`, `web`, `runtime`, `ingress` or `agent-host`. Core, Web and ingress indexes contain Linux amd64 and arm64 images; Runtime and agent-host contain Linux amd64. Platform images use `<version>-<architecture>` tags and are loaded from the release archives. Existing version tags must match the release images and platform set. The publisher verifies every version index before updating `latest` for a stable release; prereleases and drafts leave `latest` unchanged. PostgreSQL uses its upstream image. SemVer build metadata uses `_` in place of `+` in container tags; version strings are limited to 128 characters. After verifying the images, the publisher uploads the release's `compose.yaml` and checksum list. Compose pins ingress by its index digest, and initialization checks its build revision against the Compose revision.
+Version releases and manual `build-<full SHA>` drafts publish `ghcr.io/minimax-ai/openagentcore/<component>:<version>`, where `<component>` is `core`, `web`, `runtime`, `ingress` or `agent-host`. All component indexes contain Linux amd64 images; the `runtime` component contains the sandbox image. Platform images use `<version>-<architecture>` tags and are loaded from the release archives. Existing version tags must match the release images and platform set. The publisher verifies every version index before updating `latest` for a stable release; prereleases and drafts leave `latest` unchanged. PostgreSQL uses its upstream image. SemVer build metadata uses `_` in place of `+` in container tags; version strings are limited to 128 characters. After verifying the images, the publisher uploads the release's `compose.yaml` and checksum list. Compose pins ingress by its index digest, and initialization checks its build revision against the Compose revision.
 
 The combined build/publication job uses `GITHUB_TOKEN` with `packages: write`. On the first publication, GitHub creates each container package as private: a package administrator must change all five packages to **Public** in their package settings before users can pull anonymously. See [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry). Verify an unauthenticated pull after changing visibility. Repository visibility alone does not make a new container package public.
 
@@ -169,7 +136,7 @@ With `draft_release=true` the result is an unpublished `build-<full SHA>` draft 
 
 ## Continuous integration
 
-Every PR runs `core-check` and reports the required status `check`. Main uses GitHub branch protection requiring this check and an up-to-date branch before merging, so merging does not start another copy of the test suite. Changes must enter through checked PRs; an administrator bypass does not establish CI success. Main pushes publish the website when its inputs change and run `cache-warm`, which builds the MiniMax companion, the E2B helper and the pnpm store without running tests, because only caches saved on main can be restored by every PR and release tag. Version tags and manual release builds run the full release gate at their exact source commit. `scripts/ci_plan.py` owns the only input-to-check map. Component rules require both a matching directory or script prefix and a matching file suffix; exact dependency, workflow and shared build inputs have explicit rules. Rules accumulate across shared consumers and mixed changes. Paths with no matching build/test rule run hygiene only. Add the corresponding rule when introducing a new component, language, build input or resource location.
+Every PR runs `core-check` and reports the required status `check`. Main uses GitHub branch protection requiring this check and an up-to-date branch before merging, so merging does not start another copy of the test suite. Changes must enter through checked PRs; an administrator bypass does not establish CI success. Main pushes publish the website when its inputs change and run `cache-warm`, which builds the E2B helper and the pnpm store without running tests, because only caches saved on main can be restored by every PR and release tag. Version tags and manual release builds run the full release gate at their exact source commit. `scripts/ci_plan.py` owns the only input-to-check map. Component rules require both a matching directory or script prefix and a matching file suffix; exact dependency, workflow and shared build inputs have explicit rules. Rules accumulate across shared consumers and mixed changes. Paths with no matching build/test rule run hygiene only. Add the corresponding rule when introducing a new component, language, build input or resource location.
 
 The planner compares the PR event's tested merge commit with its verified first parent. NUL-delimited Git output and disabled rename detection retain both old and new paths. The plan and reasons appear in the run summary. Missing or inconsistent history, mismatched checkouts, invalid paths, planner/orchestration changes and shared build inputs select the full gate. A verified empty diff selects hygiene only. Release, manual and explicit-ref calls always select every group.
 
@@ -185,12 +152,12 @@ The planner compares the PR event's tested merge commit with its verified first 
 | `website` | Website build and output checks for website, published documentation and dependency changes |
 | `web-acceptance` | Full Web browser suite in four isolated shards after Web unit/build success; each keeps one worker |
 | `api` | Reusable official-client acceptance against standalone commands and migrations; image acceptance when image/build/helper inputs change, and in every full gate |
-| `native` | Reusable Linux, macOS and Windows builds, filesystem/process/Harness checks and native installation; all three platforms can run concurrently |
+| `native` | Linux amd64 launcher, Sandbox I/O and installer checks; portable Core launcher build/tests on Linux, macOS and Windows |
 | `lint` | Reusable actionlint check, including local composite actions |
 
 `.github/actionlint.yaml` selects hygiene and lint. Known workflow changes select their consumers: the CI review and actionlint workflows run hygiene and lint; native workflow changes add native checks; API acceptance workflow changes add API checks with container acceptance enabled; website workflow changes add website checks. The shared Node action selects every job that uses it plus lint. A new or unclassified workflow/action selects the full gate until its consumers are declared in the planner. Planner tests and CI measurement scripts run hygiene; changing the planner itself runs the full gate.
 
-Compose template and Compose test changes select both `distribution` fixtures and the `compose` smoke job; Core, Web, the daemon, shared Go packages and the image Dockerfiles also select the smoke job. Run `python3 scripts/compose-smoke.py` locally with Docker available to repeat it. The script uses a unique project, an automatically assigned loopback port and artifacts under `~/.oac/tests/`; it removes its containers and volumes on exit. CI also performs cleanup after a failed or interrupted smoke step. Diagnostics show container status without printing HTTP response bodies or sign-in keys. Core, Web, the agent host and the ingress image are built from the checkout; Web serves a placeholder page instead of the console build, and the agent-host image has no Harness; the smoke checks that the agent host connects to Core. Build-time node metadata comes from the release pinned in `deploy/compose/smoke-pins.json`; the initialization container runs with networking disabled. The smoke matrix runs on native Linux amd64 and arm64 runners; the native matrix builds and tests the shared Core installer on Linux, macOS and Windows.
+Compose template and Compose test changes select both `distribution` fixtures and the `compose` smoke job; Core, Web, the daemon, shared Go packages and the image Dockerfiles also select the smoke job. Run `python3 scripts/compose-smoke.py` locally with Docker available to repeat it. The script uses a unique project, an automatically assigned loopback port and artifacts under `~/.oac/tests/`; it removes its containers and volumes on exit. CI also performs cleanup after a failed or interrupted smoke step. Diagnostics show container status without printing HTTP response bodies or sign-in keys. Core, Web, the agent host and the ingress image are built from the checkout; Web serves a placeholder page instead of the console build, and the agent-host image has no Harness; the smoke checks that the agent host connects to Core. Build-time node metadata comes from the release pinned in `deploy/compose/smoke-pins.json`; the initialization container runs with networking disabled. The smoke runs on Linux amd64; the native matrix builds and tests the portable Core launcher on Linux, macOS and Windows.
 
 Go module and workspace inputs select backend, API (including the container), native and distribution checks. Each Node module owns its manifest and lockfile. Website dependencies select website checks; Web dependencies select Web and browser checks; example dependencies select example checks; shared TypeScript client dependencies select Web, browser and example checks; Claude adapter dependencies select Harness, native and distribution checks. Shared package-manager configuration selects all Node consumers. The root TypeScript configuration selects Web and example checks; the adapter TypeScript configuration selects Harness and native checks. Each selected set includes hygiene. Mixed changes accumulate their consumers, and every job reads the same plan instead of maintaining its own path list. For example, a notification-only PR skips database, browser and native jobs, while a notification plus Core change adds backend and API checks.
 

@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 65706a3126858abbc195940c6be89fa128e363abe708c028c1b36a8c68bfa704
+source_hash: d0bda847967fc8744b20d18fbf2cfaa86072a40ba18ef582e6ec828623e2bc7c
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -210,15 +210,43 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 | MiniMax 原生历史绑定 | `mcode/session_test.go` |
 | 无原生副作用或伪造结果的明确拒绝 | `mcode/unsupported_test.go` |
 
+## 验证公共调用路径 {#qualify-the-public-path}
+
+`services/core/tests/qualify_public_native.py` 使用锁定的官方 SDK 和原始 HTTP 断言，访问已经安装、隔离且运行真实 agent host 的 Core 部署。它创建并删除自己的 Session，使用所选真实模型；不负责部署，也不替代执行器。将 `OPENAI_BASE_URL` 设置为部署的 `/v1` 端点，将 `OPENAI_API_KEY` 设置为其 Project 密钥。另一个 Project 的密钥通过私有文件提供。[安装](../../../docs/zh/getting-started/install.md) 负责部署设置；[Projects and keys](./admin-api.md#projects-and-keys) 负责凭据签发。
+
+私有设置 JSON 恰好包含 `agent`、`model_provider` 和 `environment`。`agent` 包含 `model` 和显式的 `x_agents_core.harness`，可在该扩展内提供 `harness_config`。`model_provider` 是完整的 [Provider 配置包](./model-execution.md#session-override)；`environment` 是公共 Session Environment 输入。设置文件和外部 Project 密钥文件必须使用绝对路径、权限 0600，并保存在仓库之外。证据必须使用 `~/.oac` 下新的绝对路径；其中保存公共响应和检查名称，不保存设置。运行器拒绝写入含有三个已提供凭据中任意一个的证据。
+
+```bash
+python services/core/tests/qualify_public_native.py \
+  --settings "$HOME/.oac/qualification/codex-none.json" \
+  --foreign-key-file "$HOME/.oac/qualification/foreign-project.key" \
+  --suite none \
+  --evidence "$HOME/.oac/qualification/codex-none-result.json"
+```
+
+| 套件 | 操作 | 放置方式 |
+| --- | --- | --- |
+| `none` | 创建重试、外部历史拒绝、两个原生文本 Turn、历史回忆、SSE 顺序，以及 SDK/原始 Item 和 Turn 一致性 | `none` |
+| `pending-actions` | 查询和重连待处理调用、成功/错误结果、取消、精确目标拒绝、重试和持久化 Item | 声明支持函数工具的任意放置方式 |
+| `functions` | SDK handler、成功/错误、原生文件和 Artifact 字节、继续执行、待处理调用取消和租户隔离 | 工作区 |
+| `images` | 初始和活动图像、图像结果、重试/原子拒绝、原生文件/Artifact、隔离和继续执行 | 声明支持图像和函数的工作区 |
+| `structured` | 保存和内联 schema、函数辅助原生文件、精确 JSON/SSE、取消和文本覆盖 | 声明支持结构化输出和函数的工作区 |
+
+对于 `self_hosted`，选择自定义绝对 `workspace_directory`。运行器打印每个新 Session ID 后，使用该 Session 的公共安装命令连接独立的隔离机器或容器；运行器最多等待五分钟。多个 Session 不得共享工作区。使用现有 Environment setup、包和能力断言单独验证准备语义。独立的 `official_environment_files_native.py` 检查接受两个已连接的 self-hosted Session，通过 Environment owner 验证 Files.list 排序、分页和隔离。
+
+默认验证热继续执行，并将冷恢复记录为 `unverified`。验证冷继续执行时，额外传入指向所拥有安装的绝对目录的 `--compose-directory`，以及指定其精确项目名称的 `--compose-project`。运行器仅重启该项目的 `agent-host`，确认容器启动时间已改变，然后执行相同的历史断言。这不能证明 Core 重启或 sandbox 检查点恢复。`pending-actions` 套件重连的是公共客户端，而非 agent-host 进程，因此拒绝这些重启选项。仅在[声明和覆盖台账](./index.md#known-gaps) 支持时选择冷恢复；不支持的恢复仍是缺口，不能把跳过的检查记为成功。API 拒绝会使所选套件失败。
+
+使用锁定的 SDK 运行 `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py`，可在不调用模型的情况下检查凭据处理和所拥有的重启边界。现有确定性 Core 集成测试仍负责 schema 验证、原子准入、持久化回执和拒绝语义。真实模型结果仅证明所选套件、协议、Harness 和放置方式。Provider 生命周期、原生身份、凭据隔离、延迟发现和未选择的套件需要独立证据；仅通过 view 测试不能证明公共调用路径。
+
 ## 原生安装器参与 {#native-installer-participation}
 
-适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
+适配器从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind 和激活环境。agent host 使用该声明激活打包的 Harness。适配器负责原生布局；必须在 Linux agent host 上验证打包内容和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。自托管安装器不携带 Harness 或 Node.js。
 
-agent-host 镜像使用同一契约。`deploy/distribution/AgentHost.Dockerfile` 把每个 Harness 安装在各自的目录中并列入镜像的清单 `/opt/oac/harnesses.json`，`agent.ManifestEnvironment` 再通过 `Installation.Environment` 从那里激活它。由 agent host 运行的 Harness 也要添加到这里。
+`deploy/distribution/AgentHost.Dockerfile` 把每个 Harness 安装在各自的目录中，并列入镜像清单 `/opt/oac/harnesses.json`。`agent.ManifestEnvironment` 通过 `Installation.Environment` 激活它。将每个新增 Harness 加入该镜像和清单，并使用共享的[镜像构建](../../../docs/zh/maintainers.md#runtime-images-and-helpers)与[视图验收](#qualify-the-view)流程。
 
 ## 原生进程所有权 {#native-process-ownership}
 
-daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启动（Windows 上为 Job 对象）；其他主机会拒绝启动。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
+daemon 的 `clirunner` 在 Linux 上让每个原生子进程在自己的进程组中启动；其他平台返回其类型化的不支持错误。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
 
 所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
 
@@ -330,8 +358,8 @@ stdio 绑定在沙箱中以其别名运行。`ViewSession.MCP` 中索引为 `i` 
 
 ## 原生参考 {#native-references}
 
-| Harness | 适配器 | 原生传输方式 | Runtime 指南 |
-| --- | --- | --- | --- |
-| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) |
-| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) | [Claude Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) |
-| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP 和原生工作区配套组件 | [MiniMax Code Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/mcode/README.md) |
+| Harness | 适配器 | 原生传输方式 |
+| --- | --- | --- |
+| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server |
+| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) |
+| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP 和原生工作区配套组件 |

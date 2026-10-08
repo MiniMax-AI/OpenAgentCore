@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 90d238aec831101e7b9b8081920c8985b1f024a9d3f8f0235fc83b255f84125c
+source_hash: fc22cdc9db23a43d4c90921a2bb06b16c41d6e7586c3533284aeca2f903a850a
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -12,9 +12,9 @@ Session 的 Harness 在部署的 agent host 上运行，通过这台机器的 [S
 
 ## 平台 {#platforms}
 
-自托管机器运行 Linux amd64。在 macOS 和 Windows 上，`oac-daemon start` 拒绝启动。
+自托管安装仅支持 Linux amd64。在其他平台（包括 macOS、Windows 和 Linux arm64）上，`oac-daemon install` 和 `oac-daemon start` 返回 `UnsupportedPlatformError`；安装在领取凭据之前拒绝执行。
 
-安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
+安装程序包含 `oac-daemon` 启动器、`oac-sandbox-io` 及其版本和平台元数据。Harness 及其依赖打包在 agent host 上，自托管机器不安装它们。
 
 机器需要：
 
@@ -23,7 +23,7 @@ Session 的 Harness 在部署的 agent host 上运行，通过这台机器的 [S
 - Session 的软件包需要时，安装 Python 和 pip；
 - 环境设置所需的系统软件包。守护进程不运行 apt、sudo 或其他提权命令，请通过主机的常规管理方式安装。
 
-不需要管理员权限或 Docker。下载命令还使用 `curl`、`tar`、`gzip`、SHA-256 工具和 `flock`。Runtime 主目录必须允许执行文件。如果挂载点设为 `noexec`，请先用 `OAC_RUNTIME_HOME` 指定另一个允许执行的绝对目录，再运行命令。
+不需要 Docker。安装程序创建 Session 工作区、`/environment/{workspace,initialization,packages}` 和 `/home/runtime`，并验证当前账号能写入这些目录。如果该账号不能在 `/environment` 和 `/home` 下创建所需目录，管理员必须在安装前准备好这些目录并设置合适的所有权；安装程序不会提权。下载命令还使用 `curl`、`tar`、`gzip`、SHA-256 工具和 `flock`。Runtime 主目录必须允许执行文件。如果挂载点设为 `noexec`，请先用 `OAC_RUNTIME_HOME` 指定另一个允许执行的绝对目录，再运行命令。
 
 ## 连接机器 {#connect-a-machine}
 
@@ -52,7 +52,7 @@ Session 的 Harness 在部署的 agent host 上运行，通过这台机器的 [S
    print(installation["commands"]["posix"])
    ```
 
-2. 在目标机器上，以应运行工具的账号执行命令。命令下载与 Core 匹配的安装程序、验证校验和、询问要安装哪些 Harness 以及安装位置、完成安装、按需创建工作区、启动守护进程并检查连接。
+2. 在目标机器上，以应运行工具的账号执行命令。命令下载与 Core 匹配的安装程序、验证校验和、询问安装目录、安装启动器和 Sandbox I/O 服务、准备所需目录、启动并检查连接。
 3. 发送一个 Turn。机器已连接只证明认证成功；第一个 Turn 才会检查 Harness 和模型。
 
 在 Web 中打开 Session，复制 **Connect a host** 下的命令。
@@ -63,7 +63,7 @@ Session 的 Harness 在部署的 agent host 上运行，通过这台机器的 [S
 
 | 结果 | 含义 |
 | --- | --- |
-| **Installation** | 所选 Harness 已通过就绪检查 |
+| **Installation** | 启动器和 Sandbox I/O 服务已安装，所需目录可写 |
 | **Host connection** | Core 已确认这台机器通过[沙箱 Link](../sandbox-link-protocol.md) 为此 Environment 提供服务 |
 | **Model configuration** | 未检查；第一个 Turn 使用 Session 的模型提供商 |
 
@@ -78,10 +78,7 @@ Session 的 Harness 在部署的 agent host 上运行，通过这台机器的 [S
 | 选项 | 效果 |
 | --- | --- |
 | `--non-interactive` | 不提示；缺少输入时失败 |
-| `--harness codex,claude,minimax` | 要安装的 Harness，以逗号分隔。必须包含 Session 的 Harness |
 | `--install-dir ABS` | 安装目录。默认是 `~/.oac` 下的 `environments/<environment-id>`；设置了 `OAC_RUNTIME_HOME` 时则在该目录下 |
-| `--capability-directory ABS` | [能力快照](#local-capability-directories)存储位置。默认是安装目录中的 `capabilities` |
-| `--tool-env-file ABS` | 为工具和 MCP 服务器提供字符串变量的 JSON 文件；参阅[显式本地工具环境](../../../contracts/agents-api/zh/environments.md#explicit-local-tool-environment) |
 
 工作区在创建 Session 时固定。使用不同工作区时，创建另一个 Session。
 
@@ -97,7 +94,7 @@ environment = {
 }
 ```
 
-路径为绝对路径；由守护进程而非 Core 检查。守护进程连接前，先准备这些目录。它们是守护进程可见的普通路径；指定路径不会挂载它或创建沙箱。
+路径必须是绝对路径。在机器连接前，先在机器上准备好这些目录。agent host 上的 Environment owner 通过沙箱 Link 验证并读取它们；指定目录不会挂载它或创建沙箱。
 
 使用 `x_agents_core.environment` 提供与托管 Session 相同的 Project 所属 Skills、Plugin 归档、文件、软件包、设置命令或 Template：
 
@@ -114,7 +111,7 @@ session = client.beta.agents.sessions.create(
 
 同一扩展也支持 `environment={"type": "openai_hosted"}`。不要在 `environment` 和扩展中重复指定同一个字段。设置过程使用守护进程账号权限。
 
-第一个 Turn 之前，守护进程将这些来源复制成快照。即使来源之后被修改，重连仍复用快照；新的 Session 获取新快照。[准备协议](../../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)列出字段、合并规则、快照行为和失败情况。
+第一个 Turn 之前，Environment owner 通过沙箱 Link 准备能力快照。即使源内容已修改，重连仍复用快照；新 Session 会创建新快照。[准备契约](../../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)列出字段、合并规则、快照行为和失败结果。
 
 ## 管理安装 {#operate-the-installation}
 
@@ -123,15 +120,12 @@ session = client.beta.agents.sessions.create(
 | 命令 | 效果 |
 | --- | --- |
 | `oac-daemon start` | 注册机器并在后台启动守护进程。守护进程运行 [Sandbox I/O 服务](../sandbox-bootstrap.md)，服务退出时重新注册并重启它 |
-| `oac-daemon status` | 展示本地配置与进程，不表示连接状态 |
 | `oac-daemon logs -n 100`、`oac-daemon logs -f` | 输出或持续跟踪守护进程日志 |
 | `oac-daemon stop` | 停止守护进程 |
 
 设置了 `OAC_RUNTIME_HOME` 时，每个命令都使用同一值。在 Web 的 Session 页面 **Host connection** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
 
-添加 Harness 时，以同一安装目录重新执行安装命令，并指定要添加的 Harness（命令过期时从 Web 复制新的）。安装程序检查已有内容、只添加缺失组件，并保留已安装的 Harness。
-
-停止守护进程、取消 Turn 或删除 Session，都不会删除机器的工作区、原生历史或能力快照。安装程序拒绝其他守护进程版本的安装，以及文件已被修改的安装。程序不升级、修复或迁移它们；请安装到另一个目录。
+停止守护进程、取消 Turn 或删除 Session 不会删除机器的工作区。Harness 原生历史属于 agent host。安装程序拒绝其他守护进程版本的安装，以及文件已被修改的安装。程序不升级、修复或迁移它们；请安装到另一个目录。
 
 ## 轮换或撤销 {#rotate-or-revoke}
 
@@ -151,7 +145,7 @@ session = client.beta.agents.sessions.create(
 同一安装程序也接受已解压的发行包和运维人员签发的凭据文件，无需安装命令：
 
 ```sh
-./oac-daemon install --non-interactive --harness codex \
+./oac-daemon install --non-interactive \
   --install-dir "$HOME/.oac/my-runtime" \
   --remote 'wss://core.example/api/v1/agent-daemon/ws' \
   --environment-id '11111111-2222-4333-8444-555555555555' \
@@ -160,4 +154,4 @@ session = client.beta.agents.sessions.create(
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-使用 Session 的 `remote_url` 和 Environment ID。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。
+使用 Session 的 `remote_url`、Environment ID 和工作区。`--workspace` 在安装时准备该目录；启动器不持久化第二份工作区设置。此模式在运行 `start` 前不会启动。

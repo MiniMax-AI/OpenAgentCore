@@ -115,6 +115,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
+- `self_hosted` installation supports Linux amd64 only. `oac-daemon install` and `start` return `UnsupportedPlatformError` on other platforms, before any installation credential claim. macOS, Windows and Linux arm64 Sandbox I/O execution are not qualified; see [self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms).
+
 - The stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.

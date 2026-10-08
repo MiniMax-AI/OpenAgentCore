@@ -1,4 +1,4 @@
-"""Exercise real Runtime tar metadata without Docker or provider calls."""
+"""Exercise real sandbox tar metadata without Docker or provider calls."""
 import contextlib
 import io
 import json
@@ -23,17 +23,14 @@ class BundlePermissionsTest(unittest.TestCase):
                 key.write_text('fixture-only')
                 key.chmod(0o600)
                 output = root / 'private/result.json'
-                source_modes = {'bin': 0o755, 'bin/daemon': 0o751,
-                                'codex-resources': 0o755, 'codex': 0o700,
-                                'codex/config': 0o600, 'opt': 0o755,
-                                'opt/private': 0o700, 'opt/private/key': 0o600}
+                source_modes = {'oac-sandbox-io': 0o555}
                 image = {'Architecture': 'amd64', 'Os': 'linux', 'Id': 'sha256:fixture',
-                         'Config': {'Env': ['OAC_RUNTIME_WORKSPACE=/environment/workspace']}}
+                         'Config': {'Env': ['HOME=/home/runtime']}}
 
                 def check_output(argv, **kwargs):
                     if argv == ['docker', 'image', 'inspect', 'sha256:fixture']:
                         return json.dumps([image]).encode()
-                    self.assertEqual(argv, ['docker', 'create', 'sha256:fixture'])
+                    self.assertEqual(argv, ['docker', 'create', '--label', 'io.oac.build=e2b-template', 'sha256:fixture'])
                     return 'fixture-container\n'
 
                 def run(argv, **kwargs):
@@ -48,12 +45,8 @@ class BundlePermissionsTest(unittest.TestCase):
                                 continue
                             entry = tarfile.TarInfo(path)
                             entry.mode = mode
-                            if path in ('bin', 'codex-resources', 'codex', 'opt', 'opt/private'):
-                                entry.type = tarfile.DIRTYPE
-                                archive.addfile(entry)
-                            else:
-                                entry.size = 7
-                                archive.addfile(entry, io.BytesIO(b'fixture'))
+                            entry.size = 7
+                            archive.addfile(entry, io.BytesIO(b'fixture'))
                     return SimpleNamespace(returncode=0)
 
                 template = Mock()
@@ -66,11 +59,11 @@ class BundlePermissionsTest(unittest.TestCase):
                     self.assertEqual(stat.S_IMODE(context.stat().st_mode), 0o700)
                     with tarfile.open(context / 'runtime.tar.gz') as archive:
                         modes = {m.name: stat.S_IMODE(m.mode) for m in archive.getmembers()}
-                    for parent in ('usr', 'usr/local', 'etc'):
+                    for parent in ('usr', 'usr/local', 'usr/local/bin'):
                         self.assertEqual(modes[parent], 0o755)
                     for path, mode in source_modes.items():
-                        prefix = 'usr/local/' if path.split('/')[0] in ('bin', 'codex-resources') else 'etc/' if path.startswith('codex') else ''
-                        self.assertEqual(modes[prefix + path], mode)
+                        self.assertEqual(modes['usr/local/bin/' + path], mode)
+                    self.assertEqual(set(modes), {'usr', 'usr/local', 'usr/local/bin', 'usr/local/bin/oac-sandbox-io'})
                     self.assertEqual(stat.S_IMODE((context / 'runtime.tar.gz').stat().st_mode), 0o666 & ~mask)
                     self.assertEqual(stat.S_IMODE(key.stat().st_mode), 0o600)
                     projection = 'helper_contract_generated.py'

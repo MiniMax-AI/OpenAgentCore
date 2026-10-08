@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 65f39d4222c4f1bbab03e1c31d8eef367399a889a6bb50cbccc6dec42cc1cb88
+source_hash: 8feb92673f53693a526366264e0ff5094f69112859bfa0882e217a2b3ca07282
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -23,7 +23,6 @@ Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[publi
 官方源文件与已有服务存在以下已记录的差异：Agents 鉴权错误的 `code` 可以为 null；Files 空页的 `first_id` 和 `last_id` 为 null；File 资源的 `expires_at` 和 `status_details` 可以为 null。源文件将这些字段声明为非空。官方客户端响应验证器只对这些指定字段允许 null，其余部分按 OpenAPI 3.1 响应 schema 验证。源文件中的 Files 和 Skills 操作未声明错误响应，因此这些错误体使用上游共享的 `ErrorResponse` schema。[传输语义](wire-semantics.md)和原始 HTTP 测试验证服务行为；发布的 schema 保留官方定义。
 
 Go 输入投影排除 `packages.system`，保留下方记录的明确拒绝行为。生成过程不会启用尚未支持的操作，也不会改变已存储安装配置的验证。
-
 
 各项状态的证据必须来自固定版本的官方 SDK，以及针对运行中服务发出的原始 HTTP 请求，正如 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#compatibility-evidence) 所要求。
 
@@ -117,6 +116,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
 **执行和历史**
+
+- `self_hosted` 安装仅支持 Linux amd64。`oac-daemon install` 和 `start` 在其他平台返回 `UnsupportedPlatformError`，且拒绝发生在领取安装凭据之前。macOS、Windows 和 Linux arm64 的 Sandbox I/O 执行尚未通过验收；参阅[自托管平台](../../../docs/zh/getting-started/self-hosted.md#platforms)。
 
 - 流不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
 - 除 [Turns and Items](sessions-events.md#turns-and-items) 中列出的变体外，其他原生 Item 变体不会被投影，而且 Items 无法修改。

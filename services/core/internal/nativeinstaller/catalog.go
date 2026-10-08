@@ -38,8 +38,6 @@ type Catalog struct {
 
 var checksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-var platformName = regexp.MustCompile(`^(linux|darwin|windows)-(amd64|arm64)$`)
-
 // Load checks the matched catalog without downloading execution payloads. Local
 // offline archives are verified once; the directory stays immutable while serving.
 // A directory without catalog.json holds no installer and returns nil.
@@ -57,7 +55,7 @@ func Load(directory, version string) (*Catalog, error) {
 	}
 	c.local = make(map[string]bool)
 	for platform, artifact := range c.Artifacts {
-		if !platformName.MatchString(platform) || !checksum.MatchString(artifact.SHA256) {
+		if platform != "linux-amd64" || !checksum.MatchString(artifact.SHA256) {
 			return nil, errors.New("invalid native installer platform")
 		}
 		if artifact.URL != "" {
@@ -96,7 +94,7 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if name == "bootstrap.sh" || name == "bootstrap.ps1" {
+	if name == "bootstrap.sh" {
 		raw, _ := bootstrap.ReadFile("assets/" + name)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write(raw)
@@ -125,7 +123,6 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
-func psQuote(s string) string    { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
 // Commands installs this catalog's version from the installer base URL.
 func (c *Catalog) Commands(installerBase, authorization string) map[string]string {
@@ -134,7 +131,6 @@ func (c *Catalog) Commands(installerBase, authorization string) map[string]strin
 	// Only execute a complete successful response; preserve interactive stdin.
 	posix := `set -e; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; bash -c "$script" -- "$@"`
 	return map[string]string{
-		"posix":      "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
-		"powershell": "& { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " -Authorization " + psQuote(authorization) + " @args }",
+		"posix": "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
 	}
 }

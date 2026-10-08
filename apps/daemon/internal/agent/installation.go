@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -11,15 +10,10 @@ import (
 	"slices"
 )
 
-// Installation is an optional adapter-owned native distribution contract.
-// It supplies activation paths and readiness checks, never execution or model
-// configuration. Runtime owns copying, checksums, publication and installation locks.
+// Installation supplies adapter-owned activation paths for agent-host images.
 type Installation struct {
 	AgentKind   string
-	Version     string
-	Supported   func() bool
 	Environment func(directory, node string) map[string]string
-	Check       func(context.Context, string, string, []string) error
 }
 
 // ManifestEnvironment reads the installation manifest at path, which an
