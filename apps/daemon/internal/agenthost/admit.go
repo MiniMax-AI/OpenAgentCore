@@ -138,7 +138,7 @@ func admit(cfg Config, roots *x509.CertPool, req agent.PrepareRequest, env Envir
 		}
 		table.Aliases[path.Base(agent.ViewAlias(i))] = processbroker.Command{Executable: server.Command, Args: slices.Clone(server.Args), Dir: dir}
 	}
-	if err := checkLayout(cfg, view); err != nil {
+	if err := checkLayout(cfg, view, req.WorkspaceRoot); err != nil {
 		return nil, err
 	}
 	endpoints, err := gateway.Plan(gw)
@@ -172,9 +172,12 @@ func handoff(req agent.PrepareRequest, provider modelprovider.Provider, endpoint
 	return req
 }
 
-// checkLayout rejects a view whose overlays, masks or shim paths meet the
-// agent host's own overlays: the /etc files and the CA directory.
-func checkLayout(cfg Config, view agent.View) error {
+// checkLayout keeps view-owned paths disjoint from the sandbox workspace and
+// keeps Harness overlays, masks and shim paths off the agent host's overlays.
+func checkLayout(cfg Config, view agent.View, workspace string) error {
+	if workspace == "/" || agent.ViewReserved(workspace) {
+		return unsupported("workspace overlaps a reserved view tree")
+	}
 	own := []string{cfg.CADir}
 	for _, name := range etcFiles {
 		own = append(own, "/etc/"+name)
@@ -186,14 +189,32 @@ func checkLayout(cfg Config, view agent.View) error {
 	for _, m := range view.Masks {
 		claimed = append(claimed, m.Path)
 	}
+	if workspace != "" {
+		for _, paths := range [][]string{own, claimed} {
+			for _, p := range paths {
+				if p != "" && overlaps(workspace, p) {
+					return unsupported("workspace overlaps a view-owned path")
+				}
+			}
+		}
+	}
 	for _, p := range claimed {
 		for _, q := range own {
-			if p == q || strings.HasPrefix(p, q+"/") || strings.HasPrefix(q, p+"/") {
+			if overlaps(p, q) {
 				return fmt.Errorf("%w: admit: %w: view path %s meets the agent host's %s", ErrUnsupported, agent.ErrInvalidView, p, q)
 			}
 		}
 	}
 	return nil
+}
+
+// overlaps reports whether one of the absolute paths a and b is the other or
+// lies below it.
+func overlaps(a, b string) bool {
+	below := func(parent, child string) bool {
+		return child == parent || strings.HasPrefix(child, strings.TrimSuffix(parent, "/")+"/")
+	}
+	return below(a, b) || below(b, a)
 }
 
 // checkBinding checks the Session's binding and Environment. The binding is

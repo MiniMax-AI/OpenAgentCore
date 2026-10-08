@@ -90,7 +90,7 @@ func (h *Host) Environments(ref proto.AssignmentRef, bind proto.AssignmentBindPa
 	if err != nil || err2 != nil || bind.Validate() != nil {
 		return nil
 	}
-	if bind.EnvironmentID != "" && (bind.Resource == nil || !isViewPath(bind.WorkspaceDirectory)) {
+	if bind.EnvironmentID != "" && (bind.Resource == nil || !isViewPath(bind.WorkspaceDirectory) || checkLayout(h.cfg, agent.View{}, bind.WorkspaceDirectory) != nil) {
 		return nil
 	}
 	b := Binding{SessionID: session, AssignmentID: assignment, AssignmentEpoch: ref.Epoch, AttachGrant: slices.Clone(bind.AttachGrant)}
@@ -885,15 +885,6 @@ func (w *world) finalize(ctx context.Context, root sandboxfs.NodeRef, input agen
 		return err
 	}
 	return w.syncDir(ctx, root)
-}
-
-// overlaps reports whether one of the absolute paths a and b is the other or
-// lies below it.
-func overlaps(a, b string) bool {
-	below := func(parent, child string) bool {
-		return child == parent || strings.HasPrefix(child, strings.TrimSuffix(parent, "/")+"/")
-	}
-	return below(a, b) || below(b, a)
 }
 
 // dirEntry is the name and kind of a listed entry, all that

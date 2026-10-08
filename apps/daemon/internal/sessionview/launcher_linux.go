@@ -107,7 +107,7 @@ func (l *launcher) run() error {
 			return err
 		}
 	}
-	if err := chdir(spec.Command.Dir); err != nil {
+	if err := chdir(spec.Command.Dir, spec.EmptyRoot == nil); err != nil {
 		return err
 	}
 	pid, err := startProcess(spec, spec.Command, []uintptr{stdinFD, stdoutFD, stderrFD})
@@ -176,7 +176,7 @@ func (l *launcher) spawn(spec *launchSpec, id uint64, files []*os.File) {
 	if err != nil {
 		err = &Error{Kind: ErrLauncher, Op: "read spawn", Err: err}
 	} else {
-		err = chdir(c.Dir)
+		err = chdir(c.Dir, false)
 	}
 	l.mu.Lock()
 	if err == nil && !l.running {
@@ -463,8 +463,8 @@ func takeIdentity(spec *launchSpec) error {
 	return nil
 }
 
-// chdir makes dir, taken from the view's root when empty or relative, this thread's working directory, which the processes it starts inherit. Signals stay blocked meanwhile: a signal to the launcher could pick this thread, and a wait on the world that a signal interrupts goes on, holding the signal back from the threads that handle it.
-func chdir(dir string) error {
+// chdir makes dir, taken from the view's root when empty or relative, this thread's working directory, which the processes it starts inherit. world requires the directory to stay on the world's mount without following symlinks. Signals stay blocked meanwhile: a signal to the launcher could pick this thread, and a wait on the world that a signal interrupts goes on, holding the signal back from the threads that handle it.
+func chdir(dir string, world bool) error {
 	if !strings.HasPrefix(dir, "/") {
 		dir = "/" + dir
 	}
@@ -473,7 +473,25 @@ func chdir(dir string) error {
 		all.Val[i] = ^all.Val[i]
 	}
 	_ = unix.PthreadSigmask(unix.SIG_BLOCK, &all, &mask)
-	err := unix.Chdir(dir)
+	var err error
+	if world {
+		var root, target int
+		root, err = unix.Open("/", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err == nil {
+			rel := strings.TrimPrefix(dir, "/")
+			if rel == "" {
+				rel = "."
+			}
+			target, err = resolve(root, rel)
+			unix.Close(root)
+			if err == nil {
+				err = unix.Fchdir(target)
+				unix.Close(target)
+			}
+		}
+	} else {
+		err = unix.Chdir(dir)
+	}
 	_ = unix.PthreadSigmask(unix.SIG_SETMASK, &mask, nil)
 	if err != nil {
 		return &Error{Kind: ErrExec, Op: "chdir", Err: err}

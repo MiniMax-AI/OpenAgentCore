@@ -540,7 +540,8 @@ type PrepareRequest struct {
 	StateKey string
 	// Assignment is the assignment the Runtime admitted the preparation under.
 	Assignment proto.AssignmentRef
-	// WorkspaceRoot is the Environment's workspace, where the Harness runs.
+	// WorkspaceRoot is the Environment's bound workspace, where the Harness runs.
+	// Admission keeps it disjoint from view-owned paths, including native state.
 	// It is empty with environment none.
 	WorkspaceRoot string
 	// CapabilityRoot, Skills and MCP are the Environment's installed

@@ -57,6 +57,11 @@ func newViewFixture(t *testing.T) *viewFixture {
 	masked := view
 	masked.Masks = []agent.ViewMask{{Path: "/etc/passwd"}}
 	register(reg, "masked", &masked)
+	covered := view
+	covered.Masks = []agent.ViewMask{{Path: "/masked", Dir: true}}
+	covered.Overlays = []agent.ViewOverlay{{Path: "/overlay", Source: t.TempDir()}}
+	covered.ShimPaths = []string{"/tools/command"}
+	register(reg, "covered", &covered)
 	shimmed := view
 	shimmed.Shims = []string{"git"}
 	register(reg, "shimmed", &shimmed)
@@ -78,6 +83,14 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"incomplete binding":                 {"viewed", func(r *agent.PrepareRequest) { r.LocalEnvironment = nil }, []error{ErrInvalidSession}},
 		"shim name without PATH":             {"shimmed", func(*agent.PrepareRequest) {}, []error{ErrInvalidSession}},
 		"relative workspace":                 {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "workspace" }, []error{ErrInvalidSession}},
+		"private workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/.oac/home" }, unsupported},
+		"control workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/proc" }, unsupported},
+		"host CA workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = f.cfg.CADir }, unsupported},
+		"host overlay ancestor":              {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/etc" }, unsupported},
+		"masked workspace":                   {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/masked" }, unsupported},
+		"masked workspace child":             {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/masked/project" }, unsupported},
+		"overlay workspace":                  {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/overlay/project" }, unsupported},
+		"shim workspace ancestor":            {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/tools" }, unsupported},
 		"credentialed stdio MCP": {"viewed", func(r *agent.PrepareRequest) {
 			r.MCP = []agent.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
 		}, []error{ErrUnsupported, agent.ErrViewHandoff}},
@@ -161,7 +174,7 @@ func TestRegistryRunsKindsWithViews(t *testing.T) {
 		}
 	}
 	slices.Sort(kinds)
-	if !slices.Equal(kinds, []string{"masked", "shimmed", "viewed"}) {
+	if !slices.Equal(kinds, []string{"covered", "masked", "shimmed", "viewed"}) {
 		t.Errorf("kinds %v, want those that declare a view", kinds)
 	}
 }

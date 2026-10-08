@@ -531,7 +531,7 @@ func (s *probed) Write(b []byte) (int, error) {
 
 func TestEnvironmentOwnerKeepsWorkspaceAcrossRouters(t *testing.T) {
 	var dials atomic.Int32
-	h := &Host{owners: owners{d: deps{dial: countingDial(&dials)}}}
+	h := &Host{cfg: Config{CADir: "/trust"}, owners: owners{d: deps{dial: countingDial(&dials)}}}
 	b := newBinding(newResource())
 	payload := bindPayload(b)
 	payload.WorkspaceDirectory = "/projects/one"
@@ -551,13 +551,16 @@ func TestEnvironmentOwnerKeepsWorkspaceAcrossRouters(t *testing.T) {
 			t.Fatalf("owner lost at epoch %d", epoch)
 		}
 	}
-	for _, workspace := range []string{"", "relative", "/projects/../two", "C:/project"} {
+	for _, workspace := range []string{"", "relative", "/projects/../two", "C:/project", "/", "/.oac", "/.oac/home", "/proc/1", "/dev/shm", "/etc", "/etc/passwd", "/trust", "/trust/roots"} {
 		fresh := newBinding(newResource())
 		invalid := bindPayload(fresh)
 		invalid.WorkspaceDirectory = workspace
 		if h.Environments(ref(fresh), invalid) != nil {
 			t.Fatalf("unsupported workspace accepted: %q", workspace)
 		}
+	}
+	if len(h.owners.m) != 1 {
+		t.Fatal("a refused bind created an owner")
 	}
 	if dials.Load() != 0 {
 		t.Fatal("bind performed I/O")
