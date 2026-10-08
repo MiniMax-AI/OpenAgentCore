@@ -18,15 +18,9 @@ import (
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-// rpcDefaultRequestTimeout caps a single JSON-RPC request waiting for a
-// response. 60s is the same default mini-captain uses; it must be long
-// enough for `thread/start` (which can spin up a fresh model context),
-// short enough that a dead app-server doesn't pin the prompt forever.
+// rpcDefaultRequestTimeout caps the response wait for a JSON-RPC request,
+// including initialize and thread/start, after its write completes.
 const rpcDefaultRequestTimeout = 60 * time.Second
-
-// rpcInitTimeout caps the initial JSON-RPC `initialize` handshake.
-// Shorter than per-request so misconfigured environments fail fast.
-const rpcInitTimeout = 10 * time.Second
 
 // rpcKillTimeout bounds child teardown waits.
 const rpcKillTimeout = 3 * time.Second
@@ -168,7 +162,7 @@ func NewJSONRPCClient(cfg JSONRPCConfig) *JSONRPCClient {
 // Three failure paths:
 //
 //   - exec.LookPath / Start failure → returns the spawn error verbatim
-//   - initialize timeout → kills the child, returns context.DeadlineExceeded
+//   - initialize timeout or cancellation → kills the child, returns the error
 //   - JSON-RPC error on initialize → kills the child, returns the error
 func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (InitializeResult, error) {
 	args := append([]string{}, c.cfg.ExtraArgs...)
@@ -202,9 +196,7 @@ func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (Initi
 	go func() { defer c.readers.Done(); c.pumpStderr() }()
 	go c.waitChild()
 
-	initCtx, cancel := context.WithTimeout(ctx, rpcInitTimeout)
-	defer cancel()
-	rawResult, err := c.Request(initCtx, "initialize", init)
+	rawResult, err := c.Request(ctx, "initialize", init)
 	if err != nil {
 		_ = c.Close()
 		return InitializeResult{}, fmt.Errorf("codex rpc: initialize: %w", err)
