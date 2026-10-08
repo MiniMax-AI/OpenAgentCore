@@ -36,7 +36,7 @@ export const coreErrors = {
   "sandbox_operation_unsupported": "所选沙箱提供商不支持此操作。",
   "environment_unavailable": "此 Session 的环境已不可用。",
   "execution_unavailable": "执行暂时不可用，请稍后重试。",
-  "runtime_history_unavailable": "此 Core 上的 Runtime 历史不可用。",
+  "runtime_history_unavailable": "Runtime 历史暂时不可用，请稍后重试。",
   "runtime_history_unsupported": "此 Session 不支持 Runtime 历史。",
   "core_metrics_unavailable": "无法读取 Core 指标，请稍后重试。",
   "file_transfer_unavailable": "文件传输不可用，请稍后重试。",

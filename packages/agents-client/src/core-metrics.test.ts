@@ -5,7 +5,7 @@ import { CoreMetricsClient, projectCoreMetrics } from "./core-metrics";
 
 describe("Core metrics client", () => {
   it("reads /core/v1/metrics without the Beta header, with a bearer only when given", async () => {
-    const body = { object: "core.metrics", range: { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 }, service: { status: "running" } };
+    const body = { object: "core.metrics", range: { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 }, service: { status: "running" }, execution: { slots_in_use: 0, slots_total: 4, connected_daemons: 0 } };
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(JSON.stringify(body)));
     const client = new CoreMetricsClient({ fetch });
     expect(client).not.toBeInstanceOf(OpenAIAgentsClient);
@@ -28,11 +28,11 @@ describe("Core metrics projection", () => {
       object: "core.metrics",
       range: { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 },
       service: { status: "running", revision: "b134a1b5", execution_owner: true },
-      execution: { slots_in_use: 3, slots_total: 4, queue_wait_ms: { p95: 2600 }, series: [{ start: "2026-09-24T00:00:00Z", queued: 1 }] },
+      execution: { slots_in_use: 3, slots_total: 4, connected_daemons: 2, queue_wait_ms: { p95: 2600 }, series: [{ start: "2026-09-24T00:00:00Z", queued: 1 }] },
       jobs: [{ id: "runtime_sampler", status: "weird", processed: 12 }],
     });
     expect(metrics.service).toMatchObject({ revision: "b134a1b5", execution_owner: true, started_at: null });
-    expect(metrics.execution).toMatchObject({ slots_in_use: 3, queued_turns: null, connected_daemons: null });
+    expect(metrics.execution).toMatchObject({ slots_in_use: 3, queued_turns: null, connected_daemons: 2 });
     expect(metrics.execution.queue_wait_ms).toEqual({ p50: null, p95: 2600 });
     expect(metrics.execution.series[0]).toMatchObject({ queued: 1, in_progress: null });
     expect(metrics.database).toMatchObject({ size_bytes: null, pool: { in_use: null, idle: null, max: null }, series: [] });
@@ -46,12 +46,15 @@ describe("Core metrics projection", () => {
       object: "core.metrics",
       range: { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 },
       service: { status: "draining" },
+      execution: { slots_in_use: 0, slots_total: 4, connected_daemons: 0 },
     });
     expect(metrics.service.status).toBe("unknown");
   });
 
-  it("rejects a response that is not Core metrics or has no resolution", () => {
+  it("rejects a response that is not Core metrics or lacks its resolution or execution counts", () => {
     expect(() => projectCoreMetrics({ object: "list" })).toThrow();
     expect(() => projectCoreMetrics({ object: "core.metrics", range: { start: "", end: "" }, service: { status: "running" } })).toThrow();
+    const range = { start: "2026-09-24T00:00:00Z", end: "2026-09-24T01:00:00Z", resolution_seconds: 60 };
+    expect(() => projectCoreMetrics({ object: "core.metrics", range, service: { status: "running" }, execution: { slots_in_use: 0, slots_total: 4 } })).toThrow();
   });
 });

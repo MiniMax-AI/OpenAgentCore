@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 8b5982d90cdc89d85af1caf0aa0e9457e6fd8cb913c9bf5f3dcdd8b1dcba8a55
+source_hash: 054bd156ff66980a8bf82c9beb9aad77c2f724f3c314a2ad0a851704fcb23902
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -135,7 +135,6 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `network` | `oac-node-<installation-id>` | Runtime 容器网络 |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | 所匹配发行版的 seccomp 配置文件 |
 | `nested_sandbox` | `true` | 启用 Docker 适配器的 init 进程和 proc-mask 配置 |
-| `extra_hosts` | 可选 | 额外的容器主机映射 |
 
 [Docker 适配器](sandbox-provider.md#docker-adapter)负责容器隔离、卷布局和生命周期行为。
 

@@ -111,8 +111,6 @@ type AllocationTx interface {
 	LoadRestore(current Allocation) (placement.Restore, error)
 	// ObserveRunning records the allocation running with its creation settled.
 	ObserveRunning(current Allocation) (Allocation, error)
-	// Keep renews the allocation's lease.
-	Keep(current Allocation) (Allocation, error)
 	// SettleCreation records that the original Create can no longer change
 	// resources.
 	SettleCreation(current Allocation) (Allocation, error)

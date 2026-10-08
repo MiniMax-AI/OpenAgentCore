@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -21,10 +20,6 @@ func TestFileResourceSemanticsOfficialClientPostgres(t *testing.T) {
 		t.Skip("pinned official Python SDK required")
 	}
 	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "resources-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
@@ -32,7 +27,7 @@ func TestFileResourceSemanticsOfficialClientPostgres(t *testing.T) {
 	})
 	newServer := func() *httptest.Server {
 		t.Helper()
-		s := NewWithCredentialCipher(pool, cipher)
+		s := New(t, pool)
 		h, err := publicHandler(t, s, auth, "codex")
 		if err != nil {
 			t.Fatal(err)

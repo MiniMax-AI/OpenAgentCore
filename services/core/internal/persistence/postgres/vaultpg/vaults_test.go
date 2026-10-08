@@ -306,10 +306,10 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 func TestVaultDeletionConcurrentChildMutations(t *testing.T) {
 	_, pool := openStore(t)
 	tenant := uuid.NewString()
-	service := newService(t, pool, newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
+	service := newService(t, pool, pgtest.CredentialKey(t), nil)
 	// Each operation runs on its own Store, so only PostgreSQL orders them.
 	other := func() *vaults.Service {
-		return newService(t, pool, newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
+		return newService(t, pool, pgtest.CredentialKey(t), nil)
 	}
 	for range 8 {
 		vault := createVault(t, service, tenant)

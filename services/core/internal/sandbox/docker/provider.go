@@ -25,7 +25,6 @@ const labelPrefix = "io.oac."
 // trusted daemon/model connectivity; native tool network policy is in the image.
 type Config struct {
 	InstallationID, Image, Network, Seccomp string
-	ExtraHosts                              []string
 	NestedSandbox                           bool
 	Resources                               *sandbox.Resources
 }

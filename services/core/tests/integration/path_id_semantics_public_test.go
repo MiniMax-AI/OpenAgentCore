@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -86,12 +85,7 @@ func databaseDigest(t *testing.T, pool *pgxpool.Pool) map[string]string {
 
 func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{61}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -123,7 +117,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		t.Fatal("fixture Environment", err)
 	}
 	environment := hosted.Environment.ID
-	skill, err := SkillService(t, pool, cipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: skillArchive(t, "path-skill")})
+	skill, err := SkillService(t, pool, s.credentialCipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: skillArchive(t, "path-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}

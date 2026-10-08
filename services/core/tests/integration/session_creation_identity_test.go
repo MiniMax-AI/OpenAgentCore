@@ -1,13 +1,11 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -21,11 +19,7 @@ import (
 // an older revision never updates the current default's observations.
 func TestSessionCreationKeepsItsResolvedDeploymentRevision(t *testing.T) {
 	s, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{73}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defaults := modelconfigurationpg.New(pgunit.NewPool(pool), cipher)
+	defaults := modelconfigurationpg.New(pgunit.NewPool(pool), s.credentialCipher)
 	service, err := modelconfiguration.NewService(defaults)
 	if err != nil {
 		t.Fatal(err)

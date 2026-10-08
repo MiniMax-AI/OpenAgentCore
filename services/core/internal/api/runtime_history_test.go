@@ -39,34 +39,11 @@ func historyWith(service *runtimeHistoryFixture) func(*Dependencies, *testFakes)
 	}
 }
 
-func historyCapabilities(mode runtimehistory.CollectionMode) runtimehistory.Capabilities {
-	value := runtimehistory.Capabilities{
-		CollectionMode: mode, Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second,
+func historyCapabilities() runtimehistory.Capabilities {
+	return runtimehistory.Capabilities{
+		SampleInterval: 30 * time.Second, Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second,
 		MaximumRange: 24 * time.Hour, MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},
-	}
-	if mode == runtimehistory.CollectionPeriodic {
-		value.SampleInterval = 30 * time.Second
-	}
-	return value
-}
-
-func TestRuntimeHistoryRequiresQualifiedPeriodicCollection(t *testing.T) {
-	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionOnRead)}
-	handler, _, _ := adminTestHandler(t, historyWith(service))
-	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start=1&end=2")
-	if response.Code != http.StatusServiceUnavailable || service.calls != 0 {
-		t.Fatalf("on-read history reached query service: %d calls=%d body=%s", response.Code, service.calls, response.Body)
-	}
-}
-
-func TestRuntimeHistoryFailsClosedForMalformedCapabilities(t *testing.T) {
-	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
-	service.capabilities.Retention = 0
-	handler, _, _ := adminTestHandler(t, historyWith(service))
-	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start=1&end=2")
-	if response.Code != http.StatusServiceUnavailable || service.calls != 0 {
-		t.Fatalf("malformed capabilities reached query service: %d calls=%d body=%s", response.Code, service.calls, response.Body)
 	}
 }
 
@@ -88,7 +65,7 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 		ObservationCount: 1, ObservedCount: 1, CPUContributorCount: 1, MemoryContributorCount: 1,
 		CPUUtilizationRatio: &zeroRatio, CPUCapacityCores: &capacity, MemoryUsageBytes: &zeroMemory, MemoryLimitBytes: &limit,
 	}
-	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
+	service := &runtimeHistoryFixture{capabilities: historyCapabilities()}
 	handler, _, tenant := adminTestHandler(t, historyWith(service))
 	scope.TenantID = tenant
 	service.response = runtimehistory.Response{
@@ -116,7 +93,7 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 }
 
 func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
-	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
+	service := &runtimeHistoryFixture{capabilities: historyCapabilities()}
 	handler, _, _ := adminTestHandler(t, historyWith(service))
 	sessionID := uuid.NewString()
 	for _, query := range []string{
@@ -161,7 +138,7 @@ func TestRuntimeHistoryRejectsMismatchedServiceResponses(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	start := now.Add(-time.Hour)
 	sessionID := uuid.NewString()
-	service := &runtimeHistoryFixture{capabilities: historyCapabilities(runtimehistory.CollectionPeriodic)}
+	service := &runtimeHistoryFixture{capabilities: historyCapabilities()}
 	handler, _, tenant := adminTestHandler(t, historyWith(service))
 	base := runtimehistory.Response{
 		Capabilities: service.capabilities,
@@ -192,7 +169,7 @@ func TestRuntimeHistoryRejectsMismatchedServiceResponses(t *testing.T) {
 }
 
 func TestRuntimeHistoryDefaultPointBudgetRespectsCapabilities(t *testing.T) {
-	capabilities := historyCapabilities(runtimehistory.CollectionPeriodic)
+	capabilities := historyCapabilities()
 	capabilities.MaximumPoints = 60
 	service := &runtimeHistoryFixture{capabilities: capabilities, err: runtimehistory.ErrUnavailable}
 	handler, _, _ := adminTestHandler(t, historyWith(service))
@@ -207,7 +184,7 @@ func TestRuntimeHistoryExpectedCoverageUsesOverflowSafeCeiling(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	start := now.Add(-time.Hour)
 	huge := (time.Duration(1<<63-1) / time.Second) * time.Second
-	capabilities := historyCapabilities(runtimehistory.CollectionPeriodic)
+	capabilities := historyCapabilities()
 	capabilities.SampleInterval = huge
 	capabilities.Retention = huge
 	capabilities.MaximumRange = time.Hour

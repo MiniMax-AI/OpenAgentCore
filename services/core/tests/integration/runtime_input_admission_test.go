@@ -14,8 +14,7 @@ import (
 )
 
 func TestManagedRuntimeResetPreservesCancelAndRetry(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, _ := managedSession(t, s)
 	inputs := []sessions.Input{messageInput("accepted work")}
 	accepted, err := submitInputs(t.Context(), s, tenant, session.ID, "work", inputs)

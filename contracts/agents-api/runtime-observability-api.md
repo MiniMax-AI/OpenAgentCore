@@ -145,7 +145,6 @@ Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rule
 | `unsupported` | `runtime_mode_not_observable` | `none` and `self_hosted` Sessions. |
 | `unavailable` | `allocation_pending` | The managed allocation does not exist yet or is being created. |
 | `unavailable` | `runtime_not_running` | The allocation is being cleaned up or is released, or the provider reports the Runtime absent, stopped or suspended. |
-| `unavailable` | `source_not_configured` | This Core has no managed installation identity. |
 | `unavailable` | `sample_timeout` | The provider read exceeded its deadline. |
 | `unavailable` | `sample_unavailable` | The provider could not produce a current sample. |
 
@@ -233,7 +232,7 @@ Disk is not kept in history.
 | 404 | `not_found_error` | A missing Project, or a Session missing from it. |
 | 409 | `runtime_history_unsupported` | The Session is not `openai_hosted`. |
 | 500 | `internal_error` | Inconsistent stored identity. |
-| 503 | `runtime_history_unavailable` | Core collects no periodic history (it runs without the execution worker), or the read failed, timed out or produced a result outside the bounds. |
+| 503 | `runtime_history_unavailable` | The read failed, timed out or produced a result outside the bounds. |
 
 A response holds at most `max_points` buckets per array, 64 series and 10,000 coverage and series points in total. Storage error text is neither returned nor logged.
 

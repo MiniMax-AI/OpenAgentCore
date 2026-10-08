@@ -52,7 +52,8 @@ type Dispatcher struct {
 	// durable Serve authority or an assignment's attach authority ends, and
 	// before it destroys the resource or sends the release. It is required.
 	Links *relay.Relay
-	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
+	// ManagedRuntimes provisions hosted Environments on the sandbox deployment.
+	// It is required.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
 	// Zero uses DefaultExecutionConcurrency. It is independent of sandbox capacity.

@@ -27,7 +27,7 @@ func TestAgentHostMigrationRefusesGuestBoundSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.DownTo(ctx, 96); err != nil {
+	if _, err := provider.DownTo(ctx, 97); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := provider.Up(ctx); err == nil || !strings.Contains(err.Error(), "delete those Sessions, then upgrade") {

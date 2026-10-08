@@ -27,6 +27,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -35,13 +36,15 @@ import (
 
 var creator = identity.Subject{Kind: "service_account", ID: "test-runner"}
 
-var hostedConfiguration = json.RawMessage(`{"agent":{"model":"m"},"environment":{"type":"openai_hosted"}}`)
+// environmentConfiguration configures a self_hosted Environment Session,
+// which needs no sandbox deployment.
+var environmentConfiguration = json.RawMessage(`{"agent":{"model":"m"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)
 
 // creationService returns the Session store and service over pool with the
 // built-in placement rules.
 func creationService(t *testing.T, pool *pgxpool.Pool) (*Store, *sessions.Service) {
 	t.Helper()
-	rules, err := placement.NewRules(providers.Builtin(), "")
+	rules, err := placement.NewRules(providers.Builtin(), "https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +380,7 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 	reference := environmentconfig.Skill{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: "latest"}}
 	fileID := environmentconfig.InitialFile{Type: "file_id", Path: "/workspace/b", FileID: source.ID}
 	input := sessions.CreateSession{
-		Creator: creator, Engine: "codex", IdempotencyKey: "frozen", Configuration: hostedConfiguration,
+		Creator: creator, Engine: "codex", IdempotencyKey: "frozen", Configuration: environmentConfiguration,
 		ModelProvider:       &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: canary},
 		ModelProviderSource: v1.ModelProviderSourceSession,
 		Initialization:      environmentconfig.Setup{Skills: []environmentconfig.Skill{inline, reference}},
@@ -415,8 +418,8 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 	}
 	assertFrozen()
 	for _, reference := range []sessions.CreateSession{
-		{Creator: creator, Engine: "codex", IdempotencyKey: "foreign-skill", Configuration: hostedConfiguration, Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{reference}}},
-		{Creator: creator, Engine: "codex", IdempotencyKey: "foreign-file", Configuration: hostedConfiguration, InitialFiles: []environmentconfig.InitialFile{fileID}},
+		{Creator: creator, Engine: "codex", IdempotencyKey: "foreign-skill", Configuration: environmentConfiguration, Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{reference}}},
+		{Creator: creator, Engine: "codex", IdempotencyKey: "foreign-file", Configuration: environmentConfiguration, InitialFiles: []environmentconfig.InitialFile{fileID}},
 	} {
 		if _, err := service.CreateSession(ctx, foreign, reference); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(reference.IdempotencyKey, err)
@@ -471,8 +474,17 @@ func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tenant := uuid.NewString()
+	nodes, err := json.Marshal(sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40),
+		ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64),
+		RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A direct deployment admits hosted work without placing it on a node.
+	exec(t, pool, `UPDATE runtime_deployment SET installation_id=$1, backend_fingerprint=$2, provider_kind='e2b', mode='direct', generation=1,
+		specification='{"resources":{"cpus":2,"memory_mib":2048}}'`, uuid.New(), strings.Repeat("a", 64))
 	hosted := func(key string) sessions.CreateSession {
-		return sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: key, Configuration: hostedConfiguration}
+		return sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: key, Configuration: json.RawMessage(`{"agent":{"model":"m"},"environment":{"type":"openai_hosted"}}`)}
 	}
 	existing, err := service.CreateSession(ctx, tenant, hosted("existing"))
 	if err != nil {
@@ -493,8 +505,8 @@ func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 		done <- err
 	}()
 	awaitBlocked(ctx, t, pool, holder)
-	if _, err := tx.Exec(ctx, `UPDATE runtime_deployment SET installation_id=$1, backend_fingerprint=$2, provider_kind='docker', mode='nodes', generation=1,
-		reset_clear='force', reset_requested_at=now(), reset_forced_at=now(), reset_audit='{}'`, uuid.New(), strings.Repeat("a", 64)); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE runtime_deployment SET provider_kind='docker', mode='nodes', generation=2, specification=$1,
+		reset_clear='force', reset_requested_at=now(), reset_forced_at=now(), reset_audit='{}'`, string(nodes)); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -506,7 +518,7 @@ func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 	if retry, err := service.CreateSession(ctx, tenant, hosted("existing")); err != nil || retry.Created || retry.Session.ID != existing.Session.ID {
 		t.Fatal("retry ran admission", retry, err)
 	}
-	exec(t, pool, "UPDATE runtime_deployment SET reset_clear=NULL, reset_requested_at=NULL, reset_forced_at=NULL, reset_audit=NULL, provider_kind='', mode=''")
+	exec(t, pool, "UPDATE runtime_deployment SET reset_clear=NULL, reset_requested_at=NULL, reset_forced_at=NULL, reset_audit=NULL")
 	if _, err := service.CreateSession(ctx, tenant, hosted("unplaced")); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("placement without a node", err)
 	}
@@ -541,7 +553,7 @@ func TestSkillFreezeSerializesWithVersionDeletion(t *testing.T) {
 		if err := holder.QueryRow(ctx, "SELECT pg_backend_pid() FROM skills WHERE id=$1 FOR UPDATE", key).Scan(&holderPID); err != nil {
 			t.Fatal(err)
 		}
-		input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: hostedConfiguration,
+		input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: environmentConfiguration,
 			Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID, Version: "2"}}}}}
 		type outcome struct {
 			creation sessions.Creation

@@ -126,27 +126,18 @@ func TestServiceDoesNotCallSourcesForUnsupportedModes(t *testing.T) {
 	}
 }
 
-func TestServicePreservesUnavailableAndObservedZero(t *testing.T) {
+func TestServicePreservesObservedZero(t *testing.T) {
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
-	service, err := NewService(fixedResolver{target: target}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "source_not_configured" || observation.Sample != nil {
-		t.Fatalf("missing source was not unavailable: %+v %v", observation, err)
-	}
-
 	zeroCPU := float64(0)
 	zeroMemory := uint64(0)
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	source := &fixedSource{sample: Sample{ObservedAt: now, CPUUsageSecondsTotal: &zeroCPU, MemoryUsageBytes: &zeroMemory}}
-	service, err = NewService(fixedResolver{target: target}, sourceOf(source))
+	service, err := NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.now = func() time.Time { return now }
-	observation, err = service.ObserveSession(t.Context(), "tenant", "session")
+	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
 	if err != nil || observation.Status != StatusObserved || observation.Sample == nil || observation.Sample.CPUUsageSecondsTotal == nil || observation.Sample.MemoryUsageBytes == nil {
 		t.Fatalf("observed zero was lost: %+v %v", observation, err)
 	}
@@ -318,13 +309,16 @@ func TestServiceExportQueueNeverBlocksOrChangesObservation(t *testing.T) {
 }
 
 func TestServiceIgnoresExporterFailureAndValidatesOptions(t *testing.T) {
-	if _, err := NewService(fixedResolver{}, nil, WithExporter(nil, ExportOptions{})); err == nil {
+	if _, err := NewService(fixedResolver{}, nil); err == nil {
+		t.Fatal("missing source was accepted")
+	}
+	if _, err := NewService(fixedResolver{}, sourceOf(&fixedSource{}), WithExporter(nil, ExportOptions{})); err == nil {
 		t.Fatal("nil exporter was accepted")
 	}
-	if _, err := NewService(fixedResolver{}, nil, WithExporter(channelExporter{}, ExportOptions{QueueCapacity: -1})); err == nil {
+	if _, err := NewService(fixedResolver{}, sourceOf(&fixedSource{}), WithExporter(channelExporter{}, ExportOptions{QueueCapacity: -1})); err == nil {
 		t.Fatal("negative export queue capacity was accepted")
 	}
-	if _, err := NewService(fixedResolver{}, nil, WithExporter(channelExporter{}, ExportOptions{Timeout: -time.Second})); err == nil {
+	if _, err := NewService(fixedResolver{}, sourceOf(&fixedSource{}), WithExporter(channelExporter{}, ExportOptions{Timeout: -time.Second})); err == nil {
 		t.Fatal("negative export timeout was accepted")
 	}
 
@@ -486,7 +480,7 @@ func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.
 
 func TestServiceClassifiesResolverAndTerminalAllocationUnavailability(t *testing.T) {
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
-	service, err := NewService(fixedResolver{target: Target{SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged}, err: ErrUnavailable}, nil)
+	service, err := NewService(fixedResolver{target: Target{SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged}, err: ErrUnavailable}, sourceOf(&fixedSource{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +557,7 @@ func TestServiceRejectsMismatchedResolvedOwnership(t *testing.T) {
 		{TenantID: "tenant", SessionID: "session", EnvironmentID: "unexpected", Mode: ModeNone},
 		{TenantID: "tenant", SessionID: "session", Mode: ModeSelfHosted},
 	} {
-		service, err := NewService(fixedResolver{target: target}, nil)
+		service, err := NewService(fixedResolver{target: target}, sourceOf(&fixedSource{}))
 		if err != nil {
 			t.Fatal(err)
 		}

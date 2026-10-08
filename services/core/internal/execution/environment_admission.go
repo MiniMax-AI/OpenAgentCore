@@ -33,9 +33,6 @@ func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string
 			return sessions.ErrInvalidInput
 		}
 	case "openai_hosted":
-		if w.runtimes == nil {
-			return ErrExecutionUnavailable
-		}
 		ready, err := w.runtimes.ensureDeployment(ctx)
 		if err != nil {
 			return err

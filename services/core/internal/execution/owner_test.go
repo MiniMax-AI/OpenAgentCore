@@ -66,6 +66,12 @@ func unusedSessions(t *testing.T) (*sessions.Service, sessions.Reader) {
 	return service, struct{ sessions.Reader }{}
 }
 
+// unusedRuntimes is a runtime provider for a new installation whose
+// deployment no operator has configured.
+func unusedRuntimes(t *testing.T) *RuntimeProvider {
+	return NewDeferredRuntimeProvider(uuid.NewString(), func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t))
+}
+
 // unusedObserver fails the test on any observation. The Workers it serves run
 // no Turn.
 type unusedObserver struct{ t *testing.T }
@@ -119,24 +125,29 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service}, Owner{Lease: lease})
 			return err
 		},
-		"missing Session operations": func(t *testing.T, lease *closeCountingLease) error {
+		"missing runtime provider": func(t *testing.T, lease *closeCountingLease) error {
 			_, deployments, deploymentReader := resetManager(t)
 			service, reader := unusedSessions(t)
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Lease: lease})
 			return err
 		},
+		"missing Session operations": func(t *testing.T, lease *closeCountingLease) error {
+			_, deployments, deploymentReader := resetManager(t)
+			service, reader := unusedSessions(t)
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: unusedRuntimes(t)}, Owner{Lease: lease})
+			return err
+		},
 		"missing deployment": func(t *testing.T, lease *closeCountingLease) error {
 			owner, deployments, deploymentReader := resetManager(t)
 			service, reader := unusedSessions(t)
-			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Lease: lease, Sessions: owner.Sessions})
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: unusedRuntimes(t)}, Owner{Lease: lease, Sessions: owner.Sessions})
 			return err
 		},
 		"deployment claim": func(t *testing.T, lease *closeCountingLease) error {
 			owner, deployments, deploymentReader := resetManager(t)
 			lease.inner = owner.Lease
-			id := uuid.NewString()
 			service, reader := unusedSessions(t)
-			dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, Links: relay.New(nil), ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t))}
+			dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, Links: relay.New(nil), ManagedRuntimes: unusedRuntimes(t)}
 			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
@@ -161,6 +172,7 @@ func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
 	owner, deployments, deploymentReader := resetManager(t)
 	credentials, observer := &recordingCredentials{}, unusedObserver{t}
 	service, reader := unusedSessions(t)
+	runtimes := unusedRuntimes(t)
 	bound := Owner{Sessions: owner.Sessions}
 	for _, test := range []struct {
 		name       string
@@ -174,9 +186,10 @@ func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
 		{"missing deployment reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments}, bound, "execution worker requires the deployment reader"},
 		{"missing Session service", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader}, bound, "execution worker requires the Session service"},
 		{"missing Session reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service}, bound, "execution worker requires the Session reader"},
-		{"missing Session operations", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{}, "execution requires the Session execution operations"},
-		{"missing deployment", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, bound, "execution worker requires the deployment execution operations"},
-		{"missing Link relay", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Sessions: owner.Sessions, Deployment: owner.Deployment}, "execution worker requires the Link relay"},
+		{"missing runtime provider", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, bound, "execution worker requires the sandbox runtime provider"},
+		{"missing Session operations", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: runtimes}, Owner{}, "execution requires the Session execution operations"},
+		{"missing deployment", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: runtimes}, bound, "execution worker requires the deployment execution operations"},
+		{"missing Link relay", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: runtimes}, Owner{Sessions: owner.Sessions, Deployment: owner.Deployment}, "execution worker requires the Link relay"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			lease := &closeCountingLease{t: t}
@@ -193,10 +206,9 @@ func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
 func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	owner, deployments, deploymentReader, pool := resetManagerDB(t, nil)
 	lease := &closeCountingLease{t: t, inner: owner.Lease}
-	id := uuid.NewString()
 	// The Worker's first reconciliation scans the Session work.
 	reader, service := testSessions(t, pool, pgtest.CredentialKey(t))
-	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, Links: relay.New(nil), ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t))}
+	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, Links: relay.New(nil), ManagedRuntimes: unusedRuntimes(t)}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 	if err != nil {
 		t.Fatal(err)

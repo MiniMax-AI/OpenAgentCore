@@ -26,7 +26,8 @@ func environmentInput(key, kind, directory string) sessions.CreateSession {
 func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 	for _, kind := range []string{"self_hosted", "openai_hosted"} {
 		t.Run(kind, func(t *testing.T) {
-			s, pool := testStore(t)
+			s, _ := configuredStore(t)
+			pool := s.pool
 			ctx := context.Background()
 			tenant, foreign := uuid.NewString(), uuid.NewString()
 			input := environmentInput("environment", kind, "/workspace")
@@ -65,8 +66,8 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 			if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {
 				t.Fatal(err)
 			}
+			restarted := reopenStore(t, s)
 			pool.Close()
-			restarted, _ := testStore(t)
 			retry, err := restarted.CreateSession(ctx, tenant, input)
 			if err != nil || retry.ID != session.ID || retry.Metadata["updated"] != "yes" {
 				t.Fatal(retry, err)
@@ -80,8 +81,9 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 }
 
 func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
-	s, pool := testStore(t)
-	other, _ := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
+	other := reopenStore(t, s)
 	ctx := context.Background()
 	tenant := uuid.NewString()
 	intent := json.RawMessage(`{"request":"resolved-template"}`)
@@ -157,8 +159,8 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	restarted := reopenStore(t, s)
 	pool.Close()
-	restarted, _ := testStore(t)
 	retryInput := environmentInput("winner", "openai_hosted", "/changed-resolution")
 	retryInput.CreationRequest = intent
 	retryInput.InitialInputs = []sessions.Input{messageInput("initial")}

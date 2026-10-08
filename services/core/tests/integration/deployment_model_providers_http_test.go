@@ -11,7 +11,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
@@ -24,12 +23,8 @@ import (
 // frozen only into hosted Sessions; self-hosted Sessions bring their own
 // provider, and a Session with no provider is rejected before any write.
 func TestDeploymentModelProvidersHTTP(t *testing.T) {
-	_, pool := testStore(t)
-	if _, err := pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
-		t.Fatal(err)
-	}
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
-	st := NewWithCredentialCipher(pool, cipher)
+	st, _ := configuredStore(t)
+	pool := st.pool
 	tenant, projectKey, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: runtimedevice.HashCredential(projectKey), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
@@ -166,7 +161,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	// Simulate a default persisted when cross-protocol execution was supported.
 	// It must remain readable, but cannot create new Sessions or be rewritten.
 	historical := strings.Replace(codexDefault, `"protocol":"responses"`, `"protocol":"anthropic"`, 1)
-	encrypted, err := cipher.SealDeploymentModelProvider([]byte(historical), "codex")
+	encrypted, err := st.credentialCipher.SealDeploymentModelProvider([]byte(historical), "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

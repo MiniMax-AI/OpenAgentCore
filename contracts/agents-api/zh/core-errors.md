@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 9e089104160f06a17495c560f8a40c794046abd925de4f0aa487b58d91e481eb
+source_hash: 6d4d7795e36b8773187073d6d41d991af3e60342ec2f2b84fceabb362a82b0be
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -97,7 +97,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 500 | `internal_error` | Core 未能完成操作 |
 | 503 | `runtime_node_unavailable` | 没有可用或有剩余容量的沙箱节点 |
 | 503 | `execution_unavailable` | 执行不可用，例如 Core 正在关闭 |
-| 503 | `runtime_history_unavailable` | 持久 Runtime 历史未配置或暂时不可用 |
+| 503 | `runtime_history_unavailable` | 持久 Runtime 历史暂时不可用 |
 | 503 | `core_metrics_unavailable` | 无法读取 Core 指标 |
 | 503 | `file_transfer_unavailable` | 有界内容传输不可用 |
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
@@ -15,9 +14,10 @@ import (
 )
 
 func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
-	s, pool := testStore(t)
+	s, provider := configuredStore(t)
+	pool := s.pool
 	w := executionWriter(t, s)
-	tenant, provider := uuid.NewString(), uuid.NewString()
+	tenant := uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
 	secret := uuid.NewString()
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, provider, runtimedevice.HashCredential(secret), runtimedevice.HashCredential(secret))
@@ -41,8 +41,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ObserveRunning(t.Context(), owner); err == nil {
 		t.Fatal("lost writer changed allocation")
 	}
-	reopened, _ := testStore(t)
-	next := executionWriter(t, reopened)
+	next := executionWriter(t, New(t, pool))
 	retry, err := deploymentExecution(t, next).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, provider, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !retry.Replayed || retry.ID != owner.ID || retry.DeviceID != owner.DeviceID {
 		t.Fatalf("restart replaced unknown allocation: %+v %v", retry, err)
@@ -98,9 +97,10 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 }
 
 func TestRuntimeAllocationOneWinnerAndRollback(t *testing.T) {
-	s, pool := testStore(t)
+	s, provider := configuredStore(t)
+	pool := s.pool
 	w := executionWriter(t, s)
-	tenant, provider := uuid.NewString(), uuid.NewString()
+	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
 	var wg sync.WaitGroup
 	results := make(chan deployment.Allocation, 8)
@@ -154,12 +154,12 @@ func TestRuntimeAllocationOneWinnerAndRollback(t *testing.T) {
 	}
 }
 
-func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
-	s, pool := testStore(t)
+func TestRuntimeAllocationCleanupRevokesAndKeepsIdentity(t *testing.T) {
+	s, installation := configuredStore(t)
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,14 +167,8 @@ func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	if err != nil || !owner.CreateSettled {
 		t.Fatalf("running observation: %+v %v", owner, err)
 	}
-	if _, err := deploymentExecution(t, w).KeepAllocation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).CheckRunning(t.Context(), owner); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := deploymentExecution(t, w).KeepAllocation(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
-		t.Fatalf("expired allocation renewed: %v", err)
 	}
 	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
@@ -182,11 +176,14 @@ func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("cleanup credential still authenticates")
 	}
+	if _, err := deploymentExecution(t, w).CheckRunning(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
+		t.Fatalf("cleanup kept the allocation running: %v", err)
+	}
 	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	got, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, owner.ProviderKey, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
-	if err != nil || !got.Replayed || got.State != "released" || got.KeptAt.After(time.Now()) {
+	if err != nil || !got.Replayed || got.State != "released" {
 		t.Fatalf("cleanup permitted replacement: %+v %v", got, err)
 	}
 }

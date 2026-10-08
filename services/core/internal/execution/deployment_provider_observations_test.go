@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +10,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
@@ -47,10 +45,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cipher := pgtest.CredentialKey(t)
 	defaults := modelconfigurationpg.New(pgunit.NewPool(pool), cipher)
 	service, err := modelconfiguration.NewService(defaults)
 	if err != nil {

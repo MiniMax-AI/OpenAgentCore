@@ -25,7 +25,7 @@ func (f *fixtureSource) Live() Live { return f.live }
 func fixtureService(t *testing.T) (*Service, *fixtureSource, time.Time) {
 	t.Helper()
 	now := time.Date(2026, 9, 25, 12, 0, 20, 0, time.UTC)
-	source := &fixtureSource{history: History{Buckets: map[time.Time]*float64{}}, live: Live{ExecutionOwner: ptr(true), SlotsInUse: ptr(int64(2)), SlotsTotal: ptr(int64(4))}}
+	source := &fixtureSource{history: History{Buckets: map[time.Time]*float64{}}, live: Live{ExecutionOwner: ptr(true), SlotsInUse: 2, SlotsTotal: 4}}
 	service, err := New(now.Add(-2*time.Hour), strings.Repeat("a", 40), source, Periodic{ID: "runtime_sampler"}, Periodic{ID: "history_cleanup"}, Periodic{ID: "audit_cleanup"})
 	if err != nil {
 		t.Fatal(err)
