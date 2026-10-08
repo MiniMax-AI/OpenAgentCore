@@ -2,8 +2,6 @@ package codex
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -12,15 +10,13 @@ import (
 // McpServerConfig. Written into <CODEX_HOME>/config.toml before spawning the
 // app-server child.
 type mcpServerConfig struct {
-	Name              string
-	URL               string
-	Command           string
-	Args              []string
-	EnabledTools      *[]string
-	Required          bool
-	BearerTokenEnvVar string
-	EnvHTTPHeaders    map[string]string
-	ApproveTools      bool
+	Name         string
+	URL          string
+	Command      string
+	Args         []string
+	EnabledTools *[]string
+	Required     bool
+	ApproveTools bool
 }
 
 // writeCodexMCPConfig writes a `[mcp_servers.<name>]` TOML table per
@@ -55,11 +51,6 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 			b.WriteString(`url = `)
 			b.WriteString(tomlQuoteString(srv.URL))
 			b.WriteByte('\n')
-			if srv.BearerTokenEnvVar != "" {
-				b.WriteString("bearer_token_env_var = ")
-				b.WriteString(tomlQuoteString(srv.BearerTokenEnvVar))
-				b.WriteByte('\n')
-			}
 			if srv.EnabledTools != nil {
 				b.WriteString("enabled_tools = [")
 				for i, name := range *srv.EnabledTools {
@@ -69,16 +60,6 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 					b.WriteString(tomlQuoteString(name))
 				}
 				b.WriteString("]\n")
-			}
-			if len(srv.EnvHTTPHeaders) > 0 {
-				b.WriteString("env_http_headers = {")
-				for i, key := range slices.Sorted(maps.Keys(srv.EnvHTTPHeaders)) {
-					if i > 0 {
-						b.WriteString(", ")
-					}
-					b.WriteString(tomlQuoteString(key) + " = " + tomlQuoteString(srv.EnvHTTPHeaders[key]))
-				}
-				b.WriteString("}\n")
 			}
 			b.WriteByte('\n')
 			continue

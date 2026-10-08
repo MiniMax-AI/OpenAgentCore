@@ -22,12 +22,11 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 	for _, mode := range []string{"success", "phased", "timeout", "wrong-receipt", "duplicate-usage", "cancel", "blocked-write"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=steering-" + mode, "GORACE=atexit_sleep_ms=0"}}
+			config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=steering-" + mode, "GORACE=atexit_sleep_ms=0"}}, Home: root}
 			if mode == "phased" {
 				config.Env[1] = "SDK_HELPER_MODE=steering-timeout"
 			}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native", Model: "fake-model", SystemPrompt: "instructions"}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, AgentSessionID: "native", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

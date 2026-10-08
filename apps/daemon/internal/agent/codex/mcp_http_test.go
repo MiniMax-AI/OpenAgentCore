@@ -14,15 +14,16 @@ import (
 )
 
 func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	root := t.TempDir()
+	cfg := testView(t, "", root)
 	tools := []string{"lookup.docs", `quote"tool`}
 	denyAll := []string{}
-	servers := []proto.MCPHTTPServer{
-		{ConnectionOrigin: "service", ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
-		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
+	cfg.view.MCP = []agent.MCPBinding{
+		{ServerLabel: "docs.server", ConnectionOrigin: "service", CredentialAuthority: "project_vault", Transport: "http", ServerURL: "http://127.0.0.1:17102/mcp", AllowedTools: &tools, Required: true},
+		{ServerLabel: "blocked", ConnectionOrigin: "service", CredentialAuthority: "project_vault", Transport: "http", ServerURL: "http://127.0.0.1:17103/mcp", AllowedTools: &denyAll},
 	}
-	req := prepared(t, "public-mcp", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers})
-	plan, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
+	req := prepared(t, "public-mcp", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true})
+	plan, err := prepareViewPlan(t.Context(), req, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,13 +31,10 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 	if !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
 		t.Fatal("native profile was not pinned")
 	}
-	home, err := allocCodexHome(req.StateKey)
-	if err != nil {
-		t.Fatal(err)
+	if plan.Cwd != filepath.Join(root, agent.ViewWorkName) {
+		t.Fatal("environment:none cwd is not the view's work directory", plan.Cwd)
 	}
-	if plan.Cwd != home {
-		t.Fatal("environment:none cwd is not the private home")
-	}
+	home := filepath.Join(root, viewCodexHome)
 	config, err := os.ReadFile(filepath.Join(home, "config.toml"))
 	if err != nil {
 		t.Fatal(err)
@@ -46,16 +44,12 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 			t.Fatalf("missing native config %q", expected)
 		}
 	}
-	tools[0] = "mutated"
-	if (*plan.mcpServers["docs.server"].EnabledTools)[0] != "lookup.docs" {
-		t.Fatal("prepared allowlist retained caller-owned memory")
-	}
 	history := filepath.Join(home, "retained-history.jsonl")
 	if err := os.WriteFile(history, []byte("native-history"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	servers = []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "replacement", ServerURL: "https://new.example/mcp"}}
-	second, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
+	cfg.view.MCP = []agent.MCPBinding{{ServerLabel: "replacement", ConnectionOrigin: "service", CredentialAuthority: "project_vault", Transport: "http", ServerURL: "http://127.0.0.1:17104/mcp"}}
+	second, err := prepareViewPlan(t.Context(), req, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,33 +64,21 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 	}
 }
 
-func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
+func TestPublicMCPHTTPRejectsStoredCredentials(t *testing.T) {
 	valid := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
-	if _, _, err := runtimeMCPServers(agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{MCPHTTPServers: &valid}}); err == nil {
-		t.Fatal("non-service profile accepted")
-	}
-	for _, server := range []proto.MCPHTTPServer{
-		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://user:synthetic-secret@docs.example/mcp"},
-		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp?token=synthetic-secret"},
-		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},
-	} {
-		servers := []proto.MCPHTTPServer{server}
-		if _, _, err := runtimeMCPServers(agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
-			t.Fatal("unsupported configuration was accepted or exposed", err)
-		}
-	}
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	home, err := allocCodexHome("credentials")
-	if err != nil {
+	root := t.TempDir()
+	cfg := testView(t, "", root)
+	cfg.view.MCP = []agent.MCPBinding{{ServerLabel: "docs", ConnectionOrigin: "service", CredentialAuthority: "project_vault", Transport: "http", ServerURL: "http://127.0.0.1:17102/mcp"}}
+	if err := os.Mkdir(filepath.Join(root, viewCodexHome), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(home, ".credentials.json")
+	path := filepath.Join(root, viewCodexHome, ".credentials.json")
 	stored := []byte(`{"synthetic":"private"}`)
 	if err := os.WriteFile(path, stored, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	req := prepared(t, "credentials", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &valid})
-	if _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil {
+	if _, err := prepareViewPlan(t.Context(), req, cfg); err == nil {
 		t.Fatal("existing MCP credentials accepted")
 	}
 	if after, err := os.ReadFile(path); err != nil || !reflect.DeepEqual(after, stored) {
@@ -112,9 +94,6 @@ func mcpHTTPConfigResponse(servers map[string]mcpServerConfig) map[string]any {
 		if server.EnabledTools != nil {
 			entry["enabled_tools"] = append([]string{}, (*server.EnabledTools)...)
 		}
-		if server.BearerTokenEnvVar != "" {
-			entry["bearer_token_env_var"] = server.BearerTokenEnvVar
-		}
 		entries[name] = entry
 	}
 	return map[string]any{"config": map[string]any{"mcp_servers": entries, "features": map[string]any{"plugins": false, "apps": false}, "mcp_oauth_credentials_store": "file"}}
@@ -128,19 +107,5 @@ func writeMCPHTTPConfigResponse(t *testing.T, path string, response any) {
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestPublicMCPBearerRequiresHTTPS(t *testing.T) {
-	req := agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true}}
-	token := "synthetic-private-token"
-	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "http://tools.example/mcp", BearerToken: &token}}
-	req.MCPHTTPServers = &servers
-	if _, _, err := runtimeMCPServers(req); err == nil || strings.Contains(err.Error(), token) {
-		t.Fatal("plaintext bearer accepted or exposed")
-	}
-	servers[0].ServerURL = "https://tools.example/mcp"
-	if _, _, err := runtimeMCPServers(req); err != nil {
-		t.Fatal("HTTPS bearer declaration rejected", err)
 	}
 }

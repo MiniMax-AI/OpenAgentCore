@@ -18,17 +18,13 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.ExecutionControls = nil
-			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp", Required: true}}
-			req.MCPHTTPServers = &servers
+			cfg.view.MCP = []agent.MCPBinding{{ServerLabel: "docs", ConnectionOrigin: "service", CredentialAuthority: "project_vault", Transport: "http", ServerURL: "http://127.0.0.1:17102/mcp", Required: true}}
 			method := "thread/start"
 			if strings.HasPrefix(mode, "resume") {
 				req.AgentSessionID = "fixture-native-thread"
 				method = "thread/resume"
 			}
-			declarations, _, err := runtimeMCPServers(req)
-			if err != nil {
-				t.Fatal(err)
-			}
+			declarations := mcpServersFromBindings(cfg.view.MCP)
 			config := filepath.Join(root, "mcp-config.json")
 			writeMCPHTTPConfigResponse(t, config, mcpHTTPConfigResponse(declarations))
 			t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", config)

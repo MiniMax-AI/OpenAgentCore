@@ -2,8 +2,6 @@ package codex
 
 import (
 	"encoding/json"
-	"os"
-	"slices"
 	"strings"
 	"testing"
 
@@ -12,54 +10,43 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
-func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.T) {
-	token := "user-token"
-	req := agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}}, MCP: []agent.EnvironmentMCP{
-		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "must-not-be-native-command", Args: []string{"private-argument"}}},
-		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/1", BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.com/mcp", HTTPHeaders: map[string]string{"X-Key": "literal-${DO_NOT_EXPAND}"}}},
-	}}
-	servers, env, err := runtimeMCPServers(req)
-	if err != nil || len(servers) != 2 || len(env) != 2 {
-		t.Fatal("environment declarations were not projected", err)
+// TestViewMCPProjectsStdioAliasAndGatewayURL checks that the view's stdio
+// server runs as its alias without arguments and its HTTP server at the
+// gateway URL, and that the qualified native configuration matches only that
+// projection.
+func TestViewMCPProjectsStdioAliasAndGatewayURL(t *testing.T) {
+	cfg := testView(t, "", t.TempDir())
+	cfg.view.MCP = []agent.MCPBinding{
+		{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
+			Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}},
+		{ServerLabel: "remote", ConnectionOrigin: "environment", CredentialAuthority: "environment_configuration", Transport: "http", ServerURL: "http://127.0.0.1:17102/mcp"},
 	}
-	executable, _ := os.Executable()
-	if servers["local"].Command != executable || !servers["local"].ApproveTools ||
-		!slices.Equal(servers["local"].Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/0", "local"}) {
-		t.Fatal("native stdio bypasses the packaged launcher")
+	req := prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), LocalEnvironment: &proto.LocalEnvironment{}})
+	req.WorkspaceRoot = "/workspace"
+	plan, err := prepareViewPlan(t.Context(), req, cfg)
+	if err != nil {
+		t.Fatal(err)
 	}
-	remote := servers["remote"]
-	if remote.BearerTokenEnvVar == "" || remote.EnvHTTPHeaders["X-Key"] == "" ||
-		!slices.Contains(env, remote.BearerTokenEnvVar+"="+token) ||
-		!slices.Contains(env, remote.EnvHTTPHeaders["X-Key"]+"=literal-${DO_NOT_EXPAND}") {
-		t.Fatal("private header values changed")
+	defer plan.Cleanup()
+	servers := plan.mcpServers
+	local, remote := servers["local"], servers["remote"]
+	if len(servers) != 2 || local.Command != agent.ViewAlias(0) || local.Args == nil || len(local.Args) != 0 || !local.ApproveTools ||
+		remote.URL != "http://127.0.0.1:17102/mcp" {
+		t.Fatalf("view MCP projection: %+v", servers)
 	}
 	fixture := map[string]any{"config": map[string]any{
 		"mcp_oauth_credentials_store": "file", "features": map[string]bool{"plugins": false, "apps": false},
 		"mcp_servers": map[string]any{
-			"local":  map[string]any{"command": servers["local"].Command, "args": servers["local"].Args, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve"},
-			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve", "bearer_token_env_var": remote.BearerTokenEnvVar, "env_http_headers": remote.EnvHTTPHeaders},
+			"local":  map[string]any{"command": local.Command, "args": []string{}, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve"},
+			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve"},
 		},
 	}}
 	raw, _ := json.Marshal(fixture)
 	if !matchesMCPConfig(raw, servers) {
 		t.Fatal("qualified native projection rejected")
 	}
-	corrupt := strings.Replace(string(raw), "runtime-mcp-exec", "untrusted-launcher", 1)
+	corrupt := strings.Replace(string(raw), agent.ViewAlias(0), "/usr/bin/untrusted-launcher", 1)
 	if matchesMCPConfig(json.RawMessage(corrupt), servers) {
 		t.Fatal("different native launcher accepted")
-	}
-}
-
-func TestEnvironmentMCPRejectsPlaintextBearerAndCollisions(t *testing.T) {
-	token := "user-token"
-	req := agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}},
-		MCP: []agent.EnvironmentMCP{{BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}
-	if _, _, err := runtimeMCPServers(req); err == nil {
-		t.Fatal("plaintext bearer accepted")
-	}
-	req.MCP[0].Server.URL = "https://example.com/mcp"
-	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.com/mcp"}}
-	if _, _, err := runtimeMCPServers(req); err == nil {
-		t.Fatal("service and environment identity collision accepted")
 	}
 }

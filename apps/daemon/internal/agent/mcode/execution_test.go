@@ -4,24 +4,16 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestExecutionOptionsInheritUserEnvironment(t *testing.T) {
-	r := testRequest(t)
-	t.Setenv("OAC_TEST_SECRET_CANARY", "secret")
-	t.Setenv("NODE_OPTIONS", "--import=untrusted")
-	opts, err := prepareOptions(prepared(t, r))
+func TestExecutionDisablesNativeFeatures(t *testing.T) {
+	opts, err := fakeInstall("node").prepare(prepared(t, testRequest(t)), hostSession(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(opts.Env, "\n"), "OAC_TEST_SECRET_CANARY=secret") {
-		t.Fatal("user environment lost")
-	}
-
 	data, err := os.ReadFile(filepath.Join(opts.DataDir, "config.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +38,7 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 	} {
 		r := testRequest(t)
 		change(&r)
-		if _, err := prepareOptions(prepared(t, r)); err == nil {
+		if _, err := fakeInstall("node").prepare(prepared(t, r), hostSession(t)); err == nil {
 			t.Fatal("unsupported execution accepted")
 		}
 	}

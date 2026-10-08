@@ -21,9 +21,8 @@ func TestUsageTransportPreservesSnapshotOnFailureAndDone(t *testing.T) {
 	for _, mode := range []string{"success", "native-error", "process-error", "missing", "malformed", "duplicate", "wrong-session", "changed-result"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=usage-" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+			config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=usage-" + mode, "GORACE=atexit_sleep_ms=0"}}, Home: root}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

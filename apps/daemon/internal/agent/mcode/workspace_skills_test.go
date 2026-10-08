@@ -12,7 +12,7 @@ import (
 )
 
 func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
-	c, req, _ := workspaceFixture(t)
+	install, session, req := fakeInstall("node"), hostSession(t), workspaceRequest(t)
 	root := t.TempDir()
 	path := filepath.Join(root, "plugin", "skills", "proof")
 	if err := os.MkdirAll(path, 0700); err != nil {
@@ -28,7 +28,7 @@ func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
 		Metadata: agentskill.Metadata{Name: "proof", Description: "Read a marker"},
 	}}
 	for range 2 {
-		opts, err := prepareWorkspaceOptions(c, req)
+		opts, err := install.prepare(req, session)
 		if err != nil {
 			t.Fatal(err)
 		}

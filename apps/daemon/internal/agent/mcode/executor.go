@@ -24,28 +24,6 @@ type executor struct {
 	starting, closed, invalid bool
 }
 
-// NewExecutorFactory fixes the deployment workspace once; nil selects none.
-func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
-	var frozen *WorkspaceConfig
-	if config != nil {
-		value := *config
-		value.AllowedDomains = append([]string(nil), config.AllowedDomains...)
-		frozen = &value
-	}
-	return func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
-		binary := defaultBinary()
-		if frozen != nil {
-			binary = frozen.Binary
-		}
-		return startExecutor(ctx, req.PromptRequestPayload, binary, func() (launchOptions, error) {
-			if frozen == nil {
-				return prepareOptions(req)
-			}
-			return prepareWorkspaceOptions(*frozen, req)
-		})
-	}
-}
-
 // startExecutor prepares the native owner for req and starts binary.
 func startExecutor(ctx context.Context, req proto.PromptRequestPayload, binary string, prepare func() (launchOptions, error)) (agent.Executor, error) {
 	if ctx == nil {

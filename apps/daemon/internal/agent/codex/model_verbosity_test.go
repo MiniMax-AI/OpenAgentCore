@@ -28,22 +28,21 @@ func TestCatalogVerbositySupport(t *testing.T) {
 	}
 }
 
-func TestPrepareModelVerbosity(t *testing.T) {
+func TestViewModelVerbosity(t *testing.T) {
 	if !SupportsTextVerbosity {
 		t.Skip("catalog probe requires Unix")
 	}
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	binary := filepath.Join(t.TempDir(), "codex")
 	catalog := `{"models":[{"slug":"known-model","support_verbosity":true,"native_extra":{"keep":true}}]}`
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+catalog+"'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "known-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "high"}}))
+	plan, err := testPlan(t, prepared(t, "state", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "known-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "high"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if err := prepareModelVerbosity(context.Background(), binary, &plan); err != nil {
+	if err := viewModelVerbosity(context.Background(), binary, &plan, *fixtureProvider()); err != nil {
 		t.Fatal(err)
 	}
 	kv := plan.ExtraConfig[len(plan.ExtraConfig)-1]
@@ -60,19 +59,18 @@ func TestPrepareModelVerbosity(t *testing.T) {
 		t.Fatalf("catalog was not removed: %v", err)
 	}
 	plan.Model = "custom-provider-model"
-	if err := prepareModelVerbosity(context.Background(), binary, &plan); err == nil {
+	if err := viewModelVerbosity(context.Background(), binary, &plan, *fixtureProvider()); err == nil {
 		t.Fatal("accepted model that would ignore verbosity")
 	}
-	if err := prepareModelVerbosity(context.Background(), "/missing-codex", &plan); err == nil {
+	if err := viewModelVerbosity(context.Background(), "/missing-codex", &plan, *fixtureProvider()); err == nil {
 		t.Fatal("accepted unreadable catalog")
 	}
 }
 
-func TestPrepareDefaultModelVerbosity(t *testing.T) {
+func TestViewDefaultModelVerbosity(t *testing.T) {
 	if !SupportsTextVerbosity {
 		t.Skip("catalog probe requires Unix")
 	}
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	binary := filepath.Join(t.TempDir(), "codex")
 	catalog := `{"models":[{"slug":"supported","support_verbosity":true,"default_verbosity":"low"},{"slug":"unsupported","support_verbosity":false}]}`
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+catalog+"'\n"), 0700); err != nil {
@@ -81,12 +79,12 @@ func TestPrepareDefaultModelVerbosity(t *testing.T) {
 	for _, model := range []string{"supported", "unsupported", "unknown-provider-model"} {
 		for _, level := range []string{"low", "medium", "high"} {
 			t.Run(model+"/"+level, func(t *testing.T) {
-				plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: model, ExecutionControls: &proto.ExecutionControls{TextVerbosity: level}}))
+				plan, err := testPlan(t, prepared(t, "state", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: model, ExecutionControls: &proto.ExecutionControls{TextVerbosity: level}}))
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer func() { plan.Cleanup() }()
-				err = prepareModelVerbosity(context.Background(), binary, &plan)
+				err = viewModelVerbosity(context.Background(), binary, &plan, *fixtureProvider())
 				if model != "supported" && level != "medium" {
 					if err == nil {
 						t.Fatal("accepted unsupported non-default verbosity")

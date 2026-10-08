@@ -14,7 +14,7 @@ func Configuration() harnessconfig.Configuration {
 		{Protocol: "anthropic"},
 	}, Declaration: proto.Declaration{
 		Capabilities: proto.AgentKindCapabilities{
-			SubagentObservations: s, NativeSessionRecovery: s, EnvironmentNone: s, LocalEnvironment: s,
+			SubagentObservations: s, NativeSessionRecovery: u, EnvironmentNone: s, LocalEnvironment: s,
 			TextVerbosity: u, StructuredOutput: s, ToolSearch: s, MessageImages: s, FunctionResultImages: s,
 			FunctionTools: s, MCPHTTPTools: s, MCPHTTPRequired: s, MCPHTTPBearerAuth: s,
 		},

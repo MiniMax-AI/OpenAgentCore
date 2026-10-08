@@ -27,9 +27,8 @@ func defaultBinary() string { return binpath.Codex() }
 var ErrCLINotFound = errors.New("codex CLI not found")
 
 // CheckCLIAvailable runs `<binary> --version` and returns the trimmed
-// first line. The empty binary name defaults to defaultBinary(). Matches
-// the CLI availability check signature
-// so connect.go's preflight loop treats every engine uniformly.
+// first line. The empty binary name defaults to defaultBinary(). Discovery
+// passes it as the version check.
 func CheckCLIAvailable(ctx context.Context, binary string) (string, error) {
 	if strings.TrimSpace(binary) == "" {
 		binary = defaultBinary()

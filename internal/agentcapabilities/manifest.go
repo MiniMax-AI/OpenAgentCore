@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"path"
 	"strings"
 	"unicode/utf8"
 
@@ -33,6 +34,9 @@ type InstalledSkill struct {
 	RelativeRoot     string              `json:"relative_root"`
 	PackageRoot      string              `json:"package_root"`
 }
+
+// Root is the Skill's directory as the Harness sees it.
+func (s InstalledSkill) Root() string { return path.Join(s.InstallationRoot, s.RelativeRoot) }
 
 // Identity binds an installation to one immutable Environment and Session.
 type Identity struct {

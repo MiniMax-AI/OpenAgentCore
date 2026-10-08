@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -42,13 +44,14 @@ func TestExecutorNativeReuse(t *testing.T) {
 		t.Fatal("cannot create isolated acceptance workspace")
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(isolated) })
-	t.Setenv("OAC_RUNTIME_HOME", isolated)
-	for _, name := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
-		t.Setenv(name, "")
-	}
-	cfg := defaultSessionConfig()
-	cfg.codexBinary = binary
+	cfg := testView(t, binary, isolated)
 	cfg.logger = slog.New(slog.DiscardHandler)
+	// The test reaches the provider directly, without the view's proxy.
+	launch := cfg.view.Launch
+	cfg.view.Launch = func(opts clirunner.StartOptions) (*clirunner.Process, error) {
+		opts.Env = slices.DeleteFunc(opts.Env, func(entry string) bool { return strings.Contains(strings.ToLower(entry), "_proxy=") })
+		return launch(opts)
+	}
 	req := prepared(t, "executor-native", proto.PromptRequestPayload{
 		AgentKind:                   "codex",
 		DisableExecutionEnvironment: true, DisableSubagents: true,

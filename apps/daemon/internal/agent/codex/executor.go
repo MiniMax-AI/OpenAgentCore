@@ -25,14 +25,6 @@ type Executor struct {
 	closeMu                      sync.Mutex
 }
 
-func PrepareExecutor(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
-	e, err := newExecutor(ctx, req, defaultSessionConfig())
-	if e == nil {
-		return nil, err
-	}
-	return e, err
-}
-
 func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	if out == nil || strings.TrimSpace(runID) == "" || input.Validate() != nil {
 		return nil, errors.New("codex: start requires a run identity, input and output")
@@ -190,5 +182,3 @@ func (e *Executor) Close(ctx context.Context) error {
 }
 
 var _ agent.Executor = (*Executor)(nil)
-
-func NewExecutorFactory() agent.ExecutorFactory { return PrepareExecutor }

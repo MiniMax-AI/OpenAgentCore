@@ -27,7 +27,7 @@ type sessionConfig struct {
 	codexBinary string
 	logger      *slog.Logger
 	killTimeout time.Duration
-	// view runs codex in an agent-host Session view instead of on this host.
+	// view is the agent-host Session view codex runs in.
 	view *viewLaunch
 }
 

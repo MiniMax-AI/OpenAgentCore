@@ -112,7 +112,7 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 			if raw == "" {
 				t.Skipf("set OAC_QUALIFY_%s to the Harness's model and model_provider", strings.ToUpper(kind))
 			}
-			runtime := declaration.Discover(context.Background(), agent.DiscoveryOptions{Profile: "default", Stdout: io.Discard, Stderr: os.Stderr}, declaration.Info)
+			runtime := declaration.Discover(context.Background(), agent.DiscoveryOptions{Stdout: io.Discard, Stderr: os.Stderr}, declaration.Info)
 			if runtime == nil || runtime.View == nil {
 				t.Fatalf("%s declares no agent-host view; discovery reported why above", kind)
 			}

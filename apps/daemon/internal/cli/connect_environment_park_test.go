@@ -1,23 +1,22 @@
+//go:build linux
+
 package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/google/uuid"
 )
 
@@ -38,21 +37,10 @@ func (b *lockedBuffer) String() string {
 	return b.buf.String()
 }
 
-// A permanent enrollment rejection parks the self-hosted daemon: one message,
-// no further requests, and SIGTERM ends it with exit 0, so Docker's
-// unless-stopped policy has nothing to restart. Transient failures still exit 1.
+// A permanent enrollment rejection parks the launcher: one message, no further
+// requests, and its signal ends it without an error, so a restart policy has
+// nothing to restart. Transient failures still fail.
 func TestEnvironmentRejectionParksUntilTerminated(t *testing.T) {
-	if argv := os.Getenv("OAC_TEST_ENVIRONMENT_CONNECT"); argv != "" {
-		var args []string
-		if json.Unmarshal([]byte(argv), &args) != nil {
-			os.Exit(2)
-		}
-		if err := Execute(args); err != nil {
-			fmt.Fprintln(os.Stderr, "oac-daemon:", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
 	for _, tc := range []struct {
 		status  int
 		message string
@@ -68,86 +56,58 @@ func TestEnvironmentRejectionParksUntilTerminated(t *testing.T) {
 				w.WriteHeader(tc.status)
 			}))
 			defer server.Close()
-			home := t.TempDir()
 			environment, keyID := uuid.NewString(), uuid.NewString()
-			credential := filepath.Join(home, "executor-key.json")
+			credential := filepath.Join(t.TempDir(), "executor-key.json")
 			raw, _ := json.Marshal(map[string]string{"key_id": keyID, "environment_id": environment, "executor_token": "private-canary"})
-			if err := os.WriteFile(credential, raw, 0600); err != nil {
+			if err := os.WriteFile(credential, raw, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			args, _ := json.Marshal([]string{"connect", "--remote", "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/agent-daemon/ws",
-				"--environment-id", environment, "--credential-file", credential})
-			cmd := exec.Command(os.Args[0], "-test.run=^TestEnvironmentRejectionParksUntilTerminated$")
-			cmd.Env = append(os.Environ(), "OAC_TEST_ENVIRONMENT_CONNECT="+string(args), "OAC_RUNTIME_HOME="+home)
-			var stderr lockedBuffer
-			cmd.Stderr = &stderr
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
-			}
+			config := nativeInstallation{Remote: "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/agent-daemon/ws", Environment: environment, Credential: credential}
+			output := new(lockedBuffer)
+			rc := &runContext{stdout: output, stderr: output}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
 			exited := make(chan error, 1)
-			go func() { exited <- cmd.Wait() }()
+			go func() { exited <- runSandboxLauncher(ctx, rc, false, t.TempDir(), config) }()
 			if tc.message == "" {
-				var exit *exec.ExitError
 				select {
 				case err := <-exited:
-					if !errors.As(err, &exit) || exit.ExitCode() != 1 || strings.Contains(stderr.String(), "will not retry") {
-						t.Fatalf("transient rejection did not exit 1: %v %s", err, stderr.String())
+					if err == nil || strings.Contains(output.String(), "will not retry") {
+						t.Fatalf("transient rejection = %v %s", err, output.String())
 					}
 				case <-time.After(10 * time.Second):
-					_ = cmd.Process.Kill()
 					t.Fatal("transient rejection parked")
 				}
 				return
 			}
-			for deadline := time.Now().Add(10 * time.Second); !strings.Contains(stderr.String(), "will not retry"); {
+			for deadline := time.Now().Add(10 * time.Second); !strings.Contains(output.String(), "will not retry"); {
 				select {
 				case err := <-exited:
-					t.Fatalf("exited instead of parking: %v %s", err, stderr.String())
+					t.Fatalf("exited instead of parking: %v %s", err, output.String())
 				case <-time.After(20 * time.Millisecond):
 				}
 				if time.Now().After(deadline) {
-					_ = cmd.Process.Kill()
 					t.Fatal("no park message")
 				}
 			}
 			time.Sleep(time.Second)
 			if requests.Load() != 1 {
-				t.Fatalf("parked daemon made %d requests", requests.Load())
+				t.Fatalf("parked launcher made %d requests", requests.Load())
 			}
-			if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-				t.Fatal(err)
-			}
+			cancel()
 			select {
 			case err := <-exited:
 				if err != nil {
-					t.Fatalf("SIGTERM exit: %v", err)
+					t.Fatalf("parked launcher ended with %v", err)
 				}
 			case <-time.After(10 * time.Second):
-				_ = cmd.Process.Kill()
-				t.Fatal("parked daemon ignored SIGTERM")
+				t.Fatal("parked launcher ignored its signal")
 			}
-			output := stderr.String()
-			if strings.Count(output, "will not retry") != 1 || !strings.Contains(output, tc.message) || !strings.Contains(output, keyID) ||
-				!strings.Contains(output, environment) || strings.Contains(output, "private-canary") {
-				t.Fatalf("park message = %s", output)
+			got := output.String()
+			if strings.Count(got, "will not retry") != 1 || !strings.Contains(got, tc.message) || !strings.Contains(got, keyID) ||
+				!strings.Contains(got, environment) || strings.Contains(got, "private-canary") {
+				t.Fatalf("park message = %s", got)
 			}
 		})
-	}
-}
-
-func TestEnvironmentRejectionClassifiesConnectionErrors(t *testing.T) {
-	for _, tc := range []struct {
-		err  error
-		want string
-	}{
-		{fmt.Errorf("connect: runtime deleted: %w", transport.ErrPermanent), "install it for this Runtime and restart it"},
-		{fmt.Errorf("connect: permanent error: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion), "daemon version"},
-		{errors.New("connect: bootstrap: Environment bootstrap failed"), ""},
-		{nil, ""},
-	} {
-		got := environmentRejection(tc.err, uuid.NewString(), uuid.NewString())
-		if tc.want == "" && got != "" || !strings.Contains(got, tc.want) || strings.Contains(got, "container") {
-			t.Errorf("environmentRejection(%v) = %q", tc.err, got)
-		}
 	}
 }

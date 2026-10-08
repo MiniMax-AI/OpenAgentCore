@@ -7,20 +7,59 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
+
+// testBridge runs a bridge fixture as a view Executor whose view paths are
+// host paths.
+type testBridge struct {
+	// Config is the probe. Its Env also reaches the bridge.
+	Config
+	// Home is the Session home, at the same path in the view.
+	Home string
+	// Workspace is the workspace root of a local Environment request.
+	Workspace string
+}
+
+// StateDir is the bridge's CLAUDE_CONFIG_DIR.
+func (b testBridge) StateDir() string { return filepath.Join(b.Home, "config") }
+
+// factory is the view Executor factory over b, as the agent host runs it for
+// each Session of b's home.
+func (b testBridge) factory() agent.ExecutorFactory {
+	factory := newViewExecutorFactory(b.Config, viewLayout{node: b.Node, bridge: b.Entrypoint})
+	return func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
+		mcp, err := viewMCP(req)
+		if err != nil {
+			return nil, err
+		}
+		if req.LocalEnvironment != nil && req.WorkspaceRoot == "" {
+			req.WorkspaceRoot = b.Workspace
+		}
+		return factory(ctx, req, agent.ViewSession{Home: agent.ViewDir{Host: b.Home, View: b.Home}, Proxy: testProxy, MCP: mcp,
+			Launch: func(options clirunner.StartOptions) (*clirunner.Process, error) {
+				if err := os.MkdirAll(options.Dir, 0o700); err != nil {
+					return nil, err
+				}
+				options.Env = append(options.Env, b.Env...)
+				return clirunner.Start(options)
+			}})
+	}
+}
 
 // startSingleTurn prepares an Executor as the registry does, starts one Turn
 // and closes the Executor once that Turn settles, so each test observes the
 // complete native lifecycle.
-func startSingleTurn(ctx context.Context, config Config, req proto.PromptRequestPayload, run string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+func startSingleTurn(ctx context.Context, config testBridge, req proto.PromptRequestPayload, run string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	configuration, err := Declaration.Configuration.Prepare(req)
 	if err != nil {
 		return nil, err
 	}
-	resource, err := NewExecutorFactory(config)(ctx, agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration})
+	resource, err := config.factory()(ctx, agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration})
 	if err != nil {
 		return nil, err
 	}

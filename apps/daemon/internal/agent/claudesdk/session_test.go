@@ -20,9 +20,8 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 	for _, mode := range []string{"success", "wrong-resume", "missing", "malformed", "process-failed", "after-result", "bridge-error"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+			config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, Home: root}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
@@ -53,7 +52,7 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 						if payload.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || deltas != "partial" {
 							t.Fatalf("bad completion: %+v, deltas %q", payload, deltas)
 						}
-						if _, err := os.Stat(filepath.Join(config.StateDir, "released")); err != nil {
+						if _, err := os.Stat(filepath.Join(config.StateDir(), "released")); err != nil {
 							t.Fatal("Done preceded process release")
 						}
 					} else if payload.Metadata[proto.DoneMetaAgentSessionID] != nil {
@@ -69,23 +68,12 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 }
 
 func TestUnsupportedRequestRejectedBeforeLaunch(t *testing.T) {
-	for _, kind := range []string{"tool", "outside"} {
-		t.Run(kind, func(t *testing.T) {
-			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "fake"}
-			switch kind {
-			case "tool":
-				request.FunctionTools = []proto.FunctionTool{{}}
-			case "outside":
-				config.StateDir = filepath.Dir(root)
-			}
-			_, err := startSingleTurn(context.Background(), config, request, "run", proto.TextInput("hello"), make(chan proto.Envelope, 1))
-			if err == nil || !strings.HasPrefix(err.Error(), "claudesdk:") {
-				t.Fatalf("expected pre-launch rejection, got %v", err)
-			}
-		})
+	root := t.TempDir()
+	config := testBridge{Config: Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker")}, Home: root}
+	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, Model: "fake", FunctionTools: []proto.FunctionTool{{}}}
+	_, err := startSingleTurn(context.Background(), config, request, "run", proto.TextInput("hello"), make(chan proto.Envelope, 1))
+	if err == nil || !strings.HasPrefix(err.Error(), "claudesdk:") {
+		t.Fatalf("expected pre-launch rejection, got %v", err)
 	}
 }
 

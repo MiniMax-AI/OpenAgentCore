@@ -129,20 +129,3 @@ func OpenPrivate(root *os.Root, name string, flags int) (*os.File, error) {
 }
 
 func ensurePrivateDir(path string) error { return os.MkdirAll(path, 0700) }
-
-func MkdirPrivate(root *os.Root, name string) error {
-	if !validName(name) {
-		return ErrUnsafe
-	}
-	if err := root.Mkdir(name, 0700); err != nil && !errors.Is(err, os.ErrExist) {
-		return err
-	}
-	info, err := root.Stat(name)
-	if err != nil {
-		return err
-	}
-	if !info.IsDir() {
-		return ErrUnsafe
-	}
-	return nil
-}

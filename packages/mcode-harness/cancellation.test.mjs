@@ -32,7 +32,7 @@ for (const operation of ['cancel', 'close']) {
       setInterval(()=>appendFileSync(name+'.ticks','tick\\n'),20);
     `);
     const profile = join(root, 'profile.json');
-    await writeFile(profile, JSON.stringify({ workspace: root, scratch, network: 'enabled' }));
+    await writeFile(profile, JSON.stringify({ workspace: root, scratch }));
     const { ToolExecutor } = await import(pathToFileURL(join(artifact, 'tool-executor.mjs')));
     const executor = new ToolExecutor(profile);
     t.after(() => executor.close());

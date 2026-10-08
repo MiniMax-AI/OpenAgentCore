@@ -12,31 +12,30 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 )
 
-// runLogs tails ~/.oac/daemon/<profile>/connect.log. -f streams
-// new bytes; -n sets trailing-line history (default 100). Missing log
-// file surfaces an actionable hint instead of a path error.
+// runLogs tails the background daemon's connect.log. -f streams new bytes;
+// -n sets trailing-line history (default 100). Missing log file surfaces an
+// actionable hint instead of a path error.
 func runLogs(ctx *runContext, args []string) error {
 	fs := newFlagSet("logs")
 	var (
-		profile = fs.String("profile", paths.DefaultProfile, "profile name whose log to tail")
-		follow  = fs.Bool("f", false, "follow the log (like `tail -f`)")
-		lines   = fs.Int("n", 100, "print the last N lines before optionally following")
+		follow = fs.Bool("f", false, "follow the log (like `tail -f`)")
+		lines  = fs.Int("n", 100, "print the last N lines before optionally following")
 	)
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("logs: parse flags: %w", err)
 	}
-	if err := paths.ValidateProfile(*profile); err != nil {
-		return fmt.Errorf("logs: %w", err)
+	if fs.NArg() != 0 {
+		return fmt.Errorf("logs: unexpected arguments %q", fs.Args())
 	}
 
-	logPath, err := paths.LogFile(*profile)
+	logPath, err := paths.LogFile()
 	if err != nil {
 		return fmt.Errorf("logs: %w", err)
 	}
 	if _, err := os.Stat(logPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			fmt.Fprintf(ctx.stderr, "oac-daemon: no log file yet at %s\n", logPath)
-			fmt.Fprintln(ctx.stderr, "  Start the daemon with `oac-daemon connect -b` first.")
+			fmt.Fprintln(ctx.stderr, "  Start the daemon with `oac-daemon start` first.")
 			return fmt.Errorf("logs: log file does not exist")
 		}
 		return fmt.Errorf("logs: stat: %w", err)

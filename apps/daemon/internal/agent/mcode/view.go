@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 )
@@ -68,6 +70,32 @@ func findView() (*agent.View, error) {
 		return nil, err
 	}
 	return &view, nil
+}
+
+// programs are the installed node, CLI entry and workspace bridge, as absolute
+// host paths.
+type programs struct{ node, binary, bridge string }
+
+func findPrograms() (programs, error) {
+	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
+	if node == "" {
+		node = "node"
+	}
+	node, err := exec.LookPath(node)
+	if err != nil {
+		return programs{}, err
+	}
+	if node, err = filepath.Abs(node); err != nil {
+		return programs{}, err
+	}
+	binary, err := exec.LookPath(binpath.MCode())
+	if err != nil {
+		return programs{}, err
+	}
+	if binary, err = filepath.Abs(binary); err != nil {
+		return programs{}, err
+	}
+	return programs{node: node, binary: binary, bridge: os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE")}, nil
 }
 
 // newViewInstall presents node's directory and the harness directory holding
@@ -158,8 +186,7 @@ func (i viewInstall) prepare(req agent.PrepareRequest, session agent.ViewSession
 	if !path.IsAbs(dir) || path.Clean(dir) != dir || dir == "/" {
 		return launchOptions{}, errors.New("mcode: the workspace is not a canonical absolute path")
 	}
-	// The Harness runs each stdio alias without arguments.
-	servers, err := workspaceMCP(session.MCP, func(stdio agent.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
+	servers, err := workspaceMCP(session.MCP)
 	if err != nil {
 		return launchOptions{}, err
 	}
@@ -191,7 +218,7 @@ func (i viewInstall) prepare(req agent.PrepareRequest, session agent.ViewSession
 	var tools *workspaceTools
 	opts.MCP = []map[string]any{}
 	if local != nil {
-		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir, "network": "enabled"}, skills: req.Skills}
+		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir}, skills: req.Skills}
 		opts.MCP = append(opts.MCP, tools.server(dataDir))
 	}
 	if err := writeNativeConfig(private, data, dataDir, tools); err != nil {

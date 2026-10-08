@@ -1,10 +1,10 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 2862ddcde357d25ab32c400dca1d7fa3812ea8967c2b40092941075034eb726d
+source_hash: 39c9fc5bd3c6010ef018072f81aa9eb8e91f85b37de196d4c45a654c440af05c
 ---
 
-Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
+Environment 是 Session 的执行资源，包括 Harness 所操作的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
 
 相关职责归属：
 
@@ -12,7 +12,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 - [Executor credentials](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
 - [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的 Sandbox Provider（E2B、Docker 或 microsandbox）。
 - [Core–Runtime protocol](../../../docs/zh/runtime-protocol.md)：`runtime_prepare` 传输及所有其他线上消息。
-- [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：daemon 使用启动用户的权限运行工具；隔离由外层 Environment 提供。
+- [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：工具在 Environment 的机器上以 Sandbox I/O 账户的权限运行；隔离由外层 Environment 提供。
 
 ## 资源与状态 {#resources-and-states}
 
@@ -45,19 +45,20 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ## 放置方式 {#placements}
 
-两种放置方式运行相同的 Runtime：daemon、所选 Harness、原生工具和工作区共同在一台机器上运行。二者唯一的差异是由谁拥有该机器。
+两种放置方式的运行方式相同。所选 Harness 运行在 agent host 上，处于 Environment 机器的[视图](harness-onboarding.md#run-in-an-agent-host-view)中；该机器上的 Sandbox I/O 通过 [Link](../../../docs/zh/sandbox-link-protocol.md) 提供其文件、进程和网络，因此工作区以及 Harness 运行的每个工具都留在该机器上。二者唯一的差异是由谁拥有该机器。
 
 | 对象 | 责任 |
 | --- | --- |
 | Session 与 Environment | 持久所有权、配置、待处理交互和连接观察（Core） |
 | Provider 分配 | 计算资源和文件系统的生命周期：`openai_hosted` 使用 Core 的 Sandbox Provider，`self_hosted` 使用应用程序 |
-| 设备与 daemon 连接 | 经认证的 Runtime 身份和可替换的分派传输 |
-| Harness 进程与原生会话 | 原生模型和工具循环、其执行状态及原生历史 |
+| Runtime 连接 | agent host 经认证的 Runtime 身份和可替换的分派传输 |
+| Harness 进程与原生会话 | agent host 上的原生模型和工具循环、其执行状态及原生历史 |
+| Sandbox I/O | 机器上的 `oac-sandbox-io`，为该 Environment 的 Link resource 提供服务：`openai_hosted` 由 [Sandbox Provider](../../../docs/zh/sandbox-provider.md#oac-sandbox-io) 启动，`self_hosted` 由 `oac-daemon start` 启动（[Sandbox bootstrap](../../../docs/zh/sandbox-bootstrap.md#responsibilities-and-readiness)） |
 | 注册 | `self_hosted` 机器用来 Serve 该 Environment 的 [Link](../../../docs/zh/sandbox-link-protocol.md) resource 的 executor key |
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的 Sandbox Provider（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。声明支持 `local_environment` 的每个 Harness 都可在其中运行（[声明支持](harness-onboarding.md#declare-support)）。
+部署中配置的 Sandbox Provider（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。声明支持 `local_environment` 的每个 Harness 都可在其中工作（[声明支持](harness-onboarding.md#declare-support)）。
 
 - Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行 Provider 的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。
@@ -68,18 +69,18 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 自托管（`self_hosted`） {#self-hosted-self-hosted}
 
-应用程序拥有机器。它使用干净的绝对路径 `workspace_directory` 和可选的绝对本地 `capability_directories` 创建 Session。Core 会返回 Environment ID、`remote_url` 以及 `x_agents_core.installation` 中的一条安装命令；在该机器上运行此命令会安装 daemon 并为其注册（[self-hosted guide](../../../docs/zh/getting-started/self-hosted.md)、[executor credentials](environment-executor-credentials.md)）。
+应用程序拥有机器。它使用干净的绝对路径 `workspace_directory` 和可选的绝对本地 `capability_directories` 创建 Session。Core 会返回 Environment ID、`remote_url` 以及 `x_agents_core.installation` 中的一条安装命令；在该机器上运行此命令会安装 `oac-daemon`，其 `start` 会注册该机器并运行 Sandbox I/O（[self-hosted guide](../../../docs/zh/getting-started/self-hosted.md)、[executor credentials](environment-executor-credentials.md)）。
 
-- `remote_url` 是根据 Core 的公共 URL 推导出的 daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。它指定 Core 的私有 daemon 传输通道。
+- `remote_url` 是根据 Core 的公共 URL 推导出的 Core daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。机器从中推导 Core 的 origin 以进行注册，Sandbox I/O 则为注册返回的 Link URL 提供服务。
 - 注册记录为该 Environment 的 Link resource 提供服务的 executor key；最先注册的 key 保有它。注册不会创建任何分配，也不绑定 Session：Session 运行在部署的 agent host 上（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)）。
-- Session 的工作区必须等于 `/workspace` 别名，或等于 Runtime 绑定到的精确规范目录。指定某个路径并不会授予对它的访问权限。
+- Session 的工作区是机器上的 `/workspace`：若执行的 `workspace_directory` 指向其他路径，agent host 会使其准备失败。指定某个路径并不会授予对它的访问权限。
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
-- 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问，但不会停止原生进程；机器所有者负责停止和清理。
-- 工作区必须能在 daemon 重启后继续存在。丢失它绝不授权进行静默替换或重播。
+- 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问；机器所有者负责停止机器上仍在运行的内容并进行清理。
+- 工作区必须能在 `oac-daemon start` 或 Sandbox I/O 重启后继续存在。丢失它绝不授权进行静默替换或重播。
 
 ### 所有权规则 {#ownership-rules}
 
-- 将 Environment 身份、所有权、配置和生命周期保留在 Core 中，并使其与 Provider 计算资源、设备身份、daemon 套接字和原生会话相分离。将可变连接状态排除在不可变配置之外；替换后的所有者会使过期观察值失效。
+- 将 Environment 身份、所有权、配置和生命周期保留在 Core 中，并使其与 Provider 计算资源、设备身份、Runtime 连接和原生会话相分离。将可变连接状态排除在不可变配置之外；替换后的所有者会使过期观察值失效。
 - 调用方、设备和 Environment 连接使用彼此不同的凭据。relay 使用已注册的 executor key 认证 `self_hosted` 机器的 Serve。连接观察保留 generation 和 revision 栅栏。注册和连接都不表示已就绪。
 - 轮换、撤销、Session 删除和所有权丧失都会拒绝后续访问；但它们不保证原生效果会立即停止。
 - 原生历史保留在绑定的 Runtime 上。替换计算资源时必须保留或以可证明的方式恢复原生历史；绝不能静默移动已绑定的 Session 或重播未知工作。
@@ -161,7 +162,7 @@ Worker 在每个 tick 中最多处理 32 个到期预留，处理顺序是在检
 
 ### 准备顺序 {#preparation-order}
 
-Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后初始化按以下顺序运行，每一步都通过 `runtime_prepare` 使用同一个 daemon：
+Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后初始化按以下顺序运行，每一步都通过 `runtime_prepare` 使用同一个 agent host：
 
 1. 初始文件和工具配置；
 2. Skill 和 Plugin bundle 导入；
@@ -182,41 +183,40 @@ Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后
 
 将 `environment` 改为 `{"type":"openai_hosted"}` 会复用相同的准备输入。资源解析、Project 授权、具体 Skill 版本、加密文件内容和机密工具变量都会在 Session 创建时冻结。重试和重连会复用这些快照；新 Session 会解析新版本。`self_hosted` Environment 从不需要分配记录。
 
-**就绪性。** 传输 `connected` 是一种连接观察，而不代表就绪。执行和实时文件访问都要等待初始化；随后，原生准备所有者会在接纳 Turn 前验证已安装的快照和 Harness。文件读取保留自身的就绪性和授权，不要求能力或原生就绪。部署模型凭据绝不发送到应用程序所有的机器。
+**就绪性。** 传输 `connected` 是一种连接观察，而不代表就绪。执行和实时文件访问都要等待初始化；随后，原生准备所有者会在接纳 Turn 前验证已安装的快照和 Harness。文件读取保留自身的就绪性和授权，不要求能力或原生就绪。部署模型凭据绝不会到达 Environment 的机器；agent host 将其保存在 Session 的[凭据网关](model-execution.md#credential-gateway)中。
 
-**传输。** 初始文件、configure、npm、Python 和设置操作、惰性的 Skill 和 Plugin 归档以及最终确定选择，都会作为带有类型的 `runtime_prepare` 操作传输，并携带规范的 Session 和 Environment 身份；[protocol](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 负责分块和回执。文件及设置工作目录使用逻辑 `/workspace` 地址；Runtime 负责选择可执行文件和物理目标位置，Core 不提供任何可执行文件或主机平台字段。源选择接受可移植的 Unix 绝对路径、Windows 驱动器路径和 UNC 路径；Core 绝不会在自己的主机上解析这些路径，而 daemon 会应用其本地路径和访问检查。
+**传输。** 初始文件、configure、npm、Python 和设置操作、惰性的 Skill 和 Plugin 归档以及最终确定选择，都会作为带有类型的 `runtime_prepare` 操作传输，并携带规范的 Session 和 Environment 身份；[protocol](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 负责分块和回执。文件及设置工作目录使用逻辑 `/workspace` 地址；Runtime 负责选择可执行文件和物理目标位置，Core 不提供任何可执行文件或主机平台字段。Core 只检查源选择的拼写，绝不会在自己的主机上解析它们；agent host 将每个源选择作为 Environment 机器上的干净绝对路径读取。
 
 ### 已安装快照 {#installed-snapshot}
 
-两种来源都使用通用 Runtime 解析器，以及适用于 Linux、macOS 和 Windows 的 `installed.json` 清单。Runtime 操作者负责选择能力根目录（[installer options](../../../docs/zh/getting-started/self-hosted.md#options-for-automation)）；Core 和传输请求无法选择。
+两种放置方式都使用通用解析器，以及能力根目录中的 `installed.json` 清单；能力根目录是 Environment 机器上的 `/environment/initialization/capabilities`。Core 和传输请求无法选择其他根目录。
 
 - 清单会将 Session 和 Environment 绑定到有序的源选择摘要。准备所有者会在原生执行之前验证或创建该清单，即使选择为空也是如此。
-- 设置命令运行后，初始化器会将声明的、位于工作区内的能力目录快照到 Runtime 存储中。目录字节是在设置之后读取，而不是在 Session 创建时读取。
-- 文件系统锁可防止并发安装。私有完成记录仅保留操作者的安装根目录，因此已删除的快照绝不会被误认为首次准备，也不会再次被捕获。
+- 设置命令运行后，最终确定步骤会将声明的能力目录复制到能力根目录中。目录字节是在设置之后读取，而不是在 Session 创建时读取。
+- Session 的 Environment 所有者一次只运行一个操作，因此安装绝不会重叠。私有完成记录仅保留能力根目录，因此已删除的快照绝不会被误认为首次准备，也不会再次被捕获。
 - 快照缺失、不完整、冲突或属于外部来源时，会在不删除数据、修复或重播的情况下失败。
 - 重连和替换 Executor 会加载已安装的内容，而不会重新读取源。对源的编辑只会影响新 Session。
 - 对快照的递归引用，以及会逃逸出快照的目录项，都会被拒绝。
-- 只读快照模式只是完整性提示，不能防止启动用户进行修改。
+- 只读快照模式只是完整性提示，不能防止机器上的工具进行修改。
 
 Executor 接纳仅验证已冻结的描述符。准备所有者会在调用原生工厂之前使能力就绪；适配器仅接收已解析的、由 Runtime 所有的 Skill 路径和 MCP 声明。复用的 Executor 会保留其原始配置。
 
 ### 系统依赖与 Runtime 目录 {#system-dependencies-and-runtime-directories}
 
-daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。准备过程中只会安装用户目录中的依赖项。
+准备过程在 Environment 的机器上以 Sandbox I/O 的账户身份运行，绝不使用 sudo 或提升权限。准备过程中只会安装用户目录中的依赖项。
 
 - 系统依赖必须预先安装在托管镜像中，或由自托管机器的所有者安装。缺少可执行文件或库时，需要该依赖的操作会失败。
 - Templates 和内联配置都会拒绝 `packages.system`，包括 null 或空列表（400，param `packages.system`）。软件包响应仍会包含官方要求的 `system: []`。
-- npm 会安装到本地 prefix，Python/pip 会安装到 Runtime 软件包目录下的本地 target；Node/npm 和 Python/pip 必须已经安装。其依赖项可被每个工作目录中的原生工具看到。
-- 设置命令使用 Bash 运行；在 Windows 上必须使用 Git Bash，且不能由其他 shell 替代。默认工作目录为 `/workspace`。
-- 在 Windows 上，npm 安装以及名为 `npm` 或 `npx` 的 stdio MCP 命令（包括其 `.cmd` shim）会通过 Node 调用 npm 的 JavaScript 入口点运行，而不经过额外的 shell。
+- npm 安装到 prefix `/environment/packages/npm`，pip 安装到 target `/environment/packages/python`；Node/npm 和 Python/pip 必须已经安装。[工具环境](#explicit-local-tool-environment)会将它们的命令放到 `PATH` 中，并将 Python 软件包放到 `PYTHONPATH` 中，因此每个工作目录中的原生工具都能看到它们。
+- 设置命令使用 Bash 运行，不加载 profile 或 rc 文件。默认工作目录为 `/workspace`。
 
-初始化目录和软件包目录默认分别是 Runtime 主目录（`OAC_RUNTIME_HOME`）下的 `initialization` 和 `packages`，也可通过 `OAC_RUNTIME_INITIALIZATION_DIRECTORY` 和 `OAC_RUNTIME_PACKAGE_DIRECTORY` 设置；打包的 Linux 镜像使用 `/environment/initialization` 和 `/environment/packages`。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
+机器的布局是固定的：工作区为 `/workspace`，初始化记录和工具环境位于 `/environment/initialization`，软件包位于 `/environment/packages`。托管 Provider 会为 Sandbox I/O 的账户创建初始化目录和软件包目录。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
 
-每条命令都使用启动用户的权限和主机网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
+每条命令都使用机器的网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 
-安装器的 `--tool-env-file`（`OAC_RUNTIME_TOOL_ENV_FILE`）提供 Runtime 操作者的基础工具变量。准备过程会将这些值复制到其私有初始化快照中，并由 Session 的 `env` 键覆盖。Runtime 绝不会重写源文件，也不会继承无关的环境凭据。设置、能力解析和 Harness 执行都会读取同一份已准备快照。即使操作者编辑了文件，重连仍会保留该快照；新 Session 会读取当前文件。Harness profile 可以引用由 Runtime 所有的文件，但不得持久保存其值的副本。配置的文件缺失或无效时，准备过程会失败。
+configure 步骤是第一个初始化步骤，它会将工具环境冻结到 `/environment/initialization/tool-env.json` 中：内容为 Session 的 `env` 值，npm 和 Python 软件包命令位于 `PATH` 之前（除非 `env` 设置了 `PATH`，否则为 sandbox 镜像的 `PATH`），Python 软件包位于 `PYTHONPATH` 之前。没有 configure 步骤的 Session 会得到由空值冻结的同样环境。软件包和设置步骤在 sandbox 基础环境之上使用它运行，能力解析从中读取 MCP 值，Harness 在机器上运行的进程则从 agent host 的进程代理获得它（[Environment](harness-onboarding.md#environment)）。Harness 本身绝不会收到它，也不会继承任何环境中已有的凭据。后续 Executor 和重连读取同一个已冻结文件；初始化运行后，该文件缺失或无效时准备过程会失败。
 
 ### 初始化状态与失败 {#initialization-state-and-failure}
 
@@ -240,7 +240,7 @@ Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed
 | Runtime 上未安装 Harness | `Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session.` |
 | 其他情况：超时、未知效果、回执缺失或格式错误、Plugin 安装、快照最终确定、bootstrap 拒绝、Core 重启 | `Failed to provision environment: initialization did not complete` |
 
-每个初始化操作都会返回有类型的 `rejected`、`failed` 或 `unknown` 结果，并且 daemon 会先确认进程退出和 I/O 结算完成。Core 使用固定标签和整数组成原因，因此命令、env 值、软件包名称、路径和进程输出绝不会进入原因、事件、日志或响应。失败步骤不会重试，后续步骤也不会运行。机密 env 和设置快照会与普通元数据分开加密。初始文件在所有平台上都使用原子替换写入器和工作区锚定路径；Files API 创建则保留其自己的不覆盖规则。
+每个初始化操作都会返回有类型的 `rejected`、`failed` 或 `unknown` 结果，并且 agent host 会先确认进程退出和 I/O 结算完成。Core 使用固定标签和整数组成原因，因此命令、env 值、软件包名称、路径和进程输出绝不会进入原因、事件、日志或响应。失败步骤不会重试，后续步骤也不会运行。机密 env 和设置快照会与普通元数据分开加密。初始文件使用原子替换写入器和工作区锚定路径；Files API 创建则保留其自己的不覆盖规则。
 
 ## Templates {#templates}
 
@@ -310,7 +310,7 @@ Agent 代码可以读取 env 值，但它们绝不会出现在公开元数据或
 | 引用文件 | 50 MiB |
 | Session 或 Template 请求正文 | 16 MiB |
 
-路径必须规范、互不相同且位于逻辑工作区内部；Runtime 会将每次写入锚定到其绑定的工作区。这是 API 路径范围，不是对以同一用户身份运行的原生工具的限制。Template 元数据会将内联文件显示为 type、path 和 size，将引用显示为 type、path 和 `file_id`；无论内联文件还是引用，每个 Session 都会获得全新的文件 ID 和大小。文件数据不会出现在普通配置、响应、事件或命令参数中。Template 会保留引用；每个 Session 会授权并冻结自己的加密源字节，因此之后删除源文件无法改变这些字节。
+路径必须规范、互不相同且位于逻辑工作区内部；agent host 会将每次写入锚定到机器上的 `/workspace`。这是 API 路径范围，不是对以同一用户身份运行的原生工具的限制。Template 元数据会将内联文件显示为 type、path 和 size，将引用显示为 type、path 和 `file_id`；无论内联文件还是引用，每个 Session 都会获得全新的文件 ID 和大小。文件数据不会出现在普通配置、响应、事件或命令参数中。Template 会保留引用；每个 Session 会授权并冻结自己的加密源字节，因此之后删除源文件无法改变这些字节。
 
 ### Skills {#skills}
 
@@ -335,7 +335,7 @@ template = client.beta.agents.environments.templates.create(
 
 Plugin 是带有 type、name 和 description 的内联 ZIP，其单个归档根目录包含 `.codex-plugin/plugin.json`。清单中的 `skills` 指定 Skill 目录；整个包布局都会保留。公开 Plugin 元数据只显示 type、name 和 description。
 
-`openai_hosted` 和 Template 的 `capability_directories` 接受 `/workspace` 内的干净绝对路径，初始文件和设置命令可以填充这些路径。`self_hosted` 能力目录是机器上的绝对本地路径。通过目录发现的 Skills 绝不会显示为 `skills` 或 `plugins` 条目。目录缺失、Skill 名称重复、清单不受支持以及存在非常规文件时，初始化会失败。
+`openai_hosted` 和 Template 的 `capability_directories` 接受 `/workspace` 内的干净绝对路径，初始文件和设置命令可以填充这些路径。`self_hosted` 能力目录是机器上的绝对路径。通过目录发现的 Skills 绝不会显示为 `skills` 或 `plugins` 条目。目录缺失、Skill 名称重复、清单不受支持以及存在非常规文件时，初始化会失败。
 
 | 归档与安装限制 | 值 |
 | --- | --- |
@@ -358,9 +358,9 @@ Skills 及其不可变版本是 Project 资源，独立于 Session 和原生安�
 
 Plugin 可以在 `.codex-plugin/plugin.json` 中通过 `mcpServers: "./.mcp.json"` 声明 MCP 服务器，也可以在省略路径时使用根目录下的 `.mcp.json`。该文件包含以服务器名称为键的 `mcpServers`。将 Plugin 根目录选为能力目录会激活其 MCP 声明；选择父目录则会发现 Skills，但不会激活嵌套 MCP 服务器。
 
-共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`，以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
+共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`，以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 agent-host 变量。若 Plugin 的服务器声明了字面量 `http_headers`，或是带有 `env_vars` 的 stdio 服务器，agent host 会在安装前使其失败（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)）。
 
-stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已安装的声明，并以 Harness 的权限启动命令。在 Unix 上，helper 会将自身替换为服务器；在 Windows 上，它会在所属进程树内部转发 stdio。已初始化的值会覆盖声明中的变量。进程组和 Windows Jobs 负责取消及后代进程清理，而不负责隔离。
+stdio 服务器以其别名在机器上运行（[Stdio MCP](harness-onboarding.md#stdio-mcp)），使用叠加在 sandbox 基础环境之上的工具环境，不带任何来自 Harness 的内容。进程作用域负责取消及后代进程清理，而不负责隔离。
 
 Environment MCP 需要启用的网络。重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发；MiniMax Code 也会拒绝字面量标头。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 

@@ -1,103 +1,22 @@
 package paths_test
 
 import (
-	"errors"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 )
 
-// withTempHome points OAC_RUNTIME_HOME at a fresh tempdir for the test.
-// t.Setenv refuses to run with t.Parallel — the exact constraint
-// we want.
-func withTempHome(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
+func TestRootAndFilesHonourRuntimeHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", home)
+	if got, err := paths.Root(); err != nil || got != home {
+		t.Fatalf("Root = %q, %v, want %q", got, err, home)
 	}
-	t.Setenv("OAC_RUNTIME_HOME", dir)
-	return dir
-}
-
-func TestValidateProfile(t *testing.T) {
-	good := []string{"default", "test", "prod", "alpha-1", "alice_mac", "a.b.c", strings.Repeat("a", 64)}
-	for _, name := range good {
-		if err := paths.ValidateProfile(name); err != nil {
-			t.Errorf("ValidateProfile(%q) returned %v, want nil", name, err)
+	for name, file := range map[string]func() (string, error){"connect.pid": paths.PIDFile, "connect.log": paths.LogFile} {
+		if got, err := file(); err != nil || got != filepath.Join(home, "daemon", "default", name) {
+			t.Errorf("%s = %q, %v", name, got, err)
 		}
-	}
-	bad := []string{
-		"",
-		"../escape", ".", "..", "profile.", "CON", "nul.json", "com1", "LPT9",
-		"with/slash",
-		"with\\backslash",
-		"with space",
-		strings.Repeat("a", 65),
-		"emoji_\xf0\x9f\x98\x80",
-	}
-	for _, name := range bad {
-		if err := paths.ValidateProfile(name); err == nil {
-			t.Errorf("ValidateProfile(%q) returned nil, want error", name)
-		}
-	}
-}
-
-func TestRootHonoursOpenAgentCoreHome(t *testing.T) {
-	home := withTempHome(t)
-	got, err := paths.Root()
-	if err != nil {
-		t.Fatalf("Root: %v", err)
-	}
-	if got != home {
-		t.Fatalf("Root = %q, want %q", got, home)
-	}
-}
-
-func TestProfileDirAndFiles(t *testing.T) {
-	home := withTempHome(t)
-	want := filepath.Join(home, "daemon", "test")
-
-	gotDir, err := paths.ProfileDir("test")
-	if err != nil {
-		t.Fatalf("ProfileDir: %v", err)
-	}
-	if gotDir != want {
-		t.Fatalf("ProfileDir = %q, want %q", gotDir, want)
-	}
-
-	// ProfileDir alone must not create the directory.
-	if _, err := os.Stat(gotDir); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("ProfileDir created dir prematurely: stat err = %v", err)
-	}
-
-	cases := map[string]func(string) (string, error){
-		"auth.json":   paths.AuthFile,
-		"connect.pid": paths.PIDFile,
-		"connect.log": paths.LogFile,
-	}
-	for filename, fn := range cases {
-		got, err := fn("test")
-		if err != nil {
-			t.Fatalf("%s resolver: %v", filename, err)
-		}
-		expect := filepath.Join(want, filename)
-		if got != expect {
-			t.Errorf("%s = %q, want %q", filename, got, expect)
-		}
-	}
-}
-
-func TestInvalidProfileShortCircuits(t *testing.T) {
-	_ = withTempHome(t)
-	if _, err := paths.ProfileDir("bad/profile"); err == nil {
-		t.Fatal("ProfileDir accepted invalid profile name")
-	}
-	if _, err := paths.AuthFile("bad/profile"); err == nil {
-		t.Fatal("AuthFile accepted invalid profile name")
 	}
 }
 

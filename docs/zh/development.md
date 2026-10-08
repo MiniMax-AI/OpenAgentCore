@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: f3e891be155a821f011ebc75916a6b5c9a68984d1ffe29753fdce59162577c51
+source_hash: 2cf6decda870e6b87ae23a813d6b8159a88f85859dde20d97ffbb492f6801a76
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -74,7 +74,6 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/execution` | 持久化 Turn 分发与调度 | [Runtime 协议](runtime-protocol.md) |
 | `internal/harnessconfig` | 内置 Harness 注册及其支持声明 | [声明支持](../../contracts/agents-api/zh/harness-onboarding.md#declare-support) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
-| `internal/runtimebootstrap` | Provider 到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
 | `internal/sandboxwire` | 各沙箱 I/O 协议共享的帧头、基本类型编码和 request ID 序列 | [帧格式](sandbox-link-protocol.md#framing) |
 | `internal/sandboxlink` | Link 协议、peer 库和 relay 核心 | [沙箱 Link 协议](sandbox-link-protocol.md) |
 | `internal/sandboxbootstrap` | Provider 到 Sandbox I/O 服务的启动输入 | [沙箱引导](sandbox-bootstrap.md) |

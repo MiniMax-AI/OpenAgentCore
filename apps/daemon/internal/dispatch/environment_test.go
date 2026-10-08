@@ -1,21 +1,149 @@
 package dispatch_test
 
 import (
+	"archive/tar"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
+	"path"
+	"slices"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/google/uuid"
 )
+
+// testOwner is the Environment owner of one Session in one Environment, as
+// the agent host's is. Its workspace is in memory: a path maps to a file's
+// bytes, or to nil for a directory. prepare, when set, replaces Prepare's
+// result.
+type testOwner struct {
+	environment, session string
+	prepare              func(agent.PrepareRequest) (agent.PrepareRequest, error)
+	mu                   sync.Mutex
+	files                map[string][]byte
+}
+
+func newTestOwner(environment, session string) *testOwner {
+	return &testOwner{environment: environment, session: session, files: map[string][]byte{}}
+}
+
+// Resolve serves the owner's Session in its Environment and no other.
+func (o *testOwner) Resolve(ref proto.AssignmentRef, bind proto.AssignmentBindPayload) dispatch.Environment {
+	if bind.EnvironmentID != o.environment || ref.SessionID != o.session {
+		return nil
+	}
+	return o
+}
+
+// put adds a file, or a directory when data is nil.
+func (o *testOwner) put(name string, data []byte) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.files[name] = data
+}
+
+// file returns the file at name.
+func (o *testOwner) file(name string) ([]byte, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	data, ok := o.files[name]
+	return data, ok && data != nil
+}
+
+func (o *testOwner) Configure(r proto.PromptRequestPayload) error {
+	local := r.LocalEnvironment
+	switch {
+	case local == nil || r.DisableExecutionEnvironment || local.ID != o.environment:
+		return errors.New("the request does not name the Session's Environment")
+	case r.WorkspaceReadOnly:
+		return nil
+	case local.WorkspaceDirectory != "/workspace":
+		return errors.New("the workspace is not /workspace")
+	case local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil:
+		return agentcapabilities.ErrInvalid
+	}
+	return nil
+}
+
+func (o *testOwner) Prepare(_ context.Context, r agent.PrepareRequest) (agent.PrepareRequest, error) {
+	if o.prepare != nil {
+		return o.prepare(r)
+	}
+	r.WorkspaceRoot = "/workspace"
+	return r, nil
+}
+
+func (o *testOwner) ApplyRuntimePreparation(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
+	return dispatch.ErrEnvironmentUnavailable
+}
+
+func (o *testOwner) ListWorkspaceDirectory(_ context.Context, dir string, limit int) (dispatch.WorkspaceDirectoryResult, error) {
+	if limit < 1 || limit > proto.WorkspaceDirectoryMaxEntries || dir != "" && !proto.ValidWorkspacePath(dir) {
+		return dispatch.WorkspaceDirectoryResult{}, dispatch.ErrWorkspaceReadInvalid
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if data, ok := o.files[dir]; dir != "" && (!ok || data != nil) {
+		return dispatch.WorkspaceDirectoryResult{}, dispatch.ErrWorkspaceNotDirectory
+	}
+	parent := dir
+	if parent == "" {
+		parent = "."
+	}
+	result := dispatch.WorkspaceDirectoryResult{Entries: []dispatch.WorkspaceDirectoryEntry{}}
+	for name, data := range o.files {
+		if path.Dir(name) != parent {
+			continue
+		}
+		entry := dispatch.WorkspaceDirectoryEntry{Name: path.Base(name), Kind: "directory"}
+		if data != nil {
+			size := int64(len(data))
+			entry.Kind, entry.SizeBytes = "file", &size
+		}
+		result.Entries = append(result.Entries, entry)
+	}
+	slices.SortFunc(result.Entries, func(a, b dispatch.WorkspaceDirectoryEntry) int { return strings.Compare(a.Name, b.Name) })
+	if len(result.Entries) > limit {
+		result.Entries, result.Truncated = result.Entries[:limit], true
+	}
+	return result, nil
+}
+
+// WriteWorkspaceFile creates a new file below plain directories, as Files.create does.
+func (o *testOwner) WriteWorkspaceFile(_ context.Context, name string, data []byte) (dispatch.WorkspaceWriteResult, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if existing, ok := o.files[name]; ok && existing == nil {
+		return dispatch.WorkspaceWriteResult{}, dispatch.ErrWorkspaceWriteDirectory
+	} else if ok {
+		return dispatch.WorkspaceWriteResult{}, dispatch.ErrWorkspaceWriteUnsafe
+	}
+	for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+		if data, ok := o.files[parent]; ok && data != nil {
+			return dispatch.WorkspaceWriteResult{}, dispatch.ErrWorkspaceWriteRejected
+		}
+	}
+	o.files[name] = append([]byte{}, data...)
+	return dispatch.WorkspaceWriteResult{SizeBytes: int64(len(data))}, nil
+}
+
+// ExportOutputs exports no outputs.
+func (o *testOwner) ExportOutputs(_ context.Context, w io.Writer) error {
+	return tar.NewWriter(w).Close()
+}
+
+func (o *testOwner) Close(context.Context) error { return nil }
 
 // assertPreparationOutcome waits for the terminal admission status of id. An
 // admitted request fails in the controlled factory; a rejected one sends only
@@ -99,19 +227,6 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 	}
 }
 
-// installingOwner is the bound workspace with one installed MCP server
-// labelled label.
-type installingOwner struct {
-	*localworkspace.Binding
-	label string
-}
-
-func (o installingOwner) Prepare(ctx context.Context, req agent.PrepareRequest) (agent.PrepareRequest, error) {
-	req, err := o.Binding.Prepare(ctx, req)
-	req.MCP = append(req.MCP, agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: o.label, Type: "http", URL: "https://mcp.example"}})
-	return req, err
-}
-
 // The owner resolves installed MCP servers during preparation, and the kind's
 // declaration checks them before the factory sees them.
 func TestInstalledMCPIsCheckedBeforeTheFactory(t *testing.T) {
@@ -121,9 +236,14 @@ func TestInstalledMCPIsCheckedBeforeTheFactory(t *testing.T) {
 			if err := h.router.Shutdown(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			owner := installingOwner{preparationWorkspace(t), label}
+			// The owner installs one MCP server labelled label.
+			owner := newTestOwner(preparationEnvironmentID, preparationSessionID)
+			owner.prepare = func(req agent.PrepareRequest) (agent.PrepareRequest, error) {
+				req.MCP = append(req.MCP, agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: label, Type: "http", URL: "https://mcp.example"}})
+				return req, nil
+			}
 			var err error
-			h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: func(proto.AssignmentRef, proto.AssignmentBindPayload) dispatch.Environment { return owner }})
+			h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: owner.Resolve})
 			if err != nil {
 				t.Fatal(err)
 			}

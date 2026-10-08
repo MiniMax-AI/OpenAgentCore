@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: ea2a7a759e262188cab16966a558f866075544fb84724cd95ab4d5c78e96b6f3
+source_hash: 45f460051d8c8f87045d0146f44f86fa9d3379974000870856eac7705f33347c
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -32,16 +32,16 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 | Adapter | 原生配置、资源、API 调用、事件转换和限制 | `apps/daemon/internal/agent/<kind>` |
 | Harness | 原生模型和工具循环以及历史记录 | 锁定版本的 SDK 或可执行文件 |
 | 声明 | Harness 的支持范围，Core 和 Runtime 据此准入每个选择 | `internal/harnessconfig/<kind>` |
-| 注册 | 适配器声明、已安装工厂和该安装收窄后的支持 | `apps/daemon/internal/agent/<kind>/declaration.go`；`apps/daemon/internal/cli/agent_discovery.go` 中的静态列表 |
+| 注册 | 适配器声明、已安装视图和该安装收窄后的支持 | `apps/daemon/internal/agent/<kind>/declaration.go`；`apps/daemon/internal/cli/agent_host_linux.go` 中的静态列表 |
 
-Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管 Provider 仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型 Provider 提供模型通信设置，而不负责 Turn 调度或原生进程所有权。
+Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；它们都把沙箱提供给 Linux agent host，由 agent host 在沙箱的[视图](#run-in-an-agent-host-view)中按同一契约运行每个 Harness。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型 Provider 提供模型通信设置，而不负责 Turn 调度或原生进程所有权。
 
 ## 步骤 {#steps}
 
 1. **锁定原生来源。** 记录上游包版本和源修订版本，并在适配器旁记录原生入口点。
-2. **实现适配器**，位置为 `apps/daemon/internal/agent/<kind>`：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
-3. **声明支持并注册。** 在 `internal/harnessconfig/<kind>` 中声明支持并添加一个目录条目（[declare support](#declare-support)），然后在适配器中声明 kind，并将其添加到 `apps/daemon/internal/cli/agent_discovery.go` 中 Runtime 的静态列表（[register the adapter](#register-the-adapter)）。
-4. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
+2. **实现适配器**，位置为 `apps/daemon/internal/agent/<kind>`：实现一个视图，其 `ViewExecutorFactory` 准备 `Executor`，以及 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)、[view](#run-in-an-agent-host-view)）。复用共享的进程、凭据和配置辅助函数。
+3. **声明支持并注册。** 在 `internal/harnessconfig/<kind>` 中声明支持并添加一个目录条目（[declare support](#declare-support)），然后在适配器中声明 kind，并将其添加到 `apps/daemon/internal/cli/agent_host_linux.go` 中 agent host 的静态列表（[register the adapter](#register-the-adapter)）。
+4. **打包原生先决条件。** 提供适配器的安装描述，并将 Harness 加入 agent-host 镜像（[native installer participation](#native-installer-participation)）。
 5. **启用并选择引擎**，通过 `core.harnesses` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
 6. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将每项原生差异记录到[覆盖台账](index.md)。
 
@@ -59,15 +59,15 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 
 ## 必需的适配器接口 {#required-adapter-interfaces}
 
-[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ExecutorFactory`、`Executor`、`Turn` 和 `TurnSettlement`。`Turn` 是一个接口：`Cancel`、`CancellationOutcome`、`SteerWithReceipt`、`SubmitFunctionResult` 和 `AwaitSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。适配器不支持的操作返回 Unsupported，由能力声明而不是方法决定 Runtime 是否调用它。所有接口都使用中立协议类型。
+[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ViewExecutorFactory`、`Executor`、`Turn` 和 `TurnSettlement`。`Turn` 是一个接口：`Cancel`、`CancellationOutcome`、`SteerWithReceipt`、`SubmitFunctionResult` 和 `AwaitSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。适配器不支持的操作返回 Unsupported，由能力声明而不是方法决定 Runtime 是否调用它。所有接口都使用中立协议类型。
 
-两个工厂，`ExecutorFactory` 和视图的 `ViewExecutorFactory`，都接收一个 `agent.PrepareRequest`：`execution_prepare` 携带的 Session 配置、Registry 按 kind 的声明一次性准备好的模型配置（`Prepared`）、Session 的原生状态键（`StateKey`），以及由 Environment owner 填写的 Environment 工作区和已安装 Capabilities（`WorkspaceRoot`、`CapabilityRoot`、`Skills`、`MCP`）。适配器只从 `Prepared` 获取模型、提供商和原生参数，从不自行解析 `model` 或 `model_provider`。Turn 的 Run ID 和输入通过 `Executor.StartTurn` 传入。
+视图的 `ViewExecutorFactory` 接收一个 `agent.PrepareRequest`：`execution_prepare` 携带的 Session 配置、Registry 按 kind 的声明一次性准备好的模型配置（`Prepared`）、Session 的原生状态键（`StateKey`），以及由 Environment owner 填写的 Environment 工作区和已安装 Capabilities（`WorkspaceRoot`、`CapabilityRoot`、`Skills`、`MCP`）。适配器只从 `Prepared` 获取模型、提供商和原生参数，从不自行解析 `model` 或 `model_provider`。Turn 的 Run ID 和输入通过 `Executor.StartTurn` 传入。
 
 例如，Codex 适配器保留其 app-server 和 thread，Claude 适配器保留一个流式 Query，MiniMax 适配器保留其 ACP 连接和原生 session。它们都公开相同的 Executor 和 Turn 契约。原生回调和资源保留在适配器内部；Runtime 负责准入、空闲过期和替换。取消通过 `Turn.Cancel` 精确定位到目标 Turn，适配器则向 Runtime 提供原生完成证据。
 
 | 接口或契约 | 必需处理 | 义务 |
 | --- | --- | --- |
-| `ExecutorFactory`、`Executor.StartTurn`、`Executor.Close` | 真实实现 | 在没有模型输入的情况下准备；保留失败或不确定资源的所有权；确认清理 |
+| `ViewExecutorFactory`、`Executor.StartTurn`、`Executor.Close` | 真实实现 | 在没有模型输入的情况下准备；保留失败或不确定资源的所有权；确认清理 |
 | `Turn.Cancel`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
 | `Turn.SteerWithReceipt` | 真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
 | `Turn.SubmitFunctionResult` | 真实实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
@@ -85,9 +85,9 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 原因必须是固定的安全字符串，绝不能是已提交内容、凭据或原始原生诊断信息。Unsupported 保证不会产生原生副作用，也不表示操作成功且为空。安装不可用、未知调用 ID、原生失败和不确定结果应保留各自的错误和所有权。nil `Turn` 仍表示没有提交任何输入，并且输出归调用方所有；绝不能将其用作 Unsupported 标记。
 
-线协议请求不携带工作目录。Runtime 将 `local_environment.workspace_directory` 与其绑定进行核对，并通过 `PrepareRequest.WorkspaceRoot` 向 Harness 提供其绑定的工作区目录；必须在该目录中运行原生 Harness。
+线协议请求不携带工作目录。Environment owner 将 `local_environment.workspace_directory` 与 Environment 的工作区进行核对，并通过 `PrepareRequest.WorkspaceRoot` 向 Harness 提供该目录；必须在该目录中运行原生 Harness。
 
-工作区读取、写入、输出导出和只读 preparation 属于 Session 的 [Environment owner](../../../docs/zh/runtime-protocol.md#session-assignments)，不属于 adapter。adapter 不实现其中任何操作。其声明中的 `LocalEnvironment` 和 `EnvironmentNone` 表示其 Executor 能运行的内容，`agent.Registry.Register` 将二者与 Runtime 的 owner 所提供的内容（`agent.EnvironmentSupport`）组合一次，仅在 owner 提供时保留。组合后的 `LocalEnvironment` 同时准入 owner 的工作区读取、只读 preparation 和输出导出。一份声明适用于该安装的每个 Executor，包括其[视图](#run-in-an-agent-host-view)。
+工作区读取、写入、输出导出和只读 preparation 属于 Session 的 [Environment owner](../../../docs/zh/runtime-protocol.md#session-assignments)，不属于 adapter。adapter 不实现其中任何操作。其声明中的 `LocalEnvironment` 和 `EnvironmentNone` 表示其 Executor 能运行的内容，`agent.Registry.Register` 将二者与 Runtime 的 owner 所提供的内容（`agent.EnvironmentSupport`）组合一次，仅在 owner 提供时保留。组合后的 `LocalEnvironment` 同时准入 owner 的工作区读取、只读 preparation 和输出导出。一份声明适用于该安装的每个 Executor。
 
 声明说明 Harness 支持的公共组合，心跳将其收窄到该安装；二者都不能替代 schema 验证或 Project 授权。原生行为测试必须与声明一致。已宣称但返回 Unsupported 的操作属于契约违规，既不是成功，也不能作为重放的依据。
 
@@ -136,7 +136,6 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 - 结构化输出：读取 `ExecutionControls.OutputFormat`，并通过 Message 契约发布已确认的原生输出（[execution tools](execution-tools.md#structured-output)）。原生 SDK 以 binary64 读取 JSON 数字时，声明 `Binary64OutputSchema`。
 - 图像：声明 `MessageImages` 和 `FunctionResultImages`，以及函数结果是否准入图像 URL 和失败结果中的图像（[message input](message-content.md)）。
-- 工作区放置方式还需要经过验证的准备过程、工作区读取和输出导出，以及使用共享 Files 辅助函数的专用 Runtime 绑定。只有在展示其生命周期行为后才能启用放置方式。
 
 ### MCP 来源和原生限制 {#mcp-origin-and-native-limits}
 
@@ -150,15 +149,15 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind 及共享模型 `Configuration` 的声明中的能力、该 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、Executor 工厂和视图声明。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带 Executor 工厂和视图的不可用描述符。将版本门控和工厂选择条件保留在适配器内部；它们只能清除支持。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_host_linux.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_host_linux.go) 的 `harnessDeclarations` 中。声明包含 kind 及共享模型 `Configuration` 的声明中的能力、该 `Configuration` 和 `Discover` 函数。发现过程接收诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和视图声明。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带视图的不可用描述符。将版本门控和视图选择条件保留在适配器内部；它们只能清除支持。
 
-[`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序注册该 Runtime：
+[`cli/agent_host_linux.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_host_linux.go) 以 `RegisterKind` 和 `RegisterView` 注册每个带视图的已发现 Runtime。随后 agent host 通过 `Registry.Register` 为 dispatch 注册每个这样的 kind，该方法把声明与 agent host 提供的 Environment 组合，再以 `RegisterExecutor` 安装 agent host 自己的 Executor 工厂；该工厂构建 Session 的视图，并调用视图的 `ViewExecutorFactory`。
 
 | 顺序 | 方法 | 注册内容 |
 | --- | --- | --- |
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration)` | Kind、可用性、版本、`AgentKindCapabilities` 和模型配置；它将模型配置的声明收窄到这些能力，遇到扩大时 panic。它会重置其他注册项，因此必须首先调用。 |
-| 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期。其工厂只为收窄后的声明所准入、且模型配置能够准备的请求运行，并收到已设置 `Prepared` 的请求。 |
-| 3 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂接收 agent host 的 `RegisterExecutor` 已准备好的请求，并执行[网关规则](#endpoints-and-proxy)。 |
+| 2 | `RegisterView(kind, agent.View)` | 来自 `Runtime.View` 的视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂接收 agent host 的 Executor 工厂已准备好的请求，并执行[网关规则](#endpoints-and-proxy)。 |
+| 3 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 供 dispatch 调用的 agent host Executor 工厂。它只为收窄后的声明所准入、且模型配置能够准备的请求运行，并收到已设置 `Prepared` 的请求。 |
 
 `Runtime.View` 声明 Harness 如何在 agent-host Session 视图中运行，详见[在 agent-host 视图中运行](#run-in-an-agent-host-view)。每个适配器都显式设置它；`View: nil` 表示 agent host 拒绝该 kind，`Registry.ResolveView` 返回包装 `ErrUnsupportedOperation` 的错误。`TestPublicHarnessContractDeclarations` 要求每个声明都包含该字段。
 
@@ -192,21 +191,11 @@ Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/har
 
 开始前，记录操作集、预期结果、排除项和停止条件。当其声明的操作通过时，资格认定即结束；它不会扩展为匹配另一个 Harness 的功能列表。
 
-1. **契约测试。** 在名为 `TestSharedTextLifecycle` 的测试中，使用适配器准备好的 Executor 和确定性的原生夹具调用 `agent/contracttest.TextLifecycle`；`claudesdk/executor_test.go` 是参考实现。它检查独立的 Turn 流、原生所有者和历史连续性、持久化写入与应用回执、过期取消，以及取消后的健康继续执行。`make check-runtime-contract` 会将它与共享线协议、gateway、传输层和调度器测试、声明完整性检查以及每个适配器的 `TestUnsupportedExtensionsHaveNoNativeEffects` 一起运行。适配器测试还覆盖两个普通 Turn 共享一个原生进程或连接和历史、取消后执行另一个 Turn、过期取消和迟到事件、原生退出、清理失败、输入写入与应用回执、未知结果，以及每 Turn 新鲜的 usage、函数、输入和子项观察状态。必须说明夹具是受控夹具还是真实 Provider。
+1. **契约测试。** 在名为 `TestSharedTextLifecycle` 的测试中，使用适配器准备好的 Executor 和确定性的原生夹具调用 `agent/contracttest.TextLifecycle`；`claudesdk/executor_test.go` 是参考实现。它检查独立的 Turn 流、原生所有者和历史连续性、持久化写入与应用回执、过期取消，以及取消后的健康继续执行。`make check-runtime-contract` 会将它与共享线协议、gateway、传输层和调度器测试、声明完整性检查以及MiniMax Code 的 `TestUnsupportedExtensionsHaveNoNativeEffects` 一起运行。适配器测试还覆盖两个普通 Turn 共享一个原生进程或连接和历史、取消后执行另一个 Turn、过期取消和迟到事件、原生退出、清理失败、输入写入与应用回执、未知结果，以及每 Turn 新鲜的 usage、函数、输入和子项观察状态。必须说明夹具是受控夹具还是真实 Provider。
 2. **共享集成。** `TestThirdHarnessPublicOnboarding` 让合成 Harness 通过公共 Session 和输入准入、Worker 设备选择、真实 WebSocket gateway、daemon Registry 和 Router、中立事件以及持久化终态投影运行。它以 `mcode` kind 注册，因此 Core 按 MiniMax Code 的声明准入它，并检查已应用输入回执、已保存原生身份、继续执行、取消、不受支持的可选请求以及缺少强制 Runtime 支持。该夹具没有工作区、MCP 或公共函数，其注册仅保留在测试本地。它证明的是集成路径，而不是原生执行。
-3. **真实验收。** 使用锁定的官方 Python SDK 和针对 Core 的原始 HTTP、真实 Provider API、原生 Harness 以及专用数据库。验证初始执行、热后续执行、取消以及带继续执行的重启；记录原生所有者身份以及相同条件下的冷启动和热运行时间。对于工作区放置方式，还要验证 Files 和 Artifacts、工作区身份、公开响应中未出现凭据，以及外部历史会被拒绝。`services/core/tests/official_hosted_functions_native.py` 保存共享函数断言：成功和错误、原生文件输出和公共 Artifact 字节、重启后的同历史继续执行、外部结果拒绝以及待处理调用取消。合成运行或失败运行绝不计入。下面的选择性测试会在 `services/core/tests` 中针对真实 daemon 和模型运行锁定 SDK 夹具；设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`、`OAC_TEST_NATIVE_DAEMON_BIN`、`OAC_TEST_NATIVE_PROOF_DIR` 及其私有选项文件后，每项测试才会运行。选项文件是一个 JSON 对象，恰好包含 `model` 和 `model_provider`（即 `x_agents_core.model_provider` 的字段）；测试会将其设置为部署默认模型 Provider，而夹具的 `environment: none` Session 会在创建时将其冻结。
+3. **真实验收。** 使用锁定的官方 Python SDK 和针对 Core 的原始 HTTP、真实 Provider API、原生 Harness 以及专用数据库。验证初始执行、热后续执行、取消以及带继续执行的重启；记录原生所有者身份以及相同条件下的冷启动和热运行时间。对于工作区放置方式，还要验证 Files 和 Artifacts、工作区身份、公开响应中未出现凭据，以及外部历史会被拒绝。`services/core/tests/official_hosted_functions_native.py` 保存共享函数断言：成功和错误、原生文件输出和公共 Artifact 字节、重启后的同历史继续执行、外部结果拒绝以及待处理调用取消。合成运行或失败运行绝不计入。原生 Harness 的工作区与能力验收使用 [Qualify the view](#qualify-the-view) 中的 agent-host 测试。公共 API 的真实模型验收仍须覆盖模型 Provider 协议、MiniMax Code 文本、消息图像、带图像的函数结果、结构化输出、延迟函数发现、禁用 Web 搜索以及程序化工具调用；仅通过 view 测试不能证明这些公共 API 行为。
 4. **回归。** 现有 Harness 必须继续正常工作。先运行定向测试，然后运行 `make check`；API 更改后运行 `make openapi`，查询更改后运行 `make sqlc-generate`。
 5. **审查。** 遵循 [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
-
-| 操作 | `services/core/tests/integration` 中的测试 | 选项文件变量；测试采用 Harness 变量时也列出该变量 |
-| --- | --- | --- |
-| 模型 Provider 协议 | `TestNativeModelProtocolPublicExecution` | [Model execution](model-execution.md#acceptance) |
-| MiniMax Code 文本 | `TestNativeMCodePublicExecution` | `OAC_TEST_MCODE_REAL_OPTIONS` |
-| 消息图像 | `TestNativeMessageImagePublicExecution` | `OAC_TEST_MESSAGE_IMAGE_REAL_OPTIONS`、`OAC_TEST_MESSAGE_IMAGE_ENGINE` |
-| 带图像的函数结果 | `TestNativeFunctionImagePublicExecution` | `OAC_TEST_FUNCTION_IMAGE_REAL_OPTIONS`、`OAC_TEST_FUNCTION_IMAGE_ENGINE` |
-| 结构化输出 | `TestNativeStructuredOutputPublicExecution` | `OAC_TEST_STRUCTURED_OUTPUT_REAL_OPTIONS` |
-| 延迟函数发现 | `TestNativeToolSearchPublicExecution` | `OAC_TEST_TOOL_SEARCH_REAL_OPTIONS` |
-| 禁用 Web 搜索和程序化工具调用 | `TestNativeToolPolicyPublicExecution` | `OAC_TEST_TOOL_POLICY_REAL_OPTIONS`、`OAC_TEST_TOOL_POLICY_ENGINE` |
 
 Environment 验收使用 `services/core/tests/official_environment_{templates,setup,skills,plugins,plugin_mcp,composition,initial_files,network,skill_references}.py`。对于组合式准备，请更改 Skill 默认值和 Template，删除源文件，重试并重启；验证冻结字节、一次 setup 执行和 MCP 取消。`official_hosted_structured_native.py` 覆盖托管结构化输出。随每项验收结果记录精确源修订版本、原生版本和命令。
 
@@ -219,7 +208,7 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 | Claude 输入所有权、取消和准备清理 | `claudesdk/executor_test.go`、`cancellation_test.go`、`preparation_test.go` |
 | MiniMax 取消退役、Start 失败和清理重试 | `mcode/executor_test.go`、`executor_backpressure_test.go` |
 | MiniMax 原生历史绑定 | `mcode/session_test.go` |
-| 无原生副作用或伪造结果的明确拒绝 | 每个适配器的 `unsupported_test.go` |
+| 无原生副作用或伪造结果的明确拒绝 | `mcode/unsupported_test.go` |
 
 ## 原生安装器参与 {#native-installer-participation}
 
@@ -268,7 +257,7 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 
 ### 能力 {#capabilities}
 
-视图运行该 kind 的声明所准入的每个请求，因此 adapter 只声明其本地 Executor 和视图都能运行的内容，dispatch 按该声明检查每个请求。agent host 提供本地 Environment 和 environment none，且每个视图都运行 Environment 已安装的 Skills 和 [stdio MCP](#stdio-mcp)。Environment owner 以沙箱路径填写 `PrepareRequest.Skills` 和 `CapabilityRoot`，adapter 像本地 Executor 那样把它们交给 Harness；只有 Harness 通过视图读取它们，adapter 不在 agent host 上打开其中任何路径。agent host 以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
+视图运行该 kind 的声明所准入的每个请求，因此 adapter 只声明其视图能运行的内容，dispatch 按该声明检查每个请求。agent host 提供本地 Environment 和 environment none，且每个视图都运行 Environment 已安装的 Skills 和 [stdio MCP](#stdio-mcp)。Environment owner 以沙箱路径填写 `PrepareRequest.Skills` 和 `CapabilityRoot`，adapter 把它们交给 Harness；只有 Harness 通过视图读取它们，adapter 不在 agent host 上打开其中任何路径。agent host 以 `ErrViewHandoff` 拒绝需要凭据的 stdio 绑定。
 
 ### Environment none {#environment-none}
 
@@ -290,7 +279,7 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 
 ### 端点与代理 {#endpoints-and-proxy}
 
-调用工厂之前，agent host 将请求的模型提供商，即 `model_provider` 和 `Prepared.Provider`，指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。只有 HTTP 绑定进入网关：每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header，网关添加声明的凭据和 header。stdio 绑定在其[别名](#stdio-mcp)下运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
+调用工厂之前，agent host 将请求的模型提供商，即 `model_provider` 和 `Prepared.Provider`，指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。只有 HTTP 绑定进入网关：每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header，网关添加声明的凭据和 header。stdio 绑定在其[别名](#stdio-mcp)下运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器把提供商和绑定渲染为 Harness 的原生配置，从不接触真实凭据。
 
 Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：准备好的模型提供商不是带占位凭据的网关、请求在 `ViewSession.MCP` 之外携带 MCP、HTTP 绑定不是不含凭据的 loopback 端点，或 stdio 绑定不是其别名。
 

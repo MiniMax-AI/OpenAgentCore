@@ -12,8 +12,7 @@ import (
 )
 
 func TestHarnessConfigAppliedWithoutChangingProvider(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(prepared(t, "native-config", proto.PromptRequestPayload{
+	plan, err := testPlan(t, prepared(t, "native-config", proto.PromptRequestPayload{
 		Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"model_reasoning_effort":"high"}`),
 		ModelProvider: &modelprovider.Provider{BaseURL: "https://provider.invalid/v1", Protocol: modelprovider.Responses, APIKey: "test-key"},
 	}))

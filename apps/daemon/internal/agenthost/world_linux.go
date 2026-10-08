@@ -11,8 +11,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"github.com/google/uuid"
@@ -131,7 +131,7 @@ func components(p string) ([]string, error) {
 	if p = strings.Trim(p, "/"); p == "" || p == "." {
 		return nil, nil
 	}
-	if !localworkspace.ValidPath(p) {
+	if !proto.ValidWorkspacePath(p) {
 		return nil, fs.ErrInvalid
 	}
 	return strings.Split(p, "/"), nil

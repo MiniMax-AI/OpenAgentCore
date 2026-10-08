@@ -14,18 +14,17 @@ import (
 
 func TestTextTurnAcceptsRestrictiveCapabilities(t *testing.T) {
 	for _, test := range []struct {
-		name                   string
-		environment, subagents bool
-		controls               *proto.ExecutionControls
+		name      string
+		subagents bool
+		controls  *proto.ExecutionControls
 	}{
-		{"environment", true, false, nil}, {"subagents", false, true, nil}, {"both", true, true, nil},
-		{"execution-controls", true, true, &proto.ExecutionControls{TextVerbosity: "medium"}},
+		{"environment", false, nil}, {"subagents", true, nil},
+		{"execution-controls", true, &proto.ExecutionControls{TextVerbosity: "medium"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=success", "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", DisableExecutionEnvironment: test.environment, DisableSubagents: test.subagents, ExecutionControls: test.controls, Model: "fake-model", SystemPrompt: "instructions"}
+			config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=success", "GORACE=atexit_sleep_ms=0"}}, Home: root}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", DisableExecutionEnvironment: true, DisableSubagents: test.subagents, ExecutionControls: test.controls, Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

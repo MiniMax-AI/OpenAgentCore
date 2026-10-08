@@ -10,60 +10,35 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func workspaceFixture(t *testing.T) (WorkspaceConfig, agent.PrepareRequest, string) {
+// workspaceRequest is a request to run in a workspace on this host.
+func workspaceRequest(t *testing.T) agent.PrepareRequest {
 	t.Helper()
 	r := testRequest(t)
 	r.DisableExecutionEnvironment = false
 	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment"}
 	req := prepared(t, r)
 	req.WorkspaceRoot = t.TempDir()
-	record := filepath.Join(t.TempDir(), "calls")
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(t.TempDir(), "native")
-	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
-	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=prepared\nexport OAC_TEST_MCODE_RECORD=" + quote(record) + "\nexec " + quote(exe) + " -test.run=^TestMCodeProcess$ -- \"$@\"\n"
-	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: req.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, req, record
+	return req
 }
 
+// executorFixture prepares an Executor of the scenario's native CLI, in a
+// workspace or with environment none. It returns the Executor and the file
+// in which the CLI records the requests it receives.
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
 	t.Helper()
-	config, req, record := workspaceFixture(t)
-	script, err := os.ReadFile(config.Binary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = os.WriteFile(config.Binary, []byte(strings.Replace(string(script), "HELPER=prepared", "HELPER="+scenario, 1)), 0700); err != nil {
-		t.Fatal(err)
-	}
-	var factory agent.ExecutorFactory
+	req := prepared(t, testRequest(t))
 	if workspace {
-		factory = NewExecutorFactory(&config)
-	} else {
-		req = prepared(t, testRequest(t))
-		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)
-		factory = NewExecutorFactory(nil)
+		req = workspaceRequest(t)
 	}
-	value, err := factory(t.Context(), req)
+	record := filepath.Join(t.TempDir(), "calls")
+	e, err := hostExecutor(t, t.Context(), helperInstall(t, scenario, record), req, hostSession(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := value.(*executor)
-	t.Cleanup(func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := e.Close(cleanup); err != nil {
-			t.Error(err)
-		}
-	})
 	return e, record
 }
 
@@ -142,16 +117,15 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 			e.req.DisableSubagents = disabled
 			if !disabled {
 				// A terminal native history record still cannot prove Bash cleanup.
-				dir := t.TempDir()
-				node, bridge := filepath.Join(dir, "node"), filepath.Join(dir, "bridge.mjs")
+				reader := filepath.Join(t.TempDir(), "reader")
 				body := "#!/bin/sh\nprintf '%s\\n' '{\"version\":1,\"complete\":true,\"rootSessionId\":\"native-1\",\"sessions\":[{\"id\":\"native-1\",\"turns\":[{\"id\":\"root-turn\",\"status\":\"aborted\"}]}]}'\n"
-				for name, data := range map[string]string{node: body, bridge: "", filepath.Join(dir, "subagent-snapshot.mjs"): ""} {
-					if err := os.WriteFile(name, []byte(data), 0700); err != nil {
-						t.Fatal(err)
-					}
+				if err := os.WriteFile(reader, []byte(body), 0700); err != nil {
+					t.Fatal(err)
 				}
-				t.Setenv("OAC_RUNTIME_MCODE_NODE", node)
-				t.Setenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE", bridge)
+				e.opts.spawn = func(options clirunner.StartOptions) (*clirunner.Process, error) {
+					options.Binary = reader
+					return clirunner.Start(options)
+				}
 			}
 			out := make(chan proto.Envelope, 32)
 			second, err := e.StartTurn(t.Context(), "second", proto.TextInput("wait"), out)
@@ -288,12 +262,12 @@ func TestExecutorCloseRetainsOwnerAfterDeadline(t *testing.T) {
 	}
 }
 
-func TestExecutorFactoryPreparationFailureHasNoTypedNilOwner(t *testing.T) {
-	config, req, _ := workspaceFixture(t)
-	if err := os.WriteFile(config.Binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+func TestExecutorPreparationFailureHasNoTypedNilOwner(t *testing.T) {
+	cli := filepath.Join(t.TempDir(), "native")
+	if err := os.WriteFile(cli, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	value, err := NewExecutorFactory(&config)(t.Context(), req)
+	value, err := fakeInstall(cli).executor(t.Context(), workspaceRequest(t), hostSession(t))
 	if err == nil || value != nil {
 		t.Fatalf("settled preparation failure returned owner: nil=%t error=%v", value == nil, err)
 	}

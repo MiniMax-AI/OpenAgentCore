@@ -7,7 +7,6 @@ import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, parse, resolve } from "node:path";
 
 export type Workspace = {
-  tool_env?: Record<string, string>;
   home: string;
   state: string;
   scratch: string;
@@ -44,13 +43,12 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const config = value as Record<string, unknown>;
-  if (Object.keys(config).some(key => !["tool_env", "home", "state", "scratch", "env_names", "network_access", "allowed_domains", "skills", "mcp", "capability_root"].includes(key)) ||
+  if (Object.keys(config).some(key => !["home", "state", "scratch", "env_names", "network_access", "allowed_domains", "skills", "mcp", "capability_root"].includes(key)) ||
       (config.network_access !== undefined && config.network_access !== "enabled" && config.network_access !== "disabled" && config.network_access !== "restricted") ||
       !Array.isArray(config.env_names) ||
       config.env_names.some(name => typeof name !== "string" || !environmentNames.has(name)) ||
       new Set(config.env_names).size !== config.env_names.length) throw new Error("invalid_request");
   if (config.network_access !== undefined && config.network_access !== "enabled") throw new Error("invalid_request");
-  if (config.tool_env !== undefined && (!config.tool_env || typeof config.tool_env !== "object" || Array.isArray(config.tool_env) || Object.values(config.tool_env).some(value => typeof value !== "string"))) throw new Error("invalid_request");
   const mcp = parseEnvironmentMCP(config.mcp);
   if (config.capability_root !== undefined) directory(config.capability_root, false);
   if (Array.isArray(config.skills) && config.skills.length && !config.capability_root) throw new Error("invalid_request");
@@ -77,18 +75,10 @@ export class WorkspaceProfile {
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1",
       DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     };
-    for (const [name, value] of Object.entries(config.tool_env ?? {})) {
-      // Initialization cannot redirect the native Session history lookup.
-      if (!["HOME", "USERPROFILE", "CLAUDE_CONFIG_DIR", "CLAUDE_CODE_PROJECT_DIR_NAME"].includes(name.toUpperCase())) env[name] = value;
-    }
     for (const name of config.env_names) {
       const value = process.env[name];
       if (value === undefined) throw new Error("invalid_request");
       env[name] = value;
-    }
-    for (const reference of mcp?.credentialReferences() ?? []) {
-      if (!process.env[reference]) throw new Error("invalid_request");
-      env[reference] = process.env[reference]!;
     }
     const skills = workspaceSkills(config.skills ?? [], config.capability_root ?? "");
     this.skillNames = skills?.names ?? [];

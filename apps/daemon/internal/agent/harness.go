@@ -10,20 +10,21 @@
 // images, structured output and Subagent observations use protocol messages
 // rather than additional Go interfaces; qualify and advertise them separately.
 //
-// Registration: each adapter exports one Declaration. The Runtime discovers the
-// static declaration list and installs each resulting Runtime through Register.
-// Availability and factory selection belong to the adapter. RegisterKind resets
-// the factories, so Register installs it first. The Runtime's Environment
-// owner, not the adapter, serves and declares the Environments a kind runs
-// in: Register composes its EnvironmentSupport with the Harness's own
-// declaration once.
+// Registration: each adapter exports one Declaration. The agent host discovers
+// the static declaration list, registers each kind whose Runtime declares a
+// View, and installs its own Executor factory for it, which prepares the
+// view's Executor in the Session's view. Availability belongs to the adapter.
+// RegisterKind resets the factory and the view, so it comes first. The
+// Runtime's Environment owner, not the adapter, serves and declares the
+// Environments a kind runs in: Register composes its EnvironmentSupport with
+// the Harness's own declaration once.
 //
 // The Harness's support is its harnessconfig Declaration, which Core reads
 // too. Discovery and the Environment owner only narrow its Capabilities, and
 // the registered Executor factory runs only for a request whose selection that
 // narrowed declaration admits. Requests, events and capability descriptors
 // use the existing internal/agentdaemon/proto types. An Environment execution
-// request carries the Runtime's bound workspace directory in
+// request carries the Environment's workspace directory in
 // PrepareRequest.WorkspaceRoot; the native Harness runs there.
 package agent
 
@@ -51,7 +52,7 @@ import (
 
 // Declaration is the complete startup contract for a Harness implementation.
 // Discover returns nil when the adapter is not configured. An unavailable
-// configured adapter returns a Runtime with Available=false and no factories.
+// configured adapter returns a Runtime with Available=false and no View.
 // Discovery owns runtime-specific configuration, readiness and feature gates.
 type Declaration struct {
 	Info          proto.SupportedAgentKind
@@ -61,14 +62,12 @@ type Declaration struct {
 
 // DiscoveryOptions provides process context without naming an implementation.
 type DiscoveryOptions struct {
-	Profile        string
 	Stdout, Stderr io.Writer
 }
 
-// Runtime binds one discovered descriptor to its native factories.
+// Runtime is one discovered descriptor and how its Harness runs.
 type Runtime struct {
-	Info     proto.SupportedAgentKind
-	Executor ExecutorFactory
+	Info proto.SupportedAgentKind
 	// View declares how the Harness runs in an agent-host Session view.
 	// A nil View means the agent host rejects the kind with ErrUnsupportedOperation.
 	View *View
@@ -99,14 +98,11 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime, environmen
 	if runtime.Info.Kind != declaration.Info.Kind {
 		panic("agent.Registry.Register: discovery kind differs from declaration")
 	}
-	if !runtime.Info.Available && runtime.Executor != nil {
-		panic("agent.Registry.Register: unavailable runtime has factories")
+	if !runtime.Info.Available && runtime.View != nil {
+		panic("agent.Registry.Register: unavailable runtime has a view")
 	}
 	runtime.Info.Capabilities = environments.Compose(runtime.Info.Capabilities)
 	r.RegisterKind(runtime.Info, declaration.Configuration)
-	if runtime.Executor != nil {
-		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
-	}
 	if runtime.View != nil {
 		r.RegisterView(runtime.Info.Kind, *runtime.View)
 	}

@@ -18,12 +18,9 @@ type catalogProbe struct {
 	env    []string
 }
 
-// Validate against the binary's active catalog and use that same snapshot for
-// execution. A CLI override alone is silently ignored for unsupported models.
-func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan) error {
-	return verifyModelVerbosity(ctx, catalogProbe{binary: binary, dir: plan.Cwd, env: append(os.Environ(), plan.Env...)}, plan)
-}
-
+// verifyModelVerbosity validates the request against the binary's active
+// catalog and uses that same snapshot for execution. A CLI override alone is
+// silently ignored for unsupported models.
 func verifyModelVerbosity(ctx context.Context, probe catalogProbe, plan *SessionPlan) error {
 	// Protocol medium is the default text amount: a model with verbosity support
 	// applies the override and Codex ignores it for any other, so no catalog

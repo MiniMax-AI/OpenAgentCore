@@ -76,37 +76,26 @@ jobs:
         run: ./deploy/test_install.ps1 -Binary "$env:RUNNER_TEMP/oac.exe"
       - name: Verify native download bootstrap and recovery
         run: go test ./services/core/internal/nativeinstaller -count=1 -timeout=3m
-      - name: Native filesystem, authentication and process lifecycle
+      - name: Native filesystem and process lifecycle
         id: filesystem
         run: >-
           go test -race -count=1
           ./internal/runtimefs
-          ./apps/daemon/internal/auth
           ./apps/daemon/internal/paths
           ./apps/daemon/internal/daemonize
           ./apps/daemon/internal/agent/clirunner
-      - name: Native Harness ownership and environment identity
+      - name: Native Harness process ownership
         id: harness
         run: >-
           go test -race -count=1
           ./apps/daemon/internal/agent/codex
-          ./apps/daemon/internal/agent/claudesdk
-          ./apps/daemon/internal/agent/mcode
-          -run 'TestJSONRPCClientOwnsToolDescendants|TestSelfHostedToolEnvironment'
-      - name: Native capability snapshots, files and installation
+          -run 'TestJSONRPCClientOwnsToolDescendants'
+      - name: Native installation
         id: files
         run: >-
           go test -race -count=1
-          ./apps/daemon/internal/localworkspace
           ./apps/daemon/internal/cli
-          -run 'TestNative|TestRuntimeInit|TestRuntimePreparationRejects|TestPreparationFreezesLocalContentsAcrossReconnect|TestSnapshotMarker'
-      - name: Windows npm and npx stdio launchers without network
-        if: runner.os == 'Windows'
-        run: >-
-          go test -race -count=1 -timeout=2m
-          ./apps/daemon/internal/localworkspace
-          ./apps/daemon/internal/cli
-          -run 'TestWindowsPackageManager|TestWindowsRuntimeMCP'
+          -run 'TestNative'
       - name: Build pinned native components
         run: |
           pnpm --dir packages/claude-sdk-adapter install --frozen-lockfile

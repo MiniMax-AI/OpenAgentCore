@@ -88,7 +88,7 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 	var start startRequest
 	if err := json.Unmarshal(request, &start); err != nil || start.Type != "executor_prepare" || start.Cwd != "/workspace" || start.Workspace == nil ||
 		start.Workspace.Home != env["HOME"] || start.Workspace.State != env["CLAUDE_CONFIG_DIR"] || len(start.Workspace.MCP) != 1 ||
-		start.Workspace.MCP[0].ServerURL != "http://127.0.0.1:17102/mcp/docs" || start.Workspace.MCP[0].BearerTokenEnvVar != "" {
+		start.Workspace.MCP[0].ServerURL != "http://127.0.0.1:17102/mcp/docs" {
 		t.Fatalf("bridge request = %s, %v", request, err)
 	}
 	for _, name := range viewHomeDirs {
@@ -123,7 +123,7 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 	defer stdio.Close(ctx)
 	var stdioStart startRequest
 	if err := json.Unmarshal(<-requests, &stdioStart); err != nil || stdioStart.Workspace == nil || len(stdioStart.Workspace.MCP) != 1 ||
-		stdioStart.Workspace.MCP[0].Command != agent.ViewAlias(0) || stdioStart.Workspace.MCP[0].Args != nil ||
+		stdioStart.Workspace.MCP[0].Command != agent.ViewAlias(0) ||
 		stdioStart.Workspace.CapabilityRoot != agentcapabilities.Directory || len(stdioStart.Workspace.Skills) != 1 || stdioStart.Workspace.Skills[0].RelativeRoot != "skills/review" {
 		t.Fatalf("installed Skill and stdio MCP = %+v, %v", stdioStart.Workspace, err)
 	}
@@ -187,8 +187,10 @@ func resolveTestView(t *testing.T) agent.View {
 	lib := agent.ViewMount{Name: viewloader.MountName, HostDir: filepath.Join(root, "lib")}
 	loader := viewloader.Fragment{Closure: []agent.ViewMount{lib}, Overlays: []agent.ViewOverlay{{Path: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(root, "lib", "ld.so"), Exec: true}}, LibraryPath: lib.Path()}
 	declared := declareView(probe, RuntimeInfo{NativePath: "native/claude"}, probe.Node, filepath.Join(root, "bundle"), "dist/main.js", loader)
+	info := Declaration.Info
+	info.Available = true
 	registry := agent.NewRegistry()
-	registry.Register(Declaration, agent.Runtime{Info: Declaration.Info, View: declared}, agent.EnvironmentSupport{Local: true, None: true})
+	registry.Register(Declaration, agent.Runtime{Info: info, View: declared}, agent.EnvironmentSupport{Local: true, None: true})
 	view, err := registry.ResolveView(Declaration.Info.Kind)
 	if err != nil {
 		t.Fatal(err)

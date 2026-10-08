@@ -31,14 +31,6 @@ type nativeInstallation struct {
 	Harnesses           []string `json:"harnesses"`
 }
 
-func nativeInstallationPath() (string, error) {
-	root, err := paths.Root()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, "daemon", "installation.json"), nil
-}
-
 func lockNativeInstallation(root string) (*os.Root, func(), error) {
 	dir := filepath.Join(root, "daemon")
 	if err := runtimefs.EnsurePrivateDir(dir); err != nil {

@@ -246,28 +246,3 @@ func TestNativeInstallationDoesNotRepairMissingDaemon(t *testing.T) {
 		t.Fatal("recreated a removed daemon")
 	}
 }
-
-func TestNativeInstallationConnectCannotBypassValidation(t *testing.T) {
-	rc, args, root, _ := nativeInstallFixture(t)
-	if err := runInstall(rc, args); err != nil {
-		t.Fatal(err)
-	}
-	for _, mode := range []string{"installed", "missing-component"} {
-		t.Run(mode, func(t *testing.T) {
-			if mode == "missing-component" {
-				if err := os.Remove(filepath.Join(nativeComponentRoot(root, "codex"), "program")); err != nil {
-					t.Fatal(err)
-				}
-			}
-			for _, connection := range [][]string{
-				nil,
-				{"--remote", "ws://127.0.0.1:1/api/v1/agent-daemon/ws"},
-			} {
-				err := runConnect(rc, connection)
-				if err == nil || !strings.Contains(err.Error(), "use oac-daemon start") {
-					t.Fatal("connect bypassed native installation validation", err)
-				}
-			}
-		})
-	}
-}

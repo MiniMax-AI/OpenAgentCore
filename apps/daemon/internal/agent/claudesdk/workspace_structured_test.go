@@ -20,12 +20,12 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 			req := preparationRequest()
 			schema := `{"type":"object","properties":{"n":{"const":9007199254740992}}}`
 			req.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(schema)}}
-			e, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+			e, err := config.factory()(t.Context(), prepared(t, req))
 			if mode == "structured-missing" {
 				if err == nil || !strings.Contains(err.Error(), "workspace structured output") {
 					t.Fatal("unqualified bundle admitted", err)
 				}
-				if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
+				if _, err := os.Stat(filepath.Join(config.StateDir(), "launched")); !os.IsNotExist(err) {
 					t.Fatal("unqualified request reached native launch", err)
 				}
 				return
@@ -36,7 +36,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 			defer e.Close(context.Background())
 			req.ExecutionControls.OutputFormat.Schema[0] = ' '
 			var frozen startRequest
-			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "prepare.json")), &frozen); err != nil {
+			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir(), "prepare.json")), &frozen); err != nil {
 				t.Fatal(err)
 			}
 			if frozen.OutputFormat == nil || string(frozen.OutputFormat.Schema) != schema {
@@ -52,7 +52,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 				}
 			}
 			var started map[string]json.RawMessage
-			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "start.json")), &started); err != nil || len(started) != 3 || started["output_format"] != nil {
+			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir(), "start.json")), &started); err != nil || len(started) != 3 || started["output_format"] != nil {
 				t.Fatal("Start replaced the prepared configuration", err)
 			}
 		})

@@ -2,6 +2,8 @@ package codex
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -33,4 +35,18 @@ func TestPreparationCancellationDuringReadiness(t *testing.T) {
 		t.Fatal("failed readiness leaked model catalog")
 	}
 	assertPreparationOnly(t, root)
+}
+
+func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
+	req, cfg, root := preparationFixture(t)
+	req.WorkspaceReadOnly = true
+	if e, err := newExecutor(t.Context(), req, cfg); err == nil || e != nil {
+		t.Fatal("read-only request admitted", err)
+	}
+	if len(preparationFrames(t, root)) != 0 {
+		t.Fatal("read-only request started native child")
+	}
+	if _, err := os.Stat(filepath.Join(root, "home", viewCodexHome)); !os.IsNotExist(err) {
+		t.Fatal("read-only request created native state", err)
+	}
 }

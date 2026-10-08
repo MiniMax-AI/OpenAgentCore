@@ -1,38 +1,16 @@
 // Package paths resolves on-disk locations for oac-daemon state under
-// ~/.oac/daemon/<profile>/ — one subdir per profile so "test"
-// and "prod" servers can be connected in parallel without colliding.
-//
-// Files are 0o600, parent dir 0o700. These functions only resolve
-// paths — callers do the I/O.
+// ~/.oac. These functions only resolve paths; callers do the I/O.
 package paths
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 )
 
+// DefaultProfile names the directory below daemon/ that holds the
+// background daemon's pid and log files.
 const DefaultProfile = "default"
-
-// profilePattern restricts profile names to filesystem-safe chars so
-// a malicious --profile can't escape via "../etc/passwd" tricks.
-var profilePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,64}$`)
-
-// ValidateProfile rejects names that wouldn't survive being used as
-// a directory component.
-func ValidateProfile(name string) error {
-	if name == "" {
-		return fmt.Errorf("profile name must not be empty")
-	}
-	base := strings.ToUpper(strings.SplitN(name, ".", 2)[0])
-	reserved := base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" || (len(base) == 4 && (strings.HasPrefix(base, "COM") || strings.HasPrefix(base, "LPT")) && base[3] >= '1' && base[3] <= '9')
-	if strings.HasSuffix(name, ".") || reserved || !profilePattern.MatchString(name) {
-		return fmt.Errorf("profile %q must match %s", name, profilePattern.String())
-	}
-	return nil
-}
 
 // Root returns ~/.oac. Honours OAC_RUNTIME_HOME for tests /
 // sandbox environments without a writable home.
@@ -50,41 +28,16 @@ func Root() (string, error) {
 	return filepath.Join(home, ".oac"), nil
 }
 
-// ProfileDir returns ~/.oac/daemon/<profile>. It is not created here.
-func ProfileDir(profile string) (string, error) {
-	if err := ValidateProfile(profile); err != nil {
-		return "", err
-	}
+// PIDFile returns the background daemon's connect.pid.
+func PIDFile() (string, error) { return daemonFile("connect.pid") }
+
+// LogFile returns the background daemon's connect.log.
+func LogFile() (string, error) { return daemonFile("connect.log") }
+
+func daemonFile(name string) (string, error) {
 	root, err := Root()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(root, "daemon", profile), nil
-}
-
-// AuthFile returns the absolute path to auth.json for a profile.
-func AuthFile(profile string) (string, error) {
-	dir, err := ProfileDir(profile)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "auth.json"), nil
-}
-
-// PIDFile returns the absolute path to connect.pid for a profile.
-func PIDFile(profile string) (string, error) {
-	dir, err := ProfileDir(profile)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "connect.pid"), nil
-}
-
-// LogFile returns the absolute path to connect.log for a profile.
-func LogFile(profile string) (string, error) {
-	dir, err := ProfileDir(profile)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "connect.log"), nil
+	return filepath.Join(root, "daemon", DefaultProfile, name), nil
 }

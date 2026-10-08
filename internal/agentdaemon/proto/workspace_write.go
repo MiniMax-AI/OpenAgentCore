@@ -45,6 +45,13 @@ const (
 	WorkspaceWriteReasonUnsafe    = "unsafe_destination"
 )
 
+// ValidWorkspacePath reports whether p is a workspace path as the API addresses
+// it: at most 4096 bytes of slash-separated plain names below the workspace,
+// without a backslash, NUL, CR or LF.
+func ValidWorkspacePath(p string) bool {
+	return p != "." && len(p) <= 4096 && fs.ValidPath(p) && !strings.ContainsAny(p, "\\\x00\r\n")
+}
+
 func ValidWorkspaceWriteRequest(p WorkspaceWritePayload) bool {
 	if p.Step == "begin" {
 		for _, id := range []string{p.EnvironmentID, p.SessionID} {
@@ -56,7 +63,7 @@ func ValidWorkspaceWriteRequest(p WorkspaceWritePayload) bool {
 		digest, err := hex.DecodeString(p.SHA256)
 		return err == nil && len(digest) == 32 && strings.ToLower(p.SHA256) == p.SHA256 &&
 			p.SizeBytes >= 0 && p.SizeBytes <= WorkspaceWriteMaxBytes && p.Offset == 0 && len(p.Data) == 0 &&
-			len(p.Path) <= 4096 && p.Path != "." && fs.ValidPath(p.Path) && !strings.ContainsAny(p.Path, "\\\x00\r\n")
+			ValidWorkspacePath(p.Path)
 	}
 	if p.EnvironmentID != "" || p.SessionID != "" || p.Path != "" || p.SizeBytes != 0 || p.SHA256 != "" {
 		return false

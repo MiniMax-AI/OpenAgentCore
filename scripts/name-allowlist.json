@@ -125,11 +125,6 @@
     "reason": "Dispatch derives each Session's native state key in the existing agents-api- namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
-    "path": "apps/daemon/internal/agent/mcode/tool_environment_test.go",
-    "regex": "agents-api-",
-    "reason": "The regression fixture uses the existing persisted Session state-key namespace required by Runtime binding validation."
-  },
-  {
     "path": "services/core/migrations/000015_retire_item_backfill.sql",
     "regex": "services/agents-api/README\\.md",
     "reason": "Landed migrations keep their original text."

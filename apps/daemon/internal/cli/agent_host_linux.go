@@ -25,7 +25,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agenthost"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
@@ -50,6 +49,8 @@ const (
 
 // agentHostUIDs is the range the agent host runs its Executors as.
 var agentHostUIDs = agenthost.UIDRange{First: 70000, Count: 4096}
+
+var harnessDeclarations = []agent.Declaration{codex.Declaration, mcode.Declaration, claudesdk.Declaration}
 
 func runAgentHost(rc *runContext, args []string) error {
 	return serveAgentHost(context.Background(), rc, args, harnessDeclarations)
@@ -109,7 +110,7 @@ func serveAgentHost(parent context.Context, rc *runContext, args []string, decla
 	}
 	harnesses := agent.NewRegistry()
 	for _, declaration := range declarations {
-		runtime := declaration.Discover(ctx, agent.DiscoveryOptions{Profile: paths.DefaultProfile, Stdout: rc.stdout, Stderr: rc.stderr}, declaration.Info)
+		runtime := declaration.Discover(ctx, agent.DiscoveryOptions{Stdout: rc.stdout, Stderr: rc.stderr}, declaration.Info)
 		if runtime == nil || runtime.View == nil {
 			continue
 		}
@@ -154,4 +155,134 @@ func serveAgentHost(parent context.Context, rc *runContext, args []string, decla
 	return serveConnections(ctx, wsURL, dial, agentHostUnreachable, func(conn *transport.Conn) error {
 		return pumpConn(ctx, conn, cfg, boot)
 	})
+}
+
+// serveConnections dials Core with dial and serves each connection until ctx
+// ends or Core rejects the credential. With a positive unreachable bound it
+// fails once Core has stayed unreachable that long.
+func serveConnections(ctx context.Context, wsURL string, dial transport.DialFn, unreachable time.Duration, serve func(*transport.Conn) error) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil
+		}
+
+		dialCtx, stop := ctx, context.CancelFunc(func() {})
+		if unreachable > 0 {
+			dialCtx, stop = context.WithTimeout(ctx, unreachable)
+		}
+		conn, err := transport.Reconnect(dialCtx, dial, transport.DefaultBackoff, func(attempt int, lastDelay time.Duration, lastErr error) {
+			switch {
+			case attempt == 1:
+				obslog.Bg().Info("connecting", "ws_url", wsURL)
+			case lastErr != nil:
+				// Include lastErr so a stuck Reconnect tells the
+				// operator WHY ("ws upgrade rejected with 426")
+				// instead of just "retry attempt 3 after 4s".
+				obslog.Bg().Warn("dial retry", "attempt", attempt, "delay", lastDelay, "err", lastErr)
+			default:
+				obslog.Bg().Warn("dial retry", "attempt", attempt, "delay", lastDelay)
+			}
+		})
+		stop()
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			if errors.Is(err, transport.ErrPermanent) {
+				return fmt.Errorf("connect: permanent error (reissue the daemon credential): %w", err)
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("connect: Core unreachable for %s: %w", unreachable, err)
+			}
+			return fmt.Errorf("connect: dial: %w", err)
+		}
+		obslog.Bg().Info("ws connected", "device_id", conn.DeviceID())
+
+		// serve returns on conn close (peer hangup, transport error, ctx
+		// cancel). Loop back into Reconnect unless ctx is cancelled.
+		pumpErr := serve(conn)
+		if pumpErr != nil {
+			obslog.Bg().Warn("ws session ended", "err", pumpErr)
+		} else {
+			obslog.Bg().Info("ws session ended cleanly")
+		}
+		_ = conn.Close()
+
+		// Server-initiated clean close (e.g. shutdown) → exit;
+		// otherwise loop back and reconnect.
+		if ctx.Err() != nil {
+			return nil
+		}
+		// Permanent error (e.g. runtime deleted) → exit instead of
+		// reconnecting.
+		if pumpErr != nil && errors.Is(pumpErr, transport.ErrPermanent) {
+			return fmt.Errorf("connect: runtime deleted (reissue the daemon credential): %w", pumpErr)
+		}
+		// Small breather before redialing so a flapping server doesn't
+		// get a tight loop of upgrade requests.
+		_ = transport.Sleep(ctx, 1*time.Second)
+	}
+}
+
+// pumpConn runs the per-connection workload: a dispatch.Router of cfg's
+// Harness kinds and Environment owners fed by conn.Recv(), heartbeats every
+// boot.HeartbeatInterval(), and a confirmed router.Shutdown before returning
+// ownership to the reconnect loop. Failed cleanup keeps this exact Router
+// alive, including after a shutdown signal.
+func pumpConn(parentCtx context.Context, conn *transport.Conn, cfg dispatch.Config, boot *transport.BootstrapResponse) error {
+	cfg.Sender, cfg.Log = conn, obslog.Bg()
+	router, err := dispatch.New(cfg)
+	if err != nil {
+		return fmt.Errorf("router init: %w", err)
+	}
+	defer func() {
+		_ = conn.Close()
+		shutdownRouterUntilConfirmed(router.Shutdown, time.Second)
+	}()
+
+	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
+		return proto.HeartbeatPayload{
+			SupportedAgentKinds: cfg.Registry.SupportedAgentKinds(),
+			HomeRemoval:         proto.CapabilityFromBool(cfg.RemoveHome != nil),
+		}
+	}, obslog.Bg().With("component", "heartbeat"))
+
+	obslog.Bg().Info("pumpConn: entering recv loop")
+	for {
+		select {
+		case <-parentCtx.Done():
+			obslog.Bg().Warn("pumpConn: parentCtx cancelled", "err", parentCtx.Err())
+			return parentCtx.Err()
+		case <-conn.Done():
+			obslog.Bg().Warn("pumpConn: conn.Done fired", "err", conn.Err())
+			return conn.Err()
+		case env, ok := <-conn.Recv():
+			if !ok {
+				obslog.Bg().Warn("pumpConn: recvCh closed", "err", conn.Err())
+				return conn.Err()
+			}
+			obslog.Bg().Info("pumpConn: received envelope, calling router.Handle", "type", env.Type, "id", env.ID)
+			if err := router.Handle(parentCtx, env); err != nil {
+				obslog.Bg().Error("router.Handle failed", "type", env.Type, "id", env.ID, "err", err)
+			} else {
+				obslog.Bg().Info("pumpConn: router.Handle ok", "type", env.Type, "id", env.ID)
+			}
+		}
+	}
+}
+
+// A wait deadline does not revoke native ownership. Keep retrying the same
+// Router until it confirms cleanup; reconnect and process exit both wait here.
+// Router.Shutdown serializes attempts and retains resources after a failure.
+func shutdownRouterUntilConfirmed(shutdown func(context.Context) error, retryDelay time.Duration) {
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := shutdown(ctx)
+		cancel()
+		if err == nil {
+			return
+		}
+		obslog.Bg().Warn("router cleanup unconfirmed; reconnect remains blocked", "err", err)
+		time.Sleep(retryDelay)
+	}
 }

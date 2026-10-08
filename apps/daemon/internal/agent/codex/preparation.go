@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -28,12 +27,7 @@ func newExecutor(parent context.Context, req agent.PrepareRequest, cfg sessionCo
 	if err != nil {
 		return nil, err
 	}
-	var plan SessionPlan
-	if cfg.view != nil {
-		plan, err = prepareViewPlan(parent, req, cfg)
-	} else {
-		plan, err = prepareSessionPlan(parent, req, cfg)
-	}
+	plan, err := prepareViewPlan(parent, req, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -41,16 +35,14 @@ func newExecutor(parent context.Context, req agent.PrepareRequest, cfg sessionCo
 	cancelCtx, cancelFn := context.WithCancel(parent)
 
 	rpcCfg := JSONRPCConfig{
-		Binary:          cfg.codexBinary,
+		Binary:          cfg.view.binary,
 		EnableFeatures:  plan.EnableFeatures,
 		DisableFeatures: plan.DisableFeatures,
 		Cwd:             plan.Cwd,
-		Env:             append(os.Environ(), plan.Env...),
+		Env:             plan.Env,
+		Launch:          cfg.view.Launch,
 		LogTag:          "codex-preparation",
 		Logger:          cfg.logger,
-	}
-	if cfg.view != nil {
-		rpcCfg.Binary, rpcCfg.Env, rpcCfg.Launch = cfg.view.binary, plan.Env, cfg.view.Launch
 	}
 	for _, kv := range plan.ExtraConfig {
 		rpcCfg.ExtraArgs = append(rpcCfg.ExtraArgs, "-c", kv[0]+"="+kv[1])
