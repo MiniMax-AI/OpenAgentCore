@@ -14,11 +14,9 @@ import (
 var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode", Capabilities: proto.AgentKindCapabilities{
 	SubagentObservations:           proto.CapabilityUnsupported,
 	Streaming:                      proto.CapabilitySupported,
-	Permissions:                    proto.CapabilitySupported,
 	Usage:                          proto.CapabilityUnsupported,
 	Resume:                         proto.CapabilitySupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	WorkspaceAuthoring:             proto.CapabilitySupported,
 	Steering:                       proto.CapabilityUnsupported,
 	MessageItems:                   proto.CapabilityUnsupported,
 	ToolObservations:               proto.CapabilityUnsupported,
@@ -48,7 +46,7 @@ func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.Su
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, result proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: result, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true}
+	runtime := &agent.Runtime{Info: result}
 
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
@@ -58,30 +56,22 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 		return runtime
 	}
 	result.Available, result.Version = true, version
-	if SupportsExecution(version) {
-		result.Capabilities.Steering = proto.CapabilitySupported
-		result.Capabilities.DurableTurns = proto.CapabilitySupported
-		result.Capabilities.DurableInputReceipts = proto.CapabilitySupported
-		result.Capabilities.ExecutionControls = proto.CapabilitySupported
-		result.Capabilities.ProgrammaticToolCallingDisable = proto.CapabilitySupported
-		result.Capabilities.ToolObservations = proto.CapabilitySupported
-		result.Capabilities.SubagentControl = proto.CapabilitySupported
-		// Native preparation verifies the applied admission/tool profile before input.
-		result.Capabilities.SubagentObservations = proto.CapabilitySupported
-		result.Capabilities.EnvironmentNone = proto.CapabilitySupported
-		result.Capabilities.MCPHTTPTools = proto.CapabilitySupported
-		result.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported
-	}
+	result.Capabilities.Steering = proto.CapabilitySupported
+	result.Capabilities.DurableTurns = proto.CapabilitySupported
+	result.Capabilities.DurableInputReceipts = proto.CapabilitySupported
+	result.Capabilities.ExecutionControls = proto.CapabilitySupported
+	result.Capabilities.ProgrammaticToolCallingDisable = proto.CapabilitySupported
+	result.Capabilities.ToolObservations = proto.CapabilitySupported
+	result.Capabilities.SubagentControl = proto.CapabilitySupported
+	// Native preparation verifies the applied admission/tool profile before input.
+	result.Capabilities.SubagentObservations = proto.CapabilitySupported
+	result.Capabilities.EnvironmentNone = proto.CapabilitySupported
+	result.Capabilities.MCPHTTPTools = proto.CapabilitySupported
+	result.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported
 	runtime.Info = result
 	workspace := discoverWorkspace(parent, options, runtime)
 	if runtime.Info.Available {
 		runtime.Executor = NewExecutorFactory(workspace)
-	}
-	if workspace != nil {
-		runtime.SessionCapabilityContext = false
-		runtime.Info.Capabilities.WorkspaceAuthoring = proto.CapabilityUnsupported
-		runtime.Preparation = NewPreparationFactory(*workspace)
-		runtime.WorkspaceReadPreparation = true
 	}
 	fmt.Fprintf(options.Stdout, "mcode preflight ok (%s)\n", version)
 	return runtime

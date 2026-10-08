@@ -1,10 +1,11 @@
-// Command openapi-split separates the generated document by namespace: the
-// application API (/v1), the Core API (/core/v1) and machine connections
-// (/api/v1) each get their own document.
+// Command openapi-split emits internal contracts and exports Go definitions
+// for the public contract extension overlay and the Core client types.
 package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -19,87 +20,86 @@ const (
 )
 
 func main() {
-	if len(os.Args) != 5 {
-		fmt.Fprintln(os.Stderr, "usage: openapi-split INPUT PROJECT_OUTPUT CORE_OUTPUT RUNTIME_OUTPUT")
+	check := flag.Bool("check", false, "check generated internal contracts without changing them")
+	flag.Parse()
+	if flag.NArg() != 5 {
+		fmt.Fprintln(os.Stderr, "usage: openapi-split [--check] INPUT EXTENSIONS_OUTPUT CORE_JSON_OUTPUT CORE_OUTPUT RUNTIME_OUTPUT")
 		os.Exit(1)
 	}
-	if err := run(os.Args[1], os.Args[2], os.Args[3], os.Args[4]); err != nil {
+	if err := run(flag.Arg(0), flag.Arg(1), flag.Arg(2), flag.Arg(3), flag.Arg(4), *check); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
-func run(input, projectOutput, coreOutput, runtimeOutput string) error {
+
+// run exports Go-owned definitions for the public extension overlay and the
+// Core client types, and emits the two internal contracts. Public operations
+// come only from official OpenAPI.
+func run(input, extensionOutput, coreJSONOutput, coreOutput, runtimeOutput string, check bool) error {
 	raw, err := os.ReadFile(input)
 	if err != nil {
 		return err
 	}
-	var project, core, runtime yaml.Node
-	for _, doc := range []*yaml.Node{&project, &core, &runtime} {
-		if err = yaml.Unmarshal(raw, doc); err != nil {
-			return err
-		}
-	}
-	p, m, rt := project.Content[0], core.Content[0], runtime.Content[0]
-	filterPaths(field(p, "paths"), projectSurface)
-	filterPaths(field(m, "paths"), coreSurface)
-	filterPaths(field(rt, "paths"), runtimeSurface)
-	field(m, "basePath").Value = "/"
-	field(field(m, "info"), "title").Value = "OpenAgentCore Core API"
-	field(field(m, "info"), "description").Value = "Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted."
-	field(rt, "basePath").Value = "/"
-	field(field(rt, "info"), "title").Value = "OpenAgentCore Machine Connections"
-	field(field(rt, "info"), "description").Value = "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements."
-	// Retain exactly the definitions referenced by each surface, including shared
-	// error DTOs. Follow nested references instead of duplicating the project schema.
-	pruneDefinitions(p)
-	pruneDefinitions(m)
-	pruneDefinitions(rt)
-	// Each document keeps only the security schemes its operations require.
-	pruneSecurityDefinitions(p)
-	pruneSecurityDefinitions(m)
-	pruneSecurityDefinitions(rt)
-	// Keep unrelated existing project definitions and the generator's formatting.
-	// Only definitions exclusive to the Core or machine surfaces are removed.
-	var original yaml.Node
-	if err := yaml.Unmarshal(raw, &original); err != nil {
+	var source yaml.Node
+	if err := yaml.Unmarshal(raw, &source); err != nil {
 		return err
 	}
-	originalDefinitions := field(original.Content[0], "definitions")
-	projectDefinitions := field(p, "definitions")
-	if originalDefinitions != nil {
-		kept := make([]*yaml.Node, 0, len(originalDefinitions.Content))
-		for i := 0; i < len(originalDefinitions.Content); i += 2 {
-			key := originalDefinitions.Content[i]
-			if field(projectDefinitions, key.Value) != nil || field(field(m, "definitions"), key.Value) == nil && field(field(rt, "definitions"), key.Value) == nil {
-				kept = append(kept, key, originalDefinitions.Content[i+1])
-			}
-		}
-		projectDefinitions.Content = kept
+	if err := writeJSON(field(source.Content[0], "definitions"), extensionOutput); err != nil {
+		return err
 	}
-	for _, out := range []struct {
-		path string
-		doc  *yaml.Node
-	}{{projectOutput, &project}, {coreOutput, &core}, {runtimeOutput, &runtime}} {
-		if out.path == projectOutput {
-			if err := os.WriteFile(out.path, preserveProjectFormatting(raw, original.Content[0], p), 0644); err != nil {
-				return err
-			}
-			continue
+	for _, output := range []struct {
+		path, title, description string
+		surface                  int
+		// jsonOutput, when set, receives the document as JSON.
+		jsonOutput string
+	}{
+		{coreOutput, "OpenAgentCore Core API", "Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.", coreSurface, coreJSONOutput},
+		{runtimeOutput, "OpenAgentCore Machine Connections", "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements.", runtimeSurface, ""},
+	} {
+		var doc yaml.Node
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			return err
 		}
+		root := doc.Content[0]
+		filterPaths(field(root, "paths"), output.surface)
+		field(root, "basePath").Value = "/"
+		field(field(root, "info"), "title").Value = output.title
+		field(field(root, "info"), "description").Value = output.description
+		pruneDefinitions(root)
+		pruneSecurityDefinitions(root)
 		var buf bytes.Buffer
 		encoder := yaml.NewEncoder(&buf)
 		encoder.SetIndent(2)
-		if err := encoder.Encode(out.doc); err != nil {
+		if err := encoder.Encode(&doc); err != nil {
 			return err
 		}
 		if err := encoder.Close(); err != nil {
 			return err
 		}
-		if err := os.WriteFile(out.path, buf.Bytes(), 0644); err != nil {
+		if err := writeGenerated(output.path, buf.Bytes(), check); err != nil {
 			return err
+		}
+		if output.jsonOutput != "" {
+			if err := writeJSON(root, output.jsonOutput); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// writeJSON writes a YAML node as JSON, which scripts/generate-public-api.py
+// reads without a YAML parser.
+func writeJSON(node *yaml.Node, path string) error {
+	var value map[string]any
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0644)
 }
 func field(n *yaml.Node, key string) *yaml.Node {
 	if n != nil {
@@ -193,42 +193,16 @@ func pruneSecurityDefinitions(root *yaml.Node) {
 	schemes.Content = kept
 }
 
-// Preserve the generated project's lexical form while removing whole mappings.
-// YAML node line locations avoid interpreting indentation or quoted path names.
-func preserveProjectFormatting(raw []byte, original, filtered *yaml.Node) []byte {
-	lines := bytes.SplitAfter(raw, []byte("\n"))
-	removed := make([]bool, len(lines))
-	for _, section := range []string{"paths", "definitions", "securityDefinitions"} {
-		source, target := field(original, section), field(filtered, section)
-		if source == nil {
-			continue
+func writeGenerated(path string, data []byte, check bool) error {
+	if check {
+		existing, err := os.ReadFile(path)
+		if err != nil {
+			return err
 		}
-		end := len(lines)
-		for i := 0; i+1 < len(original.Content); i += 2 {
-			if original.Content[i].Value == section && i+2 < len(original.Content) {
-				end = original.Content[i+2].Line - 1
-				break
-			}
+		if !bytes.Equal(existing, data) {
+			return fmt.Errorf("%s is stale; run make openapi", path)
 		}
-		for i := 0; i+1 < len(source.Content); i += 2 {
-			key := source.Content[i]
-			if field(target, key.Value) != nil {
-				continue
-			}
-			stop := end
-			if i+2 < len(source.Content) {
-				stop = source.Content[i+2].Line - 1
-			}
-			for row := key.Line - 1; row < stop; row++ {
-				removed[row] = true
-			}
-		}
+		return nil
 	}
-	var out bytes.Buffer
-	for i, line := range lines {
-		if !removed[i] {
-			out.Write(line)
-		}
-	}
-	return out.Bytes()
+	return os.WriteFile(path, data, 0644)
 }

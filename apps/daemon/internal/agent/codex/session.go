@@ -20,8 +20,8 @@ import (
 // adapter safety net.
 const terminalSendTimeout = 2 * time.Second
 
-// sessionConfig is the cross-cutting knob bag — production callers go
-// through Factory which uses defaults.
+// sessionConfig is the cross-cutting knob bag; production callers use
+// defaultSessionConfig.
 type sessionConfig struct {
 	codexBinary string
 	logger      *slog.Logger
@@ -34,14 +34,6 @@ func defaultSessionConfig() sessionConfig {
 		logger:      obslog.Bg(),
 		killTimeout: rpcKillTimeout,
 	}
-}
-
-// Factory implements agent.Factory for agent_kind="codex". Spawns one
-// codex app-server child per prompt. The run stream closes when the turn
-// completes; the router retains the child until the conversation's idle
-// window expires or cancellation shuts it down sooner.
-func Factory(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-	return newSession(ctx, req, out, defaultSessionConfig())
 }
 
 // Session implements agent.Session. State lifecycle:
@@ -70,11 +62,10 @@ type Session struct {
 	functions                 *functionCalls
 	observeMessages           bool
 
-	observeToolObservations bool
-	runID                   string
-	cfg                     sessionConfig
-	out                     chan<- proto.Envelope
-	rpc                     *JSONRPCClient
+	runID string
+	cfg   sessionConfig
+	out   chan<- proto.Envelope
+	rpc   *JSONRPCClient
 
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc
@@ -112,23 +103,10 @@ type Session struct {
 	finalText   string
 	lastErrText string
 
-	interactions *pendingCodexInteractions
-	outcome      cancellationOutcomeState
+	outcome cancellationOutcomeState
 }
 
 var _ agent.Session = (*Session)(nil)
-
-// SubmitPermission completes the deferred Codex app-server request that
-// produced the Core permission envelope.
-func (s *Session) SubmitPermission(_ context.Context, permID string, decision proto.PermissionDecisionPayload) error {
-	return s.submitCodexPermission(permID, decision)
-}
-
-// SubmitPromptForUserChoice maps Core's header/answer pairs back to
-// Codex's question-id keyed requestUserInput response.
-func (s *Session) SubmitPromptForUserChoice(_ context.Context, askID string, decision proto.PromptForUserChoiceDecisionPayload) error {
-	return s.submitCodexUserInput(askID, decision)
-}
 
 // ---------------------------------------------------------------------------
 // notification handlers
@@ -151,14 +129,10 @@ func (s *Session) registerHandlers() {
 	rpc.OnNotification("thread/tokenUsage/updated", s.onUsageUpdated)
 	rpc.OnNotification("error", s.onErrorNotif)
 
-	s.onServerRequest("item/commandExecution/requestApproval", s.handleCodexCommandApproval)
-	s.onServerRequest("item/fileChange/requestApproval", s.handleCodexFileApproval)
-	s.onServerRequest("item/permissions/requestApproval", s.handleCodexPermissionsApproval)
-	// Older app-server releases used this unseparated method name.
-	s.onServerRequest("item/permissionsRequestApproval", s.handleCodexPermissionsApproval)
-	s.onServerRequest("item/tool/requestUserInput", s.handleCodexUserInput)
+	// Harnesses run unattended. Approval policy never and the session plan keep
+	// native asks from being raised; any other server request gets the
+	// client's method-not-found reply.
 	s.onServerRequest("item/tool/call", s.handleFunctionCall)
-	s.onServerRequest("mcpServer/elicitation/request", s.handleCodexMCPElicitation)
 }
 
 func (s *Session) onTurnStarted(raw json.RawMessage) {

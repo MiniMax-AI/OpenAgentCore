@@ -1,6 +1,6 @@
 // Package paths resolves on-disk locations for oac-daemon state under
 // ~/.oac/daemon/<profile>/ — one subdir per profile so "test"
-// and "prod" servers can be paired in parallel without colliding.
+// and "prod" servers can be connected in parallel without colliding.
 //
 // Files are 0o600, parent dir 0o700. These functions only resolve
 // paths — callers do the I/O.
@@ -8,7 +8,6 @@ package paths
 
 import (
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -51,8 +50,7 @@ func Root() (string, error) {
 	return filepath.Join(home, ".oac"), nil
 }
 
-// ProfileDir returns ~/.oac/daemon/<profile>. NOT created;
-// use EnsureProfileDir.
+// ProfileDir returns ~/.oac/daemon/<profile>. It is not created here.
 func ProfileDir(profile string) (string, error) {
 	if err := ValidateProfile(profile); err != nil {
 		return "", err
@@ -62,19 +60,6 @@ func ProfileDir(profile string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, "daemon", profile), nil
-}
-
-// EnsureProfileDir mkdirs the profile dir at mode 0o700 and returns
-// its path. Idempotent.
-func EnsureProfileDir(profile string) (string, error) {
-	dir, err := ProfileDir(profile)
-	if err != nil {
-		return "", err
-	}
-	if err := runtimefs.EnsurePrivateDir(dir); err != nil {
-		return "", fmt.Errorf("create profile dir %s: %w", dir, err)
-	}
-	return dir, nil
 }
 
 // AuthFile returns the absolute path to auth.json for a profile.
@@ -102,13 +87,4 @@ func LogFile(profile string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "connect.log"), nil
-}
-
-// SessionsFile returns the absolute path to sessions.json.
-func SessionsFile(profile string) (string, error) {
-	dir, err := ProfileDir(profile)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "sessions.json"), nil
 }

@@ -21,7 +21,7 @@ export function SandboxResetControls({ deployment, disabled, stale, onStart, onC
   const id = useId();
   const reset = deployment.reset;
   const [dialog, setDialog] = useState<{ action: Action; generation: number; requestedAt: string | null } | null>(null);
-  const [clear, setClear] = useState<"auto" | "force">("auto");
+  const [clear, setClear] = useState<StartSandboxReset["clear"]>("auto");
   const [deadline, setDeadline] = useState("3600");
   const [submitting, setSubmitting] = useState(false);
   const changed = dialog !== null && (dialog.generation !== deployment.generation || dialog.requestedAt !== (reset?.requested_at ?? null));

@@ -31,7 +31,7 @@ func writeSkillsError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusNotFound, code, "Resource not found.")
 	case errors.Is(err, skills.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
-	case writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err):
+	case writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err):
 	default:
 		writeInternalError(w, r)
 	}

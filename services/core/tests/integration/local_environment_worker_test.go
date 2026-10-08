@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -18,8 +17,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), scoped)
 	if scoped {
-		_, pool := testStore(t)
-		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
+		insertWorkerRuntimeAllocation(t, h.s.pool, h, "disabled")
 	}
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
@@ -102,14 +100,15 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), unassigned, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("unassigned environment selected general device", err)
 	}
-	if _, err := sessionAdapter(h.s).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatal("read persisted an unauthorized placement", err)
+	// Managed-runtime maintenance may bind its own device to the Session; the read must never bind the general one.
+	if device, err := sessionAdapter(h.s).GetSessionDevice(t.Context(), h.tenant, other.ID); err == nil && device.ID == h.device.ID || err != nil && !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatal("read persisted an unauthorized placement", device, err)
 	}
 }
 
 func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *testing.T) {
 	h, worker, environment := localWorker(t, true, true)
-	reservation, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	reservation, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{messageInput("first")})
 	if err != nil {
 		t.Fatal(err)
 	}

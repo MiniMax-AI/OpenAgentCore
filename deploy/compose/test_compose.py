@@ -61,7 +61,9 @@ class ComposeTests(unittest.TestCase):
             self.assertTrue(service['image'].endswith(':latest') or service['image'] == 'postgres:16-alpine' or service['image'].endswith('@sha256:' + 'e' * 64))
             for volume in service.get('volumes', []):
                 self.assertNotIn('docker.sock', json.dumps(volume))
-                self.assertEqual(volume['type'], 'bind')
+                self.assertEqual(volume['type'], 'volume')
+                self.assertEqual(volume['source'], 'data')
+            self.assertNotIn('platform', service)
         self.assertEqual({v['target'] for v in services['web']['volumes']}, {'/run/oac', '/node-payload'})
         self.assertIsNone(services['core']['command'])
         self.assertNotIn('OAC_WEB_INSTALLATION_SOCKET', services['web']['environment'])
@@ -77,7 +79,7 @@ class ComposeTests(unittest.TestCase):
             with self.subTest(public_url=value):
                 configured = self.render(value)
                 expected = value or 'http://localhost:8080'
-                for name, setting in (('core', 'OAC_PUBLIC_URL'), ('web', 'OAC_WEB_ORIGIN')):
+                for name, setting in (('core', 'OAC_PUBLIC_URL'), ('web', 'OAC_PUBLIC_URL')):
                     self.assertEqual(configured['services'][name]['environment'][setting], expected)
                 self.assertEqual(
                     {service: [item.get('target') for item in spec.get('volumes', [])]
@@ -95,6 +97,12 @@ class ComposeTests(unittest.TestCase):
             ['docker', 'compose', '--env-file', os.devnull, '-f', str(self.compose_file),
              'config', '--format', 'json'], env=env))
         self.assertEqual(ports(configured), {'web': [('0.0.0.0', '9080')]})
+        env['OAC_HOST'] = '::1'
+        configured = json.loads(subprocess.check_output(
+            ['docker', 'compose', '--env-file', os.devnull, '-f', str(self.compose_file),
+             'config', '--format', 'json'], env=env))
+        self.assertEqual(ports(configured), {'web': [('::1', '9080')]})
+
 
     def test_platform_network_injection_keeps_the_file_valid(self):
         # Dokploy isolated deployments attach a project network to every service.

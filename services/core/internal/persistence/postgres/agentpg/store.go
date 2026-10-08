@@ -27,10 +27,8 @@ type Store struct {
 	cipher *credentialcrypto.Cipher
 }
 
-// New returns the Agent store. cipher is nil when Core has no credential key;
-// saving or opening a model provider bundle then fails with
-// credentialcrypto.ErrUnavailable. A bundle the key cannot open is an internal
-// error.
+// New returns the Agent store, which seals model provider bundles with cipher.
+// A bundle the key cannot open is an internal error.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -63,7 +61,7 @@ func (s *Store) CreateAgent(ctx context.Context, input agents.NewAgent) (agents.
 		if created, err = agentFromRow(row); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, input.TenantID, "create", "agent", created.ID, "", writeaudit.Resource{Type: "agent", ID: created.ID})
+		return auditpg.RecordWriteAudit(ctx, q, input.TenantID, writeaudit.ActionCreate, writeaudit.ResourceAgent, created.ID, "", writeaudit.Resource{Type: writeaudit.ResourceAgent, ID: created.ID})
 	})
 	if err != nil {
 		return agents.Agent{}, translate(err)
@@ -132,7 +130,7 @@ func (t *updateTx) apply(revision agents.Revision) (agents.Agent, error) {
 	if err != nil {
 		return agents.Agent{}, err
 	}
-	return updated, auditpg.RecordWriteAudit(t.ctx, t.q, t.tenantID, "update", "agent", updated.ID, "")
+	return updated, auditpg.RecordWriteAudit(t.ctx, t.q, t.tenantID, writeaudit.ActionUpdate, writeaudit.ResourceAgent, updated.ID, "")
 }
 
 // DeleteAgent treats an agentID that cannot name an Agent as a missing one.
@@ -153,7 +151,7 @@ func (s *Store) DeleteAgent(ctx context.Context, tenantID, agentID string) (stri
 			return err
 		}
 		deleted = uuid.UUID(id.Bytes).String()
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "agent", deleted, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceAgent, deleted, "")
 	})
 	if err != nil {
 		return "", err
@@ -247,9 +245,6 @@ func (s *Store) GetAgentWithModelProvider(ctx context.Context, tenantID, agentID
 	if row.EncryptedConfig == nil {
 		return agent, nil, nil
 	}
-	if s.cipher == nil {
-		return agents.Agent{}, nil, credentialcrypto.ErrUnavailable
-	}
 	raw, err := s.cipher.OpenAgentModelExecution(row.EncryptedConfig, agent.TenantID, agent.ID)
 	if err != nil {
 		return agents.Agent{}, nil, errors.New("agent model provider decryption failed")
@@ -268,7 +263,7 @@ func (s *Store) saveModelProvider(ctx context.Context, q *sqlc.Queries, tenant, 
 	}
 	sealed, err := s.cipher.SealAgentModelExecution(raw, uuid.UUID(tenant.Bytes).String(), uuid.UUID(agent.Bytes).String())
 	if err != nil {
-		return credentialcrypto.ErrUnavailable
+		return errors.New("agent model provider encryption failed")
 	}
 	return q.SaveAgentModelExecution(ctx, sqlc.SaveAgentModelExecutionParams{AgentID: agent, EncryptedConfig: sealed})
 }

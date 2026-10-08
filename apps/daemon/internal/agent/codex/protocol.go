@@ -64,8 +64,8 @@ func (e *JsonRpcError) Error() string { return fmt.Sprintf("%d %s", e.Code, e.Me
 // ---------------------------------------------------------------------------
 
 // InitializeCapabilities mirrors codex-rs/app-server/src/protocol.rs.
-// experimentalApi=true opts into the granular AskForApproval enum and
-// the thread/* notification stream.
+// experimentalApi=true opts into the experimental thread/* fields and
+// notification stream.
 type InitializeCapabilities struct {
 	ExperimentalAPI    bool      `json:"experimentalApi"`
 	RequestAttestation bool      `json:"requestAttestation"`
@@ -94,82 +94,18 @@ type SkillsExtraRootsSetParams struct {
 }
 
 // ---------------------------------------------------------------------------
-// Approval / sandbox policies
-// ---------------------------------------------------------------------------
-
-// GranularAskForApproval names each approval gate the codex agent can
-// surface. All-false produces a fully silent run; turning any single
-// field true makes the corresponding ServerRequest reach the daemon for
-// human approval.
-//
-// JSON tags MUST stay snake_case — codex-rs deserialises this struct
-// from a config TOML / RPC param with field names like sandbox_approval,
-// and renaming silently breaks the wire.
-type GranularAskForApproval struct {
-	SandboxApproval    bool `json:"sandbox_approval"`
-	Rules              bool `json:"rules"`
-	SkillApproval      bool `json:"skill_approval"`
-	RequestPermissions bool `json:"request_permissions"`
-	MCPElicitations    bool `json:"mcp_elicitations"`
-}
-
-// AskForApproval is the discriminated union codex accepts on
-// ThreadStartParams.approvalPolicy. The serialiser must emit EITHER
-// {"granular": {...}} OR a bare string ("never" / "on-request" /
-// "on-failure" / "untrusted"). See MarshalJSON in approval_policy.go.
-type AskForApproval struct {
-	String   string                  // "" when granular is set
-	Granular *GranularAskForApproval // nil when string is set
-}
-
-// SandboxMode is the wire-level sandbox setting codex's v2 thread/start
-// API accepts. Serializes to a kebab-case string per
-// codex-rs/app-server-protocol/src/protocol/v2/shared.rs::SandboxMode.
-//
-// Earlier (~0.137-era) the field on ThreadStartParams was named
-// `sandboxPolicy` and took a tagged object `{type: "dangerFullAccess"}`.
-// 0.141.0 renamed it to `sandbox` and flattened it to one of these three
-// strings. Sending the old shape no longer errors loudly — codex just
-// silently falls back to read-only, which makes prompts terminate
-// immediately with no agent output. Keep the constants pinned exactly
-// to the kebab values upstream serializes.
-type SandboxMode string
-
-const (
-	SandboxReadOnly        SandboxMode = "read-only"
-	SandboxWorkspaceWrite  SandboxMode = "workspace-write"
-	SandboxDangerFullAcces SandboxMode = "danger-full-access"
-)
-
-// SandboxPolicy is the legacy compound type kept for internal
-// representation only — codex still echoes it back on some response
-// shapes (turn_context inside rollout files, for example). It is NOT
-// what ThreadStartParams.Sandbox takes on the wire.
-type SandboxPolicy struct {
-	Type                SandboxMode `json:"type"`
-	WritableRoots       []string    `json:"writableRoots,omitempty"`
-	NetworkAccess       bool        `json:"networkAccess,omitempty"`
-	ExcludeTmpdirEnvVar bool        `json:"excludeTmpdirEnvVar,omitempty"`
-	ExcludeSlashTmp     bool        `json:"excludeSlashTmp,omitempty"`
-}
-
-// ---------------------------------------------------------------------------
 // thread/start, thread/resume, thread/list
 // ---------------------------------------------------------------------------
 
 type ThreadStartParams struct {
-	HistoryMode    string         `json:"historyMode,omitempty"`
-	Cwd            string         `json:"cwd"`
-	Model          string         `json:"model,omitempty"`
-	ModelProvider  string         `json:"modelProvider,omitempty"`
-	ApprovalPolicy AskForApproval `json:"approvalPolicy"`
-	// Sandbox is the v0.141+ field name; previously called sandboxPolicy
-	// and took a tagged-enum object. Wire format now is a kebab-case
-	// string: "read-only" / "workspace-write" / "danger-full-access".
-	// Sending the old object shape causes codex to silently default to
-	// read-only, which terminates the turn before the model can reply.
-	Sandbox               SandboxMode           `json:"sandbox,omitempty"`
-	Permissions           string                `json:"permissions,omitempty"`
+	HistoryMode    string `json:"historyMode,omitempty"`
+	Cwd            string `json:"cwd"`
+	Model          string `json:"model,omitempty"`
+	ModelProvider  string `json:"modelProvider,omitempty"`
+	ApprovalPolicy string `json:"approvalPolicy"`
+	// Sandbox is the kebab-case mode string. Codex silently falls back to
+	// read-only for the legacy sandboxPolicy object.
+	Sandbox               string                `json:"sandbox"`
 	DeveloperInstructions string                `json:"developerInstructions,omitempty"`
 	RuntimeWorkspaceRoots []string              `json:"runtimeWorkspaceRoots,omitempty"`
 	DynamicTools          []dynamicFunctionTool `json:"dynamicTools,omitempty"`
@@ -187,19 +123,16 @@ type Thread struct {
 }
 
 type ThreadStartResult struct {
-	Thread         Thread          `json:"thread"`
-	Model          string          `json:"model,omitempty"`
-	ApprovalPolicy *AskForApproval `json:"approvalPolicy,omitempty"`
-	Sandbox        *SandboxPolicy  `json:"sandbox,omitempty"`
+	Thread Thread `json:"thread"`
+	Model  string `json:"model,omitempty"`
 }
 
 type ThreadResumeParams struct {
-	Cwd                   string         `json:"cwd,omitempty"`
-	DeveloperInstructions string         `json:"developerInstructions"`
-	ThreadID              string         `json:"threadId"`
-	ApprovalPolicy        AskForApproval `json:"approvalPolicy"`
-	Sandbox               SandboxMode    `json:"sandbox,omitempty"`
-	Permissions           string         `json:"permissions,omitempty"`
+	Cwd                   string `json:"cwd,omitempty"`
+	DeveloperInstructions string `json:"developerInstructions"`
+	ThreadID              string `json:"threadId"`
+	ApprovalPolicy        string `json:"approvalPolicy"`
+	Sandbox               string `json:"sandbox"`
 }
 
 // ---------------------------------------------------------------------------
@@ -238,10 +171,7 @@ type TurnStartParams struct {
 
 type CollaborationModeKind string
 
-const (
-	CollaborationModePlan    CollaborationModeKind = "plan"
-	CollaborationModeDefault CollaborationModeKind = "default"
-)
+const CollaborationModeDefault CollaborationModeKind = "default"
 
 type CollaborationMode struct {
 	Mode     CollaborationModeKind     `json:"mode"`
@@ -383,85 +313,4 @@ type ErrorNotification struct {
 	TurnID   string     `json:"turnId"`
 	Error    *TurnError `json:"error,omitempty"`
 	Message  string     `json:"message,omitempty"`
-}
-
-// ---------------------------------------------------------------------------
-// Approval and user-input ServerRequest params. Explicit requests defer their
-// responses until Web or IM submits the decision, even with bypass defaults.
-// ---------------------------------------------------------------------------
-
-type CommandExecutionRequestApprovalParams struct {
-	ThreadID string  `json:"threadId"`
-	TurnID   string  `json:"turnId"`
-	ItemID   string  `json:"itemId"`
-	Command  *string `json:"command,omitempty"`
-	Cwd      *string `json:"cwd,omitempty"`
-	Reason   *string `json:"reason,omitempty"`
-}
-
-type FileChangeRequestApprovalParams struct {
-	ThreadID  string  `json:"threadId"`
-	TurnID    string  `json:"turnId"`
-	ItemID    string  `json:"itemId"`
-	Reason    *string `json:"reason,omitempty"`
-	GrantRoot *string `json:"grantRoot,omitempty"`
-}
-
-type PermissionsRequestApprovalParams struct {
-	ThreadID    string         `json:"threadId"`
-	TurnID      string         `json:"turnId"`
-	ItemID      string         `json:"itemId"`
-	Cwd         string         `json:"cwd"`
-	Reason      *string        `json:"reason,omitempty"`
-	Permissions map[string]any `json:"permissions,omitempty"`
-}
-
-// CommandExecutionApprovalDecision is the verdict the daemon writes
-// back to a Codex approval ServerRequest. "accept" / "decline" / "cancel"
-// / "acceptForSession".
-type CommandExecutionApprovalDecision = string
-
-// ApprovalDecisionResult is the result body for command-execution and
-// file-change approvals. item/permissions/requestApproval uses the distinct
-// PermissionsRequestApprovalResponse contract below.
-type ApprovalDecisionResult struct {
-	Decision CommandExecutionApprovalDecision `json:"decision"`
-}
-
-// PermissionsRequestApprovalResponse mirrors Codex app-server's dedicated
-// response contract. Approving echoes the requested permission profile;
-// denying returns an empty profile, which grants no additional capability.
-type PermissionsRequestApprovalResponse struct {
-	Permissions map[string]any `json:"permissions"`
-	Scope       string         `json:"scope,omitempty"`
-}
-
-type ToolRequestUserInputOption struct {
-	Label       string `json:"label"`
-	Description string `json:"description"`
-}
-
-type ToolRequestUserInputQuestion struct {
-	ID       string                       `json:"id"`
-	Header   string                       `json:"header"`
-	Question string                       `json:"question"`
-	Options  []ToolRequestUserInputOption `json:"options,omitempty"`
-	IsOther  bool                         `json:"isOther,omitempty"`
-	IsSecret bool                         `json:"isSecret,omitempty"`
-}
-
-type ToolRequestUserInputParams struct {
-	ThreadID         string                         `json:"threadId"`
-	TurnID           string                         `json:"turnId"`
-	ItemID           string                         `json:"itemId"`
-	Questions        []ToolRequestUserInputQuestion `json:"questions"`
-	AutoResolutionMs *uint64                        `json:"autoResolutionMs,omitempty"`
-}
-
-type ToolRequestUserInputAnswer struct {
-	Answers []string `json:"answers"`
-}
-
-type ToolRequestUserInputResponse struct {
-	Answers map[string]ToolRequestUserInputAnswer `json:"answers"`
 }

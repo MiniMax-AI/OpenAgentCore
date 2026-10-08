@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -31,17 +29,12 @@ import (
 // the deployment execution operations on the Worker's lease, as server startup
 // does.
 func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{83}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	deployments := deploymentService(t, s)
 	providerConfig := func(setup deployment.Setup) *execution.RuntimeProvider {
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	}
 	configuration := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
 		setup, err := deployments.Setup(ctx)
@@ -94,7 +87,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(t.Context(), s, project.TenantID, active.ID, "pending-turn", json.RawMessage(`{"text":"pending"}`))
+	input, err := sendMessage(t.Context(), s, project.TenantID, active.ID, "pending-turn", messageText("pending"))
 	if err != nil {
 		t.Fatal(err)
 	}

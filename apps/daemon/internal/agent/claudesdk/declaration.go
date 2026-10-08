@@ -22,11 +22,9 @@ const claudeSDKNodeEnv = "OAC_RUNTIME_CLAUDE_SDK_NODE"
 var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
 	SubagentObservations:           proto.CapabilityUnsupported,
 	Streaming:                      proto.CapabilitySupported,
-	Permissions:                    proto.CapabilityUnsupported,
 	Usage:                          proto.CapabilitySupported,
 	Resume:                         proto.CapabilitySupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	WorkspaceAuthoring:             proto.CapabilityUnsupported,
 	Steering:                       proto.CapabilitySupported,
 	MessageItems:                   proto.CapabilitySupported,
 	ToolObservations:               proto.CapabilitySupported,
@@ -60,9 +58,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if entrypoint == "" {
 		return nil
 	}
-	out := &agent.Runtime{Info: descriptor, Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, fmt.Errorf("claude_sdk: configured runtime is unavailable")
-	}}
+	out := &agent.Runtime{Info: descriptor}
 	var config Config
 
 	fail := func(err error) *agent.Runtime {
@@ -120,8 +116,8 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		}
 		caps := &out.Info.Capabilities
 		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
-		caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
-		caps.WorkspaceReadPreparation, caps.NativeSessionRecovery = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.NativeSessionRecovery = proto.CapabilitySupported
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
 	out.Info.Capabilities.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())
@@ -142,12 +138,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityUnsupported, proto.CapabilityUnsupported
 		out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityUnsupported
 	}
-	out.Session = NewFactory(config)
 	out.Executor = NewExecutorFactory(config)
-	if out.Info.Capabilities.LocalEnvironment.IsSupported() {
-		out.Preparation = NewPreparationFactory(config)
-		out.WorkspaceReadPreparation = true
-	}
 
 	fmt.Fprintf(options.Stdout, "Claude SDK preflight ok (SDK %s, %s)\n", info.SDK, info.Native)
 	return out

@@ -15,7 +15,7 @@ import (
 )
 
 func TestJSONRPCClientCloseCanRetryUnreapedChild(t *testing.T) {
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: t.Context(), Binary: os.Args[0], Args: []string{"-test.run=^TestJSONRPCClientFakeCodexProcess$", "--"}, Env: append(os.Environ(), "CODEX_RPC_FAKE_PROCESS=1", "GORACE=atexit_sleep_ms=0"), NeedStdin: true, OwnProcessGroup: true})
+	process, err := clirunner.Start(clirunner.StartOptions{Parent: t.Context(), Binary: os.Args[0], Args: []string{"-test.run=^TestJSONRPCClientFakeCodexProcess$", "--"}, Env: append(os.Environ(), "CODEX_RPC_FAKE_PROCESS=1", "GORACE=atexit_sleep_ms=0"), NeedStdin: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestJSONRPCClientCloseCanRetryUnreapedChild(t *testing.T) {
 	closeConcurrently(true)
 	ownerCtx, cancelOwner := context.WithCancel(t.Context())
 	s := &Session{rpc: client, cancelCtx: ownerCtx, cancelFn: cancelOwner,
-		cfg: defaultSessionConfig(), interactions: newPendingCodexInteractions(), bufs: NewItemBuffers()}
+		cfg: defaultSessionConfig(), bufs: NewItemBuffers()}
 	ctx, cancelWait := context.WithTimeout(t.Context(), 20*time.Millisecond)
 	defer cancelWait()
 	if err := s.Cancel(ctx); !errors.Is(err, context.DeadlineExceeded) {

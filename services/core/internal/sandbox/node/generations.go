@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -15,7 +16,10 @@ type GenerationProvider struct {
 	SpecificationDigest string
 	Provider            sandbox.SandboxProvider
 	Probe               func(context.Context) error
-	Close               func()
+	// Quiescent reports that no helper outlived its canceled caller; nil
+	// means always quiescent.
+	Quiescent func() bool
+	Close     func()
 }
 
 type GenerationManagerOptions struct {
@@ -71,7 +75,7 @@ func NewGenerationManager(ctx context.Context, options GenerationManagerOptions)
 			cancel()
 			return nil, sandbox.ErrInvalid
 		}
-		m.values[ref.Generation] = &localGeneration{value: GenerationProvider{Generation: ref.Generation, SpecificationDigest: ref.SpecificationDigest}, state: "failed", diagnostic: sandbox.NodeProviderUnavailable, repairing: true}
+		m.values[ref.Generation] = &localGeneration{value: GenerationProvider{Generation: ref.Generation, SpecificationDigest: ref.SpecificationDigest}, state: "failed", diagnostic: string(sandbox.NodeProviderUnavailable), repairing: true}
 	}
 	for _, ref := range options.Collect {
 		if !validGeneration(ref.Generation) || !validSpecificationDigest(ref.SpecificationDigest) || m.values[ref.Generation] != nil {
@@ -217,11 +221,7 @@ func (m *GenerationManager) Drop(ctx context.Context, grant sandbox.GenerationRe
 		m.mu.Unlock()
 		return sandbox.ErrOwnership
 	}
-	quiet := true
-	if provider, ok := g.value.Provider.(interface{ Quiescent() bool }); ok {
-		quiet = provider.Quiescent()
-	}
-	if !quiet || g.refs != 0 || g.removing || m.target.Generation == grant.Generation || m.target.ServingGeneration != nil && *m.target.ServingGeneration == grant.Generation {
+	if g.value.Quiescent != nil && !g.value.Quiescent() || g.refs != 0 || g.removing || m.target.Generation == grant.Generation || m.target.ServingGeneration != nil && *m.target.ServingGeneration == grant.Generation {
 		m.mu.Unlock()
 		return ErrUnavailable
 	}
@@ -265,7 +265,7 @@ func (m *GenerationManager) prepareLoop() {
 				if candidate == nil || candidate.removing || candidate.collecting || candidate.preparing || candidate.refs != 0 || candidate.value.Provider != nil && !candidate.repairing || time.Now().Before(candidate.retryAt) {
 					continue
 				}
-				if provider, ok := candidate.value.Provider.(interface{ Quiescent() bool }); ok && !provider.Quiescent() {
+				if candidate.value.Quiescent != nil && !candidate.value.Quiescent() {
 					continue
 				}
 				g = candidate
@@ -364,18 +364,26 @@ func (m *GenerationManager) probeLoop() {
 		cancel()
 		m.mu.Lock()
 		g.refs--
+		changed := false
 		if !errors.Is(err, context.Canceled) {
+			state, diagnostic := g.state, g.diagnostic
 			g.state = "ready"
 			g.diagnostic = ""
 			if err != nil {
 				g.state = "failed"
 				g.diagnostic = sandbox.NodeDiagnostic(err)
-				if errors.Is(err, sandbox.ErrRuntimeImageUnavailable) || errors.Is(err, sandbox.ErrMicrosandboxArtifactsUnavailable) {
+				if errors.Is(err, sandbox.ErrRuntimeImageUnavailable) || errors.Is(err, sandbox.ErrArtifactsUnavailable) {
 					g.repairing = true
 				}
 			}
+			changed = g.state != state || g.diagnostic != diagnostic
 		}
+		generation, diagnostic := g.value.Generation, g.diagnostic
 		m.mu.Unlock()
+		if err != nil && changed {
+			// The local error stays in this host's journal; it may name host paths.
+			log.Ctx(m.ctx).Warn("sandbox node generation provider unavailable; check local runtime configuration and permissions", "generation", generation, "diagnostic", diagnostic, "error", err)
+		}
 	}
 }
 

@@ -2,7 +2,6 @@ import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxNodeHistoryRange } from "@oac/agents-client";
 
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
-import { sandboxConsoleConfig } from "../sandbox/console-config";
 
 export interface FleetSnapshot {
   deployment: SandboxDeployment;
@@ -17,12 +16,6 @@ function client(): SandboxAdminClient {
   sandboxClient ??= new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" });
   return sandboxClient;
 }
-
-/** The console's own configuration: whether it holds a sandbox administration credential. */
-export const consoleConfigQuery = queryOptions({
-  queryKey: ["console-config"],
-  queryFn: ({ signal }) => sandboxConsoleConfig(signal),
-});
 
 async function loadFleet(readAllocations: boolean, signal: AbortSignal, cache: QueryClient): Promise<FleetSnapshot> {
   const sandbox = client();

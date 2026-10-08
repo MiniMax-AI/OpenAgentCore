@@ -7,7 +7,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -17,16 +16,15 @@ import (
 // Adapter describes configuration and transport independently of compute operations.
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
-	NodeArtifacts                 []providerassets.Artifact
-	Policy                        sandbox.DeploymentPolicy
-	Configuration                 sandbox.ConfigurationAdapter
-	BuildLocal                    func(Config, LocalOptions, *Built) (func(), error)
-	BuildDirect                   func(DirectConfig) (sandbox.SandboxProvider, error)
-	Mode                          string
-	Operations                    func() providercontract.Operations
-	IdleSeconds, RetentionSeconds int64
-	ValidateSpecification         func(sandbox.DeploymentSpec) error
-	ValidateResources             func(sandbox.Resources) error
+	NodeArtifacts         []providerassets.Artifact
+	Policy                sandbox.DeploymentPolicy
+	Configuration         sandbox.ConfigurationAdapter
+	BuildLocal            func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
+	BuildDirect           func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
+	Mode                  sandbox.DeploymentMode
+	Operations            func() providercontract.Operations
+	ValidateSpecification func(sandbox.DeploymentSpec) error
+	ValidateResources     func(sandbox.Resources) error
 }
 
 // Registry holds the registered adapters. Core and the node program each build
@@ -41,22 +39,18 @@ func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
 		"docker": {
 			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
+			Policy:        docker.Policy(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
 			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 		},
 		"microsandbox": {
-			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy,
-				{Path: "native/bin/oac-microsandbox-provider", Suffix: "microsandbox-provider", Role: "runtime"},
-				{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
-				{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
-			Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
-			IdleSeconds: 300, RetentionSeconds: 86400,
+			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
+			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
 			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 		},
 		"e2b": {
-			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
+			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: e2b.BuildDirect,
 			Configuration:         e2b.ConfigurationAdapter{},
 			ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
 		},
@@ -75,13 +69,23 @@ func (r *Registry) Lookup(kind string) (Adapter, error) {
 	return a, nil
 }
 
-// IsNode reports whether the provider runs on enrolled sandbox nodes.
-func (r *Registry) IsNode(kind string) (bool, error) {
-	a, err := r.Lookup(kind)
-	if err != nil {
-		return false, err
+// BuildDirect builds a direct-mode Provider and validates its binding.
+func (r *Registry) BuildDirect(c sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
+	a, e := r.Lookup(c.Selection.Provider)
+	if e != nil {
+		return nil, e
 	}
-	return a.Mode == "nodes", nil
+	if a.BuildDirect == nil {
+		return nil, sandbox.ErrInvalid
+	}
+	p, err := a.BuildDirect(c)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateBinding(a, p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // SupportsCheckpoint reports whether the provider declares checkpoint suspension.
@@ -99,7 +103,7 @@ func (r *Registry) RetainedLimit(kind string, active, retained int) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if a.Mode == "nodes" && a.Operations()["Initial"].State != providercontract.Supported {
+	if a.Mode == sandbox.DeploymentNodes && a.Operations()["Initial"].State != providercontract.Supported {
 		return active, nil
 	}
 	return retained, nil
@@ -127,23 +131,25 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	if e != nil {
 		return sandbox.Description{}, e
 	}
-	namespace := a.Mode
-	if a.Mode == "direct" {
+	namespace := string(a.Mode)
+	if a.Mode == sandbox.DeploymentDirect {
 		namespace = kind
 	}
-	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation), IdleSeconds: a.IdleSeconds, RetentionSeconds: a.RetentionSeconds}, nil
+	return sandbox.Description{Mode: a.Mode, BackendFingerprint: sandbox.BackendFingerprint(kind, namespace+":"+installation)}, nil
 }
 
-// PythonDeploymentContract projects the same registered adapter policies into
-// the node installer; no second provider list exists in another language.
-func (r *Registry) PythonDeploymentContract() (string, error) {
-	policies := make(map[string]sandbox.DeploymentPolicy, len(r.adapters))
+// DeploymentContract projects the registered modes and policies into the node
+// installer and the TypeScript client; no second provider list exists in
+// another language.
+func (r *Registry) DeploymentContract() (python, typescript string, err error) {
+	providers := make(map[string]sandbox.ProviderProjection, len(r.adapters))
 	for kind := range r.adapters {
 		a, err := r.Lookup(kind)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
-		policies[kind] = a.Policy
+		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy}
 	}
-	return sandbox.PythonDeploymentContract(policies), nil
+	python, typescript = sandbox.DeploymentContract(providers)
+	return python, typescript, nil
 }

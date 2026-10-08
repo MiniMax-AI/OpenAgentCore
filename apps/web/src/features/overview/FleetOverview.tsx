@@ -6,13 +6,12 @@ import { useTranslation } from "react-i18next";
 
 import { ConsolePopover } from "../../components/console-popover";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
-import { formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { epochSeconds, formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { coreMetricsQuery } from "../metrics/metrics-queries";
 import { NodeRolloutStatus } from "../sandbox/NodeRolloutStatus";
-import { seconds } from "../sandbox/NodeList";
 
 /** Nodes shown in the overview; the rest are counted and listed on the Nodes page. */
 export const FLEET_LIMIT = 4;
@@ -38,10 +37,12 @@ export interface CloudHost {
 }
 
 /** A compact fleet inventory with on-demand operational details. */
-export function FleetOverview({ nodes, cloud, coreLabel, coreTone, stale, onOpenNode, onOpenBackend, onOpenSandboxMetrics, onOpenCoreMetrics }: {
+export function FleetOverview({ nodes, cloud, suspends, coreLabel, coreTone, stale, onOpenNode, onOpenBackend, onOpenSandboxMetrics, onOpenCoreMetrics }: {
   nodes: readonly SandboxNode[];
-  /** An E2B deployment: Core links to E2B's cloud instead of to machines. */
+  /** A direct deployment: Core links to the Provider's cloud instead of to machines. */
   cloud?: CloudHost | null;
+  /** Whether the deployment's Provider suspends sandboxes, which its suspension policy declares. */
+  suspends: boolean;
   onOpenBackend?: () => void;
   coreLabel: string;
   coreTone: Tone;
@@ -124,7 +125,7 @@ export function FleetOverview({ nodes, cloud, coreLabel, coreTone, stale, onOpen
               <button className="text-action" type="button" onClick={() => onOpenNode(node)}>{t("fleet.openNode")}</button>
             </>}
           >
-            <NodeGlance node={node} health={health} stale={stale} />
+            <NodeGlance node={node} health={health} stale={stale} suspends={suspends} />
           </ConsolePopover>
         );
       })}
@@ -141,11 +142,11 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** A node at a glance: reachability (with the reason a degraded provider is not ready), sandbox slots and what the node has left. */
-function NodeGlance({ node, health, stale }: { node: SandboxNode; health: NodeHealth; stale: boolean }) {
+function NodeGlance({ node, health, stale, suspends }: { node: SandboxNode; health: NodeHealth; stale: boolean; suspends: boolean }) {
   const { t, i18n } = useTranslation("overview");
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
-  const seen = seconds(node.last_seen_at);
+  const seen = epochSeconds(node.last_seen_at);
   const count = (value: number) => formatInteger(value, locale);
   const diagnostic = health === "degraded" ? nodeProviderDiagnostic(node) : "";
   return (
@@ -160,7 +161,7 @@ function NodeGlance({ node, health, stale }: { node: SandboxNode; health: NodeHe
       <Fact label={t("fleet.servingGeneration")}><span className="status-with-help">{node.rollout.ready_generation ?? MISSING}<HelpTip>{t("fleet.servingGenerationHelp")}</HelpTip></span></Fact>
       <Fact label={t("fleet.facts.lastSeen")}><span title={seen === null ? undefined : formatDateTime(seen, locale)}>{seen === null ? t("fleet.facts.never") : formatRelative(seen, now, locale)}</span></Fact>
       <Fact label={t("fleet.facts.active")}>{count(node.active)}<span className="kpi-unit">/ {count(node.max_active)}</span></Fact>
-      {node.provider === "microsandbox" ? <Fact label={t("fleet.facts.suspended")}>{count(suspendedSandboxes(node))}</Fact> : null}
+      {suspends ? <Fact label={t("fleet.facts.suspended")}>{count(suspendedSandboxes(node))}</Fact> : null}
       <Fact label={t("fleet.facts.cpu")}>{node.cpu_count === null ? MISSING : t("fleet.facts.cores", { count: node.cpu_count })}</Fact>
       <Fact label={t("fleet.facts.memory")}>{formatBytes(node.available_memory_bytes)}</Fact>
       <Fact label={t("fleet.facts.disk")}>{formatBytes(node.available_disk_bytes)}</Fact>
@@ -178,7 +179,7 @@ function CoreGlance({ label, tone }: { label: string; tone: Tone }) {
   const query = useQuery({ ...coreMetricsQuery("1h"), retry: false });
   const metrics = query.data ?? null;
   const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
-  const started = seconds(metrics?.service.started_at ?? null);
+  const started = epochSeconds(metrics?.service.started_at ?? null);
   const now = Math.floor(Date.now() / 1000);
   return (
     <Facts>
@@ -187,7 +188,7 @@ function CoreGlance({ label, tone }: { label: string; tone: Tone }) {
         <Fact label={t("fleet.facts.uptime")}>{started === null ? MISSING : formatDuration(Math.max(0, now - started))}</Fact>
         <Fact label={t("fleet.facts.slots")}>
           {count(metrics.execution.slots_in_use)}
-          {metrics.execution.slots_total === null ? null : <span className="kpi-unit">/ {count(metrics.execution.slots_total)}</span>}
+          <span className="kpi-unit">/ {count(metrics.execution.slots_total)}</span>
         </Fact>
         <Fact label={t("fleet.facts.queued")}>{count(metrics.execution.queued_turns)}</Fact>
         <Fact label={t("fleet.facts.daemons")}>{count(metrics.execution.connected_daemons)}</Fact>

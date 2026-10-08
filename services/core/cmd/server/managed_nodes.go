@@ -2,11 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"os"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -17,40 +14,17 @@ import (
 )
 
 type managedNodes struct {
-	setup         *managedSetup
-	runtime       *execution.RuntimeProvider
-	hub           *node.Hub
-	admin         *api.DeploymentAuthenticator
-	closeProvider func()
+	setup   *managedSetup
+	runtime *execution.RuntimeProvider
+	hub     *node.Hub
 }
 
 // configureManagedNodes serves the nodes of the Web-managed deployment. Node
 // presence and health and the generation of each allocation go through the
 // deployment service; the owner epoch that fences connections and the
 // allocations each generation retains are read from the deployment reader.
-func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, registry *providers.Registry, publicURL string, owner func(context.Context) error) (*managedNodes, error) {
-	setupID, err := processconfig.InstallationID()
-	if err != nil || setupID == "" {
-		return nil, err
-	}
-	if publicURL == "" {
-		return nil, errors.New("OAC_INSTALLATION_ID_FILE requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
-	}
-	closeProvider := func() {}
-	result := &managedNodes{closeProvider: closeProvider}
-	success := false
-	defer func() {
-		if !success {
-			closeProvider()
-		}
-	}()
-	result.admin, err = deploymentAdminAuthenticator()
-	if err != nil {
-		return nil, err
-	}
-	if result.admin == nil {
-		return nil, errors.New("Web sandbox setup requires OAC_CORE_KEY_DIGESTS_FILE with the Core key digest")
-	}
+func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, registry *providers.Registry, config processconfig.Config, owner func(context.Context) error) *managedNodes {
+	result := &managedNodes{}
 	result.hub = node.NewHub(node.HubOptions{
 		Generations: func(ctx context.Context, n node.Identity, connection string, epoch uint64, health node.Health) error {
 			if err := owner(ctx); err != nil {
@@ -96,43 +70,12 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
 		},
 	})
-	result.setup = &managedSetup{processPaths: providerProcessPaths(), registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: setupID, publicURL: publicURL}
-	result.runtime = execution.NewDeferredRuntimeProvider(setupID, result.setup.load, result.setup.prepare)
+	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI()}
+	result.runtime = execution.NewDeferredRuntimeProvider(config.InstallationID, result.setup.load, result.setup.prepare)
 	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
-	success = true
-	return result, nil
-}
-
-func (m *managedNodes) close() {
-	if m != nil {
-		m.hub.Close()
-		m.closeProvider()
-	}
-}
-
-func deploymentAdminAuthenticator() (*api.DeploymentAuthenticator, error) {
-	path := os.Getenv("OAC_CORE_KEY_DIGESTS_FILE")
-	if path == "" {
-		return nil, nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, errors.New("cannot read OAC_CORE_KEY_DIGESTS_FILE")
-	}
-	var digests []string
-	if json.Unmarshal(raw, &digests) != nil || len(digests) == 0 {
-		return nil, errors.New("OAC_CORE_KEY_DIGESTS_FILE must contain a JSON array of Core key SHA-256 digests")
-	}
-	return api.NewDeploymentAuthenticator(digests)
-}
-
-func serverAddress() string {
-	if value := os.Getenv("OAC_ADDR"); value != "" {
-		return value
-	}
-	return "127.0.0.1:8091"
+	return result
 }
 
 func nodeHealthRecord(health node.Health) deployment.NodeHealth {
-	return deployment.NodeHealth{Host: &deployment.NodeHost{EffectiveCPUCores: health.EffectiveCPUCores, CPUUtilization: health.CPUUtilization, TotalMemoryBytes: health.TotalMemoryBytes, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes, ObservedAt: &health.ObservedAt}, ProviderReady: health.ProviderReady, Diagnostic: health.Diagnostic, CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes}
+	return deployment.NodeHealth{Host: &deployment.NodeHost{EffectiveCPUCores: health.EffectiveCPUCores, CPUUtilization: health.CPUUtilization, TotalMemoryBytes: health.TotalMemoryBytes, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes, ObservedAt: &health.ObservedAt}, ProviderReady: health.ProviderReady, Diagnostic: sandbox.NodeDiagnosticCode(health.Diagnostic), CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes}
 }

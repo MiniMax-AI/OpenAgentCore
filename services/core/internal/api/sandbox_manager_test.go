@@ -18,7 +18,6 @@ func sandboxFakes(t testing.TB) (Dependencies, *testFakes) {
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
-	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
 	return deps, fakes
 }
 
@@ -66,15 +65,6 @@ func TestSandboxEnrollmentDoesNotAcceptProjectAsAdmin(t *testing.T) {
 		if called || result.Code != 401 {
 			t.Fatal("non-admin credential admitted")
 		}
-	}
-}
-
-func TestSandboxLocalNodeRemovalExplainsDeploymentBinding(t *testing.T) {
-	request := httptest.NewRequest(http.MethodDelete, "/core/v1/sandbox/nodes/local", nil)
-	response := httptest.NewRecorder()
-	writeDeploymentError(response, request, deployment.ErrLocalNodeConfigured)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "runtime_local_node_configured") || !strings.Contains(response.Body.String(), "previous release") {
-		t.Fatal(response.Code, response.Body.String())
 	}
 }
 

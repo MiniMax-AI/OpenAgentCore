@@ -24,17 +24,6 @@ type SessionEvents interface {
 	SessionStreamSnapshot(context.Context, string, string) (sessions.Session, int64, error)
 }
 
-// @Summary Stream live Session events
-// @Description Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. When a hosted Environment fails to provision, the stream sends agent.session.environment.failed, an error event (environment_error/sandbox_error with the safe step and exit-status reason, never command output) and agent.session.failed, then ends. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
-// @Description Active streams revalidate the original Project key every second before output; revocation, Project archival or authentication unavailability closes the stream. Authentication checks use a five-second timeout.
-// @Tags Events
-// @Produce text/event-stream
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Success 200 {object} v1.SessionEvent
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/events [get]
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	id, tenant := chi.URLParam(r, "session_id"), tenantID(r)
 	session, err := h.SessionsReader.GetSession(r.Context(), tenant, id)
@@ -42,7 +31,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		writeSessionsError(w, r, err)
 		return
 	}
-	if _, err = sessionResponse(session, h.executorURL()); err != nil {
+	if _, err = sessionResponse(session, h.Execution.ExecutorURL); err != nil {
 		writeSessionsError(w, r, err)
 		return
 	}
@@ -124,7 +113,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, ses
 			if limit >= 0 && change.Sequence > limit {
 				return
 			}
-			event, err := streamResponse(session, change, h.executorURL())
+			event, err := streamResponse(session, change, h.Execution.ExecutorURL)
 			if err != nil {
 				writeStreamFailure(write, id)
 				return
@@ -263,16 +252,9 @@ func withTurnUsage(event v1.SessionEvent) v1.SessionEvent {
 	return event
 }
 
-// writeStreamFailure sends Core's own interruption frame. Unlike official error
-// events it omits param: released clients validate exactly code, type and message.
+// writeStreamFailure sends Core's own interruption frame, a pinned error event.
 func writeStreamFailure(write func([]byte) error, session string) {
-	event := struct {
-		Type      string         `json:"type"`
-		EventID   string         `json:"event_id"`
-		SessionID string         `json:"session_id"`
-		Error     v1.StreamError `json:"error"`
-	}{"error", uuid.NewString(), session,
-		v1.StreamError{Code: "stream_interrupted", Type: "server_error", Message: "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover."}}
-	payload, _ := json.Marshal(event)
+	payload, _ := json.Marshal(v1.SessionEvent{Type: "error", EventID: uuid.NewString(), SessionID: session,
+		Error: &v1.StreamError{Code: "stream_interrupted", Type: "server_error", Message: "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover."}})
 	_ = write([]byte(fmt.Sprintf("event: error\ndata: %s\n\n", payload)))
 }

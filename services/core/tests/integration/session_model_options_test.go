@@ -1,23 +1,17 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 func TestSessionModelExecutionStoresOnlyProviderBundle(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{33}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := NewWithCredentialCipher(pool, cipher)
+	st, _ := configuredStore(t)
+	pool := st.pool
 	ctx, tenant := t.Context(), uuid.NewString()
 	provider := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: "provider-key-canary"}
 	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: []byte(`{"agent":{"model":"actual-model"},"environment":{"type":"openai_hosted"}}`), ModelProvider: provider}
@@ -40,14 +34,14 @@ func TestSessionModelExecutionStoresOnlyProviderBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ciphertext, err := cipher.SealModelExecution(historical, tenant, session.ID)
+	ciphertext, err := st.credentialCipher.SealModelExecution(historical, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE session_model_execution SET encrypted_config=$2 WHERE session_id=$1", session.ID, ciphertext); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sessionAdapter(NewWithCredentialCipher(pool, cipher)).SessionModelExecution(ctx, tenant, session.ID); err == nil {
+	if _, err := sessionAdapter(st).SessionModelExecution(ctx, tenant, session.ID); err == nil {
 		t.Fatal("retired native options accepted in provider bundle")
 	}
 }

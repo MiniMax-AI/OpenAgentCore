@@ -49,8 +49,7 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 	}).ResolveAPIKey
 	fixture.serve(fakes)
 	fakes.sessionsReader.listSessions, fakes.sessions.updateSessionMetadata = fixture.ListSessions, fixture.UpdateSessionMetadata
-	// Self-hosted Sessions report the executor URL of the enabled Execution.
-	deps.Execution = fakes.execution()
+	// Self-hosted Sessions report the executor URL.
 	deps.Execution.ExecutorURL = environmentOrigin
 	handler := newTestHandler(t, deps)
 	want, err := sessionResponse(session, environmentOrigin)

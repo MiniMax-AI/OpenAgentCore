@@ -1,3 +1,4 @@
+import type { AdminProject } from "@oac/agents-client";
 import { AlertTriangle } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -39,7 +40,7 @@ import { type ProjectReadFailure } from "./project-sessions";
 import { type KeyUsageRow } from "./key-usage";
 import { useStableColors } from "./use-stable-colors";
 import "./MetricsView.css";
-import { type KeyRef, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
 
 const RANGES: readonly AgentMetricsRange[] = ["1h", "6h", "24h", "7d"];
 
@@ -67,7 +68,7 @@ function bucketLabel(seconds: number, t: TFunction<"metrics">): string {
  * Agent metrics and usage by key through the query cache. A changed project
  * filter or range keeps the last figures on screen until the new ones arrive.
  */
-function useAgentMetricsData(projects: readonly Project[], projectsReady: boolean, filter: ProjectFilterValue, range: AgentMetricsRange) {
+function useAgentMetricsData(projects: readonly AdminProject[], projectsReady: boolean, filter: ProjectFilterValue, range: AgentMetricsRange) {
   const targets = useMemo(() => projects.filter((project) => !filter || project.id === filter), [filter, projects]);
   const metricsQuery = useQuery({ ...agentMetricsQuery(targets, filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
   const keyQuery = useQuery({ ...keyUsageQuery(filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
@@ -153,7 +154,6 @@ function coverageNote(loaded: Loaded, t: TFunction<"metrics">): string | null {
   const { coverage } = loaded.metrics;
   const parts: string[] = [];
   if (loaded.truncatedLists.length) parts.push(t("coverage.listTruncated", { names: loaded.truncatedLists.map((project) => project.name).join(", ") }));
-  if (loaded.unrecognizedSessions) parts.push(t("coverage.unrecognized", { count: loaded.unrecognizedSessions }));
   if (coverage.skippedSessions) parts.push(t("coverage.skipped", { loaded: coverage.loadedSessions, total: coverage.candidateSessions }));
   if (coverage.truncatedSessions) parts.push(t("coverage.truncated", { count: coverage.truncatedSessions }));
   if (coverage.failedSessions) parts.push(t("coverage.failed", { count: coverage.failedSessions }));
@@ -173,7 +173,7 @@ function AgentMetricsContent({
   metrics: AgentMetrics;
   listFailures: ProjectReadFailure[];
   showProject: boolean;
-  projectOf: (id: string | null) => Project | undefined;
+  projectOf: (id: string | null) => AdminProject | undefined;
   modelColor: (id: string) => string;
   toolColor: (id: string) => string;
   failure: string | null;
@@ -395,13 +395,8 @@ function AgentMetricsContent({
   );
 }
 
-function keyLabel(key: KeyRef | null, t: TFunction<"metrics">): string {
-  if (!key) return t("keys.unknown");
-  return key.name ?? (key.prefix ? `${key.prefix}…` : t("keys.unknown"));
-}
-
 /** Usage by the API key that created each Session, from Core's summary for the range. */
-function KeyUsageSection({ state, window, showProject, projectOf }: { state: KeyUsageState; window: MetricsWindow; showProject: boolean; projectOf: (id: string) => Project | undefined }) {
+function KeyUsageSection({ state, window, showProject, projectOf }: { state: KeyUsageState; window: MetricsWindow; showProject: boolean; projectOf: (id: string) => AdminProject | undefined }) {
   const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
@@ -435,13 +430,13 @@ function KeyUsageSection({ state, window, showProject, projectOf }: { state: Key
   );
 }
 
-function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: ProjectSummary; showProject: boolean; project: Project | undefined; now: number; locale: string | undefined }) {
+function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: ProjectSummary; showProject: boolean; project: AdminProject | undefined; now: number; locale: string | undefined }) {
   const { t } = useTranslation("metrics");
   const key = row.key;
   return (
     <tr>
       <th scope="row">
-        <span className={key ? "table-primary" : "table-primary table-muted"} title={key?.prefix ? `${key.prefix}…` : t("keys.unknownHelp")}>{keyLabel(key, t)}</span>
+        <span className={key ? "table-primary" : "table-primary table-muted"} title={key ? `${key.prefix}…` : t("keys.unknownHelp")}>{key ? key.name : t("keys.unknown")}</span>
         {key?.revoked_at ? <span className="pill">{t("keys.revoked")}</span> : null}
       </th>
       {showProject ? <td><ProjectName project={project} /></td> : null}
@@ -449,8 +444,8 @@ function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: Pro
       <td className="numeric">{formatInteger(row.sessions.in_progress, locale)}</td>
       <td className={row.sessions.failed ? "numeric numeric-danger" : "numeric"}>{formatInteger(row.sessions.failed, locale)}</td>
       <td className="numeric">{row.usage ? formatCompact(row.usage.total_tokens, locale) : MISSING}</td>
-      <td className="numeric" title={row.coverage.sessions ? t("keys.coverageDetail", { reported: row.coverage.reported, total: row.coverage.sessions }) : undefined}>
-        {formatPercent(row.coverage.sessions ? row.coverage.reported / row.coverage.sessions : null, locale)}
+      <td className="numeric" title={row.coverage.total_sessions ? t("keys.coverageDetail", { reported: row.coverage.measured_sessions, total: row.coverage.total_sessions }) : undefined}>
+        {formatPercent(row.coverage.ratio, locale)}
       </td>
       <td className="numeric">{formatRelative(row.last_active_at, now, locale)}</td>
     </tr>

@@ -28,16 +28,17 @@ func localEnvironment(t *testing.T, s *Store, tenant string) (sessions.Session, 
 }
 
 func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
 	sibling, _ := localEnvironment(t, s, tenant)
 	foreign, _ := localEnvironment(t, s, foreignTenant)
 	digest := runtimedevice.HashCredential(uuid.NewString())
-	if _, err := FixtureEnvironmentDevice(t.Context(), pool, foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := FixtureEnvironmentDevice(t, t.Context(), pool, foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign provisioning: %v", err)
 	}
-	bound, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, environment.ID, "dedicated", digest)
+	bound, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "dedicated", digest)
 	if err != nil || bound.EnvironmentID != environment.ID {
 		t.Fatalf("provision: %+v %v", bound, err)
 	}
@@ -51,8 +52,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 	if err != nil || len(devices) != 0 {
 		t.Fatalf("dedicated device entered general selection: %v %v", devices, err)
 	}
-	reopened, _ := testStore(t)
-	got, err := sessionAdapter(reopened).GetSessionDevice(t.Context(), tenant, session.ID)
+	got, err := sessionAdapter(New(t, pool)).GetSessionDevice(t.Context(), tenant, session.ID)
 	if err != nil || got != bound {
 		t.Fatalf("durable exact binding: %+v %v", got, err)
 	}
@@ -72,7 +72,8 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 }
 
 func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant := uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
 	var wg sync.WaitGroup
@@ -81,7 +82,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, environment.ID, "runtime", runtimedevice.HashCredential(uuid.NewString()))
+			_, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "runtime", runtimedevice.HashCredential(uuid.NewString()))
 			results <- err
 		}()
 	}
@@ -105,7 +106,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	if err := sessionService(t, s).RevokeDevice(t.Context(), tenant, bound.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
+	if _, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		t.Fatalf("silent placement replacement: %v", err)
 	}
 }

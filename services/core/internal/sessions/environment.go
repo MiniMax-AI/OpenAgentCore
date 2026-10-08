@@ -26,14 +26,12 @@ type EnvironmentReader interface {
 	// pending or running.
 	ListEnvironmentInitializations(ctx context.Context, after string) ([]EnvironmentInitialization, error)
 	// ReadEnvironmentSetup opens the setup frozen for the Session's
-	// Environment. A missing Session is ErrNotFound and a missing credential
-	// key credentialcrypto.ErrUnavailable; frozen data that does not open or
-	// validate is an internal error.
+	// Environment. A missing Session is ErrNotFound; frozen data that does not
+	// open or validate is an internal error.
 	ReadEnvironmentSetup(ctx context.Context, tenant, session string) (environmentconfig.Setup, error)
 	// ReadInitialEnvironmentFile opens the initial file frozen at position for
 	// the Session's Environment, so an installation holds one file at a time.
-	// A missing file is ErrNotFound and a missing credential key
-	// credentialcrypto.ErrUnavailable; a file that does not open or match its
+	// A missing file is ErrNotFound; a file that does not open or match its
 	// recorded size is an internal error.
 	ReadInitialEnvironmentFile(ctx context.Context, tenant, session string, position int) (environmentconfig.InitialFileMetadata, []byte, error)
 }

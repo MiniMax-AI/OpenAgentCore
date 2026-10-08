@@ -1,5 +1,6 @@
-import { AgentCoreError, type AgentSession, type CoreProjectReader } from "@oac/agents-client";
+import { AgentCoreError, type AgentSession } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import { RUNTIME_DURABLE_MAX_POINTS, RUNTIME_DURABLE_RANGES, runtimeDurableTrendSamples, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeTrendSample } from "../dashboard/runtime-trends";
 
@@ -24,7 +25,7 @@ export function hasObservableRuntime(session: AgentSession): boolean {
  * ending now. Resolves to null when Core keeps no history for it (404).
  */
 export async function loadSessionRuntimeHistory(
-  client: Pick<CoreProjectReader, "retrieveRuntimeHistory">,
+  client: Pick<ProjectClient, "retrieveRuntimeHistory">,
   session: AgentSession,
   range: SessionRuntimeRange,
   signal?: AbortSignal,

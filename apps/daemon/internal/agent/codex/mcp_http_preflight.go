@@ -46,8 +46,7 @@ func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) 
 			return false
 		}
 		if expected.URL != "" {
-			if server["url"] != expected.URL || !matchesMCPHeaderMap(server, "http_headers", expected.Headers) ||
-				!matchesMCPHeaderMap(server, "env_http_headers", expected.EnvHTTPHeaders) {
+			if server["url"] != expected.URL || !matchesMCPHeaderMap(server, "env_http_headers", expected.EnvHTTPHeaders) {
 				return false
 			}
 			delete(server, "url")

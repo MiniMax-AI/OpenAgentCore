@@ -16,11 +16,9 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:           proto.CapabilitySupported,
 		Streaming:                      proto.CapabilitySupported,
-		Permissions:                    proto.CapabilitySupported,
 		Usage:                          proto.CapabilitySupported,
 		Resume:                         proto.CapabilitySupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		WorkspaceAuthoring:             proto.CapabilitySupported,
 		Steering:                       proto.CapabilitySupported,
 		MessageItems:                   proto.CapabilitySupported,
 		ToolObservations:               proto.CapabilitySupported,
@@ -51,7 +49,7 @@ func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.Su
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: info, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true}
+	runtime := &agent.Runtime{Info: info}
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	version, err := check(ctx, "")
@@ -63,18 +61,9 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	caps := &runtime.Info.Capabilities
 	caps.NativeSessionRecovery = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	caps.LocalEnvironment = proto.CapabilityFromBool(SupportsLocalEnvironment(version))
+	caps.WorkspaceReadPreparation = caps.LocalEnvironment
 	caps.MCPHTTPRequired = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	runtime.Executor = NewExecutorFactory()
-	if caps.LocalEnvironment.IsSupported() {
-		runtime.WorkspaceReadPreparation = true
-		runtime.Preparation = func(ctx context.Context, req proto.PromptRequestPayload) (agent.Prepared, error) {
-			prepared, err := Prepare(ctx, req)
-			if prepared == nil {
-				return nil, err
-			}
-			return prepared, err
-		}
-	}
 	fmt.Fprintf(options.Stdout, "Codex preflight ok (%s)\n", version)
 	return runtime
 }

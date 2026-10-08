@@ -31,17 +31,17 @@ type ExecutorCredentialReader interface {
 }
 
 type IssuedExecutorCredential struct {
-	KeyID         string `json:"key_id"`
+	KeyID         string `json:"key_id" binding:"required"`
 	EnvironmentID string `json:"environment_id,omitempty"`
-	Token         string `json:"executor_token"`
+	Token         string `json:"executor_token" binding:"required"`
 }
 
 // ExecutorCredential is the metadata of one Environment executor credential.
 // Its secret is returned only when issued or rotated.
 type ExecutorCredential struct {
-	KeyID     string     `json:"key_id" format:"uuid"`
-	CreatedAt time.Time  `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable"`
+	KeyID     string     `json:"key_id" format:"uuid" binding:"required"`
+	CreatedAt time.Time  `json:"created_at" binding:"required"`
+	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable" binding:"required"`
 }
 
 // ExecutorConnectionState is an internal durable observation, never a wire payload.
@@ -88,13 +88,11 @@ type ExecutorCredentialStorage interface {
 	// principal or Project, or an unknown one, is ErrNotFound.
 	LoadExecutorCredentialRestriction(ctx context.Context, principal identity.Principal, key string) (string, error)
 	// SignInstallation returns the signature of an installation authorization
-	// payload under the credential key. Without that key it is
-	// credentialcrypto.ErrUnavailable.
+	// payload under the credential key.
 	SignInstallation(ctx context.Context, payload string) (string, error)
 	// VerifyInstallation checks the signature of an installation
 	// authorization payload: another signature is
-	// ErrInstallationAuthorization, and a service without the credential key
-	// credentialcrypto.ErrUnavailable.
+	// ErrInstallationAuthorization.
 	VerifyInstallation(ctx context.Context, payload, signature string) error
 	// WithExecutorCredentials runs apply in a transaction of the tenant.
 	WithExecutorCredentials(ctx context.Context, tenant string, apply func(context.Context, ExecutorCredentialTx) error) error

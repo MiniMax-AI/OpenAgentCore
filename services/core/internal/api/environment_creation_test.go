@@ -66,10 +66,8 @@ func environmentCreationHandler(t *testing.T, engine string, configure ...func(*
 	return newTestHandler(t, deps), fixture
 }
 
-// selfHostedExecution enables Execution reporting environmentOrigin to
-// self-hosted Sessions.
+// selfHostedExecution reports environmentOrigin to self-hosted Sessions.
 func selfHostedExecution(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	d.Execution.ExecutorURL = environmentOrigin
 }
 
@@ -199,44 +197,6 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 					t.Fatal("unsupported configuration reached persistence", response.Code, response.Body.String(), fixture.input)
 				}
 			})
-		}
-	}
-}
-
-// Execution, which carries the executor URL, is required; a URL without
-// Execution cannot be configured (TestNewHandlerRejectsIncompleteDependencies).
-func TestSelfHostedCreationRequiresOperatorExecution(t *testing.T) {
-	for _, stream := range []bool{false, true} {
-		unavailable := 0
-		handler, fixture := environmentCreationHandler(t, "codex", func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { unavailable++ } })
-		body := fmt.Sprintf(`{"agent":{"model":"MiniMax-M3"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"stream":%t,%s}`, stream, fixtureSessionProvider)
-		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
-		request.Header.Set("Authorization", "Bearer key")
-		request.Header.Set("OpenAI-Beta", "agents=v1")
-		request.Header.Set("Content-Type", "application/json")
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		var failure v1.ErrorResponse
-		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" || unavailable != 1 {
-			t.Fatal("operator prerequisites did not fail before persistence", response.Code, response.Body.String(), fixture.input)
-		}
-	}
-}
-
-func TestHostedCreationRequiresOperatorExecution(t *testing.T) {
-	for _, stream := range []bool{false, true} {
-		unavailable := 0
-		handler, fixture := environmentCreationHandler(t, "codex", selfHostedExecution, func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { unavailable++ } })
-		body := fmt.Sprintf(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted"},"stream":%t,"input":"Initialize the hosted execution."}`, stream)
-		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
-		request.Header.Set("Authorization", "Bearer key")
-		request.Header.Set("OpenAI-Beta", "agents=v1")
-		request.Header.Set("Content-Type", "application/json")
-		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, request)
-		var failure v1.ErrorResponse
-		if response.Code != http.StatusServiceUnavailable || json.Unmarshal(response.Body.Bytes(), &failure) != nil || failure.Error.Code == nil || *failure.Error.Code != "execution_unavailable" || fixture.input.Engine != "" || unavailable != 1 {
-			t.Fatal("hosted configuration bypassed operator prerequisites", response.Code, response.Body.String())
 		}
 	}
 }

@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -28,9 +26,8 @@ func (p *scanProvider) GetInfo(ctx context.Context, ref sandbox.Reference) (sand
 func TestManagedRuntimeScanWrapServicesNextPage(t *testing.T) {
 	for _, count := range []int{0, 1, 31, 32, 33, 65} {
 		t.Run(fmt.Sprint(count), func(t *testing.T) {
-			s, _ := newManagedTestStore(t)
+			s, key := configuredStore(t)
 			p := &scanProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
-			key := uuid.NewString()
 			w, _ := managedWorker(t, s, key, p)
 			var ids []string
 			for range count {
@@ -67,9 +64,8 @@ func TestManagedRuntimeScanWrapServicesNextPage(t *testing.T) {
 }
 
 func TestManagedRuntimeScanEmptyAfterCleanupAndCanceledCall(t *testing.T) {
-	s, _ := newManagedTestStore(t)
+	s, key := configuredStore(t)
 	p := &scanProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
-	key := uuid.NewString()
 	w, _ := managedWorker(t, s, key, p)
 	tenant, session, env := managedSession(t, s)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)

@@ -16,7 +16,7 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 			s, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
 			switch mode {
 			case "missing key":
-				s = New(s.pool)
+				s = New(t, s.pool)
 			case "deleted":
 				_, service, err := fixtureVaults(s)
 				if err != nil {

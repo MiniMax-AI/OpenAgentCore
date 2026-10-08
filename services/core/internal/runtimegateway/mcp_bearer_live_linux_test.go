@@ -60,44 +60,78 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	mcpBearerStartDaemon(t, root, daemon, native, provider, fixture.caFile, server.URL, id, runner, capture)
 	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 	defer cancel()
-	peer, err := registry.WaitForDevice(ctx, id, 30*time.Second)
-	if err != nil {
-		t.Fatal("built daemon did not connect through the real gateway")
-	}
-	t.Cleanup(func() { peer.Close("owned MCP acceptance finished") })
-	ready := time.Now().Add(30 * time.Second)
-	for {
-		info, found, known := peer.AgentKindStatus("codex")
-		if known && found && info.Available {
-			if !info.Capabilities.MCPHTTPTools || !info.Capabilities.MCPHTTPBearerAuth || !info.Capabilities.ToolObservations || !info.Capabilities.DurableTurns || !info.Capabilities.EnvironmentNone {
-				t.Fatal("built daemon did not advertise the required private execution capabilities")
+	var peer *Session
+	t.Cleanup(func() {
+		if peer != nil {
+			peer.Close("owned MCP acceptance finished")
+		}
+	})
+	connect := func() {
+		t.Helper()
+		var err error
+		if peer, err = registry.WaitForDevice(ctx, id, 30*time.Second); err != nil {
+			t.Fatal("built daemon did not connect through the real gateway")
+		}
+		ready := time.Now().Add(30 * time.Second)
+		for {
+			info, found, known := peer.AgentKindStatus("codex")
+			if known && found && info.Available {
+				if !info.Capabilities.MCPHTTPTools || !info.Capabilities.MCPHTTPBearerAuth || !info.Capabilities.ToolObservations || !info.Capabilities.DurableTurns || !info.Capabilities.EnvironmentNone {
+					t.Fatal("built daemon did not advertise the required private execution capabilities")
+				}
+				proof["codex_descriptor"] = info
+				return
 			}
-			proof["codex_descriptor"] = info
-			break
+			if time.Now().After(ready) {
+				t.Fatal("pinned Codex capability discovery did not complete")
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
-		if time.Now().After(ready) {
-			t.Fatal("pinned Codex capability discovery did not complete")
-		}
-		time.Sleep(50 * time.Millisecond)
 	}
+	connect()
 	allowed, anonymousTools := []string{"remember", "fail"}, []string{"ping"}
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ConnectionOrigin: "service", ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
 	run := func(prompt, resume string, expected map[string]string) *mcpBearerTurn {
 		t.Helper()
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
-		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", ConversationID: "mcp-bearer-acceptance", RunID: runID, Input: proto.TextInput(prompt), AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		runID, prepareID := uuid.NewString(), uuid.NewString()
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-mcp-bearer-acceptance", AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		send := func(kind, id string, payload any) {
+			t.Helper()
+			envelope, err := proto.NewEnvelope(kind, id, payload)
+			if err != nil || peer.Send(ctx, envelope) != nil {
+				t.Fatal("cannot dispatch the private MCP request")
+			}
+		}
+		statuses, err := peer.SubscribePreparation(prepareID)
+		if err != nil {
+			t.Fatal("cannot subscribe to preparation before real daemon dispatch")
+		}
+		defer peer.UnsubscribePreparation(prepareID)
+		send(proto.TypeExecutionPrepare, prepareID, proto.ExecutionPreparePayload{SessionID: "mcp-bearer-acceptance", Configuration: request})
+		var ready proto.PreparationStatusPayload
+		for ready.State != "ready" {
+			select {
+			case event, ok := <-statuses.Events:
+				if !ok || event.DecodePayload(&ready) != nil || ready.State != "preparing" && ready.State != "ready" {
+					t.Fatal("real daemon did not prepare the private MCP Executor")
+				}
+			case <-ctx.Done():
+				t.Fatal("real daemon preparation timed out")
+			}
+		}
 		sub, err := peer.SubscribeDurable(runID)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")
 		}
 		defer peer.Unsubscribe(runID)
-		envelope, err := proto.NewEnvelope(proto.TypePromptRequest, runID, request)
-		if err != nil || peer.Send(ctx, envelope) != nil {
-			t.Fatal("cannot dispatch the private MCP request")
-		}
+		send(proto.TypeExecutionStart, prepareID, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: runID, Input: proto.TextInput(prompt)})
 		mcpBearerCollectTurn(t, ctx, sub, runID, turn, expected, token, provider)
+		// The Executor stays warm after Done. Reconnecting gives the daemon a fresh
+		// Router and closes the Executor, so the next Turn is a cold continuation.
+		peer.Close("cold continuation")
+		connect()
 		turn.NativeLaunches = mcpBearerReleased(t, root)
 		turn.BearerEnvironmentReference = mcpBearerConfigReference(t, root, token)
 		return turn
@@ -147,8 +181,8 @@ func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, 
 		}
 		turn.Events = append(turn.Events, event)
 		switch event.Type {
-		case proto.TypeError, proto.TypePermissionRequest, proto.TypePromptForUserChoice:
-			t.Fatal("unexpected execution failure or interaction during private MCP acceptance")
+		case proto.TypeError:
+			t.Fatal("unexpected execution failure during private MCP acceptance")
 		case proto.TypeToolCall:
 			var call proto.ToolCallPayload
 			if event.DecodePayload(&call) != nil || call.Observation == nil {

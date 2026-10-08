@@ -1,4 +1,5 @@
-// Command harness-catalog projects adapter-owned provider declarations for tooling.
+// Command harness-catalog projects adapter-owned provider declarations and the
+// model-provider protocol vocabulary for tooling.
 package main
 
 import (
@@ -6,6 +7,7 @@ import (
 	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 type provider struct {
@@ -25,7 +27,11 @@ func declarations() map[string]map[string]provider {
 }
 
 func main() {
-	if err := json.NewEncoder(os.Stdout).Encode(declarations()); err != nil {
+	projection := struct {
+		Harnesses map[string]map[string]provider `json:"harnesses"`
+		Protocols []modelprovider.Protocol       `json:"protocols"`
+	}{declarations(), modelprovider.Protocols()}
+	if err := json.NewEncoder(os.Stdout).Encode(projection); err != nil {
 		panic(err)
 	}
 }

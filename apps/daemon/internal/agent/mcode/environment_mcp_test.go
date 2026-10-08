@@ -32,11 +32,11 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 			}
 			t.Setenv("USER_SELECTED", "must-not-resolve-from-daemon")
 			t.Setenv("MODEL_SECRET", "must-not-forward")
-			resource, err := NewPreparationFactory(c)(t.Context(), req)
+			resource, err := NewExecutorFactory(&c)(t.Context(), req)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = resource.Close() })
+			t.Cleanup(func() { _ = resource.Close(context.Background()) })
 			raw, err := os.ReadFile(record + ".session")
 			if err != nil {
 				t.Fatal(err)
@@ -98,7 +98,7 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			case "reserved":
 				req.LocalEnvironment.MCP[0].Server.Name = "oac_workspace"
 			}
-			if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
+			if _, err := prepareWorkspaceOptions(c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
 			}
 		})
@@ -109,7 +109,6 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	c, req, _ := workspaceFixture(t)
 	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
-	req.ObserveToolObservations = true
 	script, err := os.ReadFile(c.Binary)
 	if err != nil {
 		t.Fatal(err)
@@ -117,18 +116,18 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	if err := os.WriteFile(c.Binary, []byte(strings.Replace(string(script), "HELPER=prepared", "HELPER=prepared-mcp-cancel", 1)), 0700); err != nil {
 		t.Fatal(err)
 	}
-	resource, err := NewPreparationFactory(c)(t.Context(), req)
+	resource, err := NewExecutorFactory(&c)(t.Context(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 16)
-	session, err := resource.Start(ctx, "run", proto.TextInput("invoke and wait"), out)
+	session, err := resource.StartTurn(ctx, "run", proto.TextInput("invoke and wait"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = resource.(*prepared).Cancel(context.Background()) })
+	t.Cleanup(func() { _ = resource.Close(context.Background()) })
 	select {
 	case event := <-out:
 		var call proto.ToolCallPayload
@@ -191,11 +190,11 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 			item.BearerToken = &value
 		}
 		req.LocalEnvironment.MCP = []proto.EnvironmentMCP{item}
-		resource, err := NewPreparationFactory(c)(t.Context(), req)
+		resource, err := NewExecutorFactory(&c)(t.Context(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = resource.Close() })
+		t.Cleanup(func() { _ = resource.Close(context.Background()) })
 		raw, err := os.ReadFile(record + ".session")
 		if err != nil {
 			t.Fatal(err)
@@ -220,7 +219,7 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 		} else if len(server.Headers) != 0 {
 			t.Fatal("anonymous MCP inherited credentials")
 		}
-		dataDir := resource.(*prepared).session.opts.DataDir
+		dataDir := resource.(*executor).opts.DataDir
 		for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
 			body, err := os.ReadFile(filepath.Join(dataDir, name))
 			if err != nil && !os.IsNotExist(err) {
@@ -238,7 +237,7 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	token := "selected-public-vault-canary"
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
-	opts, err := prepareWorkspaceOptions(t.Context(), c, req)
+	opts, err := prepareWorkspaceOptions(c, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,12 +266,12 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	}
 	empty := []string{}
 	(*req.MCPHTTPServers)[0].AllowedTools = &empty
-	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+	if _, err := prepareWorkspaceOptions(c, req); err == nil {
 		t.Fatal("empty allowlist silently treated as all")
 	}
 	(*req.MCPHTTPServers)[0].AllowedTools = nil
 	(*req.MCPHTTPServers)[0].Required = true
-	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+	if _, err := prepareWorkspaceOptions(c, req); err == nil {
 		t.Fatal("required initialization silently ignored")
 	}
 }

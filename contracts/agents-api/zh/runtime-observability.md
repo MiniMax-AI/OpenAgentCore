@@ -1,7 +1,7 @@
 ---
 title: "运行时可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: f79a077350118f5f9bb3f4e8874242af3cb716e92f5e090f6652b001ae5780a1
+source_hash: de7eefac37eb9cc5935c28e2425efc323f1555771e48758ce9412455e891b52c
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `internal/runtimeobs/otlpexporter`。
@@ -22,13 +22,11 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 托管 Docker、microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
 
-分配中持久化的 `provider_key` 会选择且仅选择一个已配置源；该源在返回数值前会验证分配标签或等效所有权数据。在读取任何 provider 之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`，provider key 没有对应源时得到 `source_not_configured`。provider 读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
+每个托管分配都通过部署所选的 Sandbox Provider 读取；该 Provider 在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何 provider 之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`。provider 读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
 
-观测边界在 `services/core/internal/runtimeobs/source.go` 中声明。每个注册的 `SourceResolver` 都声明支持 `ResolveObservationSource`；注册过程会验证此声明，但不会加载配置或读取数据库。Core 每页只解析每个 provider key 一次，随后验证返回的 `Source`，并在该页上针对此 key 的每次读取中使用同一不可变源。未配置的解析器返回类型化的 `ErrUnavailable`，从而生成不含 provider 类型的 `sample_unavailable`。其他解析错误遵循上述 provider 读取错误规则。
+`Observe` 属于 [Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md)；`services/core/internal/runtimeobs/source.go` 负责观测类型以及 Provider 的 `Source` 视图。Core 每页只加载一次所选 Provider 及其注册 kind，并在该页的每次读取中使用同一不可变 Provider，用 `Observe` 读取每个运行中的目标。没有选择时，加载返回类型化的 `ErrUnavailable`，从而生成不含 provider 类型的 `sample_unavailable`。其他加载错误遵循上述 provider 读取错误规则。
 
-源会声明支持的 `ObservationProviderType`，该类型返回其不可变遥测标识：一个小写字母，后跟最多 31 个小写字母、数字或下划线。空标识无效。在任何采样或导出之前，provider 注册和每个解析后的绑定都会验证标识及操作声明。重新配置会影响后续的源解析，但无法更改正在处理页面所选定的标识或 provider。Generation 路由器仍会通过每个分配记录的部署代次解析该分配。
-
-源实现 `Observe`，并在 provider 操作中声明 `ObserveBatch`。声明支持 `ObserveBatch` 时，一次调用可读取该 provider 的最多 100 个目标；声明不支持时，Core 使用 `Observe` 读取每个目标。批量读取失败后绝不会逐个重试目标。[Sandbox Provider guide](../../../docs/zh/sandbox-provider.md) 说明了这些操作声明。
+观测的 provider 类型即该注册 kind：`docker`、`microsandbox` 或 `e2b`。重新配置会影响后续页面，但无法更改正在处理页面所选定的 provider 类型或 Provider。Generation 路由器仍会通过每个分配记录的部署代次解析该分配。
 
 ## 采样语义 {#sample-semantics}
 
@@ -58,7 +56,7 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 ### E2B {#e2b}
 
-一次 helper `observe` 请求会读取一页最多 100 个分配：读取私有回执中指定 sandbox 的 E2B 批量指标，并获取该 installation 中运行中 sandbox 的带标签列表，以确认每一个 sandbox。[E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) 负责此请求。它绝不会连接、续期或更改 sandbox，也不会写入任何回执。
+Core 用一次 helper `observe` 请求读取一个分配：读取私有回执中指定 sandbox 的 E2B 指标，并按该分配的标签列出运行中的 sandbox，以确认该 sandbox。[E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) 负责此请求。它绝不会连接、续期或更改 sandbox，也不会写入任何回执。
 
 | E2B 值 | 采样字段 |
 | --- | --- |
@@ -67,11 +65,11 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 | `memUsed`、`memTotal` | 内存使用量和限制 |
 | `diskUsed`、`diskTotal` | 磁盘使用量和容量；仅当两者都存在且总量非零时保留 |
 
-E2B 不报告累计 CPU 时间，因此 CPU 秒数保持为 null。`observed_at` 为 E2B 的时间点；比 Core 时钟最多领先 30 秒的时间点按 Core 时间记录，领先幅度更大时则为 `sample_unavailable`。未出现在运行列表中的 sandbox 为 `runtime_not_running`。时间点缺失或格式错误、列表存在歧义以及 E2B API 失败（包括 key 被拒绝）均为 `sample_unavailable`；格式错误的时间点只影响其所在行。
+E2B 不报告累计 CPU 时间，因此 CPU 秒数保持为 null。`observed_at` 为 E2B 的时间点；比 Core 时钟最多领先 30 秒的时间点按 Core 时间记录，领先幅度更大时则为 `sample_unavailable`。未出现在运行列表中的 sandbox 为 `runtime_not_running`。时间点缺失或格式错误、列表存在歧义以及 E2B API 失败（包括 key 被拒绝）均为 `sample_unavailable`。
 
 ## 读取预算 {#read-budgets}
 
-当前列表读取处理一页最多 100 个 Session（默认 20 个），provider 读取并发数最多为 8。每次 provider 读取的时限为 2 秒，批量读取至少为 5 秒，整个列表请求为 10 秒；超过这些时限时，列表返回 503。单 Session 读取的时限为 2 秒。一次请求内不会重试任何 provider 调用，Core 也不保留观测缓存。
+当前列表读取处理一页最多 100 个 Session（默认 20 个），provider 读取并发数最多为 8。每次 provider 读取的时限为 2 秒，整个列表请求为 10 秒；超过这些时限时，列表返回 503。单 Session 读取的时限为 2 秒。一次请求内不会重试任何 provider 调用，Core 也不保留观测缓存。
 
 ## 时长 {#durations}
 
@@ -81,17 +79,17 @@ E2B 不报告累计 CPU 时间，因此 CPU 秒数保持为 null。`observed_at`
 - 计算运行时长：采样的 `started_at` 到 `observed_at`；
 - 忙碌 Turn 时长：`turns.started_at` 到 `completed_at`，或到当前时间。
 
-CPU 静默状态、心跳时龄、连接状态和保活时间都不是空闲时间。
+CPU 静默状态、心跳时龄和连接状态都不是空闲时间。
 
 ## 保留的历史记录与可选导出 {#retained-history-and-optional-export}
 
 ### 周期采样 {#periodic-sampling}
 
-周期采集仅随执行工作器运行而执行（Core 需使用 `OAC_PUBLIC_URL` 启动；见 [Core environment](../../../docs/zh/configuration.md#appendix-core-environment-without-the-installer)），并受该工作器的数据库租约保护。未运行该工作器的 Core 不存储历史记录，所有历史读取都返回 503；当前读取在两种情况下均可正常工作。
+周期采集在执行工作器中运行，并受其数据库租约保护。
 
 采样器在启动时扫描一次，此后每次扫描结束后再经过一个采样间隔再次扫描。一次扫描按 Session ID 顺序，对未删除、状态为 `openai_hosted` 且没有已释放分配的 Session 执行 keyset 扫描。它通过与当前读取相同的解析器和源，以 32 个 Session 为一页进行读取，并发数为 8，每个源时限为 2 秒。采样器在每页之前以及扫描期间每 100 ms 检查租约；失去所有权时取消进行中的读取；将每条记录交给导出之前再次检查租约。失败的行不会停止扫描；未完成的扫描会在下一个间隔重复。
 
-每次观测，无论来自当前读取还是周期采集，都会标记采集源 `on_read` 或 `periodic`，并放入每个导出器的有界队列。队列已满时会丢弃记录；该记录将成为缺失采样，而绝不会成为零。PostgreSQL 历史存储和可选 OTLP 导出器使用彼此独立的队列，因此导出器故障不会延迟本地历史记录或执行。[`core.runtime_history` settings](../../../docs/zh/configuration.md#settings) 用于设置采样间隔、队列容量、超时和 OTLP 目标。
+每次观测，无论来自当前读取还是周期采集，都会标记采集源 `on_read` 或 `periodic`，并放入每个导出器的有界队列。队列已满时会丢弃记录；该记录将成为缺失采样，而绝不会成为零。PostgreSQL 历史存储和可选 OTLP 导出器使用彼此独立的队列，因此导出器故障不会延迟本地历史记录或执行。[Runtime 历史文件](../../../docs/zh/configuration.md#runtime-history-file) 用于设置采样间隔、队列容量、超时和 OTLP 目标。
 
 ### 存储的历史记录 {#stored-history}
 
@@ -99,7 +97,7 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 
 历史服务在查询前解析 Project、Session 和 Environment；查询始终携带该作用域和有界时间范围，但绝不携带 provider 身份。存储保留 7 天。单次读取最多覆盖 24 小时，最多读取 20,000 条原始采样，并从范围起点之前两个采样间隔处开始读取，以查找 CPU 基线；每个数组最多返回 1,000 个桶，最多返回 64 个序列，总点数最多 10,000 个。结果超出请求的作用域、时间范围或限制时，读取失败。API 的 [Series](runtime-observability-api.md#series) 部分说明了聚合方式。
 
-`runtimehistory.Capabilities` 声明采集模式、间隔、7 天保留期、最小桶宽度（30 秒或采样间隔，取较长者）、24 小时范围和点数限制；历史路由仅在所有这些值有效且采集模式为 `periodic` 时响应，否则返回 503。
+`runtimehistory.Capabilities` 声明采样间隔、7 天保留期、最小桶宽度（30 秒或采样间隔，取较长者）、24 小时范围和点数限制；这些值无效时 Core 不会启动。
 
 清理循环每分钟运行一次，即使没有活跃 Runtime 也会运行。每轮最多耗时 2 秒，按每表 256 行的批次删除过期 Runtime 行和节点主机行，每张表最多 16 批。读取绝不会返回超过保留期的行。
 
@@ -125,7 +123,7 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 | `agents.session.tokens.input` | Gauge，令牌 | 实测 Session 输入令牌 |
 | `agents.session.tokens.output` | Gauge，令牌 | 实测 Session 输出令牌 |
 | `agents.runtime.sample` | 单调差值和 | 每个经验证的结果一条，包括 unavailable 和 unsupported |
-| `agents.runtime.sample.duration` | Delta 直方图，秒 | Provider 读取时长；批量读取仅计一次 |
+| `agents.runtime.sample.duration` | Delta 直方图，秒 | Provider 读取时长 |
 
 仅当采样包含 `started_at` 时才导出 CPU 和内存数据点；缺少测量值不会产生数据点。属性包括 `agents.tenant.id`、`agents.session.id`、`agents.environment.id`、`agents.runtime.allocation.id`、`agents.runtime.mode`、`agents.runtime.provider.type`、`agents.runtime.status`、`agents.runtime.reason`、`agents.runtime.collection.source`，以及以纳秒为单位的 `agents.runtime.resolved_at_unix_nano`、`agents.runtime.observed_at_unix_nano` 和 `agents.runtime.compute.started_at_unix_nano`。这些纳秒时间使记录在后端以较低精度存储事件时间时仍可关联。Provider key、回执、原生标识符、原始错误、路径和凭据绝不会作为属性。
 

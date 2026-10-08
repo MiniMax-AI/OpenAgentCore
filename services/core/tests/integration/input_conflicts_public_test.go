@@ -44,7 +44,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "conflict-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "conflict-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	h, err := publicHandler(t, s, auth, "codex", executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{` + conflictAgent + `,"environment":` + environment + `}`)}
 		if initial {
-			input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
+			input.InitialInputs = []sessions.Input{messageInput("reserved")}
 		}
 		session, err := s.CreateSession(ctx, tenant, input)
 		if err != nil {
@@ -69,7 +69,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// waiting starts a Turn that waits for one function result.
 	waiting := func(session, key, call string) sessions.InputReceipt {
 		t.Helper()
-		receipt, err := sendMessage(ctx, s, tenant, session, key, json.RawMessage(`{"text":"work"}`))
+		receipt, err := sendMessage(ctx, s, tenant, session, key, messageText("work"))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1,4 +1,5 @@
-export { coreHarnessKinds, coreHarnessNames } from "./harness-catalog";
+export { coreHarnessKinds, coreHarnessNames, modelProviderProtocols } from "./harness-catalog";
+export { deploymentContract } from "./deployment-contract";
 export { AgentCoreError, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
 export type { OpenAIAgentsClientOptions, CoreErrorDetail, CoreErrorDetails } from "./client";
 export { createSSEDecoder } from "./sse";
@@ -9,9 +10,10 @@ export * from "./core-metrics";
 export type { CoreClientOptions } from "./core-request";
 export { isEnvironmentTemplateName, isRecognizedEnvironmentTemplate } from "./environment-template-projection";
 export { isOpenAIHostedSessionEnvironment } from "./session-environment-projection";
-export { compareSkillVersionNumbers, isSkillId, isSkillUploadPath, isSkillVersionId, isSkillVersionNumber, maxSkillUploadFiles } from "./skill-projection";
+export { compareSkillVersionNumbers, isSkillId, isSkillUploadPath, isSkillVersionId, isSkillVersionNumber } from "./skill-projection";
 export { AdminClient } from "./admin-client";
-// Skill and SkillVersion come from ./types; the admin projections use the same shapes.
-export type { AdminClientOptions, AdminProject, CreateAdminProjectInput, RenameAdminProjectInput, AdminAPIKey, AdminIssuedAPIKey, IssueAdminAPIKeyInput, AdminPage, AdminDeleted, SessionArtifact, AdminContent, AdminResourceType, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperation, AdminWriteOperationOptions, AdminWriteOperationPage, AdminSummaryOptions, AdminSummaryEntry, AdminSummary, AdminRuntimeObservation, AdminAuditOptions, AdminAuditResultID, AdminAuditEntry, AdminAuditPage, ExecutorCredential, ExecutorConnection, ExecutorCredentialList, IssueExecutorCredentialInput, IssuedExecutorCredential, CoreProjectReader, CoreInstallation, CoreInstallationConfiguration, CoreInstallationSetting, CoreAddressBindings } from "./admin-types";
+// Skill, SkillVersion and SessionArtifact come from ./types; the admin projections use the same shapes.
+export { adminResourceTypes } from "./admin-types";
+export type { AdminClientOptions, AdminProject, CreateAdminProjectInput, RenameAdminProjectInput, AdminAPIKey, AdminIssuedAPIKey, IssueAdminAPIKeyInput, AdminPage, AdminDeleted, AdminContent, AdminResourceType, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperation, AdminWriteOperationOptions, AdminWriteOperationPage, AdminSummaryOptions, AdminSummaryEntry, AdminSummary, AdminRuntimeObservation, AdminAuditOptions, AdminAuditEntry, AdminAuditPage, ExecutorCredential, ExecutorConnection, ExecutorCredentialList, IssueExecutorCredentialInput, IssuedExecutorCredential, CoreInstallation, CoreInstallationConfiguration, CoreInstallationSetting, CoreAddressBindings } from "./admin-types";
 
-export type { DiagnosticFailureCode, NativeFailureCode, ConnectionFailureParams, ProvisioningFailureParams, DiagnosticFailure, SessionDiagnosticFailure, SessionDiagnostics, ItemDiagnosticTiming, TurnDiagnostics } from "./session-diagnostics";
+export type { DiagnosticFailureCode, ConnectionFailureParams, ProvisioningFailureParams, DiagnosticFailure, SessionDiagnosticFailure, SessionDiagnostics, ItemDiagnosticTiming, TurnDiagnostics } from "./session-diagnostics";

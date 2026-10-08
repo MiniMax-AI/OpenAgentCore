@@ -16,7 +16,7 @@ import (
 func TestFunctionResultWaitsForNativeCompletion(t *testing.T) {
 	client, server, cleanup := NewTestClient()
 	defer cleanup()
-	session, output := newInteractionTestSession(client.JSONRPCClient)
+	session, output := newFunctionTestSession(client.JSONRPCClient)
 	session.setThreadID("thread")
 	session.startSteering("thread", "turn")
 	var err error
@@ -61,7 +61,7 @@ func pendingReceiptContext(t *testing.T, ctx context.Context) (*Session, ServerS
 	t.Helper()
 	client, server, cleanup := NewTestClient()
 	t.Cleanup(cleanup)
-	s, out := newInteractionTestSession(client.JSONRPCClient)
+	s, out := newFunctionTestSession(client.JSONRPCClient)
 	s.cfg.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	s.setThreadID("thread")
 	s.startSteering("thread", "turn")
@@ -169,7 +169,7 @@ func TestFunctionReceiptShutdownDoesNotConfirmApplication(t *testing.T) {
 func TestFunctionReceiptDeadlineEndsUncertainExecution(t *testing.T) {
 	client, server, cleanup := NewTestClient()
 	defer cleanup()
-	s, out := newInteractionTestSession(client.JSONRPCClient)
+	s, out := newFunctionTestSession(client.JSONRPCClient)
 	s.setThreadID("thread")
 	s.startSteering("thread", "turn")
 	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}})
@@ -207,7 +207,7 @@ func TestFunctionReceiptDeadlineEndsUncertainExecution(t *testing.T) {
 func TestFunctionReceiptWinsSimultaneousDeadline(t *testing.T) {
 	for range 100 {
 		client, _, cleanup := NewTestClient()
-		s, _ := newInteractionTestSession(client.JSONRPCClient)
+		s, _ := newFunctionTestSession(client.JSONRPCClient)
 		s.setThreadID("thread")
 		s.startSteering("thread", "turn")
 		s.functions, _ = prepareFunctionTools(nil)

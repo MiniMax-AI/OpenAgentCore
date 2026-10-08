@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -47,15 +48,11 @@ func ParseProvider(raw any) (Provider, error) {
 	return provider, nil
 }
 
-// Valid is the single vocabulary of supported upstream protocol formats.
-func (p Protocol) Valid() bool {
-	switch p {
-	case Anthropic, Responses, ChatCompletions:
-		return true
-	default:
-		return false
-	}
-}
+// Protocols is the single vocabulary of supported upstream protocol formats.
+// The Harness catalog generator projects it to the TypeScript client.
+func Protocols() []Protocol { return []Protocol{Anthropic, Responses, ChatCompletions} }
+
+func (p Protocol) Valid() bool { return slices.Contains(Protocols(), p) }
 
 func (p Provider) Validate() error {
 	if !p.Protocol.Valid() {

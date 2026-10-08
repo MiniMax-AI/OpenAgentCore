@@ -21,9 +21,7 @@ func TestDiscoveryAndRegistration(t *testing.T) {
 					called = append(called, info.Kind)
 					info.Available = true
 					info.Version = "test"
-					return &agent.Runtime{Info: info, Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-						return nil, errors.New("test")
-					}}
+					return &agent.Runtime{Info: info}
 				}
 			}
 			rc := &runContext{stdout: io.Discard, stderr: io.Discard}
@@ -40,11 +38,12 @@ func TestDiscoveryAndRegistration(t *testing.T) {
 				t.Fatalf("probes %v, want %v", called, expected)
 			}
 			registry := agent.NewRegistry()
-			registerAgentKinds(registry, discovery, "")
-			if len(registry.Kinds()) != len(expected) {
-				t.Fatal(registry.Kinds())
+			registerAgentKinds(registry, discovery)
+			kinds := registry.SupportedAgentKinds()
+			if len(kinds) != len(expected) {
+				t.Fatal(kinds)
 			}
-			for _, info := range registry.SupportedAgentKinds() {
+			for _, info := range kinds {
 				if !info.Available || info.Version != "test" {
 					t.Fatal(info)
 				}

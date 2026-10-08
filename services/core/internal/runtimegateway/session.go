@@ -34,7 +34,7 @@ var (
 	WriteTimeout = 10 * time.Second
 
 	// InteractionAckTimeout bounds the application-level round trip for a
-	// permission or user-input decision after it is written to the daemon.
+	// function result or cancellation after it is written to the daemon.
 	InteractionAckTimeout = 15 * time.Second
 
 	// ReadLimit caps a single inbound frame at 4 MiB. tool_call
@@ -99,7 +99,7 @@ type Session struct {
 
 	// supportedKinds is the latest daemon-advertised agent_kind snapshot,
 	// updated from heartbeat frames and read by the connector before
-	// dispatching prompt_request so unsupported engines fail on the server.
+	// sending execution_prepare so unsupported engines fail on the server.
 	kindsMu        sync.RWMutex
 	kindsSeen      bool
 	supportedKinds []runtimedevice.SupportedAgentKind
@@ -140,23 +140,12 @@ type Session struct {
 	closed    chan struct{}
 }
 
-// NewSession wires a freshly-upgraded WS connection into a Session.
-// The session does NOT start its goroutines automatically — Start runs
-// once the handler is ready so the session can't race with response writes.
-func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
-	return NewSessionWithOwner(conn, deviceID, workspaceID, daemonVersion, reg, log, nil)
-}
-
-// NewSessionWithOwner wires a session with an optional DB-backed owner
-// lease. Multi-pod deployments pass the lease returned by
-// ClaimAgentDaemonDeviceOwner so heartbeats can fence stale connections.
+// NewSessionWithOwner wires a freshly-upgraded WS connection into a Session
+// with an optional DB-backed owner lease. Multi-pod deployments pass the lease
+// returned by ClaimAgentDaemonDeviceOwner so heartbeats can fence stale
+// connections. The session does NOT start its goroutines automatically — Start
+// runs once the handler is ready so the session can't race with response writes.
 func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger, owner *ownerLease) *Session {
-	if log == nil {
-		log = func(string, ...any) {}
-	}
-	if reg == nil {
-		reg = NewRegistry()
-	}
 	now := time.Now()
 	return &Session{
 		DeviceID:      deviceID,
@@ -302,8 +291,8 @@ func (s *Session) Send(ctx context.Context, env proto.Envelope) error {
 
 // SendAndWaitInteractionAck sends a decision and waits until the daemon
 // confirms that its agent session applied it. Queueing or writing the
-// WebSocket frame alone is not success: without this receipt the canonical
-// database interaction must remain retryable.
+// WebSocket frame alone is not success: without this receipt the durable
+// delivery must remain retryable.
 func (s *Session) SendAndWaitInteractionAck(ctx context.Context, env proto.Envelope, deliveryID string) (proto.InteractionDecisionAckPayload, error) {
 	deliveryID = strings.TrimSpace(deliveryID)
 	if deliveryID == "" {
@@ -336,7 +325,7 @@ func (s *Session) SendAndWaitInteractionAck(ctx context.Context, env proto.Envel
 	case <-waitCtx.Done():
 		// If the ack raced the deadline, prefer the application receipt;
 		// treating an already-applied decision as retryable can trigger a
-		// contradictory second human response.
+		// contradictory second response.
 		select {
 		case ack := <-waiter:
 			return ack, nil
@@ -504,7 +493,6 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 			Version:   info.Version,
 			Capabilities: runtimedevice.KindCapabilities{
 				Streaming:             info.Capabilities.Streaming.IsSupported(),
-				Permissions:           info.Capabilities.Permissions.IsSupported(),
 				Usage:                 info.Capabilities.Usage.IsSupported(),
 				Resume:                info.Capabilities.Resume.IsSupported(),
 				Steering:              info.Capabilities.Steering.IsSupported(),
@@ -533,7 +521,6 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools.IsSupported(),
 				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired.IsSupported(),
 				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
-				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring.IsSupported(),
 			},
 		})
 	}
@@ -564,29 +551,6 @@ func (s *Session) dispatch(env proto.Envelope) {
 	case proto.TypeHeartbeat:
 		s.handleHeartbeat(env)
 		return
-	case proto.TypePermissionRequest:
-		var p proto.PermissionRequestPayload
-		requestID := ""
-		if err := env.DecodePayload(&p); err == nil {
-			requestID = strings.TrimSpace(p.RequestID)
-		}
-		if requestID == "" {
-			return
-		}
-		s.reg.AttachPermission(requestID, s)
-	case proto.TypePermissionCancel:
-		if env.ID != "" {
-			s.reg.DetachPermission(env.ID)
-		}
-	case proto.TypePromptForUserChoice:
-		// env.ID is the run id (so the fan path below delivers this
-		// frame to the run's subscriber). The ask id rides on the
-		// payload — pull it out so SubmitPromptForUserChoice can find
-		// the session by ask id via the byAsk index.
-		var p proto.PromptForUserChoicePayload
-		if err := env.DecodePayload(&p); err == nil && p.AskID != "" {
-			s.reg.AttachPromptForUserChoice(p.AskID, s)
-		}
 	case proto.TypeInteractionDecisionAck:
 		var ack proto.InteractionDecisionAckPayload
 		if err := env.DecodePayload(&ack); err != nil {
@@ -607,9 +571,7 @@ func (s *Session) dispatch(env proto.Envelope) {
 		return
 	}
 
-	// All run-correlated frames fan to the matching subscriber. Current
-	// permission and prompt-for-user-choice frames keep their interaction ID
-	// in the payload so Envelope.ID remains the run ID.
+	// All run-correlated frames fan to the matching subscriber.
 	if env.ID == "" {
 		return
 	}

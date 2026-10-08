@@ -13,17 +13,6 @@ import (
 
 const sourceTransferTimeout = 5 * time.Minute
 
-// @Summary Upload a source file
-// @Description Accepts one multipart file and purpose=user_data in either order, with a private 512 MiB content limit and 64 KiB envelope allowance. Commits only after the entire request validates. The source is project-owned, independent of Sessions and workspace copies. No Beta header is required. Other purposes, expires_after, listing, resumable Uploads, quotas/rate-limit and complete hosted error/status parity remain unsupported or unverified.
-// @Tags Files
-// @Accept multipart/form-data
-// @Produce json
-// @Security BearerAuth
-// @Param file formData file true "Source bytes"
-// @Param purpose formData string true "user_data" Enums(user_data)
-// @Success 200 {object} v1.SourceFile
-// @Failure 400,401,413,500,503 {object} v1.ErrorResponse
-// @Router /files [post]
 func (h *Handler) createSourceFile(w http.ResponseWriter, r *http.Request) {
 	deadline := time.Now().Add(sourceTransferTimeout)
 	controller := http.NewResponseController(w)

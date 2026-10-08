@@ -21,12 +21,19 @@ definitions:
         type: string
       resource_type:
         type: string
-      result_ids:
-        items:
-          type: object
-        type: array
       trace_id:
         type: string
+    required:
+      - action
+      - actor_label
+      - admin_credential_id
+      - created_at
+      - id
+      - project_id
+      - request_id
+      - resource_id
+      - resource_type
+      - trace_id
     type: object
   adminaudit.Page:
     properties:
@@ -38,6 +45,10 @@ definitions:
         type: boolean
       next_cursor:
         type: string
+    required:
+      - data
+      - has_more
+      - next_cursor
     type: object
   api.AdminRuntimeObservation:
     properties:
@@ -45,6 +56,9 @@ definitions:
         $ref: '#/definitions/api.AdminRuntimeObservationDetail'
       project_id:
         type: string
+    required:
+      - observation
+      - project_id
     type: object
   api.AdminRuntimeObservationDetail:
     properties:
@@ -107,7 +121,6 @@ definitions:
           - runtime_mode_not_observable
           - allocation_pending
           - runtime_not_running
-          - source_not_configured
           - sample_timeout
           - sample_unavailable
         type: string
@@ -155,17 +168,29 @@ definitions:
         type: array
       first_id:
         type: string
+        x-nullable: true
       has_more:
         type: boolean
       last_id:
         type: string
+        x-nullable: true
       object:
+        enum:
+          - list
         type: string
+    required:
+      - data
+      - first_id
+      - has_more
+      - last_id
+      - object
     type: object
   api.AdminSessionArchiveRequest:
     properties:
       expected_generation:
         type: integer
+    required:
+      - expected_generation
     type: object
   api.AdminSessionCounts:
     properties:
@@ -179,6 +204,12 @@ definitions:
         type: integer
       total:
         type: integer
+    required:
+      - failed
+      - idle
+      - in_progress
+      - requires_action
+      - total
     type: object
   api.AdminSummaryResponse:
     properties:
@@ -190,25 +221,43 @@ definitions:
         type: boolean
       next_cursor:
         type: string
+    required:
+      - data
+      - has_more
+      - next_cursor
     type: object
   api.AdminSummaryRow:
     properties:
       agent_id:
         type: string
+        x-nullable: true
       assets:
-        $ref: '#/definitions/sessions.AdminAssetCounts'
+        allOf:
+          - $ref: '#/definitions/sessions.AdminAssetCounts'
+        x-nullable: true
       coverage:
         $ref: '#/definitions/api.AdminUsageCoverage'
       key_id:
         type: string
+        x-nullable: true
       last_active_at:
         type: integer
+        x-nullable: true
       project_id:
         type: string
       sessions:
         $ref: '#/definitions/api.AdminSessionCounts'
       usage:
         $ref: '#/definitions/v1.TokenUsage'
+    required:
+      - agent_id
+      - assets
+      - coverage
+      - key_id
+      - last_active_at
+      - project_id
+      - sessions
+      - usage
     type: object
   api.AdminUsageCoverage:
     properties:
@@ -216,8 +265,13 @@ definitions:
         type: integer
       ratio:
         type: number
+        x-nullable: true
       total_sessions:
         type: integer
+    required:
+      - measured_sessions
+      - ratio
+      - total_sessions
     type: object
   api.CoreAPIError:
     properties:
@@ -238,7 +292,9 @@ definitions:
       type:
         type: string
     required:
+      - code
       - message
+      - param
       - type
     type: object
   api.CoreErrorResponse:
@@ -327,7 +383,21 @@ definitions:
         x-nullable: true
       params:
         type: object
+    required:
+      - code
+      - failed_at
+      - params
     type: object
+  api.DiagnosticSource:
+    enum:
+      - turn
+      - environment
+      - environment_input
+    type: string
+    x-enum-varnames:
+      - DiagnosticTurn
+      - DiagnosticEnvironment
+      - DiagnosticEnvironmentInput
   api.EnvironmentExecutorCredentialRequest:
     properties:
       key_id:
@@ -335,6 +405,8 @@ definitions:
         type: string
       rotate:
         type: boolean
+    required:
+      - key_id
     type: object
   api.ExecutorConnection:
     properties:
@@ -351,17 +423,23 @@ definitions:
         type: string
         x-nullable: true
       status:
-        enum:
-          - never_enrolled
-          - connected
-          - disconnected
-        type: string
+        $ref: '#/definitions/api.ExecutorConnectionStatus'
     required:
       - bound_key_id
       - enrolled_at
       - last_seen_at
       - status
     type: object
+  api.ExecutorConnectionStatus:
+    enum:
+      - never_enrolled
+      - connected
+      - disconnected
+    type: string
+    x-enum-varnames:
+      - ExecutorNeverEnrolled
+      - ExecutorConnected
+      - ExecutorDisconnected
   api.ExecutorCredentialList:
     properties:
       connection:
@@ -389,17 +467,8 @@ definitions:
         type: string
         x-nullable: true
       last_error_code:
-        enum:
-          - authentication_error
-          - connection_failed
-          - rate_limit_exceeded
-          - usage_limit_exceeded
-          - server_overloaded
-          - server_error
-          - resource_not_found
-          - request_timeout
-          - invalid_request
-        type: string
+        allOf:
+          - $ref: '#/definitions/modelconfiguration.ProviderErrorCode'
         x-nullable: true
       last_used_at:
         format: date-time
@@ -431,18 +500,15 @@ definitions:
       address_bindings:
         $ref: '#/definitions/deployment.AddressBindings'
       api_base_url:
-        description: public_url followed by /v1; null when public_url is null.
+        description: public_url followed by /v1.
         type: string
-        x-nullable: true
       configuration:
         allOf:
           - $ref: '#/definitions/api.InstallationConfiguration'
-        description: The process settings Core loaded. path and apply_command are empty, and applied_at is null, because Core reports its environment rather than an installer file.
-        x-nullable: true
+        description: The process settings Core loaded.
       installation_id:
-        description: The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
+        description: The ID in OAC_INSTALLATION_ID_FILE.
         type: string
-        x-nullable: true
       local_only:
         description: True when public_url names a loopback host, reachable only from the Core host.
         type: boolean
@@ -451,31 +517,39 @@ definitions:
           - core.installation
         type: string
       public_url:
-        description: 'OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.'
+        description: 'OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use.'
         type: string
-        x-nullable: true
       source_commit:
         description: Full source commit Core was built from; null for development builds.
         type: string
         x-nullable: true
+    required:
+      - address_bindings
+      - api_base_url
+      - configuration
+      - installation_id
+      - local_only
+      - object
+      - public_url
+      - source_commit
     type: object
   api.InstallationConfiguration:
     properties:
-      applied_at:
-        description: Null when Core reports its own environment.
-        type: string
-        x-nullable: true
-      apply_command:
-        description: Command that applies config.json changes. Empty when Core reports its own environment.
-        type: string
-      path:
-        description: Absolute host path of config.json. Empty when Core reports its own environment.
-        type: string
       settings:
         items:
           $ref: '#/definitions/api.InstallationSetting'
         type: array
+    required:
+      - settings
     type: object
+  api.InstallationService:
+    enum:
+      - core
+      - web
+    type: string
+    x-enum-varnames:
+      - InstallationCore
+      - InstallationWeb
   api.InstallationSetting:
     properties:
       changeable:
@@ -492,13 +566,20 @@ definitions:
       restarts:
         description: Services that restart when the setting changes.
         items:
-          type: string
+          $ref: '#/definitions/api.InstallationService'
         type: array
       sensitive:
         type: boolean
       value:
         description: Applied value; always null for a sensitive setting.
         x-nullable: true
+    required:
+      - changeable
+      - default
+      - key
+      - restarts
+      - sensitive
+      - value
     type: object
   api.ItemDiagnosticTiming:
     properties:
@@ -512,16 +593,25 @@ definitions:
         x-nullable: true
       started_at:
         type: string
+    required:
+      - completed_at
+      - item_id
+      - observed_duration_ms
+      - started_at
     type: object
   api.ProjectAPIKeyRequest:
     properties:
       name:
         type: string
+    required:
+      - name
     type: object
   api.ProjectRequest:
     properties:
       name:
         type: string
+    required:
+      - name
     type: object
   api.ResourceOwnerList:
     properties:
@@ -529,6 +619,8 @@ definitions:
         items:
           $ref: '#/definitions/writeaudit.ResourceOwner'
         type: array
+    required:
+      - data
     type: object
   api.RuntimeDiskObservation:
     properties:
@@ -550,6 +642,8 @@ definitions:
         items:
           $ref: '#/definitions/deployment.NodeAllocation'
         type: array
+    required:
+      - data
     type: object
   api.SandboxDeploymentChangeInput:
     properties:
@@ -602,6 +696,10 @@ definitions:
         type: string
       token:
         type: string
+    required:
+      - enrollment_id
+      - expires_at
+      - token
     type: object
   api.SandboxEnrollmentTokenRequest:
     properties:
@@ -619,6 +717,8 @@ definitions:
         type: string
       updated:
         type: boolean
+    required:
+      - id
     type: object
   api.SandboxNodeList:
     properties:
@@ -626,6 +726,8 @@ definitions:
         items:
           $ref: '#/definitions/deployment.Node'
         type: array
+    required:
+      - data
     type: object
   api.SessionDiagnosticFailure:
     properties:
@@ -663,13 +765,14 @@ definitions:
       params:
         type: object
       source:
-        enum:
-          - turn
-          - environment
-          - environment_input
-        type: string
+        $ref: '#/definitions/api.DiagnosticSource'
       turn_id:
         type: string
+    required:
+      - code
+      - failed_at
+      - params
+      - source
     type: object
   api.SessionDiagnostics:
     properties:
@@ -690,6 +793,11 @@ definitions:
           - requires_action
           - failed
         type: string
+    required:
+      - failure
+      - object
+      - session_id
+      - status
     type: object
   api.TurnDiagnostics:
     properties:
@@ -713,6 +821,14 @@ definitions:
         type: string
       turn_id:
         type: string
+    required:
+      - failure
+      - items
+      - items_truncated
+      - object
+      - session_id
+      - status
+      - turn_id
     type: object
   coremetrics.Database:
     properties:
@@ -727,6 +843,11 @@ definitions:
       size_bytes:
         type: integer
         x-nullable: true
+    required:
+      - ping_ms
+      - pool
+      - series
+      - size_bytes
     type: object
   coremetrics.DatabaseBucket:
     properties:
@@ -738,12 +859,15 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - ping_p95_ms
+      - pool_in_use
+      - start
     type: object
   coremetrics.Execution:
     properties:
       connected_daemons:
         type: integer
-        x-nullable: true
       in_progress_turns:
         type: integer
         x-nullable: true
@@ -764,16 +888,26 @@ definitions:
         type: array
       slots_in_use:
         type: integer
-        x-nullable: true
       slots_total:
         type: integer
-        x-nullable: true
       unavailable:
         type: integer
         x-nullable: true
       waiting_for_daemon:
         type: integer
         x-nullable: true
+    required:
+      - connected_daemons
+      - in_progress_turns
+      - interrupted
+      - oldest_queued_seconds
+      - queue_wait_ms
+      - queued_turns
+      - series
+      - slots_in_use
+      - slots_total
+      - unavailable
+      - waiting_for_daemon
     type: object
   coremetrics.ExecutionBucket:
     properties:
@@ -788,6 +922,11 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - in_progress
+      - queue_wait_p95_ms
+      - queued
+      - start
     type: object
   coremetrics.Job:
     properties:
@@ -803,8 +942,26 @@ definitions:
         type: integer
         x-nullable: true
       status:
-        type: string
+        $ref: '#/definitions/coremetrics.JobStatus'
+    required:
+      - failed
+      - id
+      - last_run_at
+      - processed
+      - status
     type: object
+  coremetrics.JobStatus:
+    enum:
+      - ok
+      - failing
+      - stopped
+      - unknown
+    type: string
+    x-enum-varnames:
+      - JobOk
+      - JobFailing
+      - JobStopped
+      - JobUnknown
   coremetrics.Latency:
     properties:
       p50:
@@ -813,6 +970,9 @@ definitions:
       p95:
         type: number
         x-nullable: true
+    required:
+      - p50
+      - p95
     type: object
   coremetrics.Pool:
     properties:
@@ -825,6 +985,10 @@ definitions:
       max:
         type: integer
         x-nullable: true
+    required:
+      - idle
+      - in_use
+      - max
     type: object
   coremetrics.Process:
     properties:
@@ -850,6 +1014,14 @@ definitions:
         items:
           $ref: '#/definitions/coremetrics.ProcessBucket'
         type: array
+    required:
+      - cpu_cores
+      - cpu_limit_cores
+      - goroutines
+      - memory_bytes
+      - memory_limit_bytes
+      - rss_bytes
+      - series
     type: object
   coremetrics.ProcessBucket:
     properties:
@@ -861,6 +1033,10 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - cpu_cores
+      - rss_bytes
+      - start
     type: object
   coremetrics.Range:
     properties:
@@ -870,6 +1046,10 @@ definitions:
         type: integer
       start:
         type: string
+    required:
+      - end
+      - resolution_seconds
+      - start
     type: object
   coremetrics.ServiceState:
     properties:
@@ -883,8 +1063,21 @@ definitions:
         type: string
         x-nullable: true
       status:
-        type: string
+        $ref: '#/definitions/coremetrics.ServiceStatus'
+    required:
+      - execution_owner
+      - revision
+      - started_at
+      - status
     type: object
+  coremetrics.ServiceStatus:
+    enum:
+      - running
+      - degraded
+    type: string
+    x-enum-varnames:
+      - ServiceRunning
+      - ServiceDegraded
   coremetrics.View:
     properties:
       database:
@@ -896,6 +1089,8 @@ definitions:
           $ref: '#/definitions/coremetrics.Job'
         type: array
       object:
+        enum:
+          - core.metrics
         type: string
       process:
         $ref: '#/definitions/coremetrics.Process'
@@ -903,6 +1098,14 @@ definitions:
         $ref: '#/definitions/coremetrics.Range'
       service:
         $ref: '#/definitions/coremetrics.ServiceState'
+    required:
+      - database
+      - execution
+      - jobs
+      - object
+      - process
+      - range
+      - service
     type: object
   deployment.AddressBindings:
     properties:
@@ -914,6 +1117,11 @@ definitions:
         type: integer
       self_hosted_executors:
         type: integer
+    required:
+      - hosted_sandboxes
+      - nodes
+      - nodes_on_other_address
+      - self_hosted_executors
     type: object
   deployment.HostHistory:
     properties:
@@ -923,6 +1131,9 @@ definitions:
         type: array
       resolution_seconds:
         type: integer
+    required:
+      - points
+      - resolution_seconds
     type: object
   deployment.HostHistoryPoint:
     properties:
@@ -937,6 +1148,11 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - available_disk_bytes_min
+      - cpu_utilization_max
+      - memory_used_bytes_max
+      - start
     type: object
   deployment.Node:
     properties:
@@ -944,8 +1160,10 @@ definitions:
         type: integer
       available_disk_bytes:
         type: integer
+        x-nullable: true
       available_memory_bytes:
         type: integer
+        x-nullable: true
       cleanup_pending:
         type: integer
       core_url:
@@ -955,20 +1173,13 @@ definitions:
         type: string
       cpu_count:
         type: integer
+        x-nullable: true
       created_at:
         type: string
       diagnostic:
+        allOf:
+          - $ref: '#/definitions/sandbox.NodeDiagnosticCode'
         description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-        enum:
-          - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
-          - capacity_insufficient
-        type: string
       enrollment_id:
         description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
         type: string
@@ -977,6 +1188,7 @@ definitions:
         type: string
       last_seen_at:
         type: string
+        x-nullable: true
       max_active:
         type: integer
       max_retained:
@@ -999,6 +1211,28 @@ definitions:
         type: integer
       snapshots:
         type: integer
+    required:
+      - active
+      - available_disk_bytes
+      - available_memory_bytes
+      - cleanup_pending
+      - core_url
+      - cpu_count
+      - created_at
+      - enrollment_id
+      - id
+      - last_seen_at
+      - max_active
+      - max_retained
+      - name
+      - online
+      - provider
+      - provider_ready
+      - reserved
+      - retained
+      - rollout
+      - running
+      - snapshots
     type: object
   deployment.NodeAllocation:
     properties:
@@ -1013,6 +1247,13 @@ definitions:
       deployment_generation:
         type: integer
       diagnostic:
+        enum:
+          - ""
+          - node_unavailable
+          - resource_missing
+          - compute_unconfirmed
+          - ownership_mismatch
+          - provider_unavailable
         type: string
       environment_id:
         type: string
@@ -1028,6 +1269,19 @@ definitions:
         type: string
       tenant_id:
         type: string
+    required:
+      - compute_phase
+      - compute_phase_changed_at
+      - created_at
+      - deployment_generation
+      - diagnostic
+      - environment_id
+      - id
+      - initialization
+      - node_id
+      - session_id
+      - state
+      - tenant_id
     type: object
   deployment.NodeDetail:
     properties:
@@ -1035,8 +1289,10 @@ definitions:
         type: integer
       available_disk_bytes:
         type: integer
+        x-nullable: true
       available_memory_bytes:
         type: integer
+        x-nullable: true
       cleanup_pending:
         type: integer
       core_url:
@@ -1046,20 +1302,13 @@ definitions:
         type: string
       cpu_count:
         type: integer
+        x-nullable: true
       created_at:
         type: string
       diagnostic:
+        allOf:
+          - $ref: '#/definitions/sandbox.NodeDiagnosticCode'
         description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-        enum:
-          - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
-          - capacity_insufficient
-        type: string
       enrollment_id:
         description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
         type: string
@@ -1072,6 +1321,7 @@ definitions:
         type: string
       last_seen_at:
         type: string
+        x-nullable: true
       max_active:
         type: integer
       max_retained:
@@ -1094,6 +1344,30 @@ definitions:
         type: integer
       snapshots:
         type: integer
+    required:
+      - active
+      - available_disk_bytes
+      - available_memory_bytes
+      - cleanup_pending
+      - core_url
+      - cpu_count
+      - created_at
+      - enrollment_id
+      - history
+      - host
+      - id
+      - last_seen_at
+      - max_active
+      - max_retained
+      - name
+      - online
+      - provider
+      - provider_ready
+      - reserved
+      - retained
+      - rollout
+      - running
+      - snapshots
     type: object
   deployment.NodeHost:
     properties:
@@ -1115,34 +1389,44 @@ definitions:
       total_memory_bytes:
         type: integer
         x-nullable: true
+    required:
+      - available_disk_bytes
+      - available_memory_bytes
+      - cpu_utilization
+      - effective_cpu_cores
+      - observed_at
+      - total_memory_bytes
     type: object
   deployment.NodeRollout:
     properties:
       diagnostic:
-        enum:
-          - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
-          - capacity_insufficient
-        type: string
+        $ref: '#/definitions/sandbox.NodeDiagnosticCode'
       ready_generation:
         description: Durable serving-generation pin; online and provider_ready still gate placement.
         type: integer
         x-nullable: true
       state:
+        allOf:
+          - $ref: '#/definitions/deployment.NodeRolloutState'
         description: Target preparation, independent of an old pin's serving readiness.
-        enum:
-          - ready
-          - preparing
-          - failed
-          - update_required
-          - unknown
-        type: string
+    required:
+      - ready_generation
+      - state
     type: object
+  deployment.NodeRolloutState:
+    enum:
+      - ready
+      - preparing
+      - failed
+      - update_required
+      - unknown
+    type: string
+    x-enum-varnames:
+      - NodeRolloutReady
+      - NodeRolloutPreparing
+      - NodeRolloutFailed
+      - NodeRolloutUpdateRequired
+      - NodeRolloutUnknown
   deployment.NodeUpdate:
     properties:
       max_active:
@@ -1152,11 +1436,14 @@ definitions:
         type: integer
       name:
         type: string
+    required:
+      - max_active
+      - name
     type: object
   deployment.Reset:
     properties:
       clear:
-        type: string
+        $ref: '#/definitions/deployment.ResetMode'
       deadline_at:
         type: string
         x-nullable: true
@@ -1167,7 +1454,21 @@ definitions:
         $ref: '#/definitions/deployment.ResetRemaining'
       requested_at:
         type: string
+    required:
+      - clear
+      - deadline_at
+      - forced_at
+      - remaining
+      - requested_at
     type: object
+  deployment.ResetMode:
+    enum:
+      - auto
+      - force
+    type: string
+    x-enum-varnames:
+      - ResetAuto
+      - ResetForce
   deployment.ResetOfflineNode:
     properties:
       name:
@@ -1176,6 +1477,10 @@ definitions:
         type: string
       resources:
         type: integer
+    required:
+      - name
+      - node_id
+      - resources
     type: object
   deployment.ResetRemaining:
     properties:
@@ -1191,14 +1496,17 @@ definitions:
         type: array
       on_offline_nodes:
         type: integer
+    required:
+      - busy
+      - cleanup
+      - idle
+      - offline_nodes
+      - on_offline_nodes
     type: object
   deployment.ResetRequest:
     properties:
       clear:
-        enum:
-          - auto
-          - force
-        type: string
+        $ref: '#/definitions/deployment.ResetMode'
       deadline_seconds:
         maximum: 86400
         minimum: 300
@@ -1216,6 +1524,9 @@ definitions:
         type: integer
       pending:
         type: integer
+    required:
+      - allocations
+      - pending
     type: object
   deployment.Rollout:
     properties:
@@ -1226,10 +1537,11 @@ definitions:
       previous_generation_sandboxes:
         type: integer
       state:
-        enum:
-          - settled
-          - preparing
-        type: string
+        $ref: '#/definitions/deployment.RolloutState'
+    required:
+      - nodes
+      - previous_generation_sandboxes
+      - state
     type: object
   deployment.RolloutNodes:
     properties:
@@ -1243,13 +1555,30 @@ definitions:
         type: integer
       update_required:
         type: integer
+    required:
+      - failed
+      - preparing
+      - ready
+      - unknown
+      - update_required
     type: object
+  deployment.RolloutState:
+    enum:
+      - settled
+      - preparing
+    type: string
+    x-enum-varnames:
+      - RolloutSettled
+      - RolloutPreparing
   deployment.Suspension:
     properties:
       idle_seconds:
         type: integer
       retention_seconds:
         type: integer
+    required:
+      - idle_seconds
+      - retention_seconds
     type: object
   deployment.View:
     properties:
@@ -1267,7 +1596,7 @@ definitions:
       metadata:
         type: object
       mode:
-        type: string
+        $ref: '#/definitions/sandbox.DeploymentMode'
       owner_epoch:
         type: integer
       provider:
@@ -1287,9 +1616,53 @@ definitions:
       suspension:
         allOf:
           - $ref: '#/definitions/deployment.Suspension'
-        description: Idle suspension policy; microsandbox only, otherwise null.
+        description: Idle suspension policy; null unless the selected Provider declares checkpoint support.
         x-nullable: true
+    required:
+      - core_url
+      - credential_configured
+      - generation
+      - installation_id
+      - mode
+      - owner_epoch
+      - provider
+      - reset
+      - resources
+      - rollout
+      - suspension
     type: object
+  modelconfiguration.ProviderErrorCode:
+    enum:
+      - authentication_error
+      - connection_failed
+      - rate_limit_exceeded
+      - usage_limit_exceeded
+      - server_overloaded
+      - server_error
+      - resource_not_found
+      - request_timeout
+      - invalid_request
+    type: string
+    x-enum-varnames:
+      - ProviderAuthenticationError
+      - ProviderConnectionFailed
+      - ProviderRateLimitExceeded
+      - ProviderUsageLimitExceeded
+      - ProviderServerOverloaded
+      - ProviderServerError
+      - ProviderResourceNotFound
+      - ProviderRequestTimeout
+      - ProviderInvalidRequest
+  modelprovider.Protocol:
+    enum:
+      - anthropic
+      - responses
+      - chat_completions
+    type: string
+    x-enum-varnames:
+      - Anthropic
+      - Responses
+      - ChatCompletions
   projects.APIKey:
     properties:
       created_at:
@@ -1304,6 +1677,14 @@ definitions:
         type: string
       revoked_at:
         type: string
+        x-nullable: true
+    required:
+      - created_at
+      - id
+      - name
+      - prefix
+      - project_id
+      - revoked_at
     type: object
   projects.IssuedAPIKey:
     properties:
@@ -1321,6 +1702,15 @@ definitions:
         type: string
       revoked_at:
         type: string
+        x-nullable: true
+    required:
+      - created_at
+      - id
+      - key
+      - name
+      - prefix
+      - project_id
+      - revoked_at
     type: object
   projects.KeyPage:
     properties:
@@ -1330,6 +1720,9 @@ definitions:
         type: array
       has_more:
         type: boolean
+    required:
+      - data
+      - has_more
     type: object
   projects.Page:
     properties:
@@ -1339,6 +1732,9 @@ definitions:
         type: array
       has_more:
         type: boolean
+    required:
+      - data
+      - has_more
     type: object
   projects.Project:
     properties:
@@ -1346,12 +1742,19 @@ definitions:
         type: integer
       archived_at:
         type: string
+        x-nullable: true
       created_at:
         type: string
       id:
         type: string
       name:
         type: string
+    required:
+      - active_key_count
+      - archived_at
+      - created_at
+      - id
+      - name
     type: object
   sandbox.ConfigurationDiscoveryInput:
     properties:
@@ -1362,13 +1765,41 @@ definitions:
       query:
         type: object
     type: object
+  sandbox.DeploymentMode:
+    enum:
+      - ""
+      - nodes
+      - direct
+    type: string
+    x-enum-varnames:
+      - DeploymentUnconfigured
+      - DeploymentNodes
+      - DeploymentDirect
   sandbox.DeploymentSpec:
     properties:
       resources:
         $ref: '#/definitions/sandbox.Resources'
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
+    required:
+      - resources
     type: object
+  sandbox.NodeDiagnosticCode:
+    enum:
+      - provider_unavailable
+      - host_unsupported
+      - artifacts_unavailable
+      - runtime_download_failed
+      - runtime_image_unavailable
+      - capacity_insufficient
+    type: string
+    x-enum-varnames:
+      - NodeProviderUnavailable
+      - NodeHostUnsupported
+      - NodeArtifactsUnavailable
+      - NodeRuntimeDownloadFailed
+      - NodeRuntimeImageUnavailable
+      - NodeCapacityInsufficient
   sandbox.Resources:
     properties:
       cpus:
@@ -1379,6 +1810,9 @@ definitions:
         type: integer
       root_disk_mib:
         type: integer
+    required:
+      - cpus
+      - memory_mib
     type: object
   sandbox.RuntimeRelease:
     properties:
@@ -1394,6 +1828,13 @@ definitions:
         type: string
       source_commit:
         type: string
+    required:
+      - firmware_sha256
+      - image_id
+      - image_manifest_digest
+      - microsandbox_ref
+      - runtime_sha256
+      - source_commit
     type: object
   sessions.AdminAssetCounts:
     properties:
@@ -1409,6 +1850,13 @@ definitions:
         type: integer
       vaults:
         type: integer
+    required:
+      - agents
+      - credentials
+      - environment_templates
+      - files
+      - skills
+      - vaults
     type: object
   sessions.ExecutorCredential:
     properties:
@@ -1420,6 +1868,10 @@ definitions:
       revoked_at:
         type: string
         x-nullable: true
+    required:
+      - created_at
+      - key_id
+      - revoked_at
     type: object
   sessions.IssuedExecutorCredential:
     properties:
@@ -1429,6 +1881,9 @@ definitions:
         type: string
       key_id:
         type: string
+    required:
+      - executor_token
+      - key_id
     type: object
   sessions.ManagedArchive:
     properties:
@@ -1437,8 +1892,22 @@ definitions:
       session_id:
         type: string
       state:
-        type: string
+        $ref: '#/definitions/sessions.ManagedArchiveState'
+    required:
+      - environment_id
+      - session_id
+      - state
     type: object
+  sessions.ManagedArchiveState:
+    enum:
+      - active
+      - cleanup_pending
+      - released
+    type: string
+    x-enum-varnames:
+      - ManagedArchiveActive
+      - ManagedArchiveCleanupPending
+      - ManagedArchiveReleased
   v1.Agent:
     properties:
       id:
@@ -1458,6 +1927,10 @@ definitions:
       service_tier:
         enum:
           - auto
+          - default
+          - flex
+          - priority
+          - fast
         type: string
       text:
         $ref: '#/definitions/v1.TextConfig'
@@ -1466,13 +1939,13 @@ definitions:
           type: object
         type: array
       x_agents_core:
-        allOf:
-          - $ref: '#/definitions/v1.AgentsCore'
-        x-nullable: true
+        $ref: '#/definitions/v1.AgentsCore'
     required:
       - id
+      - instructions
       - model
       - multi_agent
+      - name
       - reasoning
       - service_tier
       - text
@@ -1481,8 +1954,6 @@ definitions:
   v1.AgentDeleted:
     properties:
       deleted:
-        enum:
-          - true
         type: boolean
       id:
         type: string
@@ -1546,8 +2017,8 @@ definitions:
         x-nullable: true
       type:
         enum:
-          - static_bearer
           - mcp_oauth
+          - static_bearer
         type: string
     required:
       - mcp_server_url
@@ -1588,7 +2059,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.EnvironmentInstallation:
@@ -1602,10 +2075,7 @@ definitions:
       message:
         type: string
       status:
-        enum:
-          - available
-          - unavailable
-        type: string
+        $ref: '#/definitions/v1.InstallationStatus'
       version:
         type: string
     type: object
@@ -1684,6 +2154,7 @@ definitions:
       - created_at
       - files
       - id
+      - name
       - network
       - object
       - packages
@@ -1726,18 +2197,15 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.ExecutionHarnessConfigSelection:
     properties:
       source:
-        enum:
-          - session
-          - agent
-          - deployment
-          - unknown
-        type: string
+        $ref: '#/definitions/v1.ExecutionSource'
       value:
         type: object
     required:
@@ -1751,32 +2219,28 @@ definitions:
           - $ref: '#/definitions/v1.ModelProviderView'
         x-nullable: true
       source:
-        enum:
-          - session
-          - agent
-          - deployment
-          - unknown
-        type: string
+        $ref: '#/definitions/v1.ExecutionSource'
       status:
-        enum:
-          - available
-          - redacted
-          - unavailable
-        type: string
+        $ref: '#/definitions/v1.ExecutionProviderStatus'
     required:
       - configuration
       - source
       - status
     type: object
+  v1.ExecutionProviderStatus:
+    enum:
+      - available
+      - redacted
+      - unavailable
+    type: string
+    x-enum-varnames:
+      - ExecutionProviderAvailable
+      - ExecutionProviderRedacted
+      - ExecutionProviderUnavailable
   v1.ExecutionSelection:
     properties:
       source:
-        enum:
-          - session
-          - agent
-          - deployment
-          - unknown
-        type: string
+        $ref: '#/definitions/v1.ExecutionSource'
       value:
         type: string
         x-nullable: true
@@ -1784,6 +2248,18 @@ definitions:
       - source
       - value
     type: object
+  v1.ExecutionSource:
+    enum:
+      - session
+      - agent
+      - deployment
+      - unknown
+    type: string
+    x-enum-varnames:
+      - ExecutionSourceSession
+      - ExecutionSourceAgent
+      - ExecutionSourceDeployment
+      - ExecutionSourceUnknown
   v1.InputTokenDetails:
     properties:
       cached_tokens:
@@ -1791,10 +2267,20 @@ definitions:
     required:
       - cached_tokens
     type: object
+  v1.InstallationStatus:
+    enum:
+      - available
+      - unavailable
+    type: string
+    x-enum-varnames:
+      - InstallationAvailable
+      - InstallationUnavailable
   v1.Item:
     properties:
       action:
-        $ref: '#/definitions/v1.WebSearchAction'
+        allOf:
+          - $ref: '#/definitions/v1.WebSearchAction'
+        x-nullable: true
       agent_id:
         type: string
       arguments: {}
@@ -1808,18 +2294,25 @@ definitions:
         type: array
       cwd:
         type: string
+        x-nullable: true
       duration_ms:
         type: integer
-      error: {}
+        x-nullable: true
+      error:
+        x-nullable: true
       exit_code:
         type: integer
+        x-nullable: true
       id:
         type: string
+        x-nullable: true
       model:
         type: string
+        x-nullable: true
       name:
         type: string
-      output: {}
+      output:
+        x-nullable: true
       phase:
         enum:
           - commentary
@@ -1828,6 +2321,7 @@ definitions:
         x-nullable: true
       reasoning_effort:
         type: string
+        x-nullable: true
       recipient_agent_id:
         type: string
       recipient_agent_ids:
@@ -1847,9 +2341,10 @@ definitions:
         enum:
           - in_progress
           - completed
-          - failed
           - incomplete
+          - failed
         type: string
+        x-nullable: true
       summary:
         items:
           $ref: '#/definitions/v1.SummaryText'
@@ -1859,13 +2354,13 @@ definitions:
       type:
         enum:
           - message
-          - command_execution
-          - mcp_call
+          - reasoning
           - function_call
           - function_call_output
-          - web_search_call
-          - reasoning
           - agent_message
+          - mcp_call
+          - web_search_call
+          - command_execution
           - create_subagent_call
           - send_subagent_input_call
           - resume_subagent_call
@@ -1889,8 +2384,8 @@ definitions:
       type:
         enum:
           - input_text
-          - output_text
           - input_image
+          - output_text
           - encrypted_content
         type: string
     required:
@@ -1916,7 +2411,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.ModelConfigurationInput:
@@ -1957,11 +2454,7 @@ definitions:
       max_output_tokens:
         type: integer
       protocol:
-        enum:
-          - anthropic
-          - responses
-          - chat_completions
-        type: string
+        $ref: '#/definitions/modelprovider.Protocol'
     required:
       - api_key
       - base_url
@@ -1978,11 +2471,7 @@ definitions:
       max_output_tokens:
         type: integer
       protocol:
-        enum:
-          - anthropic
-          - responses
-          - chat_completions
-        type: string
+        $ref: '#/definitions/modelprovider.Protocol'
     required:
       - api_key_configured
       - base_url
@@ -1997,6 +2486,7 @@ definitions:
         x-nullable: true
     required:
       - enabled
+      - max_concurrent_subagents
     type: object
   v1.OAuthCredentialRefresh:
     properties:
@@ -2014,6 +2504,8 @@ definitions:
         $ref: '#/definitions/v1.OAuthEndpointAuth'
     required:
       - client_id
+      - resource
+      - scope
       - token_endpoint
       - token_endpoint_auth
     type: object
@@ -2038,9 +2530,21 @@ definitions:
   v1.Reasoning:
     properties:
       effort:
+        enum:
+          - none
+          - minimal
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
         type: string
         x-nullable: true
       summary:
+        enum:
+          - concise
+          - detailed
+          - auto
         type: string
         x-nullable: true
     type: object
@@ -2478,7 +2982,6 @@ definitions:
           - runtime_mode_not_observable
           - allocation_pending
           - runtime_not_running
-          - source_not_configured
           - sample_timeout
           - sample_unavailable
         type: string
@@ -2552,7 +3055,7 @@ definitions:
           - fast
         type: string
       text:
-        $ref: '#/definitions/v1.SavedAgentText'
+        $ref: '#/definitions/v1.TextConfig'
       tools:
         items:
           type: object
@@ -2560,15 +3063,15 @@ definitions:
       updated_at:
         type: integer
       x_agents_core:
-        allOf:
-          - $ref: '#/definitions/v1.SavedAgentCore'
-        x-nullable: true
+        $ref: '#/definitions/v1.SavedAgentCore'
     required:
       - created_at
       - id
+      - instructions
       - metadata
       - model
       - multi_agent
+      - name
       - object
       - reasoning
       - service_tier
@@ -2609,34 +3112,10 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
-    type: object
-  v1.SavedAgentText:
-    properties:
-      format:
-        $ref: '#/definitions/v1.SavedAgentTextFormat'
-      verbosity:
-        enum:
-          - low
-          - medium
-          - high
-        type: string
-    required:
-      - format
-      - verbosity
-    type: object
-  v1.SavedAgentTextFormat:
-    properties:
-      schema:
-        type: object
-      type:
-        enum:
-          - text
-          - json_schema
-        type: string
-    required:
-      - type
     type: object
   v1.Session:
     properties:
@@ -2686,12 +3165,14 @@ definitions:
       - agent
       - created_at
       - environment
+      - error
       - id
       - last_active_at
       - metadata
       - object
       - required_actions
       - status
+      - usage
       - vault_ids
     type: object
   v1.SessionArtifact:
@@ -2759,7 +3240,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SessionCore:
@@ -2811,8 +3294,8 @@ definitions:
       type:
         enum:
           - none
-          - self_hosted
           - openai_hosted
+          - self_hosted
         type: string
       workspace_directory:
         type: string
@@ -2868,7 +3351,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.Skill:
@@ -2933,7 +3418,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SkillVersion:
@@ -3001,19 +3488,19 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SourceFile:
     properties:
       bytes:
-        minimum: 0
         type: integer
       created_at:
         type: integer
       expires_at:
         type: integer
-        x-nullable: true
       filename:
         type: string
       id:
@@ -3024,15 +3511,23 @@ definitions:
         type: string
       purpose:
         enum:
+          - assistants
+          - assistants_output
+          - batch
+          - batch_output
+          - fine-tune
+          - fine-tune-results
+          - vision
           - user_data
         type: string
       status:
         enum:
+          - uploaded
           - processed
+          - error
         type: string
       status_details:
         type: string
-        x-nullable: true
     required:
       - bytes
       - created_at
@@ -3065,19 +3560,17 @@ definitions:
         type: array
       first_id:
         type: string
-        x-nullable: true
       has_more:
         type: boolean
       last_id:
         type: string
-        x-nullable: true
       object:
-        enum:
-          - list
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SummaryText:
@@ -3179,11 +3672,16 @@ definitions:
         x-nullable: true
     required:
       - agent_id
+      - completed_at
       - created_at
+      - error
       - id
       - object
       - session_id
+      - started_at
       - status
+      - subagent_id
+      - usage
     type: object
   v1.TurnError:
     properties:
@@ -3232,7 +3730,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.Vault:
@@ -3256,6 +3756,7 @@ definitions:
       - created_at
       - id
       - metadata
+      - name
       - object
     type: object
   v1.VaultDeleted:
@@ -3293,19 +3794,24 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.WebSearchAction:
     properties:
       pattern:
         type: string
+        x-nullable: true
       queries:
         items:
           type: string
         type: array
+        x-nullable: true
       query:
         type: string
+        x-nullable: true
       type:
         enum:
           - search
@@ -3315,6 +3821,7 @@ definitions:
         type: string
       url:
         type: string
+        x-nullable: true
     required:
       - type
     type: object
@@ -3323,6 +3830,8 @@ definitions:
       id:
         type: string
       kind:
+        enum:
+          - issued
         type: string
       name:
         type: string
@@ -3330,11 +3839,36 @@ definitions:
         type: string
       revoked_at:
         type: string
+        x-nullable: true
+    required:
+      - id
+      - kind
+      - name
+      - prefix
+      - revoked_at
     type: object
+  writeaudit.Action:
+    enum:
+      - create
+      - update
+      - delete
+      - send_events
+      - upload_file
+      - upload_version
+      - update_default_version
+    type: string
+    x-enum-varnames:
+      - ActionCreate
+      - ActionUpdate
+      - ActionDelete
+      - ActionSendEvents
+      - ActionUploadFile
+      - ActionUploadVersion
+      - ActionUpdateDefaultVersion
   writeaudit.Operation:
     properties:
       action:
-        type: string
+        $ref: '#/definitions/writeaudit.Action'
       api_key:
         $ref: '#/definitions/writeaudit.APIKey'
       created_at:
@@ -3348,9 +3882,19 @@ definitions:
       resource_id:
         type: string
       resource_type:
-        type: string
+        $ref: '#/definitions/writeaudit.ResourceType'
       trace_id:
         type: string
+    required:
+      - action
+      - api_key
+      - created_at
+      - id
+      - parent_id
+      - request_id
+      - resource_id
+      - resource_type
+      - trace_id
     type: object
   writeaudit.Page:
     properties:
@@ -3362,18 +3906,47 @@ definitions:
         type: boolean
       next_cursor:
         type: string
+    required:
+      - data
+      - has_more
+      - next_cursor
     type: object
   writeaudit.ResourceOwner:
     properties:
-      admin_audit_id:
-        type: string
       api_key:
-        $ref: '#/definitions/writeaudit.APIKey'
+        allOf:
+          - $ref: '#/definitions/writeaudit.APIKey'
+        x-nullable: true
       resource_id:
         type: string
-      source:
-        type: string
+    required:
+      - api_key
+      - resource_id
     type: object
+  writeaudit.ResourceType:
+    enum:
+      - agent
+      - session
+      - environment
+      - environment_template
+      - skill
+      - skill_version
+      - file
+      - vault
+      - credential
+      - artifact
+    type: string
+    x-enum-varnames:
+      - ResourceAgent
+      - ResourceSession
+      - ResourceEnvironment
+      - ResourceEnvironmentTemplate
+      - ResourceSkill
+      - ResourceSkillVersion
+      - ResourceFile
+      - ResourceVault
+      - ResourceCredential
+      - ResourceArtifact
 info:
   contact: {}
   description: Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.
@@ -6202,7 +6775,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; differing selections and file-managed deployments reject. This does not create compute or execute work.
+      description: Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
@@ -6694,7 +7267,7 @@ paths:
         - Sandbox Manager
   /core/v1/sandbox/runtime-observations:
     get:
-      description: Core key only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
+      description: Core key only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
       parameters:
         - description: Last Session ID from the preceding page
           in: query

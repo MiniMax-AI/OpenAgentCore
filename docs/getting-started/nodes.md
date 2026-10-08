@@ -27,18 +27,9 @@ Node installation and removal require root. Web's command uses `sudo` unless the
 
 ### The command
 
-This is the command Web generates, with this installation's values:
+Copy the current command from **Nodes → Add node**. It includes this installation's address, checksum and enrollment token. Before downloading, it checks Linux amd64, Python 3.9+ and the required tools. Temporary download failures retry up to three attempts. If checksum verification fails, copy a fresh command from Web and retry.
 
-```sh
- (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
-printf '\n==> Downloading node installer...\n' &&
-curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
-printf '==> Verifying node installer...\n' &&
-printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
-```
-
-- It downloads the installer into a private temporary directory, checks its SHA-256, and runs it with `sudo`, or directly in a root shell.
+- It downloads into the invoking account's private `~/.oac/node-bootstrap` directory, checks SHA-256, and runs with `sudo`, or directly in a root shell. Each retry clears the unfinished download while holding a lock; verified `<sha256>.pyz` files remain available to installers.
 - The token reaches the installer on standard input, so it never appears in a process argument, an environment variable or sudo's log.
 - The leading space keeps the command out of the shell history where `HISTCONTROL` ignores such lines (the Debian and Ubuntu default).
 
@@ -46,7 +37,7 @@ The installer shows each phase as it runs and, once Core confirms the node, a su
 
 ### Host requirements
 
-- Linux amd64 with systemd; Python 3.9+, `curl` and `sha256sum`; root or sudo.
+- Linux amd64 with systemd; Python 3.9+, `curl`, `sha256sum` and `flock`; root or sudo.
 - SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
 - microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
@@ -88,7 +79,7 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 - Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It refuses, without changing anything, when the node's retained identity belongs to another Core address or installation.
 - A command that already expired, or was used on another host, fails at once with `Core rejected the node configuration read (HTTP 401)`: generate a new command and run it within 10 minutes.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it.
-- Downloads resume where they stopped. A download that brings less than 64 KiB in a minute stops, keeping what it has; run the command again.
+- Failed or interrupted downloads discard their temporary files. A rerun downloads missing files from the beginning and reuses verified complete files. A transfer that brings less than 64 KiB in a minute stops; check the network and retry.
 - The Docker Runtime image is about 500 MB. On a slow link, load it first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
 - Interrupting the installer, or closing its terminal, stops it; run the command again to continue.
 
@@ -132,9 +123,9 @@ Use manual registration when you manage the node's files and service yourself in
 1. Take `oac-node` from the same release as Core.
 2. Get an enrollment token: the token in a command from **Add node**, or `POST /core/v1/sandbox/enrollment-tokens` with the Core key. It is single-use and carries the node's approved capacity; the response's `expires_at` says when it expires. Save it in a `0600` file on the host.
 3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
-4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add one adapter object for the host:
-   - `docker`: `host` (an explicit Unix socket), `image` (the locally imported Runtime image of the approved release), `network`, `extra_hosts`, an absolute `seccomp_file` and `nested_sandbox`.
-   - `microsandbox`: absolute `helper_path`, `runtime_path` and `firmware_path` with their `runtime_sha256` and `firmware_sha256`, `image`, the sandbox `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib`, a `network` policy, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
+4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size, the Runtime image and artifact hashes from `specification`:
+   - Docker: the [Docker node configuration](../configuration.md#docker-node-configuration) fields, with `host` an explicit Unix socket, `image` the local ID of the imported Runtime image and `seccomp_file` absolute.
+   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, a `network` policy, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
 5. Register, then run the node under the host's service supervisor, with real absolute paths:
 
    ```sh
@@ -166,20 +157,18 @@ When a node is online but its sandbox provider is not ready, **Nodes** and **Ove
 - **Nodes added with Web's command** report a failed check of the current sandbox configuration as **Preparation failed** in the node's target status, with the reason in a help tip (`rollout.diagnostic` in `GET /core/v1/sandbox/nodes`). The tip beside **Provider not ready** only says *Sandbox provider unavailable*.
 - **Manually registered nodes** show the reason in the help tip beside **Provider not ready** (`diagnostic`).
 
-The node's log has the local error behind the code.
+Each code is a Provider-neutral class; the local error behind it stays on the node. A manually registered node logs it. For a node added with Web's command, rerun the command on the host: the installer checks the host requirements first and names what to fix ([Installer messages](#installer-messages)).
 
 A node reports only its first failed check, in this order: the Docker daemon or KVM, Docker's limit support, host capacity, then the installed Runtime files. An unreachable Docker daemon therefore hides a missing image. The next heartbeat, about ten seconds after a fix, clears or replaces the code. An offline node keeps its last code, which Web hides until the node reconnects.
 
 | Code | Help tip | Cause | Fix |
 | --- | --- | --- | --- |
-| `docker_unavailable` | Docker unavailable | The Docker socket is unreachable or not accessible, or Docker fails its info or image request | Start Docker and give the node's user access to `/var/run/docker.sock` |
-| `docker_limits_unsupported` | Docker limits unsupported | Docker reports no CPU quota or memory limit support | Use a host whose cgroups enforce CPU and memory limits (cgroup v2) |
+| `provider_unavailable` | Sandbox provider unavailable | The provider's service is unreachable or fails a request, such as a stopped Docker daemon, or a failure without a class | Rerun the node's command, or read a manually registered node's log |
+| `host_unsupported` | Host unsupported | The host lacks a capability the provider requires, such as Docker CPU and memory limits (cgroup v2) or read-write access to `/dev/kvm` | Rerun the node's command, or read a manually registered node's log |
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
-| `runtime_image_unavailable` | Runtime image missing | Docker does not have the pinned Runtime image | A node added with Web's command downloads it again by itself; otherwise load the image from the matching release |
-| `kvm_unavailable` | KVM unavailable | The node can't open `/dev/kvm` for reading and writing | Enable hardware virtualization and give the node's user KVM access, through the `kvm` group |
-| `microsandbox_artifacts_unavailable` | microsandbox components missing | The Runtime or firmware is missing or fails its SHA-256 check, or the helper is missing | A node added with Web's command downloads the missing files by itself; otherwise restore them from the matching release |
+| `runtime_image_unavailable` | Runtime image missing | The provider does not have the pinned Runtime image | A node added with Web's command downloads it again by itself; otherwise load the image from the matching release |
+| `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | A node added with Web's command downloads the missing files by itself; otherwise restore them from the matching release |
 | `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to the console and the release. The node retries with growing delays, up to 30 minutes apart |
-| `provider_unavailable` | Sandbox provider unavailable | Any other failure | Read the node's log |
 
 A new group membership applies only to a new process. Restart the node service: `sudo systemctl restart oac-node-<installation-id>.service`. A node that is registered but never connects usually can't reach Core at the public URL, or its `/api/v1` WebSocket doesn't pass the reverse proxy.
 

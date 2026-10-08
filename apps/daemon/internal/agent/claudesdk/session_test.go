@@ -26,7 +26,7 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
-			s, err := NewFactory(config)(ctx, request, out)
+			s, err := startSingleTurn(ctx, config, request, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,7 +74,7 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 }
 
 func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
-	for _, kind := range []string{"execution-controls", "tool", "option", "outside"} {
+	for _, kind := range []string{"execution-controls", "tool", "outside"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
@@ -85,12 +85,10 @@ func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
 				request.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "low"}
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
-			case "option":
-				request.AgentOptions["allowed_tools"] = "anything"
 			case "outside":
 				config.StateDir = filepath.Dir(root)
 			}
-			_, err := NewFactory(config)(context.Background(), request, make(chan proto.Envelope, 1))
+			_, err := startSingleTurn(context.Background(), config, request, make(chan proto.Envelope, 1))
 			if err == nil || !strings.HasPrefix(err.Error(), "claudesdk:") {
 				t.Fatalf("expected pre-launch rejection, got %v", err)
 			}

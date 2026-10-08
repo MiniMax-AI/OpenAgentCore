@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
@@ -21,11 +22,11 @@ import (
 func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	// The deployment validates these inputs before it reaches storage, so
 	// storage without a database is enough.
-	rules, err := placement.NewRules(providers.Builtin(), "")
+	rules, err := placement.NewRules(providers.Builtin(), "https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), rules)
+	nodes, err := deployment.NewService(deploymentpg.New(nil, pgtest.CredentialKey(t)), deploymentpg.New(nil, pgtest.CredentialKey(t)), providers.Builtin(), rules)
 	if err != nil {
 		t.Fatal(err)
 	}

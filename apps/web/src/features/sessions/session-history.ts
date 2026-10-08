@@ -2,9 +2,10 @@ import type {
   AgentSession,
   AgentTurn,
   ListPage,
-  CoreProjectReader,
   SessionItem,
 } from "@oac/agents-client";
+
+import type { ProjectClient } from "../../lib/projects";
 
 /**
  * Read-only Session history for the administrator. The Web API offers no event
@@ -87,7 +88,7 @@ export interface SessionHistory {
   loadedAt: number;
 }
 
-type HistoryReader = Pick<CoreProjectReader, "retrieveSession" | "listItems" | "listTurns">;
+type HistoryReader = Pick<ProjectClient, "retrieveSession" | "listItems" | "listTurns">;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

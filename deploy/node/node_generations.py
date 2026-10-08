@@ -12,14 +12,14 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
-import zipapp
+import zipfile
+
+from distribution import temporary_file
 
 
 def atomic_json(path, value):
-    descriptor, temporary = tempfile.mkstemp(prefix=".generation-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "w") as stream:
+    with temporary_file(path) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
             json.dump(value, stream, sort_keys=True)
             stream.write("\n")
             stream.flush()
@@ -30,9 +30,6 @@ def atomic_json(path, value):
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
 def helper_archive(args, installer):
@@ -42,14 +39,12 @@ def helper_archive(args, installer):
         source = args.bundle / "node-install.pyz"
     if source.suffix == ".pyz" and source.is_file() and not source.is_symlink():
         return source.read_bytes()
-    with tempfile.TemporaryDirectory() as directory:
-        package = Path(directory)
-        source_dir = Path(installer.__file__).parent
+    archive = io.BytesIO()
+    source_dir = Path(installer.__file__).parent
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
         for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"):
-            shutil.copyfile(source_dir / name, package / ("__main__.py" if name == "node_install.py" else name))
-        archive = io.BytesIO()
-        zipapp.create_archive(package, archive, compressed=True)
-        return archive.getvalue()
+            package.write(source_dir / name, "__main__.py" if name == "node_install.py" else name)
+    return archive.getvalue()
 
 
 def install_helper(root, args, installer, archive=None):
@@ -62,10 +57,9 @@ def install_helper(root, args, installer, archive=None):
     installer.existing_file(target)
     if archive is None:
         archive = helper_archive(args, installer)
-    with tempfile.TemporaryDirectory(dir=root) as directory:
-        staged = Path(directory) / "helper.pyz"
-        staged.write_bytes(archive)
-        os.chmod(staged, 0o600)
+    with temporary_file(target) as staged:
+        with os.fdopen(os.open(staged, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output:
+            output.write(archive)
         os.replace(staged, target)
     atomic_json(settings, value)
 
@@ -142,8 +136,8 @@ def root_runtime_files(root, value, others, installer):
     """Return only verified original Runtime files that no retained config uses."""
     def paths(configuration):
         if configuration["provider"] == "docker":
-            return [Path(configuration["docker"]["seccomp_file"])]
-        return [Path(configuration["microsandbox"][key]) for key in ("helper_path", "runtime_path", "firmware_path")]
+            return [Path(configuration["native"]["seccomp_file"])]
+        return [Path(configuration["native"][key]) for key in ("helper_path", "runtime_path", "firmware_path")]
     names = ["runtime/seccomp.json", "images/runtime.tar.gz", "images/runtime.tar"]
     if value["provider"] == "microsandbox":
         names.extend(installer.MICRO)
@@ -233,14 +227,14 @@ def validate_preparation_plan(root, plan, base, installer):
     if not re.fullmatch(r"[a-f0-9]{40}", source):
         raise installer.InstallError("Preparation release identity differs")
     if plan["provider"] == "docker":
-        policy = Path(plan["docker"]["seccomp_file"])
+        policy = Path(plan["native"]["seccomp_file"])
         if policy not in (root / "runtime/seccomp.json", root / "releases" / source / "runtime/seccomp.json"):
             raise installer.InstallError("Preparation policy is outside its immutable release")
-        if plan["docker"]["image"] not in (runtime["image_id"], runtime["image_manifest_digest"]):
+        if plan["native"]["image"] not in (runtime["image_id"], runtime["image_manifest_digest"]):
             raise installer.InstallError("Preparation image differs from the specification")
         installer.no_links(policy)
     else:
-        micro = plan["microsandbox"]
+        micro = plan["native"]
         paths = [Path(micro[key]) for key in ("helper_path", "runtime_path", "firmware_path")]
         if not any(paths == [release / name for name in installer.MICRO] for release in (root, root / "releases" / source)):
             raise installer.InstallError("Preparation artifacts are outside their immutable release")
@@ -250,17 +244,17 @@ def validate_preparation_plan(root, plan, base, installer):
         for path in paths + [expected_home]:
             installer.no_links(path)
     configuration = dict(plan, core_url=plan["core_url"].removesuffix("/api/v1"))
-    installer.node_spec.verify_provider(plan, configuration, plan.get("docker", {}).get("image"))
+    installer.node_spec.verify_provider(plan, configuration, plan.get("native", {}).get("image"))
 
 
 def verify_plan_final(plan, final, installer):
     expected = copy.deepcopy(plan)
     if plan["provider"] == "docker":
-        image = final.get("docker", {}).get("image")
+        image = final.get("native", {}).get("image")
         runtime = plan["specification"]["runtime"]
         if image not in (runtime["image_id"], runtime["image_manifest_digest"]):
             raise installer.InstallError("Final Docker image differs from the preparation specification")
-        expected["docker"]["image"] = image
+        expected["native"]["image"] = image
     if expected != final:
         raise installer.InstallError("Final generation differs from its immutable preparation plan")
 
@@ -280,9 +274,9 @@ def owned_root(args, installer):
 
 def generation_home(root, configuration, base, installer):
     runtime = configuration["specification"]["runtime"]
-    previous = base["microsandbox"]
+    previous = base["specification"]["runtime"]
     if (runtime["runtime_sha256"], runtime["firmware_sha256"]) == (previous["runtime_sha256"], previous["firmware_sha256"]):
-        return Path(previous["runtime_home"])
+        return Path(base["native"]["runtime_home"])
     material = ":".join((configuration["installation_id"], runtime["runtime_sha256"], runtime["firmware_sha256"]))
     home = Path.home() / ".oac/m" / hashlib.sha256(material.encode()).hexdigest()[:12]
     if len(os.fsencode(home)) > 48:
@@ -293,21 +287,21 @@ def generation_home(root, configuration, base, installer):
 def image_available(value, installer):
     try:
         if value["provider"] == "docker":
-            seccomp = Path(value["docker"]["seccomp_file"])
+            seccomp = Path(value["native"]["seccomp_file"])
             installer.existing_file(seccomp)
             json.loads(seccomp.read_text())
-            raw = installer.checked(list(installer.DOCKER) + ["image", "inspect", value["docker"]["image"], "--format", "{{.Id}} {{.Os}}/{{.Architecture}}"], "Cannot inspect pinned image")
-            return raw.strip() == value["docker"]["image"] + " linux/amd64"
-        micro = value["microsandbox"]
+            raw = installer.checked(list(installer.DOCKER) + ["image", "inspect", value["native"]["image"], "--format", "{{.Id}} {{.Os}}/{{.Architecture}}"], "Cannot inspect pinned image")
+            return raw.strip() == value["native"]["image"] + " linux/amd64"
+        micro, runtime = value["native"], value["specification"]["runtime"]
         for key in ("helper_path", "runtime_path", "firmware_path"):
             if not installer.existing_file(Path(micro[key])):
                 return False
-        if (installer.file_digest(Path(micro["runtime_path"])) != micro["runtime_sha256"]
-                or installer.file_digest(Path(micro["firmware_path"])) != micro["firmware_sha256"]):
+        if (installer.file_digest(Path(micro["runtime_path"])) != runtime["runtime_sha256"]
+                or installer.file_digest(Path(micro["firmware_path"])) != runtime["firmware_sha256"]):
             return False
         env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=micro["runtime_home"], MSB_PATH=micro["runtime_path"], MSB_LIBKRUNFW_PATH=micro["firmware_path"])
-        image = json.loads(installer.checked([micro["runtime_path"], "image", "inspect", micro["image"], "--format", "json"], "Cannot inspect pinned image", env=env))
-        return image.get("digest") == micro["image"].split("@", 1)[1] and image.get("architecture") == "amd64" and image.get("os") == "linux"
+        image = json.loads(installer.checked([micro["runtime_path"], "image", "inspect", runtime["microsandbox_ref"], "--format", "json"], "Cannot inspect pinned image", env=env))
+        return image.get("digest") == runtime["microsandbox_ref"].split("@", 1)[1] and image.get("architecture") == "amd64" and image.get("os") == "linux"
     except (installer.InstallError, OSError, ValueError):
         return False
 
@@ -318,13 +312,13 @@ def runtime_files(root, value, args, manifest, sums, installer):
     release = root / "releases" / source
     if value is not None:
         if args.provider == "microsandbox":
-            release = Path(value["microsandbox"]["helper_path"]).parents[2]
-            if any(Path(value["microsandbox"][key]) != release / name for key, name in zip(
+            release = Path(value["native"]["helper_path"]).parents[2]
+            if any(Path(value["native"][key]) != release / name for key, name in zip(
                     ("helper_path", "runtime_path", "firmware_path"), installer.MICRO)):
                 raise installer.InstallError("Retained Runtime artifact paths differ")
         else:
-            release = Path(value["docker"]["seccomp_file"]).parents[1]
-            if Path(value["docker"]["seccomp_file"]) != release / "runtime/seccomp.json":
+            release = Path(value["native"]["seccomp_file"]).parents[1]
+            if Path(value["native"]["seccomp_file"]) != release / "runtime/seccomp.json":
                 raise installer.InstallError("Retained Runtime seccomp path differs")
         if release not in (root, root / "releases" / source):
             raise installer.InstallError("Retained Runtime artifacts are outside this installation")
@@ -383,7 +377,7 @@ def prepare(args, installer):
         value = configurations.get(args.generation)
         finalized = target.exists() or base["generation"] == args.generation
         if value is not None:
-            installer.node_spec.verify_provider(value, args.configuration, value.get("docker", {}).get("image"))
+            installer.node_spec.verify_provider(value, args.configuration, value.get("native", {}).get("image"))
         else:
             for candidate in configurations.values():
                 # Unpublished plans must never be used as ready reuse candidates.
@@ -393,8 +387,6 @@ def prepare(args, installer):
                     value = copy.deepcopy(candidate)
                     value["generation"] = args.generation
                     value["specification"] = args.configuration["specification"]
-                    if args.provider == "microsandbox":
-                        value["microsandbox"].update(value["specification"]["resources"])
                     break
         if not finalized or value is None or not image_available(value, installer):
             settings = installer.private_json(root / "preparation.json")
@@ -406,9 +398,9 @@ def prepare(args, installer):
             except installer.node_spec.SpecificationError as error:
                 raise installer.RuntimeDownloadError("Runtime release provenance differs") from error
             if args.provider == "microsandbox":
-                args.runtime_home = Path(value["microsandbox"]["runtime_home"]) if value else generation_home(root, args.configuration, base, installer)
+                args.runtime_home = Path(value["native"]["runtime_home"]) if value else generation_home(root, args.configuration, base, installer)
             if value is None:
-                value = installer.provider_config(root / "releases" / runtime["source_commit"], args, manifest, runtime["image_id"])
+                value = installer.provider_config(root / "releases" / runtime["source_commit"], args, runtime["image_id"])
             if preparation is None:
                 preparation = dict(marker_identity(args), import_started=False, configuration=copy.deepcopy(value))
                 atomic_json(directory / (str(args.generation) + ".preparing"), preparation)
@@ -428,7 +420,7 @@ def prepare(args, installer):
                 if runtime_image not in (runtime["image_id"], runtime["image_manifest_digest"]):
                     raise installer.InstallError("Resolved Docker image is outside the authorized specification")
                 value = copy.deepcopy(value)
-                value["docker"]["image"] = runtime_image
+                value["native"]["image"] = runtime_image
         if preparation and preparation.get("configuration"):
             verify_plan_final(preparation["configuration"], value, installer)
         if installer.existing_file(target):
@@ -566,26 +558,26 @@ def collect(args, installer):
 
 def collect_image(args, value, others, installer):
     if value["provider"] == "microsandbox":
-        micro = value["microsandbox"]
-        shared = [item for item in others if item["microsandbox"]["runtime_home"] == micro["runtime_home"]]
+        micro, image = value["native"], value["specification"]["runtime"]["microsandbox_ref"]
+        shared = [item for item in others if item["native"]["runtime_home"] == micro["runtime_home"]]
         home = Path(micro["runtime_home"])
         installer.no_links(home)
         if not home.is_dir() or installer.private_json(home / "oac-installation.json") != {"installation_id": args.installation_id}:
             raise installer.InstallError("Microsandbox store ownership differs")
         runtime_path = Path(micro["runtime_path"])
         installer.no_links(runtime_path)
-        if not installer.existing_file(runtime_path) or installer.file_digest(runtime_path) != micro["runtime_sha256"]:
+        if not installer.existing_file(runtime_path) or installer.file_digest(runtime_path) != value["specification"]["runtime"]["runtime_sha256"]:
             raise installer.InstallError("Cannot verify retained microsandbox executable")
         env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=micro["runtime_home"], MSB_PATH=micro["runtime_path"], MSB_LIBKRUNFW_PATH=micro["firmware_path"])
-        if not any(item["microsandbox"]["image"] == micro["image"] for item in shared):
+        if not any(item["specification"]["runtime"]["microsandbox_ref"] == image for item in shared):
             # A failed inspect/remove is not proof of absence. A successful full
             # inventory must contain only understood immutable references.
             raw = installer.checked([micro["runtime_path"], "image", "list", "--quiet"], "Cannot verify microsandbox image inventory", env=env)
             references = raw.splitlines()
             if any(not re.fullmatch(r"[^\s@]+@sha256:[a-f0-9]{64}", item) for item in references):
                 raise installer.InstallError("Cannot verify microsandbox image inventory")
-            if any(item.split("@", 1)[1] == micro["image"].split("@", 1)[1] for item in references):
-                installer.checked([micro["runtime_path"], "image", "remove", micro["image"], "--quiet"], "Runtime image is still in use", env=env)
+            if any(item.split("@", 1)[1] == image.split("@", 1)[1] for item in references):
+                installer.checked([micro["runtime_path"], "image", "remove", image, "--quiet"], "Runtime image is still in use", env=env)
         if not shared:
             raw = installer.checked([micro["runtime_path"], "sandbox", "list", "--format", "json"], "Cannot verify empty microsandbox store", env=env)
             if json.loads(raw) != []:

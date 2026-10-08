@@ -24,7 +24,6 @@ import socket
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -229,13 +228,18 @@ def existing_file(path):
 
 
 def write_once(path, value):
-    if existing_file(path):
-        if path.read_text() != value:
-            raise InstallError("Existing node configuration differs; preserve its state and use the upgrade guide")
-        return
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        stream.write(value)
+    # Callers hold the installation lock through comparison and publication.
+    with distribution.temporary_file(path) as temporary:
+        if existing_file(path):
+            if path.read_text() != value:
+                raise InstallError("Existing node configuration differs; preserve its state and use the upgrade guide")
+            return
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
 
 
 def json_text(value):
@@ -257,17 +261,13 @@ def download(source, name, root, expected, prefix=""):
         if file_digest(target) != expected:
             raise RuntimeDownloadError("Installed node payload differs; refusing to overwrite it")
         return
-    descriptor, temporary = tempfile.mkstemp(prefix=".download-", dir=target.parent)
-    try:
-        with os.fdopen(descriptor, "wb") as output, fetch(source, prefix + name) as response:
+    with distribution.temporary_file(target) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, prefix + name) as response:
             for block in iter(lambda: response.read(1024 * 1024), b""):
                 output.write(block)
         if file_digest(Path(temporary)) != expected:
             raise RuntimeDownloadError("Node payload checksum mismatch: " + name)
         os.replace(temporary, target)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
     if name.startswith("native/"):
         os.chmod(target, 0o700)
 
@@ -279,11 +279,11 @@ def micro_home(installation_id):
     return directory
 
 
-def provider_config(root, args, manifest, runtime_image):
+def provider_config(root, args, runtime_image):
     result = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url + "/api/v1",
               "specification": args.configuration["specification"], "generation": args.configuration["generation"]}
     if args.provider == "docker":
-        result["docker"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
+        result["native"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
                             "network": "oac-node-" + args.installation_id,
                             "seccomp_file": str(root / "runtime/seccomp.json"), "nested_sandbox": True}
     else:
@@ -291,11 +291,9 @@ def provider_config(root, args, manifest, runtime_image):
         port = endpoint.port or (443 if endpoint.scheme == "https" else 80)
         addresses = sorted({entry[4][0] for entry in socket.getaddrinfo(endpoint.hostname, port, type=socket.SOCK_STREAM)})
         core_rules = [{"action": "allow", "direction": "egress", "destination": address, "protocol": "tcp", "port": str(port)} for address in addresses]
-        result["microsandbox"] = {
+        result["native"] = {
             "helper_path": str(root / MICRO[0]), "runtime_path": str(root / MICRO[1]), "firmware_path": str(root / MICRO[2]),
-            "runtime_sha256": manifest["microsandbox"]["runtime_sha256"], "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
-            "runtime_home": str(getattr(args, "runtime_home", micro_home(args.installation_id))), "image": manifest["runtime_ref"],
-            **args.configuration["specification"]["resources"],
+            "runtime_home": str(getattr(args, "runtime_home", micro_home(args.installation_id))),
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": core_rules + [
                 {"action": "allow", "direction": "egress", "destination": "public"},
                 {"action": "allow", "direction": "egress", "destination": "host", "protocol": "udp", "port": "53"},
@@ -343,10 +341,8 @@ def unit_name(installation_id):
     return "oac-node-" + installation_id + ".service"
 
 
-def open_node(args, token):
-    """Read the Core specification and check the host; returns the node's state directory."""
-    root = Path.home() / ".oac/nodes" / args.installation_id
-    safe_directory(root)
+def configure_node(root, args, token):
+    """Read the Core specification and check the host under the installation lock."""
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
     args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not (root / "registered.json").exists())
@@ -359,7 +355,6 @@ def open_node(args, token):
         if not owner.exists() and any(runtime_home.iterdir()):
             raise InstallError("Microsandbox home contains unowned state; refusing to adopt it")
         write_once(owner, json_text({"installation_id": args.installation_id}))
-    return root
 
 
 @contextlib.contextmanager
@@ -373,7 +368,7 @@ def install_lock(root):
         yield
 
 
-def register_node(root, args, token, helper_archive=None):
+def register_node(root, args, token, helper_archive=None, *, secret_path):
     """Download and verify the payload, prepare the Runtime and register; not the service."""
     install_display.step("Downloading and verifying node files")
     program_manifest, program_sums = metadata(args.source_url, getattr(args, "bundle", None))
@@ -420,37 +415,34 @@ def register_node(root, args, token, helper_archive=None):
     runtime_image = prepare_runtime(root, args, manifest)
     # Retain the original network policy when recovering a partial installation.
     if not existing_file(root / "provider.json"):
-        write_once(root / "provider.json", json_text(provider_config(root, args, manifest, runtime_image)))
+        write_once(root / "provider.json", json_text(provider_config(root, args, runtime_image)))
     else:
         node_spec.verify_provider(json.loads((root / "provider.json").read_text()), args.configuration, runtime_image)
     marker = root / "registered.json"
     if not existing_file(marker):
         # The one-time credential is never passed through process arguments or service environments.
-        descriptor, secret_path = tempfile.mkstemp(prefix=".enrollment-", dir=root)
+        with os.fdopen(os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as secret:
+            secret.write(token)
+        install_display.step("Registering this node with Core")
         try:
-            with os.fdopen(descriptor, "w") as secret:
-                secret.write(token)
-            install_display.step("Registering this node with Core")
-            try:
-                checked([str(root / provider_assets.artifacts(args.provider, ("node",))[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
-                         "--core-url", args.core_url, "--name", socket.gethostname(),
-                         "--enrollment-token-file", secret_path], REGISTRATION_UNCONFIRMED, explain=registration_failure)
-            except AddressChanged:
-                discard_unregistered(root)
-                raise
-            write_once(marker, json_text(state))
-        finally:
-            if os.path.exists(secret_path):
-                os.unlink(secret_path)
+            checked([str(root / provider_assets.artifacts(args.provider, ("node",))[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
+                     "--core-url", args.core_url, "--name", socket.gethostname(),
+                     "--enrollment-token-file", str(secret_path)], REGISTRATION_UNCONFIRMED, explain=registration_failure)
+        except AddressChanged:
+            discard_unregistered(root)
+            raise
+        write_once(marker, json_text(state))
     elif marker.read_text() != json_text(state):
         raise InstallError("Registered node identity differs; refusing to replace it")
 
 
 def prepare_service_node(args, token, helper_archive):
     """Sudo mode, as the service user: everything but the root-owned system unit."""
-    root = open_node(args, token)
-    with install_lock(root):
-        register_node(root, args, token, helper_archive)
+    root = Path.home() / ".oac/nodes" / args.installation_id
+    safe_directory(root)
+    with install_lock(root), distribution.temporary_file(root / "enrollment-token") as secret_path:
+        configure_node(root, args, token)
+        register_node(root, args, token, helper_archive, secret_path=secret_path)
 
 
 # Sudo mode -----------------------------------------------------------------
@@ -727,15 +719,11 @@ def root_file(path, content, replace=False):
         # Set the root-owned unit and record mode independently of the caller's umask.
         path.parent.mkdir(parents=True, mode=0o755)
         os.chmod(path.parent, 0o755)
-    descriptor, temporary = tempfile.mkstemp(prefix=".oac-node-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "w") as stream:
+    with distribution.temporary_file(path) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
             stream.write(content)
         os.chmod(temporary, 0o644)
         os.replace(temporary, path)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
 def read_root_json(path):
@@ -1102,7 +1090,7 @@ def remove_node_files(root, installation_id):
     Runs as the node's own user, so a link it planted can never reach another user's files."""
     no_links(root)
     provider = private_json(root / "provider.json") or {}
-    image = (provider.get("docker") or {}).get("image")
+    image = (provider.get("native") or {}).get("image")
     runtime_home = micro_home(installation_id)
     if root.exists():
         shutil.rmtree(root)

@@ -1,24 +1,23 @@
 # Release template. The publisher pins the initialization image to this release.
 # Core and Web default to latest; OAC_IMAGE_* selects another reference.
-# Data is bind-mounted from ${OAC_DATA_DIR:-./data}.
+# Docker owns data permissions on every host platform.
 x-ingress-image: &ingress-image ${OAC_IMAGE_INGRESS:-__OAC_INIT_IMAGE__}
 services:
   init:
     image: *ingress-image
-    platform: linux/amd64
     restart: "no"
     security_opt: [no-new-privileges:true]
     command: [/usr/local/bin/oac, init]
     environment:
       OAC_REVISION: __OAC_REVISION__
     volumes:
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}
+      - type: volume
+        source: data
         target: /data
+        volume: {nocopy: true}
 
   database:
     image: postgres:16-alpine
-    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       init: {condition: service_completed_successfully}
@@ -27,12 +26,14 @@ services:
       POSTGRES_DB: agents_api
       POSTGRES_PASSWORD_FILE: /run/database/password
     volumes:
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/database
+      - type: volume
+        source: data
         target: /var/lib/postgresql/data
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/secrets/database
+        volume: {nocopy: true, subpath: database}
+      - type: volume
+        source: data
         target: /run/database
+        volume: {nocopy: true, subpath: secrets/database}
         read_only: true
     healthcheck:
       test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U agents_api -d agents_api"]
@@ -42,7 +43,6 @@ services:
 
   core:
     image: ${OAC_IMAGE_CORE:-ghcr.io/minimax-ai/openagentcore/core:latest}
-    platform: linux/amd64
     user: "65532:65532"
     restart: unless-stopped
     read_only: true
@@ -58,8 +58,6 @@ services:
       OAC_DATABASE_PASSWORD_FILE: /run/database/password
       OAC_CREDENTIAL_KEY_FILE: /run/oac/credential.key
       OAC_CORE_KEY_DIGESTS_FILE: /run/oac/core-key-digests.json
-      OAC_PROVIDER_STATE_ROOT: /state
-      OAC_NATIVE_INSTALLER_DIR: /opt/oac/native-installers
       OAC_EXECUTION_CONCURRENCY: ${OAC_EXECUTION_CONCURRENCY:-}
       OAC_DEFAULT_HARNESS: ${OAC_DEFAULT_HARNESS:-}
       OAC_HARNESSES: ${OAC_HARNESSES:-}
@@ -70,23 +68,28 @@ services:
       OAC_LOG_ADD_SOURCE: ${OAC_LOG_ADD_SOURCE:-}
       OAC_HISTORY_SETTINGS_FILE: ${OAC_HISTORY_SETTINGS_FILE:-}
     volumes:
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/secrets/core
+      - type: volume
+        source: data
         target: /run/oac
+        volume: {nocopy: true, subpath: secrets/core}
         read_only: true
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/secrets/database
+      - type: volume
+        source: data
         target: /run/database
+        volume: {nocopy: true, subpath: secrets/database}
         read_only: true
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/state
+      - type: volume
+        source: data
         target: /state
+        volume: {nocopy: true, subpath: state}
 
   web:
     ports:
-      - "${OAC_HOST:-127.0.0.1}:${OAC_WEB_PORT:-8080}:8080"
+      - target: 8080
+        published: "${OAC_WEB_PORT:-8080}"
+        host_ip: "${OAC_HOST:-127.0.0.1}"
+        protocol: tcp
     image: ${OAC_IMAGE_WEB:-ghcr.io/minimax-ai/openagentcore/web:latest}
-    platform: linux/amd64
     user: "65532:65532"
     restart: unless-stopped
     read_only: true
@@ -94,24 +97,28 @@ services:
     depends_on:
       init: {condition: service_completed_successfully}
     environment:
-      OAC_WEB_ORIGIN: *public-url
-      OAC_WEB_UPSTREAM: http://core:8091
+      OAC_PUBLIC_URL: *public-url
       OAC_WEB_CORE_KEY_FILE: /run/oac/core.key
       OAC_WEB_NODE_PAYLOAD_DIR: /node-payload
       OAC_LOG_LEVEL: ${OAC_LOG_LEVEL:-}
       OAC_LOG_FORMAT: ${OAC_LOG_FORMAT:-}
       OAC_LOG_ADD_SOURCE: ${OAC_LOG_ADD_SOURCE:-}
     volumes:
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/secrets/web
+      - type: volume
+        source: data
         target: /run/oac
+        volume: {nocopy: true, subpath: secrets/web}
         read_only: true
-      - type: bind
-        source: ${OAC_DATA_DIR:-./data}/node-payload
+      - type: volume
+        source: data
         target: /node-payload
+        volume: {nocopy: true, subpath: node-payload}
         read_only: true
     healthcheck:
       test: [CMD, /usr/local/bin/oac-web, healthcheck]
       interval: 5s
       timeout: 10s
       retries: 30
+
+volumes:
+  data:

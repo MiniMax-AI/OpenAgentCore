@@ -23,20 +23,6 @@ type EnvironmentWorkspaces interface {
 	WriteEnvironmentFile(context.Context, sessions.Environment, string, []byte) (int64, error)
 }
 
-// @Summary List live Environment files
-// @Description Lists direct regular files in one authorized self_hosted or qualified local workspace directory. Local paths use the public /workspace root and must be in cleaned form. This partial implementation defaults to the workspace root and limit 20; recursive scope and these defaults are not verified upstream semantics. A missing path, a regular file or a symbolic link returns an empty page; links are never followed. Daemons without a local workspace binding use the Claude SDK adapter reader, which keeps 404 for a missing path and 503 for a regular file or symbolic link. Well-formed unknown query keys are ignored; malformed query encoding and a repeated supported key are rejected. Sorts by case-sensitive path components, descending by default. Keep the same path, order and limit when using page. Each page rereads the complete bounded directory; changed file paths/sizes invalidate continuation locally with 400. There is no snapshot guarantee. An openai_hosted Environment that has not connected yet returns 400. Truncated or uncertain native results fail with 503 without returning a partial page. This read never starts a Turn or admits model input. Actual transport disconnect/reconnect events remain observable.
-// @Tags Environments
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_id path string true "Environment ID"
-// @Param path query string false "Absolute directory in cleaned form inside /workspace"
-// @Param limit query int false "Maximum file count; local default 20" minimum(1) maximum(100)
-// @Param order query string false "Case-sensitive path-component order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
-// @Param page query string false "Opaque continuation token; keep path, order and limit unchanged"
-// @Success 200 {object} v1.EnvironmentFileList
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/environments/{environment_id}/files [get]
 func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
@@ -47,7 +33,7 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok || !environmentFilesAccessible(w, environment) {
 		return
 	}
-	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+	if !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -57,8 +56,8 @@ func adminDeleteContext(ctx context.Context, tenant, request string) context.Con
 	// Even an inherited public provenance context must not turn an administrator
 	// operation into a user-key operation.
 	public := writeaudit.WithSource(ctx, writeaudit.Source{
-		KeyID: "static:" + strings.Repeat("a", 64), Name: "resource audit fixture", Prefix: "aaaaaaaa",
-		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "resource-audit-trace",
+		KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Name: "resource audit fixture", Prefix: "pc_aaaaaaaa",
+		Kind: "issued", TenantID: tenant, RequestID: request, TraceID: "resource-audit-trace",
 	})
 	return adminaudit.WithSource(public, adminaudit.Source{
 		CredentialID: "87654321", ActorLabel: "administrator fixture", ProjectID: tenant, RequestID: request, TraceID: "admin-mutation-trace",
@@ -82,13 +81,13 @@ func adminMutationSnapshot(t *testing.T, s *Store, tables ...string) map[string]
 
 func assertAdminMutationAudit(t *testing.T, s *Store, tenant, request, action, kind, id string) {
 	t.Helper()
-	var credential, actor, key, trace, gotAction, gotKind, gotID, mappings, raw string
-	if err := s.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,result_ids::text,to_jsonb(a)::text
- FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &key, &trace, &gotAction, &gotKind, &gotID, &mappings, &raw); err != nil {
+	var credential, actor, key, trace, gotAction, gotKind, gotID, raw string
+	if err := s.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,to_jsonb(a)::text
+ FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &key, &trace, &gotAction, &gotKind, &gotID, &raw); err != nil {
 		t.Fatal(err)
 	}
 	expectedKey := tenant
-	if credential != "87654321" || actor != "administrator fixture" || key != expectedKey || trace != "admin-mutation-trace" || gotAction != action || gotKind != kind || gotID != id || mappings != "[]" {
+	if credential != "87654321" || actor != "administrator fixture" || key != expectedKey || trace != "admin-mutation-trace" || gotAction != action || gotKind != kind || gotID != id {
 		t.Fatal("administrator audit identity differs")
 	}
 	for _, secret := range []string{"admin-private-body", "private-agent-canary", "audit-private-token"} {
@@ -106,12 +105,7 @@ func assertAdminMutationAudit(t *testing.T, s *Store, tenant, request, action, k
 }
 
 func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{94}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	rejectAdminAuditInsert(t, s)
 	tables := []string{"agents", "agent_model_execution", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
 	for _, name := range []string{"session_delete", "artifact_delete"} {

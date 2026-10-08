@@ -1,4 +1,9 @@
-import type { CoreProjectReader } from "@oac/agents-client";
+import type {
+  AdminKeyProvenance, AdminProject, AdminResourceType, AgentDeleted, AgentSession, AgentTurn, EnvironmentTemplateDeleted, EnvironmentTemplateList,
+  EnvironmentTemplateResource, ListPage, PageOptions, ReadOptions, RuntimeHistory, RuntimeHistoryQuery, RuntimeObservation, SavedAgent, SessionDeleted,
+  SessionItem, SessionListOptions, Skill, SkillContent, SkillDeleted, SkillList, SkillListOptions, SkillVersionDeleted, SkillVersionList, SourceFileDeleted,
+  SourceFileList, SourceFileListOptions, Vault, VaultCredentialDeleted, VaultCredentialList, VaultDeleted, VaultList, VaultListOptions,
+} from "@oac/agents-client";
 import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -6,11 +11,10 @@ import { useTranslation } from "react-i18next";
 import { readError } from "./read-error";
 import { ConsoleSelect } from "../components/console-select";
 import { HelpTip } from "../components/console-ui";
-import { admin, listCreators, type Creator, type OwnerResourceType, type Project } from "./admin-view";
+import { admin, listCreators } from "./admin-view";
 import { collectionQuery, projectsQuery, queryClient, type CollectionSpec } from "./queries";
 
 export { admin };
-export type { Project };
 
 /**
  * The console reaches Core only through the Web API (`/core/v1`). A
@@ -19,14 +23,14 @@ export type { Project };
  */
 
 export type ProjectsState =
-  | { status: "loading"; projects: Project[]; error: null }
-  | { status: "ready"; projects: Project[]; error: null }
-  | { status: "failed"; projects: Project[]; error: string };
+  | { status: "loading"; projects: AdminProject[]; error: null }
+  | { status: "ready"; projects: AdminProject[]; error: null }
+  | { status: "failed"; projects: AdminProject[]; error: string };
 
 interface ProjectsContextValue {
   state: ProjectsState;
   refresh: () => void;
-  byId: ReadonlyMap<string, Project>;
+  byId: ReadonlyMap<string, AdminProject>;
   /** Why the last refresh failed while earlier projects stay on screen. */
   refreshError: string | null;
   /** Original query failure for classification; translated display text is never evidence. */
@@ -79,30 +83,30 @@ export function ProjectFilter({ value, onChange, includeAll = true }: { value: P
     ...(includeAll ? [{ value: "", label: t("project.all") }] : []),
     ...state.projects.map((project) => ({
       value: project.id,
-      label: project.status === "archived" ? t("project.archivedOption", { name: project.name }) : project.name,
+      label: project.archived_at !== null ? t("project.archivedOption", { name: project.name }) : project.name,
     })),
   ], [includeAll, state.projects, t]);
   return <ConsoleSelect value={value} onChange={onChange} options={options} label={t("project.filter")} />;
 }
 
 /** The project a row belongs to when a table shows every project. */
-export function ProjectName({ project }: { project: Project | undefined }) {
+export function ProjectName({ project }: { project: AdminProject | undefined }) {
   const { t } = useTranslation("common");
   if (!project) return <span className="table-muted">—</span>;
   return (
-    <span className={project.status === "archived" ? "space-name space-disabled" : "space-name"} title={project.status === "archived" ? t("project.archived") : undefined}>
+    <span className={project.archived_at !== null ? "space-name space-disabled" : "space-name"} title={project.archived_at !== null ? t("project.archived") : undefined}>
       {project.name}
     </span>
   );
 }
 
 export interface Owned<T> {
-  project: Project;
+  project: AdminProject;
   value: T;
 }
 
 export interface ProjectFailure {
-  project: Project;
+  project: AdminProject;
   message: string;
 }
 
@@ -113,8 +117,39 @@ export interface ProjectCollection<T> {
   refresh: () => void;
 }
 
-/** The Core reads and deletes a project page uses, bound to one project. */
-export type ProjectClient = CoreProjectReader;
+/**
+ * The Core reads and deletes a project page uses, bound to one project: each
+ * method is a management client method with its project ID bound.
+ */
+export interface ProjectClient {
+  listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
+  retrieveAgent(agentId: string): Promise<SavedAgent>;
+  deleteAgent(agentId: string): Promise<AgentDeleted>;
+  listSkills(options?: SkillListOptions): Promise<SkillList>;
+  retrieveSkill(skillId: string, options?: ReadOptions): Promise<Skill>;
+  deleteSkill(skillId: string, options?: ReadOptions): Promise<SkillDeleted>;
+  listSkillVersions(skillId: string, options?: SkillListOptions): Promise<SkillVersionList>;
+  deleteSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted>;
+  downloadSkill(skillId: string, options?: ReadOptions): Promise<SkillContent>;
+  downloadSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillContent>;
+  listEnvironmentTemplates(options?: PageOptions): Promise<EnvironmentTemplateList>;
+  retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateResource>;
+  deleteEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateDeleted>;
+  listSourceFiles(options?: SourceFileListOptions): Promise<SourceFileList>;
+  deleteSourceFile(fileId: string, options?: ReadOptions): Promise<SourceFileDeleted>;
+  listVaults(options?: VaultListOptions): Promise<VaultList>;
+  retrieveVault(vaultId: string, options?: ReadOptions): Promise<Vault>;
+  listVaultCredentials(vaultId: string, options?: VaultListOptions): Promise<VaultCredentialList>;
+  deleteVault(vaultId: string): Promise<VaultDeleted>;
+  deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
+  listSessions(options?: SessionListOptions): Promise<ListPage<AgentSession>>;
+  retrieveSession(sessionId: string, options?: ReadOptions): Promise<AgentSession>;
+  deleteSession(sessionId: string): Promise<SessionDeleted>;
+  listTurns(sessionId: string, options?: PageOptions): Promise<ListPage<AgentTurn>>;
+  listItems(sessionId: string, options?: PageOptions): Promise<ListPage<SessionItem>>;
+  retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
+  retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory>;
+}
 
 async function content(result: Promise<{ blob: Blob; contentType: string | null; contentDisposition: string | null }>) {
   const value = await result;
@@ -126,11 +161,7 @@ async function content(result: Promise<{ blob: Blob; contentType: string | null;
  * shapes, so pages read a project through `/core/v1/projects/{id}`.
  * Deletions only; no creation or editing exists here.
  */
-function createProjectClient(projectId: string): CoreProjectReader {
-  const listSessions = async (options: Parameters<CoreProjectReader["listSessions"]>[0] = {}) => {
-    const page = await admin.listSessions(projectId, { after: options.after, limit: options.limit, order: options.order, agentId: options.agentId, signal: options.signal });
-    return { ...page, object: "list" as const, first_id: page.first_id ?? null, last_id: page.last_id ?? null };
-  };
+function createProjectClient(projectId: string): ProjectClient {
   return {
     listAgents: (options) => admin.listAgents(projectId, options),
     retrieveAgent: (agentId: string) => admin.retrieveAgent(projectId, agentId),
@@ -152,16 +183,17 @@ function createProjectClient(projectId: string): CoreProjectReader {
     listVaultCredentials: (vaultId, options) => admin.listVaultCredentials(projectId, vaultId, options),
     deleteVault: (vaultId) => admin.deleteVault(projectId, vaultId),
     deleteVaultCredential: (vaultId, credentialId) => admin.deleteVaultCredential(projectId, vaultId, credentialId),
-    listSessions,
-    // The management list is strict: a malformed Session fails the page rather than being skipped.
-    listSessionsTolerant: async (options) => ({ ...(await listSessions(options)), unrecognized: [] }),
+    listSessions: async (options = {}) => {
+      const page = await admin.listSessions(projectId, { after: options.after, limit: options.limit, order: options.order, agentId: options.agentId, signal: options.signal });
+      return { ...page, object: "list" as const, first_id: page.first_id ?? null, last_id: page.last_id ?? null };
+    },
     retrieveSession: (sessionId, options) => admin.retrieveSession(projectId, sessionId, options),
     deleteSession: (sessionId) => admin.deleteSession(projectId, sessionId),
     listTurns: (sessionId, options) => admin.listTurns(projectId, sessionId, options),
     listItems: (sessionId, options) => admin.listItems(projectId, sessionId, options),
     retrieveRuntimeObservation: (sessionId, options) => admin.retrieveRuntimeObservation(projectId, sessionId, options),
     retrieveRuntimeHistory: (sessionId, query) => admin.retrieveRuntimeHistory(projectId, sessionId, query),
-  } satisfies CoreProjectReader;
+  };
 }
 
 const clients = new Map<string, ProjectClient>();
@@ -188,7 +220,7 @@ export function useProjectCollection<T>(spec: CollectionSpec<T>, filter: Project
   });
   // `items` keeps its identity until a project's cached data changes, so pages
   // may depend on it in effects and memos without re-running on every render.
-  const cache = useRef<{ targets: readonly Project[]; sources: readonly (T[] | undefined)[]; items: Owned<T>[] } | null>(null);
+  const cache = useRef<{ targets: readonly AdminProject[]; sources: readonly (T[] | undefined)[]; items: Owned<T>[] } | null>(null);
   const sources = results.map((result) => result.data);
   const previous = cache.current;
   let items: Owned<T>[];
@@ -229,9 +261,9 @@ export async function readAllPages<T extends { id: string }>(
   return values;
 }
 
-/** Creator lookups are cached per project and resource; a refresh forgets them. */
-const creatorCache = new Map<string, Creator>();
-const creatorKey = (type: OwnerResourceType, projectId: string, id: string) => `${type}:${projectId}:${id}`;
+/** Creator lookups are cached per project and resource (null when Core has no creation record); a refresh forgets them. */
+const creatorCache = new Map<string, AdminKeyProvenance | null>();
+const creatorKey = (type: AdminResourceType, projectId: string, id: string) => `${type}:${projectId}:${id}`;
 let creatorGeneration = 0;
 const creatorListeners = new Set<(generation: number) => void>();
 
@@ -244,11 +276,11 @@ export function forgetCreators() {
 
 export interface Creators {
   /** undefined: not loaded yet or the lookup failed. */
-  creatorOf: (projectId: string, id: string) => Creator | undefined;
+  creatorOf: (projectId: string, id: string) => AdminKeyProvenance | null | undefined;
 }
 
 /** The key that created each row (#87 ownership), batched per project. */
-export function useCreators(type: OwnerResourceType, rows: ReadonlyArray<{ projectId: string; id: string }>): Creators {
+export function useCreators(type: AdminResourceType, rows: ReadonlyArray<{ projectId: string; id: string }>): Creators {
   const [, setVersion] = useState(0);
   const [generation, setGeneration] = useState(creatorGeneration);
   useEffect(() => {
@@ -266,7 +298,7 @@ export function useCreators(type: OwnerResourceType, rows: ReadonlyArray<{ proje
     const controller = new AbortController();
     void Promise.allSettled([...byProject].map(async ([projectId, ids]) => {
       const creators = await listCreators(projectId, type, ids, controller.signal);
-      for (const id of ids) creatorCache.set(creatorKey(type, projectId, id), creators.get(id) ?? { key: null, source: null });
+      for (const id of ids) creatorCache.set(creatorKey(type, projectId, id), creators.get(id) ?? null);
     })).then(() => { if (!controller.signal.aborted) setVersion((value) => value + 1); });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,18 +314,15 @@ export function CreatorHeading() {
   return <span className="column-help">{t("creator.column")}<HelpTip>{t("creator.help")}</HelpTip></span>;
 }
 
-/** The creating key's name, "Admin copy" for a copied asset, "Unknown" when Core has no record. */
-export function CreatorCell({ creator }: { creator: Creator | undefined }) {
+/** The creating key's name, or "Unknown" when Core has no record. */
+export function CreatorCell({ creator }: { creator: AdminKeyProvenance | null | undefined }) {
   const { t } = useTranslation("common");
   if (creator === undefined) return <span className="owner-missing">—</span>;
-  if (creator.source === "admin_copy") return <span className="owner-missing" title={t("creator.adminCopyHelp")}>{t("creator.adminCopy")}</span>;
-  const key = creator.key;
-  if (!key) return <span className="owner-missing" title={t("creator.unknownHelp")}>{t("creator.unknown")}</span>;
-  const label = key.name ?? (key.prefix ? `${key.prefix}…` : t("creator.unknown"));
+  if (!creator) return <span className="owner-missing" title={t("creator.unknownHelp")}>{t("creator.unknown")}</span>;
   return (
-    <span className={key.revoked_at ? "owner-name owner-revoked" : "owner-name"} title={key.prefix ? `${key.prefix}…` : undefined}>
-      {label}
-      {key.revoked_at ? <span className="pill">{t("creator.revoked")}</span> : null}
+    <span className={creator.revoked_at ? "owner-name owner-revoked" : "owner-name"} title={`${creator.prefix}…`}>
+      {creator.name}
+      {creator.revoked_at ? <span className="pill">{t("creator.revoked")}</span> : null}
     </span>
   );
 }

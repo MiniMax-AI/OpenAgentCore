@@ -61,7 +61,6 @@ func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, command e
 // serve takes every write from the handler, and the Worker admits Sessions
 // with initial input into s. Session reads are unexpected.
 func (s *validationStore) serve(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	f.sessionAdmission.createSession = s.CreateSession
 	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault
@@ -167,10 +166,15 @@ func TestMetadataValidationUsesOfficialFields(t *testing.T) {
 			if want := map[bool]int{true: 0, false: 3}[op.limited]; s.writes != want {
 				t.Fatalf("rejected metadata reached storage: %d writes", s.writes)
 			}
-			// Type errors precede the generic whole-body error.
+			// Type errors precede the generic whole-body error. Agent bodies follow
+			// the pinned shape walk, which reports unknown members first.
 			body := strings.Replace(fmt.Sprintf(op.body, `{"k":1}`), "{", `{"unsupported_field":true,`, 1)
+			want := "metadata.k"
+			if strings.HasPrefix(op.name, "agent") {
+				want = "unsupported_field"
+			}
 			w := credentialRequest(h, op.method, op.path, body)
-			if code, param, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "invalid_request_error" || param == nil || *param != "metadata.k" {
+			if code, param, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "invalid_request_error" || param == nil || *param != want {
 				t.Fatalf("metadata type did not precede generic error: %d %s", w.Code, w.Body)
 			}
 			for _, tc := range accepted {

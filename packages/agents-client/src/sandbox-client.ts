@@ -1,92 +1,74 @@
 import { AgentCoreError } from "./client";
 import { CoreRequester, type CoreClientOptions } from "./core-request";
-import { hasOwn, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
+import { deploymentContract } from "./deployment-contract";
+import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId, schemaFields } from "./response-projection";
+import {
+  deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
+  hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields, nodeDetailRequired,
+  nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRequired, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
+  resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues, runtimeReleaseFields,
+  sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
+  type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
+  type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout, type RuntimeRelease,
+  type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
+} from "./generated/core-api";
 import type { ReadOptions } from "./types";
 
-export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "compute_unconfirmed" | "ownership_mismatch" | "provider_unavailable";
 /** Checked against Core's shared node-diagnostics.json fixture. */
-export const sandboxNodeDiagnostics = [
-  "provider_unavailable",
-  "docker_unavailable",
-  "docker_limits_unsupported",
-  "runtime_download_failed",
-  "runtime_image_unavailable",
-  "kvm_unavailable",
-  "microsandbox_artifacts_unavailable",
-  "capacity_insufficient",
-] as const;
+export const sandboxNodeDiagnostics = nodeDiagnosticCodeValues;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */
-export type SandboxNodeDiagnostic = "" | typeof sandboxNodeDiagnostics[number];
-const nodeDiagnostics: ReadonlySet<string> = new Set(sandboxNodeDiagnostics);
+export type SandboxNodeDiagnostic = NodeDiagnosticCode;
 
 /** Keep a known readiness cause; never expose unclassified node-supplied text. */
-export function normalizeSandboxNodeDiagnostic(value: string): Exclude<SandboxNodeDiagnostic, ""> {
-  return nodeDiagnostics.has(value) ? value as Exclude<SandboxNodeDiagnostic, ""> : "provider_unavailable";
+export function normalizeSandboxNodeDiagnostic(value: string): SandboxNodeDiagnostic {
+  return isOneOf(nodeDiagnosticCodeValues, value) ? value : "provider_unavailable";
 }
 
-export type SandboxProvider = "docker" | "microsandbox" | "e2b";
+/** A registered Provider kind; deploymentContract.providers holds each one's declaration. */
+export type SandboxProvider = keyof typeof deploymentContract.providers;
+/** Client-generated, never a Core code: a deployment write whose rejection could echo the key and is withheld. */
+export const sandboxConfigurationUnconfirmed = "sandbox_configuration_unconfirmed";
+const sandboxConfigurationParams = new Set<unknown>(["runtime", ...deploymentContract.resources.map(({ name }) => `resources.${name}`)]);
+
+// Generated types keep their schema names in ./generated/core-api; these are the client's names for them.
 /** CPU and MiB limits for each sandbox, not node concurrency. */
-export interface SandboxResources { cpus: number; memory_mib: number; root_disk_mib?: number; environment_disk_mib?: number }
-export interface SandboxRuntimeRelease { source_commit: string; image_id: string; image_manifest_digest: string; microsandbox_ref: string; runtime_sha256: string; firmware_sha256: string }
-export interface SandboxSpecification { resources: SandboxResources; runtime?: SandboxRuntimeRelease }
-/** Core derives the deployment's address from the installation public URL; a `core_url` member is rejected. */
-export interface InitializeSandboxDeployment {
+export type SandboxResources = SandboxResourcesResource;
+export type SandboxRuntimeRelease = RuntimeRelease;
+export type SandboxSpecification = DeploymentSpec;
+export type SandboxRollout = Rollout;
+/** `state` is target preparation, which never invalidates a qualified older serving pin; `ready_generation` is that durable pin and alone does not imply connection readiness. */
+export type SandboxNodeRollout = NodeRollout;
+export type StartSandboxReset = ResetRequest;
+export type SandboxReset = Reset;
+/** `provider_ready` is the last provider report, so combine it with `online`; `diagnostic` is absent while the provider is ready. A `core_url` other than the installation public URL means the node receives no new sandboxes and must be re-added. */
+export type SandboxNode = Node;
+/** A one-time node enrollment command; `enrollment_id` is its public handle, never a credential. */
+export type SandboxEnrollment = SandboxEnrollmentToken;
+/** One node with its host observation and complete UTC buckets of host history. */
+export type SandboxNodeDetail = NodeDetail;
+/** A node's name and sandbox limits, with a retained limit of at least the active one. Under Docker, Core sets the retained limit to the active one. */
+export type SandboxNodeUpdate = NodeUpdate;
+export type SandboxAllocation = NodeAllocation;
+
+// The schema types each Provider's configuration, credential and metadata as free-form objects; the client names E2B's.
+/**
+ * Core derives the deployment's address from the installation public URL; a `core_url` member is rejected.
+ * `expected_generation` is required, zero for first setup. Docker and microsandbox require `resources` and `runtime`;
+ * E2B may omit `resources` to adopt its template build's CPU and memory, and always runs that build.
+ */
+export type InitializeSandboxDeployment = Omit<SandboxDeploymentInput, "provider" | "configuration" | "credential"> & {
   provider: SandboxProvider;
-  /** Required, including zero for first setup; read it from GET before submitting once. */
-  expected_generation: number;
-  /** Required for Docker/microsandbox. E2B may omit it to adopt its validated template build's CPU and memory. */
-  resources?: SandboxResources;
-  /** Required for Docker/microsandbox; E2B uses its fixed template build. */
-  runtime?: SandboxRuntimeRelease;
-  configuration?: { template?: string; api_url?: string; domain?: string };
+  configuration?: SandboxE2BConfiguration;
   /** Write-only. Omission on update preserves the current credential. */
   credential?: { api_key: string };
-}
-export interface UpdateSandboxDeployment extends InitializeSandboxDeployment {}
-export interface SandboxRollout {
-  /** Poll at high frequency only while preparing, independently of old Session retention. */
-  state: "settled" | "preparing";
-  previous_generation_sandboxes: number;
-  nodes: { ready: number; preparing: number; failed: number; update_required: number; unknown: number } | null;
-}
-export interface SandboxNodeRollout {
-  /** Target preparation; unknown/failed/preparing does not invalidate a qualified old serving pin. */
-  state: "ready" | "preparing" | "failed" | "update_required" | "unknown";
-  /** Durable serving pin; this alone does not imply current connection readiness. */
-  ready_generation: number | null;
-  diagnostic?: SandboxNodeDiagnostic;
-}
-export interface StartSandboxReset { expected_generation: number; clear: "auto" | "force"; deadline_seconds?: number }
-export interface SandboxReset {
-  clear: "auto" | "force";
-  requested_at: string;
-  deadline_at: string | null;
-  forced_at: string | null;
-  remaining: {
-    busy: number; idle: number; cleanup: number; on_offline_nodes: number;
-    offline_nodes: Array<{ node_id: string; name: string; resources: number }>;
-  };
-}
-
-export interface SandboxDeployment {
-  rollout: SandboxRollout;
-  specification?: SandboxSpecification;
-  specification_digest?: string;
-  installation_id: string;
+};
+export type UpdateSandboxDeployment = InitializeSandboxDeployment;
+export type SandboxDeployment = Omit<DeploymentView, "provider" | "configuration" | "metadata"> & {
   provider: SandboxProvider | "";
-  /** Read-only: the installation public URL, which nodes and sandboxes use to reach Core. Present before configuration. */
-  readonly core_url: string;
-  reset: SandboxReset | null;
-  owner_epoch: number;
-  generation: number;
-  mode: "nodes" | "direct" | "";
-  resources: { allocations: number; pending: number };
-  configuration?: { template?: string; api_url?: string; domain?: string };
+  configuration?: SandboxE2BConfiguration;
   metadata?: { template_build?: SandboxE2BTemplateBuild };
-  credential_configured: boolean;
-  /** Idle suspension policy; microsandbox only, otherwise null. */
-  suspension: { idle_seconds: number; retention_seconds: number } | null;
-}
+};
+export interface SandboxE2BConfiguration { template?: string; api_url?: string; domain?: string }
 /** The fixed E2B build as Core read it when the selection was saved; unknown values are null. */
 export interface SandboxE2BTemplateBuild {
   status: string | null;
@@ -95,95 +77,15 @@ export interface SandboxE2BTemplateBuild {
 export interface SandboxE2BDiscoveryInput { api_key: string; api_url?: string; domain?: string }
 export interface SandboxE2BTemplate { id: string; names: string[] }
 export interface SandboxE2BReadyBuild { id: string; cpus: number; memory_mib: number }
-export interface SandboxNode {
-  rollout: SandboxNodeRollout;
-  id: string;
-  name: string;
-  provider: string;
-  online: boolean;
-  /** Last provider report; combine with online. Target rollout state is independent of serving readiness. */
-  provider_ready: boolean;
-  /** Absent while the provider is ready. */
-  diagnostic?: SandboxNodeDiagnostic;
-  cpu_count: number | null;
-  available_memory_bytes: number | null;
-  available_disk_bytes: number | null;
-  running: number;
-  snapshots: number;
-  last_seen_at: string | null;
-  max_active: number;
-  max_retained: number;
-  active: number;
-  reserved: number;
-  retained: number;
-  cleanup_pending: number;
-  created_at: string;
-  /** Read-only: the Core address this node enrolled with. When it differs from the installation public URL, the node receives no new sandboxes and must be re-added. */
-  readonly core_url: string;
-  /** Read-only: the `enrollment_id` of the command that registered this node; null for nodes enrolled before Core recorded it. Core always sends the member. */
-  readonly enrollment_id: string | null;
-}
-/** A one-time node enrollment command issued by Core. */
-export interface SandboxEnrollment {
-  /** The one-use secret the node registers with. */
-  token: string;
-  expires_at: string;
-  /** Public, non-secret handle of this command; never a credential. The node it registers reports the same `enrollment_id`. */
-  enrollment_id: string;
-}
-/** The node machine's last heartbeat observation; unavailable measurements are null. */
-export interface SandboxNodeHost {
-  effective_cpu_cores: number | null;
-  /** Busy share of the whole host's CPU between heartbeats, 0–1. */
-  cpu_utilization: number | null;
-  total_memory_bytes: number | null;
-  available_memory_bytes: number | null;
-  available_disk_bytes: number | null;
-  observed_at: string | null;
-}
-export interface SandboxNodeHostPoint {
-  start: string;
-  cpu_utilization_max: number | null;
-  memory_used_bytes_max: number | null;
-  available_disk_bytes_min: number | null;
-}
 export type SandboxNodeHistoryRange = "1h" | "6h" | "24h";
-/** One node with its host observation and complete UTC buckets of host history. */
-export interface SandboxNodeDetail extends SandboxNode {
-  host: SandboxNodeHost;
-  history: { resolution_seconds: number; points: SandboxNodeHostPoint[] };
-}
-/** A node's name and sandbox limits; Core takes all three, with a retained limit of at least the active one. Under Docker, Core sets the retained limit to the active one. */
-export interface SandboxNodeUpdate {
-  name: string;
-  max_active: number;
-  max_retained: number;
-}
-export interface SandboxAllocation {
-  deployment_generation: number;
-  id: string;
-  node_id: string;
-  tenant_id: string;
-  session_id: string;
-  environment_id: string;
-  state: string;
-  compute_phase: string;
-  /** When the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. */
-  compute_phase_changed_at: string | null;
-  diagnostic: SandboxDiagnostic;
-  initialization: string;
-  created_at: string;
-}
+
 function invalidSandboxResponse(): never {
   throw new AgentCoreError("Core returned an invalid sandbox administration response.", 502, "invalid_admin_response");
 }
 
-/**
- * The object has every required member, optional ones only where listed, and nothing else. The projections below
- * follow Core's deployment.View, deployment.Node, deployment.NodeDetail and deployment.NodeAllocation serialization.
- */
-function members(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
-  if (!isRecord(value) || !required.every((field) => hasOwn(value, field)) || !onlyFields(value, new Set([...required, ...optional]))) return invalidSandboxResponse();
+/** The object has every required field, optional ones only where the schema lists them, and nothing else. */
+function members(value: unknown, fields: readonly string[], required: readonly string[] = fields): Record<string, unknown> {
+  if (!isRecord(value) || !schemaFields(value, fields, required)) return invalidSandboxResponse();
   return value;
 }
 function valid(condition: boolean): void {
@@ -194,23 +96,20 @@ const measure = (value: unknown) => typeof value === "number" && Number.isFinite
 const nullable = (test: (value: unknown) => boolean) => (value: unknown) => value === null || test(value);
 const strings = (value: Record<string, unknown>, fields: readonly string[]) => fields.every((field) => typeof value[field] === "string");
 
-const providers = new Set(["", "docker", "microsandbox", "e2b"]);
-const modes = new Set(["", "nodes", "direct"]);
-const releaseFields = ["source_commit", "image_id", "image_manifest_digest", "microsandbox_ref", "runtime_sha256", "firmware_sha256"];
 function projectSpecification(value: unknown): SandboxSpecification {
-  const specification = members(value, ["resources"], ["runtime"]);
-  const resources = members(specification.resources, ["cpus", "memory_mib"], ["root_disk_mib", "environment_disk_mib"]);
+  const specification = members(value, deploymentSpecFields, deploymentSpecRequired);
+  const resources = members(specification.resources, sandboxResourcesFields, sandboxResourcesRequired);
   valid(Object.values(resources).every(isNonnegativeInteger));
   if (!hasOwn(specification, "runtime")) return { resources: { ...resources } as unknown as SandboxResources };
-  const runtime = members(specification.runtime, releaseFields);
-  valid(strings(runtime, releaseFields));
+  const runtime = members(specification.runtime, runtimeReleaseFields);
+  valid(strings(runtime, runtimeReleaseFields));
   return { resources: { ...resources } as unknown as SandboxResources, runtime: { ...runtime } as unknown as SandboxRuntimeRelease };
 }
 /** The adapter's public projection has no credential member. */
 function projectE2B(configuration: unknown, metadata: unknown): Pick<SandboxDeployment, "configuration" | "metadata"> {
   const config = members(configuration, ["template", "api_url", "domain"]);
   valid(strings(config, ["template", "api_url", "domain"]));
-  const facts = members(metadata, [], ["template_build"]);
+  const facts = members(metadata, ["template_build"], []);
   if (!hasOwn(facts, "template_build")) return { configuration: { ...config }, metadata: {} };
   const build = members(facts.template_build, ["status", "resources"]);
   const resources = members(build.resources, ["cpus", "memory_mib", "root_disk_mib"]);
@@ -220,16 +119,16 @@ function projectE2B(configuration: unknown, metadata: unknown): Pick<SandboxDepl
 /** Counts and blocker identities are one Core snapshot, never reconstructed from node lists. */
 function projectReset(value: unknown, held: number): SandboxReset | null {
   if (value === null) return null;
-  const reset = members(value, ["clear", "requested_at", "deadline_at", "forced_at", "remaining"]);
-  const remaining = members(reset.remaining, ["busy", "idle", "cleanup", "on_offline_nodes", "offline_nodes"]);
-  valid((reset.clear === "auto" || reset.clear === "force") && timestamp(reset.requested_at) &&
+  const reset = members(value, resetFields);
+  const remaining = members(reset.remaining, resetRemainingFields);
+  valid(isOneOf(resetModeValues, reset.clear) && timestamp(reset.requested_at) &&
     nullable(timestamp)(reset.deadline_at) && nullable(timestamp)(reset.forced_at) &&
     (reset.clear === "auto" ? reset.deadline_at !== null && reset.forced_at === null : reset.forced_at !== null) &&
     [remaining.busy, remaining.idle, remaining.cleanup, remaining.on_offline_nodes].every(isNonnegativeInteger) && Array.isArray(remaining.offline_nodes));
   const nodes = (remaining.offline_nodes as unknown[]).map(value => {
-    const node = members(value, ["node_id", "name", "resources"]);
+    const node = members(value, resetOfflineNodeFields);
     valid(strings(node, ["node_id", "name"]) && node.node_id !== "" && isNonnegativeInteger(node.resources) && Number(node.resources) > 0);
-    return { ...node } as SandboxReset["remaining"]["offline_nodes"][number];
+    return { ...node } as unknown as ResetOfflineNode;
   });
   valid(Number(remaining.busy) + Number(remaining.idle) + Number(remaining.cleanup) === held &&
     Number(remaining.on_offline_nodes) <= held && nodes.reduce((sum, node) => sum + node.resources, 0) === remaining.on_offline_nodes &&
@@ -237,15 +136,15 @@ function projectReset(value: unknown, held: number): SandboxReset | null {
   return { ...reset, remaining: { ...remaining, offline_nodes: nodes } } as unknown as SandboxReset;
 }
 function projectRollout(value: unknown, mode: unknown, held: number): SandboxRollout {
-  const rollout = members(value, ["state", "previous_generation_sandboxes", "nodes"]);
-  valid((rollout.state === "settled" || rollout.state === "preparing") && isNonnegativeInteger(rollout.previous_generation_sandboxes) && Number(rollout.previous_generation_sandboxes) <= held);
-  const nodes = rollout.nodes === null ? null : members(rollout.nodes, ["ready", "preparing", "failed", "update_required", "unknown"]);
+  const rollout = members(value, rolloutFields);
+  valid(isOneOf(rolloutStateValues, rollout.state) && isNonnegativeInteger(rollout.previous_generation_sandboxes) && Number(rollout.previous_generation_sandboxes) <= held);
+  const nodes = rollout.nodes === null ? null : members(rollout.nodes, rolloutNodesFields);
   valid((nodes !== null) === (mode === "nodes") && (nodes === null || Object.values(nodes).every(isNonnegativeInteger)) && (rollout.state === "preparing") === (nodes !== null && Number(nodes.preparing) > 0));
   return { ...rollout, nodes: nodes && { ...nodes } } as unknown as SandboxRollout;
 }
 function projectNodeRollout(value: unknown, online: unknown): SandboxNodeRollout {
-  const rollout = members(value, ["state", "ready_generation"], ["diagnostic"]);
-  valid(["ready", "preparing", "failed", "update_required", "unknown"].includes(rollout.state as string) && nullable(isNonnegativeInteger)(rollout.ready_generation) &&
+  const rollout = members(value, nodeRolloutFields, nodeRolloutRequired);
+  valid(isOneOf(nodeRolloutStateValues, rollout.state) && nullable(isNonnegativeInteger)(rollout.ready_generation) &&
     (online !== false || rollout.state === "unknown") && (rollout.state !== "ready" || rollout.ready_generation !== null) &&
     (rollout.diagnostic === undefined || (typeof rollout.diagnostic === "string" && rollout.diagnostic !== "" && rollout.state === "failed")));
   return { ...rollout, ...(rollout.diagnostic !== undefined ? { diagnostic: normalizeSandboxNodeDiagnostic(rollout.diagnostic as string) } : {}) } as unknown as SandboxNodeRollout;
@@ -253,26 +152,26 @@ function projectNodeRollout(value: unknown, online: unknown): SandboxNodeRollout
 /** Configured deployments carry a validated public configuration and observation object. */
 function projectDeployment(value: unknown): SandboxDeployment {
   const e2b = isRecord(value) && value.provider === "e2b";
-  const fields = ["installation_id", "provider", "core_url", "reset", "rollout", "owner_epoch", "generation", "mode", "resources", "suspension", "credential_configured"];
-  const deployment = members(value, isRecord(value) && value.provider !== "" ? [...fields, "configuration", "metadata"] : fields, ["specification", "specification_digest"]);
+  // A selected Provider always has its configuration and metadata; no Provider has neither.
+  const selected = isRecord(value) && value.provider !== "";
+  const deployment = members(value, deploymentViewFields, selected ? [...deploymentViewRequired, "configuration", "metadata"] : deploymentViewRequired);
+  valid(selected || (!hasOwn(deployment, "configuration") && !hasOwn(deployment, "metadata")));
   valid(typeof deployment.credential_configured === "boolean");
   if (!e2b && deployment.provider !== "") { members(deployment.configuration, []); members(deployment.metadata, []); valid(deployment.credential_configured === false); }
-  const resources = members(deployment.resources, ["allocations", "pending"]);
-  const suspension = deployment.suspension === null ? null : members(deployment.suspension, ["idle_seconds", "retention_seconds"]);
+  const resources = members(deployment.resources, deploymentResourcesFields);
+  const suspension = deployment.suspension === null ? null : members(deployment.suspension, suspensionFields);
   const configured = hasOwn(deployment, "specification");
-  valid(strings(deployment, ["installation_id", "core_url"]) && providers.has(deployment.provider as string) && modes.has(deployment.mode as string) &&
+  valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && isOneOf(deploymentModeValues, deployment.mode) &&
     [deployment.owner_epoch, deployment.generation, resources.allocations, resources.pending].every(isNonnegativeInteger) &&
     (suspension === null || [suspension.idle_seconds, suspension.retention_seconds].every(isNonnegativeInteger)) &&
     configured === hasOwn(deployment, "specification_digest") && (!configured || (typeof deployment.specification_digest === "string" && deployment.specification_digest !== "")));
   return {
-    ...deployment, rollout: projectRollout(deployment.rollout, deployment.mode, Number(resources.allocations) + Number(resources.pending)), reset: projectReset(deployment.reset, Number(resources.allocations) + Number(resources.pending)), resources: { ...resources } as SandboxDeployment["resources"], suspension: suspension && { ...suspension } as SandboxDeployment["suspension"],
+    ...deployment, rollout: projectRollout(deployment.rollout, deployment.mode, Number(resources.allocations) + Number(resources.pending)), reset: projectReset(deployment.reset, Number(resources.allocations) + Number(resources.pending)), resources: { ...resources } as unknown as SandboxDeployment["resources"], suspension: suspension && { ...suspension } as unknown as SandboxDeployment["suspension"],
     ...(configured ? { specification: projectSpecification(deployment.specification) } : {}),
     ...(e2b ? projectE2B(deployment.configuration, deployment.metadata) : {}),
   } as unknown as SandboxDeployment;
 }
 
-const nodeFields = ["rollout", "id", "name", "provider", "online", "provider_ready", "cpu_count", "available_memory_bytes", "available_disk_bytes", "running", "snapshots",
-  "last_seen_at", "max_active", "max_retained", "active", "reserved", "retained", "cleanup_pending", "created_at", "core_url", "enrollment_id"];
 /** Core omits an empty `diagnostic`, so a present one is a code; an unknown code reads as provider_unavailable. */
 function projectNode(node: Record<string, unknown>): SandboxNode {
   const { diagnostic, rollout, ...rest } = node;
@@ -286,35 +185,34 @@ function projectNode(node: Record<string, unknown>): SandboxNode {
   return { ...fields, diagnostic: normalizeSandboxNodeDiagnostic(diagnostic as string) } as unknown as SandboxNode;
 }
 function projectNodeList(value: unknown): { data: SandboxNode[] } {
-  const list = members(value, ["data"]);
+  const list = members(value, sandboxNodeListFields);
   valid(Array.isArray(list.data));
-  return { data: (list.data as unknown[]).map((entry) => projectNode(members(entry, nodeFields, ["diagnostic"]))) };
+  return { data: (list.data as unknown[]).map((entry) => projectNode(members(entry, nodeFields, nodeRequired))) };
 }
 /** A never-observed host is all null; the history lists every bucket of the range. */
 function projectNodeDetail(value: unknown, nodeId: string): SandboxNodeDetail {
-  const { host, history, ...fields } = members(value, [...nodeFields, "host", "history"], ["diagnostic"]);
+  const { host, history, ...fields } = members(value, nodeDetailFields, nodeDetailRequired);
   const node = projectNode(fields);
-  const observed = members(host, ["effective_cpu_cores", "cpu_utilization", "total_memory_bytes", "available_memory_bytes", "available_disk_bytes", "observed_at"]);
-  const buckets = members(history, ["resolution_seconds", "points"]);
+  const observed = members(host, nodeHostFields);
+  const buckets = members(history, hostHistoryFields);
   valid(sameResourceId(node.id, nodeId) && [observed.effective_cpu_cores, observed.cpu_utilization].every(nullable(measure)) &&
     [observed.total_memory_bytes, observed.available_memory_bytes, observed.available_disk_bytes].every(nullable(isNonnegativeInteger)) &&
     nullable(timestamp)(observed.observed_at) && isNonnegativeInteger(buckets.resolution_seconds) && buckets.resolution_seconds > 0 && Array.isArray(buckets.points));
   const points = (buckets.points as unknown[]).map((entry) => {
-    const point = members(entry, ["start", "cpu_utilization_max", "memory_used_bytes_max", "available_disk_bytes_min"]);
+    const point = members(entry, hostHistoryPointFields);
     valid(timestamp(point.start) && nullable(measure)(point.cpu_utilization_max) && [point.memory_used_bytes_max, point.available_disk_bytes_min].every(nullable(isNonnegativeInteger)));
-    return { ...point } as unknown as SandboxNodeHostPoint;
+    return { ...point } as unknown as HostHistoryPoint;
   });
-  return { ...node, host: { ...observed } as unknown as SandboxNodeHost, history: { resolution_seconds: buckets.resolution_seconds as number, points } };
+  return { ...node, host: { ...observed } as unknown as NodeHost, history: { resolution_seconds: buckets.resolution_seconds as number, points } };
 }
 
-const allocationFields = ["id", "node_id", "tenant_id", "session_id", "environment_id", "state", "compute_phase", "initialization", "diagnostic"];
-const allocationDiagnostics = new Set(["", "node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable"]);
+const allocationStrings = ["id", "node_id", "tenant_id", "session_id", "environment_id", "state", "compute_phase", "initialization", "diagnostic"];
 function projectAllocations(value: unknown, nodeId: string): { data: SandboxAllocation[] } {
-  const list = members(value, ["data"]);
+  const list = members(value, sandboxAllocationListFields);
   valid(Array.isArray(list.data));
   return { data: (list.data as unknown[]).map((entry) => {
-    const allocation = members(entry, [...allocationFields, "deployment_generation", "compute_phase_changed_at", "created_at"]);
-    valid(isNonnegativeInteger(allocation.deployment_generation) && strings(allocation, allocationFields) && sameResourceId(allocation.node_id as string, nodeId) && allocationDiagnostics.has(allocation.diagnostic as string) &&
+    const allocation = members(entry, nodeAllocationFields);
+    valid(isNonnegativeInteger(allocation.deployment_generation) && strings(allocation, allocationStrings) && sameResourceId(allocation.node_id as string, nodeId) && isOneOf(nodeAllocationDiagnosticValues, allocation.diagnostic) &&
       nullable(timestamp)(allocation.compute_phase_changed_at) && timestamp(allocation.created_at));
     return { ...allocation } as unknown as SandboxAllocation;
   }) };
@@ -389,7 +287,7 @@ export class SandboxAdminClient {
           const fields = error.code === "sandbox_generation_stale" ? ["current_generation"] : error.code === "sandbox_in_use" ? ["allocations", "pending"] : error.code === "invalid_sandbox_configuration" ? ["min", "max"] : [];
           const details = Object.fromEntries(fields.filter(field => isNonnegativeInteger(error.details?.[field])).map(field => [field, Number(error.details![field])]));
           const safeParam = error.status === 400
-            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : error.code === "invalid_sandbox_configuration" && ["runtime", "resources.cpus", "resources.memory_mib", "resources.root_disk_mib", "resources.environment_disk_mib"].includes(error.param ?? "") ? error.param : null
+            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : error.code === "invalid_sandbox_configuration" && sandboxConfigurationParams.has(error.param) ? error.param : null
             : error.status === 409 && error.code === "sandbox_credential_ownership" ? "credential" : null;
           const param = error.param === safeParam ? safeParam : null;
           throw new AgentCoreError(messages[error.code]!, error.status, error.code, param, undefined, Object.keys(details).length ? details : undefined);
@@ -401,7 +299,7 @@ export class SandboxAdminClient {
         throw new AgentCoreError("E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", 409, "sandbox_configuration_error", null);
       }
       // Any other credential-bearing rejection may reflect the key in any error field.
-      throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, "sandbox_configuration_unconfirmed");
+      throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, sandboxConfigurationUnconfirmed);
     }
   }
   async listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {

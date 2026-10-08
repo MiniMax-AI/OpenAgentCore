@@ -1,7 +1,7 @@
 ---
 title: "Environment 执行器凭证"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: 6c1db305481f9ab2a51bdd0c88243feaab48348b71f5f3ebbc8f00b17744f412
+source_hash: c929752dc1113b777308855ab416bc12aef07ae2d26df71c2e691cbef2832b8b
 ---
 
 执行器凭证允许 `oac-daemon` 为一个 `self_hosted` Environment 注册并连接。它只授权该 Environment 的私有 daemon 传输（`/api/v1/agent-daemon/*`），不授权 `/v1`、`/core/v1`、sandbox node 注册或 Project 资源。Project 的 principal 是其执行 principal。Core 只保存密钥摘要。
@@ -37,7 +37,7 @@ grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本�
 | `POST /api/v1/agent-daemon/installation` | Grant | 固定绑定：`version`、`protocol_version`、`environment_id`、`remote_url`、`workspace_directory`、`harness` |
 | `POST /api/v1/agent-daemon/installation/claim` | Grant | `{"executor_token":"SECRET"}`；204 |
 
-无效或过期的 grant 返回 401 `installation_authorization_invalid`。没有匹配安装器时，grant 路由返回 503 `installation_unavailable`。Core 用安装的 [`secrets/credential.key`](../../../docs/zh/configuration.md#installation-directory) 签名每个 grant；未配置 key 时，上述 Session 响应、Core-key 查询和 grant 路由返回 503 `credential_storage_unavailable`。格式错误的密钥返回 400。产物路由不携带凭证，grant 只发送给 Core，不发送给产物主机。
+无效或过期的 grant 返回 401 `installation_authorization_invalid`。没有匹配安装器时，grant 路由返回 503 `installation_unavailable`。Core 用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations) 签名每个 grant。格式错误的密钥返回 400。产物路由不携带凭证，grant 只发送给 Core，不发送给产物主机。
 
 ## Core-key 路由 {#core-key-routes}
 

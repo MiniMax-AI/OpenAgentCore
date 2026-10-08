@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -40,18 +39,8 @@ func (e *ExecutionOperations) Claim(ctx context.Context, installationID string) 
 		if err != nil {
 			return err
 		}
-		if d.InstallationID != "" {
-			if !d.WebManaged || d.InstallationID != id {
-				return ErrConflict
-			}
-		} else {
-			resources, err := tx.CountResources()
-			if err != nil {
-				return err
-			}
-			if resources.Allocations != 0 || resources.Pending != 0 {
-				return ErrConflict
-			}
+		if d.InstallationID != "" && d.InstallationID != id {
+			return ErrConflict
 		}
 		if d.Provider != "" {
 			if _, err := e.service.specification(d); err != nil {
@@ -60,127 +49,6 @@ func (e *ExecutionOperations) Claim(ctx context.Context, installationID string) 
 		}
 		return tx.ClaimInstallation(id)
 	})
-}
-
-// ConfigureProcess records the deployment process configuration selects,
-// before the Worker starts. AdmissionPaused must be committed for the old
-// installation before any switch. A nil selection never forgets the previous
-// identity or unresolved resources.
-func (e *ExecutionOperations) ConfigureProcess(ctx context.Context, selected *ProcessDeployment) error {
-	var installation string
-	if selected != nil {
-		copy := *selected
-		selected = &copy
-		id, err := parseID(selected.InstallationID)
-		if err != nil {
-			return err
-		}
-		installation = id
-		if !validDigest(selected.BackendFingerprint) {
-			return fmt.Errorf("%w: invalid backend identity fingerprint", ErrInvalidInput)
-		}
-	}
-	return e.storage.WithDeployment(ctx, func(tx DeploymentTx) error {
-		previous, err := tx.LoadDeployment()
-		if err != nil {
-			return err
-		}
-		if previous.WebManaged {
-			return ErrConflict
-		}
-		if selected != nil && previous.InstallationID == installation && previous.BackendFingerprint == selected.BackendFingerprint && (previous.Provider == "" || selected.ProviderKind == previous.Provider) {
-			if err := tx.SetProcessDeployment(installation, selected.BackendFingerprint, selected.AdmissionPaused); err != nil {
-				return err
-			}
-			return e.configureManager(tx, previous, selected, installation)
-		}
-		resources, err := tx.CountResources()
-		if err != nil {
-			return err
-		}
-		if selected == nil {
-			if previous.InstallationID != "" && (resources.Allocations != 0 || resources.Pending != 0) {
-				return fmt.Errorf("cannot disable managed sandbox provider: %d unreleased allocations (instances, retained snapshots, uncertain operations or pending cleanup) and %d pending hosted environments remain", resources.Allocations, resources.Pending)
-			}
-			return nil
-		}
-		if previous.InstallationID == "" {
-			if resources.Allocations != 0 {
-				return fmt.Errorf("cannot adopt sandbox installation: %d existing unreleased allocations (including retained snapshots and pending cleanup) have no verified backend identity", resources.Allocations)
-			}
-		} else {
-			if !previous.AdmissionPaused || !selected.AdmissionPaused {
-				return fmt.Errorf("cannot switch sandbox installation: persist maintenance on the previous installation and keep the new installation in maintenance")
-			}
-			if resources.Allocations != 0 || resources.Pending != 0 {
-				return fmt.Errorf("cannot switch sandbox installation: %d unreleased allocations (instances, retained snapshots, uncertain operations or pending cleanup) and %d pending hosted environments remain", resources.Allocations, resources.Pending)
-			}
-		}
-		if err := tx.SetProcessDeployment(installation, selected.BackendFingerprint, selected.AdmissionPaused); err != nil {
-			return err
-		}
-		return e.configureManager(tx, previous, selected, installation)
-	})
-}
-
-// configureManager records the node provider and the local node process
-// configuration selects.
-func (e *ExecutionOperations) configureManager(tx DeploymentTx, previous Record, selected *ProcessDeployment, installation string) error {
-	if selected.ProviderKind == "" {
-		return nil
-	}
-	isNode, err := e.service.registry.IsNode(selected.ProviderKind)
-	if err != nil {
-		return err
-	}
-	if !isNode {
-		return ErrInvalidInput
-	}
-	if previous.Provider == "" {
-		resources, err := tx.CountResources()
-		if err != nil {
-			return err
-		}
-		if resources.Allocations != 0 || resources.Pending != 0 {
-			return fmt.Errorf("cannot adopt historical sandbox resources: keep the original Core responsible for retained resources and install this release separately")
-		}
-	}
-	var localNode string
-	if selected.LocalNodeID != "" {
-		id, err := parseID(selected.LocalNodeID)
-		if err != nil {
-			return err
-		}
-		localNode = id
-		if previous.LocalNodeID != "" && previous.LocalNodeID != id {
-			resources, err := tx.CountResources()
-			if err != nil {
-				return err
-			}
-			if resources.Allocations != 0 || resources.Pending != 0 || !previous.AdmissionPaused || !selected.AdmissionPaused {
-				return fmt.Errorf("local sandbox node identity changed: restore its original state directory; replacement requires maintenance and no retained resources")
-			}
-		}
-		if !validDigest(selected.LocalCredentialSHA256) {
-			return ErrInvalidInput
-		}
-		if err := validateNode("Local", selected.LocalMaxActive, selected.LocalMaxRetained); err != nil {
-			return err
-		}
-		n, err := tx.LoadNode(id)
-		if errors.Is(err, ErrNotFound) {
-			_, err = tx.InsertNode(NewNode{ID: id, InstallationID: installation, Name: "Local", BackendFingerprint: selected.BackendFingerprint, CredentialDigest: selected.LocalCredentialSHA256, MaxActive: selected.LocalMaxActive, MaxRetained: selected.LocalMaxRetained})
-		} else if err == nil {
-			if n.InstallationID != installation || n.BackendFingerprint != selected.BackendFingerprint || n.CredentialDigest != selected.LocalCredentialSHA256 {
-				return fmt.Errorf("local sandbox node identity does not match the retained backend")
-			}
-			err = tx.UpdateNode(id, NodeLimits{Name: n.Name, MaxActive: selected.LocalMaxActive, MaxRetained: selected.LocalMaxRetained})
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return tx.SetManagerDeployment(selected.ProviderKind, localNode)
 }
 
 // CheckSetup rejects a stale or reset deployment before provider preparation.
@@ -404,8 +272,8 @@ func (e *ExecutionOperations) saveSelection(tx DeploymentTx, d Record, input san
 	if err != nil {
 		return err
 	}
-	return tx.SaveSelection(SelectionRecord{InstallationID: d.InstallationID, Provider: input.Provider, BackendFingerprint: description.BackendFingerprint, Mode: description.Mode,
-		Generation: d.Generation + 1, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds, Specification: specification,
+	return tx.SaveSelection(SelectionRecord{InstallationID: d.InstallationID, Provider: input.Provider, BackendFingerprint: description.BackendFingerprint, Mode: string(description.Mode),
+		Generation: d.Generation + 1, Specification: specification,
 		Configuration: sandbox.ConfigurationRecord{Public: configurationJSON(record.Public), Metadata: configurationJSON(record.Metadata), Secret: record.Secret}})
 }
 

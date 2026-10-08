@@ -25,8 +25,7 @@ func LockDeployment(ctx context.Context, q *sqlc.Queries) (placement.Deployment,
 	}
 	return placement.Deployment{
 		InstallationID: uuidString(d.InstallationID), Provider: d.ProviderKind, Mode: d.Mode,
-		Generation: uint64(d.Generation), WebManaged: d.WebManaged, AdmissionPaused: d.AdmissionPaused,
-		Resetting: d.ResetClear.Valid, Specification: d.Specification,
+		Generation: uint64(d.Generation), Resetting: d.ResetClear.Valid, Specification: d.Specification,
 	}, nil
 }
 

@@ -23,7 +23,7 @@ import (
 )
 
 // resource names Templates in credential bindings and audit rows.
-const resource = "environment_template"
+const resource = string(writeaudit.ResourceEnvironmentTemplate)
 
 // Store implements environmenttemplates.Storage and environmenttemplates.Reader.
 type Store struct {
@@ -36,9 +36,8 @@ var (
 	_ environmenttemplates.Reader  = (*Store)(nil)
 )
 
-// New returns a Store. Without a credential key (cipher nil), writes and
-// resolutions that seal or open confidential configuration fail with
-// credentialcrypto.ErrUnavailable; safe metadata stays readable.
+// New returns a Store that seals and opens confidential configuration with
+// cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -63,7 +62,7 @@ func (s *Store) Create(ctx context.Context, tenantID string, in environmenttempl
 		if result, err = template(metadataRow(row)); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", resource, result.ID, "", writeaudit.Resource{Type: resource, ID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionCreate, writeaudit.ResourceEnvironmentTemplate, result.ID, "", writeaudit.Resource{Type: writeaudit.ResourceEnvironmentTemplate, ID: result.ID})
 	})
 	return result, storageError(err)
 }
@@ -91,7 +90,7 @@ func (s *Store) Update(ctx context.Context, tenantID, templateID string, in envi
 		if result, err = template(metadataRow(row)); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", resource, result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdate, writeaudit.ResourceEnvironmentTemplate, result.ID, "")
 	})
 	return result, storageError(err)
 }
@@ -109,7 +108,7 @@ func (s *Store) Delete(ctx context.Context, tenantID, templateID string) (string
 			return err
 		}
 		deleted = uuid.UUID(id.Bytes).String()
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", resource, deleted, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceEnvironmentTemplate, deleted, "")
 	})
 	if err != nil {
 		return "", storageError(err)
@@ -216,9 +215,6 @@ func (s *Store) Resolve(ctx context.Context, tenantID, templateID string) (envir
 			return environmenttemplates.Resolved{}, errors.New("stored environment template files have no contents")
 		}
 		return resolved, nil
-	}
-	if s.cipher == nil {
-		return environmenttemplates.Resolved{}, credentialcrypto.ErrUnavailable
 	}
 	plaintext, err := s.cipher.OpenEnvironmentFile(row.FileContents, fileBinding(tenant, id))
 	if err != nil {

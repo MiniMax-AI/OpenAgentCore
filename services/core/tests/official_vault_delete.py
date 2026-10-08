@@ -1,4 +1,4 @@
-"""Pinned Vault deletion, child removal, scoped retries and keyless recovery."""
+"""Pinned Vault deletion, child removal, scoped retries and deletion under a replaced key."""
 
 import uuid
 
@@ -8,11 +8,11 @@ from openai import AuthenticationError, NotFoundError
 
 def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
     vaults = client.beta.agents.vaults
-    values = [vaults.create(name=name) for name in ["Cascade target", "Empty HTTP target", "Keyless target", "Retained Vault"]]
+    values = [vaults.create(name=name) for name in ["Cascade target", "Empty HTTP target", "Key-lost target", "Retained Vault"]]
     foreign = other.beta.agents.vaults.create(name="Foreign Vault deletion")
     auth = {"type": "static_bearer", "mcp_server_url": "https://example.invalid/vault-delete", "token": canary}
     children = [vaults.credentials.create(values[0].id, name=str(i), auth=auth) for i in range(3)]
-    keyless = vaults.credentials.create(values[2].id, name="Keyless child", auth=auth)
+    key_lost = vaults.credentials.create(values[2].id, name="Key-lost child", auth=auth)
     retained = vaults.credentials.create(values[3].id, name="Retained child", auth=auth)
     foreign_child = other.beta.agents.vaults.credentials.create(foreign.id, name="Foreign child", auth=auth)
     spec = {"input": "Verify vault delete fixture admission.", "agent": {"model": "requested-model"}, "environment": {"type": "none"}, "vault_ids": [values[0].id, values[3].id]}
@@ -73,11 +73,11 @@ def verify_vault_deletion(client, other, invalid, peer, canary, expect_error):
     assert other.beta.agents.vaults.retrieve(foreign.id) == foreign
     assert other.beta.agents.vaults.credentials.retrieve(foreign_child.id, vault_id=foreign.id) == foreign_child
     print("Vault deletion: SDK/raw confirmation, cascade visibility, scope and retained Session identity passed.")
-    return values, keyless, retained, foreign, foreign_child, spec, headers, session
+    return values, key_lost, retained, foreign, foreign_child, spec, headers, session
 
 
 def verify_vault_deletion_recovery(client, other, saved, expect_error):
-    values, keyless, retained, foreign, foreign_child, spec, headers, session = saved
+    values, key_lost, retained, foreign, foreign_child, spec, headers, session = saved
     vaults = client.beta.agents.vaults
     for target in values[:2]:
         expect_error(NotFoundError, lambda: vaults.retrieve(target.id))
@@ -85,7 +85,7 @@ def verify_vault_deletion_recovery(client, other, saved, expect_error):
         expect_error(NotFoundError, lambda: vaults.credentials.list(target.id))
     for value in values[2:]:
         assert vaults.retrieve(value.id) == value
-    for child in [keyless, retained]:
+    for child in [key_lost, retained]:
         assert vaults.credentials.retrieve(child.id, vault_id=child.vault_id) == child
     assert other.beta.agents.vaults.retrieve(foreign.id) == foreign
     assert other.beta.agents.vaults.credentials.retrieve(foreign_child.id, vault_id=foreign.id) == foreign_child
@@ -95,7 +95,7 @@ def verify_vault_deletion_recovery(client, other, saved, expect_error):
     print("Vault deletion: absent parents/children, unaffected resources and Session retry survived API restart.")
 
 
-def verify_keyless_vault_deletion(client, saved, expect_error):
+def verify_key_lost_vault_deletion(client, saved, expect_error):
     values, child, retained, *_ = saved
     vaults, target = client.beta.agents.vaults, values[2]
     assert vaults.delete(target.id).to_dict() == {"id": target.id, "deleted": True, "object": "vault.deleted"}
@@ -104,4 +104,4 @@ def verify_keyless_vault_deletion(client, saved, expect_error):
     expect_error(NotFoundError, lambda: vaults.credentials.list(target.id))
     assert vaults.retrieve(values[3].id) == values[3]
     assert vaults.credentials.retrieve(retained.id, vault_id=retained.vault_id) == retained
-    print("Vault deletion: keyless cascade removed stored children while another Vault remained usable.")
+    print("Vault deletion: the cascade under a replaced key removed stored children while another Vault remained usable.")

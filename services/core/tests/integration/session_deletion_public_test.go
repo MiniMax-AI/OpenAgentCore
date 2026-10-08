@@ -23,13 +23,13 @@ func TestSessionDeletionOfficialClient(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
-	h, err = publicHandler(t, New(s.pool), auth, "codex", storeExecution(t, New(s.pool)))
+	h, err = publicHandler(t, New(t, s.pool), auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

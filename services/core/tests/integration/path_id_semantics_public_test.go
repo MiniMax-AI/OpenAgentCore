@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -86,19 +85,14 @@ func databaseDigest(t *testing.T, pool *pgxpool.Pool) map[string]string {
 
 func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{61}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +117,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		t.Fatal("fixture Environment", err)
 	}
 	environment := hosted.Environment.ID
-	skill, err := SkillService(t, pool, cipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: skillArchive(t, "path-skill")})
+	skill, err := SkillService(t, pool, s.credentialCipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: skillArchive(t, "path-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,28 +351,6 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	}
 	if checked < 600 {
 		t.Fatalf("route matrix checked only %d cases", checked)
-	}
-
-	// Storage availability checks also run before the lookup of a missing identifier.
-	h, err = publicHandler(t, New(pool), auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	unconfigured := httptest.NewServer(h)
-	defer unconfigured.Close()
-	keyless := pathIDClient{t: t, server: unconfigured}
-	for _, r := range []route{
-		{method: "POST", body: `{"name":"path","auth":{"type":"static_bearer","mcp_server_url":"https://mcp.example/mcp","token":"t"}}`, segments: []string{"/v1/vaults/", vault, "/credentials"}},
-		{method: "POST", body: `{"auth":{"type":"static_bearer","token":"t"}}`, segments: []string{"/v1/vaults/", vault, "/credentials/", credential}},
-		{method: "POST", body: `{"env":{"PATH_ID":"value"}}`, segments: []string{"/v1/agents/environments/templates/", template}},
-	} {
-		for index := 1; index < len(r.segments); index += 2 {
-			wantStatus, wantBody := keyless.do(owner, r.method, path(r.segments, index, uuid.NewString()), "application/json", []byte(r.body))
-			status, body := keyless.do(owner, r.method, path(r.segments, index, "not-a-uuid"), "application/json", []byte(r.body))
-			if status != wantStatus || body != wantBody {
-				t.Errorf("keyless %s %s: malformed %d %s; missing %d %s", r.method, path(r.segments, index, "{id}"), status, body, wantStatus, wantBody)
-			}
-		}
 	}
 
 	// A malformed list cursor answers like any other unresolved cursor of that

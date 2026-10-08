@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, TolerantSessionList } from "@oac/agents-client";
+import type { AdminProject, AgentSession, ListPage } from "@oac/agents-client";
 
 import type { Owned } from "../../lib/projects";
-import { type Project } from "../../lib/admin-view";
 import {
   agentOptions,
   environmentKind,
@@ -13,12 +12,11 @@ import {
   isLogTruncated,
   readSessionLog,
   statusCounts,
-  type SessionLogEntry,
   type SessionLogFilters,
 } from "./session-log";
 
-function project(id: string, name: string): Project {
-  return { id, name, source: "console", status: "active", created_at: 1, archived_at: null, active_key_count: 1 } as Project;
+function project(id: string, name: string): AdminProject {
+  return { id, name, created_at: "1970-01-01T00:00:01Z", archived_at: null, active_key_count: 1 };
 }
 
 const production = project("proj_prod", "Production");
@@ -35,7 +33,7 @@ function session(id: string, overrides: Partial<AgentSession> & { agentId?: stri
       name: agentName,
       instructions: null,
       multi_agent: { enabled: false, max_concurrent_subagents: null },
-      reasoning: {},
+      reasoning: { effort: null, summary: null },
       service_tier: "auto",
       text: { format: { type: "text" }, verbosity: "medium" },
       tools: [],
@@ -53,27 +51,26 @@ function session(id: string, overrides: Partial<AgentSession> & { agentId?: stri
   };
 }
 
-function row(owner: Project, value: AgentSession): Owned<SessionLogEntry> {
-  return { project: owner, value: { kind: "session", session: value } };
+function row(owner: AdminProject, value: AgentSession): Owned<AgentSession> {
+  return { project: owner, value };
 }
 
-function ids(rows: readonly Owned<SessionLogEntry>[]): string[] {
-  return rows.map((entry) => (entry.value.kind === "session" ? entry.value.session.id : `?${entry.value.id ?? entry.value.key}`));
+function ids(rows: readonly Owned<AgentSession>[]): string[] {
+  return rows.map((entry) => entry.value.id);
 }
 
 const filters = (patch: Partial<SessionLogFilters> = {}): SessionLogFilters => ({ ...initialSessionLogFilters, ...patch });
 
 describe("Session log across projects", () => {
-  const rows: Owned<SessionLogEntry>[] = [
+  const rows: Owned<AgentSession>[] = [
     row(production, session("s1", { status: "failed", error: "Sandbox allocation failed", last_active_at: 30 })),
     row(production, session("s2", { status: "in_progress", last_active_at: 50, environment: { type: "openai_hosted" } as AgentSession["environment"] })),
     row(data, session("s3", { status: "idle", last_active_at: 40, agentId: "agent_b", agentName: "Analyst" })),
     row(data, session("s4", { status: "requires_action", last_active_at: 50, agentId: "agent_b", agentName: "Analyst" })),
-    { project: data, value: { kind: "unrecognized", id: "5f0c0e0e-0000-4000-8000-000000000000", key: "5f0c0e0e-0000-4000-8000-000000000000" } },
   ];
 
-  it("merges every project's Sessions by most recent activity, ties by ID, unrecognized last", () => {
-    expect(ids(filterSessionLog(rows, filters()))).toEqual(["s2", "s4", "s3", "s1", "?5f0c0e0e-0000-4000-8000-000000000000"]);
+  it("merges every project's Sessions by most recent activity, ties by ID", () => {
+    expect(ids(filterSessionLog(rows, filters()))).toEqual(["s2", "s4", "s3", "s1"]);
   });
 
   it("filters by status, Agent, environment and search", () => {
@@ -82,13 +79,11 @@ describe("Session log across projects", () => {
     expect(ids(filterSessionLog(rows, filters({ environment: "openai_hosted" })))).toEqual(["s2"]);
     expect(ids(filterSessionLog(rows, filters({ query: "ALLOCATION" })))).toEqual(["s1"]);
     expect(ids(filterSessionLog(rows, filters({ query: "analyst" })))).toEqual(["s4", "s3"]);
-    // An unrecognized entry has no status, Agent or environment; only its ID can match.
-    expect(ids(filterSessionLog(rows, filters({ query: "5f0c0e0e" })))).toEqual(["?5f0c0e0e-0000-4000-8000-000000000000"]);
     expect(ids(filterSessionLog(rows, filters({ status: "idle" })))).toEqual(["s3"]);
   });
 
   it("counts statuses for the rows the other filters keep", () => {
-    expect(statusCounts(rows, filters())).toEqual({ all: 5, in_progress: 1, requires_action: 1, failed: 1, idle: 1 });
+    expect(statusCounts(rows, filters())).toEqual({ all: 4, in_progress: 1, requires_action: 1, failed: 1, idle: 1 });
     expect(statusCounts(rows, filters({ agentId: "agent_b", status: "failed" }))).toEqual({ all: 2, in_progress: 0, requires_action: 1, failed: 0, idle: 1 });
   });
 
@@ -121,25 +116,22 @@ describe("Session log across projects", () => {
 });
 
 describe("Reading a project's Session log", () => {
-  function page(data: AgentSession[], unrecognized: TolerantSessionList["unrecognized"], hasMore: boolean, lastId: string | null): TolerantSessionList {
-    return { object: "list", data, unrecognized, has_more: hasMore, first_id: data[0]?.id ?? null, last_id: lastId };
+  function page(data: AgentSession[], hasMore: boolean): ListPage<AgentSession> {
+    return { object: "list", data, has_more: hasMore, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
   }
 
-  it("walks every page and lists unreadable entries without failing", async () => {
+  it("walks every page", async () => {
     const calls: Array<string | undefined> = [];
-    const pages = [
-      page([session("a"), session("b")], [{ index: 2, id: null }], true, "c"),
-      page([session("d")], [{ index: 0, id: "e" }], false, "d"),
-    ];
-    const client = { listSessionsTolerant: async (options?: { after?: string }) => { calls.push(options?.after); return pages[calls.length - 1]!; } };
+    const pages = [page([session("a"), session("b")], true), page([session("d")], false)];
+    const client = { listSessions: async (options?: { after?: string }) => { calls.push(options?.after); return pages[calls.length - 1]!; } };
     const entries = await readSessionLog(client);
-    expect(calls).toEqual([undefined, "c"]);
-    expect(entries.map((entry) => (entry.kind === "session" ? entry.session.id : `?${entry.key}`))).toEqual(["a", "b", "?0:2", "d", "?e"]);
+    expect(calls).toEqual([undefined, "b"]);
+    expect(entries.map((entry) => entry.id)).toEqual(["a", "b", "d"]);
   });
 
   it("stops at the read bound and reports it", async () => {
     let calls = 0;
-    const client = { listSessionsTolerant: async () => { calls += 1; return page([session(`s${calls}a`), session(`s${calls}b`)], [], true, `s${calls}b`); } };
+    const client = { listSessions: async () => { calls += 1; return page([session(`s${calls}a`), session(`s${calls}b`)], true); } };
     const entries = await readSessionLog(client, undefined, 3);
     expect(entries).toHaveLength(3);
     expect(calls).toBe(2);

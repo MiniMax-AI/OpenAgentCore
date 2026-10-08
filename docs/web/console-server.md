@@ -42,7 +42,7 @@ The deployment's reverse proxy sends every path to the console. The console forw
 
 Every request except `/healthz`, `/v1`, `/api/v1` and `/docs` must pass these checks first:
 
-1. **Host and origin.** The `Host` header must equal the host of `OAC_WEB_ORIGIN`. An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site` must be `same-origin` or `none`. A write that carries neither `Origin` nor `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the console answers 403. `/node-install/*` checks only the host and the path.
+1. **Host and origin.** The `Host` header must equal the host of `OAC_PUBLIC_URL`. An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site` must be `same-origin` or `none`. A write that carries neither `Origin` nor `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the console answers 403. `/node-install/*` checks only the host and the path.
 2. **Safe request.** The path must start with `/` and contain no `%`, backslash, NUL, dot segment or empty segment. Absolute-form request targets, `CONNECT` and `TRACE` get 400. An `Upgrade` header gets 400 except on `/v1`, `/api/v1` and `/docs`, which are forwarded before these checks. A `/core/v1` request can therefore never leave that prefix.
 3. **Sign-in.** Paths that need sign-in answer 401 without a valid session cookie.
 
@@ -75,7 +75,7 @@ The console never retries a request. Browser code calls `/core/v1` through the t
 The administrator signs in with the deployment's [Core key](../getting-started/operations.md#core-key). There are no console accounts, usernames or setup step, and signing in grants the whole console.
 
 - The console compares SHA-256 digests of the submitted and configured keys in constant time. It never logs or returns the key.
-- The session cookie `core_console_session` is HttpOnly, `SameSite=Strict`, and `Secure` when `OAC_WEB_ORIGIN` is HTTPS. It lasts 12 hours.
+- The session cookie `core_console_session` is HttpOnly, `SameSite=Strict`, and `Secure` when `OAC_PUBLIC_URL` is HTTPS. It lasts 12 hours.
 - Sessions live only in the console's memory, at most 64 at a time; the oldest is dropped first. A console restart or a Core key rotation signs everyone out.
 - At most two sign-in checks run at once; another attempt gets 429 with `Retry-After: 1`.
 - Failed attempts share a budget of 10 per minute; beyond it, a wrong key gets 429 with `Retry-After: 60`. The correct key always signs in, which is why the console refuses to start with a Core key shorter than 32 characters.
@@ -98,7 +98,7 @@ With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution
 
 ## Public address
 
-The console does not configure a domain or obtain certificates. The operator's reverse proxy or hosting platform terminates HTTPS and routes to the console, and `OAC_PUBLIC_URL` records the origin that applications, nodes and executors use. The console accepts only the host of `OAC_WEB_ORIGIN`, so DNS rebinding cannot reach it.
+The console does not configure a domain or obtain certificates. The operator's reverse proxy or hosting platform terminates HTTPS and routes to the console, and `OAC_PUBLIC_URL` records the origin that browsers, applications, nodes and executors use. The console accepts only its host, so DNS rebinding cannot reach it.
 
 ## Verification
 

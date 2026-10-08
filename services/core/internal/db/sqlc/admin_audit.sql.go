@@ -12,8 +12,8 @@ import (
 )
 
 const insertAdminAudit = `-- name: InsertAdminAudit :one
-INSERT INTO admin_audit_log (id,tenant_id,admin_credential_id,actor_label,action,project_id,resource_type,resource_id,result_ids,request_id,trace_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+INSERT INTO admin_audit_log (id,tenant_id,admin_credential_id,actor_label,action,project_id,resource_type,resource_id,request_id,trace_id)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 RETURNING id
 `
 
@@ -26,7 +26,6 @@ type InsertAdminAuditParams struct {
 	ProjectID         pgtype.UUID `json:"project_id"`
 	ResourceType      string      `json:"resource_type"`
 	ResourceID        string      `json:"resource_id"`
-	ResultIds         []byte      `json:"result_ids"`
 	RequestID         string      `json:"request_id"`
 	TraceID           string      `json:"trace_id"`
 }
@@ -41,7 +40,6 @@ func (q *Queries) InsertAdminAudit(ctx context.Context, arg InsertAdminAuditPara
 		arg.ProjectID,
 		arg.ResourceType,
 		arg.ResourceID,
-		arg.ResultIds,
 		arg.RequestID,
 		arg.TraceID,
 	)

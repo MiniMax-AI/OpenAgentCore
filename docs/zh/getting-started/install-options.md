@@ -1,10 +1,10 @@
 ---
-title: "安装选项与高级部署"
+title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: e063d7dcd615ef5d6ba8b43f1cbe5a11c75325925605f376161f50b9383297c0
+source_hash: 698909d30bf0ebdff2656deb6a6cb00c18181e835e2c1a7972de0d1e7ca47733
 ---
 
-[默认安装](install.md)无需任何选项。使用本页可以在现有反向代理后运行，或者在无法访问互联网时进行安装。
+[默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
 
 向下载的脚本传递选项：
 
@@ -12,13 +12,11 @@ source_hash: e063d7dcd615ef5d6ba8b43f1cbe5a11c75325925605f376161f50b9383297c0
 ./install.sh --public-url https://core.example
 ```
 
-使用单行命令时，请将选项追加在 `bash -s --` 之后。发布包下载器还接受 `--version TAG` 来选择已发布的版本；否则会选择最新的稳定版本。它会在解压前验证捆绑包的 SHA-256，并保留已验证的捆绑包以供[修复](operations.md#installation-version-policy)。
-
-安装程序会打印每个阶段，然后打印地址、登录信息和后续步骤的摘要。设置 `NO_COLOR=1` 可禁用彩色输出。任一步骤失败都会停止安装，并且不会显示成功消息。
+Windows 可下载 `install.ps1`，然后使用相同参数，例如 `& ./install.ps1 --public-url https://core.example`。Unix 单行命令的参数追加在 `bash -s --` 后。`--version TAG` 选择已发布的版本；默认选择最新稳定版，并校验原生命令和 Compose 文件的 SHA-256。
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 
-在 Linux amd64 上使用发行版中的 `compose.yaml` 和 Docker Compose 2.26 或更高版本。发行流程会在 [Compose 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml)中固定初始化镜像及源码版本。Core 和 Web 使用 `latest` 镜像，PostgreSQL 使用 `postgres:16-alpine`。它会启动 PostgreSQL、Core 和 Web。Web 把 `/v1` 和 `/api/v1` 转发到 Core。数据通过目录 bind mount 挂载。一次性初始化服务会在该目录中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
+在任一[支持的 Core 主机](install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会在 [Compose 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml)中固定初始化镜像及源码版本。Core 和 Web 使用 `latest` 镜像，PostgreSQL 使用 `postgres:16-alpine`。它会启动 PostgreSQL、Core 和 Web。Web 把 `/v1` 和 `/api/v1` 转发到 Core。数据保存在 Docker 命名卷中。一次性初始化服务会在该目录中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
 
 进行本地试用时，请将发行版的 `compose.yaml` 下载到一个空目录，然后运行：
 
@@ -27,7 +25,7 @@ docker compose up -d --wait --wait-timeout 900
 docker compose exec web oac-web core-key
 ```
 
-`oac-web core-key` 会将生成的 Core 密钥打印到终端，而不会将其写入容器日志。打开 `http://localhost:8080` 并使用该密钥登录。所有安装机密信息都会自动生成；重启时请保留同一个 Compose 项目及其数据目录。
+`oac-web core-key` 会将生成的 Core 密钥打印到终端，而不会将其写入容器日志。打开 `http://localhost:8080` 并使用该密钥登录。所有安装机密信息都会自动生成；重启时请保留同一个 Compose 项目及其数据卷。
 
 初始化镜像除初始化命令外，仅包含较小的节点安装元数据。首次启动会验证并复制这些元数据，无需下载控制归档或访问 GitHub Releases。后续启动会验证已保存的文件。容器镜像仍需拉取。首次初始化中断后可以重新运行；如果现有数据库缺少安装机密信息，初始化会被拒绝。
 
@@ -45,7 +43,7 @@ docker compose exec web oac-web core-key
 
 登录后，使用 [Nodes](nodes.md)选择沙箱后端并添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
 
-使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，备份数据目录。请遵循[安装版本策略](operations.md#installation-version-policy)：使用不同发布版本时，需要创建新的 Compose 项目并使用全新的数据目录。
+使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，备份数据卷。请遵循[安装版本策略](operations.md#installation-version-policy)：使用不同发布版本时，需要创建新的 Compose 项目并使用全新的数据卷。
 
 ## 进程设置 {#process-settings}
 
@@ -64,13 +62,13 @@ docker compose exec web oac-web core-key
 
 | 选项 | 用途 |
 | --- | --- |
-| `--install-dir DIR` | 绝对安装目录；默认为 `~/.oac/core`。新安装要求目录为空或不存在，或者包含一个[从未启动过的安装](install.md#install) |
+| `--install-dir DIR` | 绝对安装目录；默认为 `~/.oac/core`。新安装使用空目录或不存在的目录；[重试](install.md#install)使用已有安装目录 |
 
 只要使用不同的安装目录和端口，多个安装就可以共用一台机器。需要更多安装时，请使用不同的 IP 地址或共享反向代理。每个安装都有自己的数据库、Core 密钥和节点。
 
 ## 沙箱后端 {#sandbox-backend}
 
-安装程序不保存沙箱后端。登录后，打开 **System** → **Manage sandbox configuration**，选择 Docker、microsandbox 或 E2B；Web 会按 [`standard-sizes.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/src/features/sandbox/standard-sizes.json) 推荐 Standard 尺寸。该选择保存在 Core 的数据库中。以后要更改，请[重置部署](nodes.md#change-the-sandbox-configuration)。Docker 沙箱与每个节点共用该节点的内核，其节点服务账户[等效于 root](nodes.md#what-the-installer-sets-up)。E2B 需要一个非回环的公共 HTTPS URL，因为 E2B 沙箱会从 E2B 云端调用 Core。按照 [E2B 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)准备模板。
+安装程序不保存沙箱后端。登录后，打开 **System** → **Manage sandbox configuration**，选择 Docker、microsandbox 或 E2B；Web 会把 [Provider 声明的默认大小](../sandbox-provider.md#register-the-provider-kind)推荐为 Standard 尺寸。该选择保存在 Core 的数据库中。以后要更改，请[重置部署](nodes.md#change-the-sandbox-configuration)。Docker 沙箱与每个节点共用该节点的内核，其节点服务账户[等效于 root](nodes.md#what-the-installer-sets-up)。E2B 需要一个非回环的公共 HTTPS URL，因为 E2B 沙箱会从 E2B 云端调用 Core。按照 [E2B 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)准备模板。
 
 ## 监听器与访问 {#listeners-and-access}
 
@@ -137,4 +135,4 @@ http://:8443 {
 
 ## 离线主机 {#offline-hosts}
 
-本安装程序不支持从离线捆绑包安装。它从发布版本下载 Compose 文件和容器镜像。
+Core 安装需要访问 GitHub Releases 和容器注册表，以下载发行文件和镜像。

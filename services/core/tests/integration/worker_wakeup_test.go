@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -46,7 +45,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			defer instrumented.Close()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker := startWorker(t, ctx, NewWithCredentialCipher(instrumented, fixtureCipher), h.d)
+			worker := startWorker(t, ctx, New(t, instrumented), h.d)
 			done := make(chan error, 1)
 			started := false
 			defer func() {
@@ -60,7 +59,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 					t.Error("worker did not stop")
 				}
 			}()
-			input := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}}
+			input := []sessions.Input{messageInput("wake")}
 			switch operation {
 			case "submit":
 				_, err = worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", input)
@@ -112,7 +111,7 @@ func TestWorkerSchedulerHintBypassesEnvironmentScanThrottle(t *testing.T) {
 	admitted := make(chan error, 1)
 	started := time.Now()
 	go func() {
-		_, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}})
+		_, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", []sessions.Input{messageInput("wake")})
 		admitted <- err
 	}()
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)

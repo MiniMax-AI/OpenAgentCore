@@ -16,9 +16,7 @@ type Provider struct {
 }
 
 var _ sandbox.SandboxProvider = (*Provider)(nil)
-var _ sandbox.CheckpointProvider = (*Provider)(nil)
 
-func New(c Config) (*Provider, error) { return NewWithCaller(c, &ProcessCaller{}) }
 func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	if c.Validate() != nil || caller == nil {
 		return nil, sandbox.ErrInvalid
@@ -213,10 +211,4 @@ func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generati
 		return Compute{}, e
 	}
 	return c, nil
-}
-
-// Quiescent includes a helper that outlived the caller's canceled context.
-func (p *Provider) Quiescent() bool {
-	v, ok := p.caller.(interface{ Quiescent() bool })
-	return ok && v.Quiescent()
 }

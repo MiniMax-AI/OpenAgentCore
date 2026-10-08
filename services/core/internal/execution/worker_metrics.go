@@ -4,13 +4,15 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 )
 
-// WorkerMetrics contains only observations from this worker's existing operations.
-// Missing pointers mean the corresponding operation has not established a value.
+// WorkerMetrics contains only observations from this worker's existing
+// operations. A nil ExecutionOwner means the last ownership check failed.
 type WorkerMetrics struct {
-	SlotsInUse     *int64
-	SlotsTotal     *int64
+	SlotsInUse     int64
+	SlotsTotal     int64
 	ExecutionOwner *bool
 	Scheduler      WorkerJobMetrics
 }
@@ -18,7 +20,7 @@ type WorkerMetrics struct {
 // WorkerJobMetrics describes the last completed scheduling poll. Failed counts
 // failed polls, not failed Turns; Processed is unknown when a poll fails.
 type WorkerJobMetrics struct {
-	Status    string
+	Status    coremetrics.JobStatus
 	LastRunAt *time.Time
 	Processed *int64
 	Failed    *int64
@@ -35,14 +37,13 @@ func (w *Worker) MetricsSnapshot() WorkerMetrics {
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
 	value := w.metrics.value
-	value.SlotsInUse = copyMetric(value.SlotsInUse)
-	value.SlotsTotal = copyMetric(value.SlotsTotal)
+	value.SlotsTotal = int64(w.executionConcurrency())
 	value.ExecutionOwner = copyMetric(value.ExecutionOwner)
 	value.Scheduler.LastRunAt = copyMetric(value.Scheduler.LastRunAt)
 	value.Scheduler.Processed = copyMetric(value.Scheduler.Processed)
 	value.Scheduler.Failed = copyMetric(value.Scheduler.Failed)
 	if value.Scheduler.Status == "" {
-		value.Scheduler.Status = "unknown"
+		value.Scheduler.Status = coremetrics.JobUnknown
 	}
 	return value
 }
@@ -56,11 +57,9 @@ func copyMetric[T any](source *T) *T {
 }
 
 func (w *Worker) observeSlots(active int) {
-	used, total := int64(active), int64(w.executionConcurrency())
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
-	w.metrics.value.SlotsInUse = &used
-	w.metrics.value.SlotsTotal = &total
+	w.metrics.value.SlotsInUse = int64(active)
 }
 
 func (w *Worker) observeOwnership(err error) {
@@ -78,10 +77,10 @@ func (w *Worker) observeOwnership(err error) {
 
 func (w *Worker) observeSchedulerPoll(processed int, err error) {
 	now, handled, failed := time.Now().UTC(), int64(processed), int64(0)
-	job := WorkerJobMetrics{Status: "ok", LastRunAt: &now, Processed: &handled, Failed: &failed}
+	job := WorkerJobMetrics{Status: coremetrics.JobOk, LastRunAt: &now, Processed: &handled, Failed: &failed}
 	if err != nil {
 		failed = 1
-		job.Status, job.Processed = "failing", nil
+		job.Status, job.Processed = coremetrics.JobFailing, nil
 	}
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
@@ -91,9 +90,9 @@ func (w *Worker) observeSchedulerPoll(processed int, err error) {
 func (w *Worker) observeWorkerStop(runErr, contextErr error) {
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
-	w.metrics.value.Scheduler.Status = "stopped"
+	w.metrics.value.Scheduler.Status = coremetrics.JobStopped
 	if runErr != nil && (contextErr == nil || !errors.Is(runErr, contextErr)) {
-		w.metrics.value.Scheduler.Status = "failing"
+		w.metrics.value.Scheduler.Status = coremetrics.JobFailing
 	}
 }
 
@@ -106,6 +105,5 @@ func (w *Worker) observeWorkerClosed(err error) {
 		owned := false
 		w.metrics.value.ExecutionOwner = &owned
 	}
-	used := int64(0)
-	w.metrics.value.SlotsInUse = &used
+	w.metrics.value.SlotsInUse = 0
 }

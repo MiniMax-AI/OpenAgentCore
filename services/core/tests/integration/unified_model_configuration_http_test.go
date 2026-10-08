@@ -14,14 +14,14 @@ import (
 )
 
 func TestUnifiedModelConfigurationHTTP(t *testing.T) {
-	st, _ := newManagedTestStore(t)
+	st, _ := configuredStore(t)
 	tenant, token, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "model-configuration", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
+	handler, err := publicHandler(t, st, auth, "codex", withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if snapshot.Model.Value == nil || *snapshot.Model.Value != model || snapshot.Model.Source != modelSource || snapshot.HarnessConfig.Source != nativeSource || snapshot.ModelProvider.Source != providerSource {
+		if snapshot.Model.Value == nil || *snapshot.Model.Value != model || snapshot.Model.Source != v1.ExecutionSource(modelSource) || snapshot.HarnessConfig.Source != v1.ExecutionSource(nativeSource) || snapshot.ModelProvider.Source != v1.ExecutionSource(providerSource) {
 			t.Fatalf("wrong frozen selections: %#v", snapshot)
 		}
 		equalJSON(snapshot.HarnessConfig.Value, native)

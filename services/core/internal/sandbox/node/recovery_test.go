@@ -57,10 +57,10 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 	if first.Online(id.NodeID) {
 		t.Fatal("old owner remained online")
 	}
-	if _, err = first.Proxy(id.NodeID, "docker", docker.Operations(), 1).GetInfo(context.Background(), reference()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+	if _, err = first.Proxy(id.NodeID, docker.Operations(), 1).GetInfo(context.Background(), reference()); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("old owner request = %v", err)
 	}
-	if _, err = second.Proxy(id.NodeID, "docker", docker.Operations(), 1).GetInfo(context.Background(), reference()); err != nil {
+	if _, err = second.Proxy(id.NodeID, docker.Operations(), 1).GetInfo(context.Background(), reference()); err != nil {
 		t.Fatal(err)
 	}
 	stop()
@@ -68,7 +68,7 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 		t.Fatal(err)
 	}
 	wait(t, func() bool { return !second.Online(id.NodeID) })
-	persisted, err := LoadIdentity(dir)
+	persisted, err := readIdentity(dir)
 	if err != nil || persisted.OwnerEpoch != 5 || persisted.Credential != credential {
 		t.Fatal("restart identity changed")
 	}
@@ -156,7 +156,7 @@ func TestHeartbeatAcknowledgementKeepsIdleConnectionAlive(t *testing.T) {
 	if !hub.Online(id.NodeID) {
 		t.Fatal("idle node disconnected")
 	}
-	if _, err = hub.Proxy(id.NodeID, "docker", docker.Operations(), 1).GetInfo(ctx, reference()); err != nil {
+	if _, err = hub.Proxy(id.NodeID, docker.Operations(), 1).GetInfo(ctx, reference()); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -234,7 +234,7 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("missing health")
 	}
-	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
+	proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
 	r := reference()
 	if _, err = proxy.Create(ctx, sandbox.Bootstrap{Reference: r}); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("create = %v", err)
@@ -264,7 +264,7 @@ func TestCorruptOrMismatchedIdentityNeverRotates(t *testing.T) {
 	if _, err = InitIdentity(dir, stored.CoreURL, mismatch); err == nil {
 		t.Fatal("adopted wrong backend")
 	}
-	original, err := LoadIdentity(dir)
+	original, err := readIdentity(dir)
 	if err != nil || original.Credential != stored.Credential {
 		t.Fatal("credential rotated")
 	}
@@ -273,11 +273,5 @@ func TestCorruptOrMismatchedIdentityNeverRotates(t *testing.T) {
 	}
 	if _, err = InitIdentity(dir, stored.CoreURL, id); err == nil {
 		t.Fatal("corrupt identity replaced")
-	}
-	if err = os.Remove(filepath.Join(dir, "identity.json")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = LoadIdentity(dir); err == nil {
-		t.Fatal("missing identity recreated by load")
 	}
 }

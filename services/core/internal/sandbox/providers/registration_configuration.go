@@ -24,32 +24,13 @@ func validateConfigurationAdapter(configuration sandbox.ConfigurationAdapter) er
 			return configurationRegistrationError()
 		}
 	}
-	discovery := reflect.TypeFor[sandbox.ConfigurationDiscoverer]()
-	if !value.Type().Implements(discovery) {
-		return configurationRegistrationError()
-	}
-	if err := validateConfigurationDiscoveryInterface(discovery); err != nil {
-		return err
-	}
 	return validateConfigurationRequirements(reflect.ValueOf(configuration.Requirements()))
-}
-
-// Every discovery method needs its own authored requirement. A future method
-// cannot inherit the existing Discovery decision merely by being implemented.
-func validateConfigurationDiscoveryInterface(discovery reflect.Type) error {
-	if discovery.NumMethod() != 1 {
-		return configurationRegistrationError()
-	}
-	if _, exists := discovery.MethodByName("DiscoverConfiguration"); !exists {
-		return configurationRegistrationError()
-	}
-	return nil
 }
 
 // Check field names as well as values so new requirements cannot bypass the
 // gate. This owns only configuration requirements, not resource operations.
 func validateConfigurationRequirements(value reflect.Value) error {
-	if value.Kind() != reflect.Struct || value.NumField() != 3 {
+	if value.Kind() != reflect.Struct || value.NumField() != 5 {
 		return configurationRegistrationError()
 	}
 	for i := 0; i < value.NumField(); i++ {
@@ -59,12 +40,12 @@ func validateConfigurationRequirements(value reflect.Value) error {
 			if !ok || (requirement != sandbox.Required && requirement != sandbox.NotRequired) {
 				return configurationRegistrationError()
 			}
-		case "Discovery":
+		case "Discovery", "SelectionDiscovery", "CredentialVerification":
 			support, ok := value.Field(i).Interface().(providercontract.Support)
 			if !ok {
 				return configurationRegistrationError()
 			}
-			if err := support.Check("DiscoverConfiguration"); err != nil && !errors.Is(err, providercontract.ErrUnsupported) {
+			if err := support.Check(value.Type().Field(i).Name); err != nil && !errors.Is(err, providercontract.ErrUnsupported) {
 				return configurationRegistrationError()
 			}
 		default:

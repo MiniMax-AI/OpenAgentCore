@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -25,18 +24,13 @@ type selectionResponse struct {
 // M1–M8) over real HTTP and PostgreSQL, with tenants A and B.
 func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{67}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	tenantA, tokenA, tokenB := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-a", TokenSHA256: runtimedevice.HashCredential(tokenA), TenantID: tenantA},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-b", TokenSHA256: runtimedevice.HashCredential(tokenB), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

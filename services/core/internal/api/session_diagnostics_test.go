@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -14,13 +16,13 @@ import (
 
 func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
-	h, _, tenant := adminTestHandler(t, databaseSessionReads(pool))
+	h, _, tenant := adminTestHandler(t, databaseSessionReads(t, pool))
 	created, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	session := created.Session
-	receipt := submitMessage(t, pool, tenant, session.ID, "input", json.RawMessage(`{"text":"input-secret-canary"}`))
+	receipt := submitMessage(t, pool, tenant, session.ID, "input", "input-secret-canary")
 	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)})
 	base := adminSessionsPath + session.ID
@@ -120,5 +122,13 @@ func TestDiagnosticsHostedFailureOverridesInputWithoutParsingReason(t *testing.T
 		if !strings.Contains(w.Body.String(), want) || !strings.Contains(w.Body.String(), `"failed_at":null`) {
 			t.Fatal("historical reason parsed or time invented", w.Body)
 		}
+	}
+}
+
+func TestDiagnosticStatusMatchesOfficialSession(t *testing.T) {
+	official, _ := reflect.TypeFor[v1.Session]().FieldByName("Status")
+	diagnostic, _ := reflect.TypeFor[SessionDiagnostics]().FieldByName("Status")
+	if diagnostic.Type != official.Type || diagnostic.Tag.Get("enums") != official.Tag.Get("enums") {
+		t.Fatal("diagnostics must preserve the pinned official Session status set")
 	}
 }

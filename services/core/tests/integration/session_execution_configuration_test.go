@@ -10,7 +10,6 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -24,27 +23,23 @@ func executionProjectionInput(source string) sessions.CreateSession {
 		Creator: FixtureCreator(), Engine: harness, IdempotencyKey: uuid.NewString(),
 		Configuration: []byte(`{"agent":{"model":"frozen-model"},"environment":{"type":"openai_hosted"}}`),
 		ExecutionConfiguration: &v1.SessionExecutionConfiguration{
-			Model:         v1.ExecutionSelection{Value: &model, Source: source},
-			Harness:       v1.ExecutionSelection{Value: &harness, Source: source},
+			Model:         v1.ExecutionSelection{Value: &model, Source: v1.ExecutionSource(source)},
+			Harness:       v1.ExecutionSelection{Value: &harness, Source: v1.ExecutionSource(source)},
 			ModelProvider: v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"},
 		},
 	}
 }
 
 func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{41}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	for _, stream := range []bool{false, true} {
 		for _, source := range []string{"session", "agent", "deployment"} {
 			t.Run(source+map[bool]string{false: "/ordinary", true: "/stream"}[stream], func(t *testing.T) {
 				tenant := uuid.NewString()
 				input := executionProjectionInput(source)
 				input.ModelProvider = &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://private-deployment.example/v1", APIKey: "private-projection-key-canary"}
-				input.ExecutionConfiguration.ModelProvider = v1.ExecutionProviderSelection{Source: source, Status: "available", Configuration: input.ModelProvider.SafeView()}
+				input.ExecutionConfiguration.ModelProvider = v1.ExecutionProviderSelection{Source: v1.ExecutionSource(source), Status: "available", Configuration: input.ModelProvider.SafeView()}
 				input.ExecutionConfiguration.Object = "untrusted-object"
 				input.ExecutionConfiguration.SchemaVersion = 99
 				input.ExecutionConfiguration.SessionID = "untrusted-session"
@@ -60,12 +55,12 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 					t.Fatal(err)
 				}
 				// A reader without the encryption key can use the safe snapshot after restart.
-				reader := New(pool)
+				reader := New(t, pool)
 				frozen, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if frozen.Object != "agent.session.execution_configuration" || frozen.SchemaVersion != 1 || frozen.SessionID != session.ID || frozen.Model.Source != source || frozen.Harness.Source != source {
+				if frozen.Object != "agent.session.execution_configuration" || frozen.SchemaVersion != 1 || frozen.SessionID != session.ID || frozen.Model.Source != v1.ExecutionSource(source) || frozen.Harness.Source != v1.ExecutionSource(source) {
 					t.Fatal("incorrect frozen projection identity or provenance")
 				}
 				// Deployment defaults are readable with the same Core key, so every
@@ -160,12 +155,8 @@ func TestSessionExecutionConfigurationHistoricalProvenance(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{42}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant := uuid.NewString()
 	for _, kind := range []string{"model", "harness", "source", "provider", "provider_mismatch", "post_projection_failure"} {
 		input := executionProjectionInput("session")
@@ -201,7 +192,7 @@ func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
-	s, _ := testStore(t)
+	s, _ := configuredStore(t)
 	tenant := uuid.NewString()
 	input := executionProjectionInput("session")
 	var wg sync.WaitGroup
@@ -246,7 +237,8 @@ func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
-	s, pool := testStore(t)
+	s, installation := configuredStore(t)
+	pool := s.pool
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, executionProjectionInput("agent"))
@@ -261,7 +253,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

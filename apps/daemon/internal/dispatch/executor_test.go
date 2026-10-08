@@ -69,17 +69,25 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 	}
 }
 
+// noEnvironmentPreparation prepares config for session without an execution environment.
+func noEnvironmentPreparation(session string, config proto.PromptRequestPayload) proto.ExecutionPreparePayload {
+	config.AgentStateKey, config.DisableExecutionEnvironment = "agents-api-"+session, true
+	return proto.ExecutionPreparePayload{SessionID: session, Configuration: config}
+}
 func executorRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true}}
+	return noEnvironmentPreparation("session", proto.PromptRequestPayload{AgentKind: "reusable"})
+}
+
+// registerExecutorKind registers info for prepared execution only.
+func registerExecutorKind(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.ExecutorFactory) {
+	reg.RegisterKind(info, harnessconfig.Configuration{})
+	reg.RegisterExecutor(info.Kind, factory)
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("ordinary factory is forbidden")
-	})
-	reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})
@@ -220,9 +228,7 @@ func TestExecutorPreInputFailureConfirmsCloseBeforeRetrySignal(t *testing.T) {
 func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, *recSender) {
 	t.Helper()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("unexpected legacy factory")
-	})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	registry.RegisterExecutor("reusable", factory)
 	sender := &recSender{}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, IdleTimeout: time.Minute})
@@ -291,6 +297,25 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatal("mismatched session invoked native preparation")
+	}
+}
+
+func TestExecutorRejectsUnsupportedConfigurationBeforeFactory(t *testing.T) {
+	for name, change := range map[string]func(*proto.PromptRequestPayload){
+		"no environment":       func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },
+		"unknown agent option": func(r *proto.PromptRequestPayload) { r.AgentOptions = map[string]any{"mode": "plan"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, s, calls := executorRouter(t, &reusableExecutor{}, time.Minute)
+			req := executorRequest()
+			change(&req.Configuration)
+			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", req)); err == nil {
+				t.Fatal("unsupported configuration accepted")
+			}
+			if status := waitPreparationStatus(t, s, "request", "rejected", ""); status.ErrorCode != "unsupported_configuration" || calls.Load() != 0 {
+				t.Fatalf("status=%+v factory calls=%d", status, calls.Load())
+			}
+		})
 	}
 }
 

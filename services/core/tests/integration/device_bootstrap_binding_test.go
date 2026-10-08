@@ -25,7 +25,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, remote)
-	for _, nodeID := range []string{d.LocalNodeID, remote} {
+	for _, nodeID := range []string{d.NodeID, remote} {
 		t.Run(nodeID, func(t *testing.T) {
 			tenant, bearer := uuid.NewString(), uuid.NewString()
 			session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), nodeID)
@@ -59,14 +59,14 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 }
 
 func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing.T) {
-	s, _ := testStore(t)
+	s, installation := configuredStore(t)
 	tenant := uuid.NewString()
 	ordinary, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "ordinary", runtimedevice.HashCredential("ordinary-token"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, environment := localEnvironment(t, s, tenant)
-	allocation, err := deploymentExecution(t, executionWriter(t, s)).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
+	allocation, err := deploymentExecution(t, executionWriter(t, s)).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential("allocation-token"))
 	if err != nil {
 		t.Fatal(err)
 	}

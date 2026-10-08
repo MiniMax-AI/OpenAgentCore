@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -66,6 +65,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.SessionsReader == nil {
 		return nil, errors.New("execution worker requires the Session reader")
 	}
+	if dispatcher.ManagedRuntimes == nil {
+		return nil, errors.New("execution worker requires the sandbox runtime provider")
+	}
 	owned, err := dispatcher.Bind(owner)
 	if err != nil {
 		return nil, err
@@ -79,27 +81,15 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if err != nil {
 		return nil, err
 	}
-	if worker.runtimes != nil {
-		defer func() {
-			if err != nil {
-				worker.runtimes.stop()
-			}
-		}()
-	}
-	var process *deployment.ProcessDeployment
-	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
-		config := worker.runtimes.config
-		process = &deployment.ProcessDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
-	}
-	if worker.runtimes != nil && worker.runtimes.loadDeployment != nil {
-		err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID)
-		if err == nil {
-			_, err = worker.runtimes.ensureDeployment(ctx)
+	defer func() {
+		if err != nil {
+			worker.runtimes.stop()
 		}
-	} else {
-		err = owner.Deployment.ConfigureProcess(ctx, process)
+	}()
+	if err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID); err != nil {
+		return nil, err
 	}
-	if err != nil {
+	if _, err = worker.runtimes.ensureDeployment(ctx); err != nil {
 		return nil, err
 	}
 	if err = owned.sessionExecution.ReconcileEnvironmentConnections(ctx); err != nil {
@@ -158,14 +148,10 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	defer func() {
 		w.observeWorkerStop(runErr, ctx.Err())
 		cancel()
-		if w.runtimes != nil {
-			w.runtimes.stop()
-		}
+		w.runtimes.stop()
 		running.Wait()
-		if w.runtimes != nil {
-			// Drain an external provisioning caller before releasing the writer lease.
-			w.runtimes.drain()
-		}
+		// Drain an external provisioning caller before releasing the writer lease.
+		w.runtimes.drain()
 		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
 	active := make(map[string]bool)
@@ -179,13 +165,11 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	running.Add(1)
 	go func() { defer running.Done(); preparationDone <- w.runEnvironmentInitializations(ctx) }()
 	lifecycleDone := make(chan error, 1)
-	if w.runtimes != nil {
-		running.Add(1)
-		go func() {
-			defer running.Done()
-			lifecycleDone <- w.runManagedRuntimes(ctx)
-		}()
-	}
+	running.Add(1)
+	go func() {
+		defer running.Done()
+		lifecycleDone <- w.runManagedRuntimes(ctx)
+	}()
 	type readCompletion struct {
 		id      string
 		request directoryReadRequest
@@ -365,9 +349,6 @@ func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) erro
 	var rejection *preparationRejection
 	capacityRejected := errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare && rejection.code == "preparation_capacity"
 	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
-	if errors.Is(err, ErrModelProviderRequired) {
-		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
-	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	turn, err := w.dispatcher.SessionsReader.GetTurn(finish, item.TenantID, item.SessionID, item.TurnID)

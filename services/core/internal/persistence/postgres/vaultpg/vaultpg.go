@@ -6,10 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
@@ -17,6 +13,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Store runs on pooled connections and seals and opens the Credential
@@ -30,9 +29,7 @@ type Store struct {
 
 var _ vaults.Storage = (*Store)(nil)
 
-// New returns a Store. Without a credential key (cipher nil), operations that
-// seal or open a secret fail with credentialcrypto.ErrUnavailable; Vaults,
-// Credential metadata, selection and deletion keep working.
+// New returns a Store that seals and opens secrets with cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -83,7 +80,7 @@ func (s *Store) CreateVault(ctx context.Context, vault vaults.NewVault) (vaults.
 		if err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, vault.TenantID, "create", "vault", created.ID, "", writeaudit.Resource{Type: "vault", ID: created.ID})
+		return auditpg.RecordWriteAudit(ctx, q, vault.TenantID, writeaudit.ActionCreate, writeaudit.ResourceVault, created.ID, "", writeaudit.Resource{Type: writeaudit.ResourceVault, ID: created.ID})
 	})
 	if err != nil {
 		return vaults.Vault{}, err
@@ -166,7 +163,7 @@ func (s *Store) DeleteVault(ctx context.Context, tenantID, vaultID string) (stri
 			return err
 		}
 		deleted = uuid.UUID(id.Bytes).String()
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "vault", deleted, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceVault, deleted, "")
 	})
 	if err != nil {
 		return "", err

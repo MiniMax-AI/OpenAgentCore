@@ -1,12 +1,16 @@
 package v1
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+)
 
 func TestModelExecutionValidation(t *testing.T) {
 	for _, harness := range []string{"codex", "claude_sdk", "mcode"} {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(harness+"/"+protocol, func(t *testing.T) {
-				p := ModelProviderInput{Protocol: protocol, BaseURL: "https://example.com/v1", APIKey: "secret", ContextWindow: 200000, MaxOutputTokens: 8000}
+				p := ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "secret", ContextWindow: 200000, MaxOutputTokens: 8000}
 				native := harness == "mcode" || (harness == "codex" && protocol == "responses") || (harness == "claude_sdk" && protocol == "anthropic")
 				if err := p.ValidateHarness(harness); (err == nil) != native {
 					t.Fatalf("wrong native protocol admission: %v", err)
@@ -22,7 +26,7 @@ func TestModelExecutionValidation(t *testing.T) {
 		{"responses", ""}, {"responses", "unknown"}, {"unknown", "codex"},
 		{"openai", "codex"}, {"chat", "claude_sdk"}, {"chat-completions", "mcode"},
 	} {
-		p := ModelProviderInput{Protocol: tc.protocol, BaseURL: "https://example.com/v1", APIKey: "secret", ContextWindow: 200000, MaxOutputTokens: 8000}
+		p := ModelProviderInput{Protocol: modelprovider.Protocol(tc.protocol), BaseURL: "https://example.com/v1", APIKey: "secret", ContextWindow: 200000, MaxOutputTokens: 8000}
 		if p.ValidateHarness(tc.harness) == nil {
 			t.Fatalf("unsupported protocol or harness accepted: %s/%s", tc.protocol, tc.harness)
 		}

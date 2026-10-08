@@ -73,14 +73,8 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 		fakeCheckpointProvider: f.provider, sentinel: sentinel.owner.ID,
 		release: make(chan struct{}), scans: make(chan int, 16),
 	}
-	worker := startWorker(t, t.Context(), f.store, &execution.Dispatcher{
-		Registry: f.provider.registry,
-		ManagedRuntimes: &execution.RuntimeProvider{
-			CoreURL: "http://core.invalid/api/v1", InstallationID: f.key,
-			BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			Provider:           provider, Suspension: &f.policy,
-		},
-	})
+	worker := startWebWorker(t, f.store, f.provider.registry, f.key, provider, &f.policy)
+	onlineManagerNode(t, f.store, f.node)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	var once sync.Once
@@ -113,8 +107,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 }
 
 func wakeHintInput(text string) []sessions.Input {
-	payload, _ := json.Marshal(map[string]string{"text": text})
-	return []sessions.Input{{Kind: "message", Payload: payload}}
+	return []sessions.Input{messageInput(text)}
 }
 
 func (f *wakeHintIntegration) pending(t *testing.T, target wakeHintIntegrationTarget, key string) sessions.EnvironmentInputReservation {

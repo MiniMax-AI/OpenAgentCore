@@ -120,11 +120,12 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	if _, err := LoadIdentity(dir); err == nil {
+	if release, err := lockDirectory(dir); err == nil {
+		release()
 		t.Fatal("running node did not retain lifetime identity lock")
 	}
 	r := reference()
-	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
+	proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
@@ -167,7 +168,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
 	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
-	p := h.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)
+	p := h.Proxy(uuid.NewString(), docker.Operations(), 1)
 	if sandbox.SupportsCheckpoint(p) {
 		t.Fatal("docker advertised checkpoint")
 	}
@@ -218,7 +219,7 @@ func TestAgentRejectsDuplicateSequenceAndRetainsEpoch(t *testing.T) {
 	if reads != 1 {
 		t.Fatalf("replayed operation %d", reads)
 	}
-	persisted, e := LoadIdentity(dir)
+	persisted, e := readIdentity(dir)
 	if e != nil || persisted.OwnerEpoch != 9 {
 		t.Fatalf("epoch not retained: %+v %v", persisted.Identity, e)
 	}
@@ -301,7 +302,7 @@ func TestHealthSendsOnlyFixedDiagnosticCode(t *testing.T) {
 		err  error
 		want string
 	}{
-		{fmt.Errorf("%w: dial unix /home/operator/private/docker.sock", sandbox.ErrDockerUnavailable), "docker_unavailable"},
+		{fmt.Errorf("%w: open /home/operator/private/kvm", sandbox.ErrHostUnsupported), "host_unsupported"},
 		{errors.New("open /home/operator/private/runtime: permission denied"), "provider_unavailable"},
 		{nil, ""},
 	} {

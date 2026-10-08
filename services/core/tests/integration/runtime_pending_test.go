@@ -14,9 +14,9 @@ import (
 )
 
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
-	s, _ := newManagedTestStore(t)
+	s, key := configuredStore(t)
 	tenant, idle, idleEnvironment := managedSession(t, s)
-	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
+	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{messageInput("hello")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,12 +24,8 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: deleted.TenantID, SessionID: deleted.ID}); err != nil {
 		t.Fatal(err)
 	}
-	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	start := func() *execution.Worker {
-		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
-		return w
-	}
+	start := func() *execution.Worker { return startWebWorker(t, s, runtimegateway.NewRegistry(), key, p, nil) }
 	stop := func(w *execution.Worker) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

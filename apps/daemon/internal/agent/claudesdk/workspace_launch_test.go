@@ -24,7 +24,7 @@ test "$ANTHROPIC_AUTH_TOKEN" = selected-provider-fixture || exit 23
 test "$TMPDIR" != "$CLAUDE_CONFIG_DIR/tmp" || exit 24
 case "$1" in
   */runtime_check.js)
-    printf '%s\n' '{"type":"runtime_ready","protocol":3,"node":"fixture","sdk":"fixture","mcp":"fixture","native":"fixture","features":["workspace_tools","workspace_prepare"]}' ;;
+    printf '%s\n' '{"type":"runtime_ready","protocol":3,"node":"fixture","sdk":"fixture","mcp":"fixture","native":"fixture","features":["workspace_tools","workspace_prepare","workspace_command_observations"]}' ;;
   *)
     IFS= read -r request
     printf '%s\n' '{"type":"executor_ready","protocol":3}'
@@ -41,7 +41,7 @@ esac
 		t.Fatal("readiness did not receive replacement environment", err)
 	}
 	out := make(chan proto.Envelope, 8)
-	s, err := NewFactory(config)(t.Context(), workspaceRequest(), out)
+	s, err := startSingleTurn(t.Context(), config, workspaceRequest(), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,12 +59,12 @@ esac
 		t.Fatal("expected one settled completion")
 	}
 	// Feature checking must reject an older bridge without starting execution.
-	script = strings.ReplaceAll(script, `"features":["workspace_tools","workspace_prepare"]`, `"features":[]`)
+	script = strings.ReplaceAll(script, `"features":["workspace_tools","workspace_prepare","workspace_command_observations"]`, `"features":[]`)
 	script = strings.ReplaceAll(script, "IFS= read -r request", "touch '"+filepath.Join(config.StateDir, "unexpected-start")+"'")
 	if err := os.WriteFile(config.Node, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewFactory(config)(t.Context(), workspaceRequest(), out); err == nil {
+	if _, err := startSingleTurn(t.Context(), config, workspaceRequest(), out); err == nil {
 		t.Fatal("old packaged bridge accepted workspace execution")
 	}
 	if _, err := os.Stat(filepath.Join(config.StateDir, "unexpected-start")); !os.IsNotExist(err) {

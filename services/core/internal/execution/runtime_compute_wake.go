@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if state.Rollback {
 		if _, err := p.ResumeCompute(ctx, runtimeReference(owner), state.Current); err != nil {
 			return err
@@ -70,7 +70,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 	return r.observeConnection(ctx, next)
 }
 
-func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
@@ -105,9 +105,6 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Checkpo
 // waitRuntimeAwake is called only for live Environment file operations, before
 // entering the Worker's work queues. Persisted history/artifact reads bypass it.
 func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) error {
-	if w.runtimes == nil {
-		return nil
-	}
 	key := deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}
 	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
 	if errors.Is(err, deployment.ErrNotFound) {

@@ -20,7 +20,7 @@ func resolvedSessionModelOptions(provider *v1.ModelProviderInput, engine string)
 		return nil, err
 	}
 	return map[string]any{"model_provider": map[string]any{
-		"protocol": provider.Protocol, "base_url": provider.BaseURL, "api_key": provider.APIKey,
+		"protocol": string(provider.Protocol), "base_url": provider.BaseURL, "api_key": provider.APIKey,
 		"context_window": provider.ContextWindow, "max_output_tokens": provider.MaxOutputTokens,
 	}}, nil
 }

@@ -3,11 +3,9 @@ package localworkspace
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -24,14 +22,6 @@ type Binding struct {
 	writer         *fileWriter
 	capabilityMu   sync.Mutex
 	capabilityRoot string
-}
-
-func New(environment, session, workspace string) (*Binding, error) {
-	root, err := paths.Root()
-	if err != nil {
-		return nil, err
-	}
-	return newNativeBinding(environment, session, workspace, filepath.Join(root, "capabilities"))
 }
 
 // NewWithCapabilityDirectory freezes paths selected by the Runtime operator.
@@ -69,8 +59,7 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 		return r, nil
 	}
 	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
-		r.DisableExecutionEnvironment ||
-		r.ConversationID != "" || r.WorkspaceAuthoring || !r.StrictResume {
+		r.DisableExecutionEnvironment {
 		return r, errors.New("request does not match the dedicated local Environment")
 	}
 	if !r.WorkspaceReadOnly || r.LocalEnvironment.NetworkAccess != "" || len(r.LocalEnvironment.AllowedDomains) > 0 {

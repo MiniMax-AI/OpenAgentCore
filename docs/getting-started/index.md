@@ -1,5 +1,5 @@
 ---
-title: "OpenAgentCore documentation"
+title: "Overview"
 ---
 
 OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents API. The [architecture overview](../architecture.md) explains its parts. Pick the guides for your role.

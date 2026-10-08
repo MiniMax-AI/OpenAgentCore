@@ -30,8 +30,8 @@ type sessionRequest struct {
 	originalEnvironment   json.RawMessage
 	modelProviderNull     bool
 	deploymentDefaults    *modelconfiguration.Snapshot
-	modelSource           string
-	harnessConfigSource   string
+	modelSource           v1.ExecutionSource
+	harnessConfigSource   v1.ExecutionSource
 	resolvedHarnessConfig json.RawMessage
 	v1.CreateSessionRequest
 	Input               json.RawMessage
@@ -91,9 +91,6 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 			return input, sessions.ErrInvalidInput
 		}
 		if err := json.Unmarshal(request.Agent, &input.agentFields); err != nil {
-			return input, sessions.ErrInvalidInput
-		}
-		if _, supplied := input.agentFields["model"]; supplied && input.Agent.Model == nil {
 			return input, sessions.ErrInvalidInput
 		}
 	}

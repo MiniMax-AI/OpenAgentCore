@@ -11,17 +11,17 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 // The Store seals to the canonical binding Core has always used, so secrets
-// sealed before the Store owned the key still open. A missing key is
-// credentialcrypto.ErrUnavailable, and a wrong binding is a decryption
-// failure, never a missing key, row or token.
+// sealed before the Store owned the key still open. A replaced key or a wrong
+// binding is a decryption failure, never a missing row or token.
 func TestCredentialSecretsKeepTheirSealedFormat(t *testing.T) {
 	_, pool := openStore(t)
 	cipher := newCipher(t, bytes.Repeat([]byte{61}, 32))
-	service, keyless := newService(t, pool, cipher, nil), newService(t, pool, nil, nil)
+	service, replaced := newService(t, pool, cipher, nil), newService(t, pool, pgtest.CredentialKey(t), nil)
 	tenant, url := uuid.NewString(), "https://mcp.example/tools"
 	vault := createVault(t, service, tenant)
 	expiry := time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
@@ -77,14 +77,14 @@ func TestCredentialSecretsKeepTheirSealedFormat(t *testing.T) {
 	write(static, []byte("old-static"), scope(static))
 	write(oauth, legacy, scope(oauth))
 	for _, tc := range []struct {
-		credential vaults.Credential
-		want       string
-	}{{static, "old-static"}, {oauth, "old-access"}} {
+		credential  vaults.Credential
+		want, fails string
+	}{{static, "old-static", "MCP credential decryption failed"}, {oauth, "old-access", "OAuth credential decryption failed"}} {
 		if got, err := token(service, tc.credential); err != nil || got != tc.want {
 			t.Fatal("a secret sealed before the move did not open", err)
 		}
-		if got, err := token(keyless, tc.credential); !errors.Is(err, credentialcrypto.ErrUnavailable) || got != "" {
-			t.Fatal("a keyless Store opened a secret", err)
+		if got, err := token(replaced, tc.credential); err == nil || err.Error() != tc.fails || got != "" {
+			t.Fatal("a replaced key opened a secret", err)
 		}
 	}
 	if _, err := service.UpdateOAuthCredential(t.Context(), vaults.UpdateOAuthCredential{TenantID: tenant, VaultID: vault.ID, CredentialID: oauth.ID, AccessToken: ptr("patched-access")}); err != nil {
@@ -93,20 +93,10 @@ func TestCredentialSecretsKeepTheirSealedFormat(t *testing.T) {
 	if grant := readGrant(t, pool, cipher, tenant, oauth); grant.AccessToken != "patched-access" || grant.RefreshToken != "refresh" {
 		t.Fatal("the replaced grant lost its material")
 	}
-	// Without a key, every write that seals fails first, before a malformed Vault.
 	for _, create := range []func(*vaults.Service, string) (vaults.Credential, error){createToken, createOAuth} {
-		if _, err := create(keyless, "not-a-vault"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-			t.Fatal("a keyless creation did not fail closed", err)
-		}
 		if _, err := create(service, "not-a-vault"); !errors.Is(err, vaults.ErrNotFound) {
 			t.Fatal("a malformed Vault named one", err)
 		}
-	}
-	if _, err := keyless.UpdateStaticCredential(t.Context(), vaults.UpdateStaticCredential{TenantID: tenant, VaultID: vault.ID, CredentialID: static.ID, Token: "rejected"}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("a keyless replacement did not fail closed", err)
-	}
-	if _, err := keyless.UpdateOAuthCredential(t.Context(), vaults.UpdateOAuthCredential{TenantID: tenant, VaultID: vault.ID, CredentialID: oauth.ID, AccessToken: ptr("rejected")}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("a keyless OAuth replacement did not fail closed", err)
 	}
 	// A secret sealed to another Credential or destination does not open.
 	wrongID, wrongDestination := scope(static), scope(oauth)

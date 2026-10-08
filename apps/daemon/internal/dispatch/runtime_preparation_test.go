@@ -33,7 +33,7 @@ func (s *capabilitiesTestSender) Send(ctx context.Context, env proto.Envelope) e
 func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
 	t.Helper()
 	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.New(environment, session, t.TempDir())
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, t.TempDir(), t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 }
 
 func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
-	for _, mode := range []string{"write", "export", "read", "run", "idle", "executor", "preparation"} {
+	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation"} {
 		t.Run(mode, func(t *testing.T) {
 			r, sender, environment, session := capabilitiesTestRouter(t)
 			switch mode {
@@ -181,8 +181,6 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 				r.workspaceReads = map[string]struct{}{"read": {}}
 			case "run":
 				r.sessions["run"] = &sessionState{}
-			case "idle":
-				r.idle["state"] = map[*sessionState]struct{}{}
 			case "executor":
 				r.executors[session] = &executorState{}
 			case "preparation":
@@ -202,7 +200,6 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 			r.workspaceExport = nil
 			r.workspaceReads = nil
 			clear(r.sessions)
-			clear(r.idle)
 			clear(r.executors)
 			clear(r.preparations)
 			shutdownCapabilitiesRouter(t, r)

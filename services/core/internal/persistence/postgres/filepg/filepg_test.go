@@ -153,8 +153,8 @@ func TestFilesRejectInvalidIdentifiers(t *testing.T) {
 
 func auditContext(ctx context.Context, tenant, request string) context.Context {
 	return writeaudit.WithSource(ctx, writeaudit.Source{
-		KeyID: "static:" + strings.Repeat("a", 64), Name: "file audit fixture", Prefix: "aaaaaaaa",
-		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "file-audit-trace",
+		KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Name: "file audit fixture", Prefix: "pc_aaaaaaaa",
+		Kind: "issued", TenantID: tenant, RequestID: request, TraceID: "file-audit-trace",
 	})
 }
 

@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
@@ -39,12 +38,7 @@ func uploadSource(data []byte) func(io.Writer) (files.Upload, error) {
 
 func managedArchiveFixture(t *testing.T) (*Store, *Store, string) {
 	t.Helper()
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{37}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	changes := deploymentExecution(t, w)
@@ -85,11 +79,11 @@ func archiveAllocation(t *testing.T, w *Store, tenant string, session sessions.S
 func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	input := managerSessionInput(uuid.NewString())
-	input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"waiting"}`)}}
+	input.InitialInputs = []sessions.Input{messageInput("waiting")}
 	tenant, session := managedArchiveSession(t, s, input)
 	ctx := adminDeleteContext(t.Context(), tenant, uuid.NewString())
 	active, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), tenant, session.ID)
-	if err != nil || active.State != "active" || active.SessionID != session.ID || active.EnvironmentID != session.Environment.ID {
+	if err != nil || active.State != sessions.ManagedArchiveActive || active.SessionID != session.ID || active.EnvironmentID != session.Environment.ID {
 		t.Fatal("unallocated Session status", active, err)
 	}
 	for _, generation := range []uint64{0, 2, ^uint64(0)} {
@@ -113,7 +107,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 		t.Fatal("foreign status", err)
 	}
 	result, err := deploymentExecution(t, w).ArchiveSession(ctx, tenant, session.ID, 1)
-	if err != nil || result.State != "released" {
+	if err != nil || result.State != sessions.ManagedArchiveReleased {
 		t.Fatal("unallocated archive", result, err)
 	}
 	row, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
@@ -135,7 +129,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("archived Environment allocated after archive", err)
 	}
-	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("archived Environment accepted new input", err)
 	}
 	view, err := deploymentService(t, s).View(t.Context())
@@ -166,7 +160,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	history := adminMutationSnapshot(t, s, "sessions", "turns", "session_items", "session_artifacts", "source_files", "pg_largeobject", "pg_largeobject_metadata")
 	request := uuid.NewString()
 	result, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, request), tenant, session.ID, 1)
-	if err != nil || result.State != "cleanup_pending" {
+	if err != nil || result.State != sessions.ManagedArchiveCleanupPending {
 		t.Fatal(result, err)
 	}
 	assertAdminMutationAudit(t, s, tenant, request, "archive", "session", session.ID)
@@ -196,7 +190,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), tenant, session.ID); err != nil || result.State != "released" {
+	if result, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), tenant, session.ID); err != nil || result.State != sessions.ManagedArchiveReleased {
 		t.Fatal("release not reflected", result, err)
 	}
 	page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session.ID, "", "", 100, true)

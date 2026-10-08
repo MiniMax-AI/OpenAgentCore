@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -138,7 +138,7 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceArtifact, uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
 	})
 }
 

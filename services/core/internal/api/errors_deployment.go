@@ -23,7 +23,7 @@ func writeDeploymentError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, deployment.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.")
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)
@@ -102,8 +102,6 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
 	case errors.Is(err, deployment.ErrNodeInUse):
 		writeError(w, http.StatusConflict, "runtime_node_in_use", "The sandbox node retains allocations, snapshots, reservations or pending cleanup.")
-	case errors.Is(err, deployment.ErrLocalNodeConfigured):
-		writeError(w, http.StatusConflict, "runtime_local_node_configured", "The local sandbox node is enabled in deployment configuration. Drain it with the previous release and remove its file-managed configuration before replacing it.")
 	case errors.Is(err, placement.ErrNodesPreparing):
 		writeError(w, http.StatusServiceUnavailable, "sandbox_nodes_preparing", "Sandbox nodes are preparing the requested Runtime.")
 	case errors.Is(err, placement.ErrNodeUnavailable):

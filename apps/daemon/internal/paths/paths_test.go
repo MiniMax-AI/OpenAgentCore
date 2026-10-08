@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -76,10 +75,9 @@ func TestProfileDirAndFiles(t *testing.T) {
 	}
 
 	cases := map[string]func(string) (string, error){
-		"auth.json":     paths.AuthFile,
-		"connect.pid":   paths.PIDFile,
-		"connect.log":   paths.LogFile,
-		"sessions.json": paths.SessionsFile,
+		"auth.json":   paths.AuthFile,
+		"connect.pid": paths.PIDFile,
+		"connect.log": paths.LogFile,
 	}
 	for filename, fn := range cases {
 		got, err := fn("test")
@@ -93,33 +91,6 @@ func TestProfileDirAndFiles(t *testing.T) {
 	}
 }
 
-func TestEnsureProfileDirCreates0700(t *testing.T) {
-	_ = withTempHome(t)
-	dir, err := paths.EnsureProfileDir("default")
-	if err != nil {
-		t.Fatalf("EnsureProfileDir: %v", err)
-	}
-	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatalf("stat after EnsureProfileDir: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("EnsureProfileDir returned %q which is not a directory", dir)
-	}
-	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode != 0o700 {
-		t.Errorf("EnsureProfileDir mode = %o, want 0700", mode)
-	}
-
-	// Idempotent (mkdir -p semantics).
-	dir2, err := paths.EnsureProfileDir("default")
-	if err != nil {
-		t.Fatalf("EnsureProfileDir (second call): %v", err)
-	}
-	if dir2 != dir {
-		t.Fatalf("EnsureProfileDir second call returned %q, want %q", dir2, dir)
-	}
-}
-
 func TestInvalidProfileShortCircuits(t *testing.T) {
 	_ = withTempHome(t)
 	if _, err := paths.ProfileDir("bad/profile"); err == nil {
@@ -127,9 +98,6 @@ func TestInvalidProfileShortCircuits(t *testing.T) {
 	}
 	if _, err := paths.AuthFile("bad/profile"); err == nil {
 		t.Fatal("AuthFile accepted invalid profile name")
-	}
-	if _, err := paths.EnsureProfileDir("bad/profile"); err == nil {
-		t.Fatal("EnsureProfileDir accepted invalid profile name")
 	}
 }
 

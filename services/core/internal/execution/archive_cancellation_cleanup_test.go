@@ -9,21 +9,21 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
-
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -49,7 +49,7 @@ func (waitingCleanupCheckpoint) ProviderOperations() providercontract.Operations
 }
 
 type waitingCleanupCheckpoint struct {
-	sandbox.CheckpointProvider
+	sandbox.SandboxProvider
 	beforeKill func()
 }
 
@@ -77,8 +77,8 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, service := testSessions(t, pool, testCredentialCipher(t))
-			created, err := service.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ModelProviderSourceSession})
+			_, service := testSessions(t, pool, pgtest.CredentialKey(t))
+			created, err := service.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ExecutionSourceSession})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,7 +93,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			inputs, err := service.SubmitInputs(t.Context(), project.TenantID, session.ID, "start", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"run"}`)}})
+			inputs, err := service.SubmitInputs(t.Context(), project.TenantID, session.ID, "start", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"run"}]}]}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -117,7 +117,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if scenario.delivery {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-				credentials, heartbeat := testSessions(t, pool, testCredentialCipher(t))
+				credentials, heartbeat := testSessions(t, pool, pgtest.CredentialKey(t))
 				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, credentials, wsURL)
 				if err != nil {
 					t.Fatal(err)
@@ -157,7 +157,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			sessionReader, _ := testSessions(t, pool, testCredentialCipher(t))
+			sessionReader, _ := testSessions(t, pool, pgtest.CredentialKey(t))
 			kills := 0
 			expectedStatus := sessions.TurnWaiting
 			provider := waitingCleanupProvider{beforeKill: func() {

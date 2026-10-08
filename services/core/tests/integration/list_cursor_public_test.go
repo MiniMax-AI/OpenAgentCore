@@ -13,7 +13,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -221,19 +220,14 @@ func wireError(kind string, code, param *string, message string) string {
 // lookups keep their behavior (K1–K3). A foreign cursor is always byte-identical
 // to a missing one, and a foreign or missing parent is 404 before any cursor.
 func TestListCursorErrorsPostgres(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{67}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

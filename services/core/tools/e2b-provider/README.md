@@ -19,14 +19,14 @@ The account key is stored encrypted in Core's database and is write-only. It rea
 | `command` | `RunCommand` | Runs one bounded command as the Runtime user on a running sandbox whose bootstrap completed; output is limited to 1 MiB per stream |
 | `validate_deployment` | Deployment setup | Reads the template's builds and requires the exact build to be ready with the configured CPU and memory. Without configured resources the selection adopts the build's CPU and memory. Returns the build's status, CPU, memory and reported disk for Core to record; bounded to 30 seconds |
 | `list_templates`, `list_builds` | [Configuration discovery](../../../../contracts/agents-api/sandbox-deployment.md#configuration-discovery) | Pages the key's visible templates (`GET /v2/templates`) or one template's ready builds, with a transient key. Results are capped at 200 and write no receipt |
-| `observe` | Runtime observations | Up to 100 allocations; see [Observations](#observations) |
+| `observe` | Runtime observations | One allocation; see [Observations](#observations) |
 | `verify_credential` | E2B key replacement | Up to 32 allocation references; see [Credential verification](#credential-verification) |
 
 Compatible endpoints must return the SDK 2.51.0 template-list and template-build response models; the helper does not adapt other catalog shapes. E2B has no independently configurable disk limit, and sandbox inspection does not expose a build ID: build provenance comes from the validated create selector.
 
 ## Private JSON boundary
 
-[`helper_contract.go`](../../internal/sandbox/e2b/helper_contract.go) owns the adapter-private wire types, version, operation and error vocabulary, and bounds. Its generator projects Python declarations into the helper and template sources, deriving managed-bootstrap fields from the Sandbox Provider types, network access values from `agentnetwork.Policy.Validate`, and the SDK version from the hashed dependency lock. The command-input and observation limits come from their shared Go contracts. The generated modules have no SDK or repository dependency and ship with the frozen helper and protected template startup scripts.
+[`helper_contract.go`](../../internal/sandbox/e2b/helper_contract.go) owns the adapter-private wire types, version, operation and error vocabulary, and bounds. Its generator projects Python declarations into the helper and template sources, deriving managed-bootstrap fields from the Sandbox Provider types, network access values from `agentnetwork.Policy.Validate`, and the SDK version from the hashed dependency lock. The command-input limit comes from its shared Go contract. The generated modules have no SDK or repository dependency and ship with the frozen helper and protected template startup scripts.
 
 Run `go generate ./services/core/internal/sandbox/e2b` from the repository root after changing these declarations. `make check-e2b-provider` and the Go adapter tests reject stale projections; both languages consume generated valid and invalid exchanges covering wire types, extra fields, operation/reference bounds and managed-bootstrap fields. The helper build copies those fixtures with its source before running the pinned-SDK suite.
 
@@ -56,7 +56,7 @@ Inspection uses SDK metadata and ID reads only. SDK `connect` is never used beca
 
 ## Observations
 
-`observe` reads each allocation's sandbox ID from its receipt without taking the allocation lock. It then runs one `GET /sandboxes/metrics` request and one labelled listing of the installation's running sandboxes concurrently, within the caller's deadline; the listing stops once every requested sandbox has appeared. Only a sandbox that the listing confirms for exactly that allocation is reported, with the listing's start time. A malformed metrics point makes only its row unavailable. Observation never connects to, renews or changes a sandbox and writes no receipt. [Runtime observability](../../../../contracts/agents-api/runtime-observability.md) owns the field mapping.
+`observe` reads the allocation's sandbox ID from its receipt without taking the allocation lock. It then runs one `GET /sandboxes/metrics` request for that sandbox and one listing of running sandboxes with the allocation's labels concurrently, within the caller's deadline; the listing stops once the sandbox has appeared. Only a sandbox that the listing confirms for exactly that allocation is reported, with the listing's start time. A malformed metrics point is unavailable. Observation never connects to, renews or changes a sandbox and writes no receipt. [Runtime observability](../../../../contracts/agents-api/runtime-observability.md) owns the field mapping.
 
 ## Credential verification
 

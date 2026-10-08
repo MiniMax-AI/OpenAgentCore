@@ -13,6 +13,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type ExecutorConnectionStatus string
+
+const (
+	ExecutorNeverEnrolled ExecutorConnectionStatus = "never_enrolled"
+	ExecutorConnected     ExecutorConnectionStatus = "connected"
+	ExecutorDisconnected  ExecutorConnectionStatus = "disconnected"
+)
+
 // ExecutorConnections observes current executor authority and its actual
 // gateway peer. The observer runs after the Environments snapshot closes and
 // must recheck authority after inspecting the peer. Without a gateway peer, no
@@ -22,7 +30,7 @@ type ExecutorConnections interface {
 }
 
 type EnvironmentExecutorCredentialRequest struct {
-	KeyID  string `json:"key_id" format:"uuid"`
+	KeyID  string `json:"key_id" format:"uuid" binding:"required"`
 	Rotate bool   `json:"rotate,omitempty"`
 }
 
@@ -35,10 +43,10 @@ type ExecutorCredentialList struct {
 // ExecutorConnection reports binding history and current Core-observed connectivity.
 // Heartbeat times are observations, not execution or native readiness.
 type ExecutorConnection struct {
-	Status     string     `json:"status" binding:"required" enums:"never_enrolled,connected,disconnected"`
-	BoundKeyID *string    `json:"bound_key_id" binding:"required" extensions:"x-nullable" format:"uuid"`
-	EnrolledAt *time.Time `json:"enrolled_at" binding:"required" format:"date-time" extensions:"x-nullable"`
-	LastSeenAt *time.Time `json:"last_seen_at" binding:"required" format:"date-time" extensions:"x-nullable"`
+	Status     ExecutorConnectionStatus `json:"status" binding:"required"`
+	BoundKeyID *string                  `json:"bound_key_id" binding:"required" extensions:"x-nullable" format:"uuid"`
+	EnrolledAt *time.Time               `json:"enrolled_at" binding:"required" format:"date-time" extensions:"x-nullable"`
+	LastSeenAt *time.Time               `json:"last_seen_at" binding:"required" format:"date-time" extensions:"x-nullable"`
 }
 
 // registerExecutorCredentialRoutes adds executor credential issuance to the
@@ -71,10 +79,10 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 		writeSessionsError(w, r, err)
 		return
 	}
-	connection := ExecutorConnection{Status: "never_enrolled"}
+	connection := ExecutorConnection{Status: ExecutorNeverEnrolled}
 	observed := state.Connection
 	if observed.DeviceID != "" {
-		connection = ExecutorConnection{Status: "disconnected", BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt, LastSeenAt: observed.LastSeenAt}
+		connection = ExecutorConnection{Status: ExecutorDisconnected, BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt, LastSeenAt: observed.LastSeenAt}
 		if observed.EnvironmentStatus == "connected" && observed.CredentialHash != "" {
 			connected, err := h.ExecutorConnections.ExecutorConnected(r.Context(), state.EnvironmentID, observed.CredentialHash)
 			if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
@@ -82,7 +90,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 				return
 			}
 			if err == nil && connected {
-				connection.Status = "connected"
+				connection.Status = ExecutorConnected
 			}
 		}
 	}

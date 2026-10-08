@@ -1,10 +1,10 @@
-import type { AgentSession, SandboxNode } from "@oac/agents-client";
-import { type OwnedRuntimeObservation, type Project, type ProjectSummary } from "../../lib/admin-view";
+import type { AdminProject, AgentSession, SandboxNode } from "@oac/agents-client";
+import { type OwnedRuntimeObservation, type ProjectSummary } from "../../lib/admin-view";
 
 /** Fixtures shared by the Monitor page tests. Not part of the application bundle. */
 
-export function project(id: string, overrides: Partial<Project> = {}): Project {
-  return { id, name: id, status: "active", created_at: 1, archived_at: null, active_key_count: 1, ...overrides };
+export function project(id: string, overrides: Partial<AdminProject> = {}): AdminProject {
+  return { id, name: id, created_at: "1970-01-01T00:00:01Z", archived_at: null, active_key_count: 1, ...overrides };
 }
 
 export function summary(projectId: string, overrides: Partial<ProjectSummary> = {}): ProjectSummary {
@@ -16,7 +16,7 @@ export function summary(projectId: string, overrides: Partial<ProjectSummary> = 
     assets: { agents: 1, skills: 0, environment_templates: 0, files: 0, vaults: 0, credentials: 0 },
     sessions: { total: 0, idle: 0, in_progress: 0, requires_action: 0, failed: 0 },
     usage: null,
-    coverage: { sessions: 0, reported: 0 },
+    coverage: { total_sessions: 0, measured_sessions: 0, ratio: null },
     last_active_at: null,
     ...overrides,
   };
@@ -62,12 +62,12 @@ export function hostedObservation(sessionId: string, projectId: string, override
 export function sessionLister(sessions: readonly AgentSession[], calls: string[] = []) {
   return {
     calls,
-    async listSessionsTolerant(options?: { after?: string; limit?: number; signal?: AbortSignal }) {
+    async listSessions(options?: { after?: string; limit?: number; signal?: AbortSignal }) {
       options?.signal?.throwIfAborted();
       const start = options?.after ? sessions.findIndex((entry) => entry.id === options.after) + 1 : 0;
       const data = sessions.slice(start, start + (options?.limit ?? 20));
       calls.push(options?.after ?? "first");
-      return { object: "list" as const, data, unrecognized: [], has_more: start + data.length < sessions.length, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
+      return { object: "list" as const, data, has_more: start + data.length < sessions.length, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
     },
   };
 }

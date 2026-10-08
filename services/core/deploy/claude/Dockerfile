@@ -10,7 +10,6 @@ COPY claude-sdk /opt/claude-sdk
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node \
     OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js \
-    OAC_RUNTIME_CLAUDE_SDK_WORKSPACE=managed \
     OAC_RUNTIME_WORKSPACE=/environment/workspace \
     OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization \
     OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages

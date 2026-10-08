@@ -97,11 +97,11 @@ func TestOAuthCredentialMetadataEncryptionAndScope(t *testing.T) {
 	credential := f.create(t, input)
 	got, err := f.store.GetCredential(t.Context(), f.tenant, f.vault.ID, credential.ID)
 	if err != nil || !reflect.DeepEqual(got, credential) {
-		t.Fatal("keyless safe metadata changed", err)
+		t.Fatal("safe metadata changed", err)
 	}
 	page, err := f.store.ListCredentials(t.Context(), f.tenant, f.vault.ID, vaults.PageQuery{Limit: 20, Ascending: true})
 	if err != nil || len(page.Credentials) != 1 || !reflect.DeepEqual(page.Credentials[0], credential) {
-		t.Fatal("keyless listing failed", err)
+		t.Fatal("listing failed", err)
 	}
 	encoded, _ := json.Marshal(page)
 	var ciphertext []byte
@@ -136,13 +136,6 @@ func TestOAuthCredentialMetadataEncryptionAndScope(t *testing.T) {
 	foreign.TenantID = uuid.NewString()
 	if _, err := f.service.CreateOAuthCredential(t.Context(), foreign); !errors.Is(err, vaults.ErrNotFound) {
 		t.Fatal("foreign creation admitted")
-	}
-	keyless := f.otherService(t, nil, counting)
-	if _, err := keyless.CreateOAuthCredential(t.Context(), input); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("keyless creation admitted")
-	}
-	if token, err := f.token(t.Context(), keyless, credential); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
-		t.Fatal("keyless execution admitted")
 	}
 	wrong := f.otherService(t, newCipher(t, bytes.Repeat([]byte{18}, 32)), counting)
 	if token, err := f.token(t.Context(), wrong, credential); err == nil || token != "" {

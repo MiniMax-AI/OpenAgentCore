@@ -33,9 +33,6 @@ func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string
 			return sessions.ErrInvalidInput
 		}
 	case "openai_hosted":
-		if w.runtimes == nil {
-			return ErrExecutionUnavailable
-		}
 		ready, err := w.runtimes.ensureDeployment(ctx)
 		if err != nil {
 			return err
@@ -86,13 +83,6 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.S
 	if (kind == "cancel" || kind == "tool_result") && !slices.ContainsFunc(inputs, func(input sessions.Input) bool { return input.Kind != kind }) {
 		// Neither kind creates a Turn. The Session lock preserves target and retry identity.
 		return w.admitInputs(ctx, session.TenantID, session.ID, key, inputs)
-	}
-	// Messages start work. A Session from before deployment defaults moved into
-	// Core may have no frozen provider; reject it here instead of queueing work
-	// its harness cannot run. Cancellation and results above stay available.
-	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured {
-		return nil, ErrModelProviderRequired
 	}
 	changed, unsubscribe := w.dispatcher.notifications.subscribe(session.TenantID, session.ID)
 	defer unsubscribe()

@@ -54,7 +54,7 @@ describe("Getting started steps", () => {
   });
   it("keeps local-only installations to do even with a ready node or cloud deployment", () => {
     for (const provider of ["docker", "e2b"] as const) {
-      const steps = gettingStartedSteps({ sandboxReset: false, fleet: fleet(deployment({ provider })), projects: [], sessions: 1, harnesses: [], localOnly: true });
+      const steps = gettingStartedSteps({ sandboxReset: false, fleet: fleet(deployment({ provider, mode: provider === "e2b" ? "direct" : "nodes" })), projects: [], sessions: 1, harnesses: [], localOnly: true });
       expect(steps.sandboxes).toMatchObject({ state: "todo", action: "nodes", cloud: provider === "e2b" });
     }
   });
@@ -75,9 +75,9 @@ describe("Getting started steps", () => {
   it("needs an active project with an active key, and any Session", () => {
     const steps = (projects: Parameters<typeof gettingStartedSteps>[0]["projects"], sessions: number | "failed" | null = 0) => gettingStartedSteps({ sandboxReset: false, fleet: { status: "loading" }, projects, sessions, harnesses: undefined });
     expect(steps([]).key).toEqual({ state: "todo", project: null });
-    const older = project("p1", { active_key_count: 0, created_at: 1 });
-    const newer = project("p2", { active_key_count: 0, created_at: 2 });
-    expect(steps([older, newer, project("p3", { status: "archived", active_key_count: 0, created_at: 3 })]).key).toEqual({ state: "todo", project: newer });
+    const older = project("p1", { active_key_count: 0, created_at: "1970-01-01T00:00:01Z" });
+    const newer = project("p2", { active_key_count: 0, created_at: "1970-01-01T00:00:02Z" });
+    expect(steps([older, newer, project("p3", { archived_at: "1970-01-01T00:00:04Z", active_key_count: 0, created_at: "1970-01-01T00:00:03Z" })]).key).toEqual({ state: "todo", project: newer });
     expect(steps([older, project("p4")]).key.state).toBe("done");
     expect(steps(undefined).key.state).toBeNull();
     expect(steps("failed").key.state).toBe("unknown");
@@ -86,9 +86,9 @@ describe("Getting started steps", () => {
 
   it("opens the call samples of the newest active project with a key, else of the newest active project", () => {
     const call = (projects: Parameters<typeof gettingStartedSteps>[0]["projects"]) => gettingStartedSteps({ sandboxReset: false, fleet: { status: "loading" }, projects, sessions: 0, harnesses: undefined }).session.project;
-    const keyed = project("p1", { created_at: 1 });
-    const newer = project("p2", { active_key_count: 0, created_at: 2 });
-    const archived = project("p3", { status: "archived", active_key_count: 0, created_at: 3 });
+    const keyed = project("p1", { created_at: "1970-01-01T00:00:01Z" });
+    const newer = project("p2", { active_key_count: 0, created_at: "1970-01-01T00:00:02Z" });
+    const archived = project("p3", { archived_at: "1970-01-01T00:00:04Z", active_key_count: 0, created_at: "1970-01-01T00:00:03Z" });
     expect(call([keyed, newer, archived])).toBe(keyed);
     expect(call([newer, archived])).toBe(newer);
     expect([call([archived]), call(undefined), call("failed")]).toEqual([null, null, null]);

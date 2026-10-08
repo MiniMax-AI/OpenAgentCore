@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 // This opt-in test uses the real pinned harness and an explicitly configured
@@ -47,10 +47,10 @@ func TestExecutorNativeReuse(t *testing.T) {
 	}
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
-	cfg.logger = obslog.Discard()
+	cfg.logger = slog.New(slog.DiscardHandler)
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "executor-native",
-		StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,
+		DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,
 		AgentOptions:  map[string]any{"model": model, "model_provider": map[string]any{"base_url": endpoint, "protocol": "responses", "api_key": strings.TrimSpace(string(key))}},
 		FunctionTools: []proto.FunctionTool{{Name: "hold", Description: "Wait until the host supplies a result.", Parameters: json.RawMessage("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")}},
 	}

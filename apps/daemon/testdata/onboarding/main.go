@@ -37,10 +37,10 @@ type harness struct {
 }
 
 func (h *harness) prepare(_ context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+	if req.RunID != "" || len(req.Input) != 0 {
 		return nil, errors.New("preparation submitted fixture input")
 	}
-	if !req.StrictResume || !req.DisableExecutionEnvironment || !req.DisableSubagents || len(req.FunctionTools) > 0 || req.MCPHTTPServers != nil {
+	if !req.DisableExecutionEnvironment || !req.DisableSubagents || len(req.FunctionTools) > 0 || req.MCPHTTPServers != nil {
 		return nil, errors.New("unsupported fixture operation")
 	}
 	h.mu.Lock()
@@ -163,9 +163,7 @@ func run() error {
 	h := &harness{history: map[string]string{}}
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture_harness", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 		Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
-	})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("fixture execution requires an Executor")
-	})
+	})}, harnessconfig.Configuration{})
 	registry.RegisterExecutor("fixture_harness", h.prepare)
 	sink := &sender{encoder: json.NewEncoder(os.Stdout)}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sink, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})

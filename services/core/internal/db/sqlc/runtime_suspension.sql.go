@@ -27,30 +27,6 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 	return err
 }
 
-const countRuntimeComputeReservations = `-- name: CountRuntimeComputeReservations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released' AND compute_phase <> 'suspended'
-`
-
-func (q *Queries) CountRuntimeComputeReservations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRuntimeComputeReservations, providerKey)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countRuntimeRetainedAllocations = `-- name: CountRuntimeRetainedAllocations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released'
-`
-
-func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRuntimeRetainedAllocations, providerKey)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
     GREATEST(a.compute_activity_at,
@@ -133,13 +109,11 @@ UPDATE runtime_allocations
 SET compute_phase_changed_at = CASE WHEN compute_phase = $1::text THEN compute_phase_changed_at ELSE clock_timestamp() END,
     compute_phase = $1, compute_state = $2::jsonb,
     compute_revision = compute_revision + 1,
-    compute_retained_until = $3,
-    kept_at = CASE WHEN $1::text = 'running' THEN clock_timestamp() ELSE kept_at END
+    compute_retained_until = $3
 WHERE runtime_allocations.id = $4 AND compute_revision = $5
     AND state = 'running' AND EXISTS (SELECT 1 FROM environments e WHERE e.id = runtime_allocations.environment_id AND e.initialization = 'complete')
-    AND ((compute_phase IN ('disabled','running') AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour'))
-      OR (compute_phase NOT IN ('disabled','running') AND compute_retained_until > clock_timestamp()))
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+    AND (compute_phase IN ('disabled','running') OR compute_retained_until > clock_timestamp())
+RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 type SetRuntimeComputeParams struct {
@@ -167,7 +141,6 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,

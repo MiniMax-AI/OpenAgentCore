@@ -22,18 +22,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary Create an Environment file from inline bytes or a source file
-// @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment and returns 201. Accepts inline bytes or a project-owned source file_id through the same write path. Unknown body fields are rejected with their name as param. Basic public hosted creation requires explicit managed Runtime configuration; an openai_hosted Environment that has not connected yet returns 400. Inline data is limited to 5 MiB decoded and a file_id copy to 50 MiB. Missing parent directories are created with mode 0700 and the file with mode 0600. An existing destination is never replaced; a directory, an existing file or a path through a symlink or non-directory returns 400. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
-// @Tags Environments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_id path string true "Environment ID"
-// @Param request body v1.EnvironmentFileCreateRequest true "Inline bytes or source file ID and absolute workspace path"
-// @Success 201 {object} v1.EnvironmentFile
-// @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
-// @Router /agents/environments/{environment_id}/files [post]
 func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) {
 	const maxJSON = int64(((proto.WorkspaceWriteMaxBytes+2)/3)*4 + (16 << 10))
 	raw, ok := readJSONObjectLimit(w, r, maxJSON, "Inline upload exceeds this service's bounded file limit.")
@@ -117,7 +105,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+	if !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}

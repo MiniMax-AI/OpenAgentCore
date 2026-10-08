@@ -31,7 +31,7 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 		r.mu.Unlock()
 		return ErrRouterQuiesced
 	}
-	if r.runtimePreparation != nil || len(r.sessions) != 0 || len(r.workspaceReads) != 0 || r.workspaceWrite != nil || r.workspaceExport != nil || len(r.permIndex) != 0 || len(r.askIndex) != 0 {
+	if r.runtimePreparation != nil || len(r.sessions) != 0 || len(r.workspaceReads) != 0 || r.workspaceWrite != nil || r.workspaceExport != nil {
 		r.mu.Unlock()
 		return ErrRouterBusy
 	}
@@ -39,14 +39,6 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 		if p.owns || p.busy {
 			r.mu.Unlock()
 			return ErrRouterBusy
-		}
-	}
-	for _, states := range r.idle {
-		for state := range states {
-			if state.environmentID != request.EnvironmentID || state.steerBusy || len(state.pendingIDs) != 0 || len(state.pendingAsks) != 0 {
-				r.mu.Unlock()
-				return ErrRouterBusy
-			}
 		}
 	}
 	for _, owner := range r.executors {
@@ -59,14 +51,6 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 	for _, p := range r.preparations {
 		if p.timer != nil {
 			p.timer.Stop()
-		}
-	}
-	for _, states := range r.idle {
-		for state := range states {
-			state.idleLease++
-			if state.idleTimer != nil {
-				state.idleTimer.Stop()
-			}
 		}
 	}
 	for _, owner := range r.executors {
@@ -103,11 +87,6 @@ func (r *Router) Resume(request proto.EnvironmentSuspendPayload, sender Sender) 
 	r.suspension = nil
 	for _, owner := range r.executors {
 		r.scheduleExecutorIdleLocked(owner)
-	}
-	for _, states := range r.idle {
-		for state := range states {
-			r.scheduleIdleLocked(state)
-		}
 	}
 	return nil
 }

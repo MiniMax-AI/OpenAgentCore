@@ -115,10 +115,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	}
 	owner := &cleanupExecutor{retry: make(chan struct{}), confirm: make(chan struct{})}
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-		harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			return nil, errors.New("unexpected legacy factory")
-		})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	var factories atomic.Int32
 	registry.RegisterExecutor("cleanup", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		factories.Add(1)
@@ -148,7 +145,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	}
 	defer peer.Close()
 	env, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: "cleanup",
-		Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", StrictResume: true, DisableExecutionEnvironment: true}})
+		Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", DisableExecutionEnvironment: true}})
 	if err != nil {
 		t.Fatal(err)
 	}

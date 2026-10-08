@@ -7,14 +7,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var _ sessions.SessionReader = (*Store)(nil)
@@ -214,9 +213,9 @@ func (s *Store) GetSessionExecutionConfiguration(ctx context.Context, tenantID, 
 		if row.Engine != "" {
 			harness = &row.Engine
 		}
-		projection.Model = v1.ExecutionSelection{Value: model, Source: "unknown"}
-		projection.Harness = v1.ExecutionSelection{Value: harness, Source: "unknown"}
-		projection.ModelProvider = v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"}
+		projection.Model = v1.ExecutionSelection{Value: model, Source: v1.ExecutionSourceUnknown}
+		projection.Harness = v1.ExecutionSelection{Value: harness, Source: v1.ExecutionSourceUnknown}
+		projection.ModelProvider = v1.ExecutionProviderSelection{Source: v1.ExecutionSourceUnknown, Status: v1.ExecutionProviderUnavailable}
 	} else if err := json.Unmarshal(row.ExecutionConfiguration, &projection); err != nil {
 		return v1.SessionExecutionConfiguration{}, errors.New("invalid stored session execution configuration")
 	}
@@ -261,7 +260,7 @@ func loadManagedArchive(ctx context.Context, q *sqlc.Queries, tenant, session pg
 	if row.EnvironmentType != "openai_hosted" {
 		return sessions.ManagedArchive{}, sessions.ErrInvalidInput
 	}
-	return sessions.ManagedArchive{SessionID: uuid.UUID(row.SessionID.Bytes).String(), EnvironmentID: uuid.UUID(row.EnvironmentID.Bytes).String(), State: row.State}, nil
+	return sessions.ManagedArchive{SessionID: uuid.UUID(row.SessionID.Bytes).String(), EnvironmentID: uuid.UUID(row.EnvironmentID.Bytes).String(), State: sessions.ManagedArchiveState(row.State)}, nil
 }
 
 // loadSession reads, on q, the tenant's visible Session with the projection

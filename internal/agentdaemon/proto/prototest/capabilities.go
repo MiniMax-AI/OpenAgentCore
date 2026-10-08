@@ -14,11 +14,9 @@ func Capabilities(overrides proto.AgentKindCapabilities) proto.AgentKindCapabili
 	c := proto.AgentKindCapabilities{
 		SubagentObservations:           proto.CapabilityUnsupported,
 		Streaming:                      proto.CapabilityUnsupported,
-		Permissions:                    proto.CapabilityUnsupported,
 		Usage:                          proto.CapabilityUnsupported,
 		Resume:                         proto.CapabilityUnsupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		WorkspaceAuthoring:             proto.CapabilityUnsupported,
 		Steering:                       proto.CapabilityUnsupported,
 		MessageItems:                   proto.CapabilityUnsupported,
 		ToolObservations:               proto.CapabilityUnsupported,

@@ -12,7 +12,7 @@ func TestWorkspaceCommandObservationsWaitForArgumentsAndRetainOutcome(t *testing
 	for _, status := range []string{"completed", "failed"} {
 		t.Run(status, func(t *testing.T) {
 			out := make(chan proto.Envelope, 8)
-			s := &Session{ctx: context.Background(), req: proto.PromptRequestPayload{RunID: "run", ObserveToolObservations: true}, out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
+			s := &Session{ctx: context.Background(), outputContext: context.Background(), req: proto.PromptRequestPayload{RunID: "run"}, out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
 			s.emitTool(toolUpdate{ID: "call", Name: "mcp__oac_workspace__workspace_bash"})
 			if len(out) != 0 {
 				t.Fatal("command item emitted before native arguments")

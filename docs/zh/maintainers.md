@@ -1,14 +1,17 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 679fb7cf8af9fc6aa2adfb9b04e1766497a32937fd184162614ae813707cb90b
+source_hash: aaadeb3a5e99b8d926e9f78b7fc41c7aba808e0d2af58969119e67954f9d7a58
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
 
 ## 构建分发包 {#build-a-distribution}
 
-分发包是从同一个提交构建的一组相互匹配的 Linux amd64 发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
+分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
+
+Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。宿主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
+
 
 请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.9 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请先准备固定版本的 Codex 包和 MiniMax Code 配套程序，然后执行构建：
 
@@ -98,7 +101,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 make build-e2b-provider
 ```
 
-Docker 使用固定版本的 CPython 和 Debian 12 镜像构建 Linux amd64 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`。构建结果完全由辅助程序源代码、`LICENSE` 和构建脚本决定，因此会按它们的哈希缓存在 `~/.oac/cache/e2b-provider/` 下，仅在它们变化时重新构建。输出为 `oac-e2b-provider-linux-amd64.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像使用该目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
+Docker 使用固定版本的 CPython 和 Debian 12 镜像按 `GOARCH=amd64`（默认）或 `GOARCH=arm64` 构建 Linux 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`。构建结果完全由辅助程序源代码、`LICENSE` 和构建脚本决定，因此会按它们的哈希缓存在 `~/.oac/cache/e2b-provider/` 下，仅在它们变化时重新构建。输出为 `oac-e2b-provider-linux-<architecture>.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像使用该目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
 
 **microsandbox 辅助程序。** 仅支持 Linux，并且需要 C 编译器：
 
@@ -113,9 +116,9 @@ make check-microsandbox-provider
 
 ### 独立 Core 构建 {#standalone-core-builds}
 
-`make build-core` 会将 `oac-core`、`oac-core-device`、`oac-core-environment-key` 和 `oac-node` 构建到 `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`（`OAC_DEV_CORE_BUILD_DIR` 可选择其他绝对目录）。构建过程仅将 `scripts/build-core.sh` 中列出的源文件集（Core 服务、其契约、所需的共享软件包以及根 Go 模块文件）复制到临时上下文，并使用禁用 CGO、只读模块和裁剪路径的方式构建。它不需要 Node、Docker 或其他应用程序。Core 新增共享依赖时，请将该软件包加入列表；绝不能复制整个仓库来使其完成编译。
+`make build-core` 会将 `oac-core`、`oac-core-device`、`oac-core-environment-key`、`oac-node` 和 `oac` 构建到 `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`（`OAC_DEV_CORE_BUILD_DIR` 可选择其他绝对目录）。构建过程仅将 `scripts/build-core.sh` 中列出的源文件集（Core 服务、其契约、所需的共享软件包以及根 Go 模块文件）复制到临时上下文，并使用禁用 CGO、只读模块和裁剪路径的方式构建。它不需要 Node、Docker 或其他应用程序。Core 新增共享依赖时，请将该软件包加入列表；绝不能复制整个仓库来使其完成编译。
 
-`make docker-build-core` 会根据这五个命令和 E2B 辅助程序构建 `oac-core:dev` 镜像（`OAC_DEV_CORE_IMAGE` 可选择其他名称）。基础镜像是通过摘要固定的 `debian:bookworm-slim`，包含 CA 证书以及辅助程序所需的 glibc 运行时；默认用户的 UID/GID 为 65532，Core 监听 `:8091`。该镜像仅支持 Linux amd64，并且不会推送到注册表。对镜像或其构建进行更改时，除了相关的源代码检查外，还必须运行 `make check-core-container`：它会在只读根文件系统上针对该镜像运行官方客户端测试套件，并且需要 Linux Docker、非 root 用户，以及服务检查中的[测试数据库和固定版本 SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification)（`OAC_TEST_DATABASE_URL` 指向一个已应用迁移的 `oac_*_tests` 数据库，并设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`）。
+`make docker-build-core` 会根据这五个命令和 E2B 辅助程序构建 `oac-core:dev` 镜像（`OAC_DEV_CORE_IMAGE` 可选择其他名称）。基础镜像是通过摘要固定的 `debian:bookworm-slim`，包含 CA 证书以及辅助程序所需的 glibc 运行时；默认用户的 UID/GID 为 65532，Core 监听 `:8091`。此本地构建目标生成 Linux amd64 镜像；[分发构建](#build-a-distribution)生成两种架构的镜像。对镜像或其构建进行更改时，除了相关的源代码检查外，还必须运行 `make check-core-container`：它会在只读根文件系统上针对该镜像运行官方客户端测试套件，并且需要 Linux Docker、非 root 用户，以及服务检查中的[测试数据库和固定版本 SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification)（`OAC_TEST_DATABASE_URL` 指向一个已应用迁移的 `oac_*_tests` 数据库，并设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`）。
 
 ## 发布版本 {#publish-a-version}
 
@@ -134,13 +137,13 @@ git push origin v1.2.3
 
 ### 容器注册表 {#container-registry}
 
-版本发布和手动的 `build-<full SHA>` 草稿都会将 Linux amd64 镜像发布为 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime` 或 `ingress`。例如，`ghcr.io/minimax-ai/openagentcore/core:v1.2.3`。草稿使用标签 `build-<full SHA>`。PostgreSQL 使用其上游镜像，不会重新发布。注册表镜像从发布归档中加载，不会重新构建。仅当现有版本标签的镜像配置摘要与本次发布相同时才复用该标签；如果镜像不同，则停止发布。稳定版还会把每个组件的 `latest` 标签移到该镜像。预发布和草稿不会改动 `latest`。SemVer 构建元数据在容器标签中使用 `_` 代替 `+`；长度超过 128 个字符的版本字符串无法发布到 GHCR。镜像验证之后，发布器会上传为该发行版渲染的单个 `compose.yaml` 及其校验和清单。Compose 使用注册表摘要固定 ingress 镜像；如果镜像构建版本与 Compose 版本不同，初始化会拒绝运行。草稿 Release 保持未发布。
+版本发布和手动 `build-<full SHA>` 草稿使用 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime` 或 `ingress`。Core、Web 和 ingress 索引包含 Linux amd64 和 arm64 镜像，Runtime 包含 Linux amd64。各平台镜像使用 `<version>-<architecture>` 标签，从发行归档加载。已有版本标签必须与发行镜像及平台集合一致。发布器校验全部版本索引后，才为稳定版更新 `latest`；预发布版和草稿保持 `latest` 不变。PostgreSQL 使用上游镜像。容器标签中的 SemVer 构建元数据用 `_` 替换 `+`，版本字符串上限为 128 个字符。镜像校验后，发布器上传该版本的 `compose.yaml` 和校验和清单。Compose 用索引摘要固定 ingress，初始化时检查其构建版本与 Compose 版本一致。
 
 合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部四个软件包改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
 
 GHCR 和 GitHub Releases 不共享事务。发布失败后，GHCR 中可能仍会保留一些匹配的版本标签；请保留这些镜像，并使用原始构件按照下文的草稿恢复流程操作。除清单缺失以外，注册表故障都会停止发布。作业摘要会记录按摘要固定的引用。这些镜像和渲染后的 Compose 文件仍需要[配置](configuration.md)中描述的配置、机密和路由。
 
-`install.sh` 会下载最新稳定版的 Compose 文件，或 `--version` 指定的发布版，校验 SHA-256 后启动该发布版。用法见[安装指南](getting-started/install.md#install)。
+[安装指南](getting-started/install.md#install)介绍版本选择和各平台的启动命令。
 
 Go 检查和构建作业共享 `~/.oac/cache/` 下的 Go 模块和编译器缓存目录，缓存键由运行器 OS 和架构、全部 Go 模块文件、检查/构建分区以及提交确定。分区键可防止并发作业在同一个键下保存不同的编译器子集。发布构建既可以使用后端检查的缓存，也可以使用更早发布构建的缓存。较旧的缓存只会为下载和编译提供初始内容；每项检查仍会运行。发布作业还会缓存 npm 软件包下载内容和固定版本的 microsandbox 归档，并在每次构建时验证后者的校验和。Actions 缓存可见性遵循 GitHub ref 的作用域；特定标签的缓存不会与其他发布标签共享。只有作业成功后才会保存新键。
 
@@ -181,7 +184,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 `.github/actionlint.yaml` 会选择 hygiene 和 lint。已知工作流变更会选择其使用方：CI review 和 actionlint 工作流运行 hygiene 和 lint；原生工作流变更会添加原生检查；API 验收工作流变更会添加启用容器验收的 API 检查；网站工作流变更会添加网站检查。共享 Node 操作会选择使用它的每个作业以及 lint。新工作流或未分类的工作流/操作会选择完整门禁，直至在计划器中声明其使用方。计划器测试和 CI 测量脚本运行 hygiene；更改计划器本身会运行完整门禁。
 
-Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建；Web 提供占位页面而不是控制台构建。构建时的节点元数据来自 `deploy/compose/smoke-pins.json` 固定的发布版本；初始化容器禁用网络运行。该测试检查通用 Compose 行为；它不会运行 Dokploy/Coolify 实例，也不会执行模型。
+Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建；Web 提供占位页面而不是控制台构建。构建时的节点元数据来自 `deploy/compose/smoke-pins.json` 固定的发布版本；初始化容器禁用网络运行。冒烟矩阵使用 Linux amd64 和 arm64 原生 runner；原生矩阵在 Linux、macOS 和 Windows 上构建并测试共享的 Core 安装器。
 
 Go 模块和工作区输入会选择后端、API（包括容器）、原生和分发检查。每个 Node 模块都拥有自己的清单和锁文件。网站依赖项会选择网站检查；Web 依赖项会选择 Web 和浏览器检查；示例依赖项会选择示例检查；共享 TypeScript 客户端依赖项会选择 Web、浏览器和示例检查；Claude 适配器依赖项会选择 Harness、原生和分发检查。共享包管理器配置会选择所有 Node 使用方。根 TypeScript 配置会选择 Web 和示例检查；适配器 TypeScript 配置会选择 Harness 和原生检查。每个所选集合都包含 hygiene。混合变更会累加其使用方，并且每个作业都读取同一计划，而不是维护各自的路径列表。例如，仅修改通知的 PR 会跳过数据库、浏览器和原生作业，而同时修改通知和 Core 的 PR 会添加后端和 API 检查。
 
@@ -191,7 +194,9 @@ Go 模块和工作区输入会选择后端、API（包括容器）、原生和�
 
 要手动执行完整检查，请使用 **Actions → core-check → Run workflow**。遇到暂时性故障时，请使用 GitHub 的 **Re-run failed jobs**，这样已成功的作业可保持完成状态。PR 更新后，Actions 并发机制会取消已被取代的运行。构建和依赖项缓存可加快执行，但不能替代成功的测试。原生发布安装器通过 Actions 构建产物在同一发布工作流的不同作业之间传递。
 
-`CI review and Feishu notification` 工作流仅在 PR 合并到 main 后运行一次。它检出合并后的提交，读取该 PR 已有的检查和日志，并报告实际状态，不会触发另一轮测试。关闭未合并 PR 不触发审查。该工作流只针对合并事件使用 `pull_request_target`，绝不在持有通知凭据时检出未合并 PR 的 head。
+`CI review and Feishu notification` 工作流在 PR 合入 main 后运行。矩阵中的 **Code review** 和 **Docs review** 使用独立的 LLM 上下文，并设置 `fail-fast: false`。两者读取合并后的提交和 PR 差异。代码审查检查实现、仓库规则和已有 CI 结果，不触发新一轮测试。文档审查会核对行为变化与文档是否一致，即使没有修改文档；修改文档时，还会检查矛盾、重复维护的事实、CONTRIBUTING 规定的主题归属及中英文含义。每项问题包含文件和行号、依据及最小修改建议。审查只读取仓库，不修改文件。
+
+每项审查返回结构化结果（`ok`、`issues` 或 `incomplete`）及分项中文结论，作为 Actions 构建产物保留七天。**Combined Feishu notification** 等待两项审查结束，通过已有的 `FEISHU_WEBHOOK_URL` 发送一张包含两份结果的 Card 2.0 卡片；可选的 `FEISHU_WEBHOOK_SECRET` 用于签名。卡片固定分为 PR 信息、行为变化、代码与仓库规则、CI 结果和文档审查，各区之间使用分隔线。未发现问题时标题为绿色，发现问题时为红色，审查未完成且尚未发现问题时为黄色。只有通知 job 能读取 webhook 密钥。审查失败、报告缺失或格式无效时标为未完成，另一项已有的结果照常展示。某项审查失败时，通知 job 仍会运行。只有飞书返回 `code=0` 才确认送达；请求失败或送达状态不明时不自动重试，以免重复发消息。每项审查的执行超时为 25 分钟。审查和发送失败不会阻止合并；关闭未合并的 PR 不触发此流程。持有通知凭据时，工作流只检出合并后的提交。
 
 浏览器作业各自拥有独立的固定数据和服务；对共享可变固定数据增加 worker 数不安全。失败的浏览器作业保留报告与 trace 七天。原生失败阶段摘要保留七天，详细输出留在 Actions 日志中；凭据和临时安装目录不上传。成功的原生归档仅用于显式手动打包或发布时上传，不重新压缩已压缩的归档。发布分发产物保留现有恢复策略；失败发布可以按前述方式复用原构建。
 

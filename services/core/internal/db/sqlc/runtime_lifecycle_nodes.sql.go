@@ -50,7 +50,7 @@ func (q *Queries) GetRuntimeLifecyclePlacement(ctx context.Context, arg GetRunti
 }
 
 const listRuntimeAllocationsForNode = `-- name: ListRuntimeAllocationsForNode :many
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.node_id IS NULL AND (SELECT mode FROM runtime_deployment) <> 'direct' AND a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id=a.environment_id
 JOIN sessions s ON s.id=e.session_id
@@ -89,7 +89,6 @@ func (q *Queries) ListRuntimeAllocationsForNode(ctx context.Context, arg ListRun
 			&i.RuntimeAllocation.State,
 			&i.RuntimeAllocation.CreateSettled,
 			&i.RuntimeAllocation.CreatedAt,
-			&i.RuntimeAllocation.KeptAt,
 			&i.RuntimeAllocation.ReleasedAt,
 			&i.RuntimeAllocation.ComputePhase,
 			&i.RuntimeAllocation.ComputeRevision,
@@ -120,7 +119,7 @@ const listRuntimeLifecycleNodes = `-- name: ListRuntimeLifecycleNodes :many
 SELECT n.id FROM runtime_nodes n CROSS JOIN runtime_deployment d
 WHERE n.removed_at IS NULL AND n.installation_id=d.installation_id AND d.mode='nodes'
 UNION ALL
-SELECT NULL::uuid AS id FROM runtime_deployment WHERE mode IN ('','direct')
+SELECT NULL::uuid AS id FROM runtime_deployment WHERE mode = 'direct'
 ORDER BY id
 `
 
@@ -150,7 +149,7 @@ FROM environments e JOIN sessions s ON s.id=e.session_id
 LEFT JOIN runtime_placements p ON p.environment_id=e.id
 WHERE p.node_id IS NOT DISTINCT FROM $1::uuid
   AND p.released_at IS NULL
-  AND NOT (SELECT admission_paused FROM runtime_deployment)
+  AND (SELECT reset_clear IS NULL FROM runtime_deployment)
   AND e.id > $2::uuid AND s.deleted_at IS NULL AND e.status='pending'
   AND s.configuration->'environment'->>'type'='openai_hosted'
   AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id=e.id)

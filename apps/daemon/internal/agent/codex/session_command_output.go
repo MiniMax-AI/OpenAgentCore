@@ -7,9 +7,6 @@ import (
 )
 
 func (s *Session) onCommandOutput(raw json.RawMessage) {
-	if !s.observeToolObservations {
-		return
-	}
 	var p AgentMessageDeltaNotification
 	if json.Unmarshal(raw, &p) != nil || !s.isRootTurn(p.ThreadID, p.TurnID) || p.ItemID == "" || p.Delta == "" {
 		return

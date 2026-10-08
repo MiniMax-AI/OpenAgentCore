@@ -38,14 +38,13 @@ func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
 	req.RunID, req.Input = "", nil
 	req.AgentSessionID = ""
 	req.RequireExistingNativeSession = false
-	req.ReleaseOnCompletion = false
 	data, err := json.Marshal(req)
 	return sha256.Sum256(data), err
 }
 
 func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, input proto.ExecutionPreparePayload) error {
 	req := input.Configuration
-	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.AgentStateKey != "agents-api-"+input.SessionID || !req.StrictResume {
+	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.AgentStateKey != "agents-api-"+input.SessionID {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	caps, available := r.availableCapabilities(req.AgentKind)
@@ -146,7 +145,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
 	operation, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: owner.capabilities, requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: owner.capabilities, requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
 	state := "preparing"
 	if reused {
 		state = "ready"
@@ -154,7 +153,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), ExecutorID: owner.id, Revision: 1, State: state, Reused: reused, ExpiresAt: p.deadline.UnixMilli()}
 	owner.admission = p
 	r.preparations[p.status.Handle], r.preparationRequests[env.ID] = p, p
-	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })
+	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true) })
 	if !reused {
 		r.shutdownWG.Add(1)
 	}
@@ -276,19 +275,22 @@ func (r *Router) scheduleExecutorIdleLocked(owner *executorState) {
 	owner.idleLease++
 	lease := owner.idleLease
 	r.log.Info("executor owner_idle", "executor_id", owner.id, "session_id", owner.sessionID)
-	owner.timer = time.AfterFunc(r.idleTimeout, func() {
-		r.mu.Lock()
-		if r.executors[owner.sessionID] != owner || owner.idleLease != lease || owner.run != nil || owner.admission != nil || owner.invalid {
-			r.mu.Unlock()
-			return
-		}
-		owner.invalid = true
-		owner.closeReason = "idle_expired"
-		r.shutdownWG.Add(1)
+	owner.timer = time.AfterFunc(r.idleTimeout, func() { r.expireIdleExecutor(owner, lease) })
+}
+
+// expireIdleExecutor closes owner only while lease is its current idle lease.
+func (r *Router) expireIdleExecutor(owner *executorState, lease uint64) {
+	r.mu.Lock()
+	if r.executors[owner.sessionID] != owner || owner.idleLease != lease || owner.run != nil || owner.admission != nil || owner.invalid {
 		r.mu.Unlock()
-		defer r.shutdownWG.Done()
-		_ = r.closeExecutor(owner)
-	})
+		return
+	}
+	owner.invalid = true
+	owner.closeReason = "idle_expired"
+	r.shutdownWG.Add(1)
+	r.mu.Unlock()
+	defer r.shutdownWG.Done()
+	_ = r.closeExecutor(owner)
 }
 
 // Close failures keep the exact owner; a later call retries only settled failures.

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -47,23 +46,14 @@ func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, erro
 		return agents.CreateCommand{}, err
 	}
 	if input.ServiceTier != nil {
-		if !slices.Contains([]string{"auto", "default", "flex", "priority", "fast"}, *input.ServiceTier) {
-			return agents.CreateCommand{}, errors.New("service_tier must be auto, default, flex, priority or fast.")
-		}
 		cfg.ServiceTier = *input.ServiceTier
 	}
 	if input.Reasoning != nil {
 		cfg.Reasoning = *input.Reasoning
-		if cfg.Reasoning.Effort != nil && !slices.Contains([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, *cfg.Reasoning.Effort) {
-			return agents.CreateCommand{}, errors.New("reasoning.effort is not a supported protocol value.")
-		}
-		if cfg.Reasoning.Summary != nil && !slices.Contains([]string{"concise", "detailed", "auto"}, *cfg.Reasoning.Summary) {
-			return agents.CreateCommand{}, errors.New("reasoning.summary must be concise, detailed or auto.")
-		}
 	}
 	// Model-derived effort resolution is a recorded gap. Do not manufacture a
 	// default from the operator's execution engine or another model's catalog.
-	cfg.Text, err = resolveSavedText(input.Text)
+	cfg.Text, err = resolveText(input.Text)
 	if err != nil {
 		return agents.CreateCommand{}, err
 	}
@@ -79,60 +69,41 @@ func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, erro
 	return result, err
 }
 
+// resolveSavedMultiAgent and resolveText read values whose pinned shape was
+// checked at decode; only the uint32 bound of max_concurrent_subagents remains.
 func resolveSavedMultiAgent(raw json.RawMessage) (v1.MultiAgentConfig, error) {
 	result := v1.MultiAgentConfig{}
 	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return result, nil
 	}
-	var input struct {
-		Enabled *bool           `json:"enabled"`
-		Max     json.RawMessage `json:"max_concurrent_subagents"`
-	}
-	if decodeInputObject(raw, &input, "enabled", "max_concurrent_subagents") != nil || input.Enabled == nil {
-		return result, errors.New("multi_agent requires enabled as a boolean.")
-	}
-	maximum := uint32(6)
-	if len(input.Max) > 0 && (bytes.Equal(bytes.TrimSpace(input.Max), []byte("null")) || json.Unmarshal(input.Max, &maximum) != nil || maximum == 0) {
+	input := struct {
+		Enabled bool   `json:"enabled"`
+		Max     uint32 `json:"max_concurrent_subagents"`
+	}{Max: 6}
+	if json.Unmarshal(raw, &input) != nil {
 		return result, errors.New("max_concurrent_subagents must be an integer from 1 to 4294967295.")
 	}
-	result.Enabled = *input.Enabled
+	result.Enabled = input.Enabled
 	if result.Enabled {
-		value := int(maximum)
+		value := int(input.Max)
 		result.MaxConcurrentSubagents = &value
 	}
 	return result, nil
 }
 
-func resolveSavedText(input *v1.SavedAgentTextInput) (v1.SavedAgentText, error) {
-	result := v1.SavedAgentText{Format: v1.SavedAgentTextFormat{Type: "text"}, Verbosity: "medium"}
+func resolveText(input *v1.TextConfigInput) (v1.TextConfig, error) {
+	result := v1.TextConfig{Format: v1.TextFormat{Type: "text"}, Verbosity: "medium"}
 	if input == nil {
 		return result, nil
 	}
-	// Reuse the Session verbosity policy without its narrower format admission.
-	text, err := resolveText(&v1.TextConfigInput{Verbosity: input.Verbosity})
-	if err != nil {
-		return result, err
+	if input.Verbosity != nil {
+		result.Verbosity = *input.Verbosity
 	}
-	result.Verbosity = text.Verbosity
 	if len(input.Format) == 0 || bytes.Equal(bytes.TrimSpace(input.Format), []byte("null")) {
 		return result, nil
 	}
-	result.Format = v1.SavedAgentTextFormat{}
-	if decodeInputObject(input.Format, &result.Format, "type", "schema") != nil {
-		return result, errors.New("text.format must be a supported format object.")
-	}
-	switch result.Format.Type {
-	case "text":
-		if len(result.Format.Schema) > 0 {
-			return result, errors.New("text format does not accept schema.")
-		}
-	case "json_schema":
-		var schema map[string]json.RawMessage
-		if json.Unmarshal(result.Format.Schema, &schema) != nil || schema == nil {
-			return result, errors.New("json_schema format requires a schema object.")
-		}
-	default:
-		return result, errors.New("text.format.type must be text or json_schema.")
+	if err := json.Unmarshal(input.Format, &result.Format); err != nil {
+		return result, &storedDataError{err}
 	}
 	return result, nil
 }

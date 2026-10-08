@@ -13,10 +13,29 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload, string) {
+	t.Helper()
+	r := testRequest(t)
+	r.RunID, r.Input = "", nil
+	r.DisableExecutionEnvironment = false
+	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
+	record := filepath.Join(t.TempDir(), "calls")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "native")
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
+	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=prepared\nexport OAC_TEST_MCODE_RECORD=" + quote(record) + "\nexec " + quote(exe) + " -test.run=^TestMCodeProcess$ -- \"$@\"\n"
+	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.LocalEnvironment.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, r, record
+}
+
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
 	t.Helper()
 	config, req, record := workspaceFixture(t)
-	req.ReleaseOnCompletion = false
 	script, err := os.ReadFile(config.Binary)
 	if err != nil {
 		t.Fatal(err)
@@ -28,9 +47,8 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 	if workspace {
 		factory = NewExecutorFactory(&config)
 	} else {
-		req = executionRequest(t)
-		req.ReleaseOnCompletion = false
-		req.RunID, req.Input, req.ConversationID = "", nil, ""
+		req = testRequest(t)
+		req.RunID, req.Input = "", nil
 		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)
 		factory = NewExecutorFactory(nil)
 	}
@@ -191,12 +209,21 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 func TestExecutorStartFailureOwnership(t *testing.T) {
 	t.Run("validation", func(t *testing.T) {
 		e, record := executorFixture(t, "executor-reuse", true)
-		out := make(chan proto.Envelope, 1)
-		turn, err := e.StartTurn(t.Context(), "", proto.TextInput("invalid"), out)
-		if err == nil || turn != nil {
-			t.Fatal("invalid Start acquired output")
+		image := "data:image/png;base64,iVBORw0KGgo="
+		for _, invalid := range []struct {
+			id, reason string
+			input      proto.MessageInput
+		}{
+			{"", "requires live context, identity", proto.TextInput("invalid")},
+			{"attachment", "does not support image input", proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image", ImageURL: &image}}}}},
+		} {
+			out := make(chan proto.Envelope, 1)
+			turn, err := e.StartTurn(t.Context(), invalid.id, invalid.input, out)
+			if err == nil || turn != nil || !strings.Contains(err.Error(), invalid.reason) {
+				t.Fatal("invalid Start acquired output", err)
+			}
+			close(out)
 		}
-		close(out)
 		raw, _ := os.ReadFile(record)
 		if strings.Contains(string(raw), "session/prompt") {
 			t.Fatal("invalid input was sent")
@@ -263,7 +290,6 @@ func TestExecutorCloseRetainsOwnerAfterDeadline(t *testing.T) {
 
 func TestExecutorFactoryPreparationFailureHasNoTypedNilOwner(t *testing.T) {
 	config, req, _ := workspaceFixture(t)
-	req.ReleaseOnCompletion = false
 	if err := os.WriteFile(config.Binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}

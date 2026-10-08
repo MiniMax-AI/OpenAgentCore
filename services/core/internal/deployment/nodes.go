@@ -133,9 +133,6 @@ func (s *Service) RemoveNode(ctx context.Context, id string) error {
 			if n.Retained != 0 || n.CleanupPending != 0 {
 				return ErrNodeInUse
 			}
-			if d.LocalNodeID == nodeID {
-				return ErrLocalNodeConfigured
-			}
 			return tx.RemoveNode(nodeID)
 		}
 		return ErrNotFound
@@ -165,7 +162,7 @@ func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (Enro
 		if d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused {
+		if d.Mode != string(sandbox.DeploymentNodes) {
 			return ErrConflict
 		}
 		if _, err := s.specification(d); err != nil {
@@ -214,7 +211,7 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 		if d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused || input.Provider != d.Provider {
+		if d.Mode != string(sandbox.DeploymentNodes) || input.Provider != d.Provider {
 			return ErrInvalidInput
 		}
 		spec, err := s.specification(d)
@@ -281,7 +278,7 @@ func (s *Service) AuthenticateNode(ctx context.Context, nodeID, credential strin
 		if err != nil {
 			return placement.ErrNodeUnavailable
 		}
-		if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
+		if n.InstallationID != d.InstallationID || d.Mode != string(sandbox.DeploymentNodes) {
 			return ErrNodeCredential
 		}
 		if err := s.checkEnrollmentIdentity(tx, d, n); err != nil {
@@ -400,7 +397,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		if node == nil && d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" {
+		if d.Mode != string(sandbox.DeploymentNodes) {
 			return ErrConflict
 		}
 		if node != nil {
@@ -425,9 +422,6 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		spec, err := s.generationSpecification(tx, d, selected)
 		if err != nil {
 			return err
-		}
-		if node == nil && d.AdmissionPaused {
-			return ErrConflict
 		}
 		limit, err := s.registry.RetainedLimit(d.Provider, active, retained)
 		if err != nil {
@@ -455,7 +449,7 @@ func (s *Service) connection(tx NodeReads, d Record, nodeID, connectionID string
 	if err != nil {
 		return StoredNode{}, err
 	}
-	if n.ConnectionID != connectionID || n.ConnectedEpoch != epoch || epoch == 0 || epoch > math.MaxInt64 || d.OwnerEpoch != epoch || n.InstallationID != d.InstallationID || d.Mode != "nodes" {
+	if n.ConnectionID != connectionID || n.ConnectedEpoch != epoch || epoch == 0 || epoch > math.MaxInt64 || d.OwnerEpoch != epoch || n.InstallationID != d.InstallationID || d.Mode != string(sandbox.DeploymentNodes) {
 		return StoredNode{}, ErrNodeCredential
 	}
 	return n, nil
@@ -569,7 +563,7 @@ func (s *Service) heartbeat(ctx context.Context, nodeID, connectionID string, ep
 			if health.ProviderReady {
 				state = "ready"
 			}
-			statuses = []sandbox.GenerationStatus{{Generation: n.DeploymentGeneration, SpecificationDigest: n.SpecificationDigest, State: state, Diagnostic: health.Diagnostic}}
+			statuses = []sandbox.GenerationStatus{{Generation: n.DeploymentGeneration, SpecificationDigest: n.SpecificationDigest, State: state, Diagnostic: string(health.Diagnostic)}}
 		}
 		return s.recordGenerations(tx, d, n, statuses, protocol)
 	})

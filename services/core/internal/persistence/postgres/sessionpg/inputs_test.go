@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -22,8 +23,10 @@ var messagePayload = json.RawMessage(`{"input":[{"role":"user","content":[{"type
 
 var cancelInput = sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
 
+// messageInput is a public message event with one text part, as the events
+// route stores it.
 func messageInput(text string) sessions.Input {
-	payload, _ := json.Marshal(map[string]string{"text": text})
+	payload, _ := json.Marshal(v1.SessionInput{Type: "agent.session.input.message", Input: []v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: &text}}}}})
 	return sessions.Input{Kind: "message", Payload: payload}
 }
 
@@ -314,7 +317,7 @@ func TestInputBatchesAreOrderedAndIdempotentAcrossConnections(t *testing.T) {
 		t.Fatalf("inputs=%d err=%v", len(inputs), err)
 	}
 	for i, input := range inputs {
-		var payload map[string]string
+		var payload v1.SessionInput
 		if err := json.Unmarshal(input.Payload, &payload); err != nil {
 			t.Fatal(err)
 		}
@@ -322,7 +325,7 @@ func TestInputBatchesAreOrderedAndIdempotentAcrossConnections(t *testing.T) {
 		if i%2 == 1 {
 			want = "second"
 		}
-		if payload["text"] != want {
+		if *payload.Input[0].Content[0].Text != want {
 			t.Fatalf("batch interleaved at %d: %v", i, payload)
 		}
 	}
@@ -355,7 +358,7 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 			t.Fatalf("changed batch accepted: %v", err)
 		}
 	}
-	batch[1].Payload = json.RawMessage(`{ "text" : "one" }`)
+	batch[1].Payload = json.RawMessage(`{ "input" : [ { "content" : [ { "text" : "one", "type" : "input_text" } ], "role" : "user" } ], "type" : "agent.session.input.message" }`)
 	pool.Close()
 	restartedStore, restarted := stagingService(t, pgtest.Open(t))
 	retry, err := restarted.SubmitInputs(ctx, text(tenant), text(session), "mixed", batch)

@@ -97,7 +97,7 @@ def registry_image(reference):
     if manifest is not None and "manifests" in manifest:
         descriptors = manifest["manifests"]
         if len(descriptors) != 1:
-            raise ValueError("Expected one Linux amd64 registry image: " + reference)
+            raise ValueError("Expected one platform registry image: " + reference)
         digest = descriptors[0]["digest"]
         if not distribution.DIGEST.fullmatch(digest):
             raise ValueError("Invalid registry image descriptor")
@@ -109,85 +109,110 @@ def registry_image(reference):
 
 
 def publish_images(assets, repository, revision, tag, floating_latest=False):
-    """Load the checked release archives; never rebuild or replace another image."""
+    """Verify both architectures before publishing immutable platform tags and indexes."""
     image_tag = tag.replace("+", "_")
-    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", image_tag):
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}", image_tag):
         raise ValueError("Release version exceeds the container tag format")
-    stem = "oac-" + revision + "-linux-amd64"
-    # Extract named regular members only, never archive-controlled paths.
     with tempfile.TemporaryDirectory(prefix="oac-ghcr-") as directory:
         directory = pathlib.Path(directory)
-        with tarfile.open(assets / (stem + ".tar.gz"), "r:gz") as archive:
-            manifest = json.load(archive.extractfile(stem + "/manifest.json"))
-            if manifest["source_commit"] != revision or manifest["platform"] != "linux/amd64":
-                raise ValueError("Registry images do not match the release")
-            for name in IMAGE_NAMES:
-                if name == "runtime":
-                    continue
-                member = archive.getmember(stem + "/images/" + name + ".tar")
-                if not member.isfile():
-                    raise ValueError("Expected a regular image archive")
-                with archive.extractfile(member) as source, (directory / (name + ".tar")).open("wb") as target:
-                    shutil.copyfileobj(source, target)
-        runtime = manifest["artifacts"]["images/runtime.tar.gz"]
-        filename = runtime["filename"]
-        if pathlib.Path(filename).name != filename:
-            raise ValueError("Invalid Runtime asset filename")
-        runtime_path = assets / filename
-        if runtime_path.is_symlink() or distribution.sha256(runtime_path) != runtime["sha256"]:
-            raise ValueError("Runtime image checksum mismatch")
-        with gzip.open(runtime_path, "rb") as source, (directory / "runtime.tar").open("wb") as target:
-            shutil.copyfileobj(source, target)
-        for name in IMAGE_NAMES:
-            expected = (manifest["images"][name], manifest["image_manifest_digests"][name])
-            if distribution.image_identities(directory / (name + ".tar"), expected[0]) != expected:
-                raise ValueError("Release image identity mismatch: " + name)
+        entries = {}
+        for architecture in ("amd64", "arm64"):
+            stem = "oac-" + revision + "-linux-" + architecture
+            with tarfile.open(assets / (stem + ".tar.gz"), "r:gz") as archive:
+                manifest = json.load(archive.extractfile(stem + "/manifest.json"))
+                if manifest["source_commit"] != revision or manifest["platform"] != "linux/" + architecture:
+                    raise ValueError("Registry images do not match the release")
+                names = IMAGE_NAMES if architecture == "amd64" else ("core", "web", "ingress")
+                for name in names:
+                    path = directory / (name + "-" + architecture + ".tar")
+                    if name == "runtime":
+                        artifact = manifest["artifacts"]["images/runtime.tar.gz"]
+                        filename = artifact["filename"]
+                        if pathlib.Path(filename).name != filename:
+                            raise ValueError("Invalid Runtime asset filename")
+                        compressed = assets / filename
+                        if compressed.is_symlink() or distribution.sha256(compressed) != artifact["sha256"]:
+                            raise ValueError("Runtime image checksum mismatch")
+                        with gzip.open(compressed, "rb") as source, path.open("wb") as target:
+                            shutil.copyfileobj(source, target)
+                    else:
+                        member = archive.getmember(stem + "/images/" + name + ".tar")
+                        if not member.isfile():
+                            raise ValueError("Expected a regular image archive")
+                        with archive.extractfile(member) as source, path.open("wb") as target:
+                            shutil.copyfileobj(source, target)
+                    expected = (manifest["images"][name], manifest["image_manifest_digests"][name])
+                    if distribution.image_identities(path, expected[0], architecture) != expected:
+                        raise ValueError("Release image identity mismatch: " + name)
+                    entries[name, architecture] = (path, *expected)
         references = {}
-        # Validate every local image and every existing tag before the first push.
-        for name in IMAGE_NAMES:
-            path = directory / (name + ".tar")
+        for (name, architecture), (path, config, digest) in entries.items():
             subprocess.run(["docker", "load", "--input", str(path)], check=True)
-            config = manifest["images"][name]
-            local = distribution.resolve_image(config, manifest["image_manifest_digests"][name])
-            reference = "ghcr.io/" + repository.lower() + "/" + name + ":" + image_tag
-            remote, selected = registry_image(reference)
+            local = distribution.resolve_image(config, digest, architecture)
+            reference = "ghcr.io/" + repository.lower() + "/" + name + ":" + image_tag + "-" + architecture
+            remote, _ = registry_image(reference)
             if remote is not None and remote.get("config", {}).get("digest") != config:
                 raise ValueError("Registry tag already names a different image: " + reference)
-            references[name] = (reference, config, local, remote)
+            references[name, architecture] = (reference, config, local, remote)
+        # Version indexes are immutable too. Check every existing one before pushing.
+        bases = {name: "ghcr.io/" + repository.lower() + "/" + name + ":" + image_tag for name in IMAGE_NAMES}
+        for name, reference in bases.items():
+            current = registry_manifest(reference)
+            if current is not None:
+                verify_index(reference, current, {arch: entry[1] for (n, arch), entry in entries.items() if n == name})
+
         def push_image(item):
-            name, (reference, config, local, remote) = item
-            print("Publishing registry image " + name, flush=True)
+            key, (reference, config, local, remote) = item
             if remote is None:
                 subprocess.run(["docker", "tag", local, reference], check=True)
                 subprocess.run(["docker", "push", reference], check=True)
             remote, selected = registry_image(reference)
             if remote is None or remote.get("config", {}).get("digest") != config:
                 raise ValueError("Registry image verification failed: " + reference)
-            # Inspect the registry's descriptor, not the local Docker image ID.
             details = json.loads(subprocess.check_output(
                 ["docker", "manifest", "inspect", "--verbose", selected], text=True))
             digest = details["Descriptor"]["digest"]
             if not distribution.DIGEST.fullmatch(digest):
                 raise ValueError("Invalid registry manifest digest")
-            print("Verified registry image " + name, flush=True)
-            return name, {"tag": reference, "digest": reference.rsplit(":", 1)[0] + "@" + digest}
-        result = dict(sorted(parallel_each(push_image, references.items())))
+            return key, reference.rsplit(":", 1)[0] + "@" + digest
+        platforms = dict(parallel_each(push_image, references.items()))
+        result = {}
+        for name, reference in bases.items():
+            sources = [value for (n, _), value in platforms.items() if n == name]
+            expected = {arch: entry[1] for (n, arch), entry in entries.items() if n == name}
+            if registry_manifest(reference) is None:
+                subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", reference, *sources], check=True)
+            verify_index(reference, registry_manifest(reference), expected)
+            digest = subprocess.check_output(["docker", "buildx", "imagetools", "inspect", reference,
+                                               "--format", "{{.Manifest.Digest}}"], text=True).strip()
+            if not distribution.DIGEST.fullmatch(digest):
+                raise ValueError("Invalid registry index digest")
+            pinned = reference.rsplit(":", 1)[0] + "@" + digest
+            result[name] = {"tag": reference, "digest": pinned}
+        # Advance floating tags only after all version indexes are verified.
         if floating_latest:
-            def push_latest(item):
-                name, (reference, config, local, remote) = item
-                latest = reference.rsplit(":", 1)[0] + ":latest"
-                current, _selected = registry_image(latest)
-                if current is not None and current.get("config", {}).get("digest") == config:
-                    return name, latest
-                print("Publishing registry image " + name + ":latest", flush=True)
-                subprocess.run(["docker", "tag", local, latest], check=True)
-                subprocess.run(["docker", "push", latest], check=True)
-                current, selected = registry_image(latest)
-                if current is None or current.get("config", {}).get("digest") != config:
-                    raise ValueError("Registry image verification failed: " + latest)
-                return name, latest
-            parallel_each(push_latest, references.items())
+            for name, entry in result.items():
+                latest = bases[name].rsplit(":", 1)[0] + ":latest"
+                expected = {arch: value[1] for (n, arch), value in entries.items() if n == name}
+                subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", latest, entry["digest"]], check=True)
+                verify_index(latest, registry_manifest(latest), expected)
         return result
+
+
+def verify_index(reference, index, expected):
+    if not index or len(index.get("manifests", [])) != len(expected):
+        raise ValueError("Registry index has unexpected platforms: " + reference)
+    actual = {}
+    for descriptor in index["manifests"]:
+        platform = descriptor.get("platform", {})
+        architecture = platform.get("architecture")
+        digest = descriptor.get("digest", "")
+        if platform.get("os") != "linux" or architecture in actual or not distribution.DIGEST.fullmatch(digest):
+            raise ValueError("Invalid registry platform descriptor")
+        child = registry_manifest(reference.rsplit(":", 1)[0] + "@" + digest)
+        actual[architecture] = (child or {}).get("config", {}).get("digest")
+    if actual != expected:
+        raise ValueError("Registry index names a different image: " + reference)
 
 
 def publish(assets, repository, revision, tag, mode):
@@ -209,7 +234,8 @@ def publish(assets, repository, revision, tag, mode):
     # The builder validates the manifest and Runtime assets. Verify archives again
     # after the Actions artifact transfer between jobs.
     stem = "oac-" + revision + "-linux-amd64"
-    archives = [assets / (stem + ".tar.gz"), assets / "install.sh"]
+    archives = [assets / (stem + ".tar.gz"), assets / ("oac-" + revision + "-linux-arm64.tar.gz"), assets / "install.sh", assets / "install.ps1"]
+    archives.extend(assets / name for name in ("oac-linux-amd64", "oac-linux-arm64", "oac-darwin-amd64", "oac-darwin-arm64", "oac-windows-amd64.exe"))
     if mode == "publish" or (assets / (stem + "-offline.tar.gz")).exists():
         archives.append(assets / (stem + "-offline.tar.gz"))
     for archive in archives:
@@ -244,7 +270,7 @@ def publish(assets, repository, revision, tag, mode):
     release = api(repository, "releases", "--method", "POST",
                   "-f", "tag_name=" + tag, "-f", "target_commitish=" + revision,
                   "-f", "name=OpenAgentCore " + tag,
-                  "-f", "body=Linux amd64 distribution from commit " + revision + ".",
+                  "-f", "body=Core for Linux, macOS and Windows; Linux amd64 Node distribution from commit " + revision + ".",
                   "-F", "draft=true", "-F", "prerelease=" + str(prerelease).lower())
     verify_draft(release, tag, revision)
     release_id = release["id"]

@@ -251,20 +251,17 @@ func TestSandboxResetAuditFailureRollsBackPauseAndCompletion(t *testing.T) {
 }
 
 func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
-	s, w, process := managerFixture(t, 10, 10)
-	// Reuse the real placement fixture, then adopt its selection as Web-managed.
-	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_deployment SET web_managed=true,local_node_id=NULL`)
-	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET deployment_generation=1,specification_digest=$1`, SandboxDeploymentTestSpec("docker").Digest("docker"))
+	s, w, d := managerFixture(t, 10, 10)
 	_, pending := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	tenant, suspended := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	allocation := archiveAllocation(t, w, tenant, suspended, process.InstallationID)
+	allocation := archiveAllocation(t, w, tenant, suspended, d.InstallationID)
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_allocations SET compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, allocation.ID)
 	tenant, deleted := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	archiveAllocation(t, w, tenant, deleted, process.InstallationID)
+	archiveAllocation(t, w, tenant, deleted, d.InstallationID)
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: deleted.ID}); err != nil {
 		t.Fatal(err)
 	}
-	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, process.InstallationID, deployment.ResetRequest{ExpectedGeneration: 1, Clear: "auto"})
+	reset, err := startReset(t, SandboxResetTestContext(t.Context()), w, d.InstallationID, deployment.ResetRequest{ExpectedGeneration: 1, Clear: "auto"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +271,7 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 	}
 	for _, state := range []string{"preparing", "stale", "epoch", "disconnected"} {
 		runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET connected_epoch=(SELECT owner_epoch FROM runtime_deployment)`)
-		onlineManagerNode(t, s, process.LocalNodeID)
+		onlineManagerNode(t, s, d.NodeID)
 		switch state {
 		case "preparing":
 			runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET provider_ready=false`)
@@ -298,14 +295,14 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 		if view.Reset.Remaining.OnOfflineNodes != want {
 			t.Fatalf("%s presence: %+v", state, view.Reset.Remaining)
 		}
-		if want > 0 && (len(view.Reset.Remaining.OfflineNodes) != 1 || view.Reset.Remaining.OfflineNodes[0].NodeID != process.LocalNodeID || view.Reset.Remaining.OfflineNodes[0].Resources != 3) {
+		if want > 0 && (len(view.Reset.Remaining.OfflineNodes) != 1 || view.Reset.Remaining.OfflineNodes[0].NodeID != d.NodeID || view.Reset.Remaining.OfflineNodes[0].Resources != 3) {
 			t.Fatal("offline ownership projection", view.Reset.Remaining)
 		}
 	}
-	if _, err := deploymentExecution(t, w).CompleteReset(t.Context(), process.InstallationID, 1, reset.Reset.RequestedAt); err == nil {
+	if _, err := deploymentExecution(t, w).CompleteReset(t.Context(), d.InstallationID, 1, reset.Reset.RequestedAt); err == nil {
 		t.Fatal("offline resources were treated as cleaned")
 	}
-	if err := deploymentService(t, s).RemoveNode(t.Context(), process.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
+	if err := deploymentService(t, s).RemoveNode(t.Context(), d.NodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("removed node with reset resources", err)
 	}
 	if row, err := sessionAdapter(s).GetEnvironment(t.Context(), pending.TenantID, pending.Environment.ID); err == nil && row.Status == "expired" {

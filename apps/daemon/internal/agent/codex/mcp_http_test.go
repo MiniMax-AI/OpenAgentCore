@@ -20,21 +20,13 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
 		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
 	}
-	original := map[string]any{
-		"mcp_servers":     map[string]any{"operator": map[string]any{"command": "operator-mcp"}},
-		"enable_features": []any{"apps", "plugins", "unrelated"},
-	}
-	req := proto.PromptRequestPayload{AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: original}
-	req.AgentOptions = executionOptions(req)
+	req := proto.PromptRequestPayload{AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 	plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if original["mcp_servers"] == nil || req.AgentOptions["mcp_servers"] != nil {
-		t.Fatal("declaration failed to replace operator MCP without mutation")
-	}
-	if !slices.Equal(plan.EnableFeatures, []string{"unrelated"}) || !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
+	if !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
 		t.Fatal("native profile was not pinned")
 	}
 	home, err := allocCodexHome(req.AgentStateKey)
@@ -52,9 +44,6 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		if !strings.Contains(string(config), expected) {
 			t.Fatalf("missing native config %q", expected)
 		}
-	}
-	if strings.Contains(string(config), "operator") {
-		t.Fatal("operator MCP was rendered")
 	}
 	tools[0] = "mutated"
 	if (*plan.mcpServers["docs.server"].EnabledTools)[0] != "lookup.docs" {

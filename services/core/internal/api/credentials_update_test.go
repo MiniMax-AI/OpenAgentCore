@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
@@ -107,7 +106,7 @@ func TestCredentialUpdateUsesExistingBoundariesAndSafeErrors(t *testing.T) {
 	for _, tc := range []struct {
 		err    error
 		status int
-	}{{vaults.ErrNotFound, 404}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("credential-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {errors.New("credential-canary"), 500}} {
 		h, f, _ := credentialHandler(t)
 		f.err = tc.err
 		w := credentialRequest(h, "POST", "/v1/vaults/"+f.credential.VaultID+"/credentials/"+f.credential.ID, body)

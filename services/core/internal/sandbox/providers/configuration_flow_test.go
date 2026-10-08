@@ -31,7 +31,8 @@ func (regionalConfiguration) ReplacesCredential() bool { return false }
 type regionalCodec struct{}
 
 func (regionalCodec) Requirements() sandbox.ConfigurationRequirements {
-	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, PublicOrigin: sandbox.NotRequired, Discovery: providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}}
+	unsupported := providercontract.Support{State: providercontract.Unsupported, Reason: "node_configuration_has_no_catalog"}
+	return sandbox.ConfigurationRequirements{Credential: sandbox.NotRequired, PublicOrigin: sandbox.NotRequired, Discovery: unsupported, SelectionDiscovery: unsupported, CredentialVerification: unsupported}
 }
 func (regionalCodec) WithCredential(sandbox.Configuration, sandbox.Configuration) (sandbox.Configuration, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "WithCredential", Reason: "credentials_not_required"}
@@ -75,6 +76,12 @@ func (a regionalCodec) Equal(x, y sandbox.Configuration) (bool, error) {
 func (regionalCodec) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
 }
+func (regionalCodec) DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error) {
+	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "node_configuration_has_no_catalog"}
+}
+func (regionalCodec) VerifyCredential(context.Context, sandbox.DirectConfig, []sandbox.Reference) error {
+	return &providercontract.UnsupportedError{Operation: "VerifyCredential", Reason: "node_configuration_has_no_catalog"}
+}
 
 // A registered native configuration reaches the ordinary API and Store without
 // adding its fields or kind to either Core package.
@@ -91,8 +98,8 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// The deployment reaches the registered configuration only through the
 	// registry it is built with.
 	deployments := func() *deployment.Service {
-		storage := deploymentpg.New(pgunit.NewPool(pool), nil)
-		rules, err := placement.NewRules(registry, "")
+		storage := deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
+		rules, err := placement.NewRules(registry, "https://core.example")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +115,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close(context.Background())
-	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, nil))
+	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, pgtest.CredentialKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,14 +151,14 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		Environments:    struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{},
 		ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Metrics:             struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
-		Execution: &api.Execution{
+		Execution: api.Execution{
 			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
 			SessionAdmission: struct{ api.SessionAdmission }{},
 			InputAdmission:   struct{ api.InputAdmission }{},
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 		},
-		Sandboxes: &api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), nil), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
+		Sandboxes: api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
 			DeploymentReset: leaseSetup{t: t, changes: changes, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {

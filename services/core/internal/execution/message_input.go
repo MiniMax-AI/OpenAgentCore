@@ -10,17 +10,11 @@ import (
 )
 
 func messageInput(raw json.RawMessage) (proto.MessageInput, error) {
-	var input struct {
-		Text  *string           `json:"text"`
-		Input []v1.InputMessage `json:"input"`
-	}
+	var input v1.SessionInput
 	if json.Unmarshal(raw, &input) != nil {
 		return nil, sessions.ErrInvalidInput
 	}
 	var messages proto.MessageInput
-	if len(input.Input) == 0 && input.Text != nil {
-		messages = proto.TextInput(*input.Text)
-	}
 	for _, message := range input.Input {
 		if message.Role != "user" {
 			return nil, sessions.ErrInvalidInput

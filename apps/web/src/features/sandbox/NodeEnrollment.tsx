@@ -10,7 +10,7 @@ import { formatBytes } from "../../lib/format";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { installationQuery } from "../../lib/installation";
 import { sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
-import { sandboxRequestError } from "../../lib/sandbox-labels";
+import { sandboxProviderLabel, sandboxRequestError } from "../../lib/sandbox-labels";
 import { checklistOpenFor, modelStep, nextStepAfterNode } from "../overview/getting-started";
 import { harnessesQuery } from "../system/harness-queries";
 import { nodeSourceUrl } from "./core-origin";
@@ -36,10 +36,11 @@ const DEFAULT_RETAINED = "8";
 /**
  * Add node: the administrator sets the node's sandbox limits, then Core issues a
  * one-time enrollment command that approves them
- * (`POST /core/v1/sandbox/enrollment-tokens`). Only microsandbox suspends
- * sandboxes, so only it asks for a retained limit; Docker retains exactly the
- * sandboxes it runs at once. The command downloads the installer from the
- * installation's public URL, never the browser's address, and runs it with
+ * (`POST /core/v1/sandbox/enrollment-tokens`). Only a deployment with a
+ * suspension policy, which its Provider's checkpoint support declares, asks for
+ * a retained limit; otherwise a node retains exactly the sandboxes it runs at
+ * once. The command downloads the installer from the installation's public
+ * URL, never the browser's address, and runs it with
  * sudo (or directly as root), which installs the node as a system service.
  * The log hint names that system service. No command is issued until the installation
  * is read: one whose public URL other machines can't use (loopback, as
@@ -68,7 +69,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   onRefresh: () => Promise<SandboxNode[] | null>;
 }) {
   const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { t: tCommon } = useTranslation("common");
   const id = useId();
   const [active, setActive] = useState(DEFAULT_ACTIVE);
@@ -91,11 +92,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // The deployment's core_url is the same address, but the installation is read again on each opening, so a fix shows at once.
   const publicUrl = installation.data ? nodeSourceUrl(installation.data) : null;
   const available = consoleConfig.node_installer;
-  const provider = deployment.provider === "docker" || deployment.provider === "microsandbox" ? deployment.provider : null;
-  const backend = provider === "microsandbox" ? "microsandbox" : "Docker";
+  const provider = deployment.mode === "nodes" && deployment.provider ? deployment.provider : null;
+  const backend = sandboxProviderLabel(deployment.provider, locale);
   // Nodes and their sandboxes reach Core at its public URL, so a loopback one serves no other machine;
   // and without the provider's node files the installer would fail on the host. Either way no command
-  // is issued, nor before the installation is read: a failed read (an older Core, say) proves nothing.
+  // is issued, nor before the installation is read: a failed read proves nothing about the address.
   const blocker: { text: string; failed?: boolean } | null = deployment.reset
     ? { text: t("Node enrollment is paused while reset is in progress.") }
     : !fresh
@@ -108,7 +109,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
         : null;
   // Core takes whole numbers from 1 to a million, with the retained limit at least the active one.
-  const suspends = deployment.provider === "microsandbox";
+  const suspends = deployment.suspension !== null;
   const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
   const inRange = (limit: number | null): limit is number => limit !== null && limit >= 1 && limit <= 1_000_000;
   const activeLimit = whole(active);
@@ -236,7 +237,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     size: size ? t("{{cpus}} CPU · {{memory}}", { cpus: size.cpus, memory: formatBytes(size.memory_mib * 2 ** 20) }) : "",
   };
   const requirements = provider ? <>
-    <HostRequirements provider={provider} sized={Boolean(size)} values={values} open={requirementsOpen} onToggle={setRequirementsOpen} />
+    <HostRequirements sized={Boolean(size)} values={values} open={requirementsOpen} onToggle={setRequirementsOpen} />
   </> : null;
   const limitsForm = `${id}-limits`;
   const footer = !available || (!enrollment && blocker) ? undefined
@@ -293,7 +294,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         {command ? <CommandBlock key={command} value={command} label={t("One-time enrollment command")} autoFocus
           extra={!registered ? <span className="sandbox-command-expiry" role="timer" title={new Date(enrollment.expires_at).toLocaleString(locale)}>{t("Expires in {{time}}", { time: formatCountdown(Date.parse(enrollment.expires_at) - now) })}</span> : null} /> : null}
         {/* The installer keeps partial downloads and exits 130 on Ctrl-C; the token lasts until the countdown ends. */}
-        {command ? <p className="sandbox-command-note">{t("If the command is interrupted or the download stalls, run the same command again: the download resumes.")}</p> : null}
+        {command ? <p className="sandbox-command-note">{t("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")}</p> : null}
         {/* One live region for the whole flow; only its contents change, so each change is announced. */}
         <div role="status" aria-label={t("Registration progress")}>
           {ready && node ? <div className="sandbox-enrollment-status connected"><span className="sandbox-status-dot" />{t("{{name}} · Connected", { name: node.name })}</div>

@@ -1,7 +1,8 @@
+import type { AdminProject } from "@oac/agents-client";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import { flowError, idleFlow, isAbort, keyFlowReducer, normalizeName, type KeyFlow, type KeyFlowEvent } from "./key-flows";
-import { issueKey, type Project } from "../../lib/admin-view";
+import { admin } from "../../lib/admin-view";
 
 export interface KeyFlowControls {
   flow: KeyFlow;
@@ -15,7 +16,7 @@ export interface KeyFlowControls {
  * changed a project or its keys. Writes are never retried automatically: an
  * uncertain result is reported for the operator to check.
  */
-export function useKeyFlow(onChanged: (project: Project) => void = () => undefined): KeyFlowControls {
+export function useKeyFlow(onChanged: (project: AdminProject) => void = () => undefined): KeyFlowControls {
   const [flow, dispatch] = useReducer(keyFlowReducer, idleFlow);
   const flowRef = useRef(flow);
   flowRef.current = flow;
@@ -43,7 +44,7 @@ export function useKeyFlow(onChanged: (project: Project) => void = () => undefin
     const project = current.project;
     send({ type: "started" });
     try {
-      const key = await issueKey(project.id, keyName);
+      const key = await admin.issueAPIKey(project.id, { name: keyName });
       send({ type: "issued", projectId: project.id, key });
     } catch (error) {
       if (!isAbort(error)) send({ type: "failed", error: flowError(error) });

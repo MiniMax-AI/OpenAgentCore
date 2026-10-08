@@ -51,7 +51,7 @@ type DeploymentReset interface {
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; differing selections and file-managed deployments reject. This does not create compute or execute work.
+// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -132,9 +132,9 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		ExpectedGeneration *uint64 `json:"expected_generation"`
-		Clear              string  `json:"clear"`
-		DeadlineSeconds    *int32  `json:"deadline_seconds"`
+		ExpectedGeneration *uint64              `json:"expected_generation"`
+		Clear              deployment.ResetMode `json:"clear"`
+		DeadlineSeconds    *int32               `json:"deadline_seconds"`
 	}
 	if decodeInputObject(raw, &input, "expected_generation", "clear", "deadline_seconds") != nil || input.ExpectedGeneration == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "A current expected_generation is required.", "expected_generation")

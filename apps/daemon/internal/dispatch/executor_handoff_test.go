@@ -93,10 +93,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			}
 			owner := &terminalHandoffExecutor{turns: make(chan *terminalHandoffTurn, 3)}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-				harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-					return nil, errors.New("legacy path forbidden")
-				})
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 			var creates atomic.Int32
 			registry.RegisterExecutor("handoff", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 				creates.Add(1)
@@ -150,7 +147,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 					}
 				}
 			}
-			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true}}
+			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", DisableExecutionEnvironment: true}}
 			admit := func(id string) proto.PreparationStatusPayload {
 				t.Helper()
 				handle(proto.TypeExecutionPrepare, id, request)

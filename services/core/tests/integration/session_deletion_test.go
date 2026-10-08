@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -62,7 +61,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`))
+			receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", messageText("retained"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -117,7 +116,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				t.Fatal(err)
 			}
 			marker := sessionDeletedAt(t, pool, session.ID)
-			fresh := New(pool)
+			fresh := New(t, pool)
 			// The owner's repeated deletion confirms again without another write.
 			for _, repeat := range []*Store{s, fresh} {
 				if err := sessionService(t, repeat).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
@@ -139,7 +138,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := createSession(ctx, fresh, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
-			if _, err := sendMessage(ctx, fresh, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sendMessage(ctx, fresh, tenant, session.ID, "input", messageText("retained")); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			if _, err := requestCancel(ctx, fresh, tenant, session.ID, "late-cancel"); !errors.Is(err, sessions.ErrNotFound) {
@@ -283,7 +282,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(instrumented.Close)
-		return New(instrumented)
+		return New(t, instrumented)
 	}
 	for _, kind := range admissions {
 		t.Run(kind.name+"/admission-first", func(t *testing.T) {
@@ -340,7 +339,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 		t.Run(kind.name+"/concurrent", func(t *testing.T) {
 			for range 8 {
 				tenant, session := kind.setup(t, plain)
-				other := New(pool)
+				other := New(t, pool)
 				start := make(chan struct{})
 				results := make(chan error, 2)
 				go func() {
@@ -397,7 +396,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 		var current state
 		if err := s.pool.QueryRow(ctx, `SELECT s.deleted_at, p.released_at FROM sessions s
 			JOIN environments e ON e.session_id=s.id JOIN runtime_placements p ON p.environment_id=e.id
-			WHERE s.id=$1 AND p.node_id=$2`, session.ID, d.LocalNodeID).Scan(&current.deleted, &current.released); err != nil {
+			WHERE s.id=$1 AND p.node_id=$2`, session.ID, d.NodeID).Scan(&current.deleted, &current.released); err != nil {
 			t.Fatal("missing placement", err)
 		}
 		nodes, err := deploymentService(t, s).ListNodes(ctx)

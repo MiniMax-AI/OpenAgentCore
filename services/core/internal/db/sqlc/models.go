@@ -8,14 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AdminAssetCopy struct {
-	TargetTenantID pgtype.UUID `json:"target_tenant_id"`
-	IdempotencyKey string      `json:"idempotency_key"`
-	RequestHash    []byte      `json:"request_hash"`
-	Result         []byte      `json:"result"`
-	AuditID        pgtype.UUID `json:"audit_id"`
-}
-
 type AdminAuditLog struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
@@ -25,18 +17,9 @@ type AdminAuditLog struct {
 	Action            string             `json:"action"`
 	ResourceType      string             `json:"resource_type"`
 	ResourceID        string             `json:"resource_id"`
-	ResultIds         []byte             `json:"result_ids"`
 	RequestID         string             `json:"request_id"`
 	TraceID           string             `json:"trace_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-}
-
-type AdminResourceOwner struct {
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	ResourceType string      `json:"resource_type"`
-	ResourceID   string      `json:"resource_id"`
-	ParentID     string      `json:"parent_id"`
-	AuditID      pgtype.UUID `json:"audit_id"`
 }
 
 type Agent struct {
@@ -238,7 +221,6 @@ type RuntimeAllocation struct {
 	State                 string             `json:"state"`
 	CreateSettled         bool               `json:"create_settled"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	KeptAt                pgtype.Timestamptz `json:"kept_at"`
 	ReleasedAt            pgtype.Timestamptz `json:"released_at"`
 	ComputePhase          string             `json:"compute_phase"`
 	ComputeRevision       int64              `json:"compute_revision"`
@@ -256,14 +238,9 @@ type RuntimeDeployment struct {
 	Singleton          bool               `json:"singleton"`
 	InstallationID     pgtype.UUID        `json:"installation_id"`
 	BackendFingerprint string             `json:"backend_fingerprint"`
-	AdmissionPaused    bool               `json:"admission_paused"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ProviderKind       string             `json:"provider_kind"`
-	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
 	OwnerEpoch         int64              `json:"owner_epoch"`
-	WebManaged         bool               `json:"web_managed"`
-	IdleSeconds        int64              `json:"idle_seconds"`
-	RetentionSeconds   int64              `json:"retention_seconds"`
 	Generation         int64              `json:"generation"`
 	Mode               string             `json:"mode"`
 	ProviderCredential []byte             `json:"provider_credential"`

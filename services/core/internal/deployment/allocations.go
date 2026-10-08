@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 // ReserveAllocation commits the allocation of the tenant's hosted Environment
@@ -68,7 +67,7 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 			return ErrInvalidInput
 		}
 		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation}
-		if d.Mode == "nodes" {
+		if d.Mode == string(sandbox.DeploymentNodes) {
 			reserved, err := tx.LoadReserved()
 			if err != nil {
 				return err
@@ -99,11 +98,16 @@ func (e *ExecutionOperations) ObserveRunning(ctx context.Context, owner Allocati
 	})
 }
 
-// KeepAllocation follows an authenticated connection and a successful
-// provider observation. A keepalive never revives cleanup or an expired lease.
-func (e *ExecutionOperations) KeepAllocation(ctx context.Context, owner Allocation) (Allocation, error) {
-	return e.change(ctx, owner, true, func(tx AllocationTx, current Allocation) (Allocation, error) {
-		return tx.Keep(current)
+// CheckRunning returns the stored allocation while it is still the owner's
+// running compute: its Session undeleted and bound to the allocation's
+// device. It follows an authenticated connection and a successful provider
+// observation and changes nothing.
+func (e *ExecutionOperations) CheckRunning(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.change(ctx, owner, true, func(_ AllocationTx, current Allocation) (Allocation, error) {
+		if current.State != "running" {
+			return Allocation{}, ErrAllocationConflict
+		}
+		return current, nil
 	})
 }
 
@@ -347,7 +351,7 @@ func (s *Service) LifecycleNode(ctx context.Context, tenant, environment string)
 	if err != nil {
 		return "", err
 	}
-	if p.Provider == "" || p.Mode == "direct" {
+	if p.Provider == "" || p.Mode == string(sandbox.DeploymentDirect) {
 		if p.PlacementNodeID != "" || p.AllocationNodeID != "" {
 			return "", placement.ErrNodeUnavailable
 		}

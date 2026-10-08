@@ -10,16 +10,16 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // auditResource is the administrator audit resource type of a deployment
@@ -43,9 +43,7 @@ var (
 	_ modelconfiguration.Observer = (*Store)(nil)
 )
 
-// New returns a Store. Without a credential key (cipher nil), Replace and
-// LoadBundle fail with credentialcrypto.ErrUnavailable; List, Delete and
-// observations keep working.
+// New returns a Store that seals and opens bundles with cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -67,22 +65,19 @@ func (s *Store) List(ctx context.Context) ([]modelconfiguration.Configuration, e
 // new revision, which clears the replaced revision's observations, and audits
 // the write in the same transaction.
 func (s *Store) Replace(ctx context.Context, record modelconfiguration.Record) (modelconfiguration.Configuration, error) {
-	if s.cipher == nil {
-		return modelconfiguration.Configuration{}, credentialcrypto.ErrUnavailable
-	}
 	raw, err := json.Marshal(record.Configuration)
 	if err != nil {
 		return modelconfiguration.Configuration{}, err
 	}
 	sealed, err := s.cipher.SealDeploymentModelProvider(raw, record.Harness)
 	if err != nil {
-		return modelconfiguration.Configuration{}, credentialcrypto.ErrUnavailable
+		return modelconfiguration.Configuration{}, errors.New("model provider encryption failed")
 	}
 	var result modelconfiguration.Configuration
 	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
 		row, err := q.UpsertDeploymentModelProvider(ctx, sqlc.UpsertDeploymentModelProviderParams{
-			Harness: record.Harness, Protocol: record.Provider.Protocol, BaseUrl: record.Provider.BaseURL,
+			Harness: record.Harness, Protocol: string(record.Provider.Protocol), BaseUrl: record.Provider.BaseURL,
 			ContextWindow: record.Provider.ContextWindow, MaxOutputTokens: record.Provider.MaxOutputTokens,
 			Model: record.Model, HarnessConfig: record.HarnessConfig, EncryptedConfig: sealed,
 			Revision: pgtype.UUID{Bytes: uuid.New(), Valid: true},
@@ -120,9 +115,6 @@ func (s *Store) LoadBundle(ctx context.Context, harness string) (modelconfigurat
 	}
 	if err != nil {
 		return modelconfiguration.Bundle{}, translate(err)
-	}
-	if s.cipher == nil {
-		return modelconfiguration.Bundle{}, credentialcrypto.ErrUnavailable
 	}
 	raw, err := s.cipher.OpenDeploymentModelProvider(row.EncryptedConfig, harness)
 	if err != nil {
@@ -188,10 +180,11 @@ func configuration(row sqlc.ListDeploymentModelProvidersRow) modelconfiguration.
 	result := modelconfiguration.Configuration{
 		Harness: row.Harness, Model: row.Model, HarnessConfig: json.RawMessage(row.HarnessConfig), UpdatedAt: row.UpdatedAt.Time,
 		LastUsedAt: timestamp(row.LastUsedAt), LastErrorAt: timestamp(row.LastErrorAt),
-		Provider: v1.ModelProviderView{Protocol: row.Protocol, BaseURL: row.BaseUrl, ContextWindow: row.ContextWindow, MaxOutputTokens: row.MaxOutputTokens, APIKeyConfigured: true},
+		Provider: v1.ModelProviderView{Protocol: modelprovider.Protocol(row.Protocol), BaseURL: row.BaseUrl, ContextWindow: row.ContextWindow, MaxOutputTokens: row.MaxOutputTokens, APIKeyConfigured: true},
 	}
 	if row.LastErrorCode.Valid {
-		result.LastErrorCode = &row.LastErrorCode.String
+		code := modelconfiguration.ProviderErrorCode(row.LastErrorCode.String)
+		result.LastErrorCode = &code
 	}
 	return result
 }

@@ -297,34 +297,12 @@ func (t *deploymentTx) ClaimInstallation(installationID string) error {
 	return t.q.ClaimWebSandboxDeployment(t.ctx, id)
 }
 
-func (t *deploymentTx) SetProcessDeployment(installationID, backendFingerprint string, admissionPaused bool) error {
-	id, err := parseID(installationID)
-	if err != nil {
-		return err
-	}
-	return t.q.SetRuntimeDeployment(t.ctx, sqlc.SetRuntimeDeploymentParams{InstallationID: id, BackendFingerprint: backendFingerprint, AdmissionPaused: admissionPaused})
-}
-
-func (t *deploymentTx) SetManagerDeployment(provider, localNodeID string) error {
-	var local pgtype.UUID
-	if localNodeID != "" {
-		var err error
-		if local, err = parseID(localNodeID); err != nil {
-			return err
-		}
-	}
-	return t.q.SetRuntimeManagerDeployment(t.ctx, sqlc.SetRuntimeManagerDeploymentParams{ProviderKind: provider, LocalNodeID: local})
-}
-
 func (t *deploymentTx) SaveSelection(selection deployment.SelectionRecord) error {
 	if selection.Generation > math.MaxInt64 {
 		return deployment.ErrInvalidInput
 	}
-	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, IdleSeconds: selection.IdleSeconds, RetentionSeconds: selection.RetentionSeconds, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
+	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
 	if len(selection.Configuration.Secret) > 0 {
-		if t.cipher == nil {
-			return credentialcrypto.ErrUnavailable
-		}
 		sealed, err := t.cipher.SealSandboxDeployment(selection.Configuration.Secret, selection.InstallationID, selection.Generation)
 		if err != nil {
 			return errors.New("sandbox deployment credential encryption failed")

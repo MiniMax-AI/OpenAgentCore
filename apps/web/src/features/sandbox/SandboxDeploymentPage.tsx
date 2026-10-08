@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { InitializeSandboxDeployment, UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@oac/agents-client";
+import { deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxDeployment, type StartSandboxReset } from "@oac/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,6 @@ import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import { sandboxAdmin } from "./sandbox-queries";
-import { SandboxPageAccess } from "./SandboxPageAccess";
 import { useSandboxPageState } from "./use-sandbox-page-state";
 import { sandboxWriteOwnershipQuery } from "./sandbox-write-ownership";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
@@ -35,15 +34,15 @@ function DeploymentHeader({ actions }: { actions?: ReactNode }) {
 /** System's secondary page is the sole owner of deployment configuration controls. */
 export function SandboxDeploymentPage() {
   const { i18n } = useTranslation("sandbox");
-  return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en"}>
-    <SandboxPageAccess header={<DeploymentHeader />}>{() => <DeploymentConfiguration />}</SandboxPageAccess>
+  return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en"}>
+    <DeploymentConfiguration />
   </section>;
 }
 
 function DeploymentConfiguration() {
   const { t, i18n } = useTranslation("sandbox");
   const { t: tNavigation } = useTranslation("sandboxNavigation");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { navigate } = useConsoleNavigation();
   const queryClient = useQueryClient();
   const { deploymentQuery, snapshot, installation, loading, busy, setupNeedsRefresh, confirmed, fresh, refresh, configurationKey } = useSandboxPageState();
@@ -81,7 +80,7 @@ function DeploymentConfiguration() {
     return false;
   }
   async function initialize(input: InitializeSandboxDeployment) {
-    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && input.provider !== "e2b" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
+    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
   }
   async function update(input: UpdateSandboxDeployment) {
     return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true, true);
@@ -95,7 +94,7 @@ function DeploymentConfiguration() {
 
   return <>
     <DeploymentHeader actions={<>
-      {snapshot?.deployment.provider && snapshot.deployment.provider !== "e2b" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
+      {snapshot?.deployment.mode === "nodes" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
       <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy} label={t("Refresh sandbox state")} />
     </>} />
     <div className="console-page-body sandbox-content">

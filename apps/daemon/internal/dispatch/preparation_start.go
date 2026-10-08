@@ -33,12 +33,12 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "unknown_preparation")
 	}
-	if p.workspaceReadOnly {
+	if p.executor == nil {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "read_only_preparation")
 	}
 	owner := p.executor
-	if owner == nil || owner.id != input.ExecutorID {
+	if owner.id != input.ExecutorID {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "unknown_executor")
 	}
@@ -61,7 +61,7 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 	}
 	if !time.Now().Before(p.deadline) {
 		r.mu.Unlock()
-		r.releasePreparation(p, "expired", "", true, true)
+		r.releasePreparation(p, "expired", "", true)
 		return nil
 	}
 	if r.sessions[input.RunID] != nil {
@@ -70,7 +70,7 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 	}
 	p.status.State, p.status.RunID, p.status.Revision = "starting", input.RunID, p.status.Revision+1
 	p.startFingerprint, p.busy = fingerprint, true
-	state := &sessionState{capabilities: p.capabilities, runID: input.RunID, stateKey: p.stateKey, environmentID: p.environmentID, out: make(chan proto.Envelope, 64), ctx: p.ctx, ctxCancel: p.cancel, pendingIDs: make(map[string]struct{}), pendingAsks: make(map[string]struct{}), traceparent: env.Trace}
+	state := &sessionState{capabilities: p.capabilities, runID: input.RunID, environmentID: p.environmentID, out: make(chan proto.Envelope, 64), ctx: p.ctx, traceparent: env.Trace}
 	state.preparedHandoff = newPreparedHandoff(p, owner.native)
 	p.handoff, owner.run = state.preparedHandoff, state
 	r.sessions[input.RunID] = state

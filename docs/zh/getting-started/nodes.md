@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 863ce05f8cfbc5da7c9f05c35c361ebd15a99fc3cebc952e2c8076810ff3fe3b
+source_hash: cd12954864bf9c15cf2d700fc3d9ebaf6126c0ab4297784850cfdd32b86ae656
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -29,18 +29,9 @@ Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添
 
 ### 命令 {#the-command}
 
-Web 生成如下命令，填入本安装的值：
+从 **Nodes → Add node** 复制当前命令，其中已填入本安装的地址、校验和与注册令牌。命令先检查 Linux amd64、Python 3.9+ 和必要工具，再下载文件；临时网络故障最多尝试三次。校验失败时，从 Web 复制新命令重试。
 
-```sh
- (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
-printf '\n==> Downloading node installer...\n' &&
-curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
-printf '==> Verifying node installer...\n' &&
-printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --enrollment-token-stdin --source-url 'https://core.example' --core-url 'https://core.example' --provider 'docker' --installation-id '<installation-id>')
-```
-
-- 下载到私有临时目录、检查 SHA-256，再通过 `sudo` 执行；root shell 中则直接执行。
+- 下载到当前账号的私有 `~/.oac/node-bootstrap` 目录，检查 SHA-256，再通过 `sudo` 执行；root shell 中则直接执行。每次持锁清理下载残片后重试，已验证的 `<sha256>.pyz` 保留供安装程序使用。
 - 令牌通过标准输入传给安装程序，不出现在进程参数、环境变量或 sudo 日志中。
 - 当 `HISTCONTROL` 忽略以空格开头的行时（Debian 和 Ubuntu 默认如此），前导空格能避免命令进入 shell 历史。
 
@@ -48,7 +39,7 @@ printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR
 
 ### 主机要求 {#host-requirements}
 
-- Linux amd64 和 systemd；Python 3.9+、`curl` 和 `sha256sum`；root 或 sudo。
+- Linux amd64 和 systemd；Python 3.9+、`curl`、`sha256sum` 和 `flock`；root 或 sudo。
 - SELinux 不处于 enforcing 模式。安装程序不支持 enforcing SELinux 主机。
 - Docker：正在运行的 rootful Docker Engine，其 `/var/run/docker.sock` 套接字属于 `docker` 组，权限为 `0660`，并强制执行 CPU 和内存限制（cgroup v2）。
 - microsandbox：`/dev/kvm` 属于 `kvm` 组（硬件或嵌套虚拟化），并具有 microsandbox 链接的库（glibc）。
@@ -90,7 +81,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 - 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。保留的节点身份属于其他 Core 地址或安装时，程序拒绝且不修改任何内容。
 - 已过期或已在其他主机使用的命令立即失败，显示 `Core rejected the node configuration read (HTTP 401)`：生成新命令并在 10 分钟内执行。
 - 慢速下载期间命令过期时，注册失败并显示 `The enrollment command expired or was already used`。下载文件保留：在 Web 生成新命令后执行。
-- 下载从断点继续。每分钟下载不足 64 KiB 时会停止并保留已有内容；重新执行命令即可。
+- 失败或中断时删除下载残片；重新执行时从头下载缺失文件，复用已校验的完整文件。每分钟下载不足 64 KiB 时会停止，请检查网络后重试。
 - Docker Runtime 镜像约 500 MB。网络较慢时可提前加载：将发行资产 `oac-<commit>-linux-amd64-runtime.tar.gz` 复制到主机并运行 `sudo docker load -i`。安装程序发现精确匹配的镜像后跳过下载。
 - 中断安装程序或关闭终端会停止程序；重新执行命令继续。
 
@@ -134,9 +125,9 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 1. 使用与 Core 同一发行版本的 `oac-node`。
 2. 获取注册令牌：使用 **Add node** 命令中的令牌，或通过 Core 密钥调用 `POST /core/v1/sandbox/enrollment-tokens`。令牌一次性使用，包含批准的节点容量；响应的 `expires_at` 给出过期时间。在主机上存入权限为 `0600` 的文件。
 3. 使用令牌读取节点配置，不会消耗令牌：`GET /api/v1/sandbox-node/configuration`，带 `Authorization: Bearer <token>`。
-4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并为主机添加一个适配器对象：
-   - `docker`：`host`（显式 Unix 套接字）、`image`（本地导入的批准发行版 Runtime 镜像）、`network`、`extra_hosts`、绝对路径 `seccomp_file` 和 `nested_sandbox`。
-   - `microsandbox`：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`，以及对应的 `runtime_sha256` 和 `firmware_sha256`；`image`；沙箱的 `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib`；`network` 策略；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
+4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并添加 `native` 对象，写入该提供商的主机设置。适配器从 `specification` 读取沙箱规格、Runtime 镜像和产物哈希：
+   - Docker：[Docker 节点配置](../configuration.md#docker-node-configuration)中的字段，其中 `host` 是显式 Unix 套接字，`image` 是导入的 Runtime 镜像的本地 ID，`seccomp_file` 是绝对路径。
+   - microsandbox：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`；`network` 策略；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
 5. 使用真实绝对路径注册，然后通过主机服务管理器运行节点：
 
    ```sh
@@ -168,20 +159,18 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 - **使用 Web 命令添加的节点**：当前沙箱配置检查失败时，在目标状态显示 **Preparation failed**，帮助提示中给出原因（`GET /core/v1/sandbox/nodes` 的 `rollout.diagnostic`）。**Provider not ready** 旁的提示仅显示 *Sandbox provider unavailable*。
 - **手动注册的节点**：在 **Provider not ready** 旁的帮助提示展示原因（`diagnostic`）。
 
-节点日志包含状态码背后的本地错误。
+每个状态码都是与 Provider 无关的类别；其背后的本地错误留在节点上。手动注册的节点会把它写入日志。对于使用 Web 命令添加的节点，请在主机上重新运行该命令：安装程序会先检查主机要求，并指出需要修复的问题（[安装程序消息](#installer-messages)）。
 
 节点按如下顺序仅报告首个失败检查：Docker 守护进程或 KVM、Docker 限制支持、主机容量、已安装的 Runtime 文件。因此无法访问 Docker 守护进程时，会隐藏镜像缺失问题。修复后约十秒的下一次心跳会清除或替换状态码。离线节点保留最后状态码，Web 在节点重连前隐藏它。
 
 | 状态码 | 帮助提示 | 原因 | 解决方法 |
 | --- | --- | --- | --- |
-| `docker_unavailable` | Docker unavailable | Docker 套接字不可达、无权访问，或 Docker info/镜像请求失败 | 启动 Docker 并赋予节点用户访问 `/var/run/docker.sock` 的权限 |
-| `docker_limits_unsupported` | Docker limits unsupported | Docker 报告不支持 CPU 配额或内存限制 | 使用 cgroups 强制执行 CPU 与内存限制的主机（cgroup v2） |
+| `provider_unavailable` | Sandbox provider unavailable | 提供商的服务不可达或请求失败（例如 Docker 守护进程已停止），或失败没有类别 | 重新运行节点的命令，或阅读手动注册节点的日志 |
+| `host_unsupported` | Host unsupported | 主机缺少提供商所需的能力，例如 Docker 的 CPU 与内存限制（cgroup v2）或对 `/dev/kvm` 的读写权限 | 重新运行节点的命令，或阅读手动注册节点的日志 |
 | `capacity_insufficient` | Host too small | 主机 CPU 或内存不足以运行一个沙箱 | 使用更大主机或修改沙箱规格 |
-| `runtime_image_unavailable` | Runtime image missing | Docker 中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
-| `kvm_unavailable` | KVM unavailable | 节点无法读写 `/dev/kvm` | 启用硬件虚拟化，通过 `kvm` 组赋予节点用户 KVM 访问权限 |
-| `microsandbox_artifacts_unavailable` | microsandbox components missing | Runtime 或固件缺失、SHA-256 检查失败，或辅助程序缺失 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
+| `runtime_image_unavailable` | Runtime image missing | 提供商中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
+| `artifacts_unavailable` | Provider files missing | 固定版本的提供商文件（例如 microsandbox 的 Runtime、固件或辅助程序）缺失或 SHA-256 检查失败 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
 | `runtime_download_failed` | Runtime download failed | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到控制台和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
-| `provider_unavailable` | Sandbox provider unavailable | 其他失败 | 阅读节点日志 |
 
 新用户组成员关系仅对新进程生效。重启节点服务：`sudo systemctl restart oac-node-<installation-id>.service`。已注册但从未连接的节点通常无法通过公开 URL 访问 Core，或 `/api/v1` WebSocket 无法通过反向代理。
 

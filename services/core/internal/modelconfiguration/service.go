@@ -40,8 +40,7 @@ func (s *Service) Delete(ctx context.Context, harness string) error {
 }
 
 // Resolve opens the Harness's default for Session creation. It returns nil
-// when the Harness has none, and credentialcrypto.ErrUnavailable without a
-// credential key.
+// when the Harness has none.
 func (s *Service) Resolve(ctx context.Context, harness string) (*Snapshot, error) {
 	bundle, err := s.storage.LoadBundle(ctx, harness)
 	if errors.Is(err, ErrNotFound) {

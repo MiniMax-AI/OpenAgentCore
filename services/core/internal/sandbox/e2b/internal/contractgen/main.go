@@ -83,8 +83,7 @@ func main() {
 	values := map[string]any{
 		"PROTOCOL_VERSION": e2b.ProtocolVersion, "SDK_VERSION": sdk,
 		"MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
-		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes,
-		"MAX_OBSERVATION_REFERENCES": e2b.MaxObservationReferences, "MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
+		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes, "MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
 		"OPERATIONS": e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
 		"REQUEST_FIELDS": fields(reflect.TypeFor[e2b.Request]()), "RESPONSE_FIELDS": fields(reflect.TypeFor[e2b.Response]()),
 		"REFERENCE_FIELDS":         fields(reflect.TypeFor[sandbox.Reference]()),
@@ -131,7 +130,7 @@ func fixtures() []byte {
 	for _, operation := range e2b.HelperOperations() {
 		copy := q
 		copy.Operation = operation
-		if operation == "observe" || operation == "verify_credential" {
+		if operation == "verify_credential" {
 			copy.References = []sandbox.Reference{r}
 		}
 		add("request", operation, true, copy)
@@ -148,32 +147,22 @@ func fixtures() []byte {
 		value[item.field] = item.value
 		add("request", item.name, false, value)
 	}
-	for _, operation := range []string{"observe", "verify_credential"} {
-		limit := e2b.MaxObservationReferences
-		if operation == "verify_credential" {
-			limit = e2b.MaxCredentialReferences
+	for _, count := range []int{0, e2b.MaxCredentialReferences, e2b.MaxCredentialReferences + 1} {
+		copy := q
+		copy.Operation = "verify_credential"
+		copy.References = make([]sandbox.Reference, count)
+		for index := range copy.References {
+			copy.References[index] = r
+			copy.References[index].AllocationID = fmt.Sprintf("%08x-3333-4333-8333-333333333333", index+1)
 		}
-		for _, count := range []int{0, limit, limit + 1} {
-			copy := q
-			copy.Operation = operation
-			copy.References = make([]sandbox.Reference, count)
-			for index := range copy.References {
-				copy.References[index] = r
-				copy.References[index].AllocationID = fmt.Sprintf("%08x-3333-4333-8333-333333333333", index+1)
-			}
-			add("request", fmt.Sprintf("%s-count-%d", operation, count), count <= limit && (operation != "observe" || count > 0), copy)
-		}
-		for _, refs := range []any{map[string]any{}, "invalid", []any{nil}} {
-			value := object(q)
-			value["Operation"] = operation
-			value["References"] = refs
-			add("request", operation+"-references-type", false, value)
-		}
+		add("request", fmt.Sprintf("verify_credential-count-%d", count), count <= e2b.MaxCredentialReferences, copy)
 	}
-	duplicate := q
-	duplicate.Operation = "observe"
-	duplicate.References = []sandbox.Reference{r, r}
-	add("request", "duplicate-observation", false, duplicate)
+	for _, refs := range []any{map[string]any{}, "invalid", []any{nil}} {
+		value := object(q)
+		value["Operation"] = "verify_credential"
+		value["References"] = refs
+		add("request", "verify_credential-references-type", false, value)
+	}
 	for _, code := range e2b.HelperErrors() {
 		add("response", "error-"+code, true, e2b.Response{Version: e2b.ProtocolVersion, ErrorCode: code})
 	}

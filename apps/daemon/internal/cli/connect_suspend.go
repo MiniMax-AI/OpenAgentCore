@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/authoring"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
@@ -34,7 +33,6 @@ func (s *reconnectSender) replace(conn *transport.Conn) { s.mu.Lock(); s.conn = 
 
 type suspendedRouter struct {
 	router   *dispatch.Router
-	bridge   *authoring.Bridge
 	sender   *reconnectSender
 	registry *agent.Registry
 	local    *localworkspace.Binding
@@ -46,13 +44,11 @@ func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry) (*suspen
 		return nil, err
 	}
 	sender := &reconnectSender{conn: conn}
-	bridge := authoring.New(sender)
-	wrapped := authoringRegistry(registry, bridge)
-	router, err := dispatch.New(dispatch.Config{Registry: wrapped, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
+	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
 	if err != nil {
 		return nil, err
 	}
-	return &suspendedRouter{router: router, bridge: bridge, sender: sender, registry: wrapped, local: local}, nil
+	return &suspendedRouter{router: router, sender: sender, registry: registry, local: local}, nil
 }
 
 func (s *suspendedRouter) shutdown() {
@@ -176,10 +172,6 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 		case env, ok := <-conn.Recv():
 			if !ok {
 				return nil, conn.Err()
-			}
-			if env.Type == proto.TypeAuthoringResponse {
-				s.bridge.Deliver(env)
-				continue
 			}
 			if env.Type == proto.TypeEnvironmentResume {
 				request := rejectedResumeRequest(env)

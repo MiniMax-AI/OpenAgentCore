@@ -7,34 +7,34 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
+// resolveSavedTools canonicalizes tools whose pinned shape was checked at the
+// /v1 boundary. The default case guards a pinned tool type that Core does not
+// resolve yet.
 func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 	tools := make([]json.RawMessage, 0, len(input))
 	for _, raw := range input {
 		var kind struct {
 			Type string `json:"type"`
 		}
-		if json.Unmarshal(raw, &kind) != nil {
-			return nil, errors.New("tools must contain tool objects.")
+		if err := json.Unmarshal(raw, &kind); err != nil {
+			return nil, &storedDataError{err}
 		}
 		var value json.RawMessage
 		switch kind.Type {
 		case "function":
 			var function v1.FunctionToolInput
-			if decodeInputObject(raw, &function, "type", "name", "description", "parameters", "defer_loading") != nil {
-				return nil, errors.New("Invalid function tool fields.")
+			if err := json.Unmarshal(raw, &function); err != nil {
+				return nil, &storedDataError{err}
 			}
-			resolved, _, err := resolveFunction(function)
+			resolved, err := resolveFunction(function)
 			if err != nil {
 				return nil, err
 			}
 			value = resolved
 		case "tool_search":
-			if decodeInputObject(raw, &kind, "type") != nil {
-				return nil, errors.New("tool_search only accepts type.")
-			}
 			value, _ = json.Marshal(kind)
 		case "programmatic_tool_calling":
-			resolved, err := resolveProgrammaticTool(raw)
+			resolved, _, err := resolveProgrammaticTool(raw)
 			if err != nil {
 				return nil, err
 			}

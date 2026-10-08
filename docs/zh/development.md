@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: ddc74c5f4b9766690c0ed35743d391cadd8025c1842ba279ab5f990b6b6980ce
+source_hash: 70dc4a684bc017d14ac9df87948220e2dd19fb82918edf44d695494ea7f62de0
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -94,7 +94,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | --- | --- |
 | Core handler、持久化或 client | `make check-core` |
 | SQL 查询 | `make sqlc-generate`，检查生成文件，再运行 `make check-sqlc` |
-| Handler annotation 或 API 契约 | `make openapi`，检查三个命名空间的 schema |
+| 公共 schema、Core 扩展或内部处理函数注解 | `make openapi`、`make check-openapi`；检查生成类型和三个命名空间的 schema |
 | 共享 Runtime 协议 | `make check-runtime-contract` |
 | Provider 集成 | `make check-sandbox-provider-contract` 和 provider 的原生检查 |
 | Claude SDK bridge 与产物 | `make check-claude-sdk` |

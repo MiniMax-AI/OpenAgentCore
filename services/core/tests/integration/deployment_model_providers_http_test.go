@@ -4,24 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -29,19 +23,15 @@ import (
 // frozen only into hosted Sessions; self-hosted Sessions bring their own
 // provider, and a Session with no provider is rejected before any write.
 func TestDeploymentModelProvidersHTTP(t *testing.T) {
-	_, pool := testStore(t)
-	if _, err := pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
-		t.Fatal(err)
-	}
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
-	st := NewWithCredentialCipher(pool, cipher)
+	st, _ := configuredStore(t)
+	pool := st.pool
 	tenant, projectKey, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: runtimedevice.HashCredential(projectKey), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
+	handler, err := publicHandler(t, st, auth, "codex", withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +157,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	// Simulate a default persisted when cross-protocol execution was supported.
 	// It must remain readable, but cannot create new Sessions or be rewritten.
 	historical := strings.Replace(codexDefault, `"protocol":"responses"`, `"protocol":"anthropic"`, 1)
-	encrypted, err := cipher.SealDeploymentModelProvider([]byte(historical), "codex")
+	encrypted, err := st.credentialCipher.SealDeploymentModelProvider([]byte(historical), "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,8 +165,8 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	incompatible := call("POST", "/v1/agents/sessions", projectKey, hosted, 400)
-	if !strings.Contains(string(incompatible["error"]), "does not support this model provider protocol") || strings.Contains(string(incompatible["error"]), "credential_storage_unavailable") {
-		t.Fatal("unsupported stored protocol was reported as a credential failure")
+	if !strings.Contains(string(incompatible["error"]), "does not support this model provider protocol") {
+		t.Fatal("unsupported stored protocol was not reported as such")
 	}
 	if text(providerView(call("GET", path, coreKey, "", 200))["protocol"]) != "anthropic" {
 		t.Fatal("unsupported default was rewritten")
@@ -230,72 +220,17 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	}
 }
 
-// A hosted or self-hosted Session created before providers were required has
-// no frozen provider: new work is rejected before anything is queued, and input
-// reserved before the upgrade fails with that reason instead of waiting.
-func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
-	legacy, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
-		Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	executor := connectFixtureRuntime(t, h, legacy)
-	// Reserved directly, as a pre-upgrade Core did.
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
-	defer stop()
-	_, pool := testStore(t)
-	reservations := func() int {
-		t.Helper()
-		var count int
-		if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM environment_input_reservations WHERE session_id=$1", legacy.ID).Scan(&count); err != nil {
-			t.Fatal(err)
-		}
-		return count
-	}
-	before := reservations()
-	message := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"start"}`)}}
-	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
-		t.Fatal("provider-free Session accepted work", err)
-	}
-	if after := reservations(); after != before {
-		t.Fatal("rejected work was queued", before, after)
-	}
-	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "legacy reservation settled", func() bool {
-		got, err := sessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
-		return err == nil && got.State == sessions.EnvironmentInputFailed
-	})
-	session, err := sessionAdapter(h.s).GetSession(t.Context(), h.tenant, legacy.ID)
-	if err != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "model_provider_required" {
-		t.Fatal("legacy reservation did not fail with its reason", session.EnvironmentInputActivity, err)
-	}
-	_ = executor.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-	for {
-		var frame proto.Envelope
-		if executor.conn.ReadJSON(&frame) != nil {
-			break
-		}
-		if frame.Type == proto.TypeExecutionPrepare || frame.Type == proto.TypePromptRequest {
-			t.Fatal("provider-free work reached the executor", frame.Type)
-		}
-	}
-}
-
 // A none Session may freeze the deployment default, so its caller intent is
 // recorded first: a same-key retry returns the committed Session after the
 // default was replaced or removed.
 func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
-	st, _ := NewModelTestStore(t)
+	st, _ := testStore(t)
 	if _, err := st.pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
 		t.Fatal(err)
 	}
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st))
+	handler, err := publicHandler(t, st, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +316,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		_, err = defaults.Replace(admin, modelconfiguration.Replacement{Harness: harness, Configuration: v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"}})
 		return snapshot, err
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), modelProviderDefaults(resolver))
+	handler, err := publicHandler(t, st, auth, "codex", modelProviderDefaults(resolver))
 	if err != nil {
 		t.Fatal(err)
 	}

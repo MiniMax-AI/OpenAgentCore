@@ -9,7 +9,7 @@ import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
-import { formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { epochSeconds, formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { FleetReadNotice } from "../fleet/FleetReadNotice";
 import { fleetSnapshot, useSandboxFleet } from "../fleet/use-sandbox-fleet";
 import { coreMetricsQuery } from "./metrics-queries";
@@ -21,12 +21,6 @@ const GIB = 2 ** 30;
 
 const jobTone: Record<CoreJobStatus, Tone> = { ok: "ok", failing: "danger", stopped: "warning", unknown: "neutral" };
 const statusTone: Record<CoreMetrics["service"]["status"], Tone> = { running: "ok", degraded: "warning", unknown: "neutral" };
-
-function seconds(value: string | null): number | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
-}
 
 function milliseconds(value: number | null): string {
   return value === null ? MISSING : formatDuration(value / 1000);
@@ -93,7 +87,7 @@ export function CoreMetricsPage() {
 
 function ServiceMeta({ metrics }: { metrics: CoreMetrics }) {
   const { t } = useTranslation("metrics");
-  const started = seconds(metrics.service.started_at);
+  const started = epochSeconds(metrics.service.started_at);
   const now = Math.floor(Date.now() / 1000);
   const notOwner = metrics.service.execution_owner === false;
   return (
@@ -115,14 +109,14 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
   const { execution, database, process } = metrics;
-  const processBuckets = useMemo(() => process.series.map((entry) => seconds(entry.start) ?? 0), [process.series]);
+  const processBuckets = useMemo(() => process.series.map((entry) => epochSeconds(entry.start) ?? 0), [process.series]);
   const bucketSeconds = metrics.range.resolution_seconds;
   const bucket = formatBucket(bucketSeconds, locale);
-  const executionBuckets = useMemo(() => execution.series.map((entry) => seconds(entry.start) ?? 0), [execution.series]);
-  const databaseBuckets = useMemo(() => database.series.map((entry) => seconds(entry.start) ?? 0), [database.series]);
+  const executionBuckets = useMemo(() => execution.series.map((entry) => epochSeconds(entry.start) ?? 0), [execution.series]);
+  const databaseBuckets = useMemo(() => database.series.map((entry) => epochSeconds(entry.start) ?? 0), [database.series]);
   const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
   const integer = (value: number) => formatInteger(value, locale);
-  const slotsFull = execution.slots_in_use !== null && execution.slots_total !== null && execution.slots_in_use >= execution.slots_total;
+  const slotsFull = execution.slots_in_use >= execution.slots_total;
   // Sandbox nodes hold their own connection to Core, as daemons do; E2B deployments have none.
   const { state: fleetState, refresh: refreshFleet } = useSandboxFleet({ poll: true });
   const fleet = fleetSnapshot(fleetState);
@@ -136,7 +130,7 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
         <Kpi
           label={t("core.slots")}
           help={t("core.slotsHelp")}
-          value={execution.slots_in_use === null ? MISSING : <Figure value={<LiveNumber value={execution.slots_in_use} />} unit={execution.slots_total === null ? undefined : `/ ${integer(execution.slots_total)}`} />}
+          value={<Figure value={<LiveNumber value={execution.slots_in_use} />} unit={`/ ${integer(execution.slots_total)}`} />}
           tone={slotsFull ? "warning" : undefined}
         />
         <Kpi
@@ -313,7 +307,7 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
                   <tr key={job.id}>
                     <th scope="row"><span className="table-primary">{t(`core.jobs.names.${job.id}`, { defaultValue: job.id })}</span></th>
                     <td><StatusDot tone={jobTone[job.status]} label={t(`core.jobs.health.${job.status}`)} /></td>
-                    <td className="numeric" title={job.last_run_at ?? undefined}>{formatRelative(seconds(job.last_run_at), now, locale)}</td>
+                    <td className="numeric" title={job.last_run_at ?? undefined}>{formatRelative(epochSeconds(job.last_run_at), now, locale)}</td>
                     <td className="numeric">{count(job.processed)}</td>
                     <td className={job.failed ? "numeric numeric-danger" : "numeric"}>{count(job.failed)}</td>
                   </tr>

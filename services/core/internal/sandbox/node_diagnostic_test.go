@@ -18,14 +18,14 @@ func TestNodeDiagnosticContract(t *testing.T) {
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	codes := []string{NodeProviderUnavailable}
+	var codes []string
 	for _, diagnostic := range nodeDiagnostics {
-		codes = append(codes, diagnostic.code)
-		if got := NodeDiagnostic(fmt.Errorf("private probe detail: %w", diagnostic.err)); got != diagnostic.code {
-			t.Errorf("wrapped readiness cause = %q, want %q", got, diagnostic.code)
+		codes = append(codes, string(diagnostic.code))
+		if got := NodeDiagnostic(fmt.Errorf("private probe detail: %w", diagnostic.err)); got != string(diagnostic.code) {
+			t.Errorf("wrapped readiness cause = %q, want %q", got, string(diagnostic.code))
 		}
-		if got := NormalizeNodeDiagnostic(diagnostic.code); got != diagnostic.code {
-			t.Errorf("normalized readiness cause = %q, want %q", got, diagnostic.code)
+		if got := NormalizeNodeDiagnostic(string(diagnostic.code)); got != string(diagnostic.code) {
+			t.Errorf("normalized readiness cause = %q, want %q", got, string(diagnostic.code))
 		}
 	}
 	slices.Sort(codes)
@@ -36,7 +36,7 @@ func TestNodeDiagnosticContract(t *testing.T) {
 	if NodeDiagnostic(nil) != "" || NormalizeNodeDiagnostic("") != "" {
 		t.Fatal("ready state must have no diagnostic")
 	}
-	if NodeDiagnostic(errors.New("private probe detail")) != NodeProviderUnavailable || NormalizeNodeDiagnostic("future_code") != NodeProviderUnavailable {
+	if NodeDiagnostic(errors.New("private probe detail")) != string(NodeProviderUnavailable) || NormalizeNodeDiagnostic("future_code") != string(NodeProviderUnavailable) {
 		t.Fatal("unknown causes must remain provider_unavailable")
 	}
 }

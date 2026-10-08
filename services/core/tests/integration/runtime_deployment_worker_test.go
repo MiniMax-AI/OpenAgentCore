@@ -1,7 +1,7 @@
 package integration
 
 import (
-	"strings"
+	"errors"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -12,8 +12,7 @@ import (
 )
 
 func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := uuid.NewString()
+	s, key := configuredStore(t)
 	old := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	worker, stop := managedWorker(t, s, key, old)
 	tenant, _, environment := managedSession(t, s)
@@ -23,25 +22,9 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	}
 	stop()
 	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64), Provider: replacement, AdmissionPaused: true}
-	start := func(config *execution.RuntimeProvider) error {
-		_, err := startWorkerErr(t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: config})
-		return err
-	}
-	if err := start(config); err == nil || !strings.Contains(err.Error(), "maintenance") {
-		t.Fatal("startup switched active deployment", err)
-	}
-	worker, stop = managedWorkerMode(t, s, key, old, true)
-	replay, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
-	if err != nil || !replay.Replayed || replay.ID != owner.ID {
-		t.Fatal("maintenance interrupted existing allocation", replay, err)
-	}
-	stop()
-	if err := start(config); err == nil || !strings.Contains(err.Error(), "unreleased allocations") {
-		t.Fatal("startup abandoned retained allocation", err)
-	}
-	if err := start(nil); err == nil || !strings.Contains(err.Error(), "unreleased allocations") {
-		t.Fatal("omitted configuration abandoned deployment", err)
+	_, err = startNextWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: webRuntimes(t, s, uuid.NewString(), replacement, nil)})
+	if !errors.Is(err, deployment.ErrConflict) {
+		t.Fatal("startup switched the claimed installation", err)
 	}
 	if replacement.creates != 0 || replacement.kills != 0 {
 		t.Fatal("rejected startup touched new backend")
@@ -51,6 +34,10 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 		t.Fatal("rejected startup rewrote resource owner", got, err)
 	}
 	// Failed startup relinquishes its lease, so the original backend can resume.
-	_, stop = managedWorker(t, s, key, old)
+	worker, stop = managedWorker(t, s, key, old)
+	replay, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
+	if err != nil || !replay.Replayed || replay.ID != owner.ID {
+		t.Fatal("rejected startup interrupted the existing allocation", replay, err)
+	}
 	stop()
 }

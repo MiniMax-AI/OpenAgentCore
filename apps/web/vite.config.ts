@@ -5,31 +5,13 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath } from "node:url";
 
-import {
-  loadLocalDockerBackendGuideProfile,
-  loadLocalDockerGuideProfile,
-} from "./src/lib/docker-guide-config.ts";
-
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repositoryRoot, "");
   const target = env.OAC_WEB_DEV_PROXY_TARGET ?? "http://127.0.0.1:8091";
-  const selfHostedSessionsEnabled = env.OAC_WEB_SELF_HOSTED_SESSIONS === "1";
-  const openAIHostedSessionsEnabled = env.OAC_WEB_OPENAI_HOSTED_SESSIONS === "1";
-  const environmentFilesEnabled = env.OAC_WEB_ENVIRONMENT_FILES === "1";
-  const localDockerGuide = loadLocalDockerGuideProfile(env);
-  const localDockerBackendGuide = loadLocalDockerBackendGuideProfile(env);
 
   return {
-    define: {
-      __OAC_WEB_SELF_HOSTED_SESSIONS__: JSON.stringify(selfHostedSessionsEnabled),
-      __OAC_WEB_OPENAI_HOSTED_SESSIONS__: JSON.stringify(openAIHostedSessionsEnabled),
-      __OAC_WEB_ENVIRONMENT_FILES__: JSON.stringify(environmentFilesEnabled),
-      __OAC_WEB_DOCKER_GUIDE__: JSON.stringify(localDockerGuide),
-      __OAC_WEB_DOCKER_BACKEND_GUIDE__: JSON.stringify(localDockerBackendGuide),
-    },
-    envDir: repositoryRoot,
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },

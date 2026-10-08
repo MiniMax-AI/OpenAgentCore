@@ -2,30 +2,39 @@ package dispatch_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+// preparedFixture is a disposable fault-injection resource; Start transfers it
+// to one Session. A cancellablePreparation follows that Session across Start.
+type preparedFixture interface {
+	Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error)
+	Close() error
+}
+
+type cancellablePreparation interface {
+	preparedFixture
+	agent.Session
+}
+
+type preparationFactory func(context.Context, proto.PromptRequestPayload) (preparedFixture, error)
+
 // Old fault-injection fixtures model disposable executors, not reusable native implementations.
-func preparationExecutorFixture(factory agent.PreparationFactory) agent.ExecutorFactory {
+func preparationExecutorFixture(factory preparationFactory) agent.ExecutorFactory {
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 		prepared, err := factory(ctx, req)
 		if prepared == nil {
 			return nil, err
 		}
-		owner := &preparationExecutor{prepared: prepared}
-		if _, ok := prepared.(agent.PreparedCancellation); !ok {
-			return owner, errors.New("fixture has no cancellation target")
-		}
-		return owner, err
+		return &preparationExecutor{prepared: prepared}, err
 	}
 }
 
 type preparationExecutor struct {
-	prepared  agent.Prepared
+	prepared  preparedFixture
 	mu        sync.Mutex
 	cancelled bool
 }
@@ -39,7 +48,7 @@ func (e *preparationExecutor) Close(ctx context.Context) error {
 	var err error
 	if resource, ok := e.prepared.(*retryablePreparation); ok {
 		err = resource.Close()
-	} else if cancel, ok := e.prepared.(agent.PreparedCancellation); ok {
+	} else if cancel, ok := e.prepared.(cancellablePreparation); ok {
 		err = cancel.Cancel(ctx)
 	} else {
 		err = e.prepared.Close()
@@ -79,7 +88,7 @@ type preparationTurn struct {
 
 func (t *preparationTurn) Cancel(ctx context.Context) error { return t.owner.Close(ctx) }
 func (t *preparationTurn) CancellationOutcome() proto.DonePayload {
-	if target, ok := t.owner.prepared.(agent.PreparedCancellation); ok {
+	if target, ok := t.owner.prepared.(cancellablePreparation); ok {
 		return target.CancellationOutcome()
 	}
 	return proto.DonePayload{}
@@ -112,18 +121,6 @@ func (t *preparationTurn) SteerWithReceipt(ctx context.Context, p proto.PromptSt
 		return target.Steer(ctx, p)
 	}
 	return agent.ErrSteeringInactive
-}
-func (t *preparationTurn) SubmitPermission(ctx context.Context, id string, p proto.PermissionDecisionPayload) error {
-	if target, ok := t.Session.(agent.PermissionResponder); ok {
-		return target.SubmitPermission(ctx, id, p)
-	}
-	return agent.ErrUnknownPermission
-}
-func (t *preparationTurn) SubmitPromptForUserChoice(ctx context.Context, id string, p proto.PromptForUserChoiceDecisionPayload) error {
-	if target, ok := t.Session.(agent.UserChoiceResponder); ok {
-		return target.SubmitPromptForUserChoice(ctx, id, p)
-	}
-	return agent.ErrUnknownAsk
 }
 func (t *preparationTurn) ReadWorkspaceFile(ctx context.Context, path string, limit int) (agent.WorkspaceReadResult, error) {
 	if target, ok := t.Session.(agent.WorkspaceReader); ok {

@@ -1,7 +1,7 @@
 // Package gateway is the server-side hub of the agent_daemon connector.
 // It owns the HTTP / WebSocket entry points the daemon dials in to,
 // per-device long-lived WebSocket sessions, and a process-local
-// registry of deviceID/runID/permID → Session for routing.
+// registry of deviceID/runID → Session for routing.
 //
 // The package deliberately does NOT depend on the connector
 // implementation — the connector imports it, not the other way around.
@@ -18,31 +18,18 @@ import (
 // asks for a device the gateway has no live session for.
 var ErrDeviceNotRegistered = errors.New("agentdaemon gateway: device not registered (offline / never connected)")
 
-// ErrPermissionNotRegistered is returned when SubmitPermission arrives
-// for a perm id we don't have a pending mapping for.
-var ErrPermissionNotRegistered = errors.New("agentdaemon gateway: permission id not registered (expired / unknown)")
-
-// ErrPromptForUserChoiceNotRegistered is returned when
-// SubmitPromptForUserChoice arrives for an ask id we don't have a
-// pending mapping for. Same race semantics as the permission variant
-// (cancelled / expired / never seen).
-var ErrPromptForUserChoiceNotRegistered = errors.New("agentdaemon gateway: prompt_for_user_choice id not registered (expired / unknown)")
-
 // ErrWaitForDeviceTimeout is returned by WaitForDevice when the
 // deadline expires before a daemon dials in.
 var ErrWaitForDeviceTimeout = errors.New("agentdaemon gateway: timed out waiting for device to register")
 
 // Registry is the process-wide map of live daemon sessions. It is
 // concurrency-safe; readers and writers live in different goroutines.
-// Four O(1) indexes are maintained: byDevice (primary), byRun (per
-// Subscribe), byPerm (per permission_request), byAsk (per
-// prompt_for_user_choice).
+// Two O(1) indexes are maintained: byDevice (primary) and byRun (per
+// Subscribe).
 type Registry struct {
 	mu       sync.RWMutex
 	byDevice map[string]*Session
 	byRun    map[string]*Session
-	byPerm   map[string]*Session
-	byAsk    map[string]*Session
 
 	// waiters holds buffered(1) channels that WaitForDevice callers
 	// are blocked on. Register drains the slice the moment a session
@@ -58,15 +45,13 @@ func NewRegistry() *Registry {
 	return &Registry{
 		byDevice: map[string]*Session{},
 		byRun:    map[string]*Session{},
-		byPerm:   map[string]*Session{},
-		byAsk:    map[string]*Session{},
 		waiters:  map[string][]chan *Session{},
 	}
 }
 
 // Register adds a freshly-upgraded session under its deviceID. The
 // latest dial-in wins: if a session was already registered for that
-// device, the old one's run/perm indexes are evicted (the caller
+// device, the old one's run index entries are evicted (the caller
 // closes the displaced *Session).
 func (r *Registry) Register(sess *Session) (previous *Session) {
 	r.mu.Lock()
@@ -78,16 +63,6 @@ func (r *Registry) Register(sess *Session) (previous *Session) {
 		for runID, s := range r.byRun {
 			if s == previous {
 				delete(r.byRun, runID)
-			}
-		}
-		for permID, s := range r.byPerm {
-			if s == previous {
-				delete(r.byPerm, permID)
-			}
-		}
-		for askID, s := range r.byAsk {
-			if s == previous {
-				delete(r.byAsk, askID)
 			}
 		}
 	}
@@ -121,16 +96,6 @@ func (r *Registry) Deregister(sess *Session) {
 	for runID, s := range r.byRun {
 		if s == sess {
 			delete(r.byRun, runID)
-		}
-	}
-	for permID, s := range r.byPerm {
-		if s == sess {
-			delete(r.byPerm, permID)
-		}
-	}
-	for askID, s := range r.byAsk {
-		if s == sess {
-			delete(r.byAsk, askID)
 		}
 	}
 }
@@ -173,74 +138,6 @@ func (r *Registry) DetachRun(runID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.byRun, runID)
-}
-
-// AttachPermission records a permID -> session mapping so a later
-// SubmitPermission can route the decision frame to the right device.
-func (r *Registry) AttachPermission(permID string, sess *Session) {
-	if permID == "" || sess == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.byPerm[permID] = sess
-}
-
-// DetachPermission clears the permID -> session mapping. Idempotent.
-func (r *Registry) DetachPermission(permID string) {
-	if permID == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.byPerm, permID)
-}
-
-// LookupPermission returns the session that owns a pending permID,
-// or ErrPermissionNotRegistered when the permission has expired /
-// been cancelled.
-func (r *Registry) LookupPermission(permID string) (*Session, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if sess, ok := r.byPerm[permID]; ok {
-		return sess, nil
-	}
-	return nil, ErrPermissionNotRegistered
-}
-
-// AttachPromptForUserChoice records askID → session so a later
-// SubmitPromptForUserChoice can route the decision back to the right
-// daemon. Mirrors AttachPermission.
-func (r *Registry) AttachPromptForUserChoice(askID string, sess *Session) {
-	if askID == "" || sess == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.byAsk[askID] = sess
-}
-
-// DetachPromptForUserChoice clears the askID → session mapping.
-// Idempotent.
-func (r *Registry) DetachPromptForUserChoice(askID string) {
-	if askID == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.byAsk, askID)
-}
-
-// LookupPromptForUserChoice returns the session that owns a pending
-// askID, or ErrPromptForUserChoiceNotRegistered when the ask has
-// expired or been cancelled.
-func (r *Registry) LookupPromptForUserChoice(askID string) (*Session, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if sess, ok := r.byAsk[askID]; ok {
-		return sess, nil
-	}
-	return nil, ErrPromptForUserChoiceNotRegistered
 }
 
 // Devices returns a snapshot of registered device ids in arbitrary order.

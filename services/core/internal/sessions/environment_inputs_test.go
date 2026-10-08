@@ -51,7 +51,7 @@ func TestJoinsActiveTurn(t *testing.T) {
 }
 
 func TestReserveEnvironmentInput(t *testing.T) {
-	const batch = `[{"kind":"message","payload":{"text":"hi"}}]`
+	const batch = `[{"kind":"message","payload":` + hi + `}]`
 	find := "FindInputReservation request " + batch
 	reserve := func(t *testing.T, tx *fakeInputTx) (EnvironmentInputReservation, error) {
 		tx.loadEnvironmentInput = inputs()

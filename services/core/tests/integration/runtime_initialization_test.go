@@ -16,7 +16,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -46,12 +45,8 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			setupOnly := strings.HasPrefix(mode, "setup-")
 			mode = strings.TrimPrefix(mode, "setup-")
 			expectedSteps := 2
-			_, pool := newManagedTestStore(t)
-			cipher, err := credentialcrypto.New(bytes.Repeat([]byte{9}, 32))
-			if err != nil {
-				t.Fatal(err)
-			}
-			s := NewWithCredentialCipher(pool, cipher)
+			s, key := configuredStore(t)
+			pool := s.pool
 			tenant := uuid.NewString()
 			input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
 			if setupOnly {
@@ -85,8 +80,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				}
 				return completedInitialization(proto.RuntimePreparePayload{}, nil)
 			}
-			key := uuid.NewString()
-			w, stop := managedWorkerMode(t, s, key, p, false, true)
+			w, stop := managedWorkerMode(t, s, key, p, true)
 			if mode == "restart" {
 				awaitInitialization(t, s, tenant, env.ID, "failed")
 				if p.writes.Load() != 0 {
@@ -122,7 +116,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 					t.Fatal("completed preparation blocked", err)
 				}
 				stop()
-				_, _ = managedWorkerMode(t, s, key, p, false, true)
+				_, _ = managedWorkerMode(t, s, key, p, true)
 				time.Sleep(350 * time.Millisecond)
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("completed preparation replayed")
@@ -141,7 +135,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 }
 
 func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
-	s := hostedFailureStore(t)
+	s, key := configuredStore(t)
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for path, body := range map[string]string{"proof/.codex-plugin/plugin.json": `{"name":"plugin","description":"A plugin.","skills":"./skills"}`, "proof/skills/example/SKILL.md": "---\nname: plugin-proof\ndescription: A plugin Skill.\n---\nProof."} {
@@ -181,8 +175,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		actionsMu.Unlock()
 		return completedInitialization(request, data)
 	}
-	key := uuid.NewString()
-	worker, _ := managedWorkerMode(t, s, key, provider, false, true)
+	worker, _ := managedWorkerMode(t, s, key, provider, true)
 	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}

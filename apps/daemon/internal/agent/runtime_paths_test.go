@@ -5,28 +5,29 @@ import (
 	"testing"
 )
 
-func TestManagedSkillsRootUsesStableAgentState(t *testing.T) {
+func TestStateDirUsesStableAgentState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", home)
-	got, err := ManagedSkillsRoot("codex", "conv-1/agent-1/codex", "ignored", "ignored")
+	got, err := StateDir("codex", "conv-1/agent-1/codex")
 	if err != nil {
-		t.Fatalf("ManagedSkillsRoot: %v", err)
+		t.Fatalf("StateDir: %v", err)
 	}
-	want := filepath.Join(home, "runtime", "codex", "state", "conv-1", "agent-1", "codex", "skills")
+	want := filepath.Join(home, "runtime", "codex", "state", "conv-1", "agent-1", "codex")
 	if got != want {
 		t.Fatalf("root = %q, want %q", got, want)
 	}
 }
 
-func TestManagedSkillsRootSanitizesFallback(t *testing.T) {
+func TestStateDirRequiresAgentState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", home)
-	got, err := ManagedSkillsRoot("fake_beta", "", "../conv name", "ignored")
-	if err != nil {
-		t.Fatalf("ManagedSkillsRoot: %v", err)
+	for _, key := range []string{"", " ", "../.."} {
+		if _, err := StateDir("codex", key); err == nil {
+			t.Fatalf("state key %q accepted", key)
+		}
 	}
-	want := filepath.Join(home, "runtime", "fake_beta", "conv-.._conv_name", "skills")
-	if got != want {
-		t.Fatalf("root = %q, want %q", got, want)
+	got, err := StateDir("codex", "../session-1/a b")
+	if want := filepath.Join(home, "runtime", "codex", "state", "session-1", "a_b"); err != nil || got != want {
+		t.Fatalf("sanitized state = %q, %v; want %q", got, err, want)
 	}
 }

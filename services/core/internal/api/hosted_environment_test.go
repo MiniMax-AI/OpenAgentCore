@@ -89,7 +89,6 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		recorder := &hostedCreationRecorder{}
 		handler, fixture := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
-			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
 			f.sessionAdmission.createSession = recorder.CreateSession
 		})
 		input := ""

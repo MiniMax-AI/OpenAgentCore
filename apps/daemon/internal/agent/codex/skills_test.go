@@ -3,11 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestSetSkillExtraRootsUsesCodexRPC(t *testing.T) {
@@ -40,37 +36,5 @@ func TestSetSkillExtraRootsUsesCodexRPC(t *testing.T) {
 	}
 	if err := <-result; err != nil {
 		t.Fatalf("setSkillExtraRoots: %v", err)
-	}
-}
-
-func TestPrepareManagedSkillsPrunesWhenPayloadOmitsSkills(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", home)
-	stale := filepath.Join(home, "runtime", "codex", "state", "conv-1", "agent-1", "codex", "skills", "stale")
-	if err := os.MkdirAll(stale, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	root, err := prepareManagedSkills(context.Background(), nil, proto.PromptRequestPayload{
-		AgentStateKey: "conv-1/agent-1/codex",
-	})
-	if err != nil {
-		t.Fatalf("prepareManagedSkills: %v", err)
-	}
-	if root != "" {
-		t.Fatalf("root = %q, want empty", root)
-	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale skill still exists: %v", err)
-	}
-}
-
-func TestEffectiveAgentStateKeyFallsBackToConversation(t *testing.T) {
-	got := effectiveAgentStateKey(proto.PromptRequestPayload{
-		ConversationID: "conv-legacy",
-		RunID:          "run-ignored",
-	})
-	if got != "_legacy_conversation/conv-legacy/codex" {
-		t.Fatalf("state key = %q", got)
 	}
 }

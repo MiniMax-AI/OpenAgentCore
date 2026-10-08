@@ -20,7 +20,9 @@ var (
 	ErrNotConfigured         = errors.New("the sandbox deployment is not configured")
 	ErrNodeInUse             = errors.New("sandbox node retains resources")
 	ErrNodeCredential        = errors.New("invalid sandbox node credential")
-	ErrLocalNodeConfigured   = errors.New("local sandbox node is enabled in deployment configuration")
+	// ErrCredentialUnreadable reports a stored credential the credential key
+	// cannot open or authenticate, such as after the key was replaced.
+	ErrCredentialUnreadable = errors.New("sandbox deployment credential decryption failed")
 	// ErrAllocationConflict rejects an allocation change whose owner no longer
 	// matches the stored allocation, device binding, state or compute revision,
 	// or a replay for another installation.

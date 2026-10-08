@@ -56,7 +56,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", messageText("question"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`)); err != nil {
+	if _, err = sendMessage(ctx, s, tenant, session.ID, "start", messageText("question")); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
@@ -102,7 +102,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	var all []sessions.SessionChange
 	cursor := int64(0)
 	for {
-		page, err := sessionAdapter(New(pool)).ListSessionEvents(ctx, tenant, session.ID, cursor)
+		page, err := sessionAdapter(New(t, pool)).ListSessionEvents(ctx, tenant, session.ID, cursor)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -166,7 +166,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	})
 	inputs := make([]sessions.Input, 64)
 	for i := range inputs {
-		inputs[i] = sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
+		inputs[i] = messageInput("input")
 	}
 	for range 5 {
 		if _, err = submitInputs(ctx, s, tenant, session.ID, uuid.NewString(), inputs); err != nil {

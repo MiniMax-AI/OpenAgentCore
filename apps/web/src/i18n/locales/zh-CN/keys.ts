@@ -110,7 +110,6 @@ export const keys: TranslationShape<typeof english> = {
     loading: "正在读取 API 地址",
     failed: "无法读取 API 地址。",
     localOnly: "从其他机器调用前，请先把 OAC_PUBLIC_URL 设为它们能访问的地址。",
-    noAddress: "Core 尚未配置公开 API 地址，请设置 OAC_PUBLIC_URL。",
     model: "把 {{model}} 换成模型服务提供的模型名；也可以删掉 model 字段，使用本部署的默认模型配置。运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。自托管 Session 不使用部署默认值。",
     keyPlaceholder: "<项目 API key>",
     projectKey: "把 OPENAI_API_KEY 设为这个项目签发的 API key。key 只在签发时显示一次；丢失后请签发新 key。",
@@ -175,12 +174,11 @@ export const keys: TranslationShape<typeof english> = {
   },
   operations: {
     title: "写操作记录",
-    help: "这个项目里每一次成功的写操作，以及发起它的 key，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。“未知”表示管理员复制或没有记录 key。",
+    help: "这个项目里每一次成功的写操作，以及发起它的 key，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。",
     filterLabel: "筛选写操作记录",
     allTypes: "全部资源",
     allKeys: "全部 key",
     revokedKeyOption: "{{name}} · 已撤销",
-    unknownKey: "未知",
     columns: {
       time: "时间",
       action: "操作",

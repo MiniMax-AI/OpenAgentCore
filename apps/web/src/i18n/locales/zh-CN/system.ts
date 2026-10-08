@@ -13,7 +13,6 @@ export const system: TranslationShape<typeof english> = {
     apiBaseUrlHelp: "应用把它设为 OPENAI_BASE_URL，并把项目 API key 设为 OPENAI_API_KEY。",
     copyApiBaseUrl: "复制 API 基础地址",
     localOnly: "只能在 Core 所在的机器上访问",
-    notSet: "未设置",
     id: "安装 ID",
     sourceCommit: "源码提交",
     unknown: "未知",
@@ -21,12 +20,7 @@ export const system: TranslationShape<typeof english> = {
   startup: {
     title: "启动设置",
     help: "Core 报告它加载的进程设置。敏感设置只显示是否已设置。",
-    none: "Core 没有报告启动设置。",
     effective: "这些是这个 Core 进程加载的设置。",
-    where: "在 <path/> 中修改，然后运行 <command/>",
-    copyPath: "复制路径",
-    copyCommand: "复制命令",
-    appliedAt: "上次应用于 {{time}}",
     columns: {
       key: "设置",
       value: "值",
@@ -94,7 +88,6 @@ export const system: TranslationShape<typeof english> = {
       save: "保存",
       saving: "正在保存…",
       uncertain: "Core 没有确认这次修改。已重新读取默认模型配置，请先核对再重试。",
-      noCredentialKey: "Core 没有配置凭据加密密钥，因此无法保存 key。用安装器安装的会自动配置；手动部署时，请为 Core 设置 OAC_CREDENTIAL_KEY_FILE。",
     },
     clearDialog: {
       title: "清除默认模型配置",

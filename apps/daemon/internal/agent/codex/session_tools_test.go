@@ -21,47 +21,39 @@ func toolSnapshotFixtures() []string {
 	}
 }
 
-func TestToolObservationsOnlyWhenRequested(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		for _, item := range toolSnapshotFixtures() {
-			var source struct{ ID string }
-			if err := json.Unmarshal([]byte(item), &source); err != nil {
-				t.Fatal(err)
-			}
-			t.Run(source.ID, func(t *testing.T) {
-				out := make(chan proto.Envelope, 4)
-				s := &Session{runID: "run", observeToolObservations: enabled, out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
-				s.setThreadID("private-thread")
-				s.onTurnStarted(json.RawMessage(`{"threadId":"private-thread","turn":{"id":"private-turn"}}`))
-				raw := json.RawMessage(`{"threadId":"private-thread","turnId":"private-turn","item":` + item + `}`)
-				s.onItemStarted(raw)
-				s.onItemCompleted(raw)
-				if len(out) != 2 {
-					t.Fatalf("tool event count changed: %d", len(out))
-				}
-				for _, stage := range []string{"before", "after"} {
-					event := <-out
-					var tool proto.ToolCallPayload
-					if event.DecodePayload(&tool) != nil || event.Type != proto.TypeToolCall || tool.ID != source.ID || tool.Stage != stage {
-						t.Fatal(event)
-					}
-					if bytes.Contains(event.Payload, []byte("native_item")) {
-						t.Fatal("engine-specific snapshot escaped adapter")
-					}
-					if !enabled {
-						if tool.Observation != nil {
-							t.Fatal("unrequested observation")
-						}
-						continue
-					}
-					if tool.Observation == nil || stage == "before" && tool.Observation.Status != "in_progress" {
-						t.Fatal(tool.Observation)
-					}
-					if source.ID == "mcp" && !bytes.Contains(tool.Observation.Output, []byte("9007199254740993")) {
-						t.Fatal("structured output precision lost")
-					}
-				}
-			})
+func TestToolObservations(t *testing.T) {
+	for _, item := range toolSnapshotFixtures() {
+		var source struct{ ID string }
+		if err := json.Unmarshal([]byte(item), &source); err != nil {
+			t.Fatal(err)
 		}
+		t.Run(source.ID, func(t *testing.T) {
+			out := make(chan proto.Envelope, 4)
+			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
+			s.setThreadID("private-thread")
+			s.onTurnStarted(json.RawMessage(`{"threadId":"private-thread","turn":{"id":"private-turn"}}`))
+			raw := json.RawMessage(`{"threadId":"private-thread","turnId":"private-turn","item":` + item + `}`)
+			s.onItemStarted(raw)
+			s.onItemCompleted(raw)
+			if len(out) != 2 {
+				t.Fatalf("tool event count changed: %d", len(out))
+			}
+			for _, stage := range []string{"before", "after"} {
+				event := <-out
+				var tool proto.ToolCallPayload
+				if event.DecodePayload(&tool) != nil || event.Type != proto.TypeToolCall || tool.ID != source.ID || tool.Stage != stage {
+					t.Fatal(event)
+				}
+				if bytes.Contains(event.Payload, []byte("native_item")) {
+					t.Fatal("engine-specific snapshot escaped adapter")
+				}
+				if tool.Observation == nil || stage == "before" && tool.Observation.Status != "in_progress" {
+					t.Fatal(tool.Observation)
+				}
+				if source.ID == "mcp" && !bytes.Contains(tool.Observation.Output, []byte("9007199254740993")) {
+					t.Fatal("structured output precision lost")
+				}
+			}
+		})
 	}
 }

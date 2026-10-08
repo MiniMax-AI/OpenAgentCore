@@ -21,7 +21,7 @@ import (
 )
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
-	s, _ := newManagedTestStore(t)
+	s, key := configuredStore(t)
 	tenant, session, environment := managedSession(t, s)
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
@@ -33,11 +33,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	server.Start()
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	key := uuid.NewString()
-	start := func() *execution.Worker {
-		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: server.URL + "/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
-		return w
-	}
+	start := func() *execution.Worker { return startWebWorker(t, s, registry, key, p, nil) }
 	stop := func(w *execution.Worker) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

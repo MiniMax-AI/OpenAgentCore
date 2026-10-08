@@ -176,10 +176,10 @@ func TestRuntimePreparationInitialActions(t *testing.T) {
 	base := RuntimePreparePayload{Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
 	for _, initialization := range []RuntimeInitialization{
 		{Action: "configure", Env: map[string]string{"EXAMPLE": "value"}},
-		{Action: "npm", Network: "disabled", Packages: []string{"typescript"}},
-		{Action: "python", Network: "enabled", Packages: []string{"requests"}},
-		{Action: "setup", Network: "enabled", Command: "echo done"},
-		{Action: "setup", Network: "disabled", Command: "echo done", CWD: "/workspace/project"},
+		{Action: "npm", Packages: []string{"typescript"}},
+		{Action: "python", Packages: []string{"requests"}},
+		{Action: "setup", Command: "echo done"},
+		{Action: "setup", Command: "echo done", CWD: "/workspace/project"},
 	} {
 		p := base
 		p.Action, p.Initialization = "initialize", &initialization
@@ -203,13 +203,12 @@ func TestRuntimePreparationInitialActions(t *testing.T) {
 		{Action: "exec", Command: "echo done"},
 		{Action: "configure", Packages: []string{"git"}},
 		{Action: "configure", Env: map[string]string{"A=B": "value"}},
-		{Action: "system", Network: "enabled", Packages: []string{"git"}},
-		{Action: "npm", Network: "invalid", Packages: []string{"a"}},
-		{Action: "python", Network: "enabled", Packages: []string{"--help"}},
-		{Action: "setup", Network: "enabled", Command: "x", CWD: "/environment"},
-		{Action: "setup", Network: "enabled", Command: "x", CWD: "/workspace/../private"},
-		{Action: "setup", Network: "enabled", Command: "x", Env: map[string]string{}},
-		{Action: "setup", Network: "enabled", Command: "x", Packages: []string{}},
+		{Action: "system", Packages: []string{"git"}},
+		{Action: "python", Packages: []string{"--help"}},
+		{Action: "setup", Command: "x", CWD: "/environment"},
+		{Action: "setup", Command: "x", CWD: "/workspace/../private"},
+		{Action: "setup", Command: "x", Env: map[string]string{}},
+		{Action: "setup", Command: "x", Packages: []string{}},
 	} {
 		p := base
 		p.Action, p.Initialization = "initialize", &initialization

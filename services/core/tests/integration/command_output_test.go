@@ -21,7 +21,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"run commands"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", messageText("run commands"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reopening the Store recovers committed Items without creating events.
-	reopened := New(pool)
+	reopened := New(t, pool)
 	before, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	page, err = sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 3 {

@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,10 +10,10 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -46,10 +45,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cipher := pgtest.CredentialKey(t)
 	defaults := modelconfigurationpg.New(pgunit.NewPool(pool), cipher)
 	service, err := modelconfiguration.NewService(defaults)
 	if err != nil {
@@ -81,7 +77,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 }
 func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()
-	_, service := testSessions(t, f.pool, nil)
+	_, service := testSessions(t, f.pool, pgtest.CredentialKey(t))
 	receipts, err := service.SubmitInputs(t.Context(), f.tenant, f.session.ID, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`)}})
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +88,7 @@ func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	}
 	return receipt
 }
-func (f finishObservationFixture) fields(t *testing.T) (*time.Time, *string) {
+func (f finishObservationFixture) fields(t *testing.T) (*time.Time, *modelconfiguration.ProviderErrorCode) {
 	t.Helper()
 	rows, err := f.defaults.List(t.Context())
 	if err != nil || len(rows) != 1 {
@@ -200,7 +196,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool), nil)}
+				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))}
 				started := time.Now()
 				d.observeDeploymentProvider(f.tenant, f.session.ID, turn)
 				if elapsed := time.Since(started); elapsed < 900*time.Millisecond || elapsed > 2*time.Second {
@@ -226,7 +222,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 			if cleanup != nil {
 				cleanup()
 			}
-			persisted, err := sessionpg.New(pgunit.NewPool(f.pool), nil).GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
+			persisted, err := sessionpg.New(pgunit.NewPool(f.pool), pgtest.CredentialKey(t)).GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
 			if err != nil || persisted.Status != sessions.TurnCompleted {
 				t.Fatal("terminal outcome lost", err)
 			}

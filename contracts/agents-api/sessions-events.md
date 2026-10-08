@@ -39,7 +39,7 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 - **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A cancellation on an idle Session with no pending input is accepted and has no effect; while an input reservation is pending, it returns 409.
 - **Function results.** `turn_id`, `call_id` and `success` are required; `output` and `error` are optional and nullable ([content rules](./message-content.md#function-results)). An identical repeated result returns 202 without another application or event. The result Item appears when the harness applies the result; a result that cancellation prevents from being applied stays stored but produces no Item.
 - **Queueing.** A queued Turn starts when a Runtime that supports the Session's harness and configuration is connected and one of Core's [`core.execution_concurrency`](../../docs/configuration.md#settings) work slots is free. A Session stays bound to the Runtime that first ran it.
-- **Execution availability.** A service without execution returns 503 `execution_unavailable`, and a Worker that loses execution ownership returns 503. A Session created without a model provider rejects new messages with 400 `model_provider_required` ([model execution](./model-execution.md)).
+- **Execution availability.** While Core shuts down, or after its Worker loses execution ownership, requests return 503 `execution_unavailable`.
 
 ### Sessions with an Environment
 
@@ -99,7 +99,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 
 ### Event rules
 
-- Session events carry `event_id`, `type` and the `session` snapshot at that transition. Turn events carry `session_id` and `turn_id`. There is no Turn `waiting` event.
+- Session events carry `event_id`, `type` and the `session` snapshot at that transition. Turn events carry `session_id` and `turn_id`; Environment events carry `session_id` and a null `turn_id`. There is no Turn `waiting` event.
 - A new Turn publishes `agent.session.turn.created`, the user `item.added`, `agent.session.in_progress`, then `agent.session.turn.in_progress`, all from one transaction. When a batch holds several messages, the later messages follow the Session activity.
 - Terminal Turn events (`completed`, `failed`, `cancelled`) carry top-level `usage` copied from the Turn snapshot at that moment, null when unknown. Other events omit it.
 - `item.added` and `item.done` always carry `output_index`, null for input Items. Function results emit `item.added` only; `item.done` is for agent output.
@@ -123,7 +123,7 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 | `mcp_call` | Server and tool identity, arguments, structured result or error |
 | `function_call`, `function_call_output` | A linked call and its result. The result always carries `output` and `error`, null when the submission omitted them; stored results keep the submitted field presence. Native file changes appear as an `apply_patch` function call with the changes as arguments and no invented result |
 | `web_search_call` | The supported action fields (`search`, `open_page`, `find_in_page`, `other`) |
-| `reasoning`, `agent_message` and the Subagent coordination calls | See [Subagents](./subagents.md). `agent_message` has no status; reasoning status can be absent or null |
+| `reasoning`, `agent_message` and the Subagent coordination calls | See [Subagents](./subagents.md). `agent_message` has no status; reasoning status can be null |
 
 A failed tool does not fail its Turn. Tool output is readable by the Session's Project and can contain the tool's own diagnostic text.
 
@@ -150,5 +150,3 @@ When an Environment fails to initialize, whether an `openai_hosted` sandbox or a
 Session reads and lists return the same Session, and input that was waiting for the Environment settles as failed in the same snapshot. The GET stream and the creation stream end after `agent.session.failed`. New input returns 409 ([input errors](#input-errors)); the Session can be deleted.
 
 The [Environment initialization contract](./environments.md#initialization-state-and-failure) defines the fixed failure reasons.
-
-Core's own `stream_interrupted` error event carries `type`, `code` and `message` without `param`; `error` events shaped like the official ones carry `param: null`.

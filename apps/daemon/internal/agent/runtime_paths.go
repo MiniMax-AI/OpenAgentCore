@@ -8,32 +8,22 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 )
 
-// ManagedSkillsRoot returns an adapter-owned skill directory scoped to one
-// agent state. It never derives runtime state from the subprocess cwd.
-func ManagedSkillsRoot(agentKind, agentStateKey, conversationID, runID string) (string, error) {
+// StateDir returns an adapter-owned state directory scoped to one agent
+// state. It never derives runtime state from the subprocess cwd.
+func StateDir(agentKind, agentStateKey string) (string, error) {
 	root, err := paths.Root()
 	if err != nil {
-		return "", fmt.Errorf("agent: resolve managed skills root: %w", err)
+		return "", fmt.Errorf("agent: resolve state directory: %w", err)
 	}
 	kind := safeRuntimePathPart(agentKind)
 	if kind == "" {
 		return "", fmt.Errorf("agent: invalid agent kind %q", agentKind)
 	}
-	base := filepath.Join(root, "runtime", kind)
-	if key := strings.TrimSpace(agentStateKey); key != "" {
-		parts := safeRuntimePathParts(key)
-		if len(parts) == 0 {
-			return "", fmt.Errorf("agent: invalid agent state key %q", agentStateKey)
-		}
-		return filepath.Join(append([]string{base, "state"}, append(parts, "skills")...)...), nil
+	parts := safeRuntimePathParts(agentStateKey)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("agent: invalid agent state key %q", agentStateKey)
 	}
-	if id := safeRuntimePathPart(conversationID); id != "" {
-		return filepath.Join(base, "conv-"+id, "skills"), nil
-	}
-	if id := safeRuntimePathPart(runID); id != "" {
-		return filepath.Join(base, "run-"+id, "skills"), nil
-	}
-	return "", fmt.Errorf("agent: agent state key, conversation id, or run id is required")
+	return filepath.Join(append([]string{root, "runtime", kind, "state"}, parts...)...), nil
 }
 
 func safeRuntimePathParts(value string) []string {

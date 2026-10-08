@@ -25,9 +25,8 @@ func (s *inputRecorder) SubmitInputs(_ context.Context, tenant, session, key str
 	return nil, s.err
 }
 
-// admit enables Execution whose Worker records submitted inputs in s.
+// admit makes the Worker record submitted inputs in s.
 func (s *inputRecorder) admit(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	f.inputAdmission.submitInputs = s.SubmitInputs
 }
 

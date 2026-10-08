@@ -1,6 +1,5 @@
-import type { CoreHarness } from "@oac/agents-client";
+import type { AdminProject, CoreHarness } from "@oac/agents-client";
 
-import { type Project } from "../../lib/admin-view";
 import { nodeServingReady } from "../fleet/fleet-model";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
 import { templateBuildStatus } from "../sandbox/deployment-specification";
@@ -20,9 +19,9 @@ export interface GettingStartedSteps {
   sandboxes: { state: StepState; action: SandboxAction; cloud: boolean };
   model: StepState;
   /** `project` is the active project a key would be issued for; null means create one first. */
-  key: { state: StepState; project: Project | null };
+  key: { state: StepState; project: AdminProject | null };
   /** `project` is the active project whose call samples the step opens; null leads to the project list. */
-  session: { state: StepState; project: Project | null };
+  session: { state: StepState; project: AdminProject | null };
 }
 
 export function gettingStartedSteps(input: {
@@ -32,7 +31,7 @@ export function gettingStartedSteps(input: {
   /** Undefined while reading; a failed installation read cannot confirm readiness. */
   localOnly?: boolean | "failed";
   /** Undefined until the project list is read. */
-  projects: readonly Project[] | "failed" | undefined;
+  projects: readonly AdminProject[] | "failed" | undefined;
   /** Sessions in every project, by Core's summary; null until it is read. */
   sessions: number | "failed" | null;
   /** Core's harnesses; undefined until they are read. */
@@ -41,10 +40,10 @@ export function gettingStartedSteps(input: {
   const { sessions } = input;
   return {
     sandboxes: input.sandboxReset !== false
-      ? { state: input.sandboxReset === "failed" ? "unknown" : input.sandboxReset ? "todo" : null, action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.provider === "e2b" }
+      ? { state: input.sandboxReset === "failed" ? "unknown" : input.sandboxReset ? "todo" : null, action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.mode === "direct" }
       : input.localOnly === undefined || input.localOnly === "failed"
       ? { state: input.localOnly === "failed" ? "unknown" : null, action: "nodes", cloud: false }
-      : input.localOnly ? { state: "todo", action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.provider === "e2b" } : sandboxStep(input.fleet),
+      : input.localOnly ? { state: "todo", action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.mode === "direct" } : sandboxStep(input.fleet),
     model: modelStep(input.harnesses),
     key: keyStep(input.projects),
     session: {
@@ -56,19 +55,19 @@ export function gettingStartedSteps(input: {
 
 /**
  * Own machines are ready once the deployment is saved and a node is online
- * with its provider ready; E2B once the deployment is saved, since Core admits
- * only a ready template build. Only a build Core reports as not ready leaves
+ * with its provider ready; a direct Provider (E2B) once the deployment is
+ * saved, since Core admits only a ready template build. Only a build Core reports as not ready leaves
  * the step to do; a selection saved before Core recorded its build has no
  * status and counts as done.
  */
 function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   if (fleet.status !== "ready") {
-    return { state: fleet.status === "failed" || fleet.status === "unconfigured" ? "unknown" : null, action: "nodes", cloud: false };
+    return { state: fleet.status === "failed" ? "unknown" : null, action: "nodes", cloud: false };
   }
-  if (fleet.error) return { state: "unknown", action: "nodes", cloud: fleet.snapshot.deployment.provider === "e2b" };
+  if (fleet.error) return { state: "unknown", action: "nodes", cloud: fleet.snapshot.deployment.mode === "direct" };
   const { deployment, nodes } = fleet.snapshot;
   if (!deployment.provider) return { state: "todo", action: "setup", cloud: false };
-  if (deployment.provider === "e2b") {
+  if (deployment.mode === "direct") {
     return { state: templateBuildStatus(deployment.metadata?.template_build) === "notReady" ? "todo" : "done", action: "nodes", cloud: true };
   }
   if (nodes.some(nodeServingReady)) return { state: "done", action: "nodes", cloud: false };
@@ -87,13 +86,13 @@ export function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefin
 }
 
 /** The newest of the projects, most likely the one just created. */
-function newestOf(projects: readonly Project[]): Project | null {
-  return projects.reduce<Project | null>((best, project) => (!best || project.created_at > best.created_at ? project : best), null);
+function newestOf(projects: readonly AdminProject[]): AdminProject | null {
+  return projects.reduce<AdminProject | null>((best, project) => (!best || Date.parse(project.created_at) > Date.parse(best.created_at) ? project : best), null);
 }
 
-function keyStep(projects: readonly Project[] | "failed" | undefined): GettingStartedSteps["key"] {
+function keyStep(projects: readonly AdminProject[] | "failed" | undefined): GettingStartedSteps["key"] {
   if (!projects || projects === "failed") return { state: projects ? "unknown" : null, project: null };
-  const active = projects.filter((project) => project.status === "active");
+  const active = projects.filter((project) => project.archived_at === null);
   if (active.some((project) => project.active_key_count > 0)) return { state: "done", project: null };
   return { state: "todo", project: newestOf(active) };
 }
@@ -102,9 +101,9 @@ function keyStep(projects: readonly Project[] | "failed" | undefined): GettingSt
  * Where the first Session's call samples are: the newest active project with
  * an active key, else the newest active project (whose page issues one).
  */
-function callProject(projects: readonly Project[] | "failed" | undefined): Project | null {
+function callProject(projects: readonly AdminProject[] | "failed" | undefined): AdminProject | null {
   if (!projects || projects === "failed") return null;
-  const active = projects.filter((project) => project.status === "active");
+  const active = projects.filter((project) => project.archived_at === null);
   return newestOf(active.filter((project) => project.active_key_count > 0)) ?? newestOf(active);
 }
 
@@ -142,7 +141,7 @@ const INSTALLATION_KEY = "oac-web.last-installation";
  */
 export function checklistStorageKey(fleet: FleetState): string | null {
   const installation = fleet.status === "ready" ? fleet.snapshot.deployment.installation_id
-    : fleet.status === "failed" || fleet.status === "unconfigured" ? readStored(INSTALLATION_KEY) ?? ""
+    : fleet.status === "failed" ? readStored(INSTALLATION_KEY) ?? ""
     : null;
   if (installation === null) return null;
   return installation ? `${MEMORY_KEY}.${installation}` : MEMORY_KEY;

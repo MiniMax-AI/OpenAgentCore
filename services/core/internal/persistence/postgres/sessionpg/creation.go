@@ -6,10 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -24,6 +20,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // modelProviderKeyPurpose keys the provider-key fingerprint in creation
@@ -33,9 +32,6 @@ const modelProviderKeyPurpose = "parsar.agents-api.model-provider-api-key.v1"
 var _ sessions.CreationTx = (*creationTx)(nil)
 
 func (s *Store) FingerprintProviderKey(secret string) (string, error) {
-	if s.cipher == nil {
-		return "", credentialcrypto.ErrUnavailable
-	}
 	return s.cipher.Fingerprint(modelProviderKeyPurpose, secret)
 }
 
@@ -133,9 +129,6 @@ func skillError(err error) error {
 }
 
 func (t *creationTx) SaveModelExecution(ctx context.Context, provider v1.ModelProviderInput) error {
-	if t.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	raw, err := json.Marshal(provider)
 	if err != nil {
 		return err
@@ -160,9 +153,6 @@ func (t *creationTx) SaveExecutionConfiguration(ctx context.Context, projection 
 }
 
 func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environmentconfig.InitialFile) error {
-	if t.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	metadata := environmentconfig.InitialFilesMetadata(initial)
 	for i, f := range initial {
 		body := f.Data
@@ -200,9 +190,6 @@ func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environment
 }
 
 func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setup) error {
-	if t.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	plaintext, err := json.Marshal(setup)
 	if err != nil {
 		return err
@@ -244,7 +231,7 @@ func (t *creationTx) PruneChanges(ctx context.Context) error {
 }
 
 func (t *creationTx) AuditCreation(ctx context.Context, created ...writeaudit.Resource) error {
-	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, "create", "session", optionalID(t.session), "", created...)
+	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, writeaudit.ActionCreate, writeaudit.ResourceSession, optionalID(t.session), "", created...)
 }
 
 func (t *creationTx) LoadSession(ctx context.Context) (sessions.Session, error) {

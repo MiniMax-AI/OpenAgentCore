@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
@@ -74,12 +73,7 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 
 func selfHostedMCPAdmissionFixture(t *testing.T) (*Store, string, vaults.Vault, vaults.Credential) {
 	t.Helper()
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New([]byte(strings.Repeat("k", 32)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := testStore(t)
 	_, service, err := fixtureVaults(s)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +93,7 @@ func selfHostedMCPAdmissionFixture(t *testing.T) (*Store, string, vaults.Vault, 
 func selfHostedMCPAdmissionHandler(t *testing.T, s *Store, tenant string) http.Handler {
 	t.Helper()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	handler, err := publicHandler(t, s, auth, "codex", executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

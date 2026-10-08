@@ -33,8 +33,7 @@ var (
 	_ skills.Reader  = (*Store)(nil)
 )
 
-// New builds the Skill store. Without a cipher, uploads and content reads
-// fail with credentialcrypto.ErrUnavailable and metadata reads still work.
+// New builds the Skill store, which seals archives with cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -56,9 +55,9 @@ func (s *Store) CreateSkill(ctx context.Context, in skills.NewSkill) (skills.Ski
 			return err
 		}
 		result = skillFromRow(row)
-		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, "create", "skill", result.ID, "",
-			writeaudit.Resource{Type: "skill", ID: result.ID},
-			writeaudit.Resource{Type: "skill_version", ID: initial.ID, ParentID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, writeaudit.ActionCreate, writeaudit.ResourceSkill, result.ID, "",
+			writeaudit.Resource{Type: writeaudit.ResourceSkill, ID: result.ID},
+			writeaudit.Resource{Type: writeaudit.ResourceSkillVersion, ID: initial.ID, ParentID: result.ID})
 	})
 	if err != nil {
 		return skills.Skill{}, translate(err)
@@ -88,8 +87,8 @@ func (s *Store) CreateVersion(ctx context.Context, in skills.NewVersion) (skills
 		if err := q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: owner.TenantID, ID: owner.ID, MakeDefault: in.MakeDefault, Name: in.Name, Description: in.Description}); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, "upload_version", "skill_version", result.ID, result.SkillID,
-			writeaudit.Resource{Type: "skill_version", ID: result.ID, ParentID: result.SkillID})
+		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, writeaudit.ActionUploadVersion, writeaudit.ResourceSkillVersion, result.ID, result.SkillID,
+			writeaudit.Resource{Type: writeaudit.ResourceSkillVersion, ID: result.ID, ParentID: result.SkillID})
 	})
 	if err != nil {
 		return skills.Version{}, translate(err)
@@ -117,7 +116,7 @@ func (s *Store) SetDefaultVersion(ctx context.Context, tenantID string, skillID 
 			return err
 		}
 		result = skillFromRow(row)
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update_default_version", "skill", result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdateDefaultVersion, writeaudit.ResourceSkill, result.ID, "")
 	})
 	if err != nil {
 		return skills.Skill{}, translate(err)
@@ -135,7 +134,7 @@ func (s *Store) DeleteSkill(ctx context.Context, tenantID string, skillID uuid.U
 		if _, err := q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: pgID(skillID)}); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "skill", skills.FormatID(skillID), "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceSkill, skills.FormatID(skillID), "")
 	})
 	return translate(err)
 }
@@ -195,7 +194,7 @@ func (d *versionDeletion) ApplyVersionDeletion(decision skills.VersionDeletion) 
 			}
 		}
 	}
-	return translate(auditpg.RecordWriteAudit(d.ctx, d.q, d.tenantID, "delete", "skill_version", decision.Target.ID, decision.Target.SkillID))
+	return translate(auditpg.RecordWriteAudit(d.ctx, d.q, d.tenantID, writeaudit.ActionDelete, writeaudit.ResourceSkillVersion, decision.Target.ID, decision.Target.SkillID))
 }
 
 func (s *Store) Skill(ctx context.Context, tenantID string, id uuid.UUID) (skills.Skill, error) {
@@ -301,9 +300,6 @@ func (s *Store) DefaultVersionContent(ctx context.Context, tenantID string, skil
 
 // insertVersion seals the archive under a new version ID and stores it.
 func (s *Store) insertVersion(ctx context.Context, q *sqlc.Queries, tenant, skill pgtype.UUID, version int64, name, description string, archive []byte) (skills.Version, error) {
-	if s.cipher == nil {
-		return skills.Version{}, credentialcrypto.ErrUnavailable
-	}
 	id := newID()
 	body, err := s.cipher.SealSkill(archive, credentialcrypto.NewSkillBinding(tenant.Bytes, skill.Bytes, id.Bytes, version))
 	if err != nil {
@@ -338,8 +334,7 @@ func LockSkills(ctx context.Context, q *sqlc.Queries, tenant pgtype.UUID, ids []
 
 // ReadVersionForFreeze reads, on q, a version of the tenant's Skill, opens
 // it with cipher and verifies it is still the archive the version records. A
-// missing version is skills.ErrNotFound and a missing cipher
-// credentialcrypto.ErrUnavailable; one that does not open or verify is
+// missing version is skills.ErrNotFound; one that does not open or verify is
 // corrupt stored data, an internal error.
 func ReadVersionForFreeze(ctx context.Context, q *sqlc.Queries, cipher *credentialcrypto.Cipher, tenant pgtype.UUID, skillID string, version int64) (skills.Content, error) {
 	key, err := skills.ParseID(skillID)
@@ -361,9 +356,6 @@ func ReadVersionForFreeze(ctx context.Context, q *sqlc.Queries, cipher *credenti
 }
 
 func open(cipher *credentialcrypto.Cipher, row sqlc.SkillVersion) (skills.Content, error) {
-	if cipher == nil {
-		return skills.Content{}, credentialcrypto.ErrUnavailable
-	}
 	archive, err := cipher.OpenSkill(row.Contents, credentialcrypto.NewSkillBinding(row.TenantID.Bytes, row.SkillID.Bytes, row.ID.Bytes, row.Version))
 	if err != nil {
 		return skills.Content{}, err

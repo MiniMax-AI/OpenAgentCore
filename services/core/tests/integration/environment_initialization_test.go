@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -49,12 +48,7 @@ func awaitInitialization(t *testing.T, s *Store, tenant, environment, state stri
 func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *testing.T) {
 	for _, outcome := range []string{"completed", "failed", "unknown", "unavailable", "revoked"} {
 		t.Run(outcome, func(t *testing.T) {
-			_, pool := newManagedTestStore(t)
-			cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-			if err != nil {
-				t.Fatal(err)
-			}
-			s := NewWithCredentialCipher(pool, cipher)
+			s, _ := newManagedTestStore(t)
 			principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
 			session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 				Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),

@@ -50,7 +50,16 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 
 func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
 	t.Helper()
-	s, _ := NewModelTestStore(t)
+	var snapshot struct {
+		Environment struct {
+			Type string `json:"type"`
+		} `json:"environment"`
+	}
+	_ = json.Unmarshal(configuration, &snapshot)
+	s, _ := testStore(t)
+	if snapshot.Environment.Type == "openai_hosted" {
+		s, _ = configuredStore(t)
+	}
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
@@ -60,12 +69,6 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	secret := uuid.NewString()
 	h.credential = secret
-	var snapshot struct {
-		Environment struct {
-			Type string `json:"type"`
-		} `json:"environment"`
-	}
-	_ = json.Unmarshal(configuration, &snapshot)
 	if snapshot.Environment.Type == "self_hosted" {
 		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
 		secret = h.credential
@@ -74,7 +77,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = FixtureEnvironmentDevice(ctx, s.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
+		h.device, err = FixtureEnvironmentDevice(t, ctx, s.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
 		h.device, err = sessionService(t, s).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}
@@ -125,8 +128,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 
 func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
 	h.t.Helper()
-	body, _ := json.Marshal(map[string]string{"text": text})
-	r, err := sendMessage(context.Background(), h.s, h.tenant, h.session.ID, key, body)
+	r, err := sendMessage(context.Background(), h.s, h.tenant, h.session.ID, key, messageText(text))
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -229,7 +231,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	request := h.read(testExecutionRequest)
 	var prompt proto.PromptRequestPayload
 	_ = request.DecodePayload(&prompt)
-	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.ConversationID != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
+	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.AgentStateKey != "agents-api-"+h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
 	if _, err := h.bound().Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {

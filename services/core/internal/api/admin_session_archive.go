@@ -15,7 +15,7 @@ type SessionArchive interface {
 }
 
 type AdminSessionArchiveRequest struct {
-	ExpectedGeneration uint64 `json:"expected_generation"`
+	ExpectedGeneration uint64 `json:"expected_generation" binding:"required"`
 }
 
 // @Summary Release a managed Session's execution resources while retaining history
@@ -38,10 +38,6 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 	var input AdminSessionArchiveRequest
 	if decodeInputObject(raw, &input, "expected_generation") != nil || input.ExpectedGeneration == 0 {
 		writeOperationError(w, r, sessions.ErrInvalidInput)
-		return
-	}
-	if h.Execution == nil {
-		writeOperationError(w, r, sessions.ErrEnvironmentUnavailable)
 		return
 	}
 	result, err := h.Execution.SessionArchive.ArchiveSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)

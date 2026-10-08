@@ -114,7 +114,7 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
-		receipt, err := sendMessage(ctx, s, tenant, session.ID, uuid.NewString(), []byte(`{"text":"metadata fixture"}`))
+		receipt, err := sendMessage(ctx, s, tenant, session.ID, uuid.NewString(), messageText("metadata fixture"))
 		if err != nil {
 			t.Fatal(err)
 		}

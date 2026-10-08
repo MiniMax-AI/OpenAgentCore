@@ -116,20 +116,14 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 				}
 				continue
 			}
-			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || runtime.Preparation != nil {
+			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || runtime.Info.Capabilities.WorkspaceReadPreparation.IsSupported() {
 				t.Fatalf("runtime: %+v", runtime)
 			}
 			registry := agent.NewRegistry()
 			registry.Register(Declaration, *runtime)
 			info := registry.SupportedAgentKinds()[0]
-			if info.Capabilities.WorkspaceAuthoring.IsSupported() || info.Capabilities.Preparation.IsSupported() != ready {
+			if info.Capabilities.Preparation.IsSupported() != ready {
 				t.Fatal(info)
-			}
-			if !ready {
-				factory, _ := registry.Resolve("claude_sdk")
-				if _, err := factory(t.Context(), proto.PromptRequestPayload{}, nil); err == nil || !strings.Contains(err.Error(), "runtime is unavailable") {
-					t.Fatal(err)
-				}
 			}
 		}
 	}

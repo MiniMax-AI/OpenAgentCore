@@ -1,16 +1,17 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -38,21 +39,18 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	reg := agent.NewRegistry()
 	sender := &recSender{}
 	sessions := map[string]*functionSession{}
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-		s := &functionSession{fakeSession: &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}}
-		sessions[p.RunID] = s
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, runID string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+		s := &functionSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}}
+		sessions[runID] = s
 		return s, nil
-	})
+	}))
 	router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer router.Shutdown(context.Background())
 	for _, id := range []string{"one", "two"} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, id, proto.PromptRequestPayload{AgentKind: "function-test", Input: proto.TextInput("lookup"), FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
-		if err := router.Handle(t.Context(), env); err != nil {
-			t.Fatal(err)
-		}
+		startRun(t, router, sender, id, proto.PromptRequestPayload{AgentKind: "function-test", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
 	}
 	submit := func(run, call, text, delivery string) proto.InteractionDecisionAckPayload {
 		t.Helper()
@@ -137,17 +135,20 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 
 func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
 	reg := agent.NewRegistry()
-	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "unsupported", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		called = true
-		return nil, nil
+	var called atomic.Bool
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "unsupported", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		called.Store(true)
+		return nil, errors.New("unexpected executor preparation")
 	})
 	sender := &recSender{}
 	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	defer router.Shutdown(context.Background())
-	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})
-	if err := router.Handle(t.Context(), env); err == nil || called {
-		t.Fatal("unsupported engine silently ignored tools", err)
+	env, _ := proto.NewEnvelope(proto.TypeExecutionPrepare, "run", noEnvironmentPreparation("session", proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}}))
+	if err := router.Handle(t.Context(), env); err == nil {
+		t.Fatal("unsupported engine silently ignored tools")
+	}
+	if status := waitPreparationStatus(t, sender, "run", "rejected", ""); status.ErrorCode != "unsupported_configuration" || called.Load() {
+		t.Fatalf("status=%+v executor called=%t", status, called.Load())
 	}
 }
 
@@ -165,17 +166,22 @@ func functionResultContent(text string) []proto.InputContent {
 
 func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
 	reg := agent.NewRegistry()
-	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		called = true
-		return nil, nil
+	var called atomic.Bool
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		called.Store(true)
+		return nil, errors.New("unexpected executor preparation")
 	})
-	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
+	sender := &recSender{}
+	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 	defer router.Shutdown(context.Background())
 	for _, search := range []bool{false, true} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, "discovery", proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}})
-		if err := router.Handle(t.Context(), env); err == nil || called {
-			t.Fatal("deferred definitions reached an eager-only adapter", err)
+		id := fmt.Sprint("discovery-", search)
+		env, _ := proto.NewEnvelope(proto.TypeExecutionPrepare, id, noEnvironmentPreparation("session", proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}}))
+		if err := router.Handle(t.Context(), env); err == nil {
+			t.Fatal("deferred definitions reached an eager-only adapter")
+		}
+		if status := waitPreparationStatus(t, sender, id, "rejected", ""); status.ErrorCode != "unsupported_configuration" || called.Load() {
+			t.Fatalf("status=%+v executor called=%t", status, called.Load())
 		}
 	}
 }

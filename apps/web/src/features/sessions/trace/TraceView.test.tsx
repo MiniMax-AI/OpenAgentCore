@@ -14,7 +14,7 @@ const session: AgentSession = {
     name: "Fixture Agent",
     instructions: "Use durable evidence.",
     multi_agent: { enabled: false, max_concurrent_subagents: null },
-    reasoning: {},
+    reasoning: { effort: null, summary: null },
     service_tier: "auto",
     text: { format: { type: "text" }, verbosity: "medium" },
     tools: [{
@@ -39,6 +39,7 @@ function turn(id: string, overrides: Partial<AgentTurn> = {}): AgentTurn {
   return {
     id,
     agent_id: "agent-1",
+    subagent_id: null,
     session_id: session.id,
     object: "agent.session.turn",
     status: "completed",

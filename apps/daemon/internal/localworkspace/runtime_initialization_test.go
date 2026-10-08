@@ -74,7 +74,7 @@ func TestRuntimeInitializationPackageTargets(t *testing.T) {
 	}
 	packages, _ := PackageDirectory()
 	for _, action := range []string{"npm", "python"} {
-		if err = b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: action, Network: "enabled", Packages: []string{"name with spaces", "second"}}); err != nil {
+		if err = b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: action, Packages: []string{"name with spaces", "second"}}); err != nil {
 			t.Fatal(action, err)
 		}
 		raw, err := os.ReadFile(receipt)
@@ -242,7 +242,7 @@ func TestRuntimeInitializationSetupUsesBashAndPhysicalWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(b.workspace, "proof.sh"), []byte("printf skill-proof"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "setup", Network: "enabled", CWD: "/workspace/sub", Command: `. ../proof.sh > proof; printf '%s' "$VALUE" > value`})
+	err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "setup", CWD: "/workspace/sub", Command: `. ../proof.sh > proof; printf '%s' "$VALUE" > value`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,13 +261,13 @@ func TestRuntimeInitializationMissingDependenciesAndInvalidRequests(t *testing.T
 	if err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "configure"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, input := range []proto.RuntimeInitialization{{Action: "setup", Network: "enabled", Command: "true"}, {Action: "npm", Network: "enabled", Packages: []string{"valid"}}, {Action: "python", Network: "enabled", Packages: []string{"valid"}}} {
+	for _, input := range []proto.RuntimeInitialization{{Action: "setup", Command: "true"}, {Action: "npm", Packages: []string{"valid"}}, {Action: "python", Packages: []string{"valid"}}} {
 		var failed *InitializationFailure
 		if err := b.initializeRuntime(t.Context(), input); !errors.As(err, &failed) || !strings.Contains(err.Error(), "requires") {
 			t.Fatal("missing dependency was not explicit", input.Action, err)
 		}
 	}
-	for _, input := range []proto.RuntimeInitialization{{Action: "system"}, {Action: "setup", Network: "enabled", Command: "true", CWD: "/workspace/../outside"}, {Action: "npm", Network: "enabled", Packages: []string{"--unsafe"}}} {
+	for _, input := range []proto.RuntimeInitialization{{Action: "system"}, {Action: "setup", Command: "true", CWD: "/workspace/../outside"}, {Action: "npm", Packages: []string{"--unsafe"}}} {
 		if !errors.Is(b.initializeRuntime(t.Context(), input), agentcapabilities.ErrInvalid) {
 			t.Fatal("invalid request accepted", input.Action)
 		}

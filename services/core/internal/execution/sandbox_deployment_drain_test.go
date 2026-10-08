@@ -70,7 +70,7 @@ func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, 
 			t.Error(err)
 		}
 	})
-	deployments, reader, operations := testDeployment(t, pool, nil, lease)
+	deployments, reader, operations := testDeployment(t, pool, pgtest.CredentialKey(t), lease)
 	return Owner{Lease: lease, Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader, pool
 }
 
@@ -92,8 +92,8 @@ func testLifecycleCancellationPreservesLease(t *testing.T, mode string) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }))
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +230,8 @@ func TestSandboxDeploymentDrainFailureCannotReactivate(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }))
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

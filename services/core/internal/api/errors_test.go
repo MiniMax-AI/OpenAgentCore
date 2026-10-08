@@ -11,7 +11,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
@@ -138,7 +137,6 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	for err, code := range map[error]string{
 		deployment.ErrConflict:                 "sandbox_deployment_conflict",
 		deployment.ErrNodeInUse:                "runtime_node_in_use",
-		deployment.ErrLocalNodeConfigured:      "runtime_local_node_configured",
 		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
 		sessions.ErrEnvironmentUnavailable:     "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
@@ -189,7 +187,6 @@ func TestSharedPersistenceErrors(t *testing.T) {
 		{writeSessionsError, fmt.Errorf("write: %w", textvalue.ErrUnstorable), 400, unstorableTextMessage},
 		{writeAuditError, textvalue.ErrUnstorable, 400, unstorableTextMessage},
 		{writeDeploymentError, deployment.ErrInvalidInput, 400, invalid},
-		{writeSessionsError, credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
 		{writeAuditError, errors.New("canary"), 500, "internal_error"},
 	} {
 		response := respond(test.write, test.err)

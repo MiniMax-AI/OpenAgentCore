@@ -40,7 +40,7 @@ const publicUrl = () => (state.installation === "local" ? LOCAL_URL : PUBLIC_URL
 /** Core reports one installation ID, a canonical UUID, in the installation and the deployment. */
 const INSTALLATION_ID = "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f";
 
-/** GET /core/v1/installation: the address, the startup settings from config.json and what is bound to the address. */
+/** GET /core/v1/installation: the address, the startup settings Core loaded and what is bound to the address. */
 function installation() {
   const local = state.installation === "local";
   const setting = (key, value, fallback, restarts, extra = {}) => ({ key, value, default: fallback, changeable: true, sensitive: false, restarts, ...extra });
@@ -51,7 +51,6 @@ function installation() {
     object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
     local_only: local, source_commit: release.source_commit,
     configuration: {
-      path: "/opt/oac/config.json", apply_command: "sudo oac apply", applied_at: "2026-09-24T09:30:00Z",
       settings: [
         setting("public_url", publicUrl(), LOCAL_URL, ["core", "web"]),
         setting("listen_address", "127.0.0.1:8091", "127.0.0.1:8091", ["core"]),
@@ -93,12 +92,12 @@ function e2bDeployment() {
   return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, configuration: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } };
 }
 
-function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true, artifacts = "docker,microsandbox") {
+function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", installers = true, artifacts = "docker,microsandbox") {
   // Self-hosted Sessions get their remote_url from public_url, as in Core.
   const screenshots = process.env.OAC_WEB_SCREENSHOT_DEMO === "1";
   const now = Math.floor(Date.now() / 1000);
   const base = (screenshots ? buildScreenshotDemo : buildDemo)(now, address === "local" ? LOCAL_URL : PUBLIC_URL);
-  const resources = buildResources(now, base.agents, base.sessions);
+  const resources = buildResources(now);
   const admin = buildAdmin(now, base, resources);
   // A fresh install: no project, Session or Runtime yet; Getting started leads.
   if (fresh) for (const list of [admin.projects, base.sessions, base.observations, base.allocations]) list.splice(0);
@@ -113,8 +112,6 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     executorCredentials: new Map(),
     // How config.json's public_url is set: "public", "local" or "stale".
     installation: address,
-    // "none": Core has no credential encryption key, so it cannot store a provider's key.
-    credentialKey: credentials !== "none",
     // Startup state and deployment default model provider per harness; API keys are never kept.
     // The demo deployment's default harness has a default model; a fresh install has none.
     harnesses: {
@@ -575,8 +572,6 @@ async function harnessRoute(request, response, path) {
   if (!support(harness).protocols.includes(input.model_provider?.protocol)) return error(response, 400, "This harness does not support this protocol.", "model_provider_protocol_unsupported");
   const problem = providerProblem(harness, input.model_provider ?? {});
   if (problem) return error(response, 400, problem, "invalid_request_error");
-  // As Core's error mapping: sealing the key needs the credential encryption key.
-  if (!state.credentialKey) return error(response, 503, "Credential encryption is not configured on this service.", "credential_storage_unavailable");
   entry.provider = {
     object: "core.model_configuration", harness, model: input.model, harness_config: input.harness_config ?? {},
     model_provider: { protocol: input.model_provider.protocol, base_url: input.model_provider.base_url, api_key_configured: true,
@@ -597,7 +592,7 @@ async function fixtureRoute(request, response, url) {
   }
   if (url.pathname === "/__fixture/health") return send(response, 200, { ok: true });
   if (url.pathname === "/__fixture/reset" && request.method === "POST") {
-    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("credentials") ?? "configured", url.searchParams.get("installers") !== "none", url.searchParams.get("artifacts") ?? undefined);
+    reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("installers") !== "none", url.searchParams.get("artifacts") ?? undefined);
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/deployment" && request.method === "POST") {
