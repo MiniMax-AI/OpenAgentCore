@@ -172,10 +172,11 @@ func unusedPreparation(t testing.TB) execution.RuntimeDeploymentPreparer {
 	}
 }
 
-// startWebWorker starts the Worker on webRuntimes.
-func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.Worker {
+// startWebWorker starts the Worker on webRuntimes, with links as its Link
+// relay or a new one when links is nil.
+func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, links *relay.Relay, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.Worker {
 	t.Helper()
-	w, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: webRuntimes(t, s, installation, p, suspension)})
+	w, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: registry, Links: links, ManagedRuntimes: webRuntimes(t, s, installation, p, suspension)})
 	if err != nil {
 		t.Fatal(err)
 	}

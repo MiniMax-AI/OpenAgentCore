@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,7 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -114,11 +112,9 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	tenant, active := newTurnSession(t, s)
 	input := submitMessage(t, s, tenant, active.ID, "active")
 	transition(t, writer, tenant, active.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	host, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "owner test", runtimedevice.HashCredential(uuid.NewString()))
+	host := registerAgentHost(t, s, tenant)
+	err := sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, active.ID, host.ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err = sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, active.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	queued, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "queued"})

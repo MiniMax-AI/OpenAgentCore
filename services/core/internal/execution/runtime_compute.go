@@ -106,14 +106,9 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 }
 
 // allocationAssignment reads the assignment of the Session whose Environment
-// the allocation runs; it is ErrNotFound unless the allocation's Runtime holds
-// it.
+// the allocation runs; it is ErrNotFound until placement binds the Session.
 func (r *runtimeLifecycle) allocationAssignment(ctx context.Context, owner deployment.Allocation) (sessions.ExecutionDevice, error) {
-	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
-	if err == nil && bound.ID != owner.DeviceID {
-		err = sessions.ErrNotFound
-	}
-	return bound, err
+	return r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
 }
 
 func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
@@ -168,7 +163,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	}
 	// Publish disconnected only after receiving the daemon's receipt barrier.
 	r.connections.mu.Lock()
-	err = observeRuntimeConnection(ctx, r.sessionExecution, r.connections.current, owner.TenantID, owner.EnvironmentID, nil, false)
+	err = observeRuntimeConnection(ctx, r.sessionExecution, r.connections.current, owner.TenantID, owner.EnvironmentID, false)
 	r.connections.mu.Unlock()
 	if err != nil {
 		return err

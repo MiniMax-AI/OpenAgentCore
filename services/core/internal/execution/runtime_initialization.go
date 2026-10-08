@@ -57,7 +57,25 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			if len(active) >= w.executionConcurrency() {
 				continue
 			}
-			if owner.Resource.Kind != "" && (!owner.ResourceLive || !w.dispatcher.Links.Serving(owner.Resource.Ref())) {
+			// The agent host prepares an Environment through its Link
+			// resource, so one without a live resource Serving waits, even
+			// while its Session stays bound.
+			if !owner.ResourceLive || !w.dispatcher.Links.Serving(owner.Resource.Ref()) {
+				continue
+			}
+			if owner.DeviceID == "" {
+				// Placement binds an agent host once the Environment serves;
+				// a later scan claims the preparation on it.
+				if _, err := w.place(ctx, owner.TenantID, owner.SessionID, owner.EnvironmentID, func(id string) bool {
+					peer, err := w.dispatcher.authorizedPeer(ctx, id)
+					if err != nil {
+						return false
+					}
+					_, _, known := peer.AgentKindStatus(owner.Engine)
+					return known
+				}); err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
+					return err
+				}
 				continue
 			}
 			peer, err := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)

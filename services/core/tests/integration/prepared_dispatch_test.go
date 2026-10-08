@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -20,7 +21,7 @@ type preparedDispatchResult struct {
 
 func preparedDispatchHarness(t *testing.T) (*dispatchHarness, sessions.EnvironmentInputReservation) {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","x_agents_core":{"harness_config":{"model_reasoning_effort":"low"}}},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","x_agents_core":{"harness_config":{"model_reasoning_effort":"low"}}},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`))
 	assertNoRuntimeAllocation(t, h)
 	h.d, h.lease = h.bound(), h.owner().Lease
 	enableWorkerEnvironment(t, h)
@@ -72,12 +73,29 @@ func readyPreparedDispatch(t *testing.T, h *dispatchHarness, request, handle str
 	return start
 }
 
+// TestSelfHostedProviderBundleStaysOnTheAgentHost checks that a self_hosted
+// Session's model provider bundle reaches only the agent host. The machine's
+// executor credential Serves the enrollment's Link resource and authenticates
+// no Runtime, so no Runtime frame reaches the machine.
+func TestSelfHostedProviderBundleStaysOnTheAgentHost(t *testing.T) {
+	h, pending := preparedDispatchHarness(t)
+	runPreparedDispatch(h, t.Context(), pending)
+	var prepare proto.ExecutionPreparePayload
+	if frame := h.read(proto.TypeExecutionPrepare); frame.DecodePayload(&prepare) != nil || prepare.Configuration.ModelProvider == nil || prepare.Configuration.ModelProvider.APIKey != FixtureModelProvider("codex").APIKey {
+		t.Fatal("the agent host did not receive the provider bundle", prepare.Configuration.ModelProvider)
+	}
+	var runtimes int
+	if err := h.s.pool.QueryRow(t.Context(), "SELECT count(*) FROM devices WHERE credential_hash = $1", runtimedevice.HashCredential(string(h.serve))).Scan(&runtimes); err != nil || runtimes != 0 {
+		t.Fatal("the executor credential authenticates a Runtime", runtimes, err)
+	}
+}
+
 func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T) {
 	h, pending := preparedDispatchHarness(t)
 	result := runPreparedDispatch(h, t.Context(), pending)
 	frame := h.read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.device.EnvironmentID || prepare.Configuration.DisableExecutionEnvironment {
+	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.session.Environment.ID || prepare.Configuration.DisableExecutionEnvironment {
 		t.Fatal("invalid preparation configuration", prepare)
 	}
 	session, err := sessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)

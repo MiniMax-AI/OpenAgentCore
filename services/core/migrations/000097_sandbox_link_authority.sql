@@ -13,7 +13,8 @@ CREATE TABLE sandbox_enrollments (
   id uuid PRIMARY KEY,
   environment_id uuid NOT NULL UNIQUE REFERENCES environments(id),
   executor_key_id uuid NOT NULL REFERENCES environment_executor_credentials(key_id),
-  generation bigint NOT NULL DEFAULT 1 CHECK (generation > 0)
+  generation bigint NOT NULL DEFAULT 1 CHECK (generation > 0),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
 ALTER TABLE devices
@@ -42,6 +43,23 @@ FROM sandbox_enrollments n
 JOIN environments e ON e.id = n.environment_id
 JOIN sessions s ON s.id = e.session_id
 JOIN environment_executor_credentials c ON c.key_id = n.executor_key_id;
+
+-- Sessions run on an agent host. A Session bound to an in-sandbox or
+-- user-managed Runtime cannot move, so the upgrade waits until those Sessions
+-- are deleted.
+-- +goose StatementBegin
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM session_runtime_assignments b
+    JOIN sessions s ON s.id = b.session_id
+    JOIN devices d ON d.id = b.runtime_id
+    WHERE b.desired_state = 'bound' AND s.deleted_at IS NULL AND NOT d.agent_host
+  ) THEN
+    RAISE EXCEPTION 'Sessions are bound to a Runtime that is not an agent host; delete those Sessions, then upgrade';
+  END IF;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 DROP VIEW sandbox_resources;

@@ -12,9 +12,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// FixtureEnvironmentDevice provisions the dedicated Runtime device of the
-// tenant's hosted Environment on pool through the procedure the managed
-// Runtime allocation runs, without the allocation.
+// FixtureEnvironmentDevice creates the per-allocation device of the tenant's
+// hosted Environment on pool through the procedure the managed Runtime
+// allocation runs, without the allocation.
 func FixtureEnvironmentDevice(t testing.TB, ctx context.Context, pool *pgxpool.Pool, tenant, environment, name, credentialHash string) (sessions.ExecutionDevice, error) {
 	s := New(t, pool)
 	current, err := sessionAdapter(s).GetEnvironment(ctx, tenant, environment)
@@ -29,12 +29,12 @@ func FixtureEnvironmentDevice(t testing.TB, ctx context.Context, pool *pgxpool.P
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
-	device := sessions.ExecutionDevice{ID: uuid.NewString(), Name: registration.Name, EnvironmentID: current.ID}
+	device := sessions.ExecutionDevice{ID: uuid.NewString(), Name: registration.Name}
 	err = sessionpg.WithSession(ctx, s.pooled, lookup.TenantID, lookup.ID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
 		if err := locked.Public(); err != nil {
 			return err
 		}
-		return sessions.CreateEnvironmentDevice(ctx, sessionpg.BindSession(q, lookup.TenantID, lookup.ID), device, registration.CredentialHash)
+		return sessions.CreateEnvironmentDevice(ctx, sessionpg.BindSession(q, lookup.TenantID, lookup.ID), current.ID, device, registration.CredentialHash)
 	})
 	if err != nil {
 		return sessions.ExecutionDevice{}, err

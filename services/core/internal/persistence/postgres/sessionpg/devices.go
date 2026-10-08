@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -44,7 +45,7 @@ func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session 
 		return sessions.ExecutionBinding{}, err
 	}
 	return sessions.ExecutionBinding{
-		Device: sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID),
+		Device: sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name,
 			Assignment: assignmentRef(lookup.ID, row.AssignmentID, row.Epoch), SessionEnvironmentID: optionalID(row.SessionEnvironmentID)},
 		NativeSessionID: row.NativeSessionID,
 		HasStartedTurn:  row.HasStartedTurn,
@@ -54,7 +55,7 @@ func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session 
 // requireInitialized requires that the tenant's Session completed its
 // Environment preparation; before that, and for a missing Session, it is
 // sessions.ErrNotFound.
-func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup sqlc.GetDeviceParams) error {
+func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup Lookup) error {
 	ready, err := q.GetSessionInitializationReady(ctx, sqlc.GetSessionInitializationReadyParams(lookup))
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !ready) {
 		return sessions.ErrNotFound
@@ -62,12 +63,12 @@ func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup sqlc.GetDev
 	return err
 }
 
-func (s *Store) ListExecutionDevices(ctx context.Context, tenant string) ([]sessions.ExecutionDevice, error) {
+func (s *Store) ListAgentHosts(ctx context.Context, tenant string) ([]sessions.ExecutionDevice, error) {
 	id, err := parseID(tenant)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.units.Queries().ListExecutionDevices(ctx, id)
+	rows, err := s.units.Queries().ListAgentHosts(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func loadSessionDevice(ctx context.Context, q *sqlc.Queries, tenant, session pgt
 	if err != nil {
 		return sessions.ExecutionDevice{}, false, err
 	}
-	return sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID),
+	return sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name,
 		Assignment: assignmentRef(session, row.AssignmentID, row.Epoch), SessionEnvironmentID: optionalID(row.SessionEnvironmentID)}, true, nil
 }
 
@@ -155,21 +156,6 @@ func (s *Store) ArchivedCancellationReceipt(ctx context.Context, device, credent
 		return runtimedevice.ArchivedCancellationReceipt{}, err
 	}
 	return runtimedevice.ArchivedCancellationReceipt{RunID: uuid.UUID(row.ID.Bytes).String(), Deadline: row.CancelRequestedAt.Time.Add(runtimedevice.ArchivedCancellationReceiptLimit)}, nil
-}
-
-func (s *Store) ListEnrolledRuntimeBindings(ctx context.Context) ([]sessions.EnrolledRuntimeBinding, error) {
-	rows, err := s.units.Queries().ListEnrolledRuntimeBindings(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]sessions.EnrolledRuntimeBinding, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, sessions.EnrolledRuntimeBinding{
-			DeviceID: optionalID(row.DeviceID), TenantID: optionalID(row.TenantID),
-			EnvironmentID: optionalID(row.EnvironmentID), SessionID: optionalID(row.SessionID),
-		})
-	}
-	return result, nil
 }
 
 func (s *Store) CreateDevice(ctx context.Context, tenant string, registration sessions.DeviceRegistration) (sessions.ExecutionDevice, error) {
@@ -255,32 +241,32 @@ type enrollmentTx struct {
 
 var _ sessions.EnrollmentTx = (*enrollmentTx)(nil)
 
-func (t *enrollmentTx) AuthorizeEnrollment(ctx context.Context) (sessions.EnrollmentAuthority, error) {
-	row, err := t.q.AuthorizeRuntimeEnrollment(ctx, sqlc.AuthorizeRuntimeEnrollmentParams{EnvironmentID: t.environment, TenantID: t.tenant, TokenSha256: t.credentialHash})
+func (t *enrollmentTx) AuthorizeEnrollment(ctx context.Context) (string, error) {
+	key, err := t.q.AuthorizeRuntimeEnrollment(ctx, sqlc.AuthorizeRuntimeEnrollmentParams{EnvironmentID: t.environment, TenantID: t.tenant, TokenSha256: t.credentialHash})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sessions.EnrollmentAuthority{}, sessions.ErrNotFound
+		return "", sessions.ErrNotFound
 	}
 	if err != nil {
-		return sessions.EnrollmentAuthority{}, err
+		return "", err
 	}
-	return sessions.EnrollmentAuthority{KeyID: optionalID(row.KeyID), WorkspaceDirectory: row.WorkspaceDirectory}, nil
+	return optionalID(key), nil
 }
 
-func (t *enrollmentTx) EnrollDevice(ctx context.Context, key string) (string, error) {
+func (t *enrollmentTx) EnrollSandbox(ctx context.Context, key string) (sandboxbootstrap.Resource, error) {
 	keyID, err := parseID(key)
 	if err != nil {
-		return "", err
+		return sandboxbootstrap.Resource{}, err
 	}
-	row, err := t.q.EnrollRuntimeDevice(ctx, sqlc.EnrollRuntimeDeviceParams{
-		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: t.tenant, EnvironmentID: t.environment, ExecutorKeyID: keyID,
+	row, err := t.q.EnrollSandbox(ctx, sqlc.EnrollSandboxParams{
+		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, EnvironmentID: t.environment, ExecutorKeyID: keyID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", sessions.ErrDeviceBindingConflict
+		return sandboxbootstrap.Resource{}, sessions.ErrDeviceBindingConflict
 	}
 	if err != nil {
-		return "", err
+		return sandboxbootstrap.Resource{}, err
 	}
-	return uuid.UUID(row.ID.Bytes).String(), nil
+	return linkResource(t.tenant, t.environment, pgtype.Text{String: "enrollment", Valid: true}, row.ID, pgtype.Int8{Int64: row.Generation, Valid: true}), nil
 }
 
 var _ sessions.DeviceBindingTx = (*SessionTx)(nil)
@@ -290,7 +276,7 @@ func (t *SessionTx) LoadDevice(ctx context.Context, device string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	_, err = t.q.GetDevice(ctx, sqlc.GetDeviceParams{TenantID: t.tenant, ID: id})
+	_, err = t.q.GetAgentHost(ctx, sqlc.GetAgentHostParams{TenantID: t.tenant, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -308,8 +294,9 @@ func (t *SessionTx) ReleaseAssignment(ctx context.Context, removeHome bool) erro
 	return t.q.ReleaseSessionAssignment(ctx, sqlc.ReleaseSessionAssignmentParams{SessionID: t.session, RemoveHome: removeHome})
 }
 
-// BindDevice binds the device to the Session; a Session bound to another
-// device, or a released assignment, is sessions.ErrDeviceBindingConflict.
+// BindDevice binds the agent host to the Session; a Session bound to another
+// Runtime, a released assignment, or a Session whose Environment has no live
+// Link resource is sessions.ErrDeviceBindingConflict.
 func (t *SessionTx) BindDevice(ctx context.Context, device string) error {
 	id, err := parseID(device)
 	if err != nil {

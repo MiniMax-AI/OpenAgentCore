@@ -85,32 +85,45 @@ func decodeEnvironmentJSON(raw []byte, value any) error {
 
 func enrollEnvironment(ctx context.Context, client *http.Client, base, environment, credential string) (environmentEnrollment, error) {
 	var out environmentEnrollment
+	raw, err := requestEnrollment(ctx, client, base, environment, credential)
+	if err != nil {
+		return out, err
+	}
+	if decodeEnvironmentJSON(raw, &out) != nil || !environmentUUID(out.DeviceID) || !environmentUUID(out.SessionID) || out.EnvironmentID != environment || out.WorkspaceDirectory == "/" || agentcapabilities.ValidateLocalDirectories([]string{out.WorkspaceDirectory}) != nil {
+		return environmentEnrollment{}, errors.New("connect: invalid Environment enrollment response")
+	}
+	return out, nil
+}
+
+// requestEnrollment returns the body of a successful enrollment; each caller
+// decodes the response it expects.
+func requestEnrollment(ctx context.Context, client *http.Client, base, environment, credential string) ([]byte, error) {
 	body, _ := json.Marshal(map[string]string{"environment_id": environment})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/agent-daemon/enroll", bytes.NewReader(body))
 	if err != nil {
-		return out, errors.New("connect: invalid enrollment request")
+		return nil, errors.New("connect: invalid enrollment request")
 	}
 	req.Header.Set("Authorization", "Bearer "+credential)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
-		return out, errors.New("connect: Environment enrollment transport failed")
+		return nil, errors.New("connect: Environment enrollment transport failed")
 	}
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusUnauthorized:
-		return out, errEnvironmentCredentialRejected
+		return nil, errEnvironmentCredentialRejected
 	case http.StatusConflict:
-		return out, errEnvironmentBindingConflict
+		return nil, errEnvironmentBindingConflict
 	default:
-		return out, fmt.Errorf("connect: Environment enrollment rejected (HTTP %d)", resp.StatusCode)
+		return nil, fmt.Errorf("connect: Environment enrollment rejected (HTTP %d)", resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024+1))
-	if err != nil || len(raw) > 16*1024 || decodeEnvironmentJSON(raw, &out) != nil || !environmentUUID(out.DeviceID) || !environmentUUID(out.SessionID) || out.EnvironmentID != environment || out.WorkspaceDirectory == "/" || agentcapabilities.ValidateLocalDirectories([]string{out.WorkspaceDirectory}) != nil {
-		return environmentEnrollment{}, errors.New("connect: invalid Environment enrollment response")
+	if err != nil || len(raw) > 16*1024 {
+		return nil, errors.New("connect: invalid Environment enrollment response")
 	}
-	return out, nil
+	return raw, nil
 }
 
 func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string) (*transport.BootstrapResponse, error) {

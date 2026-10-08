@@ -476,7 +476,7 @@ async function executorCredentialRoute(request, response, projectId, environment
   const credentials = state.executorCredentials.get(environmentId);
   if (!keyId && request.method === "GET") return send(response, 200, {
     data: credentials.map((entry) => ({ ...entry })),
-    connection: { status: "never_enrolled", bound_key_id: null, enrolled_at: null, last_seen_at: null },
+    connection: { status: "never_enrolled", bound_key_id: null, enrolled_at: null },
   });
   if (!keyId && request.method === "POST") {
     // As Core, a body that is not JSON is invalid input like any other: 400 with one message.

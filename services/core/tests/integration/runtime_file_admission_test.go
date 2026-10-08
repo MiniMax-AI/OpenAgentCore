@@ -13,17 +13,26 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func runtimeFileWriteKey(owner deployment.Allocation) sessions.FileWriteIdentity {
-	return sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: owner.DeviceID, RequestSHA256: strings.Repeat("a", 64)}
+// runtimeFileWriteHost places the allocation's Session on an agent host, the
+// Runtime its file writes name.
+func runtimeFileWriteHost(t *testing.T, s *Store, owner deployment.Allocation) string {
+	t.Helper()
+	host := registerAgentHost(t, s, owner.TenantID)
+	assignSession(t, s, owner.SessionID, host.ID)
+	return host.ID
+}
+
+func runtimeFileWriteKey(host string) sessions.FileWriteIdentity {
+	return sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: host, RequestSHA256: strings.Repeat("a", 64)}
 }
 
 func TestRuntimeFileWriteRequiresRunningComputeBeforeNewIntent(t *testing.T) {
 	for _, phase := range []string{"disabled", "running", "quiescing", "suspending", "suspended", "restoring", "waking"} {
 		t.Run(phase, func(t *testing.T) {
-			_, w, pool, owner := runtimeSuspensionFixture(t)
+			s, w, pool, owner := runtimeSuspensionFixture(t)
 			writes := sessionExecution(t, w.lease)
 			runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase=$2,compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID, phase)
-			key := runtimeFileWriteKey(owner)
+			key := runtimeFileWriteKey(runtimeFileWriteHost(t, s, owner))
 			write, err := writes.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, key)
 			blocked := phase != "disabled" && phase != "running"
 			if blocked {
@@ -47,9 +56,10 @@ func TestRuntimeFileWriteRequiresRunningComputeBeforeNewIntent(t *testing.T) {
 }
 
 func TestRuntimeFileWritePhaseFencePreservesExistingReceipts(t *testing.T) {
-	_, w, pool, owner := runtimeSuspensionFixture(t)
+	s, w, pool, owner := runtimeSuspensionFixture(t)
 	writes := sessionExecution(t, w.lease)
-	key := runtimeFileWriteKey(owner)
+	host := runtimeFileWriteHost(t, s, owner)
+	key := runtimeFileWriteKey(host)
 	first, err := writes.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, key)
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +77,7 @@ func TestRuntimeFileWritePhaseFencePreservesExistingReceipts(t *testing.T) {
 		if _, err := writes.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("phase fence masked changed retry identity", err)
 		}
-		if _, err := writes.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, runtimeFileWriteKey(owner)); !errors.Is(err, sessions.ErrTurnConflict) {
+		if _, err := writes.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, runtimeFileWriteKey(host)); !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal("receipt authorized a successor while waking", err)
 		}
 		if state == "pending" {
@@ -84,7 +94,7 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 			s, w, pool, owner := runtimeSuspensionFixture(t)
 			runtimeSuspensionCompleted(t, pool, owner)
 			writes := sessionExecution(t, w.lease)
-			key := runtimeFileWriteKey(owner)
+			key := runtimeFileWriteKey(runtimeFileWriteHost(t, s, owner))
 			until := time.Now().Add(time.Hour)
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)

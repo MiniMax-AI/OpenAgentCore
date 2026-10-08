@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,23 +12,18 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// nodeIsolationProvider Serves each allocation it creates at link.
 type nodeIsolationProvider struct {
 	*fakeCheckpointProvider
-	link      *sandboxlinktest.Server
 	blockMu   sync.Mutex
 	blocked   map[string]bool
 	mode      string
@@ -52,20 +45,6 @@ func (p *nodeIsolationProvider) block(ctx context.Context, r sandbox.Reference, 
 	<-ctx.Done()
 	p.returned.Add(1)
 	return ctx.Err()
-}
-func (p *nodeIsolationProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	info, err := p.fakeCheckpointProvider.Create(ctx, b)
-	if err == nil {
-		err = p.connect(ctx, b)
-	}
-	if err == nil {
-		select {
-		case <-startLinkServe(p.preparation.t, p.link, []byte(b.SandboxIO.Credential), b.SandboxIO.Resource.Ref()).connected:
-		case <-ctx.Done():
-			err = ctx.Err()
-		}
-	}
-	return info, err
 }
 func (p *nodeIsolationProvider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	if err := p.block(ctx, r, "observe"); err != nil {
@@ -106,9 +85,8 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
-	registry := runtimegateway.NewRegistry()
-	cp := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s))), blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
+	cp := newFakeCheckpointProvider(t, s)
+	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
 	preparationContext, cancelPreparation := context.WithCancel(t.Context())
 	t.Cleanup(cancelPreparation)
 	cp.preparation = &initializationPeer{t: t, apply: func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {
@@ -122,21 +100,10 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		p.writes.Add(1)
 		return completedInitialization(request, data)
 	}}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
-	server := httptest.NewServer(http.HandlerFunc(handler.WS))
-	cp.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
-	t.Cleanup(func() {
-		cp.mu.Lock()
-		for _, peer := range cp.peers {
-			peer.Close()
-		}
-		cp.mu.Unlock()
-		server.Close()
-	})
 	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: webDeployment(t, s, "microsandbox"), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
-	f.worker, err = startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: registry, Links: p.link.Relay, ManagedRuntimes: webRuntimes(t, s, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})})
+	f.worker, err = startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: cp.registry, Links: cp.link.Relay, ManagedRuntimes: webRuntimes(t, s, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -104,9 +104,6 @@ type ReservationTx interface {
 type AllocationTx interface {
 	// LoadAllocation returns the Environment's allocation.
 	LoadAllocation() (Allocation, error)
-	// LoadSessionDevice returns the device the Session is bound to and
-	// whether it is bound to one.
-	LoadSessionDevice() (SessionDevice, bool, error)
 	// LoadActivity returns the allocation's activity.
 	LoadActivity(current Allocation) (Activity, error)
 	// LoadRestore locks the deployment and returns what restoring the

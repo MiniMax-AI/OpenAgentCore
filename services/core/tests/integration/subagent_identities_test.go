@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -26,11 +25,9 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	journal := sessionExecution(t, w.lease)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
-	host, err := sessionService(t, s).CreateDevice(ctx, tenant, "identity test", runtimedevice.HashCredential(uuid.NewString()))
+	host := registerAgentHost(t, s, tenant)
+	err := sessionExecution(t, w.lease).BindSessionDevice(ctx, tenant, session.ID, host.ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err = sessionExecution(t, w.lease).BindSessionDevice(ctx, tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "first")

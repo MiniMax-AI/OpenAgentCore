@@ -24,9 +24,8 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || owner.Replayed || owner.State != "creating" || owner.CreateSettled {
 		t.Fatalf("reservation: %+v %v", owner, err)
 	}
-	bound, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID)
-	if err != nil || bound.ID != owner.DeviceID || bound.EnvironmentID != environment.ID {
-		t.Fatalf("binding not committed with allocation: %+v %v", bound, err)
+	if _, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatalf("the reservation bound the Session: %v", err)
 	}
 	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: uuid.NewString(), EnvironmentID: environment.ID}, provider, runtimedevice.HashCredential(secret), runtimedevice.HashCredential(secret)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign allocation accepted: %v", err)

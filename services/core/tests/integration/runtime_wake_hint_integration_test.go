@@ -73,7 +73,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 		fakeCheckpointProvider: f.provider, sentinel: sentinel.owner.ID,
 		release: make(chan struct{}), scans: make(chan int, 16),
 	}
-	worker := startWebWorker(t, f.store, f.provider.registry, f.key, provider, &f.policy)
+	worker := startWebWorker(t, f.store, f.provider.registry, f.provider.link.Relay, f.key, provider, &f.policy)
 	onlineManagerNode(t, f.store, f.node)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)

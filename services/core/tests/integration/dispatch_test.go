@@ -13,12 +13,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -43,14 +44,22 @@ type dispatchHarness struct {
 	url          string
 	credential   string
 	environments map[string]*dispatchHarness
+	link         *sandboxlinktest.Server   // the relay the Session's Environment Serves at
+	resource     sandboxbootstrap.Resource // the Environment's Link resource, if the Session has one
+	serve        []byte                    // the resource's Serve credential
+	served       *linkServe                // the fake sandbox Serving resource
 }
 
 func newDispatchHarness(t *testing.T) *dispatchHarness {
 	t.Helper()
-	return newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"none"}}`), false)
+	return newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"none"}}`))
 }
 
-func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
+// newDispatchHarnessForSession binds a Session of configuration to the
+// deployment's agent host, which the harness connects as. A Session with an
+// Environment first gets a live Link resource that a fake sandbox Serves at
+// the harness's relay: an enrollment for self_hosted, an allocation otherwise.
+func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchHarness {
 	t.Helper()
 	s, _ := testStore(t)
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
@@ -60,28 +69,14 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	if err != nil {
 		t.Fatal(err)
 	}
-	secret := uuid.NewString()
-	h.credential = secret
-	var snapshot struct {
-		Environment struct {
-			Type string `json:"type"`
-		} `json:"environment"`
-	}
-	_ = json.Unmarshal(configuration, &snapshot)
-	if snapshot.Environment.Type == "self_hosted" {
-		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
-		secret = h.credential
-	} else if local {
-		environment, getErr := sessionAdapter(s).GetSessionEnvironment(ctx, h.tenant, h.session.ID)
-		if getErr != nil {
-			t.Fatal(getErr)
-		}
-		h.device, err = FixtureEnvironmentDevice(t, ctx, s.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
-	} else {
-		h.device, err = sessionService(t, s).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
-	}
-	if err != nil {
-		t.Fatal(err)
+	host := registerAgentHost(t, s, h.tenant)
+	h.device, h.credential = sessions.ExecutionDevice{ID: host.ID, Name: "agent host"}, host.Credential
+	secret := h.credential
+	h.link = sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+	if h.session.Environment != nil {
+		h.resource, h.serve = fixtureLinkResource(t, s, h.tenant, h.session)
+		h.served = startLinkServe(t, h.link, h.serve, h.resource.Ref())
+		within(t, h.served.connected)
 	}
 	if err = bindSessionDevice(t, s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
@@ -121,8 +116,16 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.d = &execution.Dispatcher{Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(s.pool), s.credentialCipher), Sessions: sessionService, SessionsReader: sessionStore}
+	h.d = &execution.Dispatcher{Registry: h.registry, Links: h.link.Relay, Observer: modelconfigurationpg.New(pgunit.NewPool(s.pool), s.credentialCipher), Sessions: sessionService, SessionsReader: sessionStore}
 	return h
+}
+
+// stopServing stops the fake sandbox and waits until the relay no longer
+// holds its serve peer.
+func (h *dispatchHarness) stopServing() {
+	h.t.Helper()
+	h.served.stop()
+	awaitDaemonRemoteCondition(h.t, h.t.Context(), linkWait, "the relay to drop the serve peer", func() bool { return !h.link.Relay.Serving(h.resource.Ref()) })
 }
 
 func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
@@ -433,7 +436,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 		missing := tc.missing
 		t.Run(missing, func(t *testing.T) {
 			// Only an explicit non-medium verbosity needs text_verbosity.
-			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","text":{"verbosity":"high"}},"environment":{"type":"none"}}`), false)
+			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","text":{"verbosity":"high"}},"environment":{"type":"none"}}`))
 			caps := prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 			deadline := time.Now().Add(3 * time.Second)

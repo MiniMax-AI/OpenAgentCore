@@ -91,13 +91,3 @@ func checkNativeInstallation(ctx context.Context, root string, selected []string
 	}
 	return nil
 }
-
-// Installed discovery is confined to verified adapters; ordinary tool PATH
-// remains available to the selected Harness and its tools.
-func nativeInstallationKinds(selected []string) map[string]bool {
-	kinds := make(map[string]bool, len(selected))
-	for _, name := range selected {
-		kinds[nativeHarnesses[name].AgentKind] = true
-	}
-	return kinds
-}

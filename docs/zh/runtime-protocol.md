@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 7adbec57ec29c33da6a85b1204490e54a3bc580b1a37dd871a9f2a8b587ec278
+source_hash: f3da984e5c04ed245950af6bbd51f110f66e8e0ec01f74e9458c21aefa84dc01
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -108,7 +108,7 @@ Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替�
 
 ## Session 分配 {#session-assignments}
 
-分配（assignment）把一个 Session 绑定到运行它的 Runtime。`Envelope.assignment` 以 `session_id`、`assignment_id` 和 `epoch` 命名它，这是 frame 携带分配的唯一位置。Core 每次改变分配的期望状态时推进 epoch，因此较低的 epoch 是陈旧的。
+分配（assignment）把一个 Session 绑定到运行它的 Runtime。`Envelope.assignment` 以 `session_id`、`assignment_id` 和 `epoch` 命名它，这是 frame 携带分配的唯一位置。Core 每次改变分配的期望状态时推进 epoch，因此较低的 epoch 是陈旧的。无论 Environment 类型如何，Core 都把每个 Session 绑定到第一个已连接且接纳其 Harness 的 agent host；带 Environment 的 Session 只在该 Environment 的 [Link](./sandbox-link-protocol.md) resource 正在 Serve 时绑定，绑定之后不会转移到其他 Runtime。轮换 `self_hosted` Environment 的[执行器凭证](../../contracts/agents-api/zh/environment-executor-credentials.md)会推进其 enrollment 的 generation，并在同一次写入中推进该 Session 已绑定分配的 epoch。此后 Link 拒绝较早 epoch 的 attachment，因此正在运行的 Turn 失去该 Environment。下一次 bind 携带更高的 epoch 和新的 generation，agent host 在绑定前先结算较早 epoch 的工作，与释放时相同。
 
 每个 Session frame 都携带分配：`execution_prepare`、`execution_start` 和 `execution_release`；`prompt_cancel`、`prompt_steer` 和 `function_result`；`runtime_prepare`、`workspace_read`、`workspace_write` 和 `workspace_export` 的每个 frame；以及 `environment_quiesce` 和 `environment_resume`。回复回显请求的分配，Run 的 frame 携带启动它的分配；Core 拒绝指明其他分配的回复或 Run frame。heartbeat 不携带分配。
 

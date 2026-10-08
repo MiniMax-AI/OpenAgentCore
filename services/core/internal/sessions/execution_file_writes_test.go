@@ -53,7 +53,7 @@ func TestReserveEnvironmentFileWrite(t *testing.T) {
 	reserve := "WithFileWriteReservation " + testTenant + " " + testEnvironment
 	admission := []string{reserve, "LoadFileWrite " + testFileWrite, "LoadEnvironment", "LoadSessionDevice", "LoadComputeSuspension", "LoadPendingFileWrite", "LoadActiveTurn", "LoadPendingInput"}
 	pending := EnvironmentFileWrite{Identity: testWriteKey, EnvironmentID: testEnvironment, SessionID: testSession, State: "pending"}
-	bound := loads(ExecutionDevice{ID: testDevice, EnvironmentID: testEnvironment}, true)
+	bound := loads(ExecutionDevice{ID: testDevice}, true)
 	admitted := func(tx fakeTx) fakeTx {
 		tx.loadFileWrite = loads(EnvironmentFileWrite{}, false)
 		if tx.loadEnvironment == nil {
@@ -88,7 +88,7 @@ func TestReserveEnvironmentFileWrite(t *testing.T) {
 		{"a replaced Environment", admitted(fakeTx{loadEnvironment: returns(Environment{ID: testKey, Status: "ready"})}), LockedSession{}, ErrInvalidInput, false, admission[:3]},
 		{"a failed Environment", admitted(fakeTx{loadEnvironment: returns(Environment{ID: testEnvironment, Status: "failed"})}), LockedSession{}, ErrInvalidInput, false, admission[:3]},
 		{"no device", admitted(fakeTx{loadSessionDevice: loads(ExecutionDevice{}, false)}), LockedSession{}, ErrNotFound, false, admission[:4]},
-		{"another device", admitted(fakeTx{loadSessionDevice: loads(ExecutionDevice{ID: testKey, EnvironmentID: testEnvironment}, true)}), LockedSession{}, ErrDeviceBindingConflict, false, admission[:4]},
+		{"another device", admitted(fakeTx{loadSessionDevice: loads(ExecutionDevice{ID: testKey}, true)}), LockedSession{}, ErrDeviceBindingConflict, false, admission[:4]},
 		{"suspended compute", func() fakeTx { tx := admitted(fakeTx{}); tx.loadComputeSuspension = returns(true); return tx }(), LockedSession{}, ErrTurnConflict, false, admission[:5]},
 		{"pending input", idle(fakeTx{loadPendingInput: returns(true)}), LockedSession{}, ErrTurnConflict, false, admission},
 	} {

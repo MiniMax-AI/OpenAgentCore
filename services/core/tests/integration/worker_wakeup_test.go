@@ -98,7 +98,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 }
 
 func TestWorkerSchedulerHintBypassesEnvironmentScanThrottle(t *testing.T) {
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`))
 	enableWorkerEnvironment(t, h)
 	frames := workerFrames(t, h)
 	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)

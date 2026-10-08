@@ -105,7 +105,10 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	// Capture retains the public Turn after its native Run has been released.
 	prepare := reserved || session.LastTurn != nil && session.LastTurn.ArtifactCaptureStarted
 	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(check, session.TenantID, session.ID)
-	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine) {
+	if err != nil || bound.SessionEnvironmentID != environment.ID || !w.directoryDeviceReady(check, bound.ID, session.Engine) {
+		return
+	}
+	if serving, err := w.dispatcher.environmentServing(check, environment.TenantID, environment.ID); err != nil || !serving {
 		return
 	}
 	peer, err := w.dispatcher.assignedPeer(check, bound)

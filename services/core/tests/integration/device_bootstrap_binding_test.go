@@ -70,22 +70,10 @@ func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
-	_, selfhost, key := runtimeEnrollmentFixture(t, s, principal)
-	enrolled, err := sessionService(t, s).EnrollRuntime(t.Context(), selfhost.ID, executorDigest(key.Token))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range []string{ordinary.ID, allocation.DeviceID, enrolled.DeviceID} {
+	for _, id := range []string{ordinary.ID, allocation.DeviceID} {
 		credential, found, err := sessionAdapter(s).GetDeviceCredential(t.Context(), id)
 		if err != nil || !found || credential.RuntimeNodeID != "" {
 			t.Fatalf("non-node credential acquired allocation route: found=%v node=%s error=%v", found, credential.RuntimeNodeID, err)
 		}
-	}
-	if err := sessionService(t, s).RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
-		t.Fatal(err)
-	}
-	if _, found, err := sessionAdapter(s).GetDeviceCredential(t.Context(), enrolled.DeviceID); err != nil || found {
-		t.Fatal("LEFT JOIN revived revoked executor key", err)
 	}
 }

@@ -29,7 +29,7 @@ async function findCodex(directory, depth = 0) {
 const candidates = await findCodex(join(root, 'native-tools', 'node_modules', '@openai'));
 assert.equal(candidates.length, 1, 'Expected exactly one native Codex artifact');
 const bundle = join(root, 'native-installer');
-const receipt = await buildBundle({ daemon, node: await realpath(node), codex: candidates[0], claude: join(root, 'claude-runtime'), ...(!windows ? { minimax: join(root, 'minimax-runtime') } : {}), output: bundle });
+const receipt = await buildBundle({ daemon, node: await realpath(node), codex: candidates[0], claude: join(root, 'claude-runtime'), ...(!windows ? { minimax: join(root, 'minimax-runtime') } : {}), ...(process.platform === 'linux' ? { sandboxIo: join(root, 'oac-sandbox-io') } : {}), output: bundle });
 console.log(JSON.stringify({ stage: 'bundle', os: receipt.os, arch: receipt.arch, components: Object.keys(receipt.components), model_requests: 0 }));
 const workspace = join(root, 'native-install-workspace'); await mkdir(workspace);
 const credential = join(root, 'native-install-credential.json');

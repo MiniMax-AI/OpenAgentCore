@@ -14,7 +14,7 @@ func TestSelfHostedCapabilitySourcesAreFrozenAndStrict(t *testing.T) {
 	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
 		Configuration: []byte(`{"type":"self_hosted","workspace_directory":"/home/user/project","capability_directories":["/home/user/skills","/opt/plugins"]}`)}
 	var request proto.PromptRequestPayload
-	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &request); err != nil {
+	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: environment.ID}, &request); err != nil {
 		t.Fatal(err)
 	}
 	local := request.LocalEnvironment
@@ -39,7 +39,7 @@ func TestSelfHostedPreparedPathsArePlatformNeutral(t *testing.T) {
 		session := sessions.Session{ID: "session", TenantID: "tenant"}
 		environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: raw}
 		var request proto.PromptRequestPayload
-		err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &request)
+		err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: environment.ID}, &request)
 		if err != nil || request.LocalEnvironment.WorkspaceDirectory != directory || request.LocalEnvironment.CapabilitySources.Directories[0] != directory {
 			t.Fatal("Core interpreted a Runtime source path", directory, err)
 		}

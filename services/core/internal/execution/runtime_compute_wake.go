@@ -7,7 +7,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -18,37 +17,19 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 			return err
 		}
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
-	if err != nil {
-		if !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
-			return err
-		}
-		// This idempotent control signal is fenced by guest PID/start time and the
-		// suspension token. It cannot execute or replay an agent request.
-		result, err := p.RunCommandCompute(ctx, runtimeReference(owner), state.Current, sandbox.Command{Args: []string{"oac-daemon", "resume", "--control-file", "/run/oac/daemon-suspend.json", "--environment-id", owner.EnvironmentID, "--suspend-id", state.SuspendID}})
-		if err != nil {
-			return err
-		}
-		if result.ExitCode != 0 {
-			return sandbox.ErrComputeUnconfirmed
-		}
-		timer := time.NewTicker(100 * time.Millisecond)
-		defer timer.Stop()
-		for {
-			peer, err = authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
-			if err == nil {
-				break
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.C:
-			}
-		}
+	// The resumed sandbox serves again before its Runtime resumes the
+	// Environment. A later pass retries a wake whose sandbox or agent host is
+	// not connected.
+	if err := r.waitServing(ctx, owner); err != nil {
+		return err
 	}
-	// Resume carries the reference that quiesced the Runtime; a suspended
-	// Runtime admits nothing else, so it is not bound again.
 	bound, err := r.allocationAssignment(ctx, owner)
+	if err != nil {
+		return err
+	}
+	// Resume carries the reference that quiesced the Runtime; a quiesced
+	// Runtime admits nothing else, so it is not bound again.
+	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, bound.ID)
 	if err != nil {
 		return err
 	}
@@ -72,6 +53,23 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 	}
 	// The Worker's pass publishes the Environment connected again.
 	return r.deployment.ClearWake(ctx, next, owner.ComputeActivityAt)
+}
+
+// waitServing waits, for at most 30 seconds, until the relay holds the serve
+// peer of the allocation's Link resource.
+func (r *runtimeLifecycle) waitServing(ctx context.Context, owner deployment.Allocation) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	timer := time.NewTicker(100 * time.Millisecond)
+	defer timer.Stop()
+	for !r.links.Serving(serveResource(owner).Ref()) {
+		select {
+		case <-ctx.Done():
+			return sandbox.ErrComputeUnconfirmed
+		case <-timer.C:
+		}
+	}
+	return nil
 }
 
 func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {

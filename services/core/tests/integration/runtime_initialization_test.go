@@ -5,10 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,7 +41,7 @@ func (p *initializingProvider) RunCommand(ctx context.Context, r sandbox.Referen
 }
 
 func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
-	for _, mode := range []string{"complete", "restart", "uncertain", "setup-complete", "setup-restart", "setup-uncertain"} {
+	for _, mode := range []string{"complete", "restart", "uncertain", "unavailable", "setup-complete", "setup-restart", "setup-uncertain"} {
 		t.Run(mode, func(t *testing.T) {
 			setupOnly := strings.HasPrefix(mode, "setup-")
 			mode = strings.TrimPrefix(mode, "setup-")
@@ -74,15 +74,15 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				}
 			}
 			p := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, initializationPeer: initializationPeer{deferred: true}}
+			var rejected atomic.Bool
 			p.apply = func(_ proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
-				if _, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
-					t.Error("premature file access", err)
-				}
-				if _, err := sessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
-					t.Error("premature execution", err)
-				}
 				if mode == "uncertain" {
 					return proto.RuntimePrepareResultPayload{Outcome: "unknown", ErrorCode: "runtime_preparation_unconfirmed"}
+				}
+				// A first step the Runtime rejects as unavailable took no
+				// effect, so a later pass starts the preparation again.
+				if mode == "unavailable" && rejected.CompareAndSwap(false, true) {
+					return proto.RuntimePrepareResultPayload{Outcome: "rejected", ErrorCode: "resource_unavailable"}
 				}
 				return completedInitialization(proto.RuntimePreparePayload{}, nil)
 			}
@@ -114,7 +114,11 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				want = "failed"
 			}
 			awaitInitialization(t, s, tenant, env.ID, want)
-			if mode == "complete" {
+			if mode == "unavailable" {
+				if int(p.writes.Load()) != expectedSteps+1 {
+					t.Fatal("rejected first step was not retried once", p.writes.Load())
+				}
+			} else if mode == "complete" {
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("missing operations", p.writes.Load())
 				}

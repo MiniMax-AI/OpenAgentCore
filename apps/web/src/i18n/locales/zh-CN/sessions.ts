@@ -147,12 +147,10 @@ export const sessions = {
   executor: {
     connection: {
       title: "主机连接",
-      help: "只有执行器仍具备有效权限且连接存活时，Core 才报告已连接。最后在线时间来自最近一次心跳，可能有延迟；它不代表模型或运行引擎已就绪。",
+      help: "只有绑定凭证仍具备有效权限、且主机正在为此 Environment 提供服务时，Core 才报告已连接。",
       status: { never_enrolled: "尚未连接", connected: "已连接", disconnected: "已断开", revoked: "绑定凭证已撤销", unknown: "未知" },
       boundKey: "绑定凭证",
-      lastSeen: "最后在线",
       notBound: "尚未绑定",
-      noHeartbeat: "尚无心跳记录",
       stale: "刷新失败。当前显示上次读取的绑定信息，连接状态未知。",
       refreshing: "正在刷新上次读取的绑定信息，尚未确认当前连接。",
       failed: "无法读取连接状态，请刷新重试。",

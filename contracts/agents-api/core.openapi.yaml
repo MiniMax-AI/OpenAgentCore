@@ -342,10 +342,6 @@ definitions:
         format: date-time
         type: string
         x-nullable: true
-      last_seen_at:
-        format: date-time
-        type: string
-        x-nullable: true
       status:
         enum:
           - never_enrolled
@@ -355,7 +351,6 @@ definitions:
     required:
       - bound_key_id
       - enrolled_at
-      - last_seen_at
       - status
     type: object
   api.ExecutorCredentialList:
@@ -4112,7 +4107,7 @@ paths:
         - Environment Templates
   /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials:
     get:
-      description: Core key only. Returns metadata of the credentials restricted to this Environment, oldest first; secrets are never listed. Connection combines current credential authority and an open matching gateway peer; timestamps are historical observations, not readiness. Without a gateway it is never connected. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
+      description: Core key only. Returns metadata of the credentials restricted to this Environment, oldest first; secrets are never listed. Connection is connected while the enrolled credential has authority and the sandbox it enrolled serves the Environment's Link resource; enrolled_at is when the Environment was first enrolled, not readiness. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
       parameters:
         - description: Project UUID
           in: path

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -24,14 +23,12 @@ type fileWriteFixture struct {
 
 func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	t.Helper()
-	s, pool := testStore(t)
+	s, _ := testStore(t)
 	lease := executionWriter(t, s).lease
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
-	host, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	host := registerAgentHost(t, s, tenant)
+	assignSession(t, s, session.ID, host.ID)
 	return fileWriteFixture{s: s, lease: lease, writer: sessionExecution(t, lease), tenant: tenant, session: session, env: env,
 		key: sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: host.ID, RequestSHA256: strings.Repeat("a", 64)}}
 }

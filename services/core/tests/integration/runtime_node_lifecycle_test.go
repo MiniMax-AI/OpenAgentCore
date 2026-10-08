@@ -21,6 +21,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			wakeTenant, _, wakeEnv := f.session(f.nodeB, false)
 			wakeOwner := f.provision(wakeTenant, wakeEnv)
 			f.phase(wakeTenant, wakeEnv.ID, "running")
+			assignSession(t, f.store, wakeOwner.SessionID, f.provider.host.ID)
 			if _, err := f.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')", uuid.NewString(), wakeOwner.SessionID); err != nil {
 				t.Fatal(err)
 			}

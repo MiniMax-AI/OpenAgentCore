@@ -166,26 +166,22 @@ func (t *SessionTx) LoadBoundDevice(ctx context.Context) (bool, error) {
 // Environment. The insert takes no row when the Environment already has a
 // device, including one a concurrent transaction inserted first, or cannot
 // take one: that is sessions.ErrDeviceBindingConflict.
-func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions.ExecutionDevice, credentialHash string) error {
+func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, environment string, device sessions.ExecutionDevice, credentialHash string) error {
 	id, err := parseID(device.ID)
 	if err != nil {
 		return err
 	}
-	environment, err := parseID(device.EnvironmentID)
+	environmentID, err := parseID(environment)
 	if err != nil {
 		return err
 	}
-	inserted, err := t.q.CreateEnvironmentDevice(ctx, sqlc.CreateEnvironmentDeviceParams{
-		ID: id, TenantID: t.tenant, SessionID: t.session, EnvironmentID: environment,
+	_, err = t.q.CreateEnvironmentDevice(ctx, sqlc.CreateEnvironmentDeviceParams{
+		ID: id, TenantID: t.tenant, SessionID: t.session, EnvironmentID: environmentID,
 		Name: device.Name, CredentialHash: pgtype.Text{String: credentialHash, Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sessions.ErrDeviceBindingConflict
 	}
-	if err != nil {
-		return err
-	}
-	_, err = t.q.BindSessionDevice(ctx, sqlc.BindSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: inserted})
 	return err
 }
 

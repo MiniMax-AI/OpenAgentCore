@@ -11,7 +11,7 @@ import (
 func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T) {
 	for _, code := range []string{"preparation_failed", "invalid_configuration", "unsupported_configuration", "unsupported_preparation"} {
 		t.Run(code, func(t *testing.T) {
-			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
+			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`))
 			enableWorkerEnvironment(t, h)
 			frames := workerFrames(t, h)
 			pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{messageInput("first")})
@@ -94,7 +94,7 @@ func TestWorkerRetriesUncertainPreparationFailure(t *testing.T) {
 		{"run_present", "rejected", proto.TypeExecutionPrepare, "unsupported_configuration", "unconfirmed-run"},
 	} {
 		t.Run(response.name, func(t *testing.T) {
-			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
+			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`))
 			enableWorkerEnvironment(t, h)
 			frames := workerFrames(t, h)
 			pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "retry", []sessions.Input{messageInput("retry")})
@@ -126,7 +126,7 @@ func TestWorkerRetriesUncertainPreparationFailure(t *testing.T) {
 }
 
 func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing.T) {
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`))
 	enableWorkerEnvironment(t, h)
 	frames := workerFrames(t, h)
 	first, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{messageInput("first")})

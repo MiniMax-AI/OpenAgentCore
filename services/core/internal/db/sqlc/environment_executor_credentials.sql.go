@@ -55,12 +55,11 @@ func (q *Queries) ExecutorProjectScopeExists(ctx context.Context, arg ExecutorPr
 }
 
 const getEnvironmentExecutorConnection = `-- name: GetEnvironmentExecutorConnection :one
-SELECT d.id AS device_id, d.executor_key_id, d.created_at AS enrolled_at,
-    d.last_seen_at, a.credential_hash, e.status AS environment_status
+SELECT n.id AS enrollment_id, n.executor_key_id, n.created_at AS enrolled_at, r.credential_hash
 FROM environments e
 JOIN sessions s ON s.id = e.session_id
-LEFT JOIN devices d ON d.environment_id = e.id AND d.tenant_id = s.tenant_id
-LEFT JOIN runtime_device_authority a ON a.id = d.id
+LEFT JOIN sandbox_enrollments n ON n.environment_id = e.id
+LEFT JOIN sandbox_resources r ON r.kind = 'enrollment' AND r.id = n.id AND r.live
 WHERE e.id = $1 AND s.tenant_id = $2
     AND s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'self_hosted'
 `
@@ -71,24 +70,22 @@ type GetEnvironmentExecutorConnectionParams struct {
 }
 
 type GetEnvironmentExecutorConnectionRow struct {
-	DeviceID          pgtype.UUID        `json:"device_id"`
-	ExecutorKeyID     pgtype.UUID        `json:"executor_key_id"`
-	EnrolledAt        pgtype.Timestamptz `json:"enrolled_at"`
-	LastSeenAt        pgtype.Timestamptz `json:"last_seen_at"`
-	CredentialHash    pgtype.Text        `json:"credential_hash"`
-	EnvironmentStatus string             `json:"environment_status"`
+	EnrollmentID   pgtype.UUID        `json:"enrollment_id"`
+	ExecutorKeyID  pgtype.UUID        `json:"executor_key_id"`
+	EnrolledAt     pgtype.Timestamptz `json:"enrolled_at"`
+	CredentialHash pgtype.Text        `json:"credential_hash"`
 }
 
+// The Environment's enrollment, with the credential that may Serve it while
+// its Link resource is live.
 func (q *Queries) GetEnvironmentExecutorConnection(ctx context.Context, arg GetEnvironmentExecutorConnectionParams) (GetEnvironmentExecutorConnectionRow, error) {
 	row := q.db.QueryRow(ctx, getEnvironmentExecutorConnection, arg.EnvironmentID, arg.TenantID)
 	var i GetEnvironmentExecutorConnectionRow
 	err := row.Scan(
-		&i.DeviceID,
+		&i.EnrollmentID,
 		&i.ExecutorKeyID,
 		&i.EnrolledAt,
-		&i.LastSeenAt,
 		&i.CredentialHash,
-		&i.EnvironmentStatus,
 	)
 	return i, err
 }
@@ -257,6 +254,11 @@ WITH rotated AS (
 ), advanced AS (
     UPDATE sandbox_enrollments n SET generation = n.generation + 1
     FROM rotated r WHERE n.executor_key_id = r.key_id
+    RETURNING n.environment_id
+), rebound AS (
+    UPDATE session_runtime_assignments b SET epoch = b.epoch + 1
+    FROM advanced a JOIN environments e ON e.id = a.environment_id
+    WHERE b.session_id = e.session_id AND b.desired_state = 'bound'
 )
 SELECT key_id, environment_id FROM rotated
 `
@@ -275,7 +277,9 @@ type RotateExecutorCredentialRow struct {
 }
 
 // Rotation advances the generation of the key's enrollments, so the Link
-// authority refuses what the old secret served.
+// authority refuses what the old secret served, and the epoch of the bound
+// assignments of their Sessions, so the next Bind carries the new
+// generation.
 func (q *Queries) RotateExecutorCredential(ctx context.Context, arg RotateExecutorCredentialParams) (RotateExecutorCredentialRow, error) {
 	row := q.db.QueryRow(ctx, rotateExecutorCredential,
 		arg.TokenSha256,

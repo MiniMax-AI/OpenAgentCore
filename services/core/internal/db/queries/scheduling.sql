@@ -7,8 +7,8 @@ FROM turns t JOIN sessions s ON s.id = t.session_id
 WHERE t.status = ANY(sqlc.arg(statuses)::text[]) AND t.id > sqlc.arg(after_id)::uuid
 AND (s.deleted_at IS NULL OR t.status <> 'queued')
 AND (NOT sqlc.arg(connected_only)::boolean OR EXISTS (
-    SELECT 1 FROM devices d WHERE d.tenant_id = s.tenant_id AND d.revoked_at IS NULL
-        AND d.id = ANY(sqlc.arg(connected_devices)::uuid[])
+    SELECT 1 FROM devices d WHERE d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
+        AND d.revoked_at IS NULL AND d.id = ANY(sqlc.arg(connected_devices)::uuid[])
 ))
 ORDER BY t.id LIMIT 100;
 
@@ -20,15 +20,16 @@ LEFT JOIN session_runtime_assignments b ON b.session_id = s.id
 WHERE r.state = 'pending' AND r.deadline > clock_timestamp()
 AND r.id > sqlc.arg(after_id)::uuid AND s.deleted_at IS NULL
 AND EXISTS (
-    SELECT 1 FROM devices d WHERE d.tenant_id = s.tenant_id AND d.revoked_at IS NULL
-        AND d.id = ANY(sqlc.arg(connected_devices)::uuid[])
+    SELECT 1 FROM devices d WHERE d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
+        AND d.revoked_at IS NULL AND d.id = ANY(sqlc.arg(connected_devices)::uuid[])
         AND (b.runtime_id IS NULL OR d.id = b.runtime_id)
 )
 ORDER BY r.id LIMIT 100;
 
--- name: ListExecutionDevices :many
+-- name: ListAgentHosts :many
+-- The agent hosts that may run the tenant's Sessions; see GetAgentHost.
 SELECT id, name FROM devices
-WHERE tenant_id = $1 AND revoked_at IS NULL AND environment_id IS NULL
+WHERE agent_host AND revoked_at IS NULL AND (tenant_id IS NULL OR tenant_id = $1)
 ORDER BY id;
 
 -- name: GetLatestSessionTurn :one

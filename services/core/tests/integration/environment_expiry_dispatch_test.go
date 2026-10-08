@@ -21,7 +21,7 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 	var requests []proto.Envelope
 	var active []sessions.Session
 	for _, key := range []string{"one", "two", "three", "four"} {
-		session := publicSession(t, h, key)
+		session := ordinarySession(t, h, key)
 		if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, key, []sessions.Input{messageInput("remain active")}); err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) 
 		t.Fatal(err)
 	}
 	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
-	h.session = publicSession(t, h, "unrelated")
+	h.session = ordinarySession(t, h, "unrelated")
 	receipt, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "work", []sessions.Input{messageInput("make normal progress")})
 	if err != nil {
 		t.Fatal(err)

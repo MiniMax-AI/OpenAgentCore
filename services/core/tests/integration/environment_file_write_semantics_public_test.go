@@ -49,7 +49,7 @@ func serveFileWrite(h *dispatchHarness, final proto.WorkspaceWriteResultPayload)
 }
 
 func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T) {
-	h, w, environment := localWorker(t, true, false)
+	h, w, environment := localWorker(t, false)
 	_, pool := testStore(t)
 	if _, err := pool.Exec(t.Context(), `UPDATE environments SET status='connected' WHERE id=$1`, environment.ID); err != nil {
 		t.Fatal(err)

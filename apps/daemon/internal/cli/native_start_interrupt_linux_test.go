@@ -1,11 +1,9 @@
-//go:build unix
+//go:build linux
 
 package cli
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +19,6 @@ func TestNativeStartInterruptHelper(t *testing.T) {
 	if os.Getenv("OAC_TEST_START_INTERRUPT") != "1" {
 		t.Skip("subprocess helper")
 	}
-	probeNativeInstallation = func(context.Context, string, []string) error { return nil }
 	if err := runStart(&runContext{stdout: os.Stdout, stderr: os.Stderr}, nil); err != nil {
 		os.Exit(2)
 	}
@@ -32,19 +29,10 @@ func TestNativeStartInterruptCancelsEnrollment(t *testing.T) {
 	rc, args, root, _ := nativeInstallFixture(t)
 	requested := make(chan struct{})
 	release := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// The enrollment never answers before the interrupt.
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		close(requested)
 		<-release
-		var config nativeInstallation
-		if err := readNativeJSON(filepath.Join(root, "daemon", "installation.json"), &config); err != nil {
-			return
-		}
-		_ = json.NewEncoder(w).Encode(environmentEnrollment{
-			DeviceID:           "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
-			SessionID:          "bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb",
-			EnvironmentID:      config.Environment,
-			WorkspaceDirectory: config.Workspace,
-		})
 	}))
 	defer server.Close()
 	defer close(release)

@@ -207,11 +207,10 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 	project := binding.Project
 	session, env, key := runtimeEnrollmentFixture(t, s, binding.Principal)
 	state, err := sessionAdapter(s).ProjectExecutorCredentialState(ctx, binding.Principal, env.ID)
-	if err != nil || state.Connection.DeviceID != "" || state.Connection.EnrolledAt != nil || state.Connection.BoundKeyID != nil || state.Connection.LastSeenAt != nil {
+	if err != nil || state.Connection.Enrolled || state.Connection.EnrolledAt != nil || state.Connection.BoundKeyID != nil {
 		t.Fatal("never enrolled", state, err)
 	}
-	enrolled, err := sessionService(t, s).EnrollRuntime(ctx, env.ID, executorDigest(key.Token))
-	if err != nil {
+	if _, err := sessionService(t, s).EnrollRuntime(ctx, env.ID, executorDigest(key.Token)); err != nil {
 		t.Fatal(err)
 	}
 	check := func() sessions.ExecutorCredentialState {
@@ -223,29 +222,22 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 		return v
 	}
 	state = check()
-	if state.Connection.DeviceID != enrolled.DeviceID || state.Connection.BoundKeyID == nil || *state.Connection.BoundKeyID != key.KeyID || state.Connection.EnrolledAt == nil || state.Connection.LastSeenAt != nil || state.Connection.CredentialHash != executorDigest(key.Token) {
+	if !state.Connection.Enrolled || state.Connection.BoundKeyID == nil || *state.Connection.BoundKeyID != key.KeyID || state.Connection.EnrolledAt == nil || state.Connection.CredentialHash != executorDigest(key.Token) {
 		t.Fatal("binding", state)
 	}
 	for _, spelling := range []string{env.ID, strings.ToUpper(env.ID), strings.ReplaceAll(env.ID, "-", "")} {
 		resolved, err := sessionAdapter(s).ProjectExecutorCredentialState(ctx, binding.Principal, spelling)
-		if err != nil || resolved.EnvironmentID != env.ID || resolved.Connection.DeviceID != enrolled.DeviceID || resolved.Connection.CredentialHash != executorDigest(key.Token) {
+		if err != nil || resolved.EnvironmentID != env.ID || !resolved.Connection.Enrolled || resolved.Connection.CredentialHash != executorDigest(key.Token) {
 			t.Fatal("equivalent target did not retain canonical identity and binding", spelling, resolved, err)
 		}
 	}
-	// An additional credential never changes the enrolled device's bound key.
+	// An additional credential never changes the enrolled key.
 	if _, err = sessionService(t, s).IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), binding.Principal, env.ID, uuid.NewString(), false); err != nil {
 		t.Fatal(err)
 	}
 	state = check()
 	if *state.Connection.BoundKeyID != key.KeyID || len(state.Credentials) != 2 {
 		t.Fatal("second key changed binding")
-	}
-	if _, err = pool.Exec(ctx, "UPDATE devices SET last_seen_at=clock_timestamp() WHERE id=$1", enrolled.DeviceID); err != nil {
-		t.Fatal(err)
-	}
-	state = check()
-	if state.Connection.LastSeenAt == nil {
-		t.Fatal("heartbeat history missing")
 	}
 	rotated, err := sessionService(t, s).IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), binding.Principal, env.ID, key.KeyID, true)
 	if err != nil {
@@ -285,7 +277,7 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 		t.Fatal(err)
 	}
 	state = check()
-	if state.Connection.EnvironmentStatus != "expired" || state.Connection.CredentialHash != "" {
+	if !state.Connection.Enrolled || state.Connection.CredentialHash != "" {
 		t.Fatal("expired authority")
 	}
 	foreign := createTestProject(t, pool)

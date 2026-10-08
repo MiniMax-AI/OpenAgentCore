@@ -13,13 +13,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *execution.Worker, sessions.Environment) {
+func localWorker(t *testing.T, execute bool) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), scoped)
-	if scoped {
-		_, pool := testStore(t)
-		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
-	}
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`))
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +49,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 }
 
 func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testing.T) {
-	h, w, environment := localWorker(t, true, false)
+	h, w, environment := localWorker(t, false)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, sessions.ErrNotFound) {
@@ -82,10 +78,13 @@ func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testin
 	}
 }
 
-func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.T) {
-	h, w, environment := localWorker(t, false, false)
+// An Environment whose Link resource is not Serving, or that has none, has no
+// directory to read.
+func TestLocalEnvironmentWorkerRejectsUnservedEnvironment(t *testing.T) {
+	h, w, environment := localWorker(t, false)
+	h.stopServing()
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), environment, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
-		t.Fatal("general device used as local authority", err)
+		t.Fatal("an Environment that is not Serving was read", err)
 	}
 	other, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "unassigned", Configuration: h.session.Configuration})
 	if err != nil {
@@ -96,7 +95,7 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 		t.Fatal(err)
 	}
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), unassigned, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
-		t.Fatal("unassigned environment selected general device", err)
+		t.Fatal("an Environment without a Link resource was read", err)
 	}
 	if _, err := sessionAdapter(h.s).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("read persisted an unauthorized placement", err)
@@ -104,7 +103,7 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 }
 
 func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *testing.T) {
-	h, worker, environment := localWorker(t, true, true)
+	h, worker, environment := localWorker(t, true)
 	reservation, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{messageInput("first")})
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +144,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		t.Fatal("local reservation did not settle", err)
 	}
 	bound, err := sessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
-	if err != nil || bound.Device.EnvironmentID != environment.ID || bound.NativeSessionID != "local-native-history" {
+	if err != nil || bound.Device.ID != h.device.ID || bound.NativeSessionID != "local-native-history" {
 		t.Fatal("local native identity was not retained", err)
 	}
 	artifacts, err := sessionAdapter(h.s).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)

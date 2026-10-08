@@ -3,6 +3,7 @@ package integration
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 
@@ -38,23 +39,22 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 		t.Fatalf("foreign provisioning: %v", err)
 	}
 	bound, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "dedicated", digest)
-	if err != nil || bound.EnvironmentID != environment.ID {
+	if err != nil {
 		t.Fatalf("provision: %+v %v", bound, err)
 	}
+	// Sessions are placed on agent hosts only: the device binds no Session.
 	execution := sessionExecution(t, executionWriter(t, s).lease)
-	for _, other := range []sessions.Session{sibling, foreign} {
+	for _, other := range []sessions.Session{session, sibling, foreign} {
 		if err := execution.BindSessionDevice(t.Context(), other.TenantID, other.ID, bound.ID); err == nil {
-			t.Fatal("dedicated credential bound to another Session")
+			t.Fatal("an Environment device was bound to a Session")
 		}
 	}
-	devices, err := sessionAdapter(s).ListExecutionDevices(t.Context(), tenant)
-	if err != nil || len(devices) != 0 {
-		t.Fatalf("dedicated device entered general selection: %v %v", devices, err)
+	if _, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatalf("provisioning bound the Session: %v", err)
 	}
-	reopened, _ := testStore(t)
-	got, err := sessionAdapter(reopened).GetSessionDevice(t.Context(), tenant, session.ID)
-	if err != nil || got.ID != bound.ID || got.EnvironmentID != bound.EnvironmentID || got.Assignment.SessionID != session.ID || got.Assignment.Epoch != 1 || !got.Assignment.Valid() {
-		t.Fatalf("durable exact binding: %+v %v", got, err)
+	hosts, err := sessionAdapter(s).ListAgentHosts(t.Context(), tenant)
+	if err != nil || slices.ContainsFunc(hosts, func(host sessions.ExecutionDevice) bool { return host.ID == bound.ID }) {
+		t.Fatalf("an Environment device entered placement: %v %v", hosts, err)
 	}
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), bound.ID); err != nil || !ok {
 		t.Fatalf("valid credential unavailable: %v", err)
@@ -74,7 +74,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	s, pool := testStore(t)
 	tenant := uuid.NewString()
-	session, environment := localEnvironment(t, s, tenant)
+	_, environment := localEnvironment(t, s, tenant)
 	var wg sync.WaitGroup
 	results := make(chan error, 6)
 	for range 6 {
@@ -98,11 +98,11 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	if winners != 1 {
 		t.Fatalf("provisioned %d devices", winners)
 	}
-	bound, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID)
-	if err != nil {
+	var device string
+	if err := pool.QueryRow(t.Context(), "SELECT id::text FROM devices WHERE environment_id = $1", environment.ID).Scan(&device); err != nil {
 		t.Fatal(err)
 	}
-	if err := sessionService(t, s).RevokeDevice(t.Context(), tenant, bound.ID); err != nil {
+	if err := sessionService(t, s).RevokeDevice(t.Context(), tenant, device); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrDeviceBindingConflict) {

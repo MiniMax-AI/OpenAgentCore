@@ -324,7 +324,7 @@ func run(config processconfig.Config) error {
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    sessionStore,
-		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
+		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, links: linkRelay},
 		Admin: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 		Execution: api.Execution{
@@ -349,8 +349,8 @@ func run(config processconfig.Config) error {
 		return err
 	}
 	handler := serverHandler(apiHandler, &daemonRoutes{gateway: daemonHandler,
-		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService),
-		connection:  runtimeenrollment.ConnectionHandler(sessionStore, registry),
+		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService, config.PublicOrigin),
+		connection:  runtimeenrollment.ConnectionHandler(sessionStore, linkRelay),
 		nodeConnect: managedNodes.hub})
 	server := &http.Server{Addr: config.Addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)

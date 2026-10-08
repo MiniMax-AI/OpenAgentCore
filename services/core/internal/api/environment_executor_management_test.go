@@ -93,7 +93,7 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	}
 
 	w := projectKeyHTTP(h, "GET", path, "admin", "")
-	if w.Code != 200 || w.Body.String() != `{"data":[{"key_id":"listed","created_at":"1970-01-01T00:00:01Z","revoked_at":null}],"connection":{"status":"never_enrolled","bound_key_id":null,"enrolled_at":null,"last_seen_at":null}}`+"\n" {
+	if w.Code != 200 || w.Body.String() != `{"data":[{"key_id":"listed","created_at":"1970-01-01T00:00:01Z","revoked_at":null}],"connection":{"status":"never_enrolled","bound_key_id":null,"enrolled_at":null}}`+"\n" {
 		t.Fatal("list", w.Code, w.Body)
 	}
 	w = projectKeyHTTP(h, "POST", path, "admin", body)
@@ -156,7 +156,7 @@ func TestExecutorConnectionListObservation(t *testing.T) {
 			key := callerBinding()
 			at := time.Unix(1, 0).UTC()
 			bound := "bound-key"
-			f := &executorManagementFixture{connection: sessions.ExecutorConnectionState{DeviceID: "device", BoundKeyID: &bound, EnrolledAt: &at, CredentialHash: "private-digest", EnvironmentStatus: "connected"}}
+			f := &executorManagementFixture{connection: sessions.ExecutorConnectionState{Enrolled: true, BoundKeyID: &bound, EnrolledAt: &at, CredentialHash: "private-digest"}}
 			h := executorManagementHandler(t, key, f, func(_ context.Context, environment, digest string) (bool, error) {
 				if environment != "environment" || digest != "private-digest" {
 					t.Fatal("wrong binding")
@@ -185,7 +185,7 @@ func TestExecutorConnectionListUsesResolvedEnvironment(t *testing.T) {
 	key := callerBinding()
 	f := &executorManagementFixture{
 		resolvedEnvironment: canonical,
-		connection:          sessions.ExecutorConnectionState{DeviceID: "device", CredentialHash: "private-digest", EnvironmentStatus: "connected"},
+		connection:          sessions.ExecutorConnectionState{Enrolled: true, CredentialHash: "private-digest"},
 	}
 	observations := 0
 	h := executorManagementHandler(t, key, f, func(_ context.Context, environment, digest string) (bool, error) {

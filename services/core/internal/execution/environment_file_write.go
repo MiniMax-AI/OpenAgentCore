@@ -90,7 +90,10 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return fileWriteResult{err: err}
 	}
 	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(ctx, session.TenantID, session.ID)
-	if err != nil || !environmentDeviceMatches(session, environment, bound) || w.dispatcher.Registry == nil {
+	if err != nil || bound.SessionEnvironmentID != environment.ID || w.dispatcher.Registry == nil {
+		return unavailable
+	}
+	if serving, err := w.dispatcher.environmentServing(ctx, environment.TenantID, environment.ID); err != nil || !serving {
 		return unavailable
 	}
 	peer, err := w.dispatcher.assignedPeer(ctx, bound)

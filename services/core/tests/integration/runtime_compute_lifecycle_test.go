@@ -15,6 +15,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -26,21 +27,45 @@ import (
 
 // The controlled provider records external effects independently of DB phases.
 // Lost replies retain those effects so recovery must use observation, not replay.
+// Each running compute Serves its allocation's Link resource at link, and the
+// deployment's agent host, which runs the Sessions, connects to the gateway.
 type fakeCheckpointProvider struct {
+	t           *testing.T
 	preparation *initializationPeer
 	lifecycleProvider
 	computes                                                     map[string]sandbox.ComputeState
 	snapshots                                                    map[string]sandbox.SnapshotIdentity
 	bootstraps                                                   map[string]sandbox.Bootstrap
-	peers                                                        map[string]*websocket.Conn
+	serving                                                      map[string]*linkServe // by allocation
+	host                                                         agentHost
+	hostConn                                                     *websocket.Conn
 	registry                                                     *runtimegateway.Registry
+	link                                                         *sandboxlinktest.Server
 	endpoint                                                     string
 	captures, restores, captureObservations, restoreObservations int
-	computeKills, snapshotDeletes, wakeCommands                  int
+	computeKills, snapshotDeletes                                int
 	promptFrames                                                 atomic.Int32
 	quiesces, resumes                                            atomic.Int32
 	loseCapture, loseRestore, rejectQuiesce                      bool
 	beforeQuiesce                                                func()
+}
+
+func newFakeCheckpointProvider(t *testing.T, s *Store) *fakeCheckpointProvider {
+	t.Helper()
+	p := &fakeCheckpointProvider{t: t, lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, serving: map[string]*linkServe{},
+		host: registerAgentHost(t, s, ""), registry: runtimegateway.NewRegistry(), link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))}
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: p.registry})
+	server := httptest.NewServer(http.HandlerFunc(handler.WS))
+	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
+	t.Cleanup(func() {
+		p.mu.Lock()
+		if p.hostConn != nil {
+			p.hostConn.Close()
+		}
+		p.mu.Unlock()
+		server.Close()
+	})
+	return p
 }
 
 func (p *fakeCheckpointProvider) Initial(_ context.Context, r sandbox.Reference) (sandbox.Compute, error) {
@@ -49,15 +74,52 @@ func (p *fakeCheckpointProvider) Initial(_ context.Context, r sandbox.Reference)
 func (p *fakeCheckpointProvider) NewCompute(_ context.Context, r sandbox.Reference, generation uint64, parent *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
 	return sandbox.Compute{Generation: generation, Name: fmt.Sprintf("%s-g%d", r.AllocationID, generation), RestoredFrom: parent}, nil
 }
+
+// Create starts the compute, which Serves its Link resource, and connects
+// the agent host unless it is connected.
 func (p *fakeCheckpointProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	info, err := p.lifecycleProvider.Create(ctx, b)
+	if err != nil {
+		return info, err
+	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	current, _ := p.Initial(ctx, b.Reference)
 	current.ID = uuid.NewString()
 	p.computes[current.Name] = sandbox.ComputeState{Compute: current, Status: "running", BootstrapComplete: true}
 	p.bootstraps[b.AllocationID] = b
-	return info, err
+	p.mu.Unlock()
+	if served := p.serve(b.AllocationID); served != nil {
+		select {
+		case <-served.connected:
+		case <-ctx.Done():
+			return info, ctx.Err()
+		}
+	}
+	return info, p.connectHost(ctx, false)
+}
+
+// serve starts the allocation's Serve unless it runs, and returns the new one.
+func (p *fakeCheckpointProvider) serve(allocation string) *linkServe {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.serving[allocation] != nil {
+		return nil
+	}
+	io := p.bootstraps[allocation].SandboxIO
+	served := startLinkServe(p.t, p.link, []byte(io.Credential), io.Resource.Ref())
+	p.serving[allocation] = served
+	return served
+}
+
+// stopServe ends the allocation's Serve, as a paused or killed sandbox does.
+func (p *fakeCheckpointProvider) stopServe(allocation string) {
+	p.mu.Lock()
+	served := p.serving[allocation]
+	delete(p.serving, allocation)
+	p.mu.Unlock()
+	if served != nil {
+		served.stop()
+	}
 }
 func (p *fakeCheckpointProvider) GetCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	p.mu.Lock()
@@ -72,6 +134,12 @@ func (p *fakeCheckpointProvider) GetCompute(_ context.Context, _ sandbox.Referen
 	return state, nil
 }
 func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendRequest) (sandbox.ComputeState, error) {
+	paused := false
+	defer func() {
+		if paused {
+			p.stopServe(q.Reference.AllocationID)
+		}
+	}()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.computes[q.Source.Name]
@@ -89,7 +157,7 @@ func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendReq
 			return sandbox.ComputeState{}, errors.New("capture replayed")
 		}
 		p.snapshots[q.OperationID] = sandbox.SnapshotIdentity{Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Digest: "verified", CheckpointID: "checkpoint", CheckpointRoot: "private", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
-		state.Status = "paused"
+		state.Status, paused = "paused", true
 		p.computes[q.Source.Name] = state
 		if p.loseCapture {
 			p.loseCapture = false
@@ -102,6 +170,12 @@ func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendReq
 	return state, nil
 }
 func (p *fakeCheckpointProvider) Resume(_ context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
+	restored := false
+	defer func() {
+		if restored {
+			p.serve(q.Reference.AllocationID)
+		}
+	}()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if q.ObserveOnly {
@@ -120,13 +194,20 @@ func (p *fakeCheckpointProvider) Resume(_ context.Context, q sandbox.ResumeReque
 	target.ID = uuid.NewString()
 	state := sandbox.ComputeState{Compute: target, Status: "running", BootstrapComplete: true}
 	p.computes[target.Name] = state
+	restored = true
 	if p.loseRestore {
 		p.loseRestore = false
 		return sandbox.ComputeState{}, sandbox.ErrComputeUnconfirmed
 	}
 	return state, nil
 }
-func (p *fakeCheckpointProvider) KillCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) error {
+func (p *fakeCheckpointProvider) KillCompute(_ context.Context, r sandbox.Reference, c sandbox.Compute) error {
+	killed := false
+	defer func() {
+		if killed {
+			p.stopServe(r.AllocationID)
+		}
+	}()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.computes[c.Name]
@@ -138,6 +219,7 @@ func (p *fakeCheckpointProvider) KillCompute(_ context.Context, _ sandbox.Refere
 	}
 	p.computeKills++
 	delete(p.computes, c.Name)
+	killed = true
 	return nil
 }
 func (p *fakeCheckpointProvider) DeleteSnapshot(_ context.Context, _ sandbox.Reference, s sandbox.SnapshotIdentity) error {
@@ -160,27 +242,32 @@ func (p *fakeCheckpointProvider) ResumeCompute(ctx context.Context, r sandbox.Re
 		return state, err
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	state.Status = "running"
 	p.computes[c.Name] = state
+	p.mu.Unlock()
+	p.serve(r.AllocationID)
 	return state, nil
 }
-func (p *fakeCheckpointProvider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, command sandbox.Command) (sandbox.CommandResult, error) {
-	if _, err := p.GetCompute(ctx, r, c); err != nil {
-		return sandbox.CommandResult{}, err
-	}
-	if len(command.Args) != 8 || command.Args[0] != "oac-daemon" || command.Args[1] != "resume" || command.Args[5] != r.EnvironmentID {
-		return sandbox.CommandResult{}, errors.New("unexpected wake command")
-	}
-	p.mu.Lock()
-	p.wakeCommands++
-	b := p.bootstraps[r.AllocationID]
-	p.mu.Unlock()
-	return sandbox.CommandResult{}, p.connect(ctx, b)
+func (p *fakeCheckpointProvider) RunCommandCompute(context.Context, sandbox.Reference, sandbox.Compute, sandbox.Command) (sandbox.CommandResult, error) {
+	return sandbox.CommandResult{}, errors.New("unexpected compute command")
 }
-func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstrap) error {
-	header := http.Header{"Authorization": []string{"Bearer " + b.Credential}}
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, p.endpoint+"?device_id="+b.DeviceID+"&version="+proto.Version, header)
+
+// connectHost connects the agent host unless it is connected; restart drops
+// its connection first, as a restarted agent host does.
+func (p *fakeCheckpointProvider) connectHost(ctx context.Context, restart bool) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.hostConn != nil && !restart {
+		return nil
+	}
+	var previous *runtimegateway.Session
+	if p.hostConn != nil {
+		previous, _ = p.registry.LookupDevice(p.host.ID)
+		p.hostConn.Close()
+		p.hostConn = nil
+	}
+	header := http.Header{"Authorization": []string{"Bearer " + p.host.Credential}}
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, p.endpoint+"?device_id="+p.host.ID+"&version="+proto.Version, header)
 	if err != nil {
 		return err
 	}
@@ -189,74 +276,70 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 		conn.Close()
 		return err
 	}
-	p.mu.Lock()
-	p.peers[b.AllocationID] = conn
-	p.mu.Unlock()
-	if _, err = p.registry.WaitForDevice(ctx, b.DeviceID, time.Second); err != nil {
-		conn.Close()
-		return err
-	}
-	go func() {
-		defer conn.Close()
-		transfer := initializationTransfer{peer: p.preparation}
-		for {
-			var env proto.Envelope
-			if conn.ReadJSON(&env) != nil {
-				return
-			}
-			if reply, ok := assignmentReply(env); ok {
-				if conn.WriteJSON(reply) != nil {
-					return
-				}
-				continue
-			}
-			if env.Type == proto.TypeRuntimePrepare && p.preparation != nil {
-				reply, err := transfer.receive(env)
-				if err != nil {
-					p.preparation.t.Error(err)
-					return
-				}
-				if conn.WriteJSON(reply) != nil {
-					return
-				}
-				continue
-			}
-			if env.Type != proto.TypeEnvironmentQuiesce && env.Type != proto.TypeEnvironmentResume {
-				p.mu.Lock()
-				p.promptFrames.Add(1)
-				p.mu.Unlock()
-				continue
-			}
-			var request proto.EnvironmentSuspendPayload
-			if env.DecodePayload(&request) != nil {
-				return
-			}
-			p.mu.Lock()
-			reject := p.rejectQuiesce && env.Type == proto.TypeEnvironmentQuiesce
-			if env.Type == proto.TypeEnvironmentQuiesce {
-				p.quiesces.Add(1)
-			} else {
-				p.resumes.Add(1)
-			}
-			beforeQuiesce := p.beforeQuiesce
-			p.mu.Unlock()
-			if env.Type == proto.TypeEnvironmentQuiesce && beforeQuiesce != nil {
-				beforeQuiesce()
-			}
-			kind := proto.TypeEnvironmentResumed
-			if env.Type == proto.TypeEnvironmentQuiesce {
-				kind = proto.TypeEnvironmentQuiesced
-			}
-			reply, _ := env.Reply(kind, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: !reject})
-			if conn.WriteJSON(reply) != nil {
-				return
-			}
-			if env.Type == proto.TypeEnvironmentQuiesce && !reject {
-				return
-			}
+	p.hostConn = conn
+	for deadline := time.Now().Add(time.Second); ; time.Sleep(time.Millisecond) {
+		if current, err := p.registry.LookupDevice(p.host.ID); err == nil && current != previous {
+			break
 		}
-	}()
+		if time.Now().After(deadline) {
+			return context.DeadlineExceeded
+		}
+	}
+	go p.answer(conn)
 	return nil
+}
+
+// answer replies to binds, preparation and suspension control on conn.
+func (p *fakeCheckpointProvider) answer(conn *websocket.Conn) {
+	defer conn.Close()
+	transfer := newInitializationTransfer(p.preparation, conn)
+	for {
+		var env proto.Envelope
+		if conn.ReadJSON(&env) != nil {
+			return
+		}
+		if reply, ok := assignmentReply(env); ok {
+			if transfer.write(reply) != nil {
+				return
+			}
+			continue
+		}
+		if env.Type == proto.TypeRuntimePrepare && p.preparation != nil {
+			if err := transfer.receive(env); err != nil {
+				p.preparation.t.Error(err)
+				return
+			}
+			continue
+		}
+		if env.Type != proto.TypeEnvironmentQuiesce && env.Type != proto.TypeEnvironmentResume {
+			p.promptFrames.Add(1)
+			continue
+		}
+		var request proto.EnvironmentSuspendPayload
+		if env.DecodePayload(&request) != nil {
+			return
+		}
+		p.mu.Lock()
+		reject := p.rejectQuiesce && env.Type == proto.TypeEnvironmentQuiesce
+		if env.Type == proto.TypeEnvironmentQuiesce {
+			p.quiesces.Add(1)
+		} else {
+			p.resumes.Add(1)
+		}
+		beforeQuiesce := p.beforeQuiesce
+		p.mu.Unlock()
+		if env.Type == proto.TypeEnvironmentQuiesce && beforeQuiesce != nil {
+			beforeQuiesce()
+		}
+		kind := proto.TypeEnvironmentResumed
+		if env.Type == proto.TypeEnvironmentQuiesce {
+			kind = proto.TypeEnvironmentQuiesced
+		}
+		reply, _ := env.Reply(kind, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: !reject})
+		if transfer.write(reply) != nil {
+			return
+		}
+	}
 }
 
 type computeLifecycleFixture struct {
@@ -273,20 +356,7 @@ type computeLifecycleFixture struct {
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
-	registry := runtimegateway.NewRegistry()
-	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
-	server := httptest.NewServer(http.HandlerFunc(handler.WS))
-	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
-	t.Cleanup(func() {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		for _, peer := range p.peers {
-			peer.Close()
-		}
-		server.Close()
-	})
-	f := &computeLifecycleFixture{t: t, store: s, provider: p, key: webDeployment(t, s, "microsandbox"), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour}}
+	f := &computeLifecycleFixture{t: t, store: s, provider: newFakeCheckpointProvider(t, s), key: webDeployment(t, s, "microsandbox"), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour}}
 	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -298,7 +368,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	w := startWebWorker(t, f.store, f.provider.registry, f.key, f.provider, &f.policy)
+	w := startWebWorker(t, f.store, f.provider.registry, f.provider.link.Relay, f.key, f.provider, &f.policy)
 	// The Worker's claim starts a new owner epoch, in which the node reconnects.
 	onlineManagerNode(t, f.store, f.node)
 	var once sync.Once
@@ -318,17 +388,10 @@ func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.E
 	t := f.t
 	t.Helper()
 	tenant, session, environment := managedSession(t, f.store)
-	owner, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key)
-	if err != nil {
+	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key); err != nil {
 		t.Fatal(err)
 	}
-	f.provider.mu.Lock()
-	b := f.provider.bootstraps[owner.ID]
-	f.provider.mu.Unlock()
-	if err := f.provider.connect(t.Context(), b); err != nil {
-		t.Fatal(err)
-	}
-	owner = f.phase(tenant, environment.ID, "running")
+	owner := f.phase(tenant, environment.ID, "running")
 	return tenant, session, environment, owner
 }
 func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deployment.Allocation {
@@ -352,8 +415,12 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deplo
 	f.t.Fatalf("compute phase=%s, want %s state=%s", owner.ComputePhase, phase, owner.ComputeState)
 	return owner
 }
+
+// complete records a Turn that ran on the agent host, where placement bound
+// the Session.
 func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
+	assignSession(f.t, f.store, owner.SessionID, f.provider.host.ID)
 	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')`, id, owner.SessionID)
 	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	return id
@@ -378,9 +445,14 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	if f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.computes) != 0 || len(f.provider.snapshots) != 1 {
 		t.Fatal("capture did not release source compute")
 	}
+	// The agent host restarts while the Environment is suspended; the wake
+	// resumes it on the new connection.
+	if err := f.provider.connectHost(t.Context(), true); err != nil {
+		t.Fatal(err)
+	}
 	queued := f.queued(suspended)
 	awake := f.phase(tenant, env.ID, "running")
-	if awake.SessionID != session.ID || awake.ID != owner.ID || awake.DeviceID != owner.DeviceID || f.provider.creates != 1 || f.provider.restores != 1 || f.provider.snapshotDeletes != 1 {
+	if awake.SessionID != session.ID || awake.ID != owner.ID || awake.DeviceID != owner.DeviceID || f.provider.creates != 1 || f.provider.restores != 1 || f.provider.snapshotDeletes != 1 || f.provider.resumes.Load() != 1 {
 		t.Fatal("wake replaced Session or replayed allocation")
 	}
 	var completedCount, queuedCount int

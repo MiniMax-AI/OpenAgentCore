@@ -147,12 +147,11 @@ export interface AdminAuditPage extends AdminPage<AdminAuditEntry> { next_cursor
 
 /** Executor credential metadata for one self_hosted environment; the credential itself is never listed. */
 export interface ExecutorCredential { key_id: string; created_at: string; revoked_at: string | null }
-/** Core authority plus a matching live gateway peer; timestamps alone are not readiness. */
+/** Connected while the bound credential has authority and the sandbox it enrolled serves the Environment; `enrolled_at` is not readiness. */
 export interface ExecutorConnection {
   status: "never_enrolled" | "connected" | "disconnected";
   bound_key_id: string | null;
   enrolled_at: string | null;
-  last_seen_at: string | null;
 }
 export interface ExecutorCredentialList { data: ExecutorCredential[]; connection: ExecutorConnection }
 

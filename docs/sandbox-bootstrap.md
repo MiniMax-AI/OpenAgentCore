@@ -36,6 +36,8 @@ The service runs as the account the Provider starts it with. The input names no 
 
 The Provider creates the account and the sandbox, delivers this file and starts `oac-sandbox-io` as that account. `make build-sandbox-io` builds the static Linux binary. The Provider keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
 
+On a [self-hosted machine](./getting-started/self-hosted.md), `oac-daemon start` acts as the Provider for the machine's enrollment. It enrolls with the executor credential and writes this file to `daemon/sandbox-io-bootstrap.json` under the Runtime home, with the `link_url` and `resource` Core returns and the executor token as `credential`. It runs `oac-sandbox-io` as the account that started it. When the service exits, it enrolls again, because a rotation advances the generation, then rewrites the file and restarts the service.
+
 The service validates the input and owns the link: it connects as the serve peer, serves bound streams and reconnects while the credential stays valid. `resource`, including its generation, must be the resource the credential serves, or the relay refuses the link.
 
 The File service serves the single [world export](./file-access-protocol.md#attach), and the Provider's sandbox setup owns its isolation. The [Process service](./process-protocol.md#implement-a-service) runs processes as the service's account, and the service, a child subreaper, reaps their orphaned descendants. The service also serves the [Network protocol](./sandbox-network-protocol.md): it resolves names and dials TCP from the sandbox's network namespace, within the egress each stream's `Bind` carries.

@@ -13,21 +13,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func insertWorkerRuntimeAllocation(t *testing.T, pool *pgxpool.Pool, h *dispatchHarness, phase string) {
+// setWorkerComputePhase puts the harness's allocation in phase, with
+// compute retained for an hour.
+func setWorkerComputePhase(t *testing.T, pool *pgxpool.Pool, h *dispatchHarness, phase string) {
 	t.Helper()
-	_, err := pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,state,create_settled,compute_phase,compute_retained_until,deployment_generation)
-		VALUES($1,$2,$3,$4,'running',true,$5,clock_timestamp()+interval '1 hour',(SELECT generation FROM runtime_deployment))`, uuid.NewString(), h.device.EnvironmentID, h.device.ID, uuid.NewString(), phase)
-	if err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase = $2, compute_retained_until = clock_timestamp() + interval '1 hour' WHERE id = $1`, h.resource.ID, phase); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`), true)
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`))
 	enableWorkerEnvironment(t, h)
 	_, pool := testStore(t)
-	insertWorkerRuntimeAllocation(t, pool, h, "waking")
+	setWorkerComputePhase(t, pool, h, "waking")
 	return h, pool
 }
 

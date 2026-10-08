@@ -13,10 +13,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// ExecutorConnections observes current executor authority and its actual
-// gateway peer. The observer runs after the Environments snapshot closes and
-// must recheck authority after inspecting the peer. Without a gateway peer, no
-// binding is connected.
+// ExecutorConnections observes current executor authority and the enrolled
+// sandbox's serve peer at the Link relay. The observer runs after the
+// Environments snapshot closes and must recheck authority after inspecting
+// the relay. Without a serve peer, no enrollment is connected.
 type ExecutorConnections interface {
 	ExecutorConnected(ctx context.Context, environmentID, credentialDigest string) (bool, error)
 }
@@ -32,13 +32,12 @@ type ExecutorCredentialList struct {
 	Connection ExecutorConnection            `json:"connection" binding:"required"`
 }
 
-// ExecutorConnection reports binding history and current Core-observed connectivity.
-// Heartbeat times are observations, not execution or native readiness.
+// ExecutorConnection reports the Environment's enrollment and whether its
+// sandbox serves the Environment now.
 type ExecutorConnection struct {
 	Status     string     `json:"status" binding:"required" enums:"never_enrolled,connected,disconnected"`
 	BoundKeyID *string    `json:"bound_key_id" binding:"required" extensions:"x-nullable" format:"uuid"`
 	EnrolledAt *time.Time `json:"enrolled_at" binding:"required" format:"date-time" extensions:"x-nullable"`
-	LastSeenAt *time.Time `json:"last_seen_at" binding:"required" format:"date-time" extensions:"x-nullable"`
 }
 
 // registerExecutorCredentialRoutes adds executor credential issuance to the
@@ -52,7 +51,7 @@ func (h *Handler) registerExecutorCredentialRoutes(r chi.Router) {
 }
 
 // @Summary List a self_hosted Environment's executor credentials
-// @Description Core key only. Returns metadata of the credentials restricted to this Environment, oldest first; secrets are never listed. Connection combines current credential authority and an open matching gateway peer; timestamps are historical observations, not readiness. Without a gateway it is never connected. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
+// @Description Core key only. Returns metadata of the credentials restricted to this Environment, oldest first; secrets are never listed. Connection is connected while the enrolled credential has authority and the sandbox it enrolled serves the Environment's Link resource; enrolled_at is when the Environment was first enrolled, not readiness. The Environment must be a self_hosted Environment of the Project whose Session exists; otherwise 404.
 // @Tags Executor Credentials
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -73,9 +72,9 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 	}
 	connection := ExecutorConnection{Status: "never_enrolled"}
 	observed := state.Connection
-	if observed.DeviceID != "" {
-		connection = ExecutorConnection{Status: "disconnected", BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt, LastSeenAt: observed.LastSeenAt}
-		if observed.EnvironmentStatus == "connected" && observed.CredentialHash != "" {
+	if observed.Enrolled {
+		connection = ExecutorConnection{Status: "disconnected", BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt}
+		if observed.CredentialHash != "" {
 			connected, err := h.ExecutorConnections.ExecutorConnected(r.Context(), state.EnvironmentID, observed.CredentialHash)
 			if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 				writeSessionsError(w, r, err)

@@ -25,7 +25,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	frames := workerFrames(t, runtimes...)
 	ordinary := map[string]sessions.Session{}
 	for _, key := range []string{"one", "two", "three"} {
-		session := publicSession(t, h, key)
+		session := ordinarySession(t, h, key)
 		h.session = session
 		receipt := h.message(key, "ordinary")
 		ordinary[receipt.TurnID] = session
@@ -137,7 +137,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	handle := acknowledgePreparation(runtime, first.ID)
 	runtime.write(first.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "failed"})
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
-	h.session = publicSession(t, h, "unrelated")
+	h.session = ordinarySession(t, h, "unrelated")
 	receipt := h.message("ordinary", "make progress after preparation failure")
 	request := nextWorkerFrame(t, frames, testExecutionRequest)
 	if request.ID != receipt.TurnID {

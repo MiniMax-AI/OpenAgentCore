@@ -5,9 +5,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -47,56 +46,42 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 		}
 	}
 	bound, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token))
-	if err != nil || bound.SessionID != session.ID || bound.EnvironmentID != environment.ID || bound.WorkspaceDirectory != "/workspace" {
+	if err != nil || bound.TenantID != p.TenantID || bound.EnvironmentID != environment.ID || bound.Kind != "enrollment" || bound.ID == "" || bound.Generation != 1 {
 		t.Fatalf("enrollment: %+v %v", bound, err)
 	}
 	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token)); err != nil || again != bound {
-		t.Fatalf("retry changed binding: %+v %v", again, err)
+		t.Fatalf("retry changed the resource: %+v %v", again, err)
 	}
-	if devices, err := sessionAdapter(s).ListExecutionDevices(ctx, p.TenantID); err != nil || len(devices) != 0 {
-		t.Fatalf("enrolled Runtime entered general selection: %v", err)
+	if _, err := sessionAdapter(s).GetSessionDevice(ctx, p.TenantID, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatalf("enrollment bound the Session: %v", err)
 	}
-	auth := runtimegateway.NewAuthenticator(sessionAdapter(s))
-	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, key.Token); err != nil {
-		t.Fatal(err)
+	if live, err := sessionAdapter(s).GetEnvironmentResource(ctx, p.TenantID, environment.ID); err != nil || live.Resource != bound || live.CredentialHash != executorDigest(key.Token) {
+		t.Fatalf("live resource: %+v %v", live, err)
 	}
 	otherKey, err := sessionService(t, s).IssueExecutorCredential(ctx, p, uuid.NewString(), environment.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(otherKey.Token)); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
-		t.Fatalf("another key replaced binding: %v", err)
+		t.Fatalf("another key replaced the enrollment: %v", err)
 	}
 	rotated, err := sessionService(t, s).RotateExecutorCredential(ctx, p, key.KeyID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, key.Token); !errors.Is(err, runtimegateway.ErrAuthBadCredential) {
-		t.Fatalf("old key after rotation: %v", err)
+	if _, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatalf("the rotated-out token enrolled: %v", err)
 	}
-	if _, err := auth.AuthenticateBearer(ctx, bound.DeviceID, rotated.Token); err != nil {
-		t.Fatal(err)
-	}
-	for _, check := range []struct {
-		token  string
-		denied bool
-	}{{key.Token, true}, {rotated.Token, false}} {
-		status, err := sessionService(t, s).TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{RuntimeID: bound.DeviceID, CredentialHash: executorDigest(check.token)})
-		if err != nil || status.Deleted != check.denied {
-			t.Fatalf("rotation heartbeat: %+v %v", status, err)
-		}
-	}
-	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(rotated.Token)); err != nil || again != bound {
-		t.Fatalf("rotation replaced identity: %+v %v", again, err)
+	next := bound
+	next.Generation++
+	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(rotated.Token)); err != nil || again != next {
+		t.Fatalf("re-enrollment after rotation: %+v %v", again, err)
 	}
 	if err := sessionService(t, s).RevokeExecutorCredential(ctx, p, key.KeyID); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(ctx, bound.DeviceID); err != nil || ok {
-		t.Fatalf("revoked key authenticates: %v", err)
-	}
-	if _, err := sessionAdapter(s).GetSessionDevice(ctx, p.TenantID, session.ID); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatalf("revoked binding dispatchable: %v", err)
+	if _, err := sessionAdapter(s).GetEnvironmentResource(ctx, p.TenantID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatalf("a revoked key's enrollment is live: %v", err)
 	}
 }
 
@@ -105,7 +90,7 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 	p := FixtureExecutorPrincipal(t, s, uuid.NewString())
 	session, environment, key := runtimeEnrollmentFixture(t, s, p)
 	var wg sync.WaitGroup
-	results := make(chan sessions.RuntimeEnrollment, 6)
+	results := make(chan sandboxbootstrap.Resource, 6)
 	failures := make(chan error, 6)
 	for range 6 {
 		wg.Add(1)
@@ -124,13 +109,13 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var bound sessions.RuntimeEnrollment
+	var bound sandboxbootstrap.Resource
 	for got := range results {
-		if bound.DeviceID == "" {
+		if bound.ID == "" {
 			bound = got
 		}
 		if got != bound {
-			t.Fatal("concurrent enrollment created multiple identities")
+			t.Fatal("concurrent enrollment created multiple resources")
 		}
 	}
 	var allocations int
@@ -143,11 +128,7 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 	if _, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("deleted enrollment: %v", err)
 	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), bound.DeviceID); err != nil || ok {
-		t.Fatalf("deleted Session authenticates: %v", err)
-	}
-	status, err := sessionService(t, s).TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: bound.DeviceID, CredentialHash: executorDigest(key.Token)})
-	if err != nil || !status.Deleted {
-		t.Fatalf("deleted heartbeat: %+v %v", status, err)
+	if _, err := sessionAdapter(s).GetEnvironmentResource(t.Context(), p.TenantID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatalf("a deleted Session's enrollment is live: %v", err)
 	}
 }

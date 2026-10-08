@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 6bfd865756dbe0d358c687ce83f23b610ab9f6db9902e86ef775741982920ae5
+source_hash: 91a4b01924b65e48003f3a66a76a840272b5f672d0e0b667e6afd3626b8e4564
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -53,7 +53,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 | Provider 分配 | 计算资源和文件系统的生命周期：`openai_hosted` 使用 Core 的 Sandbox Provider，`self_hosted` 使用应用程序 |
 | 设备与 daemon 连接 | 经认证的 Runtime 身份和可替换的分派传输 |
 | Harness 进程与原生会话 | 原生模型和工具循环、其执行状态及原生历史 |
-| 注册 | `self_hosted` 机器的 Environment、设备和 executor key 的精确绑定 |
+| 注册 | `self_hosted` 机器用来 Serve 该 Environment 的 [Link](../../../docs/zh/sandbox-link-protocol.md) resource 的 executor key |
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
@@ -71,18 +71,18 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 应用程序拥有机器。它使用干净的绝对路径 `workspace_directory` 和可选的绝对本地 `capability_directories` 创建 Session。Core 会返回 Environment ID、`remote_url` 以及 `x_agents_core.installation` 中的一条安装命令；在该机器上运行此命令会安装 daemon 并为其注册（[self-hosted guide](../../../docs/zh/getting-started/self-hosted.md)、[executor credentials](environment-executor-credentials.md)）。
 
 - `remote_url` 是根据 Core 的公共 URL 推导出的 daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。它指定 Core 的私有 daemon 传输通道。
-- 注册会将精确的 Session、Environment、设备和 executor key 绑定在一起。它不会创建任何分配，也无法将 Session 迁移到另一台设备。
+- 注册记录为该 Environment 的 Link resource 提供服务的 executor key；最先注册的 key 保有它。注册不会创建任何分配，也不绑定 Session：Session 运行在部署的 agent host 上（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)）。
 - Session 的工作区必须等于 `/workspace` 别名，或等于 Runtime 绑定到的精确规范目录。指定某个路径并不会授予对它的访问权限。
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
 - 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问，但不会停止原生进程；机器所有者负责停止和清理。
-- 工作区和原生历史必须能在 daemon 重启后继续存在。丢失它们绝不授权进行静默替换或重播。
+- 工作区必须能在 daemon 重启后继续存在。丢失它绝不授权进行静默替换或重播。
 
 **应用管理的 E2B。** 应用程序可以在由其使用 E2B SDK 创建、续期和销毁的 E2B sandbox 中运行 Runtime，然后将该 Runtime 注册为 `self_hosted` Environment（[E2B Runtime guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)）。Core 不为其保留 E2B 分配，也绝不续期或终止它。
 
 ### 所有权规则 {#ownership-rules}
 
 - 将 Environment 身份、所有权、配置和生命周期保留在 Core 中，并使其与 Provider 计算资源、设备身份、daemon 套接字和原生会话相分离。将可变连接状态排除在不可变配置之外；替换后的所有者会使过期观察值失效。
-- 调用方、设备和 Environment 连接使用彼此不同的凭据。daemon gateway 会对已注册的 executor key 和精确设备进行认证。连接观察保留 generation 和 revision 栅栏。注册和连接都不表示已就绪。
+- 调用方、设备和 Environment 连接使用彼此不同的凭据。relay 使用已注册的 executor key 认证 `self_hosted` 机器的 Serve。连接观察保留 generation 和 revision 栅栏。注册和连接都不表示已就绪。
 - 轮换、撤销、Session 删除和所有权丧失都会拒绝后续访问；但它们不保证原生效果会立即停止。
 - 原生历史保留在绑定的 Runtime 上。替换计算资源时必须保留或以可证明的方式恢复原生历史；绝不能静默移动已绑定的 Session 或重播未知工作。
 - 持久元数据读取不需要活跃的 Runtime。实时文件读取需要获得对精确工作区的授权视图和有界操作所有权。写入、替换或撤销工作区所有者的操作也适用变更栅栏。

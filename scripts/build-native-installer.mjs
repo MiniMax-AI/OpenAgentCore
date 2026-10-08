@@ -150,6 +150,8 @@ export async function buildBundle(options) {
   const output = await outputRealPath(options.output);
   // Refuse staging inside a source: recursive copying must not ingest its own output.
   for (const name of ['node', ...names]) if (inside(await realpath(options[name]), output)) throw new Error('Output must be outside component sources');
+  // Only Linux distributions carry oac-sandbox-io, the service a self-hosted machine runs.
+  if ((process.platform === 'linux') !== Boolean(options.sandboxIo)) throw new Error(options.sandboxIo ? '--sandbox-io is Linux-only' : 'Missing --sandbox-io');
   const daemonVersion = probe(options.daemon, ['version'], dirname(options.daemon), process.env);
   if (!/^[0-9A-Za-z][0-9A-Za-z.+_-]{0,127}$/.test(daemonVersion)) throw new Error('Invalid daemon version');
   await mkdir(dirname(output), { recursive: true });
@@ -157,6 +159,7 @@ export async function buildBundle(options) {
   try {
     const daemon = join(staging, process.platform === 'win32' ? 'oac-daemon.exe' : 'oac-daemon');
     await copyFile(options.daemon, daemon); await chmod(daemon, 0o755);
+    if (options.sandboxIo) { await copyFile(options.sandboxIo, join(staging, 'oac-sandbox-io')); await chmod(join(staging, 'oac-sandbox-io'), 0o755); }
     await mkdir(join(staging, 'components'));
     const components = {};
     for (const name of ['node', ...names]) components[name] = { version: pins[name], files: await copyComponent(options[name], join(staging, 'components', name)) };

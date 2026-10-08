@@ -241,17 +241,6 @@ func (t *allocationTx) LoadAllocation() (deployment.Allocation, error) {
 	return current, err
 }
 
-func (t *allocationTx) LoadSessionDevice() (deployment.SessionDevice, bool, error) {
-	row, err := t.q.GetSessionDevice(t.ctx, sqlc.GetSessionDeviceParams{TenantID: t.tenant, ID: t.session})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return deployment.SessionDevice{}, false, nil
-	}
-	if err != nil {
-		return deployment.SessionDevice{}, false, err
-	}
-	return deployment.SessionDevice{ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID)}, true, nil
-}
-
 func (t *allocationTx) LoadActivity(current deployment.Allocation) (deployment.Activity, error) {
 	id, err := parseID(current.ID)
 	if err != nil {

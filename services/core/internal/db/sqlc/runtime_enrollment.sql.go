@@ -12,7 +12,7 @@ import (
 )
 
 const authorizeRuntimeEnrollment = `-- name: AuthorizeRuntimeEnrollment :one
-SELECT c.key_id, e.session_id, COALESCE(s.configuration->'environment'->>'workspace_directory', '')::text AS workspace_directory
+SELECT c.key_id
 FROM environment_executor_credentials c
 JOIN environments e ON e.id = $1
 JOIN sessions s ON s.id = e.session_id
@@ -32,92 +32,39 @@ type AuthorizeRuntimeEnrollmentParams struct {
 	TenantID      pgtype.UUID `json:"tenant_id"`
 }
 
-type AuthorizeRuntimeEnrollmentRow struct {
-	KeyID              pgtype.UUID `json:"key_id"`
-	SessionID          pgtype.UUID `json:"session_id"`
-	WorkspaceDirectory string      `json:"workspace_directory"`
-}
-
-func (q *Queries) AuthorizeRuntimeEnrollment(ctx context.Context, arg AuthorizeRuntimeEnrollmentParams) (AuthorizeRuntimeEnrollmentRow, error) {
+func (q *Queries) AuthorizeRuntimeEnrollment(ctx context.Context, arg AuthorizeRuntimeEnrollmentParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, authorizeRuntimeEnrollment, arg.EnvironmentID, arg.TokenSha256, arg.TenantID)
-	var i AuthorizeRuntimeEnrollmentRow
-	err := row.Scan(&i.KeyID, &i.SessionID, &i.WorkspaceDirectory)
-	return i, err
+	var key_id pgtype.UUID
+	err := row.Scan(&key_id)
+	return key_id, err
 }
 
-const enrollRuntimeDevice = `-- name: EnrollRuntimeDevice :one
-INSERT INTO devices (id, tenant_id, name, environment_id, executor_key_id)
-VALUES ($1, $2, 'User-managed Runtime', $3, $4)
-ON CONFLICT (environment_id) DO UPDATE SET name = devices.name
-WHERE devices.executor_key_id = EXCLUDED.executor_key_id AND devices.revoked_at IS NULL
-RETURNING id, name, environment_id
+const enrollSandbox = `-- name: EnrollSandbox :one
+INSERT INTO sandbox_enrollments (id, environment_id, executor_key_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (environment_id) DO UPDATE SET executor_key_id = EXCLUDED.executor_key_id
+WHERE sandbox_enrollments.executor_key_id = EXCLUDED.executor_key_id
+RETURNING id, generation
 `
 
-type EnrollRuntimeDeviceParams struct {
+type EnrollSandboxParams struct {
 	ID            pgtype.UUID `json:"id"`
-	TenantID      pgtype.UUID `json:"tenant_id"`
 	EnvironmentID pgtype.UUID `json:"environment_id"`
 	ExecutorKeyID pgtype.UUID `json:"executor_key_id"`
 }
 
-type EnrollRuntimeDeviceRow struct {
-	ID            pgtype.UUID `json:"id"`
-	Name          string      `json:"name"`
-	EnvironmentID pgtype.UUID `json:"environment_id"`
+type EnrollSandboxRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Generation int64       `json:"generation"`
 }
 
-func (q *Queries) EnrollRuntimeDevice(ctx context.Context, arg EnrollRuntimeDeviceParams) (EnrollRuntimeDeviceRow, error) {
-	row := q.db.QueryRow(ctx, enrollRuntimeDevice,
-		arg.ID,
-		arg.TenantID,
-		arg.EnvironmentID,
-		arg.ExecutorKeyID,
-	)
-	var i EnrollRuntimeDeviceRow
-	err := row.Scan(&i.ID, &i.Name, &i.EnvironmentID)
+// The first key to enroll the Environment keeps its enrollment; the same key
+// enrolling again returns it, and another key conflicts.
+func (q *Queries) EnrollSandbox(ctx context.Context, arg EnrollSandboxParams) (EnrollSandboxRow, error) {
+	row := q.db.QueryRow(ctx, enrollSandbox, arg.ID, arg.EnvironmentID, arg.ExecutorKeyID)
+	var i EnrollSandboxRow
+	err := row.Scan(&i.ID, &i.Generation)
 	return i, err
-}
-
-const listEnrolledRuntimeBindings = `-- name: ListEnrolledRuntimeBindings :many
-SELECT d.id AS device_id, d.tenant_id, e.id AS environment_id, e.session_id
-FROM devices d
-JOIN environments e ON e.id = d.environment_id
-JOIN sessions s ON s.id = e.session_id AND s.tenant_id = d.tenant_id
-WHERE d.executor_key_id IS NOT NULL AND s.deleted_at IS NULL
-    AND e.status NOT IN ('failed', 'expired')
-ORDER BY d.id
-`
-
-type ListEnrolledRuntimeBindingsRow struct {
-	DeviceID      pgtype.UUID `json:"device_id"`
-	TenantID      pgtype.UUID `json:"tenant_id"`
-	EnvironmentID pgtype.UUID `json:"environment_id"`
-	SessionID     pgtype.UUID `json:"session_id"`
-}
-
-func (q *Queries) ListEnrolledRuntimeBindings(ctx context.Context) ([]ListEnrolledRuntimeBindingsRow, error) {
-	rows, err := q.db.Query(ctx, listEnrolledRuntimeBindings)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListEnrolledRuntimeBindingsRow{}
-	for rows.Next() {
-		var i ListEnrolledRuntimeBindingsRow
-		if err := rows.Scan(
-			&i.DeviceID,
-			&i.TenantID,
-			&i.EnvironmentID,
-			&i.SessionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const touchAuthenticatedDevice = `-- name: TouchAuthenticatedDevice :execrows

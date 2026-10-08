@@ -75,9 +75,6 @@ type NewAllocation struct {
 	ServeCredentialHash string
 }
 
-// SessionDevice is the Runtime device a Session is bound to.
-type SessionDevice struct{ ID, EnvironmentID string }
-
 // Activity separates real work from the connection keepalive. ObservedAt is
 // the database clock when it was read.
 type Activity struct {
