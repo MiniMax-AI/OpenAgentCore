@@ -82,7 +82,7 @@ func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProv
 	if peer, ok := p.(interface {
 		setRuntimeGateway(*testing.T, *Store, string, *runtimegateway.Registry, *sandboxlinktest.Server)
 	}); ok {
-		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: dispatcher.Registry})
+		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: dispatcher.Registry, Links: runtimegateway.NewLinkAuthority(sessionAdapter(s))})
 		server := httptest.NewServer(http.HandlerFunc(handler.WS))
 		t.Cleanup(server.Close)
 		link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
