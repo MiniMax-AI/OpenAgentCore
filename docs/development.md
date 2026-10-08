@@ -72,7 +72,6 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](./runtime-protocol.md) |
 | `internal/harnessconfig` | Built-in Harness registrations and their support declarations | [Declare support](../contracts/agents-api/harness-onboarding.md#declare-support) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](./runtime-protocol.md) |
-| `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](./runtime-bootstrap.md) |
 | `internal/sandboxwire` | Frame header, primitive encoding and request ID sequence shared by the sandbox I/O protocols | [Framing](./sandbox-link-protocol.md#framing) |
 | `internal/sandboxlink` | Link protocol, peer libraries and relay core | [Sandbox link protocol](./sandbox-link-protocol.md) |
 | `internal/sandboxbootstrap` | Provider-to-Sandbox I/O service startup input | [Sandbox bootstrap](./sandbox-bootstrap.md) |
