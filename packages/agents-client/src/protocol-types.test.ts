@@ -64,6 +64,7 @@ import type {
 describe("Runtime Observation discriminated contract", () => {
   it("narrows status, reason, mode, instance, and sample presence together", () => {
     type Observed = Extract<RuntimeObservation, { status: "observed" }>;
+    type ManagedUnsupported = Extract<RuntimeObservation, { status: "unsupported"; mode: "openai_hosted" }>;
     type Unavailable = Extract<RuntimeObservation, { status: "unavailable" }>;
     type NoneMode = Extract<RuntimeObservation, { mode: "none" }>;
     type SelfHosted = Extract<RuntimeObservation, { mode: "self_hosted" }>;
@@ -73,6 +74,11 @@ describe("Runtime Observation discriminated contract", () => {
     expectTypeOf<Observed["observed_at"]>().toEqualTypeOf<number>();
     expectTypeOf<Observed["instance"]["allocation_id"]>().toEqualTypeOf<string>();
     expectTypeOf<Unavailable["reason"]>().toEqualTypeOf<RuntimeUnavailableReason>();
+    expectTypeOf<Unavailable["reason"]>().toEqualTypeOf<"allocation_pending" | "runtime_not_running" | "sample_timeout" | "sample_unavailable">();
+    expectTypeOf<ManagedUnsupported["reason"]>().toEqualTypeOf<string>();
+    expectTypeOf<ManagedUnsupported["instance"]["allocation_id"]>().toEqualTypeOf<string>();
+    expectTypeOf<ManagedUnsupported["observed_at"]>().toEqualTypeOf<null>();
+    expectTypeOf<ManagedUnsupported["cpu"]>().toEqualTypeOf<null>();
     expectTypeOf<Unavailable["observed_at"]>().toEqualTypeOf<null>();
     expectTypeOf<NoneMode["environment_id"]>().toEqualTypeOf<null>();
     expectTypeOf<NoneMode["instance"]["kind"]>().toEqualTypeOf<"none">();

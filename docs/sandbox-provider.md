@@ -48,7 +48,7 @@ Every provider returns a complete `ProviderOperations()` declaration with one en
 
 `Initial` and `NewCompute` construct compute references without allocating, and `ResumeCompute` thaws only the same resident instance after an aborted pause.
 
-Each declaration entry is `state: supported` with no reason, or `state: unsupported` with an authored reason code. Missing, zero, unknown or unsafe entries fail validation. Adding a method to `SandboxProvider` requires an explicit decision and implementation in every adapter; never supply a base type or generate blanket unsupported implementations.
+Each declaration entry is `state: supported` with no reason, or `state: unsupported` with an authored reason code. A safe code contains 1–96 ASCII characters: a lowercase letter first, followed only by lowercase letters, digits or underscores. Missing, zero, unknown or unsafe entries fail validation. Adding a method to `SandboxProvider` requires an explicit decision and implementation in every adapter; never supply a base type or generate blanket unsupported implementations.
 
 An unsupported method returns `providercontract.UnsupportedError` before any native I/O. The error names the exact operation and a safe code, never a native message, resource identity, endpoint or credential. An empty result, a nil error, `Unavailable` or an unknown mutation outcome never stands in for unsupported, and the four required methods can never return it.
 

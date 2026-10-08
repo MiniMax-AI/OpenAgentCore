@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import importlib.util
 import re
+import json
 
 
 PROVIDER_TYPE_SCHEMA = """      provider_type:
@@ -61,6 +62,18 @@ def main() -> None:
 
     path = Path(sys.argv[1])
     document = harness_enums(path.read_text(encoding="utf-8"))
+    # Swag omits response patterns. The shared Provider fixture checks this
+    # ECMAScript expression against the Go declaration validator.
+    fixture = json.loads((Path(__file__).resolve().parent.parent / "services/core/internal/providercontract/testdata/observation_reasons.json").read_text())
+    for definition in ("v1.RuntimeObservation", "api.AdminRuntimeObservationDetail"):
+        start = document.index("  " + definition + ":\n")
+        end = re.search(r"^  \S", document[start + 1:], re.M).start() + start + 1
+        observation = document[start:end]
+        marker = "      reason:\n        type: string\n"
+        if observation.count(marker) != 1:
+            raise ValueError("Expected one Runtime observation reason field")
+        observation = observation.replace(marker, marker + "        pattern: '" + fixture["schema_pattern"] + "'\n")
+        document = document[:start] + observation + document[end:]
     series_start = "  v1.RuntimeHistorySeries:\n"
     series_end = "\n  v1.RuntimeHistoryTime:\n"
     if document.count(series_start) != 1 or document.count(series_end) != 1:

@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 11794813cac6e3f5613935905eeee54fb72c3bdd4d05b4e84f9f4b0702f26aba
+source_hash: af35eef1f8c73b311a6166a5aa0352c61f33c71c834803f2e7bab6e51be3d965
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -50,7 +50,7 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 
 `Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例。
 
-每个声明项为不带 reason 的 `state: supported`，或带 authored reason code 的 `state: unsupported`。缺失、零值、未知或不安全项都会验证失败。给 `SandboxProvider` 添加方法时，必须在每个 adapter 中明确决定并实现；不提供 base type，也不生成笼统的不支持实现。
+每个声明项为不带 reason 的 `state: supported`，或带 authored reason code 的 `state: unsupported`。安全代码由 1–96 个 ASCII 字符组成：首字符为小写字母，后续仅允许小写字母、数字或下划线。缺失、零值、未知或不安全项都会验证失败。给 `SandboxProvider` 添加方法时，必须在每个 adapter 中明确决定并实现；不提供 base type，也不生成笼统的不支持实现。
 
 不支持的方法在任何原生 I/O 前返回 `providercontract.UnsupportedError`。错误指明精确操作和安全 code，不包含原生消息、资源身份、endpoint 或凭据。空结果、nil error、`Unavailable` 或未知 mutation 结果都不能代替 unsupported，四项必需方法不能返回 unsupported。
 

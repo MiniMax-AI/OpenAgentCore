@@ -117,13 +117,8 @@ definitions:
         type: string
         x-nullable: true
       reason:
-        enum:
-          - runtime_mode_not_observable
-          - allocation_pending
-          - runtime_not_running
-          - sample_timeout
-          - sample_unavailable
         type: string
+        pattern: '^[a-z][a-z0-9_]{0,95}(?![\s\S])'
         x-nullable: true
       resolved_at:
         minimum: 0
@@ -2891,13 +2886,8 @@ definitions:
         type: string
         x-nullable: true
       reason:
-        enum:
-          - runtime_mode_not_observable
-          - allocation_pending
-          - runtime_not_running
-          - sample_timeout
-          - sample_unavailable
         type: string
+        pattern: '^[a-z][a-z0-9_]{0,95}(?![\s\S])'
         x-nullable: true
       resolved_at:
         minimum: 0

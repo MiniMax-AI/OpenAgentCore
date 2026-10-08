@@ -1,3 +1,4 @@
+import { runtimeUnavailableReasons } from "./types";
 import { coreHarnessKinds } from "./harness-catalog";
 import { projectEnvironmentInstallation } from "./installation-projection";
 import {
@@ -25,7 +26,7 @@ import {
 } from "./generated/public-api";
 import {
   runtimeCPUObservationFields, runtimeInstanceFields, runtimeMemoryObservationFields, runtimeObservationFields,
-  runtimeObservationLifecycleStateValues, runtimeObservationModeValues, runtimeObservationReasonValues, runtimeObservationStatusValues,
+  runtimeObservationLifecycleStateValues, runtimeObservationModeValues, runtimeObservationStatusValues,
 } from "./generated/core-api";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage } from "./history-projection";
@@ -884,7 +885,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     )) ||
     !isRecord(value.instance) || !exactFields(value.instance, runtimeInstanceFields) ||
     !isOneOf(runtimeObservationStatusValues, value.status) ||
-    !(value.reason === null || isOneOf(runtimeObservationReasonValues, value.reason)) ||
+    !(value.reason === null || (typeof value.reason === "string" && /^[a-z][a-z0-9_]{0,95}(?![\s\S])/.test(value.reason))) ||
     !isNonnegativeInteger(value.resolved_at)
   ) return invalidRuntimeObservation();
 
@@ -930,10 +931,10 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
       observedAt !== null || startedAt !== null || value.cpu !== null || value.memory !== null
     )) ||
     (value.status === "unsupported" && (
-      (!isNone && !isSelfHosted) || value.reason !== "runtime_mode_not_observable"
+      value.reason === null || (isManaged ? allocationId === null : value.reason !== "runtime_mode_not_observable")
     )) ||
     (value.status === "unavailable" && (
-      !isManaged || value.reason === null || value.reason === "runtime_mode_not_observable"
+      !isManaged || !isOneOf(runtimeUnavailableReasons, value.reason)
     )) ||
     (startedAt !== null && observedAt !== null && startedAt > observedAt) ||
     (allocationCreatedAt !== null && allocationCreatedAt > value.resolved_at)

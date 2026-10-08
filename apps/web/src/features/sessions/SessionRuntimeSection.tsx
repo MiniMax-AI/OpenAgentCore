@@ -85,7 +85,7 @@ export function SessionRuntimeSection({
   let stateLabel = MISSING;
   let stateTone: Tone | undefined;
   if (observation?.status === "observed") stateLabel = t(`runtime.lifecycle.${observation.lifecycle_state}`);
-  else if (observation?.reason) { stateLabel = t(`runtime.reason.${observation.reason}`); stateTone = observation.status === "unavailable" ? "warning" : undefined; }
+  else if (observation?.reason) { stateLabel = t(`runtime.reason.${observation.reason}`, { defaultValue: observation.reason }); stateTone = observation.status === "unavailable" ? "warning" : undefined; }
   const cpu = observation?.status === "observed" ? observation.cpu : null;
   const memory = observation?.status === "observed" ? observation.memory : null;
   const cpuValue = cpu?.usage_cores != null && cpu.capacity_cores != null

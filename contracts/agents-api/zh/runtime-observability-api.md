@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 1c52fa06b312330585b304300b61993d2021105196d58aff7ee0daacafd744b8
+source_hash: 0c2d61cebaea7a0b761105582ce7eafe95287efbacc9a7409eceb64a158778d2
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -92,7 +92,7 @@ Authorization: Bearer <Core key>
 | `instance` | object | 当前计算资源标识；请参阅 [`RuntimeInstance`](#runtimeinstance)。 |
 | `lifecycle_state` | enum 或 null | Core 自身对托管分配的生命周期视图；对于 `none` 和 `self_hosted` 为 null。请参阅下文。 |
 | `status` | enum | `observed`、`unsupported` 或 `unavailable`。 |
-| `reason` | enum 或 null | 该行没有样本的原因；请参阅 [Status and reason](#status-and-reason)。 |
+| `reason` | string 或 null | 该行没有样本的原因；请参阅 [Status and reason](#status-and-reason)。 |
 | `allocation_created_at` | integer 或 null | 创建托管分配时的 Unix 秒数。 |
 | `resolved_at` | integer | Core 解析此行时的 Unix 秒数。 |
 | `observed_at` | integer 或 null | 提供方样本的 Unix 秒数；无样本时为 null。 |
@@ -143,12 +143,13 @@ Authorization: Bearer <Core key>
 | --- | --- | --- |
 | `observed` | null | 提供方返回了样本。 |
 | `unsupported` | `runtime_mode_not_observable` | `none` 和 `self_hosted` Session。 |
+| `unsupported` | 提供方声明的安全代码 | 托管 Runtime 的提供方按[提供方操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)声明不支持 `Observe`。分配 ID 必须存在；所有样本字段均为 null。 |
 | `unavailable` | `allocation_pending` | 托管分配尚不存在或正在创建。 |
 | `unavailable` | `runtime_not_running` | 分配正在清理或已释放，或者提供方报告 Runtime 不存在、已停止或已暂停。 |
 | `unavailable` | `sample_timeout` | 提供方读取超过其截止时间。 |
 | `unavailable` | `sample_unavailable` | 提供方无法生成当前样本。 |
 
-所有权不匹配、格式错误的持久身份或无效的提供方证据会使请求失败，而不会转换为 `unavailable` 行。生成的 `core.openapi.yaml` 会记录每个字段的类型、可空性和枚举，但无法表达 status、mode 与字段之间哪些组合有效；上表和上述字段规则具有规范效力。
+所有权不匹配、格式错误的持久身份或无效的提供方证据会使请求失败，而不会转换为 `unavailable` 行。生成的 `core.openapi.yaml` 会记录每个字段的类型、可空性、枚举和字符串模式，但无法表达 status、mode 与字段之间哪些组合有效；上表和上述字段规则具有规范效力。
 
 ### 错误 {#errors}
 

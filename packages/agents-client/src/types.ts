@@ -21,7 +21,7 @@ import type {
 } from "./generated/public-api";
 import type {
   CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource, RuntimeCPUObservation,
-  RuntimeMemoryObservation, RuntimeObservationLifecycleState, RuntimeObservationReason,
+  RuntimeMemoryObservation, RuntimeObservationLifecycleState,
 } from "./generated/core-api";
 
 // Generated types keep their schema names in ./generated/public-api; these are the client's names for them.
@@ -784,10 +784,11 @@ export interface CreateSessionStreamOptions extends StreamOptions {
 
 // Generated /core/v1 types keep their schema names in ./generated/core-api.
 export type {
-  HarnessModelConfiguration, RuntimeCPUObservation, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
+  HarnessModelConfiguration, RuntimeCPUObservation, RuntimeHistory, RuntimeMemoryObservation, SessionExecutionConfiguration,
 } from "./generated/core-api";
 
-export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
+export const runtimeUnavailableReasons = ["allocation_pending", "runtime_not_running", "sample_timeout", "sample_unavailable"] as const;
+export type RuntimeUnavailableReason = (typeof runtimeUnavailableReasons)[number];
 
 // The schema's flat observation cannot state each mode's null rules; this union does, and the client validates them.
 interface RuntimeObservationBase {
@@ -835,6 +836,12 @@ export interface RuntimeUnavailableObservation extends RuntimeObservationBase {
   memory: null;
 }
 
+export interface RuntimeManagedUnsupportedObservation extends Omit<RuntimeUnavailableObservation, "instance" | "status" | "reason"> {
+  instance: RuntimeObservedObservation["instance"];
+  status: "unsupported";
+  reason: string;
+}
+
 export interface RuntimeNoneObservation extends RuntimeObservationBase {
   environment_id: null;
   mode: "none";
@@ -872,6 +879,7 @@ export interface RuntimeSelfHostedObservation extends RuntimeObservationBase {
 export type RuntimeObservation =
   | RuntimeObservedObservation
   | RuntimeUnavailableObservation
+  | RuntimeManagedUnsupportedObservation
   | RuntimeNoneObservation
   | RuntimeSelfHostedObservation;
 
