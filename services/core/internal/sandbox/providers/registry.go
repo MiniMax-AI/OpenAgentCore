@@ -142,16 +142,18 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation)}, nil
 }
 
-// PythonDeploymentContract projects the same registered adapter policies into
-// the node installer; no second provider list exists in another language.
-func (r *Registry) PythonDeploymentContract() (string, error) {
-	policies := make(map[string]sandbox.DeploymentPolicy, len(r.adapters))
+// DeploymentContract projects the registered modes and policies into the node
+// installer and the TypeScript client; no second provider list exists in
+// another language.
+func (r *Registry) DeploymentContract() (python, typescript string, err error) {
+	providers := make(map[string]sandbox.ProviderProjection, len(r.adapters))
 	for kind := range r.adapters {
 		a, err := r.Lookup(kind)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
-		policies[kind] = a.Policy
+		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy}
 	}
-	return sandbox.PythonDeploymentContract(policies), nil
+	python, typescript = sandbox.DeploymentContract(providers)
+	return python, typescript, nil
 }

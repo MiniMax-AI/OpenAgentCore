@@ -4,7 +4,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-func Policy() sandbox.DeploymentPolicy { return sandbox.DeploymentPolicy{Disk: true, Runtime: true} }
+func Policy() sandbox.DeploymentPolicy {
+	return sandbox.DeploymentPolicy{Disk: true, Runtime: true,
+		DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 4096, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192}}
+}
 
 func ValidateResources(r sandbox.Resources) error { return r.ValidatePolicy("microsandbox", Policy()) }
 func ValidateSpecification(s sandbox.DeploymentSpec) error {

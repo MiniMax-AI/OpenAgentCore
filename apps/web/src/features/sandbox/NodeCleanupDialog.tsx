@@ -12,7 +12,6 @@ export interface NodeCleanup {
   name: string;
   installationId: string;
   scriptDigest: string;
-  provider: string;
   /** The Core address the node enrolled with, when it is no longer the deployment's; else null. */
   oldAddress: string | null;
 }
@@ -23,7 +22,7 @@ export interface NodeCleanup {
  * The installer first confirms with Core, at the node's own address, that the
  * node is removed, which holds from the removal on. The command uses sudo unless the shell is already root. A node enrolled with an earlier address may find it gone; then
  * `--force` skips only that confirmation. Nothing deletes sandboxes, volumes or
- * images. Like Add node's, the command downloads from the installation's public
+ * images; the uninstaller prints what it kept. Like Add node's, the command downloads from the installation's public
  * URL, which the dialog reads (again, if it is not at hand): until it is read, if
  * the read fails (with Try again), or while other machines can't use it, the
  * dialog says so in place of the command. It never opens empty.
@@ -49,8 +48,7 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
     </div> : cleanup ? <div className="sandbox-add-node form-stack">
       <p>{t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command()} value={command()} label={t("Uninstall command")} autoFocus />
-      <p className="sandbox-cleanup-note">{join(t("It never deletes sandboxes, volumes or images."),
-        ...(cleanup.provider === "microsandbox" ? [t("It keeps microsandbox's image store and sandbox data, and prints how to remove them by hand.")] : []))}</p>
+      <p className="sandbox-cleanup-note">{t("It never deletes sandboxes, volumes or images.")}</p>
       {cleanup.oldAddress !== null ? <details className="sandbox-host-requirements">
         <summary>{t("Old Core address gone?")}</summary>
         <div className="sandbox-cleanup-details">

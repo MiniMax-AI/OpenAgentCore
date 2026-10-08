@@ -102,8 +102,8 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				{"direct build", func() error { _, err := registry.BuildDirect(sandbox.DirectConfig{Selection: selection}); return err }},
 				{"binding", func() error { return ValidateBinding(a, &docker.Provider{}) }},
 				{"projection", func() error {
-					text, err := registry.PythonDeploymentContract()
-					if text != "" {
+					python, typescript, err := registry.DeploymentContract()
+					if python != "" || typescript != "" {
 						t.Fatal("partial invalid projection")
 					}
 					return err
@@ -160,7 +160,15 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	if err != nil || p == nil || calls != 2 {
 		t.Fatalf("credential-free direct build: %v calls=%d", err, calls)
 	}
-	if _, err := registry.PythonDeploymentContract(); err != nil {
+	if _, _, err := registry.DeploymentContract(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRegistrationRejectsInvalidDefaultResources(t *testing.T) {
+	a := Builtin().adapters["docker"]
+	a.Policy.DefaultResources = &sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024}
+	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal(err)
 	}
 }

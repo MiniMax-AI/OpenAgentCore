@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultSandboxResources, distributionRuntime, isRuntimeReleaseField, sandboxesThatFit, savedSpecification, validSandboxResources } from "./deployment-specification";
-import standardSizes from "./standard-sizes.json";
-import type { SandboxSpecification } from "@oac/agents-client";
+import { deploymentContract, type SandboxProvider, type SandboxSpecification } from "@oac/agents-client";
 
 const manifest = { platform: "linux/amd64", source_commit: "0".repeat(40), images: { runtime: `sha256:${"a".repeat(64)}` },
   image_manifest_digests: { runtime: `sha256:${"b".repeat(64)}` }, runtime_ref: `oac-runtime@sha256:${"b".repeat(64)}`,
@@ -27,20 +26,18 @@ describe("deployment resources and Runtime", () => {
     expect(savedSpecification("e2b", "docker", current)).toBeNull();
     expect(savedSpecification("e2b", "e2b", { resources: current.resources })).toEqual({ resources: current.resources });
   });
-  it("keeps the installer's Standard sizes structure", () => {
-    expect(Object.keys(standardSizes).sort()).toEqual(["docker", "microsandbox"]);
-    expect(Object.keys(standardSizes.docker).sort()).toEqual(["cpus", "memory_mib"]);
-    expect(Object.keys(standardSizes.microsandbox).sort()).toEqual(["cpus", "environment_disk_mib", "memory_mib", "root_disk_mib"]);
-    for (const provider of ["docker", "microsandbox"] as const) {
-      for (const value of Object.values(standardSizes[provider])) expect(Number.isInteger(value) && value > 0).toBe(true);
+  it("proposes a copy of each declared default size, which the declared bounds accept", () => {
+    for (const provider of Object.keys(deploymentContract.providers) as SandboxProvider[]) {
+      const declared = deploymentContract.providers[provider].default_resources;
       const resources = defaultSandboxResources(provider);
-      expect(resources).toEqual(standardSizes[provider]);
-      expect(resources).not.toBe(standardSizes[provider]);
-      expect(validSandboxResources(provider, resources)).toBe(true);
+      expect(resources).toEqual(declared);
+      if (resources) {
+        expect(resources).not.toBe(declared);
+        expect(validSandboxResources(provider, resources)).toBe(true);
+      }
     }
   });
   it("respects CPU, memory and supported disk bounds", () => {
-    for (const provider of ["docker", "microsandbox", "e2b"] as const) expect(validSandboxResources(provider, defaultSandboxResources(provider))).toBe(true);
     expect(validSandboxResources("docker", { cpus: 0, memory_mib: 2048 })).toBe(false);
     expect(validSandboxResources("e2b", { cpus: 256, memory_mib: 2048 })).toBe(false);
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 511 })).toBe(false);

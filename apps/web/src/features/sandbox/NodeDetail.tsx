@@ -44,7 +44,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
   coreUrl: string;
   targetGeneration?: number;
   stale: boolean;
-  /** The deployment's idle suspension policy; only microsandbox has one. */
+  /** The deployment's idle suspension policy; null unless its Provider declares checkpoint support. */
   suspension: SandboxDeployment["suspension"];
 }) {
   const { t, i18n } = useTranslation("sandbox");
@@ -53,8 +53,8 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
   const now = Math.floor(Date.now() / 1000);
   const own = allocations.filter((allocation) => allocation.node_id === node.id);
   const reporting = !stale && node.online;
-  // Only microsandbox suspends sandboxes into snapshots; Docker retains nothing.
-  const suspends = node.provider === "microsandbox";
+  // Only a Provider that declares checkpoint support suspends sandboxes; the node shares the deployment's.
+  const suspends = suspension !== null;
   const state = nodeState(node, own, stale, coreUrl);
   // As in the list, an old address is the status to act on; the node's health would only distract.
   const diagnostic = stale || state === "old_address" ? "" : nodeDiagnostic(node);
@@ -108,7 +108,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
                   <th scope="col">{t("Configuration generation")}</th>
                   <th scope="col">{t("Recorded state")}</th>
                   <th scope="col">{t("Recorded compute")}</th>
-                  {/* Only microsandbox changes compute phase; under Docker it is always disabled. */}
+                  {/* Only a Provider with a suspension policy changes compute phase; elsewhere it is always disabled. */}
                   {suspension ? <th scope="col"><span className="column-help">{t("In this state")}<HelpTip>{t("How long the sandbox has been in its compute state. For a suspended one, the reclaim time is estimated from when it was suspended and the deployment's retention; Core reclaims it around then. Older allocations show a dash until their state next changes.")}</HelpTip></span></th> : null}
                   <th scope="col">{t("Issue")}</th>
                   <th scope="col">{t("Created")}</th>
