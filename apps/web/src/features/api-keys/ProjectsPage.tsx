@@ -1,3 +1,4 @@
+import type { AdminAPIKey, AdminProject } from "@oac/agents-client";
 import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FolderKanban, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,7 +11,7 @@ import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../
 import { Modal } from "../../components/Modal";
 import { useFailureToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
-import { formatDateTime, formatInteger, formatRelative } from "../../lib/format";
+import { epochSeconds, formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { activeKeyNames, archiveKeyCount, flowError, isAbort, isArchiveConfirmed, isUsableName, matchesProject, normalizeName, prefixLabel, projectNameProblem, type FlowError } from "./key-flows";
 import { FlowErrorMessage, KeyFlowDialogs, NameField, PendingKeyNotice } from "./KeyFlowDialogs";
@@ -22,18 +23,17 @@ import { projectsQuery } from "../../lib/queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
-import { type AdminKey, archiveProject, createProject, type Project, renameProject, revokeKey } from "../../lib/admin-view";
 import { TableSkeleton } from "../../components/Skeleton";
 
 type Dialog =
   /** `thenIssue`: Getting started continues from the new project to its first key. */
   | { kind: "create"; name: string; thenIssue?: boolean }
-  | { kind: "rename"; project: Project; name: string }
+  | { kind: "rename"; project: AdminProject; name: string }
   /** `typed`: the project name, required while it has active keys. */
-  | { kind: "archive"; project: Project; typed: string }
-  | { kind: "revoke"; project: Project; key: AdminKey; activeCount: number };
+  | { kind: "archive"; project: AdminProject; typed: string }
+  | { kind: "revoke"; project: AdminProject; key: AdminAPIKey; activeCount: number };
 
-const manageable = (project: Project) => project.status === "active";
+const manageable = (project: AdminProject) => project.archived_at === null;
 
 /**
  * Platform › Projects and keys. A project owns the assets shared by all of
@@ -58,7 +58,7 @@ export function ProjectsPage() {
   useEffect(() => { setSelectedId(params.id ?? null); }, [params]);
 
   // After a key is issued (or its outcome is uncertain), re-read the project and its keys.
-  const keyChanged = useCallback((project: Project) => {
+  const keyChanged = useCallback((project: AdminProject) => {
     void invalidateProjects(queryClient, { projectId: project.id });
   }, [queryClient]);
   const controls = useKeyFlow(keyChanged);
@@ -138,17 +138,17 @@ export function ProjectsPage() {
     setDialogError(null);
     try {
       if (current.kind === "create") {
-        const project = await createProject(normalizeName(current.name));
+        const project = await admin.createProject({ name: normalizeName(current.name) });
         // The project page opens anew and finds the project in the list at once;
         // the re-read below confirms it. The key dialog follows as its intent.
         queryClient.setQueryData(projectsQuery.queryKey, (list) => (list && !list.some((entry) => entry.id === project.id) ? [...list, project] : list ?? [project]));
         navigate("projects", { id: project.id }, current.thenIssue ? "issue-key" : undefined);
       } else if (current.kind === "rename") {
-        await renameProject(current.project.id, normalizeName(current.name));
+        await admin.renameProject(current.project.id, { name: normalizeName(current.name) });
       } else if (current.kind === "archive") {
-        await archiveProject(current.project.id);
+        await admin.archiveProject(current.project.id);
       } else {
-        await revokeKey(current.project.id, current.key.id);
+        await admin.revokeAPIKey(current.project.id, current.key.id);
       }
       setDialog(null);
     } catch (error) {
@@ -260,7 +260,7 @@ export function ProjectsPage() {
                         </th>
                         <td><ProjectStatus project={project} /></td>
                         <td className="numeric">{formatInteger(project.active_key_count, locale)}</td>
-                        <td className="key-nowrap">{formatDateTime(project.created_at, locale)}</td>
+                        <td className="key-nowrap">{formatDateTime(epochSeconds(project.created_at), locale)}</td>
                         <td className="key-nowrap" title={lastActive !== null ? formatDateTime(lastActive, locale) : undefined}>{formatRelative(lastActive, now, locale)}</td>
                         <td className="actions-cell" onClick={(event) => event.stopPropagation()}>
                           {manageable(project) ? (

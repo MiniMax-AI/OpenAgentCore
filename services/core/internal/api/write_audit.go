@@ -20,7 +20,7 @@ type WriteAudit interface {
 }
 
 type ResourceOwnerList struct {
-	Data []writeaudit.ResourceOwner `json:"data"`
+	Data []writeaudit.ResourceOwner `json:"data" binding:"required"`
 }
 
 func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowed ...string) (url.Values, string, bool) {

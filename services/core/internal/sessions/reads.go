@@ -67,7 +67,7 @@ type TurnDiagnosticsSnapshot struct {
 // ManagedArchive reports resource disposal, not archive request provenance
 // or Turn settlement. Existing expiry and failed provisioning use the same states.
 type ManagedArchive struct {
-	SessionID     string `json:"session_id"`
-	EnvironmentID string `json:"environment_id"`
-	State         string `json:"state"`
+	SessionID     string `json:"session_id" binding:"required"`
+	EnvironmentID string `json:"environment_id" binding:"required"`
+	State         string `json:"state" enums:"active,cleanup_pending,released" binding:"required"`
 }

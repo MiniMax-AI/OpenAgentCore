@@ -29,22 +29,22 @@ type Filter struct {
 // Operation is one administrator write. ProjectID is null for
 // deployment-wide writes, such as deployment default model providers.
 type Operation struct {
-	ID                string    `json:"id"`
-	CreatedAt         time.Time `json:"created_at"`
-	AdminCredentialID string    `json:"admin_credential_id"`
-	ActorLabel        string    `json:"actor_label"`
-	Action            string    `json:"action"`
-	ProjectID         *string   `json:"project_id" extensions:"x-nullable"`
-	ResourceType      string    `json:"resource_type"`
-	ResourceID        string    `json:"resource_id"`
-	RequestID         string    `json:"request_id"`
-	TraceID           string    `json:"trace_id"`
+	ID                string    `json:"id" binding:"required"`
+	CreatedAt         time.Time `json:"created_at" binding:"required"`
+	AdminCredentialID string    `json:"admin_credential_id" binding:"required"`
+	ActorLabel        string    `json:"actor_label" binding:"required"`
+	Action            string    `json:"action" binding:"required"`
+	ProjectID         *string   `json:"project_id" extensions:"x-nullable" binding:"required"`
+	ResourceType      string    `json:"resource_type" binding:"required"`
+	ResourceID        string    `json:"resource_id" binding:"required"`
+	RequestID         string    `json:"request_id" binding:"required"`
+	TraceID           string    `json:"trace_id" binding:"required"`
 }
 
 type Page struct {
-	Data       []Operation `json:"data"`
-	HasMore    bool        `json:"has_more"`
-	NextCursor string      `json:"next_cursor"`
+	Data       []Operation `json:"data" binding:"required"`
+	HasMore    bool        `json:"has_more" binding:"required"`
+	NextCursor string      `json:"next_cursor" binding:"required"`
 }
 
 // Validate checks f and returns it with the default page size applied. The

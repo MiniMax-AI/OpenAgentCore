@@ -117,6 +117,8 @@ definitions:
         $ref: '#/definitions/sandbox.Resources'
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
+    required:
+      - resources
     type: object
   sandbox.Resources:
     properties:
@@ -128,6 +130,9 @@ definitions:
         type: integer
       root_disk_mib:
         type: integer
+    required:
+      - cpus
+      - memory_mib
     type: object
   sandbox.RuntimeRelease:
     properties:
@@ -143,6 +148,13 @@ definitions:
         type: string
       source_commit:
         type: string
+    required:
+      - firmware_sha256
+      - image_id
+      - image_manifest_digest
+      - microsandbox_ref
+      - runtime_sha256
+      - source_commit
     type: object
   v1.APIError:
     properties:

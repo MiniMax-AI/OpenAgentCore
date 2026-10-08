@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
-import { CoreMetricsClient, type CoreMetricsRange } from "@oac/agents-client";
+import { type AdminProject, CoreMetricsClient, type CoreMetricsRange } from "@oac/agents-client";
 
-import { listRuntimeObservations, loadSummary, type Project } from "../../lib/admin-view";
+import { listRuntimeObservations, loadSummary } from "../../lib/admin-view";
 import { projectClient } from "../../lib/projects";
 import { aggregateAgentMetrics, metricsWindow, type AgentMetrics, type AgentMetricsRange } from "./agent-metrics";
 import { loadProjectAgentMetrics } from "./agent-metrics-loader";
@@ -20,7 +20,7 @@ export const hostedRuntimesQuery = queryOptions({
 
 export interface LoadedAgentMetrics {
   metrics: AgentMetrics;
-  truncatedLists: Project[];
+  truncatedLists: AdminProject[];
   listFailures: ProjectReadFailure[];
   /** Epoch milliseconds. */
   loadedAt: number;
@@ -31,7 +31,7 @@ export interface LoadedAgentMetrics {
  * read time; the key holds every input: the project filter, the range and the
  * projects read.
  */
-export function agentMetricsQuery(targets: readonly Project[], filter: string, range: AgentMetricsRange) {
+export function agentMetricsQuery(targets: readonly AdminProject[], filter: string, range: AgentMetricsRange) {
   return queryOptions({
     queryKey: ["agent-metrics", { project: filter, range }, targets.map((project) => project.id)],
     queryFn: async ({ signal }): Promise<LoadedAgentMetrics> => {

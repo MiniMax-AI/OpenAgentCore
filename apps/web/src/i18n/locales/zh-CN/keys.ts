@@ -174,12 +174,11 @@ export const keys: TranslationShape<typeof english> = {
   },
   operations: {
     title: "写操作记录",
-    help: "这个项目里每一次成功的写操作，以及发起它的 key，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。“未知”表示没有记录 key。",
+    help: "这个项目里每一次成功的写操作，以及发起它的 key，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。",
     filterLabel: "筛选写操作记录",
     allTypes: "全部资源",
     allKeys: "全部 key",
     revokedKeyOption: "{{name}} · 已撤销",
-    unknownKey: "未知",
     columns: {
       time: "时间",
       action: "操作",

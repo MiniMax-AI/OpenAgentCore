@@ -1,82 +1,50 @@
-import type { AgentSession } from "@oac/agents-client";
+import type { AdminProject, AgentSession } from "@oac/agents-client";
 
 import type { CapacitySummary } from "../fleet/fleet-model";
 import type { InProject } from "../metrics/project-sessions";
-import { type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
 
 /** Pure projections behind the Overview. Missing inputs stay null, never zero. */
 
-export interface SessionCounts {
-  total: number;
-  idle: number;
-  in_progress: number;
-  requires_action: number;
-  failed: number;
-}
-
-export type SummaryUsage = NonNullable<ProjectSummary["usage"]>;
+export type SessionCounts = ProjectSummary["sessions"];
 
 export interface ProjectUsageRow {
-  project: Project;
+  project: AdminProject;
   /** The project's `/summary` row, or null when Core returned none for it. */
   summary: ProjectSummary | null;
 }
 
 /** Project rows of a `/summary` response (Agent and key rows are skipped). */
 export function projectRows(summary: readonly ProjectSummary[]): ProjectSummary[] {
-  return summary.filter((row) => row.agent_id === null && !row.key);
+  return summary.filter((row) => row.agent_id === null && row.key_id === null);
 }
 
 /**
  * One row per project, joined with its `/summary` row. Active projects come
  * first, then the most recently active.
  */
-export function projectUsageRows(projects: readonly Project[], summary: readonly ProjectSummary[]): ProjectUsageRow[] {
+export function projectUsageRows(projects: readonly AdminProject[], summary: readonly ProjectSummary[]): ProjectUsageRow[] {
   const byProject = new Map(projectRows(summary).map((row) => [row.project_id, row]));
   return projects
     .map((project) => ({ project, summary: byProject.get(project.id) ?? null }))
     .sort((a, b) => (
-      Number(a.project.status === "archived") - Number(b.project.status === "archived")
+      Number(a.project.archived_at !== null) - Number(b.project.archived_at !== null)
       || (b.summary?.last_active_at ?? -1) - (a.summary?.last_active_at ?? -1)
       || a.project.name.localeCompare(b.project.name)
     ));
 }
 
-export interface SummaryTotals {
-  sessions: SessionCounts;
-  /** Sum over projects that reported usage; null when none did. */
-  usage: SummaryUsage | null;
-  coverage: { sessions: number; reported: number };
-}
-
-/** Totals over every project row. */
-export function summaryTotals(summary: readonly ProjectSummary[]): SummaryTotals {
+/** Session counts over every project row. */
+export function summaryTotals(summary: readonly ProjectSummary[]): SessionCounts {
   const sessions: SessionCounts = { total: 0, idle: 0, in_progress: 0, requires_action: 0, failed: 0 };
-  const coverage = { sessions: 0, reported: 0 };
-  let usage: SummaryUsage | null = null;
   for (const row of projectRows(summary)) {
     sessions.total += row.sessions.total;
     sessions.idle += row.sessions.idle;
     sessions.in_progress += row.sessions.in_progress;
     sessions.requires_action += row.sessions.requires_action;
     sessions.failed += row.sessions.failed;
-    coverage.sessions += row.coverage.sessions;
-    coverage.reported += row.coverage.reported;
-    if (row.usage) {
-      usage ??= { input_tokens: 0, output_tokens: 0, total_tokens: 0, cached_tokens: 0, reasoning_tokens: 0 };
-      usage.input_tokens += row.usage.input_tokens;
-      usage.output_tokens += row.usage.output_tokens;
-      usage.total_tokens += row.usage.total_tokens;
-      usage.cached_tokens += row.usage.cached_tokens;
-      usage.reasoning_tokens += row.usage.reasoning_tokens;
-    }
   }
-  return { sessions, usage, coverage };
-}
-
-/** Share of Sessions that reported usage; null when there are none. */
-export function coverageRatio(coverage: { sessions: number; reported: number }): number | null {
-  return coverage.sessions > 0 ? coverage.reported / coverage.sessions : null;
+  return sessions;
 }
 
 export function attentionCount(counts: Pick<SessionCounts, "failed" | "requires_action">): number {

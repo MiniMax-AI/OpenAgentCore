@@ -1,5 +1,5 @@
 // Command openapi-split emits internal contracts and exports Go definitions
-// for the public contract extension overlay.
+// for the public contract extension overlay and the Core client types.
 package main
 
 import (
@@ -22,19 +22,20 @@ const (
 func main() {
 	check := flag.Bool("check", false, "check generated internal contracts without changing them")
 	flag.Parse()
-	if flag.NArg() != 4 {
-		fmt.Fprintln(os.Stderr, "usage: openapi-split [--check] INPUT EXTENSIONS_OUTPUT CORE_OUTPUT RUNTIME_OUTPUT")
+	if flag.NArg() != 5 {
+		fmt.Fprintln(os.Stderr, "usage: openapi-split [--check] INPUT EXTENSIONS_OUTPUT CORE_JSON_OUTPUT CORE_OUTPUT RUNTIME_OUTPUT")
 		os.Exit(1)
 	}
-	if err := run(flag.Arg(0), flag.Arg(1), flag.Arg(2), flag.Arg(3), *check); err != nil {
+	if err := run(flag.Arg(0), flag.Arg(1), flag.Arg(2), flag.Arg(3), flag.Arg(4), *check); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// run exports Go-owned definitions for the public extension overlay and emits
-// the two internal contracts. Public operations come only from official OpenAPI.
-func run(input, extensionOutput, coreOutput, runtimeOutput string, check bool) error {
+// run exports Go-owned definitions for the public extension overlay and the
+// Core client types, and emits the two internal contracts. Public operations
+// come only from official OpenAPI.
+func run(input, extensionOutput, coreJSONOutput, coreOutput, runtimeOutput string, check bool) error {
 	raw, err := os.ReadFile(input)
 	if err != nil {
 		return err
@@ -43,23 +44,17 @@ func run(input, extensionOutput, coreOutput, runtimeOutput string, check bool) e
 	if err := yaml.Unmarshal(raw, &source); err != nil {
 		return err
 	}
-	var definitions map[string]any
-	if err := field(source.Content[0], "definitions").Decode(&definitions); err != nil {
-		return err
-	}
-	extensionJSON, err := json.Marshal(definitions)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(extensionOutput, extensionJSON, 0644); err != nil {
+	if err := writeJSON(field(source.Content[0], "definitions"), extensionOutput); err != nil {
 		return err
 	}
 	for _, output := range []struct {
 		path, title, description string
 		surface                  int
+		// jsonOutput, when set, receives the document as JSON.
+		jsonOutput string
 	}{
-		{coreOutput, "OpenAgentCore Core API", "Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.", coreSurface},
-		{runtimeOutput, "OpenAgentCore Machine Connections", "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements.", runtimeSurface},
+		{coreOutput, "OpenAgentCore Core API", "Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.", coreSurface, coreJSONOutput},
+		{runtimeOutput, "OpenAgentCore Machine Connections", "Machine connection routes under /api/v1. Sandbox nodes authenticate with a one-use enrollment token or their node credential; Project API keys and the Core key are not accepted. See each operation's security requirements.", runtimeSurface, ""},
 	} {
 		var doc yaml.Node
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
@@ -84,8 +79,27 @@ func run(input, extensionOutput, coreOutput, runtimeOutput string, check bool) e
 		if err := writeGenerated(output.path, buf.Bytes(), check); err != nil {
 			return err
 		}
+		if output.jsonOutput != "" {
+			if err := writeJSON(root, output.jsonOutput); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
+}
+
+// writeJSON writes a YAML node as JSON, which scripts/generate-public-api.py
+// reads without a YAML parser.
+func writeJSON(node *yaml.Node, path string) error {
+	var value map[string]any
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0644)
 }
 func field(n *yaml.Node, key string) *yaml.Node {
 	if n != nil {

@@ -23,6 +23,10 @@ import {
   textFormatResourceFields, textResourceFields, vaultCredentialResourceFields, vaultListResourceFields, vaultResourceFields,
   verbosityResourceValues,
 } from "./generated/public-api";
+import {
+  runtimeCPUObservationFields, runtimeInstanceFields, runtimeMemoryObservationFields, runtimeObservationFields,
+  runtimeObservationLifecycleStateValues, runtimeObservationModeValues, runtimeObservationReasonValues, runtimeObservationStatusValues,
+} from "./generated/core-api";
 import { projectTokenUsage } from "./usage-projection";
 import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage } from "./history-projection";
 import { projectOpenAIHostedSessionEnvironment } from "./session-environment-projection";
@@ -240,19 +244,7 @@ const maxSourceFileListLimit = 10000;
 const unsafeUnknownEventFields = new Set([
   "session", "turn", "turn_id", "item", "item_id", "output_index", "content_index", "part", "delta", "text", "error", "environment",
 ]);
-const runtimeObservationFields = new Set([
-  "id", "object", "session_id", "environment_id", "mode", "provider_type", "instance", "status", "reason",
-  "lifecycle_state", "allocation_created_at", "resolved_at", "observed_at", "started_at", "cpu", "memory",
-]);
-const runtimeInstanceFields = new Set(["kind", "allocation_id", "device_id", "connection_generation"]);
-const runtimeCPUFields = new Set(["usage_seconds_total", "capacity_cores", "usage_cores", "utilization_ratio"]);
-const runtimeMemoryFields = new Set(["usage_bytes", "limit_bytes"]);
-const runtimeObservationReasons = new Set([
-  "runtime_mode_not_observable", "allocation_pending", "runtime_not_running",
-  "sample_timeout", "sample_unavailable",
-]);
 const runtimeProviderTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
-const runtimeLifecycleStates = new Set(["active", "sleeping", "transitioning", "pending", "stopped"]);
 function invalidSessionInputBatch(): never {
   throw new TypeError("Invalid Session input event batch.");
 }
@@ -886,15 +878,13 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     id === null || sessionId === null || id !== sessionId ||
     (expectedSessionId !== undefined && !sameUuid(sessionId, expectedSessionId)) ||
     value.object !== "agent.runtime_observation" ||
-    (value.mode !== "none" && value.mode !== "self_hosted" && value.mode !== "openai_hosted") ||
+    !isOneOf(runtimeObservationModeValues, value.mode) ||
     !(value.provider_type === null || (
       typeof value.provider_type === "string" && runtimeProviderTypePattern.test(value.provider_type)
     )) ||
     !isRecord(value.instance) || !exactFields(value.instance, runtimeInstanceFields) ||
-    (value.status !== "observed" && value.status !== "unsupported" && value.status !== "unavailable") ||
-    !(value.reason === null || (
-      typeof value.reason === "string" && runtimeObservationReasons.has(value.reason)
-    )) ||
+    !isOneOf(runtimeObservationStatusValues, value.status) ||
+    !(value.reason === null || isOneOf(runtimeObservationReasonValues, value.reason)) ||
     !isNonnegativeInteger(value.resolved_at)
   ) return invalidRuntimeObservation();
 
@@ -927,7 +917,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     )) ||
     (isManaged && (
       value.instance.kind !== "managed_allocation" || environmentId === null || connectionGeneration !== null ||
-      !runtimeLifecycleStates.has(String(value.lifecycle_state)) ||
+      !isOneOf(runtimeObservationLifecycleStateValues, value.lifecycle_state) ||
       (allocationId === null && (deviceId !== null || allocationCreatedAt !== null))
     ))
   ) return invalidRuntimeObservation();
@@ -953,7 +943,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
 
   let cpu: RuntimeObservation["cpu"] = null;
   if (value.cpu !== null) {
-    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUFields)) {
+    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUObservationFields)) {
       return invalidRuntimeObservation();
     }
     cpu = {
@@ -970,7 +960,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
 
   let memory: RuntimeObservation["memory"] = null;
   if (value.memory !== null) {
-    if (!observed || !isRecord(value.memory) || !exactFields(value.memory, runtimeMemoryFields)) {
+    if (!observed || !isRecord(value.memory) || !exactFields(value.memory, runtimeMemoryObservationFields)) {
       return invalidRuntimeObservation();
     }
     memory = {
