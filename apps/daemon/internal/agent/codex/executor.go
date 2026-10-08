@@ -101,9 +101,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 			Mode:     CollaborationModeDefault,
 			Settings: CollaborationModeSettings{ReasoningEffort: e.plan.ModelReasoningEffort, Model: model, DeveloperInstructions: developerInstructions},
 		}}
-		startCtx, stop := context.WithTimeout(ctx, 10*time.Second)
-		_, err = s.rpc.requestWithResult(startCtx, "turn/start", params, s.bindTurnResult)
-		stop()
+		_, err = s.rpc.requestWithResult(ctx, "turn/start", params, s.bindTurnResult)
 		if err != nil {
 			s.cfg.logger.Warn("codex: turn/start ack failed", "run_id", runID, "err", err)
 			err = fmt.Errorf("codex: turn/start: %w", err)

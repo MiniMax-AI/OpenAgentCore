@@ -113,6 +113,103 @@ func TestExecutorNormalTurnsKeepProcessAndThread(t *testing.T) {
 		t.Fatal("normal completion closed executor")
 	}
 }
+
+func TestExecutorTurnStartUsesDefaultRequestBudget(t *testing.T) {
+	t.Setenv("OAC_TEST_EXECUTOR_START_DELAY", "11s")
+	e, root := executorFixture(t, "complete")
+	out := make(chan proto.Envelope, 20)
+	turn, err := e.StartTurn(t.Context(), "delayed-ack", proto.TextInput("answer"), out)
+	if err != nil {
+		t.Fatalf("valid turn/start acknowledgement after the former 10s limit: %v", err)
+	}
+	if !awaitExecutorTurn(t, turn, out).Reusable {
+		t.Fatal("delayed acknowledgement did not retain a reusable Turn")
+	}
+	starts := 0
+	for _, frame := range preparationFrames(t, root) {
+		if frame.Method == "turn/start" {
+			starts++
+		}
+	}
+	if starts != 1 {
+		t.Fatalf("input submitted %d times", starts)
+	}
+}
+
+func TestExecutorTurnStartBudgetFailuresRetainOwnership(t *testing.T) {
+	for _, mode := range []string{"request-timeout", "parent-cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("OAC_TEST_EXECUTOR_START_DELAY", "1s")
+			e, root := executorFixture(t, "complete")
+			if mode == "request-timeout" {
+				e.base.rpc.cfg.RequestTimeout = 100 * time.Millisecond
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			out := make(chan proto.Envelope, 20)
+			type result struct {
+				turn agent.Turn
+				err  error
+			}
+			done := make(chan result, 1)
+			go func() {
+				turn, err := e.StartTurn(ctx, "uncertain-ack", proto.TextInput("answer"), out)
+				done <- result{turn, err}
+			}()
+			waitPreparationMethod(t, root, "turn/start")
+			if mode == "parent-cancel" {
+				cancel()
+			}
+			var got result
+			select {
+			case got = <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("turn/start ignored its request budget or parent cancellation")
+			}
+			if got.turn == nil || got.turn != e.active || got.err == nil {
+				t.Fatal("uncertain submission lost exact Turn ownership", got.err)
+			}
+			if mode == "parent-cancel" && !errors.Is(got.err, context.Canceled) {
+				t.Fatal("parent cancellation was not preserved", got.err)
+			}
+			if mode == "request-timeout" && (ctx.Err() != nil || !strings.Contains(got.err.Error(), "turn/start timed out after 100ms")) {
+				t.Fatal("configured RPC budget was not preserved", got.err, ctx.Err())
+			}
+			settleCtx, stop := context.WithTimeout(t.Context(), 5*time.Second)
+			defer stop()
+			settlement, err := got.turn.AwaitSettlement(settleCtx)
+			if err == nil || errors.Is(err, context.DeadlineExceeded) || settlement.Reusable {
+				t.Fatal("uncertain native start fabricated settlement", settlement, err)
+			}
+			terminals := 0
+			for frame := range out {
+				if frame.Type == proto.TypeDone {
+					terminals++
+				}
+			}
+			if terminals != 1 {
+				t.Fatalf("terminal count %d", terminals)
+			}
+			if turn, err := e.StartTurn(t.Context(), "no-replay", proto.TextInput("answer"), make(chan proto.Envelope, 20)); turn != nil || err == nil {
+				t.Fatal("uncertain executor admitted another input", err)
+			}
+			if err := e.Close(settleCtx); err != nil {
+				t.Fatal(err)
+			}
+			waitExecutorRelease(t, e, root)
+			starts := 0
+			for _, frame := range preparationFrames(t, root) {
+				if frame.Method == "turn/start" {
+					starts++
+				}
+			}
+			if starts != 1 {
+				t.Fatalf("input submitted %d times", starts)
+			}
+		})
+	}
+}
+
 func TestExecutorFreezesPreparedConfiguration(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "resumed"}[resume], func(t *testing.T) {
