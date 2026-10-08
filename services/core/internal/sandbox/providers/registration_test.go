@@ -165,35 +165,12 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	}
 }
 
-// Idle time is measured before suspension, retention after suspension. Neither
-// duration needs to be greater than the other.
-func TestRegistrationCheckpointPolicy(t *testing.T) {
+// Only a nodes registration may declare checkpoint support.
+func TestRegistrationCheckpointRequiresNodes(t *testing.T) {
 	registry := Builtin()
-	for _, tc := range []struct {
-		name            string
-		kind            string
-		idle, retention int64
-		direct, valid   bool
-	}{
-		{"negative idle", "microsandbox", -1, 20, false, false},
-		{"missing idle", "microsandbox", 0, 20, false, false},
-		{"missing retention", "microsandbox", 20, 0, false, false},
-		{"overflow", "microsandbox", 1<<63 - 1, 20, false, false},
-		{"direct suspension", "microsandbox", 20, 20, true, false},
-		{"unsupported suspension", "docker", 20, 20, false, false},
-		{"independent durations", "microsandbox", 300, 30, false, true},
-		{"no suspension", "docker", 0, 0, false, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			a := registry.adapters[tc.kind]
-			a.IdleSeconds, a.RetentionSeconds = tc.idle, tc.retention
-			if tc.direct {
-				a.Mode, a.BuildLocal, a.BuildDirect = "direct", nil, registry.adapters["e2b"].BuildDirect
-			}
-			err := ValidateRegistration(a)
-			if (err == nil) != tc.valid || err != nil && !errors.Is(err, providercontract.ErrContract) {
-				t.Fatal(err)
-			}
-		})
+	a := registry.adapters["microsandbox"]
+	a.Mode, a.BuildLocal, a.NodeArtifacts, a.BuildDirect = "direct", nil, nil, registry.adapters["e2b"].BuildDirect
+	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) || !strings.Contains(err.Error(), "checkpoint") {
+		t.Fatal("direct checkpoint registration accepted", err)
 	}
 }

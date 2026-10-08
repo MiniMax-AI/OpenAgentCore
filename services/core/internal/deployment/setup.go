@@ -21,8 +21,8 @@ type Setup struct {
 	// transport proxies.
 	Operations    providercontract.Operations
 	Configuration sandbox.Configuration `json:"-"`
-	// Suspension is the idle suspension policy of a provider that suspends
-	// sandboxes, and nil otherwise.
+	// Suspension is the idle suspension policy of a provider that declares
+	// checkpoint support, and nil otherwise.
 	Suspension *Suspension
 	// UsesCredential reports whether the provider's configuration carries a
 	// credential.

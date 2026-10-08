@@ -17,16 +17,15 @@ import (
 // Adapter describes configuration and transport independently of compute operations.
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
-	NodeArtifacts                 []providerassets.Artifact
-	Policy                        sandbox.DeploymentPolicy
-	Configuration                 sandbox.ConfigurationAdapter
-	BuildLocal                    func(Config, LocalOptions, *Built) (func(), error)
-	BuildDirect                   func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
-	Mode                          string
-	Operations                    func() providercontract.Operations
-	IdleSeconds, RetentionSeconds int64
-	ValidateSpecification         func(sandbox.DeploymentSpec) error
-	ValidateResources             func(sandbox.Resources) error
+	NodeArtifacts         []providerassets.Artifact
+	Policy                sandbox.DeploymentPolicy
+	Configuration         sandbox.ConfigurationAdapter
+	BuildLocal            func(Config, LocalOptions, *Built) (func(), error)
+	BuildDirect           func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
+	Mode                  string
+	Operations            func() providercontract.Operations
+	ValidateSpecification func(sandbox.DeploymentSpec) error
+	ValidateResources     func(sandbox.Resources) error
 }
 
 // Registry holds the registered adapters. Core and the node program each build
@@ -51,7 +50,6 @@ func Builtin() *Registry {
 				{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
 				{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
 			Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
-			IdleSeconds: 300, RetentionSeconds: 86400,
 			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 		},
@@ -141,7 +139,7 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	if a.Mode == "direct" {
 		namespace = kind
 	}
-	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation), IdleSeconds: a.IdleSeconds, RetentionSeconds: a.RetentionSeconds}, nil
+	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation)}, nil
 }
 
 // PythonDeploymentContract projects the same registered adapter policies into

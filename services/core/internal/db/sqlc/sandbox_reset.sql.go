@@ -25,8 +25,7 @@ func (q *Queries) CancelSandboxReset(ctx context.Context) error {
 
 const completeSandboxReset = `-- name: CompleteSandboxReset :exec
 UPDATE runtime_deployment SET provider_kind = '', backend_fingerprint = '', mode = '',
-    specification = '{}', idle_seconds = 0, retention_seconds = 0,
-    provider_config = '{}'::jsonb, provider_metadata = '{}'::jsonb, provider_credential = NULL,
+    specification = '{}', provider_config = '{}'::jsonb, provider_metadata = '{}'::jsonb, provider_credential = NULL,
     generation = generation + 1, owner_epoch = owner_epoch + 1,
     reset_clear = NULL, reset_requested_at = NULL,
     reset_deadline_at = NULL, reset_forced_at = NULL, reset_audit = NULL,
@@ -51,7 +50,7 @@ func (q *Queries) ForceSandboxReset(ctx context.Context) error {
 }
 
 const getSandboxDeploymentSnapshot = `-- name: GetSandboxDeploymentSnapshot :one
-WITH deployment AS MATERIALIZED (SELECT singleton, installation_id, backend_fingerprint, updated_at, provider_kind, owner_epoch, idle_seconds, retention_seconds, generation, mode, provider_credential, specification, reset_clear, reset_requested_at, reset_deadline_at, reset_forced_at, reset_audit, provider_config, provider_metadata FROM runtime_deployment WHERE singleton = true LIMIT 1),
+WITH deployment AS MATERIALIZED (SELECT singleton, installation_id, backend_fingerprint, updated_at, provider_kind, owner_epoch, generation, mode, provider_credential, specification, reset_clear, reset_requested_at, reset_deadline_at, reset_forced_at, reset_audit, provider_config, provider_metadata FROM runtime_deployment WHERE singleton = true LIMIT 1),
 observed AS MATERIALIZED (SELECT clock_timestamp() AS as_of),
 held AS (
     SELECT a.deployment_generation, a.node_id, s.id AS session_id, e.id AS environment_id, false AS pending,
@@ -89,7 +88,7 @@ held AS (
 ), offline AS (
     SELECT node_id, name, count(*)::bigint AS resources FROM classified WHERE offline GROUP BY node_id, name
 )
-SELECT d.singleton, d.installation_id, d.backend_fingerprint, d.updated_at, d.provider_kind, d.owner_epoch, d.idle_seconds, d.retention_seconds, d.generation, d.mode, d.provider_credential, d.specification, d.reset_clear, d.reset_requested_at, d.reset_deadline_at, d.reset_forced_at, d.reset_audit, d.provider_config, d.provider_metadata,
+SELECT d.singleton, d.installation_id, d.backend_fingerprint, d.updated_at, d.provider_kind, d.owner_epoch, d.generation, d.mode, d.provider_credential, d.specification, d.reset_clear, d.reset_requested_at, d.reset_deadline_at, d.reset_forced_at, d.reset_audit, d.provider_config, d.provider_metadata,
     (SELECT count(*) FROM classified WHERE NOT pending)::bigint AS allocations,
     (SELECT count(*) FROM classified WHERE pending)::bigint AS pending,
     jsonb_build_object(
@@ -131,8 +130,6 @@ func (q *Queries) GetSandboxDeploymentSnapshot(ctx context.Context) (GetSandboxD
 		&i.RuntimeDeployment.UpdatedAt,
 		&i.RuntimeDeployment.ProviderKind,
 		&i.RuntimeDeployment.OwnerEpoch,
-		&i.RuntimeDeployment.IdleSeconds,
-		&i.RuntimeDeployment.RetentionSeconds,
 		&i.RuntimeDeployment.Generation,
 		&i.RuntimeDeployment.Mode,
 		&i.RuntimeDeployment.ProviderCredential,

@@ -18,7 +18,7 @@ type View struct {
 	Configuration        json.RawMessage         `json:"configuration,omitempty" swaggertype:"object"`
 	Metadata             json.RawMessage         `json:"metadata,omitempty" swaggertype:"object"`
 	CredentialConfigured bool                    `json:"credential_configured"`
-	// Idle suspension policy; microsandbox only, otherwise null.
+	// Idle suspension policy; null unless the selected Provider declares checkpoint support.
 	Suspension     *Suspension `json:"suspension" extensions:"x-nullable"`
 	InstallationID string      `json:"installation_id"`
 	Provider       string      `json:"provider"`
@@ -34,8 +34,8 @@ type Resources struct {
 	Pending     int64 `json:"pending"`
 }
 
-// Suspension is the idle suspension policy. Only microsandbox suspends
-// sandboxes; Docker and E2B deployments return null.
+// Suspension is Core's idle suspension policy, which applies to every Provider
+// that declares checkpoint support.
 type Suspension struct {
 	IdleSeconds      int64 `json:"idle_seconds"`
 	RetentionSeconds int64 `json:"retention_seconds"`

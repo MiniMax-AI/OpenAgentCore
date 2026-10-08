@@ -242,8 +242,6 @@ type RuntimeDeployment struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ProviderKind       string             `json:"provider_kind"`
 	OwnerEpoch         int64              `json:"owner_epoch"`
-	IdleSeconds        int64              `json:"idle_seconds"`
-	RetentionSeconds   int64              `json:"retention_seconds"`
 	Generation         int64              `json:"generation"`
 	Mode               string             `json:"mode"`
 	ProviderCredential []byte             `json:"provider_credential"`

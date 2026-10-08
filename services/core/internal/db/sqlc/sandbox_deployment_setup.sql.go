@@ -32,16 +32,14 @@ func (q *Queries) ClaimWebSandboxDeployment(ctx context.Context, installationID 
 
 const initializeSandboxDeployment = `-- name: InitializeSandboxDeployment :exec
 UPDATE runtime_deployment SET provider_kind=$1, backend_fingerprint=$2,
-idle_seconds=$3, retention_seconds=$4, generation=$5, mode=$6,
-provider_config=$7,provider_metadata=$8,provider_credential=$9,specification=$10,
+generation=$3, mode=$4,
+provider_config=$5,provider_metadata=$6,provider_credential=$7,specification=$8,
 updated_at=clock_timestamp() WHERE singleton=true
 `
 
 type InitializeSandboxDeploymentParams struct {
 	ProviderKind       string `json:"provider_kind"`
 	BackendFingerprint string `json:"backend_fingerprint"`
-	IdleSeconds        int64  `json:"idle_seconds"`
-	RetentionSeconds   int64  `json:"retention_seconds"`
 	Generation         int64  `json:"generation"`
 	Mode               string `json:"mode"`
 	ProviderConfig     []byte `json:"provider_config"`
@@ -54,8 +52,6 @@ func (q *Queries) InitializeSandboxDeployment(ctx context.Context, arg Initializ
 	_, err := q.db.Exec(ctx, initializeSandboxDeployment,
 		arg.ProviderKind,
 		arg.BackendFingerprint,
-		arg.IdleSeconds,
-		arg.RetentionSeconds,
 		arg.Generation,
 		arg.Mode,
 		arg.ProviderConfig,

@@ -4,7 +4,7 @@ owner_epoch=owner_epoch+1, updated_at=clock_timestamp() WHERE singleton=true;
 
 -- name: InitializeSandboxDeployment :exec
 UPDATE runtime_deployment SET provider_kind=$1, backend_fingerprint=$2,
-idle_seconds=$3, retention_seconds=$4, generation=$5, mode=$6,
+generation=$3, mode=$4,
 provider_config=sqlc.arg(provider_config),provider_metadata=sqlc.arg(provider_metadata),provider_credential=sqlc.arg(provider_credential),specification=sqlc.arg(specification),
 updated_at=clock_timestamp() WHERE singleton=true;
 

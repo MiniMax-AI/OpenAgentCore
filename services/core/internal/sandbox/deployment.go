@@ -109,8 +109,7 @@ func (s DeploymentSpec) Digest(provider string) string {
 }
 
 // Description is what a provider registration says about a deployment of it:
-// its mode, its backend namespace fingerprint and its checkpoint timing.
+// its mode and its backend namespace fingerprint.
 type Description struct {
-	Mode, BackendFingerprint      string
-	IdleSeconds, RetentionSeconds int64
+	Mode, BackendFingerprint string
 }

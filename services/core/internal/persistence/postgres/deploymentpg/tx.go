@@ -301,7 +301,7 @@ func (t *deploymentTx) SaveSelection(selection deployment.SelectionRecord) error
 	if selection.Generation > math.MaxInt64 {
 		return deployment.ErrInvalidInput
 	}
-	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, IdleSeconds: selection.IdleSeconds, RetentionSeconds: selection.RetentionSeconds, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
+	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
 	if len(selection.Configuration.Secret) > 0 {
 		if t.cipher == nil {
 			return credentialcrypto.ErrUnavailable
