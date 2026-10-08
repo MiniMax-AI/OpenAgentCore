@@ -172,13 +172,13 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
 	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
-	secret := make([]byte, 64)
+	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return deployment.Allocation{}, err
 	}
-	// The device and Serve credentials; only their digests are stored.
-	token, serve := hex.EncodeToString(secret[:32]), hex.EncodeToString(secret[32:])
-	owner, err := r.deployment.ReserveAllocation(ctx, key, providerKey, runtimedevice.HashCredential(token), runtimedevice.HashCredential(serve))
+	// Only the Serve credential digest is stored.
+	serve := hex.EncodeToString(secret)
+	owner, err := r.deployment.ReserveAllocation(ctx, key, providerKey, runtimedevice.HashCredential(serve))
 	if err != nil {
 		return owner, err
 	}
@@ -291,15 +291,6 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 		owner, err = r.requestCleanup(ctx, owner)
 		if err != nil {
 			return err
-		}
-		if peer, err := r.registry.LookupDevice(owner.DeviceID); err == nil {
-			draining, err := peer.DrainArchivedCancellation(ctx)
-			if err != nil {
-				return err
-			}
-			if draining {
-				return nil
-			}
 		}
 	}
 	if owner.ComputePhase != "disabled" {

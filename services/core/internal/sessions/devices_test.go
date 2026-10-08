@@ -18,8 +18,6 @@ type fakeStorage struct {
 	t     *testing.T
 	calls []string
 
-	createDevice             func(DeviceRegistration) (ExecutionDevice, error)
-	revokeDevice             func() error
 	touchDevice              func() (bool, error)
 	touchAuthenticatedDevice func() (bool, error)
 	// enrollment is the transaction WithEnrollment applies in, with
@@ -60,16 +58,6 @@ func (s *fakeStorage) record(name string, set bool, detail ...string) {
 		s.t.Fatalf("unexpected call to %s", name)
 	}
 	s.calls = append(s.calls, strings.Join(append([]string{name}, detail...), " "))
-}
-
-func (s *fakeStorage) CreateDevice(_ context.Context, tenant string, registration DeviceRegistration) (ExecutionDevice, error) {
-	s.record("CreateDevice", s.createDevice != nil, tenant, registration.Name, registration.CredentialHash)
-	return s.createDevice(registration)
-}
-
-func (s *fakeStorage) RevokeDevice(_ context.Context, tenant, device string) error {
-	s.record("RevokeDevice", s.revokeDevice != nil, tenant, device)
-	return s.revokeDevice()
 }
 
 func (s *fakeStorage) TouchDevice(_ context.Context, device string) (bool, error) {
@@ -123,49 +111,7 @@ func deviceService(t *testing.T, storage *fakeStorage) *Service {
 
 const credentialDigest = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 
-func TestNewDeviceRegistration(t *testing.T) {
-	registration, err := NewDeviceRegistration("  runtime  ", strings.ToUpper(credentialDigest))
-	if err != nil || registration != (DeviceRegistration{Name: "runtime", CredentialHash: credentialDigest}) {
-		t.Fatalf("registration %+v, %v", registration, err)
-	}
-	if _, err := NewDeviceRegistration(strings.Repeat("n", 256), credentialDigest); err != nil {
-		t.Fatalf("longest name: %v", err)
-	}
-	for name, input := range map[string][2]string{
-		"blank name":      {"   ", credentialDigest},
-		"long name":       {strings.Repeat("n", 257), credentialDigest},
-		"not hex":         {"runtime", "not-a-digest"},
-		"short digest":    {"runtime", credentialDigest[:62]},
-		"raw credential":  {"runtime", "secret"},
-		"missing digest":  {"runtime", ""},
-		"padded digest":   {"runtime", " " + credentialDigest},
-		"too long digest": {"runtime", credentialDigest + "00"},
-	} {
-		if _, err := NewDeviceRegistration(input[0], input[1]); !errors.Is(err, ErrInvalidInput) {
-			t.Fatalf("%s: %v", name, err)
-		}
-	}
-}
-
 func TestDeviceUseCases(t *testing.T) {
-	storage := &fakeStorage{t: t}
-	if _, err := deviceService(t, storage).CreateDevice(t.Context(), "tenant", "runtime", "secret"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("invalid registration: %v", err)
-	}
-	created := ExecutionDevice{ID: "device", Name: "runtime"}
-	storage.createDevice = func(DeviceRegistration) (ExecutionDevice, error) { return created, nil }
-	storage.revokeDevice = done
-	if device, err := deviceService(t, storage).CreateDevice(t.Context(), "tenant", " runtime ", strings.ToUpper(credentialDigest)); err != nil || device != created {
-		t.Fatalf("created %+v, %v", device, err)
-	}
-	if err := deviceService(t, storage).RevokeDevice(t.Context(), "tenant", "device"); err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"CreateDevice tenant runtime " + credentialDigest, "RevokeDevice tenant device"}
-	if strings.Join(storage.calls, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("calls %q", storage.calls)
-	}
-
 	// A heartbeat reports whether the device, or the credential it was
 	// authenticated with, still has authority.
 	for _, current := range []bool{true, false} {
@@ -184,7 +130,7 @@ func TestDeviceUseCases(t *testing.T) {
 		}
 	}
 	failing := func() (bool, error) { return true, errStorage }
-	storage = &fakeStorage{t: t, touchDevice: failing, touchAuthenticatedDevice: failing}
+	storage := &fakeStorage{t: t, touchDevice: failing, touchAuthenticatedDevice: failing}
 	if status, err := deviceService(t, storage).TouchRuntimeHeartbeat(t.Context(), "device"); !errors.Is(err, errStorage) || status != (runtimedevice.HeartbeatStatus{}) {
 		t.Fatalf("failed runtime heartbeat %+v, %v", status, err)
 	}

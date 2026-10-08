@@ -2,32 +2,10 @@ package sessions
 
 import (
 	"context"
-	"encoding/hex"
-	"fmt"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
-
-// DeviceRegistration is a Runtime device's name and the SHA-256 digest of its
-// credential, as NewDeviceRegistration validates them.
-type DeviceRegistration struct {
-	Name           string
-	CredentialHash string
-}
-
-// NewDeviceRegistration validates a device registration: a name of 1 to 256
-// bytes once trimmed, and a SHA-256 credential digest in hex, which it
-// normalizes to lowercase. Anything else is ErrInvalidInput.
-func NewDeviceRegistration(name, credentialHash string) (DeviceRegistration, error) {
-	name = strings.TrimSpace(name)
-	digest, err := hex.DecodeString(credentialHash)
-	if err != nil || len(digest) != 32 || name == "" || len(name) > 256 {
-		return DeviceRegistration{}, fmt.Errorf("%w: device name and SHA-256 credential digest required", ErrInvalidInput)
-	}
-	return DeviceRegistration{Name: name, CredentialHash: hex.EncodeToString(digest)}, nil
-}
 
 // SandboxResource is a live Link resource. Quiesced compute is between a
 // quiesce and the wake that resumes it.
@@ -50,10 +28,6 @@ type DeviceReader interface {
 	// authenticates a device with, and reports whether the device still has
 	// authority.
 	GetDeviceCredential(ctx context.Context, device string) (runtimedevice.Credential, bool, error)
-	// ArchivedCancellationReceipt reads the receipt window that archiving a
-	// Session leaves the device's exact authenticated delivery of one of
-	// runIDs; without one it is the zero receipt.
-	ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error)
 	// ListLiveSandboxResources lists the live Link resources.
 	ListLiveSandboxResources(ctx context.Context) ([]SandboxResource, error)
 	// GetEnvironmentResource reads the live Link resource of the tenant's
@@ -71,11 +45,6 @@ type DeviceReader interface {
 
 // DeviceStorage stores Runtime devices.
 type DeviceStorage interface {
-	// CreateDevice stores a new device of the tenant and returns it.
-	CreateDevice(ctx context.Context, tenant string, registration DeviceRegistration) (ExecutionDevice, error)
-	// RevokeDevice revokes the tenant's device; an unknown device is
-	// ErrNotFound.
-	RevokeDevice(ctx context.Context, tenant, device string) error
 	// TouchDevice records that the device was seen and reports whether it
 	// still has authority.
 	TouchDevice(ctx context.Context, device string) (bool, error)
@@ -101,21 +70,6 @@ type EnrollmentTx interface {
 	// returns its Link resource, or the resource the same key already
 	// enrolled. An enrollment by another key is ErrDeviceBindingConflict.
 	EnrollSandbox(ctx context.Context, key string) (sandboxbootstrap.Resource, error)
-}
-
-// CreateDevice provisions a device for an operator. It is not a tenant-facing
-// registration API.
-func (s *Service) CreateDevice(ctx context.Context, tenant, name, credentialHash string) (ExecutionDevice, error) {
-	registration, err := NewDeviceRegistration(name, credentialHash)
-	if err != nil {
-		return ExecutionDevice{}, err
-	}
-	return s.storage.CreateDevice(ctx, tenant, registration)
-}
-
-// RevokeDevice revokes the tenant's device.
-func (s *Service) RevokeDevice(ctx context.Context, tenant, device string) error {
-	return s.storage.RevokeDevice(ctx, tenant, device)
 }
 
 // TouchRuntimeHeartbeat records a Runtime connection. A device that lost its

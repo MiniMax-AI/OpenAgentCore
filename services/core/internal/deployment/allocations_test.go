@@ -17,28 +17,12 @@ import (
 )
 
 type fakeReservationTx struct {
-	t                       testing.TB
-	loadBoundDevice         func() (bool, error)
-	insertEnvironmentDevice func(string, sessions.ExecutionDevice, string) error
-	loadEnvironment         func() (sessions.Environment, error)
-	findAllocation          func() (Allocation, bool, error)
-	lockDeployment          func() (placement.Deployment, error)
-	loadReserved            func() (placement.Reserved, error)
-	insertAllocation        func(NewAllocation) (Allocation, error)
-}
-
-func (f *fakeReservationTx) LoadBoundDevice(context.Context) (bool, error) {
-	if f.loadBoundDevice == nil {
-		unexpected(f.t, "LoadBoundDevice")
-	}
-	return f.loadBoundDevice()
-}
-
-func (f *fakeReservationTx) InsertEnvironmentDevice(_ context.Context, environment string, device sessions.ExecutionDevice, credentialHash string) error {
-	if f.insertEnvironmentDevice == nil {
-		unexpected(f.t, "InsertEnvironmentDevice")
-	}
-	return f.insertEnvironmentDevice(environment, device, credentialHash)
+	t                testing.TB
+	loadEnvironment  func() (sessions.Environment, error)
+	findAllocation   func() (Allocation, bool, error)
+	lockDeployment   func() (placement.Deployment, error)
+	loadReserved     func() (placement.Reserved, error)
+	insertAllocation func(NewAllocation) (Allocation, error)
 }
 
 func (f *fakeReservationTx) LoadEnvironment(context.Context) (sessions.Environment, error) {
@@ -134,7 +118,7 @@ func (f *fakeAllocationTx) RecordObservation(Allocation, string) error {
 // activity change.
 type fakeCleanupTx struct {
 	*fakeAllocationTx
-	revokeDevice         func(Allocation) error
+	releaseAssignment    func(bool) error
 	requestCleanup       func(Allocation) (Allocation, error)
 	loadEnvironment      func() (sessions.Environment, error)
 	loadEnvironmentInput func() (*sessions.EnvironmentInputState, error)
@@ -144,11 +128,11 @@ type fakeCleanupTx struct {
 	cancelPendingInput   func() error
 }
 
-func (f *fakeCleanupTx) RevokeDevice(current Allocation) error {
-	if f.revokeDevice == nil {
-		unexpected(f.t, "RevokeDevice")
+func (f *fakeCleanupTx) ReleaseAssignment(_ context.Context, removeHome bool) error {
+	if f.releaseAssignment == nil {
+		unexpected(f.t, "ReleaseAssignment")
 	}
-	return f.revokeDevice(current)
+	return f.releaseAssignment(removeHome)
 }
 
 func (f *fakeCleanupTx) RequestCleanup(current Allocation) (Allocation, error) {
@@ -276,27 +260,27 @@ func TestReserveAllocationReplaysBeforeAdmission(t *testing.T) {
 	existing := Allocation{ID: uuid.NewString(), EnvironmentID: key.EnvironmentID, ProviderKey: installation}
 	tx := &fakeReservationTx{t: t, loadEnvironment: hostedEnvironment(key.EnvironmentID),
 		findAllocation: func() (Allocation, bool, error) { return existing, true, nil }}
-	replayed, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash())
+	replayed, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash())
 	if err != nil || !replayed.Replayed || replayed.ID != existing.ID {
 		t.Fatal("reservation did not replay", replayed, err)
 	}
-	if _, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), testCredentialHash(), testCredentialHash()); !errors.Is(err, ErrAllocationConflict) {
+	if _, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), testCredentialHash()); !errors.Is(err, ErrAllocationConflict) {
 		t.Fatal("another installation replayed the allocation", err)
 	}
 	deleted := &fakeReservationTx{t: t}
-	if _, err := allocationOperations(t, deleted, sessions.LockedSession{Deleted: true}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := allocationOperations(t, deleted, sessions.LockedSession{Deleted: true}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("a deleted Session reserved an allocation", err)
 	}
 	selfHosted := &fakeReservationTx{t: t, loadEnvironment: func() (sessions.Environment, error) {
 		return sessions.Environment{ID: key.EnvironmentID, Configuration: json.RawMessage(`{"type":"self_hosted"}`)}, nil
 	}}
-	if _, err := allocationOperations(t, selfHosted, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, ErrInvalidInput) {
+	if _, err := allocationOperations(t, selfHosted, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("a self-hosted Environment reserved an allocation", err)
 	}
 }
 
 // A fresh reservation passes admission, takes the node and generation its
-// Session reserved and creates the dedicated device with the allocation.
+// Session reserved and retains the Serve credential digest.
 func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 	key := AllocationKey{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString()}
 	installation, node := uuid.NewString(), uuid.NewString()
@@ -316,39 +300,29 @@ func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 		d.Resetting = true
 		return d, nil
 	}
-	if _, err := allocationOperations(t, resetting, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, placement.ErrResetAdmission) {
+	if _, err := allocationOperations(t, resetting, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, placement.ErrResetAdmission) {
 		t.Fatal("a resetting deployment reserved an allocation", err)
 	}
 	released := fresh()
 	released.loadReserved = func() (placement.Reserved, error) {
 		return placement.Reserved{NodeID: node, Generation: 5, Released: true, Available: true}, nil
 	}
-	if _, err := allocationOperations(t, released, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), testCredentialHash()); !errors.Is(err, placement.ErrNodeUnavailable) {
+	if _, err := allocationOperations(t, released, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash()); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("a released placement reserved an allocation", err)
 	}
-	var device sessions.ExecutionDevice
-	var deviceEnvironment string
 	var inserted NewAllocation
 	tx := fresh()
 	tx.loadReserved = func() (placement.Reserved, error) {
 		return placement.Reserved{NodeID: node, Generation: 5, Available: true}, nil
 	}
-	tx.loadBoundDevice = func() (bool, error) { return false, nil }
-	tx.insertEnvironmentDevice = func(environment string, d sessions.ExecutionDevice, hash string) error {
-		if hash != testCredentialHash() {
-			t.Fatal("device credential", hash)
-		}
-		device, deviceEnvironment = d, environment
-		return nil
-	}
 	tx.insertAllocation = func(a NewAllocation) (Allocation, error) {
 		inserted = a
-		return Allocation{ID: a.ID, DeviceID: a.DeviceID, NodeID: a.NodeID}, nil
+		return Allocation{ID: a.ID, NodeID: a.NodeID}, nil
 	}
 	serveHash := testCredentialHash()
-	result, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, testCredentialHash(), serveHash)
-	if err != nil || result.Replayed || inserted.NodeID != node || inserted.Generation != 5 || inserted.ProviderKey != installation || inserted.DeviceID != device.ID || deviceEnvironment != key.EnvironmentID || inserted.ServeCredentialHash != serveHash {
-		t.Fatal("reservation", result, inserted, device, err)
+	result, err := allocationOperations(t, tx, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, installation, serveHash)
+	if err != nil || result.Replayed || inserted.NodeID != node || inserted.Generation != 5 || inserted.ProviderKey != installation || inserted.EnvironmentID != key.EnvironmentID || inserted.ServeCredentialHash != serveHash {
+		t.Fatal("reservation", result, inserted, err)
 	}
 }
 
@@ -356,12 +330,12 @@ func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 // deleted Session. Any other owner, or compute that no longer runs, is a
 // conflict.
 func TestAllocationChangesCheckTheOwner(t *testing.T) {
-	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running"}
+	owner := Allocation{ID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running"}
 	stored := func(current Allocation) func() (Allocation, error) {
 		return func() (Allocation, error) { return current, nil }
 	}
 	moved := owner
-	moved.DeviceID = uuid.NewString()
+	moved.ID = uuid.NewString()
 	if _, err := allocationOperations(t, nil, sessions.LockedSession{}, &fakeAllocationTx{t: t, loadAllocation: stored(moved)}).SettleCreation(t.Context(), owner); !errors.Is(err, ErrAllocationConflict) {
 		t.Fatal("a replaced allocation settled", err)
 	}
@@ -419,26 +393,26 @@ func TestSetComputeValidatesBeforeStorage(t *testing.T) {
 // reaches storage.
 func TestReserveAllocationValidatesTheCredentialDigests(t *testing.T) {
 	key := AllocationKey{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString()}
-	for _, digests := range [][2]string{{"not-a-digest", testCredentialHash()}, {testCredentialHash(), "not-a-digest"}} {
-		if _, err := allocationOperations(t, nil, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), digests[0], digests[1]); !errors.Is(err, ErrInvalidInput) {
+	for _, digest := range []string{"not-a-digest", "", testCredentialHash()[:62]} {
+		if _, err := allocationOperations(t, nil, sessions.LockedSession{}, nil).ReserveAllocation(t.Context(), key, uuid.NewString(), digest); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("a malformed digest reserved an allocation", err)
 		}
 	}
 }
 
-// Cleanup revokes the device, then cancels a deleted Session's work or
+// Cleanup releases the assignment, then cancels a deleted Session's work or
 // terminates a live Session's Environment, then requests cleanup. An absent
 // creation then settles and releases the allocation, which releases its node
 // placement with it.
-func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
-	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running"}
+func TestCleanupReleasesAssignmentSettlesTheSessionThenReleases(t *testing.T) {
+	owner := Allocation{ID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running"}
 	for _, test := range []struct {
 		name            string
 		deleted, absent bool
 		want            []string
 	}{
-		{"deleted Session with absent creation", true, true, []string{"LoadAllocation", "RevokeDevice", "LoadAllocation", "LoadActiveTurn", "CancelPendingInput", "RequestCleanup", "SettleCreation", "Release"}},
-		{"live Session with expired compute", false, false, []string{"LoadAllocation", "RevokeDevice", "LoadAllocation", "LoadEnvironment", "LoadEnvironmentInput", "ExpireEnvironment", "FailPendingInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RequestCleanup"}},
+		{"deleted Session with absent creation", true, true, []string{"LoadAllocation", "ReleaseAssignment", "LoadAllocation", "LoadActiveTurn", "CancelPendingInput", "RequestCleanup", "SettleCreation", "Release"}},
+		{"live Session with expired compute", false, false, []string{"LoadAllocation", "ReleaseAssignment", "LoadAllocation", "LoadEnvironment", "LoadEnvironmentInput", "ExpireEnvironment", "FailPendingInput", "LoadActiveTurn", "CancelPendingInput", "LoadEnvironmentInput", "RequestCleanup"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var calls []string
@@ -457,7 +431,13 @@ func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
 					settleCreation: change("SettleCreation", func(a *Allocation) { a.CreateSettled = true }),
 					release:        change("Release", func(a *Allocation) { a.State = "released" }),
 				},
-				revokeDevice:   func(Allocation) error { calls = append(calls, "RevokeDevice"); return nil },
+				releaseAssignment: func(removeHome bool) error {
+					if removeHome {
+						t.Fatal("cleanup removed native home")
+					}
+					calls = append(calls, "ReleaseAssignment")
+					return nil
+				},
 				requestCleanup: change("RequestCleanup", func(a *Allocation) { a.State = "cleanup_pending" }),
 				loadActiveTurn: func() (sessions.Turn, bool, error) {
 					calls = append(calls, "LoadActiveTurn")

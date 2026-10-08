@@ -103,18 +103,12 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 		if observation.Target.Instance.AllocationID != "" {
 			result.Instance.AllocationID = &observation.Target.Instance.AllocationID
 		}
-		if observation.Target.Instance.DeviceID != "" {
-			result.Instance.DeviceID = &observation.Target.Instance.DeviceID
-		}
 		if !observation.Target.Instance.AllocationCreatedAt.IsZero() {
 			created := observation.Target.Instance.AllocationCreatedAt.Unix()
 			result.AllocationCreatedAt = &created
 		}
 	case runtimeobs.ModeSelfHosted:
 		result.Instance.Kind = "self_hosted_connection"
-		if observation.Target.Instance.DeviceID != "" {
-			result.Instance.DeviceID = &observation.Target.Instance.DeviceID
-		}
 		if observation.Target.Instance.ConnectionGeneration != "" {
 			result.Instance.ConnectionGeneration = &observation.Target.Instance.ConnectionGeneration
 		}
