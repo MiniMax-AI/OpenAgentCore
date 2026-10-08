@@ -215,7 +215,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		sb.reset(t, cfg)
 		s := sb.session(h, cfg, installed)
 		s.prepare(t, pluginArchive(t, word, code))
-		_, answer, _ := s.turn(t, "skill", "Use the qualify-word skill.\nAnswer with exactly one line: WORD=<the qualification word it tells>", k)
+		_, answer, _ := s.turn(t, "skill", "Use the qualify-word skill: read its SKILL.md, and call no MCP tool.\nAnswer with exactly one line: WORD=<the qualification word it tells>", k)
 		if !strings.Contains(answer, "WORD="+word) {
 			t.Errorf("the answer %q does not report WORD=%s", answer, word)
 		}
@@ -266,7 +266,7 @@ for line in iter(sys.stdin.readline, ""):
     if method == "initialize":
         reply["result"] = {"protocolVersion": msg["params"]["protocolVersion"], "capabilities": {"tools": {}}, "serverInfo": {"name": "qualify", "version": "1"}}
     elif method == "tools/list":
-        reply["result"] = {"tools": [{"name": "reveal_code", "description": "Returns the qualification code.", "inputSchema": {"type": "object", "properties": {}}}]}
+        reply["result"] = {"tools": [{"name": "reveal_code", "description": "Returns the MCP server's code.", "inputSchema": {"type": "object", "properties": {}}}]}
     elif method == "tools/call":
         reply["result"] = {"content": [{"type": "text", "text": "The code is " + code + "."}]}
     elif method == "ping":
