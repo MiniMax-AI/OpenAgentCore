@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 6378777af8dce6438d8796b51f5b737837e2ce56092fe2c48baf0ba91c0e4aea
+source_hash: 11794813cac6e3f5613935905eeee54fb72c3bdd4d05b4e84f9f4b0702f26aba
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -198,7 +198,7 @@ Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspensi
 
 一个 snapshot 和 timestamp 对持有资源分区。离线 ownership 来自 allocation 或 active placement 的 node，与 online presence 使用同一 45 秒 connection 和 owner-epoch predicate，独立于 provider readiness；cleanup failure、offline state 或空 read 都不授权合成 release。held resource 为零时，Core 在数据库事务外 drain，在 deployment lock 下复查，并在一个事务中清空 deployment，再发布携带 generation 的空 provider，没有可失败工作。最终 write 或 drain 失败时，在释放 mutation gate 前使用有界 owner context 恢复已提交 provider；恢复失败时 admission 保持 fenced，owner 停止。
 
-管理员 [Session archive](../../contracts/agents-api/zh/admin-api.md#session-archive) 在 Session-first transaction 中保留 Project scope 与 hosted eligibility 检查，并一起处理 Environment expiry、cancellation、Runtime authority revocation 和 audit；reset 的后台 archive 从可信记录重建实际 Project scope，保留请求方 provenance。普通 provider lifecycle 释放 compute 和 snapshot。archive cancellation 在 terminal commit 前保留健康 receipt path：仅首次撤销 device 的 archive 记录精确 `archive_cancel_turn_id`（普通 revocation 清空它，重复 cleanup 保留它），现有已认证 delivery 可从 Turn 原 `cancel_requested_at` 起最多 20 秒排空该 cancellation。Core 独立于 subscription removal，通过 `done`、cancellation acknowledgement 和 terminal commit 跟踪 delivery，不授予新 connection、input、file 或 MCP authority，也不续期 lease。事务或 lifecycle gate 不等待 receipt，peer 丢失、到期或重启回到普通 failure 与 cleanup，不虚构 cancelled outcome。
+管理员 [Session archive](../../contracts/agents-api/zh/admin-api.md#session-archive) 在 Session-first transaction 中保留 Project scope 与 hosted eligibility 检查，并一起处理 Environment expiry、cancellation 和 audit；reset 的后台 archive 从可信记录重建实际 Project scope，保留请求方 provenance。对于已有 allocation 的 Environment，archive 释放 Session 的 assignment，保留其原生 home，并请求 allocation cleanup。普通 provider lifecycle 释放 compute 和 snapshot。共享的 agent-host 凭据仍然有效。取消遵循 [Turn 生命周期](../../contracts/agents-api/zh/sessions-events.md#send-input)：请求 cleanup 或确认沙箱已释放，都不能证明 Turn 已结算。
 
 ## 验证集成 {#validate-the-integration}
 
@@ -229,7 +229,7 @@ Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenA
 
 Create 拒绝复用没有 container 的保留 volume。它将沙箱引导文件复制到 `/home/runtime/sandbox-io-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、initialization 和 package directory 放入 container；container 以 `oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json` 作为 entry point 运行。该服务是 container 的第一个进程，并回收其孤儿后代进程，因此 container 不需要 init process。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
 
-node 使用 [provider 配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进 Runtime。
+node 使用 [provider 配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进沙箱。
 
 ### Seccomp profile {#seccomp-profile}
 

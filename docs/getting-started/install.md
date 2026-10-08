@@ -22,7 +22,7 @@ This page follows the default path. Every flag, existing reverse proxies and off
 - Free port 8080 for Web. See [ports](./install-options.md#ports). Docker must be able to publish it; the installer does not change host policy.
 - For anything off this machine, the origin in `OAC_PUBLIC_URL` must be the address browsers, nodes and executors use. You can sign in on this machine first.
 
-Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a Linux node or use E2B.
+Sandbox nodes run on Linux amd64. When the operator launcher runs on macOS or Windows, its Docker engine must still be Linux amd64; connect a Linux sandbox node or use E2B.
 
 ## Install
 

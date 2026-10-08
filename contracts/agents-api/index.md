@@ -123,6 +123,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Behind the [credential gateway](./model-execution.md#credential-gateway), pinned Codex compacts history locally and never calls `/responses/compact`.
 - Claude Code and MiniMax Code report no public usage.
+- Claude Code and MiniMax Code do not support `native_session_recovery`: when a Session has a started Turn but Core has no recorded native Session ID, execution is rejected. Cold continuation with an already recorded native ID is a separate case; this declaration neither rejects it nor qualifies it. See [public-path qualification](./harness-onboarding.md#qualify-the-public-path).
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
 - Message images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.
 

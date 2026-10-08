@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: a6920271d21280686ae8df889f8de499da4dc2572bc1a80d4a567e3861a1c520
+source_hash: e600effab6cb2c4d1ee31c54781eb3a6bd9ad8d8f794078f3b827385bb450f68
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -114,11 +114,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://cor
 
 `401` 表示 `/v1` 已到达 Core，Core 正在要求提供密钥。`404` 表示请求已到达 Web：请修复反向代理，否则应用调用和每个节点连接都会失败。
 
-所有位置都必须保持启用 TLS 验证。使用私有证书颁发机构时，节点主机、自托管机器和 Runtime 镜像必须信任该机构。
+所有位置都必须保持启用 TLS 验证。使用私有证书颁发机构时，agent-host 和沙箱镜像、节点主机以及自托管机器必须信任其访问的 HTTPS 端点所使用的机构。
 
 ### 使用快速隧道进行本地试用 {#try-it-locally-with-a-quick-tunnel}
 
-[Cloudflare 快速隧道](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)会为使用外部入口的试用安装提供一个临时公共 HTTPS 地址。它只会转发到一个端口，因此需要在前面放置一个具有相同路由的本地代理：
+[Cloudflare 快速隧道](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)提供临时公共 HTTPS 地址，可用于连接和下载检查。[Quick Tunnel 不支持 SSE](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations)，因此 Agents API 流式调用需要支持 SSE 的 HTTPS 入口。隧道只转发到一个端口，因此需要在前面放置一个具有相同路由的本地代理：
 
 ```caddyfile
 http://:8443 {
