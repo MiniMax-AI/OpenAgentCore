@@ -237,3 +237,13 @@ func (r *Registry) removeWaiter(deviceID string, ch chan *Session) {
 		r.waiters[deviceID] = filtered
 	}
 }
+
+// CloseConnections releases upgraded WebSockets, which http.Server.Shutdown
+// does not close. Call after stopping new HTTP upgrades.
+func (r *Registry) CloseConnections() {
+	for _, id := range r.Devices() {
+		if session, err := r.LookupDevice(id); err == nil {
+			session.Close("execution service shutting down")
+		}
+	}
+}

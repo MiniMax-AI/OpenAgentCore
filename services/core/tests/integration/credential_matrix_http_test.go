@@ -48,7 +48,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(sessionService(t, s), origin))
-	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(sessionAdapter(s), relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))))
+	mux.Handle("/api/v1/agent-daemon/connection", &runtimeenrollment.Connections{Store: sessionAdapter(s), Links: relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))})
 	mux.Handle("/", handler)
 	server := api.CanonicalPaths(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
