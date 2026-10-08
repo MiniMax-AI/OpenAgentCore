@@ -68,7 +68,7 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 	cases := []string{"no_completed_turn", "queued", "in_progress", "waiting", "subagent_queued", "subagent_in_progress", "subagent_waiting", "input_reservation", "file_write", "idle"}
 	for _, kind := range cases {
 		t.Run(kind, func(t *testing.T) {
-			_, w, pool, owner := runtimeSuspensionFixture(t)
+			s, w, pool, owner := runtimeSuspensionFixture(t)
 			completed := ""
 			if kind != "no_completed_turn" {
 				completed = runtimeSuspensionCompleted(t, pool, owner)

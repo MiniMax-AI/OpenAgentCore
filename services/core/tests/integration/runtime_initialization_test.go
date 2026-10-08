@@ -85,7 +85,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				}
 				return
 			}
-			owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
+			_, err = w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -60,7 +60,7 @@ func newLinkHarness(t *testing.T, configuration string) *linkHarness {
 func insertAllocation(t *testing.T, s *Store, resource sandboxbootstrap.Resource, serve []byte) {
 	t.Helper()
 	if _, err := s.pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,provider_key,state,create_settled,deployment_generation,serve_credential_hash)
-		VALUES($1,$2,$3,'running',true,(SELECT generation FROM runtime_deployment),$4)`, resource.ID, resource.EnvironmentID, uuid.NewString(), serveHash(serve)); err != nil {
+		VALUES($1,$2,(SELECT installation_id FROM runtime_deployment),'running',true,(SELECT generation FROM runtime_deployment),$3)`, resource.ID, resource.EnvironmentID, serveHash(serve)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -457,8 +457,8 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 
 // TestRegisteredAgentHostAuthenticates registers the agent host from its
 // identity file as Core's startup does. The Link route and the Runtime gateway
-// accept its credential, a second startup changes nothing, and another
-// device's ID is never taken over.
+// accept its credential, a second startup changes nothing, and rotation fences
+// the previous credential.
 func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	dir := t.TempDir()
@@ -508,8 +508,15 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 		t.Fatal("a second registration changed the agent host", err)
 	}
 
-	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), runtime, runtimedevice.HashCredential(uuid.NewString())); err == nil {
-		t.Fatal("registration replaced an existing host credential")
+	rotated := uuid.NewString()
+	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), runtime, runtimedevice.HashCredential(rotated)); err != nil {
+		t.Fatal(err)
+	}
+	if want := "(" + runtimedevice.HashCredential(rotated) + ",2,t,1)"; row() != want {
+		t.Fatal("rotation did not advance credential revision")
+	}
+	if _, err := runtimegateway.NewAuthenticator(sessionAdapter(s)).AuthenticateBearer(t.Context(), runtime, credential); !errors.Is(err, runtimegateway.ErrAuthBadCredential) {
+		t.Fatal("rotation retained previous credential", err)
 	}
 }
 

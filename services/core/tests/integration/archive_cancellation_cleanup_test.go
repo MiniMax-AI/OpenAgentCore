@@ -14,7 +14,7 @@ import (
 func TestArchiveCancellationThenDeleteRemovesHome(t *testing.T) {
 	h := newDispatchHarnessForSession(t, []byte(hostedLinkSession))
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilitySupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: workerEnvironmentCapabilities()}}})
-	if _, err := h.s.pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'archive-cleanup',$1)", h.tenant); err != nil {
+	if _, err := h.s.pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'archive-cleanup',$2)", h.tenant, h.tenant); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := h.s.pool.Exec(t.Context(), "INSERT INTO projects(id,name,tenant_id,subject_kind,subject_id) VALUES($1,'Archive cleanup',$1,'service_account',$2)", h.tenant, "project:"+h.tenant); err != nil {

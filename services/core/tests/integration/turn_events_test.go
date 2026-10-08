@@ -81,8 +81,7 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, conflict); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
-	reopened := reopenStore(t, h.s)
-	pool := reopened.pool
+	reopened, pool := testStore(t)
 	defer pool.Close()
 	page, err := reopened.ListTurnEvents(ctx, tenant, session.ID, input.TurnID, 0, 1)
 	if err != nil || len(page) != 1 || page[0].Ordinal != 1 {
