@@ -38,7 +38,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 			t.Error("worker did not stop")
 		}
 	})
-	if second, err := startWorkerErr(ctx, h.s, h.d); err == nil {
+	if second, err := startWorkerErr(t, ctx, h.s, h.d); err == nil {
 		cancel()
 		go second.Run(ctx)
 		t.Fatal("second service acquired database")
@@ -170,7 +170,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err != nil || pending.LastTurn.Status != sessions.TurnCancelled {
 		t.Fatal(pending, err)
 	}
-	restarted, err := startWorkerErr(ctx, h.s, h.d)
+	restarted, err := startWorkerErr(t, ctx, h.s, h.d)
 	if err != nil {
 		t.Fatal("lease not released", err)
 	}

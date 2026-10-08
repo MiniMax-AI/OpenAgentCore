@@ -29,7 +29,8 @@ func localEnvironment(t *testing.T, s *Store, tenant string) (sessions.Session, 
 }
 
 func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
 	sibling, _ := localEnvironment(t, s, tenant)
@@ -72,7 +73,8 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 }
 
 func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
 	var wg sync.WaitGroup

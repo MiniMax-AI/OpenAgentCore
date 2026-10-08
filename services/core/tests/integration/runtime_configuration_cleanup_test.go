@@ -83,8 +83,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 		{name: "kill unavailable stays retained", inspectionError: sandbox.ErrInvalid, killError: sandbox.ErrComputeUnconfirmed, wantSettled: true, wantKill: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s, _ := newManagedTestStore(t)
-			key := webDeployment(t, s, "e2b")
+			s, key := configuredStore(t)
 			p := &configurationCleanupProvider{
 				lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: test.loseCreate},
 				rejectCreate:      test.rejectCreate, settleCreate: test.settleCreate,

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
@@ -74,12 +73,7 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 
 func selfHostedMCPAdmissionFixture(t *testing.T) (*Store, string, vaults.Vault, vaults.Credential) {
 	t.Helper()
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New([]byte(strings.Repeat("k", 32)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := testStore(t)
 	_, service, err := fixtureVaults(s)
 	if err != nil {
 		t.Fatal(err)

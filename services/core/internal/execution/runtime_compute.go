@@ -127,7 +127,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	if err != nil {
 		return err
 	}
-	if _, err := r.deployment.KeepAllocation(ctx, owner); err != nil {
+	if _, err := r.deployment.CheckRunning(ctx, owner); err != nil {
 		return err
 	}
 	activity, err := r.reader.Activity(ctx, owner.ID)

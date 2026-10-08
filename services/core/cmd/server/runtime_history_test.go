@@ -26,7 +26,7 @@ func TestRuntimeHistoryUsesCoreDatabaseByDefault(t *testing.T) {
 		t.Fatal("default history requires extra deployment")
 	}
 	capabilities := setup.Reader.Capabilities()
-	if !capabilities.Durable() || capabilities.Retention != 7*24*time.Hour {
+	if capabilities.Validate() != nil || capabilities.Retention != 7*24*time.Hour {
 		t.Fatalf("incorrect default capabilities: %+v", capabilities)
 	}
 	if setup.SampleInterval != 30*time.Second {

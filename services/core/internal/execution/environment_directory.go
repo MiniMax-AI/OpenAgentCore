@@ -58,9 +58,6 @@ func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment sessi
 func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRequest, reserved bool) (result directoryReadResult) {
 	result.err = ErrExecutionUnavailable
 	defer func() {
-		if w.runtimes == nil {
-			return
-		}
 		touch, stop := context.WithTimeout(context.WithoutCancel(owner), 5*time.Second)
 		defer stop()
 		if err := w.dispatcher.Deployment.TouchActivity(touch, request.environment.TenantID, request.environment.ID); err != nil {

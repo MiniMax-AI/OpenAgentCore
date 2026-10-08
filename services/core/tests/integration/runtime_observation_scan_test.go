@@ -8,7 +8,7 @@ import (
 )
 
 func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *testing.T) {
-	s, _ := newManagedTestStore(t)
+	s, _ := configuredStore(t)
 	var expected []string
 	for range 5 {
 		_, session, _ := managedSession(t, s)

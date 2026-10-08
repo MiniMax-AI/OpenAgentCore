@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -32,12 +31,7 @@ func enrollmentTokenDigest(token string) string {
 }
 
 func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -73,12 +67,7 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 }
 
 func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{4}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
@@ -123,13 +112,6 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || !ok || credential.RuntimeAllocationID != owner.ID || credential.RuntimeNodeID != "" {
 		t.Fatal("direct bootstrap lost managed identity", err)
 	}
-	if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 hours' WHERE id=$1", owner.ID); err != nil {
-		t.Fatal(err)
-	}
-	observed, err := deploymentStore(w).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
-	if err != nil || observed.Expired {
-		t.Fatal("cloud inherited legacy node-less expiry", err)
-	}
 	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), id, deployment.ResetRequest{Clear: "auto", ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -162,9 +144,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 }
 
 func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{5}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	nodes := deploymentService(t, s)
@@ -237,9 +217,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 }
 
 func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
@@ -281,9 +259,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 }
 
 func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -366,9 +342,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 // node reconnects to drain resources; fresh admission and node configuration
 // stay closed until an administrator replaces the selection.
 func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	nodes := deploymentService(t, s)

@@ -14,27 +14,27 @@ import (
 func TestWorkerMetricsUnknownAndDetached(t *testing.T) {
 	worker := &Worker{}
 	initial := worker.MetricsSnapshot()
-	if initial.SlotsInUse != nil || initial.SlotsTotal != nil || initial.ExecutionOwner != nil || initial.Scheduler.Status != "unknown" || initial.Scheduler.LastRunAt != nil || initial.Scheduler.Processed != nil || initial.Scheduler.Failed != nil {
+	if initial.SlotsInUse != 0 || initial.SlotsTotal != 4 || initial.ExecutionOwner != nil || initial.Scheduler.Status != "unknown" || initial.Scheduler.LastRunAt != nil || initial.Scheduler.Processed != nil || initial.Scheduler.Failed != nil {
 		t.Fatalf("unobserved worker reported values: %+v", initial)
 	}
 	worker.observeSlots(3)
 	worker.observeOwnership(nil)
 	worker.observeSchedulerPoll(2, nil)
 	first := worker.MetricsSnapshot()
-	if *first.SlotsInUse != 3 || *first.SlotsTotal != 4 || !*first.ExecutionOwner || *first.Scheduler.Processed != 2 || *first.Scheduler.Failed != 0 || first.Scheduler.Status != "ok" {
+	if first.SlotsInUse != 3 || first.SlotsTotal != 4 || !*first.ExecutionOwner || *first.Scheduler.Processed != 2 || *first.Scheduler.Failed != 0 || first.Scheduler.Status != "ok" {
 		t.Fatalf("unexpected observation: %+v", first)
 	}
 	observedAt := *first.Scheduler.LastRunAt
-	*first.SlotsInUse, *first.SlotsTotal, *first.ExecutionOwner = 100, 100, false
+	*first.ExecutionOwner = false
 	*first.Scheduler.Processed, *first.Scheduler.Failed = 100, 100
 	*first.Scheduler.LastRunAt = time.Time{}
 	second := worker.MetricsSnapshot()
-	if *second.SlotsInUse != 3 || *second.SlotsTotal != 4 || !*second.ExecutionOwner || *second.Scheduler.Processed != 2 || *second.Scheduler.Failed != 0 || !second.Scheduler.LastRunAt.Equal(observedAt) {
+	if second.SlotsInUse != 3 || second.SlotsTotal != 4 || !*second.ExecutionOwner || *second.Scheduler.Processed != 2 || *second.Scheduler.Failed != 0 || !second.Scheduler.LastRunAt.Equal(observedAt) {
 		t.Fatal("caller mutation altered the worker's observations")
 	}
 	worker.observeSlots(1)
 	worker.observeSchedulerPoll(0, nil)
-	if *second.SlotsInUse != 3 || *second.Scheduler.Processed != 2 {
+	if second.SlotsInUse != 3 || *second.Scheduler.Processed != 2 {
 		t.Fatal("new observations altered a retained snapshot")
 	}
 }
@@ -74,7 +74,7 @@ func TestWorkerMetricsFailuresAndClosure(t *testing.T) {
 	worker.observeWorkerClosed(nil)
 	worker.observeOwnership(nil)
 	closed := worker.MetricsSnapshot()
-	if closed.ExecutionOwner == nil || *closed.ExecutionOwner || *closed.SlotsInUse != 0 {
+	if closed.ExecutionOwner == nil || *closed.ExecutionOwner || closed.SlotsInUse != 0 {
 		t.Fatal("late ownership observation revived a closed worker")
 	}
 	uncertain := &Worker{}
@@ -96,10 +96,9 @@ func TestWorkerMetricsConcurrentSnapshots(t *testing.T) {
 				worker.observeOwnership(nil)
 				worker.observeSchedulerPoll(j%5, nil)
 				value := worker.MetricsSnapshot()
-				if *value.SlotsInUse < 0 || *value.SlotsInUse > *value.SlotsTotal || *value.SlotsTotal != 4 {
+				if value.SlotsInUse < 0 || value.SlotsInUse > value.SlotsTotal || value.SlotsTotal != 4 {
 					t.Errorf("inconsistent slot snapshot: %+v", value)
 				}
-				*value.SlotsInUse = -1
 				*value.ExecutionOwner = false
 				*value.Scheduler.Processed = -1
 			}

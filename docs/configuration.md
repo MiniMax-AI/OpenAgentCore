@@ -131,7 +131,6 @@ The node installer writes Docker’s host settings into the `native` object of t
 | `network` | `oac-node-<installation-id>` | Runtime container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
 | `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
-| `extra_hosts` | Optional | Additional container host mappings |
 
 The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.
 

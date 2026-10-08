@@ -1,7 +1,7 @@
 ---
 title: "运行时可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: f77670c854cb175c2a30a8428e75c5c382c28b94b56479dfbee9fd82d2a57785
+source_hash: 327caa3afd98367ce831c2e80905a3cddb4a8342c312072e35b52b4ccad315f9
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `internal/runtimeobs/otlpexporter`。
@@ -22,7 +22,7 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 托管 Docker、microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
 
-每个托管分配都通过部署所选的 Sandbox Provider 读取；该 Provider 在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何 provider 之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`，Core 没有 installation 标识时得到 `source_not_configured`。provider 读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
+每个托管分配都通过部署所选的 Sandbox Provider 读取；该 Provider 在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何 provider 之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`。provider 读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
 
 `Observe` 属于 [Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md)；`services/core/internal/runtimeobs/source.go` 负责观测类型以及 Provider 的 `Source` 视图。Core 每页只加载一次所选 Provider 及其注册 kind，并在该页的每次读取中使用同一不可变 Provider，用 `Observe` 读取每个运行中的目标。没有选择时，加载返回类型化的 `ErrUnavailable`，从而生成不含 provider 类型的 `sample_unavailable`。其他加载错误遵循上述 provider 读取错误规则。
 
@@ -79,7 +79,7 @@ E2B 不报告累计 CPU 时间，因此 CPU 秒数保持为 null。`observed_at`
 - 计算运行时长：采样的 `started_at` 到 `observed_at`；
 - 忙碌 Turn 时长：`turns.started_at` 到 `completed_at`，或到当前时间。
 
-CPU 静默状态、心跳时龄、连接状态和保活时间都不是空闲时间。
+CPU 静默状态、心跳时龄和连接状态都不是空闲时间。
 
 ## 保留的历史记录与可选导出 {#retained-history-and-optional-export}
 
@@ -97,7 +97,7 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 
 历史服务在查询前解析 Project、Session 和 Environment；查询始终携带该作用域和有界时间范围，但绝不携带 provider 身份。存储保留 7 天。单次读取最多覆盖 24 小时，最多读取 20,000 条原始采样，并从范围起点之前两个采样间隔处开始读取，以查找 CPU 基线；每个数组最多返回 1,000 个桶，最多返回 64 个序列，总点数最多 10,000 个。结果超出请求的作用域、时间范围或限制时，读取失败。API 的 [Series](runtime-observability-api.md#series) 部分说明了聚合方式。
 
-`runtimehistory.Capabilities` 声明采集模式、间隔、7 天保留期、最小桶宽度（30 秒或采样间隔，取较长者）、24 小时范围和点数限制；历史路由仅在所有这些值有效且采集模式为 `periodic` 时响应，否则返回 503。
+`runtimehistory.Capabilities` 声明采样间隔、7 天保留期、最小桶宽度（30 秒或采样间隔，取较长者）、24 小时范围和点数限制；这些值无效时 Core 不会启动。
 
 清理循环每分钟运行一次，即使没有活跃 Runtime 也会运行。每轮最多耗时 2 秒，按每表 256 行的批次删除过期 Runtime 行和节点主机行，每张表最多 16 批。读取绝不会返回超过保留期的行。
 

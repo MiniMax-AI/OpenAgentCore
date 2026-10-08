@@ -13,7 +13,6 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -25,12 +24,9 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{84}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, reopenedStore := NewWithCredentialCipher(pool, cipher), NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
+	pool := s.pool
+	reopenedStore := New(t, pool)
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},

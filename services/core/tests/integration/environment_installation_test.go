@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,18 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{37}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := testStore(t)
 	installations := sessionService(t, s)
 	ctx := t.Context()
 	p := createTestProject(t, pool).Principal
@@ -51,7 +44,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	expired.ExpiresAt = time.Now().Add(-time.Second).Unix()
 	raw, _ = json.Marshal(expired)
 	payload = base64.RawURLEncoding.EncodeToString(raw)
-	signature, _ := cipher.Fingerprint("environment-installation", payload)
+	signature, _ := s.credentialCipher.Fingerprint("environment-installation", payload)
 	if _, err := installations.ValidateEnvironmentInstallation(ctx, payload+"."+signature, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 		t.Fatal("accepted expired grant", err)
 	}

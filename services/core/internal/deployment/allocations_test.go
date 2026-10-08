@@ -80,7 +80,6 @@ type fakeAllocationTx struct {
 	t              testing.TB
 	loadAllocation func() (Allocation, error)
 	settleCreation func(Allocation) (Allocation, error)
-	keep           func(Allocation) (Allocation, error)
 	release        func(Allocation) (Allocation, error)
 }
 
@@ -104,13 +103,6 @@ func (f *fakeAllocationTx) LoadRestore(Allocation) (placement.Restore, error) {
 func (f *fakeAllocationTx) ObserveRunning(Allocation) (Allocation, error) {
 	unexpected(f.t, "ObserveRunning")
 	return Allocation{}, nil
-}
-
-func (f *fakeAllocationTx) Keep(current Allocation) (Allocation, error) {
-	if f.keep == nil {
-		unexpected(f.t, "Keep")
-	}
-	return f.keep(current)
 }
 
 func (f *fakeAllocationTx) SettleCreation(current Allocation) (Allocation, error) {
@@ -308,7 +300,11 @@ func TestReserveAllocationReplaysBeforeAdmission(t *testing.T) {
 func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 	key := AllocationKey{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString()}
 	installation, node := uuid.NewString(), uuid.NewString()
-	deployment := placement.Deployment{InstallationID: installation, Mode: "nodes", Generation: 7}
+	specification, err := json.Marshal(testSpecification("docker"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deployment := placement.Deployment{InstallationID: installation, Provider: "docker", Mode: "nodes", Generation: 7, Specification: specification}
 	fresh := func() *fakeReservationTx {
 		return &fakeReservationTx{t: t, loadEnvironment: hostedEnvironment(key.EnvironmentID),
 			findAllocation: func() (Allocation, bool, error) { return Allocation{}, false, nil },
@@ -357,9 +353,10 @@ func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 }
 
 // A live change needs the Session undeleted; settlement continues for a
-// deleted Session. Any other owner is a conflict.
+// deleted Session. Any other owner, or compute that no longer runs, is a
+// conflict.
 func TestAllocationChangesCheckTheOwner(t *testing.T) {
-	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString()}
+	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running"}
 	stored := func(current Allocation) func() (Allocation, error) {
 		return func() (Allocation, error) { return current, nil }
 	}
@@ -370,7 +367,7 @@ func TestAllocationChangesCheckTheOwner(t *testing.T) {
 	}
 	deleted := owner
 	deleted.SessionDeleted = true
-	if _, err := allocationOperations(t, nil, sessions.LockedSession{}, &fakeAllocationTx{t: t, loadAllocation: stored(deleted)}).KeepAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := allocationOperations(t, nil, sessions.LockedSession{}, &fakeAllocationTx{t: t, loadAllocation: stored(deleted)}).CheckRunning(t.Context(), owner); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("a deleted Session kept its allocation", err)
 	}
 	settled := &fakeAllocationTx{t: t, loadAllocation: stored(deleted), settleCreation: func(current Allocation) (Allocation, error) {
@@ -379,6 +376,14 @@ func TestAllocationChangesCheckTheOwner(t *testing.T) {
 	}}
 	if result, err := allocationOperations(t, nil, sessions.LockedSession{}, settled).SettleCreation(t.Context(), owner); err != nil || !result.CreateSettled {
 		t.Fatal("a deleted Session's creation did not settle", result, err)
+	}
+	cleanup := owner
+	cleanup.State = "cleanup_pending"
+	if _, err := allocationOperations(t, nil, sessions.LockedSession{}, &fakeAllocationTx{t: t, loadAllocation: stored(cleanup)}).CheckRunning(t.Context(), owner); !errors.Is(err, ErrAllocationConflict) {
+		t.Fatal("cleanup kept the allocation running", err)
+	}
+	if current, err := allocationOperations(t, nil, sessions.LockedSession{}, &fakeAllocationTx{t: t, loadAllocation: stored(owner)}).CheckRunning(t.Context(), owner); err != nil || current.ID != owner.ID {
+		t.Fatal("the owner's running allocation", current, err)
 	}
 }
 

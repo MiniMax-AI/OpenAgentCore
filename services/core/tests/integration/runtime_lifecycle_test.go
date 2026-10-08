@@ -97,7 +97,7 @@ func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProv
 		peer.setRuntimeGateway(t, s, "ws"+strings.TrimPrefix(server.URL, "http"), dispatcher.Registry, link)
 		dispatcher.Links = link.Relay
 	}
-	w, err := startNextWorker(t.Context(), s, dispatcher)
+	w, err := startNextWorker(t, t.Context(), s, dispatcher)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,8 +157,7 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, s *Store, tenant, 
 }
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, env := managedSession(t, s)
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
 	w, stop := managedWorker(t, s, key, p)
@@ -196,8 +195,7 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, env := managedSession(t, s)
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
 	w, _ := managedWorker(t, s, key, p)
@@ -226,8 +224,7 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 }
 
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, _, env := managedSession(t, s)
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, _ := managedWorker(t, s, key, p)

@@ -65,7 +65,7 @@ type runtimeLifecycle struct {
 
 func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, links *relay.Relay, connections *environmentConnections, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
-		return nil, nil
+		return nil, sandbox.ErrInvalid
 	}
 	id, err := uuid.Parse(config.InstallationID)
 	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || config.loadDeployment == nil || config.prepareDeployment == nil || registry == nil {
@@ -127,9 +127,6 @@ func (r *runtimeLifecycle) lock(ctx context.Context) error {
 // ProvisionEnvironment is an internal bootstrap operation for an already
 // authorized hosted Environment. It does not enable public hosted admission.
 func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, providerKey string) (deployment.Allocation, error) {
-	if w.runtimes == nil {
-		return deployment.Allocation{}, ErrExecutionUnavailable
-	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	ctx, finish, err := w.runtimes.enter(ctx)
@@ -247,9 +244,6 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 // observes existing allocations and bootstraps committed resources without an
 // allocation. It never retries an existing Create or native work.
 func (w *Worker) ReconcileManagedRuntimes(ctx context.Context) error {
-	if w.runtimes == nil {
-		return nil
-	}
 	return w.runtimes.reconcile(ctx)
 }
 
@@ -393,7 +387,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if renewed.Reference != runtimeReference(owner) || renewed.State != "running" || !renewed.BootstrapComplete {
 		return sandbox.ErrOwnership
 	}
-	_, err = r.deployment.KeepAllocation(ctx, owner)
+	_, err = r.deployment.CheckRunning(ctx, owner)
 	return err
 }
 

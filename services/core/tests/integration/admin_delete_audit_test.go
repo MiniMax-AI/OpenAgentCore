@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -106,12 +105,7 @@ func assertAdminMutationAudit(t *testing.T, s *Store, tenant, request, action, k
 }
 
 func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{94}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	rejectAdminAuditInsert(t, s)
 	tables := []string{"agents", "agent_model_execution", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
 	for _, name := range []string{"session_delete", "artifact_delete"} {

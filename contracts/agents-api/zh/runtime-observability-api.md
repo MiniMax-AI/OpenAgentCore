@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 6eca80ffefcaf8e26901659e5251518f84d2c6c93349085b378d46f9ac49149d
+source_hash: 05ee25e01c2a8e9ce0f85c325a4a0e0e2f11eb76861e54740efa8975d9c5a999
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -147,7 +147,6 @@ Authorization: Bearer <Core key>
 | `unsupported` | `runtime_mode_not_observable` | `none` 和 `self_hosted` Session。 |
 | `unavailable` | `allocation_pending` | 托管分配尚不存在或正在创建。 |
 | `unavailable` | `runtime_not_running` | 分配正在清理或已释放，或者提供方报告 Runtime 不存在、已停止或已暂停。 |
-| `unavailable` | `source_not_configured` | 此 Core 没有托管 installation 标识。 |
 | `unavailable` | `sample_timeout` | 提供方读取超过其截止时间。 |
 | `unavailable` | `sample_unavailable` | 提供方无法生成当前样本。 |
 
@@ -235,7 +234,7 @@ Core 先解析 Project，然后解析 Session 及其 Environment，之后才读�
 | 404 | `not_found_error` | Project 不存在，或 Session 不属于该 Project。 |
 | 409 | `runtime_history_unsupported` | Session 不是 `openai_hosted`。 |
 | 500 | `internal_error` | 已存储的标识不一致。 |
-| 503 | `runtime_history_unavailable` | Core 未收集周期性历史（即在不使用 execution worker 的情况下运行），或读取失败、超时或产生了超出界限的结果。 |
+| 503 | `runtime_history_unavailable` | 读取失败、超时或产生了超出界限的结果。 |
 
 每个数组最多包含 `max_points` 个桶，响应最多包含 64 条 series，并且 coverage 和 series 中的点总计最多为 10,000 个。存储错误文本既不会返回，也不会记录到日志中。
 

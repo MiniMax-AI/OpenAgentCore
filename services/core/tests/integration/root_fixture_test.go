@@ -33,19 +33,14 @@ type Store struct {
 }
 
 // defaultPlacement is the placement rules cmd/server builds on the built-in
-// providers and an HTTPS public URL.
+// providers and the public URL https://core.example.
 var defaultPlacement, _ = placement.NewRules(providers.Builtin(), "https://core.example")
 
 // New is the fixture on pool under the shared test credential key and
 // defaultPlacement.
 func New(t testing.TB, pool *pgxpool.Pool) *Store {
-	return NewWithCredentialCipher(pool, pgtest.CredentialKey(t))
-}
-
-// NewWithCredentialCipher is New under another credential key.
-func NewWithCredentialCipher(pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) *Store {
 	pooled := pgunit.NewPool(pool)
-	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled, credentialCipher: cipher, placement: defaultPlacement}
+	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled, credentialCipher: pgtest.CredentialKey(t), placement: defaultPlacement}
 }
 
 // NewExecution is s with its Session transactions on lease.

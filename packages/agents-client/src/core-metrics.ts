@@ -68,14 +68,14 @@ export interface CoreMetrics {
     execution_owner: boolean | null;
   };
   execution: {
-    slots_in_use: number | null;
-    slots_total: number | null;
+    slots_in_use: number;
+    slots_total: number;
     queued_turns: number | null;
     /** Queued Turns whose Session has no connected daemon (part of queued_turns). */
     waiting_for_daemon: number | null;
     in_progress_turns: number | null;
     oldest_queued_seconds: number | null;
-    connected_daemons: number | null;
+    connected_daemons: number;
     /** Turns failed with execution_interrupted in the range. */
     interrupted: number | null;
     /** Requests refused with execution_unavailable in the range. */
@@ -122,6 +122,12 @@ function number(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function count(value: unknown, path: string): number {
+  const result = number(value);
+  if (result === null) throw new AgentCoreError(`Core metrics: ${path} is missing.`, 0, "invalid_response");
+  return result;
+}
+
 function text(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
 }
@@ -145,7 +151,7 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   if (body.object !== "core.metrics") throw new AgentCoreError("Core metrics: unexpected object type.", 0, "invalid_response");
   const range = record(body.range, "range");
   const service = record(body.service, "service");
-  const execution = optional(body.execution);
+  const execution = record(body.execution, "execution");
   const database = optional(body.database);
   const pool = optional(database.pool);
   const process = optional(body.process);
@@ -162,13 +168,13 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
       execution_owner: typeof service.execution_owner === "boolean" ? service.execution_owner : null,
     },
     execution: {
-      slots_in_use: number(execution.slots_in_use),
-      slots_total: number(execution.slots_total),
+      slots_in_use: count(execution.slots_in_use, "execution.slots_in_use"),
+      slots_total: count(execution.slots_total, "execution.slots_total"),
       queued_turns: number(execution.queued_turns),
       waiting_for_daemon: number(execution.waiting_for_daemon),
       in_progress_turns: number(execution.in_progress_turns),
       oldest_queued_seconds: number(execution.oldest_queued_seconds),
-      connected_daemons: number(execution.connected_daemons),
+      connected_daemons: count(execution.connected_daemons, "execution.connected_daemons"),
       interrupted: number(execution.interrupted),
       unavailable: number(execution.unavailable),
       queue_wait_ms: latency(execution.queue_wait_ms),

@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -20,12 +19,7 @@ func TestSkillsOfficialClientPostgres(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{51}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := testStore(t)
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
@@ -37,7 +31,7 @@ func TestSkillsOfficialClientPostgres(t *testing.T) {
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
-	recoveredStore := NewWithCredentialCipher(pool, cipher)
+	recoveredStore := New(t, pool)
 	h, err = publicHandler(t, recoveredStore, auth, "codex")
 	if err != nil {
 		t.Fatal(err)

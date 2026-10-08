@@ -22,7 +22,8 @@ func projectCredentials(ctx context.Context, s *Store, project identity.Principa
 }
 
 func TestProjectEnvironmentExecutorManagement(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	ctx := t.Context()
 	binding := createTestProject(t, pool)
 	project, p := binding.Project, binding.Principal

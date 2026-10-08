@@ -82,10 +82,8 @@ def main():
         credential_key.touch(mode=0o600)
         credential_key_values = [base64.b64encode(secrets.token_bytes(32)).decode()]
         credential_key.write_text(credential_key_values[0] + "\n")
-        # The database records the first installation ID it sees, so every run uses this one.
-        installation_id = Path(directory) / "installation.id"
-        installation_id.touch(mode=0o600)
-        installation_id.write_text("3f8e2c71-5b0d-4e6a-9c47-1d2a8b6f0e53\n")
+        # The test database belongs to the test installation, which the Go Worker fixtures also run as.
+        installation_id = Path(__file__).resolve().parent / "testdata/installation.id"
         env = dict(os.environ, OAC_DATABASE_URL=dsn, OAC_CORE_KEY_DIGESTS_FILE=str(core_key_digests), OAC_ADDR=f"127.0.0.1:{port}", OAC_DEFAULT_HARNESS="codex")
         env["OAC_CREDENTIAL_KEY_FILE"] = str(credential_key)
         env["OAC_INSTALLATION_ID_FILE"] = str(installation_id)

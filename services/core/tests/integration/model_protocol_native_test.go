@@ -61,7 +61,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
-	worker, err := startWorkerErr(ctx, h.s, h.d)
+	worker, err := startWorkerErr(t, ctx, h.s, h.d)
 	if err != nil {
 		t.Fatal("cannot start native execution worker")
 	}

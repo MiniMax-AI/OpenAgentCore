@@ -10,7 +10,6 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -32,12 +31,8 @@ func executionProjectionInput(source string) sessions.CreateSession {
 }
 
 func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{41}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	for _, stream := range []bool{false, true} {
 		for _, source := range []string{"session", "agent", "deployment"} {
 			t.Run(source+map[bool]string{false: "/ordinary", true: "/stream"}[stream], func(t *testing.T) {
@@ -160,12 +155,8 @@ func TestSessionExecutionConfigurationHistoricalProvenance(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{42}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant := uuid.NewString()
 	for _, kind := range []string{"model", "harness", "source", "provider", "provider_mismatch", "post_projection_failure"} {
 		input := executionProjectionInput("session")
@@ -201,7 +192,7 @@ func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
-	s, _ := testStore(t)
+	s, _ := configuredStore(t)
 	tenant := uuid.NewString()
 	input := executionProjectionInput("session")
 	var wg sync.WaitGroup
@@ -246,7 +237,8 @@ func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
-	s, pool := testStore(t)
+	s, installation := configuredStore(t)
+	pool := s.pool
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, executionProjectionInput("agent"))
@@ -261,7 +253,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

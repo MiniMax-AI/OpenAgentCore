@@ -23,7 +23,7 @@ const deletionAgent = `"agent":{"id":"agent_deletion","model":"fixture","tools":
 // missing and malformed identifiers keep one not-found response.
 func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, _ := newManagedTestStore(t)
+	s, _ := configuredStore(t)
 	audit := auditpg.New(pgunit.NewPool(s.pool))
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()

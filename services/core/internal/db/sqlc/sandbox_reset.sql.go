@@ -55,11 +55,10 @@ observed AS MATERIALIZED (SELECT clock_timestamp() AS as_of),
 held AS (
     SELECT a.deployment_generation, a.node_id, s.id AS session_id, e.id AS environment_id, false AS pending,
         (a.state = 'cleanup_pending' OR s.deleted_at IS NOT NULL OR e.status IN ('failed', 'expired')
-         OR CASE WHEN a.compute_phase NOT IN ('disabled', 'running')
-            THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= observed.as_of
-            ELSE a.node_id IS NULL AND d.mode <> 'direct' AND a.kept_at <= observed.as_of - interval '1 hour' END) AS cleanup
+         OR (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL
+            AND a.compute_retained_until <= observed.as_of)) AS cleanup
     FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    JOIN sessions s ON s.id = e.session_id CROSS JOIN deployment d CROSS JOIN observed
+    JOIN sessions s ON s.id = e.session_id CROSS JOIN observed
     WHERE a.state <> 'released'
     UNION ALL
     SELECT p.deployment_generation, p.node_id, s.id, e.id, true, false

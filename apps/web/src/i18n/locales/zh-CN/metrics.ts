@@ -310,7 +310,6 @@ export const metrics = {
     reason: {
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",
-      source_not_configured: "数据源不可用",
       sample_timeout: "采样超时",
       sample_unavailable: "采样不可用",
     },

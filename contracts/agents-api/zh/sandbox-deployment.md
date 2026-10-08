@@ -1,10 +1,10 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 7900b9c51c42e8bd55c9b411f58b572bf2333e9d84177c313df612712737133f
+source_hash: 72427ef3933ee3c9f7bde17f506c72945b33df9320508fc1a47d08cb89920922
 ---
 
-沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness；部署可以保持未配置状态，既无节点，也不接受托管准入。
+沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
 
 本契约负责下列 Core API 路由及其语义。[节点指南](../../../docs/zh/getting-started/nodes.md)负责操作员工作流，[机器连接 API](machine-api.md#node-routes)负责节点调用的路由，[沙箱节点协议](node-generation-protocol.md)负责节点连接。
 

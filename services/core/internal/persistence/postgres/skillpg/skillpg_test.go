@@ -39,9 +39,11 @@ func newFixture(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Ciphe
 	return fixture{pool: pool, store: store, service: service}
 }
 
-func testCipher(t *testing.T, seed byte) *credentialcrypto.Cipher {
+// otherKey is a credential key other than pgtest.CredentialKey, for a test that
+// a replaced key cannot open content.
+func otherKey(t *testing.T) *credentialcrypto.Cipher {
 	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{seed}, 32))
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{0x5a}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +99,7 @@ func (f fixture) rowCounts(t *testing.T, skill uuid.UUID) (skillRows, versionRow
 }
 
 func TestOwnershipEncryptionAndVersions(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 41))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	bundle := proofArchive(t, "confidential-skill-canary")
@@ -229,7 +231,7 @@ func TestOwnershipEncryptionAndVersions(t *testing.T) {
 
 // A zero page is empty; HasMore reports whether a resource follows the cursor.
 func TestListsAcceptLimitZero(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 43))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	bundle := proofArchive(t, "limit-zero")
@@ -287,7 +289,7 @@ func TestListsAcceptLimitZero(t *testing.T) {
 
 func TestMetadataTracksDefaultVersion(t *testing.T) {
 	pool := pgtest.Open(t)
-	f := newFixture(t, pool, testCipher(t, 74))
+	f := newFixture(t, pool, otherKey(t))
 	// Metadata reads and default changes work under a replaced key.
 	replaced := newFixture(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
@@ -360,7 +362,7 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 
 // Deleting the sole version deletes the Skill and all its rows in one commit.
 func TestSoleVersionDeletionRemovesSkill(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 63))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	skill := f.create(t, tenant, proofArchive(t, "sole-version"))
@@ -410,7 +412,7 @@ func TestSoleVersionDeletionRemovesSkill(t *testing.T) {
 // commits first makes the default undeletable, and a deletion that commits
 // first makes the later upload miss the Skill. Neither loses acknowledged data.
 func TestSoleVersionDeletionSerializesWithUpload(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 63))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	for _, uploadFirst := range []bool{true, false} {
@@ -469,7 +471,7 @@ func TestSoleVersionDeletionSerializesWithUpload(t *testing.T) {
 // LockSkills locks each named Skill of the tenant once, and
 // ReadVersionForFreeze opens a version only with the key that sealed it.
 func TestFreezeReads(t *testing.T) {
-	cipher := testCipher(t, 48)
+	cipher := pgtest.CredentialKey(t)
 	f := newFixture(t, pgtest.Open(t), cipher)
 	ctx := t.Context()
 	tenant := uuid.NewString()
@@ -497,7 +499,7 @@ func TestFreezeReads(t *testing.T) {
 	if _, err := skillpg.ReadVersionForFreeze(ctx, q, cipher, tenantID, first.ID, 2); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("missing version", err)
 	}
-	if _, err := skillpg.ReadVersionForFreeze(ctx, q, testCipher(t, 49), tenantID, first.ID, 1); err == nil || errors.Is(err, skills.ErrNotFound) {
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, otherKey(t), tenantID, first.ID, 1); err == nil || errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("another key opened the version", err)
 	}
 }
@@ -527,7 +529,7 @@ func waitForLockWaiters(t *testing.T, pool *pgxpool.Pool, holder int32, count in
 // Text PostgreSQL cannot store, here a YAML-escaped U+0000 in the manifest
 // description, is the shared unstorable-text error and stores nothing.
 func TestUnstorableTextStoresNothing(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 45))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	bad := archive(t, "proof", `"before\0after"`, "unstorable")
@@ -549,7 +551,7 @@ func TestUnstorableTextStoresNothing(t *testing.T) {
 
 // A malformed tenant is invalid input, not a database error.
 func TestMalformedTenantIsInvalidInput(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 46))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	if _, err := f.service.CreateSkill(t.Context(), skills.CreateSkill{TenantID: "not-a-tenant", Archive: proofArchive(t, "tenant")}); !errors.Is(err, skills.ErrInvalidInput) {
 		t.Fatal("create", err)
 	}

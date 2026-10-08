@@ -61,7 +61,16 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 // the harness's relay: an enrollment for self_hosted, an allocation otherwise.
 func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchHarness {
 	t.Helper()
+	var snapshot struct {
+		Environment struct {
+			Type string `json:"type"`
+		} `json:"environment"`
+	}
+	_ = json.Unmarshal(configuration, &snapshot)
 	s, _ := testStore(t)
+	if snapshot.Environment.Type == "openai_hosted" {
+		s, _ = configuredStore(t)
+	}
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error

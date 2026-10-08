@@ -4,12 +4,17 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"math/big"
 	"net"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,9 +55,34 @@ func TestDockerSandboxServesItsAllocation(t *testing.T) {
 	authority := sandboxlinktest.NewAuthority()
 	links := relay.New(authority)
 	t.Cleanup(func() { links.Close() })
-	// The sandbox reaches the relay through the host gateway as example.com,
-	// a name the test certificate carries; the image trusts that certificate.
+	// The sandbox reaches the relay at the bridge network's gateway, an
+	// address the test certificate carries; the image trusts that certificate.
+	bridge, err := c.NetworkInspect(t.Context(), "bridge", client.NetworkInspectOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gateway netip.Addr
+	for _, config := range bridge.Network.IPAM.Config {
+		if config.Gateway.Is4() {
+			gateway = config.Gateway
+		}
+	}
+	if !gateway.IsValid() {
+		t.Fatal("the bridge network has no IPv4 gateway")
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{SerialNumber: big.NewInt(1), NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1), gateway.AsSlice()}}
+	certificate, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewUnstartedServer(links)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{certificate}, PrivateKey: key}}}
 	listener, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		t.Fatal(err)
@@ -109,12 +139,12 @@ func TestDockerSandboxServesItsAllocation(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	p, err := New(c, Config{InstallationID: uuid.NewString(), Image: image.ID, Network: "bridge", Seccomp: string(seccomp), ExtraHosts: []string{"example.com:host-gateway"}})
+	p, err := New(c, Config{InstallationID: uuid.NewString(), Image: image.ID, Network: "bridge", Seccomp: string(seccomp)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	b := contracttest.Bootstrap(sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()})
-	b.SandboxIO.LinkURL = "wss://example.com:" + port + "/api/v1/sandbox-link"
+	b.SandboxIO.LinkURL = "wss://" + net.JoinHostPort(gateway.String(), port) + "/api/v1/sandbox-link"
 	resource := b.SandboxIO.Resource.Ref()
 	authority.AddServe([]byte(b.SandboxIO.Credential), sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource})
 	runtimeID := sandboxwire.NewID()

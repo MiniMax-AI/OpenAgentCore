@@ -122,7 +122,7 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
   const databaseBuckets = useMemo(() => database.series.map((entry) => seconds(entry.start) ?? 0), [database.series]);
   const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
   const integer = (value: number) => formatInteger(value, locale);
-  const slotsFull = execution.slots_in_use !== null && execution.slots_total !== null && execution.slots_in_use >= execution.slots_total;
+  const slotsFull = execution.slots_in_use >= execution.slots_total;
   // Sandbox nodes hold their own connection to Core, as daemons do; E2B deployments have none.
   const { state: fleetState, refresh: refreshFleet } = useSandboxFleet({ poll: true });
   const fleet = fleetSnapshot(fleetState);
@@ -136,7 +136,7 @@ function CoreMetricsBody({ metrics }: { metrics: CoreMetrics }) {
         <Kpi
           label={t("core.slots")}
           help={t("core.slotsHelp")}
-          value={execution.slots_in_use === null ? MISSING : <Figure value={<LiveNumber value={execution.slots_in_use} />} unit={execution.slots_total === null ? undefined : `/ ${integer(execution.slots_total)}`} />}
+          value={<Figure value={<LiveNumber value={execution.slots_in_use} />} unit={`/ ${integer(execution.slots_total)}`} />}
           tone={slotsFull ? "warning" : undefined}
         />
         <Kpi

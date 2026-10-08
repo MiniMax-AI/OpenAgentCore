@@ -107,7 +107,7 @@ func newObserved(t *testing.T) observed {
 		},
 	}
 	// Hosted creation needs placement rules, as cmd/server gives them.
-	rules, err := placement.NewRules(providers.Builtin(), "")
+	rules, err := placement.NewRules(providers.Builtin(), "https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}

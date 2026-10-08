@@ -3,6 +3,8 @@ package integration
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,10 +27,11 @@ import (
 // bearer tokens through the vaults service on s, records model configuration
 // observations through the model configuration adapter on s, runs Session use
 // cases and reads through the Session service and adapter on s, and reads the
-// deployment through the deployment adapter on s.
+// deployment through the deployment adapter on s. Without the dispatcher's
+// sandbox runtimes it runs fixtureRuntimes.
 func startWorker(t testing.TB, ctx context.Context, s *Store, dispatcher *execution.Dispatcher) *execution.Worker {
 	t.Helper()
-	worker, err := startWorkerErr(ctx, s, dispatcher)
+	worker, err := startWorkerErr(t, ctx, s, dispatcher)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +39,7 @@ func startWorker(t testing.TB, ctx context.Context, s *Store, dispatcher *execut
 }
 
 // startWorkerErr is startWorker for tests that assert a startup failure.
-func startWorkerErr(ctx context.Context, s *Store, dispatcher *execution.Dispatcher) (*execution.Worker, error) {
+func startWorkerErr(t testing.TB, ctx context.Context, s *Store, dispatcher *execution.Dispatcher) (*execution.Worker, error) {
 	lease, err := pgunit.AcquireLease(ctx, s.pool)
 	if err != nil {
 		return nil, err
@@ -45,7 +48,7 @@ func startWorkerErr(ctx context.Context, s *Store, dispatcher *execution.Dispatc
 	if err != nil {
 		return nil, errors.Join(err, lease.Close(ctx))
 	}
-	return startOwnedWorkerErr(ctx, s, dispatcher, owner)
+	return startOwnedWorkerErr(t, ctx, s, dispatcher, owner)
 }
 
 // startOwnedWorker is startWorker on an Owner the test already holds, for tests
@@ -53,14 +56,14 @@ func startWorkerErr(ctx context.Context, s *Store, dispatcher *execution.Dispatc
 // Run exits.
 func startOwnedWorker(t testing.TB, ctx context.Context, s *Store, dispatcher *execution.Dispatcher, owner execution.Owner) *execution.Worker {
 	t.Helper()
-	worker, err := startOwnedWorkerErr(ctx, s, dispatcher, owner)
+	worker, err := startOwnedWorkerErr(t, ctx, s, dispatcher, owner)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return worker
 }
 
-func startOwnedWorkerErr(ctx context.Context, s *Store, dispatcher *execution.Dispatcher, owner execution.Owner) (*execution.Worker, error) {
+func startOwnedWorkerErr(t testing.TB, ctx context.Context, s *Store, dispatcher *execution.Dispatcher, owner execution.Owner) (*execution.Worker, error) {
 	_, credentials, err := fixtureVaults(s)
 	if err != nil {
 		return nil, errors.Join(err, owner.Lease.Close(ctx))
@@ -83,7 +86,38 @@ func startOwnedWorkerErr(ctx context.Context, s *Store, dispatcher *execution.Di
 	if owned.Links == nil {
 		owned.Links = relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))
 	}
+	if owned.ManagedRuntimes == nil {
+		owned.ManagedRuntimes = fixtureRuntimes(t, s)
+	}
 	return execution.StartWorker(ctx, &owned, owner)
+}
+
+// testInstallation is the installation that owns the shared test database.
+// The official-client acceptance runs Core as the same installation on that
+// database, so both read it from tests/testdata/installation.id.
+func testInstallation(t testing.TB) string {
+	t.Helper()
+	value, err := os.ReadFile("../testdata/installation.id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(value))
+}
+
+// fixtureRuntimes is webRuntimes on a lifecycleProvider for the installation
+// that claimed s's database, or for testInstallation before one did. On an
+// unconfigured deployment it never loads a provider.
+func fixtureRuntimes(t testing.TB, s *Store) *execution.RuntimeProvider {
+	t.Helper()
+	view, err := deploymentService(t, s).View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation := view.InstallationID
+	if installation == "" {
+		installation = testInstallation(t)
+	}
+	return webRuntimes(t, s, installation, &lifecycleProvider{resources: map[string]sandbox.Info{}}, nil)
 }
 
 // executionOwner acquires the execution lease on s's database and builds the
@@ -176,7 +210,7 @@ func unusedPreparation(t testing.TB) execution.RuntimeDeploymentPreparer {
 // relay or a new one when links is nil.
 func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, links *relay.Relay, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.Worker {
 	t.Helper()
-	w, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: registry, Links: links, ManagedRuntimes: webRuntimes(t, s, installation, p, suspension)})
+	w, err := startNextWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: links, ManagedRuntimes: webRuntimes(t, s, installation, p, suspension)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,9 +220,9 @@ func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, l
 // startNextWorker is startWorkerErr after another owner closed its lease. A
 // closed lease stays held until PostgreSQL ends its backend, so startup
 // retries ErrLeaseHeld briefly.
-func startNextWorker(ctx context.Context, s *Store, dispatcher *execution.Dispatcher) (*execution.Worker, error) {
+func startNextWorker(t testing.TB, ctx context.Context, s *Store, dispatcher *execution.Dispatcher) (*execution.Worker, error) {
 	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		w, err := startWorkerErr(ctx, s, dispatcher)
+		w, err := startWorkerErr(t, ctx, s, dispatcher)
 		if !errors.Is(err, pgunit.ErrLeaseHeld) || time.Now().After(deadline) {
 			return w, err
 		}

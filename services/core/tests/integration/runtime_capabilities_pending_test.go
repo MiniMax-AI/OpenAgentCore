@@ -1,12 +1,10 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -15,13 +13,7 @@ import (
 )
 
 func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{9}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{
 		Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),

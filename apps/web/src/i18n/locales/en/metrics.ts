@@ -310,7 +310,6 @@ export const metrics = {
     reason: {
       allocation_pending: "Allocation pending",
       runtime_not_running: "Not running",
-      source_not_configured: "Source unavailable",
       sample_timeout: "Sample timed out",
       sample_unavailable: "Sample unavailable",
     },

@@ -16,7 +16,8 @@ import (
 func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testing.T) {
 	for _, expired := range []bool{false, true} {
 		t.Run(map[bool]string{false: "failed", true: "expired"}[expired], func(t *testing.T) {
-			s, pool := testStore(t)
+			s, installation := configuredStore(t)
+			pool := s.pool
 			tenant := uuid.NewString()
 			input := environmentInput("initial-terminal", "openai_hosted", "/workspace")
 			input.InitialInputs = []sessions.Input{messageInput("initial")}
@@ -26,12 +27,12 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			writer := executionWriter(t, s)
-			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if expired {
-				if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
+				if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_phase='suspended',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1", owner.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -112,7 +113,8 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 }
 
 func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
-	s, pool := testStore(t)
+	s, installation := configuredStore(t)
+	pool := s.pool
 	tenant := uuid.NewString()
 	input := environmentInput("rollback-terminal", "openai_hosted", "/workspace")
 	input.InitialInputs = []sessions.Input{messageInput("initial")}
@@ -121,7 +123,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := executionWriter(t, s)
-	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

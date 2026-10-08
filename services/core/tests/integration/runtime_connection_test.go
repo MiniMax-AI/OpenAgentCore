@@ -19,13 +19,12 @@ import (
 // connected while the relay holds its allocation's serve peer, and that a
 // restarted Worker publishes it connected again.
 func TestManagedRuntimeConnectionFollowsServe(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, environment := managedSession(t, s)
 	link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	start := func() (*execution.Worker, func()) {
-		w, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: link.Relay, ManagedRuntimes: webRuntimes(t, s, key, p, nil)})
+		w, err := startNextWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: link.Relay, ManagedRuntimes: webRuntimes(t, s, key, p, nil)})
 		if err != nil {
 			t.Fatal(err)
 		}
