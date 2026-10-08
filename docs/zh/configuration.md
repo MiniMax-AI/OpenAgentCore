@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 286ca5de3c5f97cf261feea1145b98cf59055c5f197fa7ad3bb02bf0e281a5b4
+source_hash: 48e9776a3ac7b42b4b651304b8bf003d26c07745b239c1567ce5e0d7fb8f0540
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -115,8 +115,9 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `secrets/database/` | 生成的数据库密码 | PostgreSQL 和 Core |
 | `secrets/core/` | 凭据加密密钥、安装 ID 和 Core 密钥摘要 | Core |
 | `secrets/web/` | 生成的 Core 登录密钥 | Web |
-| `secrets/agent-host/` | `identity.json`，即 agent host 的 Runtime ID 和凭据 | Core（据此注册 agent host）和 agent host |
+| `secrets/agent-host/` | `identity.json`，即 [agent host 的身份](#agent-host-container) | Core 和 agent host |
 | `state/` | 私有 Provider 状态，在 Core 中挂载到 `/state`。每个适配器拥有一个子目录；E2B 使用 `e2b/`，不允许组或其他用户访问 | Core |
+| `agent-host/` | [agent host 的状态目录](#agent-host-container) | agent host；初始化时检查它是否为空 |
 | `node-payload/` | 已验证的节点安装元数据 | Web |
 
 初始化会准备该目录；应用服务以只读方式接收各自的机密目录。`docker compose exec web oac-web core-key` 把 Core 密钥打印到运维人员终端，不写入容器日志。数据库密码和凭据加密密钥绝不打印。
@@ -139,7 +140,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ## Agent-host 容器 {#agent-host-container}
 
-agent host 在沙箱之外、在每个 Session 自己的视图中运行该 Session 的 Harness（见[在 agent-host 视图中运行](../../contracts/agents-api/zh/harness-onboarding.md#run-in-an-agent-host-view)）。Compose 安装把它作为 `agent-host` 服务运行在 Core 的网络命名空间中，它通过 `http://127.0.0.1:8091` 访问 Core，并以只读方式挂载数据卷的 `secrets/agent-host/`。它的容器以 root 运行 [agent-host 镜像](maintainers.md#runtime-images-and-helpers)，需要 Linux 5.14 或更高版本以及 cgroup v2：
+agent host 在沙箱之外、在每个 Session 自己的视图中运行该 Session 的 Harness（见[在 agent-host 视图中运行](../../contracts/agents-api/zh/harness-onboarding.md#run-in-an-agent-host-view)）。它的容器以 root 运行 [agent-host 镜像](maintainers.md#runtime-images-and-helpers)，需要 Linux 5.14 或更高版本以及 cgroup v2：
 
 | 要求 | Docker 参数 | 用途 |
 | --- | --- | --- |
@@ -159,6 +160,8 @@ agent host 需要一个委派给它的 cgroup v2 目录。它在该目录中为�
 - `--core-url` 是 Core 的源地址。agent host 按 Core 从 `OAC_PUBLIC_URL` 推导的方式，从它推导 Runtime gateway 和 Link 的 URL，并忽略 Core 返回的公开地址，因此它必须是 https 源地址，或回环主机上的 http 源地址，后者只有 Core 网络命名空间内的 peer 才能访问。
 
 agent host 为镜像的 `/opt/oac/harnesses.json` 所安装、且声明了视图的每个 Harness 提供服务；没有任何 Harness 时它也会启动并连接。它把每个 Session 的 home（含 Harness 的原生历史）保存在 `/var/lib/oac/agent-host`，该目录必须比容器存活更久，Session 才能在重启后继续。连接断开后它按退避策略重新拨号；当 Core 连续两分钟不可达时，agent host 以非零状态退出，由其监管程序重启。
+
+Compose 安装把 agent host 作为 `agent-host` 服务运行在 Core 的网络命名空间中，并使用 `--core-url http://127.0.0.1:8091`。它从以只读方式挂载的[数据卷](#compose-installations) `secrets/agent-host/` 读取身份，并把状态目录保存在数据卷的 `agent-host/` 中。
 
 绝不要为 agent host 设置 `GODEBUG=http2debug`。设置后，Go 的 HTTP/2 实现会记录它编码的每个请求头，包括 agent host 添加的模型和 MCP 凭据。
 
@@ -189,7 +192,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 | `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | 必填。`/run/oac/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
 | `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它 |
-| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`：一个 JSON 对象，`{"runtime_id": "<canonical UUID>", "credential": "<string>"}`。设置 `OAC_PUBLIC_URL` 时必须设置，且只能与它一同设置。Core 启动时用该 ID 和凭据注册 agent host，agent host 按原样出示该凭据；新凭据会隔离旧凭据认证过的 Link，已吊销的 agent host 保持吊销 |
+| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`：[agent host 的身份](#agent-host-container)，其 `runtime_id` 为规范 UUID。设置 `OAC_PUBLIC_URL` 时必须设置，且只能与它一同设置。Core 启动时用该 ID 和凭据注册 agent host；新凭据会隔离旧凭据认证过的 Link，已吊销的 agent host 保持吊销 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS`、`OAC_HISTORY_SETTINGS_FILE`、`OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | 对应的[进程设置](#settings)。Web 也读取三个日志设置 |
 | `OAC_PROVIDER_ROOT` | 适配器构件的绝对根目录。Core 镜像设置为 `/opt/oac`。每个适配器都拥有此根目录下的辅助路径。当其中的 `native-installers/` 目录包含 `catalog.json` 时，Core 在核对该目录清单与自身发行版后提供自托管守护进程安装程序。适配器状态位于 `/state`，即数据卷的 [`state/`](#compose-installations) |
 

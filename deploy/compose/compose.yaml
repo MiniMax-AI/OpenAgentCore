@@ -91,7 +91,8 @@ services:
         volume: {nocopy: true, subpath: state}
 
   # The agent-host container's flags are in docs/configuration.md. It shares
-  # Core's network namespace and reaches Core on its loopback listener.
+  # Core's network namespace and reaches Core on its loopback listener; the
+  # Session homes in its state directory outlive the container.
   agent-host:
     image: ${OAC_IMAGE_AGENT_HOST:-ghcr.io/minimax-ai/openagentcore/agent-host:latest}
     restart: unless-stopped
@@ -101,7 +102,12 @@ services:
     devices: [/dev/fuse]
     security_opt: [apparmor=unconfined]
     command: [agent-host, --identity-file, *agent-host-identity, --core-url, "http://127.0.0.1:8091"]
-    volumes: [*agent-host-secrets]
+    volumes:
+      - *agent-host-secrets
+      - type: volume
+        source: data
+        target: /var/lib/oac/agent-host
+        volume: {nocopy: true, subpath: agent-host}
 
   web:
     ports:

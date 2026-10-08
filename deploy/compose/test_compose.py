@@ -72,10 +72,11 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual([device['source'] for device in agent_host['devices']], ['/dev/fuse'])
         self.assertEqual(agent_host['command'], ['agent-host', '--identity-file', '/run/agent-host/identity.json',
                                                  '--core-url', 'http://127.0.0.1:8091'])
-        identity = {'target': '/run/agent-host', 'subpath': 'secrets/agent-host', 'read_only': True}
-        for name in ('core', 'agent-host'):
-            self.assertIn(identity, [{'target': v['target'], 'subpath': v['volume']['subpath'], 'read_only': v.get('read_only')}
-                                     for v in services[name]['volumes']], name)
+        def mounts(name):
+            return [(v['target'], v['volume']['subpath'], v.get('read_only', False)) for v in services[name]['volumes']]
+        identity = ('/run/agent-host', 'secrets/agent-host', True)
+        self.assertIn(identity, mounts('core'))
+        self.assertEqual(mounts('agent-host'), [identity, ('/var/lib/oac/agent-host', 'agent-host', False)])
         self.assertEqual(services['core']['environment']['OAC_AGENT_HOST_IDENTITY_FILE'], '/run/agent-host/identity.json')
         self.assertIsNone(services['core']['command'])
         self.assertNotIn('OAC_WEB_INSTALLATION_SOCKET', services['web']['environment'])

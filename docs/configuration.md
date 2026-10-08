@@ -111,8 +111,9 @@ The initialization service generates secrets and the installation ID once, then 
 | `secrets/database/` | Generated database password | PostgreSQL and Core |
 | `secrets/core/` | Credential encryption key, installation ID and Core key digest | Core |
 | `secrets/web/` | Generated Core sign-in key | Web |
-| `secrets/agent-host/` | `identity.json`, the agent host's Runtime ID and credential | Core, which registers the agent host from it, and the agent host |
+| `secrets/agent-host/` | `identity.json`, the [agent host's identity](#agent-host-container) | Core and the agent host |
 | `state/` | Private Provider state, mounted in Core at `/state`. Each adapter owns a subdirectory; E2B uses `e2b/`, with no group or other access | Core |
+| `agent-host/` | The [agent host's state directory](#agent-host-container) | The agent host; initialization checks whether it is empty |
 | `node-payload/` | Verified node installation metadata | Web |
 
 Initialization prepares this directory; application services receive their secret directories read-only. `docker compose exec web oac-web core-key` prints the Core key to the operator terminal without writing it to container logs. Database passwords and credential encryption keys are never printed.
@@ -135,7 +136,7 @@ The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolat
 
 ## Agent-host container
 
-The agent host runs each Session's Harness outside the sandbox, in a view of its own ([Run in an agent-host view](../contracts/agents-api/harness-onboarding.md#run-in-an-agent-host-view)). A Compose installation runs it as the `agent-host` service in Core's network namespace, where it reaches Core at `http://127.0.0.1:8091`, with the data volume's `secrets/agent-host/` mounted read-only. Its container runs the [agent-host image](./maintainers.md#runtime-images-and-helpers) as root and needs Linux 5.14 or newer with cgroup v2:
+The agent host runs each Session's Harness outside the sandbox, in a view of its own ([Run in an agent-host view](../contracts/agents-api/harness-onboarding.md#run-in-an-agent-host-view)). Its container runs the [agent-host image](./maintainers.md#runtime-images-and-helpers) as root and needs Linux 5.14 or newer with cgroup v2:
 
 | Requirement | Docker flag | Used for |
 | --- | --- | --- |
@@ -155,6 +156,8 @@ The container runs `oac-daemon agent-host --identity-file <path> --core-url <ori
 - `--core-url` is Core's origin. The agent host derives the Runtime gateway and Link URLs from it as Core derives them from `OAC_PUBLIC_URL`, and ignores the public addresses Core returns, so it must be an https origin or an http origin on a loopback host, which only a peer in Core's network namespace reaches.
 
 The agent host serves each Harness that the image's `/opt/oac/harnesses.json` installs and that declares a view, and it starts and connects with none. It keeps each Session's home, with the Harness's native history, in `/var/lib/oac/agent-host`, which must outlive the container for Sessions to continue after a restart. A lost connection is redialed with backoff; when Core stays unreachable for two minutes, the agent host exits with a nonzero status for its supervisor to restart it.
+
+A Compose installation runs the agent host as the `agent-host` service in Core's network namespace, with `--core-url http://127.0.0.1:8091`. It reads its identity from the [data volume](#compose-installations)'s `secrets/agent-host/`, mounted read-only, and keeps its state directory in the data volume's `agent-host/`.
 
 Never set `GODEBUG=http2debug` for the agent host. With it, Go's HTTP/2 implementation logs every header it encodes, including the model and MCP credentials the agent host adds.
 
@@ -185,7 +188,7 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 | `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | Required. `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
 | `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL`. Core refuses an ID other than the one its database recorded |
-| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`: one JSON object, `{"runtime_id": "<canonical UUID>", "credential": "<string>"}`. Required with `OAC_PUBLIC_URL`, and only with it. When Core starts it registers the agent host with that ID and credential, which the agent host presents as written; a new credential fences the Links the old one authenticated, and a revoked agent host stays revoked |
+| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`: the [agent host's identity](#agent-host-container), whose `runtime_id` is a canonical UUID. Required with `OAC_PUBLIC_URL`, and only with it. When Core starts it registers the agent host with that ID and credential; a new credential fences the Links the old one authenticated, and a revoked agent host stays revoked |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
 | `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 

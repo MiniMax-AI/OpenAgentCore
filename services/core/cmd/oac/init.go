@@ -24,7 +24,7 @@ var releaseMembers = []string{"manifest.json", "SHA256SUMS", "node-install.pyz",
 var dataOwners = []struct {
 	name string
 	uid  int
-}{{"database", 70}, {"secrets", 65532}, {"state", 65532}, {"node-payload", 65532}}
+}{{"database", 70}, {"secrets", 65532}, {"state", 65532}, {"node-payload", 65532}, {"agent-host", 0}}
 
 var chown = os.Chown
 
@@ -201,7 +201,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 		nextStep("verify_empty_data")
-		for _, name := range []string{"database", "state"} {
+		for _, name := range []string{"database", "state", "agent-host"} {
 			entries, err := os.ReadDir(filepath.Join(root, name))
 			if err != nil {
 				return err
