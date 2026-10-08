@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -90,7 +89,7 @@ func (p *generationRouter) Observe(ctx context.Context, t runtimeobs.Target) (ru
 // routeGenerations routes a direct provider's allocations through their own
 // generations. Node providers route through the node transport instead.
 func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeployment, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
-	if setup.Mode == "nodes" {
+	if setup.Mode == string(sandbox.DeploymentNodes) {
 		return candidate, nil
 	}
 	candidate.Config.Provider = &generationRouter{setup: s, operations: candidate.Config.Provider.ProviderOperations()}

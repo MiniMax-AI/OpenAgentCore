@@ -5,12 +5,11 @@ import (
 	"os"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"gopkg.in/yaml.v3"
 )
 
 func TestNodeDiagnosticSchemaContract(t *testing.T) {
@@ -35,7 +34,9 @@ func TestNodeDiagnosticSchemaContract(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s has no Diagnostic field", model.Name())
 		}
-		check(model.Name(), strings.Split(field.Tag.Get("enums"), ","))
+		if field.Type != reflect.TypeFor[sandbox.NodeDiagnosticCode]() {
+			t.Errorf("%s diagnostic must use the canonical code type", model.Name())
+		}
 	}
 	raw, err = os.ReadFile("../../../../contracts/agents-api/core.openapi.yaml")
 	if err != nil {
@@ -43,15 +44,27 @@ func TestNodeDiagnosticSchemaContract(t *testing.T) {
 	}
 	var document struct {
 		Definitions map[string]struct {
+			Enum       []string `yaml:"enum"`
 			Properties map[string]struct {
-				Enum []string `yaml:"enum"`
+				Ref   string `yaml:"$ref"`
+				AllOf []struct {
+					Ref string `yaml:"$ref"`
+				} `yaml:"allOf"`
 			} `yaml:"properties"`
 		} `yaml:"definitions"`
 	}
 	if err := yaml.Unmarshal(raw, &document); err != nil {
 		t.Fatal(err)
 	}
+	check("sandbox.NodeDiagnosticCode", document.Definitions["sandbox.NodeDiagnosticCode"].Enum)
 	for _, name := range []string{"deployment.Node", "deployment.NodeDetail", "deployment.NodeRollout"} {
-		check(name, document.Definitions[name].Properties["diagnostic"].Enum)
+		field := document.Definitions[name].Properties["diagnostic"]
+		ref := field.Ref
+		if len(field.AllOf) == 1 {
+			ref = field.AllOf[0].Ref
+		}
+		if ref != "#/definitions/sandbox.NodeDiagnosticCode" {
+			t.Errorf("%s diagnostic does not reference the canonical enum", name)
+		}
 	}
 }

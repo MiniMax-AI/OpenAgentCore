@@ -2,7 +2,7 @@ import { AgentCoreError } from "./client";
 import { CoreRequester, type CoreClientOptions } from "./core-request";
 import { isOneOf } from "./response-projection";
 import type { ReadOptions } from "./types";
-import { jobStatusValues, serviceStateStatusValues, type CoremetricsView, type JobStatus, type Latency, type ServiceState, type ServiceStateStatus } from "./generated/core-api";
+import { jobStatusValues, serviceStatusValues, type CoremetricsView, type JobStatus, type Latency, type ServiceState, type ServiceStatus } from "./generated/core-api";
 
 function invalidCoreMetrics(): never {
   throw new AgentCoreError("Core metrics: the response is not JSON.", 0, "invalid_response");
@@ -19,7 +19,7 @@ export type CoreJobStatus = JobStatus;
  * null, never zero. The client reads a service status it does not recognise
  * as `unknown`, which is never shown as running.
  */
-export type CoreMetrics = Omit<CoremetricsView, "service"> & { service: Omit<ServiceState, "status"> & { status: ServiceStateStatus | "unknown" } };
+export type CoreMetrics = Omit<CoremetricsView, "service"> & { service: Omit<ServiceState, "status"> & { status: ServiceStatus | "unknown" } };
 
 type Json = Record<string, unknown>;
 
@@ -67,7 +67,7 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   const database = optional(body.database);
   const pool = optional(database.pool);
   const process = optional(body.process);
-  const status = isOneOf(serviceStateStatusValues, service.status) ? service.status : "unknown";
+  const status = isOneOf(serviceStatusValues, service.status) ? service.status : "unknown";
   const resolution = number(range.resolution_seconds);
   if (resolution === null || resolution <= 0) throw new AgentCoreError("Core metrics: range.resolution_seconds is missing.", 0, "invalid_response");
   return {

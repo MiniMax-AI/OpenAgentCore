@@ -9,16 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func openAudit(t *testing.T) (*pgunit.Pool, *auditpg.Store) {
@@ -46,7 +45,7 @@ func record(t *testing.T, pool *pgunit.Pool, ctx context.Context, write func(con
 func recordWrite(t *testing.T, pool *pgunit.Pool, source writeaudit.Source, action, kind, id string, created ...writeaudit.Resource) {
 	t.Helper()
 	if err := record(t, pool, writeaudit.WithSource(t.Context(), source), func(ctx context.Context, q *sqlc.Queries) error {
-		return auditpg.RecordWriteAudit(ctx, q, source.TenantID, action, kind, id, "", created...)
+		return auditpg.RecordWriteAudit(ctx, q, source.TenantID, writeaudit.Action(action), writeaudit.ResourceType(kind), id, "", created...)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +203,7 @@ func TestMalformedProvenanceFailsClosed(t *testing.T) {
 			id = ""
 		}
 		ctx := writeaudit.WithSource(t.Context(), source)
-		if err := auditpg.RecordWriteAudit(ctx, nil, valid.TenantID, action, kind, id, "", created...); !errors.Is(err, writeaudit.ErrInvalidSource) {
+		if err := auditpg.RecordWriteAudit(ctx, nil, valid.TenantID, writeaudit.Action(action), writeaudit.ResourceType(kind), id, "", created...); !errors.Is(err, writeaudit.ErrInvalidSource) {
 			t.Fatalf("%s accepted: %v", field, err)
 		}
 	}

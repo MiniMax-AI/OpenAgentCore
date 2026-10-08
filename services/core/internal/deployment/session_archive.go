@@ -57,7 +57,7 @@ func (e *ExecutionOperations) archiveSession(ctx context.Context, tenantID, sess
 			if err := checkArchiveReset(d, *resetRequestedAt); err != nil {
 				return err
 			}
-			if d.Reset.Clear == ResetAuto {
+			if d.Reset.Clear == string(ResetAuto) {
 				busy, err := tx.LoadResetBusy()
 				if err != nil {
 					return err

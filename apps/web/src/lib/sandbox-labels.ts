@@ -1,22 +1,21 @@
-import { AgentCoreError, sandboxConfigurationUnconfirmed, type SandboxNode, type SandboxProvider } from "@oac/agents-client";
-import i18n from "../i18n";
+import { AgentCoreError, sandboxConfigurationUnconfirmed, type SandboxProvider } from "@oac/agents-client";
+import i18n, { type SupportedLanguage } from "../i18n";
 import { knownCoreError } from "./core-error";
-import { translate, type Locale } from "./locale";
-import type { MessageKey } from "./locale-strings";
+import type { ParseKeys } from "i18next";
 
-const states: Record<string, MessageKey> = {
+const states: Record<string, ParseKeys<"sandbox">> = {
   reserved: "Reserved state", creating: "Creating", active: "Active", releasing: "Releasing", released: "Released", failed: "Failed", pending: "Pending",
   cleanup_pending: "Cleanup pending", disabled: "Disabled", waking: "Waking",
   running: "Running", quiescing: "Quiescing", suspending: "Suspending", suspended: "Suspended", restoring: "Restoring", stopped: "Stopped",
 };
-export function sandboxStateLabel(state: string, locale: Locale): string {
-  return translate(locale, Object.hasOwn(states, state) ? states[state]! : "Unknown state");
+export function sandboxStateLabel(state: string, locale: SupportedLanguage): string {
+  return i18n.getFixedT(locale, "sandbox")(Object.hasOwn(states, state) ? states[state]! : "Unknown state");
 }
 /** Localized catalog errors first; unknown refusals retain Core’s message. */
-export function sandboxRequestError(error: unknown, locale: Locale): string {
-  const known = knownCoreError(error, i18n.getFixedT(locale === "zh" ? "zh-CN" : "en", "common"), "bytes");
+export function sandboxRequestError(error: unknown, locale: SupportedLanguage): string {
+  const known = knownCoreError(error, i18n.getFixedT(locale, "common"), "bytes");
   if (known) return known;
-  let key: MessageKey = "The sandbox request failed. Refresh to check the current state before trying again.";
+  let key: ParseKeys<"sandbox"> = "The sandbox request failed. Refresh to check the current state before trying again.";
   if (error instanceof AgentCoreError) {
     const refused = !sandboxWriteUncertain(error);
     if (error.code === sandboxConfigurationUnconfirmed) { if (refused) key = "Core rejected the sandbox configuration."; else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state."; }
@@ -25,7 +24,7 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
       key = "The sandbox request was rejected. Refresh to check the current state.";
     } else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state.";
   } else if (error instanceof Error && error.message === "removal_unconfirmed") key = "Core did not confirm node removal. Refresh to check its state.";
-  return translate(locale, key);
+  return i18n.getFixedT(locale, "sandbox")(key);
 }
 
 /**
@@ -45,20 +44,16 @@ export function sandboxWriteUncertain(error: unknown): boolean {
  * such as a loopback public_url; null for any other failure. Nothing
  * was saved, so the administrator corrects the cause and saves again.
  */
-export function sandboxConfigurationRejection(error: unknown, locale: Locale = "en"): string | null {
+export function sandboxConfigurationRejection(error: unknown, locale: SupportedLanguage = "en"): string | null {
   if (error instanceof AgentCoreError && !sandboxWriteUncertain(error) && error.code) {
-    const known = knownCoreError(error, i18n.getFixedT(locale === "zh" ? "zh-CN" : "en", "common"));
+    const known = knownCoreError(error, i18n.getFixedT(locale, "common"));
     if (known) return known;
   }
   return error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error" && error.message ? error.message : null;
 }
 
-export function sandboxNodeStatus(node: SandboxNode, stale: boolean, locale: Locale): string {
-  return translate(locale, stale ? "Status unconfirmed" : !node.online ? "Offline" : node.provider_ready ? "Available" : "Unavailable");
-}
-
-export function sandboxProviderLabel(provider: SandboxProvider | "", locale: Locale): string {
+export function sandboxProviderLabel(provider: SandboxProvider | "", locale: SupportedLanguage): string {
   if (provider === "docker") return "Docker";
   if (provider === "microsandbox") return "microsandbox";
-  return translate(locale, provider === "e2b" ? "E2B cloud" : "Unknown state");
+  return i18n.getFixedT(locale, "sandbox")(provider === "e2b" ? "E2B cloud" : "Unknown state");
 }

@@ -44,8 +44,9 @@ func TestPublicSchemaPreservesOfficialDefinitions(t *testing.T) {
 	upstream := source["components"].(map[string]any)["schemas"].(map[string]any)
 	schemas := public["components"].(map[string]any)["schemas"].(map[string]any)
 	owners := map[string]bool{"AgentResource": true, "CreateAgentParams": true, "UpdateAgentParams": true, "SessionAgentConfigParam": true, "SessionAgentResource": true, "CreateAgentSessionParams": true, "SessionResource": true}
+	// Extension dependencies retain their producing Go package names.
 	for name, value := range schemas {
-		if strings.HasPrefix(name, "v1.") {
+		if strings.HasPrefix(name, "v1.") || name == "modelprovider.Protocol" {
 			continue
 		}
 		schema := value.(map[string]any)

@@ -2,12 +2,12 @@ import type {
   AddressBindings, AdminauditOperation, AdminauditPage, AdminRuntimeObservationDetail, AdminSessionArchiveRequest, AdminSummaryResponse,
   AdminSummaryRow, EnvironmentExecutorCredentialRequest, Installation, InstallationConfiguration, InstallationSetting, IssuedAPIKey,
   IssuedExecutorCredential as IssuedExecutorCredentialResource, ManagedArchive, Project, ProjectAPIKeyRequest, ProjectRequest, ProjectsAPIKey,
-  ResourceOwner, WriteauditAPIKey, WriteauditOperation, WriteauditOperationResourceType, WriteauditPage,
+  ResourceOwner, WriteauditAPIKey, WriteauditOperation, ResourceType, WriteauditPage,
 } from "./generated/core-api";
 import type { PageOptions, RuntimeObservation } from "./types";
 
 export type { ExecutorConnection, ExecutorCredential, ExecutorCredentialList, RuntimeDiskObservation } from "./generated/core-api";
-export { writeauditOperationResourceTypeValues as adminResourceTypes } from "./generated/core-api";
+export { resourceTypeValues as adminResourceTypes } from "./generated/core-api";
 
 // Generated types keep their schema names in ./generated/core-api; these are the client's names for them.
 export type AdminProject = Project;
@@ -19,7 +19,7 @@ export type IssueAdminAPIKeyInput = ProjectAPIKeyRequest;
 export type ArchiveAdminSessionInput = AdminSessionArchiveRequest;
 /** Current resource disposition; released does not imply that the active Turn has finalized. */
 export type AdminSessionArchive = ManagedArchive;
-export type AdminResourceType = WriteauditOperationResourceType;
+export type AdminResourceType = ResourceType;
 export type AdminKeyProvenance = WriteauditAPIKey;
 /** `api_key` is null when Core has no creation record. */
 export type AdminResourceOwner = ResourceOwner;

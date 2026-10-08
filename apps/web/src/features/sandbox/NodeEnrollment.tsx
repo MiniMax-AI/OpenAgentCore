@@ -69,7 +69,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   onRefresh: () => Promise<SandboxNode[] | null>;
 }) {
   const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { t: tCommon } = useTranslation("common");
   const id = useId();
   const [active, setActive] = useState(DEFAULT_ACTIVE);

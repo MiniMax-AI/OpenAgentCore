@@ -1,10 +1,10 @@
 import type { SandboxNode, SandboxNodeRollout } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 
-const labels: Record<SandboxNodeRollout["state"], MessageKey> = { ready: "Ready for target", preparing: "Preparing target", failed: "Preparation failed", update_required: "Node software incompatible", unknown: "Target readiness unknown" };
+const labels: Record<SandboxNodeRollout["state"], ParseKeys<"sandbox">> = { ready: "Ready for target", preparing: "Preparing target", failed: "Preparation failed", update_required: "Node software incompatible", unknown: "Target readiness unknown" };
 const tones: Record<SandboxNodeRollout["state"], Tone> = { ready: "ok", preparing: "neutral", failed: "warning", update_required: "warning", unknown: "neutral" };
 
 /** A serving pin is historical ownership, not proof of a live connection or capacity. */

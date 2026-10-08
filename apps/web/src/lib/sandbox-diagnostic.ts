@@ -1,9 +1,9 @@
 import { normalizeSandboxNodeDiagnostic, type SandboxNode } from "@oac/agents-client";
-import { translate, type Locale } from "./locale";
-import type { MessageKey } from "./locale-strings";
+import i18n, { type SupportedLanguage } from "../i18n";
+import type { ParseKeys } from "i18next";
 export interface SandboxDiagnosticMessage { label: string; advice: string }
 
-const diagnostics: Record<string, { label: MessageKey; advice: MessageKey }> = {
+const diagnostics: Record<string, { label: ParseKeys<"sandbox">; advice: ParseKeys<"sandbox"> }> = {
   node_unavailable: {
     label: "Node disconnected",
     advice: "Reconnect the assigned node, then refresh. Existing resources stay assigned to this node; Core does not move the Session automatically.",
@@ -57,11 +57,12 @@ export function nodeProviderDiagnostic(node: Pick<SandboxNode, "online" | "provi
   return normalizeSandboxNodeDiagnostic(node.diagnostic ?? "");
 }
 
-export function sandboxDiagnosticMessage(value?: string, locale: Locale = "en"): SandboxDiagnosticMessage | null {
+export function sandboxDiagnosticMessage(value?: string, locale: SupportedLanguage = "en"): SandboxDiagnosticMessage | null {
   if (!value) return null;
   const message = Object.hasOwn(diagnostics, value) ? diagnostics[value]! : {
     label: "Sandbox state needs attention",
     advice: "Inspect the assigned node and resource, then refresh.",
   } as const;
-  return { label: translate(locale, message.label), advice: translate(locale, message.advice) };
+  const t = i18n.getFixedT(locale, "sandbox");
+  return { label: t(message.label), advice: t(message.advice) };
 }

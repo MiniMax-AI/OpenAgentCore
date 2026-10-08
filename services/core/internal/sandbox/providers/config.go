@@ -39,7 +39,7 @@ func (r *Registry) Build(config sandbox.NodeConfig, options sandbox.LocalOptions
 	if err != nil {
 		return nil, closeProvider, err
 	}
-	if adapter.Mode != "nodes" {
+	if adapter.Mode != sandbox.DeploymentNodes {
 		return nil, closeProvider, fmt.Errorf("%w: selected provider does not support node hosting", sandbox.ErrInvalid)
 	}
 	if config.Generation == 0 {

@@ -19,7 +19,7 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
 	public, id := "https://core.example", "5b7c0f3e-0000-4000-8000-000000000001"
-	settings := InstallationConfiguration{Settings: []InstallationSetting{{Key: "ports.core", Value: 8091, Default: 8091, Changeable: true, Restarts: []string{"core"}}}}
+	settings := InstallationConfiguration{Settings: []InstallationSetting{{Key: "ports.core", Value: 8091, Default: 8091, Changeable: true, Restarts: []InstallationService{"core"}}}}
 	fakes.installationBindings.addressBindings = func(context.Context) (deployment.AddressBindings, error) {
 		return deployment.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
 	}

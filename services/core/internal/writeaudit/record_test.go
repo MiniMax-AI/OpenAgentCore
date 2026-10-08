@@ -41,7 +41,7 @@ func TestValidateRecord(t *testing.T) {
 	} {
 		source, action, resources := issuedSource(tenant), "create", agent
 		change(&source, &action, &resources)
-		if err := ValidateRecord(source, tenant, action, resources); !errors.Is(err, ErrInvalidSource) {
+		if err := ValidateRecord(source, tenant, Action(action), resources); !errors.Is(err, ErrInvalidSource) {
 			t.Errorf("%s accepted: %v", name, err)
 		}
 	}

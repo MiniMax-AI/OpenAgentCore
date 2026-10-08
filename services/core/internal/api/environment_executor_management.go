@@ -13,6 +13,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type ExecutorConnectionStatus string
+
+const (
+	ExecutorNeverEnrolled ExecutorConnectionStatus = "never_enrolled"
+	ExecutorConnected     ExecutorConnectionStatus = "connected"
+	ExecutorDisconnected  ExecutorConnectionStatus = "disconnected"
+)
+
 // ExecutorConnections observes current executor authority and the enrolled
 // sandbox's serve peer at the Link relay. The observer runs after the
 // Environments snapshot closes and must recheck authority after inspecting
@@ -35,9 +43,9 @@ type ExecutorCredentialList struct {
 // ExecutorConnection reports the Environment's enrollment and whether its
 // sandbox serves the Environment now.
 type ExecutorConnection struct {
-	Status     string     `json:"status" binding:"required" enums:"never_enrolled,connected,disconnected"`
-	BoundKeyID *string    `json:"bound_key_id" binding:"required" extensions:"x-nullable" format:"uuid"`
-	EnrolledAt *time.Time `json:"enrolled_at" binding:"required" format:"date-time" extensions:"x-nullable"`
+	Status     ExecutorConnectionStatus `json:"status" binding:"required"`
+	BoundKeyID *string                  `json:"bound_key_id" binding:"required" extensions:"x-nullable" format:"uuid"`
+	EnrolledAt *time.Time               `json:"enrolled_at" binding:"required" format:"date-time" extensions:"x-nullable"`
 }
 
 // registerExecutorCredentialRoutes adds executor credential issuance to the
@@ -70,10 +78,10 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 		writeSessionsError(w, r, err)
 		return
 	}
-	connection := ExecutorConnection{Status: "never_enrolled"}
+	connection := ExecutorConnection{Status: ExecutorNeverEnrolled}
 	observed := state.Connection
 	if observed.Enrolled {
-		connection = ExecutorConnection{Status: "disconnected", BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt}
+		connection = ExecutorConnection{Status: ExecutorDisconnected, BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt}
 		if observed.CredentialHash != "" {
 			connected, err := h.ExecutorConnections.ExecutorConnected(r.Context(), state.EnvironmentID, observed.CredentialHash)
 			if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
@@ -81,7 +89,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 				return
 			}
 			if err == nil && connected {
-				connection.Status = "connected"
+				connection.Status = ExecutorConnected
 			}
 		}
 	}

@@ -164,7 +164,7 @@ func (a *agent) health(ctx context.Context, host *hostHealthSampler) (Health, er
 	h.Diagnostic = sandbox.NodeDiagnostic(e)
 	if e != nil && ctx.Err() != nil {
 		// A closing connection cancelled the probe; that says nothing about the provider.
-		h.Diagnostic = sandbox.NodeProviderUnavailable
+		h.Diagnostic = string(sandbox.NodeProviderUnavailable)
 	} else {
 		wasReady := a.ready.Swap(h.ProviderReady)
 		seen := a.healthSeen.Swap(true)
