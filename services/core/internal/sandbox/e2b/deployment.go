@@ -12,7 +12,7 @@ import (
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{RuntimeError: "E2B Runtime is selected by its immutable template build"}
+	return sandbox.DeploymentPolicy{Artifacts: map[string]sandbox.ArtifactRule{}, RuntimeError: "E2B Runtime is selected by its immutable template build"}
 }
 
 func ValidateResources(r sandbox.Resources) error          { return r.ValidatePolicy("e2b", Policy()) }

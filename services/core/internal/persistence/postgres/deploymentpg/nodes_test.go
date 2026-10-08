@@ -360,6 +360,17 @@ func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
 	for _, mode := range []string{"v2", "old_v1", "current_v1"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newFixture(t)
+			db := sql.OpenDB(stdlib.GetConnector(*f.pool.Config().ConnConfig))
+			defer db.Close()
+			migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../../migrations"), goose.WithTableName("agents_api_schema_version"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Keep this node-protocol migration test below the independent
+			// Runtime release guard, before installing any deployment fixtures.
+			if _, err := migration.DownTo(t.Context(), 98); err != nil {
+				t.Fatal(err)
+			}
 			changes, _ := f.execution(t)
 			input := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
 			installation, first := f.initialize(t, changes, input)
@@ -382,12 +393,6 @@ func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
 					t.Fatal("target change replaced execution ownership", next)
 				}
 			}
-			db := sql.OpenDB(stdlib.GetConnector(*f.pool.Config().ConnConfig))
-			defer db.Close()
-			migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../../migrations"), goose.WithTableName("agents_api_schema_version"))
-			if err != nil {
-				t.Fatal(err)
-			}
 			_, err = migration.DownTo(t.Context(), 81)
 			if mode == "current_v1" {
 				if err != nil {
@@ -398,9 +403,9 @@ func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
 					t.Fatal("downgrade discarded required node protocol")
 				}
 				// DownTo may have removed later, reversible migrations before the
-				// node protocol migration refused the downgrade. Restore the current
-				// schema before using this version of the adapter to verify recovery.
-				if _, err = migration.Up(t.Context()); err != nil {
+				// node protocol migration refused the downgrade. Restore the test
+				// baseline before using the adapter to verify recovery.
+				if _, err = migration.UpTo(t.Context(), 98); err != nil {
 					t.Fatal("refused downgrade could not restore current schema", err)
 				}
 				if _, err = f.service.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 1); err != nil {
@@ -413,7 +418,7 @@ func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
 					t.Fatal("removed node blocked downgrade", err)
 				}
 			}
-			if _, err = migration.Up(t.Context()); err != nil {
+			if _, err = migration.UpTo(t.Context(), 98); err != nil {
 				t.Fatal("node schema could not upgrade again", err)
 			}
 		})
@@ -424,18 +429,22 @@ func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
 // node's last report, are rewritten to their class.
 func TestNodeReadinessClassMigrationRewritesStoredCodes(t *testing.T) {
 	f := newFixture(t)
+	db := sql.OpenDB(stdlib.GetConnector(*f.pool.Config().ConnConfig))
+	defer db.Close()
+	migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../../migrations"), goose.WithTableName("agents_api_schema_version"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Seed the readiness fixture below the independent Runtime release guard.
+	if _, err := migration.DownTo(t.Context(), 98); err != nil {
+		t.Fatal(err)
+	}
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	connection := f.connect(t, node.NodeID)
 	failed := []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "failed", Diagnostic: "provider_unavailable"}}
 	if err := f.service.HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{Diagnostic: "provider_unavailable"}, failed); err != nil {
-		t.Fatal(err)
-	}
-	db := sql.OpenDB(stdlib.GetConnector(*f.pool.Config().ConnConfig))
-	defer db.Close()
-	migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../../migrations"), goose.WithTableName("agents_api_schema_version"))
-	if err != nil {
 		t.Fatal(err)
 	}
 	var version int64
@@ -453,7 +462,7 @@ func TestNodeReadinessClassMigrationRewritesStoredCodes(t *testing.T) {
 	if _, err := f.pool.Exec(t.Context(), "UPDATE runtime_node_generation_status SET diagnostic='microsandbox_artifacts_unavailable' WHERE node_id=$1", node.NodeID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := migration.Up(t.Context()); err != nil {
+	if _, err := migration.UpTo(t.Context(), 98); err != nil {
 		t.Fatal(err)
 	}
 	detail, err := f.service.NodeDetail(t.Context(), node.NodeID, "1h")

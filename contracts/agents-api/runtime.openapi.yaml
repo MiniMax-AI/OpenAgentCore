@@ -138,24 +138,14 @@ definitions:
     type: object
   sandbox.RuntimeRelease:
     properties:
-      firmware_sha256:
-        type: string
-      image_id:
-        type: string
-      image_manifest_digest:
-        type: string
-      microsandbox_ref:
-        type: string
-      runtime_sha256:
-        type: string
+      artifacts:
+        additionalProperties:
+          type: string
+        type: object
       source_commit:
         type: string
     required:
-      - firmware_sha256
-      - image_id
-      - image_manifest_digest
-      - microsandbox_ref
-      - runtime_sha256
+      - artifacts
       - source_commit
     type: object
   v1.APIError:

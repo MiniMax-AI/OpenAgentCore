@@ -167,7 +167,7 @@ def root_runtime_files(root, value, others, installer):
             or any(not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest) for digest in saved["sha256"].values())):
         raise installer.InstallError("Original Runtime artifact ownership differs")
     if value["provider"] == "microsandbox" and any(
-            saved["sha256"][name] != base["specification"]["runtime"][field]
+            saved["sha256"][name] != base["specification"]["runtime"]["artifacts"][field]
             for name, field in zip(installer.MICRO[1:], ("runtime_sha256", "firmware_sha256"))):
         raise installer.InstallError("Original Runtime artifact hashes differ from its specification")
     for path in candidates:
@@ -230,7 +230,7 @@ def validate_preparation_plan(root, plan, base, installer):
         policy = Path(plan["native"]["seccomp_file"])
         if policy not in (root / "runtime/seccomp.json", root / "releases" / source / "runtime/seccomp.json"):
             raise installer.InstallError("Preparation policy is outside its immutable release")
-        if plan["native"]["image"] not in (runtime["image_id"], runtime["image_manifest_digest"]):
+        if plan["native"]["image"] not in (runtime["artifacts"]["image_id"], runtime["artifacts"]["image_manifest_digest"]):
             raise installer.InstallError("Preparation image differs from the specification")
         installer.no_links(policy)
     else:
@@ -252,7 +252,7 @@ def verify_plan_final(plan, final, installer):
     if plan["provider"] == "docker":
         image = final.get("native", {}).get("image")
         runtime = plan["specification"]["runtime"]
-        if image not in (runtime["image_id"], runtime["image_manifest_digest"]):
+        if image not in (runtime["artifacts"]["image_id"], runtime["artifacts"]["image_manifest_digest"]):
             raise installer.InstallError("Final Docker image differs from the preparation specification")
         expected["native"]["image"] = image
     if expected != final:
@@ -275,9 +275,9 @@ def owned_root(args, installer):
 def generation_home(root, configuration, base, installer):
     runtime = configuration["specification"]["runtime"]
     previous = base["specification"]["runtime"]
-    if (runtime["runtime_sha256"], runtime["firmware_sha256"]) == (previous["runtime_sha256"], previous["firmware_sha256"]):
+    if (runtime["artifacts"]["runtime_sha256"], runtime["artifacts"]["firmware_sha256"]) == (previous["artifacts"]["runtime_sha256"], previous["artifacts"]["firmware_sha256"]):
         return Path(base["native"]["runtime_home"])
-    material = ":".join((configuration["installation_id"], runtime["runtime_sha256"], runtime["firmware_sha256"]))
+    material = ":".join((configuration["installation_id"], runtime["artifacts"]["runtime_sha256"], runtime["artifacts"]["firmware_sha256"]))
     home = Path.home() / ".oac/m" / hashlib.sha256(material.encode()).hexdigest()[:12]
     if len(os.fsencode(home)) > 48:
         raise installer.InstallError("HOME is too long for versioned microsandbox socket paths")
@@ -296,12 +296,12 @@ def image_available(value, installer):
         for key in ("helper_path", "runtime_path", "firmware_path"):
             if not installer.existing_file(Path(micro[key])):
                 return False
-        if (installer.file_digest(Path(micro["runtime_path"])) != runtime["runtime_sha256"]
-                or installer.file_digest(Path(micro["firmware_path"])) != runtime["firmware_sha256"]):
+        if (installer.file_digest(Path(micro["runtime_path"])) != runtime["artifacts"]["runtime_sha256"]
+                or installer.file_digest(Path(micro["firmware_path"])) != runtime["artifacts"]["firmware_sha256"]):
             return False
         env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=micro["runtime_home"], MSB_PATH=micro["runtime_path"], MSB_LIBKRUNFW_PATH=micro["firmware_path"])
-        image = json.loads(installer.checked([micro["runtime_path"], "image", "inspect", runtime["microsandbox_ref"], "--format", "json"], "Cannot inspect pinned image", env=env))
-        return image.get("digest") == runtime["microsandbox_ref"].split("@", 1)[1] and image.get("architecture") == "amd64" and image.get("os") == "linux"
+        image = json.loads(installer.checked([micro["runtime_path"], "image", "inspect", runtime["artifacts"]["microsandbox_ref"], "--format", "json"], "Cannot inspect pinned image", env=env))
+        return image.get("digest") == runtime["artifacts"]["microsandbox_ref"].split("@", 1)[1] and image.get("architecture") == "amd64" and image.get("os") == "linux"
     except (installer.InstallError, OSError, ValueError):
         return False
 
@@ -400,7 +400,8 @@ def prepare(args, installer):
             if args.provider == "microsandbox":
                 args.runtime_home = Path(value["native"]["runtime_home"]) if value else generation_home(root, args.configuration, base, installer)
             if value is None:
-                value = installer.provider_config(root / "releases" / runtime["source_commit"], args, runtime["image_id"])
+                runtime_image = runtime["artifacts"]["image_id"] if args.provider == "docker" else None
+                value = installer.provider_config(root / "releases" / runtime["source_commit"], args, runtime_image)
             if preparation is None:
                 preparation = dict(marker_identity(args), import_started=False, configuration=copy.deepcopy(value))
                 atomic_json(directory / (str(args.generation) + ".preparing"), preparation)
@@ -417,7 +418,7 @@ def prepare(args, installer):
             if finalized:
                 installer.node_spec.verify_provider(value, args.configuration, runtime_image)
             elif args.provider == "docker":
-                if runtime_image not in (runtime["image_id"], runtime["image_manifest_digest"]):
+                if runtime_image not in (runtime["artifacts"]["image_id"], runtime["artifacts"]["image_manifest_digest"]):
                     raise installer.InstallError("Resolved Docker image is outside the authorized specification")
                 value = copy.deepcopy(value)
                 value["native"]["image"] = runtime_image
@@ -558,7 +559,7 @@ def collect(args, installer):
 
 def collect_image(args, value, others, installer):
     if value["provider"] == "microsandbox":
-        micro, image = value["native"], value["specification"]["runtime"]["microsandbox_ref"]
+        micro, image = value["native"], value["specification"]["runtime"]["artifacts"]["microsandbox_ref"]
         shared = [item for item in others if item["native"]["runtime_home"] == micro["runtime_home"]]
         home = Path(micro["runtime_home"])
         installer.no_links(home)
@@ -566,10 +567,10 @@ def collect_image(args, value, others, installer):
             raise installer.InstallError("Microsandbox store ownership differs")
         runtime_path = Path(micro["runtime_path"])
         installer.no_links(runtime_path)
-        if not installer.existing_file(runtime_path) or installer.file_digest(runtime_path) != value["specification"]["runtime"]["runtime_sha256"]:
+        if not installer.existing_file(runtime_path) or installer.file_digest(runtime_path) != value["specification"]["runtime"]["artifacts"]["runtime_sha256"]:
             raise installer.InstallError("Cannot verify retained microsandbox executable")
         env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=micro["runtime_home"], MSB_PATH=micro["runtime_path"], MSB_LIBKRUNFW_PATH=micro["firmware_path"])
-        if not any(item["specification"]["runtime"]["microsandbox_ref"] == image for item in shared):
+        if not any(item["specification"]["runtime"]["artifacts"]["microsandbox_ref"] == image for item in shared):
             # A failed inspect/remove is not proof of absence. A successful full
             # inventory must contain only understood immutable references.
             raw = installer.checked([micro["runtime_path"], "image", "list", "--quiet"], "Cannot verify microsandbox image inventory", env=env)

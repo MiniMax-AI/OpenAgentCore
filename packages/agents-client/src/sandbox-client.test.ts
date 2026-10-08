@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, sandboxNodeDiagnostics, type SandboxNode } from "./sandbox-client";
 
+import deploymentContractFixture from "../../../services/core/internal/sandbox/testdata/deployment-contract.json";
 import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testdata/node-diagnostics.json";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
@@ -40,7 +41,8 @@ const allocation = {
   session_id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f", environment_id: "3d4e5f6a-7b8c-4d9e-8f1a-2b3c4d5e6f7a",
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
-const runtime = { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) };
+const runtime = { source_commit: "a".repeat(40), artifacts: { image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64) } };
+const microRuntime = { source_commit: runtime.source_commit, artifacts: { microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) } };
 const unconfigured = {
   credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
 const docker = {
@@ -49,7 +51,7 @@ const docker = {
   resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 }, runtime }, specification_digest: "0".repeat(64),
 };
 const microsandbox = {
-  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 }, runtime },
+  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 }, runtime: microRuntime },
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
 /** An E2B selection saved before Core recorded its template build. */
@@ -73,6 +75,35 @@ const { specification_digest: _digest, ...undigested } = docker;
 const { compute_phase_changed_at: _changed, ...unphased } = allocation;
 
 describe("strict sandbox administration projections", () => {
+  it.each(deploymentContractFixture.filter((entry) => entry.valid || /release|artifact|newline|crlf/.test(entry.name)))("checks the shared release contract: $name", async (entry) => {
+    const base = entry.provider === "e2b" ? e2bDeployment : entry.provider === "microsandbox" ? microsandbox : docker;
+    const body = { ...base, specification: entry.specification };
+    if (entry.valid) expect(await read("deployment", body)).toEqual(body);
+    else await expect(read("deployment", body)).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
+  it.each([
+    ["missing runtime", undefined], ["null runtime", null],
+    ["legacy release", { source_commit: runtime.source_commit, ...runtime.artifacts }],
+    ["missing artifacts", { source_commit: runtime.source_commit }],
+    ["null artifacts", { ...runtime, artifacts: null }], ["array artifacts", { ...runtime, artifacts: [] }],
+    ["missing identity", { ...runtime, artifacts: { image_id: runtime.artifacts.image_id } }],
+    ["foreign provider identities", microRuntime],
+    ["extra identity", { ...runtime, artifacts: { ...runtime.artifacts, runtime_sha256: "e".repeat(64) } }],
+    ["null identity", { ...runtime, artifacts: { ...runtime.artifacts, image_id: null } }],
+    ["numeric identity", { ...runtime, artifacts: { ...runtime.artifacts, image_id: 42 } }],
+    ["uppercase identity", { ...runtime, artifacts: { ...runtime.artifacts, image_id: runtime.artifacts.image_id.toUpperCase() } }],
+    ["identity trailing newline", { ...runtime, artifacts: { ...runtime.artifacts, image_id: runtime.artifacts.image_id + "\n" } }],
+    ["commit trailing newline", { ...runtime, source_commit: runtime.source_commit + "\n" }],
+    ["extra release field", { ...runtime, image_id: runtime.artifacts.image_id }],
+  ])("rejects a Docker deployment with %s", async (_, value) => {
+    await expect(read("deployment", { ...docker, specification: { ...docker.specification, runtime: value } })).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
+  it("rejects a release for a provider that declares no artifacts", async () => {
+    await expect(read("deployment", { ...e2bDeployment, specification: { ...e2bDeployment.specification, runtime } })).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
   it.each([
     ["nodes", "ready and unready", { data: [node, unready] }], ["nodes", "empty", { data: [] }],
     ["detail", "observed", detail], ["unobserved", "never observed", unobserved],
@@ -192,7 +223,7 @@ describe("Core sandbox credential boundaries", () => {
   it("forwards one specification with generation and preserves backend conflict details", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_specification_mismatch", message: "Node specification differs" } }, 409));
     const admin = new SandboxAdminClient({ token: "admin-only", fetch });
-    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, runtime: { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) }, expected_generation: 3 };
+    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, runtime, expected_generation: 3 };
     await expect(admin.updateDeployment(input)).rejects.toMatchObject({ status: 409, code: "sandbox_specification_mismatch" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual(input);

@@ -55,7 +55,7 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	release, resources := spec.Runtime, spec.Resources
 	config := Config{
 		InstallationID: result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
-		RuntimeSHA256: release.RuntimeSHA256, FirmwareSHA256: release.FirmwareSHA256, Image: release.MicrosandboxRef,
+		RuntimeSHA256: release.Artifacts["runtime_sha256"], FirmwareSHA256: release.Artifacts["firmware_sha256"], Image: release.Artifacts["microsandbox_ref"],
 		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, EnvironmentDiskMiB: resources.EnvironmentDiskMiB, Network: network,
 	}
 	provider, err := NewWithCaller(config, caller)
