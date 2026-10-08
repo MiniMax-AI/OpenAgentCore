@@ -66,13 +66,14 @@ JOIN environment_executor_credentials c ON c.key_id = n.executor_key_id;
 
 -- +goose Down
 -- Restoring the old device references cannot invent identities or discard
--- durable history, uncertain writes, Provider cleanup or pending host cleanup.
+-- durable history, enrollment authority, uncertain writes or pending cleanup.
 -- +goose StatementBegin
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM subagent_identities)
     OR EXISTS (SELECT 1 FROM environment_file_writes)
     OR EXISTS (SELECT 1 FROM runtime_allocations)
+    OR EXISTS (SELECT 1 FROM sandbox_enrollments)
     OR EXISTS (
       SELECT 1 FROM session_runtime_assignments b JOIN sessions s ON s.id = b.session_id
       WHERE s.deleted_at IS NULL OR b.desired_state <> 'released' OR b.applied_epoch <> b.epoch

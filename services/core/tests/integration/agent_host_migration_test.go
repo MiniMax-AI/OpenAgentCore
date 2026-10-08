@@ -2,17 +2,19 @@ package integration
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
 
 func TestAgentHostMigration(t *testing.T) {
-	for _, scenario := range []string{"bound_assignment", "subagent_history", "pending_write", "live_allocation", "settled_session"} {
+	for _, scenario := range []string{"bound_assignment", "subagent_history", "pending_write", "live_allocation", "enrollment_authority", "settled_session"} {
 		t.Run(scenario, func(t *testing.T) {
 			s, pool := newManagedTestStore(t)
 			ctx := t.Context()
@@ -82,6 +84,40 @@ func TestAgentHostMigration(t *testing.T) {
 			}
 			if snapshot("devices") != "[]" || snapshot("session_runtime_assignments") != "[]" {
 				t.Fatal("guest execution authority survived upgrade")
+			}
+			if scenario == "enrollment_authority" {
+				principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
+				selfHosted, err := s.CreateSession(ctx, principal.TenantID, sessions.CreateSession{
+					Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+					Configuration: json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				service := sessionService(t, s)
+				first, err := service.IssueExecutorCredential(ctx, principal, uuid.NewString(), selfHosted.Environment.ID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				resource, err := service.EnrollRuntime(ctx, selfHosted.Environment.ID, executorDigest(first.Token))
+				if err != nil {
+					t.Fatal(err)
+				}
+				before := snapshot("sandbox_enrollments")
+				if _, err := migrations.DownTo(ctx, 97); err == nil || !strings.Contains(err.Error(), "Cannot restore device constraints") {
+					t.Fatal("rollback discarded enrollment authority", err)
+				}
+				if snapshot("sandbox_enrollments") != before || snapshot("session_runtime_assignments") != "[]" || snapshot("runtime_allocations") != "[]" {
+					t.Fatal("refused rollback changed unbound enrollment")
+				}
+				var columns int
+				if err := pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='devices' AND column_name='credential_revision'`).Scan(&columns); err != nil || columns != 1 {
+					t.Fatal("refused rollback changed schema", columns, err)
+				}
+				if again, err := service.EnrollRuntime(ctx, selfHosted.Environment.ID, executorDigest(first.Token)); err != nil || again != resource {
+					t.Fatal("rollback changed enrolled identity", again, err)
+				}
+				return
 			}
 			if scenario == "subagent_history" || scenario == "pending_write" || scenario == "live_allocation" {
 				if scenario == "live_allocation" {
