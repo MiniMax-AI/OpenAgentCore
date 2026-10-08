@@ -90,7 +90,7 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 | `instance` | object | The current compute identity; see [`RuntimeInstance`](#runtimeinstance). |
 | `lifecycle_state` | enum or null | Core's own lifecycle view of a managed allocation; null for `none` and `self_hosted`. See below. |
 | `status` | enum | `observed`, `unsupported` or `unavailable`. |
-| `reason` | enum or null | Why the row has no sample; see [Status and reason](#status-and-reason). |
+| `reason` | string or null | Why the row has no sample; see [Status and reason](#status-and-reason). |
 | `allocation_created_at` | integer or null | Unix seconds when the managed allocation was created. |
 | `resolved_at` | integer | Unix seconds when Core resolved this row. |
 | `observed_at` | integer or null | Unix seconds of the provider sample; null without a sample. |
@@ -141,12 +141,13 @@ Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rule
 | --- | --- | --- |
 | `observed` | null | The provider returned a sample. |
 | `unsupported` | `runtime_mode_not_observable` | `none` and `self_hosted` Sessions. |
+| `unsupported` | Provider-declared safe code | A managed Runtime whose Provider declares `Observe` unsupported under the [Provider operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts). The allocation ID is present; all sample fields are null. |
 | `unavailable` | `allocation_pending` | The managed allocation does not exist yet or is being created. |
 | `unavailable` | `runtime_not_running` | The allocation is being cleaned up or is released, or the provider reports the Runtime absent, stopped or suspended. |
 | `unavailable` | `sample_timeout` | The provider read exceeded its deadline. |
 | `unavailable` | `sample_unavailable` | The provider could not produce a current sample. |
 
-An ownership mismatch, malformed durable identity or invalid provider evidence fails the request instead of becoming an `unavailable` row. The generated `core.openapi.yaml` records each field's type, nullability and enum but cannot express which combinations of status, mode and fields are valid; this table and the field rules above are normative.
+An ownership mismatch, malformed durable identity or invalid provider evidence fails the request instead of becoming an `unavailable` row. The generated `core.openapi.yaml` records each field's type, nullability, enum and string pattern but cannot express which combinations of status, mode and fields are valid; this table and the field rules above are normative.
 
 ### Errors
 

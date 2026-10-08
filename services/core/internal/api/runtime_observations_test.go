@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/google/uuid"
 )
@@ -201,5 +204,72 @@ func TestAdminRuntimeObservationProjectsReportedUtilizationAndDisk(t *testing.T)
 	raw, _ = json.Marshal(value)
 	if err != nil || !strings.Contains(string(raw), `"disk":null`) || strings.Contains(string(public), "disk") {
 		t.Fatalf("unreported disk was not null or reached the project shape: %s %s %v", raw, public, err)
+	}
+}
+
+type declaredObservationSource struct {
+	t      *testing.T
+	reason string
+}
+
+func (s declaredObservationSource) ProviderOperations() providercontract.Operations {
+	return providercontract.Operations{"Observe": {State: providercontract.Unsupported, Reason: s.reason}}
+}
+
+func (s declaredObservationSource) Observe(context.Context, runtimeobs.Target) (runtimeobs.Sample, error) {
+	s.t.Fatal("an unsupported operation must not be invoked")
+	return runtimeobs.Sample{}, nil
+}
+
+func (s declaredObservationSource) Resolve(_ context.Context, tenant, session string) (runtimeobs.Target, error) {
+	return runtimeobs.Target{
+		TenantID: tenant, SessionID: session, EnvironmentID: "22222222-2222-4222-8222-222222222222", Mode: runtimeobs.ModeManaged,
+		Instance: runtimeobs.Instance{AllocationID: "33333333-3333-4333-8333-333333333333", ProviderKey: "provider", AllocationState: "running", ComputePhase: "running"},
+	}, nil
+}
+
+func TestRuntimeObservationPreservesDeclaredProviderReasons(t *testing.T) {
+	raw, err := os.ReadFile("../providercontract/testdata/observation_reasons.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		SchemaPattern string `json:"schema_pattern"`
+		Cases         []struct {
+			Reason string
+			Valid  bool
+		}
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	field, ok := reflect.TypeOf(v1.RuntimeObservation{}).FieldByName("Reason")
+	if !ok || field.Tag.Get("pattern") != fixture.SchemaPattern {
+		t.Fatal("wire reason pattern differs from Provider fixture")
+	}
+	for _, entry := range fixture.Cases {
+		t.Run(entry.Reason, func(t *testing.T) {
+			source := declaredObservationSource{t: t, reason: entry.Reason}
+			service, err := runtimeobs.NewService(source, func(context.Context) (runtimeobs.Source, string, error) { return source, "docker", nil })
+			if err != nil {
+				t.Fatal(err)
+			}
+			handler, _, _ := adminTestHandler(t, observeWith(service))
+			session := "11111111-1111-4111-8111-111111111111"
+			response := runtimeObservationRequest(handler, adminSessionsPath+session+"/runtime-observation")
+			if !entry.Valid {
+				if response.Code != http.StatusInternalServerError || strings.Contains(response.Body.String(), entry.Reason) && entry.Reason != "" {
+					t.Fatalf("invalid declaration exposed: %d %s", response.Code, response.Body)
+				}
+				return
+			}
+			var value v1.RuntimeObservation
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &value) != nil {
+				t.Fatalf("observation returned %d: %s", response.Code, response.Body)
+			}
+			if value.Status != "unsupported" || value.Reason == nil || *value.Reason != entry.Reason || value.Mode != "openai_hosted" || value.LifecycleState == nil || *value.LifecycleState != "active" || value.Instance.Kind != "managed_allocation" || value.Instance.AllocationID == nil || *value.Instance.AllocationID != "33333333-3333-4333-8333-333333333333" || value.ObservedAt != nil || value.StartedAt != nil || value.CPU != nil || value.Memory != nil {
+				t.Fatalf("invalid unsupported observation: %s", response.Body)
+			}
+		})
 	}
 }
