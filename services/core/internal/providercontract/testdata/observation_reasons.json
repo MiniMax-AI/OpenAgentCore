@@ -1,0 +1,26 @@
+{
+  "schema_pattern": "^[a-z][a-z0-9_]{0,95}(?![\\s\\S])",
+  "cases": [
+    {"reason": "native_metrics_not_supported", "valid": true, "unavailable": false},
+    {"reason": "a", "valid": true, "unavailable": false},
+    {"reason": "a0_9", "valid": true, "unavailable": false},
+    {"reason": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "valid": true, "unavailable": false},
+    {"reason": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "valid": false, "unavailable": false},
+    {"reason": "", "valid": false, "unavailable": false},
+    {"reason": "A", "valid": false, "unavailable": false},
+    {"reason": "1abc", "valid": false, "unavailable": false},
+    {"reason": "_abc", "valid": false, "unavailable": false},
+    {"reason": "native-metrics", "valid": false, "unavailable": false},
+    {"reason": "native.metrics", "valid": false, "unavailable": false},
+    {"reason": "native metrics", "valid": false, "unavailable": false},
+    {"reason": "native_metrics\n", "valid": false, "unavailable": false},
+    {"reason": "native_metrics\r\n", "valid": false, "unavailable": false},
+    {"reason": "native_metrics\u2028", "valid": false, "unavailable": false},
+    {"reason": "é", "valid": false, "unavailable": false},
+    {"reason": "runtime_mode_not_observable", "valid": true, "unavailable": false},
+    {"reason": "allocation_pending", "valid": true, "unavailable": true},
+    {"reason": "runtime_not_running", "valid": true, "unavailable": true},
+    {"reason": "sample_timeout", "valid": true, "unavailable": true},
+    {"reason": "sample_unavailable", "valid": true, "unavailable": true}
+  ]
+}

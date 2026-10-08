@@ -1,6 +1,10 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import observationReasons from "../../../services/core/internal/providercontract/testdata/observation_reasons.json";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminClient } from "./admin-client";
+import { runtimeUnavailableReasons } from "./types";
 import { AgentCoreError, projectAgentSession, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
@@ -2742,6 +2746,62 @@ describe("OpenAIAgentsClient", () => {
     expect(String(calls[0]?.input)).toBe(
       `https://core.example/core/v1/projects/${runtimeProjectId}/sessions/${runtimeSessionId}/runtime-observation`,
     );
+  });
+
+  it.each(observationReasons.cases)("checks declared reason $reason against schema and both administrator reads", async ({ reason, valid }) => {
+    const schema = readFileSync(new URL("../../../contracts/agents-api/core.openapi.yaml", import.meta.url), "utf8");
+    for (const definition of ["v1.RuntimeObservation", "api.AdminRuntimeObservationDetail"]) {
+      const observation = schema.split(`  ${definition}:\n`)[1]?.split(/^  \S/m)[0];
+      const reasonSchema = observation?.match(/      reason:\n((?:        .*\n)+)/)?.[1];
+      const pattern = reasonSchema?.match(/pattern: '([^']+)'/)?.[1];
+      expect(pattern).toBe(observationReasons.schema_pattern);
+      expect(reasonSchema).toContain("type: string");
+      expect(reasonSchema).toContain("x-nullable: true");
+      expect(reasonSchema).not.toContain("enum:");
+      expect(new RegExp(pattern!).test(reason)).toBe(valid);
+    }
+
+    const value = runtimeObservation({ status: "unsupported", reason, observed_at: null, started_at: null, cpu: null, memory: null });
+    const page = { object: "list", data: [{ project_id: runtimeProjectId, observation: { ...value, disk: null } }], has_more: false, first_id: runtimeSessionId, last_id: runtimeSessionId };
+    const single = new AdminClient({ fetch: recordingFetch(jsonResponse(value), []) }).retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId);
+    const list = new AdminClient({ fetch: recordingFetch(jsonResponse(page), []) }).listRuntimeObservations();
+    if (valid) {
+      await expect(single).resolves.toEqual(value);
+      await expect(list).resolves.toEqual(page);
+    } else {
+      await expect(single).rejects.toMatchObject({ code: "invalid_runtime_observation" });
+      await expect(list).rejects.toMatchObject({ code: "invalid_runtime_observation" });
+    }
+  });
+
+  it("keeps unavailable reasons equal to the shared producer fixture", () => {
+    expect([...runtimeUnavailableReasons].sort()).toEqual(observationReasons.cases.filter((entry) => entry.unavailable).map((entry) => entry.reason).sort());
+  });
+
+  it.each(observationReasons.cases)("checks unavailable reason $reason", async ({ reason, unavailable }) => {
+    const value = runtimeObservation({ status: "unavailable", reason, observed_at: null, started_at: null, cpu: null, memory: null });
+    const client = new AdminClient({ fetch: recordingFetch(jsonResponse(value), []) });
+    const result = client.retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId);
+    if (unavailable) await expect(result).resolves.toEqual(value);
+    else await expect(result).rejects.toMatchObject({ code: "invalid_runtime_observation" });
+  });
+
+  it.each([
+    ["unavailable Provider reason", { status: "unavailable", reason: "native_metrics_not_supported" }],
+    ["unavailable mode reason", { status: "unavailable", reason: "runtime_mode_not_observable" }],
+    ["missing reason", { reason: null }],
+    ["missing allocation", { allocation_created_at: null, instance: { kind: "managed_allocation", allocation_id: null, connection_generation: null } }],
+    ["missing lifecycle", { lifecycle_state: null }],
+    ["observed timestamp", { observed_at: 20 }],
+    ["started timestamp", { started_at: 10 }],
+    ["CPU sample", { cpu: { usage_seconds_total: 1, capacity_cores: null, usage_cores: null, utilization_ratio: null } }],
+    ["memory sample", { memory: { usage_bytes: 1, limit_bytes: null } }],
+    ["none Provider reason", { mode: "none", environment_id: null, provider_type: null, lifecycle_state: null, allocation_created_at: null, instance: { kind: "none", allocation_id: null, connection_generation: null } }],
+    ["self-hosted Provider reason", { mode: "self_hosted", lifecycle_state: null, allocation_created_at: null, instance: { kind: "self_hosted_connection", allocation_id: null, connection_generation: null } }],
+  ])("rejects unsupported combination: %s", async (_, overrides) => {
+    const value = runtimeObservation({ status: "unsupported", reason: "native_metrics_not_supported", observed_at: null, started_at: null, cpu: null, memory: null, ...overrides });
+    const client = new AdminClient({ fetch: recordingFetch(jsonResponse(value), []) });
+    await expect(client.retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId)).rejects.toMatchObject({ code: "invalid_runtime_observation" });
   });
 
   it("accepts an unsupported none-mode Runtime observation with explicit nulls", async () => {

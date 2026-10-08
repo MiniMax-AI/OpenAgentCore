@@ -35,7 +35,7 @@ export interface AdminRuntimeObservationDetail {
   object: "agent.runtime_observation";
   observed_at: number | null;
   provider_type: string | null;
-  reason: AdminRuntimeObservationDetailReason | null;
+  reason: string | null;
   resolved_at: number;
   session_id: string;
   started_at: number | null;
@@ -46,8 +46,6 @@ export const adminRuntimeObservationDetailLifecycleStateValues = ["active", "sle
 export type AdminRuntimeObservationDetailLifecycleState = (typeof adminRuntimeObservationDetailLifecycleStateValues)[number];
 export const adminRuntimeObservationDetailModeValues = ["none", "self_hosted", "openai_hosted"] as const;
 export type AdminRuntimeObservationDetailMode = (typeof adminRuntimeObservationDetailModeValues)[number];
-export const adminRuntimeObservationDetailReasonValues = ["runtime_mode_not_observable", "allocation_pending", "runtime_not_running", "sample_timeout", "sample_unavailable"] as const;
-export type AdminRuntimeObservationDetailReason = (typeof adminRuntimeObservationDetailReasonValues)[number];
 export const adminRuntimeObservationDetailStatusValues = ["observed", "unsupported", "unavailable"] as const;
 export type AdminRuntimeObservationDetailStatus = (typeof adminRuntimeObservationDetailStatusValues)[number];
 export interface AdminRuntimeObservationList {
@@ -738,7 +736,7 @@ export interface RuntimeObservation {
   object: "agent.runtime_observation";
   observed_at: number | null;
   provider_type: string | null;
-  reason: RuntimeObservationReason | null;
+  reason: string | null;
   resolved_at: number;
   session_id: string;
   started_at: number | null;
@@ -749,8 +747,6 @@ export const runtimeObservationLifecycleStateValues = ["active", "sleeping", "tr
 export type RuntimeObservationLifecycleState = (typeof runtimeObservationLifecycleStateValues)[number];
 export const runtimeObservationModeValues = ["none", "self_hosted", "openai_hosted"] as const;
 export type RuntimeObservationMode = (typeof runtimeObservationModeValues)[number];
-export const runtimeObservationReasonValues = ["runtime_mode_not_observable", "allocation_pending", "runtime_not_running", "sample_timeout", "sample_unavailable"] as const;
-export type RuntimeObservationReason = (typeof runtimeObservationReasonValues)[number];
 export const runtimeObservationStatusValues = ["observed", "unsupported", "unavailable"] as const;
 export type RuntimeObservationStatus = (typeof runtimeObservationStatusValues)[number];
 export interface RuntimeRelease {
