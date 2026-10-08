@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -247,4 +248,105 @@ func handleSteeringAndWait(t *testing.T, h *harness, env proto.Envelope) error {
 	}
 	waitFor(t, func() bool { return len(h.sender.snapshot()) > before }, "steering ack")
 	return nil
+}
+
+func TestSteeringRetainsAdmittedDeclaration(t *testing.T) {
+	for _, test := range []struct {
+		name              string
+		admitted, current proto.CapabilitySupport
+		available         bool
+	}{
+		{"narrowed", proto.CapabilitySupported, proto.CapabilityUnsupported, true},
+		{"widened", proto.CapabilityUnsupported, proto.CapabilitySupported, true},
+		{"unavailable", proto.CapabilitySupported, proto.CapabilitySupported, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newHarness(t)
+			defer h.router.Shutdown(context.Background())
+			var calls atomic.Int32
+			factory := func(_ context.Context, _ fixtureRun, out chan<- proto.Envelope) (fixtureSession, error) {
+				return &steeringSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}, steer: func(_ context.Context, input proto.PromptSteerPayload, _ func()) error {
+					calls.Add(1)
+					if !input.Input.HasImages() {
+						t.Error("native input lost its image")
+					}
+					return nil
+				}}, nil
+			}
+			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MessageImages: test.admitted})}
+			registerSession(h.reg, info, factory)
+			startRun(t, h.router, h.sender, "fixture", "active")
+			info.Capabilities.MessageImages, info.Available = test.current, test.available
+			registerSession(h.reg, info, factory)
+			image := "https://example.com/input.png"
+			input := proto.PromptSteerPayload{InputID: "image", Input: proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image", ImageURL: &image}}}}}
+			env := scoped(t, "active", proto.TypePromptSteer, "active", input)
+			accepted := test.admitted.IsSupported()
+			code := "unsupported"
+			if accepted {
+				code = ""
+			}
+			for range 2 {
+				if err := handleSteeringAndWait(t, h, env); err != nil {
+					t.Fatal(err)
+				}
+				if ack := lastSteeringAck(t, h.sender, "active", "image"); ack.Accepted != accepted || ack.Written || ack.ErrorCode != code {
+					t.Fatalf("admitted declaration changed: %+v", ack)
+				}
+			}
+			wanted := int32(0)
+			if accepted {
+				wanted = 1
+			}
+			if calls.Load() != wanted {
+				t.Fatalf("native calls=%d, want %d", calls.Load(), wanted)
+			}
+			// Rejected and accepted receipts both bind the original input identity.
+			changed := input
+			changed.Input = proto.TextInput("changed input")
+			if err := handleSteeringAndWait(t, h, scoped(t, "active", proto.TypePromptSteer, "active", changed)); err != nil {
+				t.Fatal(err)
+			}
+			if ack := lastSteeringAck(t, h.sender, "active", "image"); ack.ErrorCode != "input_conflict" {
+				t.Fatalf("receipt identity lost: %+v", ack)
+			}
+			foreign := env
+			foreign.Assignment.AssignmentID = "other"
+			if err := handleSteeringAndWait(t, h, foreign); err != nil {
+				t.Fatal(err)
+			}
+			if ack := lastSteeringAck(t, h.sender, "active", "image"); ack.ErrorCode != proto.AssignmentConflict {
+				t.Fatalf("receipt escaped assignment: %+v", ack)
+			}
+			if test.available {
+				// Another admitted Turn uses the current declaration, without changing
+				// the active Turn's permissions or replaying its receipt.
+				startRun(t, h.router, h.sender, "fixture", "new")
+				if err := handleSteeringAndWait(t, h, scoped(t, "new", proto.TypePromptSteer, "new", input)); err != nil {
+					t.Fatal(err)
+				}
+				accepted = test.current.IsSupported()
+				code = "unsupported"
+				if accepted {
+					code = ""
+					wanted++
+				}
+				if ack := lastSteeringAck(t, h.sender, "new", "image"); ack.Accepted != accepted || ack.ErrorCode != code {
+					t.Fatalf("new Turn ignored current declaration: %+v", ack)
+				}
+			} else {
+				assign(t, h.router, "new", "")
+				prepare := scoped(t, "new", proto.TypeExecutionPrepare, "prepare-new", noEnvironmentPreparation("new", proto.PromptRequestPayload{AgentKind: "fixture"}))
+				if err := h.router.Handle(t.Context(), prepare); err == nil {
+					t.Fatal("new admission accepted an unavailable kind")
+				}
+				if status := waitPreparationStatus(t, h.sender, prepare.ID, "rejected", ""); status.ErrorCode != "resource_unavailable" {
+					t.Fatalf("new admission ignored unavailability: %+v", status)
+				}
+			}
+			if calls.Load() != wanted {
+				t.Fatalf("native calls=%d, want %d", calls.Load(), wanted)
+			}
+		})
+	}
 }

@@ -87,6 +87,11 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 	if state.steering == nil {
 		state.steering = make(map[string]steeringReceipt)
 	}
+	if err := proto.ValidateSelection(state.declaration, proto.Selection{Messages: input.Input}); err != nil {
+		ack.ErrorCode, ack.Error = "unsupported", err.Error()
+		state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack}
+		return &ack
+	}
 	ack.ErrorCode, ack.Error = "not_ready", "The run is still starting."
 	// Bind input identity before any retryable state so changed text cannot
 	// slip through a startup or in-flight retry.
