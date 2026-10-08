@@ -60,7 +60,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `invalid_name` | `name` | `max_length`：Projects 和节点为 128，Project 键为 80 | 名称未通过相应资源的验证器 |
 | `invalid_node_capacity` | `max_active` 或 `max_retained` | `min`：1，`max`：1000000 | 容量无效；保留容量还必须至少等于活动容量 |
 | `invalid_model_provider` | null | 省略 | 必须提供完整的模型提供商配置包 |
-| `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS，且不得包含凭据、查询或片段 |
+| `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTP 或 HTTPS，且不得包含凭据、查询或片段 |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` 和 `allowed_protocols`，来自该构建的适配器目录 | 协议未知，或所选 Harness 不支持该协议 |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`：16384 | 密钥为空、过长或包含禁止字符 |
 | `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制无效，或 Harness 要求的正数限制缺失 |

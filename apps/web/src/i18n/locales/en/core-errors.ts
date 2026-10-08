@@ -10,7 +10,7 @@ export const coreErrors = {
   "model_configuration_model_invalid": "Enter a model ID of at most 1024 UTF-8 bytes without control characters.",
   "harness_config_invalid": "Check the supported native fields and their values. The JSON object must be at most 16 KiB and cannot redefine Core-managed settings.",
   "invalid_model_provider": "Enter the complete model provider configuration.",
-  "model_provider_base_url_invalid": "Use an HTTPS URL without credentials, query parameters or a fragment.",
+  "model_provider_base_url_invalid": "Use an HTTP or HTTPS URL without credentials, query parameters or a fragment.",
   "model_provider_protocol_unsupported": "This protocol is not supported by the harness.",
   "model_provider_api_key_invalid": "Enter a valid API key without control characters.",
   "model_provider_token_limits_invalid": "Use valid token limits; output cannot exceed context, and required limits must be positive.",

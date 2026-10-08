@@ -75,7 +75,7 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	if !slices.Contains(env, "ANTHROPIC_AUTH_TOKEN=selected-secret") || slices.Contains(env, "ANTHROPIC_AUTH_TOKEN=selected-provider-fixture") {
 		t.Fatal("provider selection was not exclusive")
 	}
-	for _, value := range []any{nil, "secret", map[string]any{"protocol": "anthropic", "base_url": "http://provider.example", "api_key": "secret"}, map[string]any{"protocol": "anthropic", "base_url": "https://user:pass@provider.example", "api_key": "secret"}} {
+	for _, value := range []any{nil, "secret", map[string]any{"protocol": "anthropic", "base_url": "ftp://provider.example", "api_key": "secret"}, map[string]any{"protocol": "anthropic", "base_url": "https://user:pass@provider.example", "api_key": "secret"}} {
 		req.AgentOptions["model_provider"] = value
 		if _, _, err := prepare(config, req); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("unsafe provider accepted or disclosed")

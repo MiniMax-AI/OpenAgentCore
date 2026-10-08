@@ -7,7 +7,7 @@ import (
 
 func TestModelProviderPublicValidation(t *testing.T) {
 	for _, tc := range []struct{ name, provider string }{
-		{"url", `{"protocol":"responses","base_url":"http://private-url.example","api_key":"private-key"}`},
+		{"url", `{"protocol":"responses","base_url":"ftp://private-url.example","api_key":"private-key"}`},
 		{"protocol", `{"protocol":"private-protocol","base_url":"https://example.test","api_key":"private-key"}`},
 		{"key", `{"protocol":"responses","base_url":"https://example.test","api_key":""}`},
 		{"limits", `{"protocol":"responses","base_url":"https://example.test","api_key":"private-key","context_window":1,"max_output_tokens":2}`},
@@ -17,7 +17,7 @@ func TestModelProviderPublicValidation(t *testing.T) {
 			body := `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted"},"input":"hello","x_agents_core":{"model_provider":` + tc.provider + `}}`
 			out := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", body)
 			messages := map[string]string{
-				"url":      "model provider requires an HTTPS base_url without credentials, query or fragment",
+				"url":      "model provider requires an http or https base_url without credentials, query or fragment",
 				"protocol": "unsupported model provider protocol", "key": "invalid model provider API key",
 				"limits": "invalid model token limits",
 			}

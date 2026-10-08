@@ -80,7 +80,7 @@ New hosted requests, and requests that omit the inline model, record caller inte
 ```
 
 - `protocol` names the upstream API (`anthropic`, `responses` or `chat_completions`), not an engine. The selected Harness must support it natively.
-- `base_url` uses HTTPS with a valid host, without credentials, query or fragment.
+- `base_url` uses HTTP or HTTPS with a valid host, without credentials, query or fragment. The scheme is the operator's choice: a self-hosted provider on another host may be plain HTTP.
 - `api_key` is nonempty, at most 16 KiB and contains no NUL, CR or LF.
 - `context_window` and `max_output_tokens` are optional nonnegative integers, with output no larger than context; both must be positive for MiniMax Code. Use the real model's limits.
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.

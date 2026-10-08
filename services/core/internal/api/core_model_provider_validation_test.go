@@ -49,8 +49,8 @@ func TestCoreModelProviderValidationFields(t *testing.T) {
 		details                          map[string]any
 	}{
 		{"bundle", "codex", `{"api_key":"private-key"}`, "invalid_model_provider", "", nil},
-		{"negative shape", "codex", `{"protocol":"responses","base_url":"http://private-url","api_key":"private-key","context_window":-1}`, "invalid_model_provider", "", nil},
-		{"url first", "codex", `{"protocol":"private-protocol","base_url":"http://private-url","api_key":"private-key"}`, "model_provider_base_url_invalid", "base_url", nil},
+		{"negative shape", "codex", `{"protocol":"responses","base_url":"https://example.test","api_key":"private-key","context_window":-1}`, "invalid_model_provider", "", nil},
+		{"url first", "codex", `{"protocol":"private-protocol","base_url":"ftp://private-url.example","api_key":"private-key"}`, "model_provider_base_url_invalid", "base_url", nil},
 		{"protocol", "codex", `{"protocol":"private-protocol","base_url":"https://example.test","api_key":"private-key"}`, "model_provider_protocol_unsupported", "protocol", map[string]any{"harness": "codex", "allowed_protocols": []any{"responses"}}},
 		{"key", "codex", `{"protocol":"responses","base_url":"https://example.test","api_key":"private-key\n"}`, "model_provider_api_key_invalid", "api_key", map[string]any{"max_length": float64(16384)}},
 		{"output", "codex", `{"protocol":"responses","base_url":"https://example.test","api_key":"private-key","context_window":1,"max_output_tokens":2}`, "model_provider_token_limits_invalid", "max_output_tokens", nil},

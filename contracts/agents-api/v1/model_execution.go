@@ -42,7 +42,7 @@ func (p *ModelProviderInput) validate(registry harnessconfig.Registry) error {
 		return &ModelProviderError{Code: "invalid_model_provider", Param: "", message: "model_provider is required"}
 	}
 	if !validModelProviderBaseURL(p.BaseURL) {
-		return &ModelProviderError{Code: "model_provider_base_url_invalid", Param: "base_url", message: "model provider requires an HTTPS base_url without credentials, query or fragment"}
+		return &ModelProviderError{Code: "model_provider_base_url_invalid", Param: "base_url", message: "model provider requires an http or https base_url without credentials, query or fragment"}
 	}
 	if !registry.SupportsProtocol(p.Protocol) {
 		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: "unsupported model provider protocol"}

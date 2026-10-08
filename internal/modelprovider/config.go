@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -62,9 +61,9 @@ func (p Provider) Validate() error {
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") {
 		return ErrConfiguration
 	}
-	// Remote providers require HTTPS. Runtime-local providers may use loopback
-	// HTTP; Core retains stricter public provider admission.
-	if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
+	// The scheme carries no admission decision here: an operator may point a
+	// Harness at a plain-HTTP endpoint, including one on another host.
+	if u.Scheme != "https" && u.Scheme != "http" {
 		return ErrConfiguration
 	}
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {

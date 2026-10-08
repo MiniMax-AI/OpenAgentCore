@@ -16,12 +16,12 @@ function selection(value: unknown, invalid: Invalid): SessionExecutionConfigurat
 }
 
 // Splits an absolute URL as RFC 3986 appendix B does, without parsing its host.
-const baseURLPattern = /^https:\/\/([^/?#]*)[^?#]*(?:\?([^#]*))?(?:#([\s\S]*))?$/iu;
+const baseURLPattern = /^https?:\/\/([^/?#]*)[^?#]*(?:\?([^#]*))?(?:#([\s\S]*))?$/iu;
 
 /**
- * Checks a stored base URL no more strictly than Core's write rule: HTTPS with a
- * host and no credentials, query or fragment. Host syntax is Core's to enforce;
- * a value an earlier Core accepted must not fail a whole list.
+ * Checks a stored base URL no more strictly than Core's write rule: an HTTP or
+ * HTTPS URL with a host and no credentials, query or fragment. Host syntax is
+ * Core's to enforce; a value an earlier Core accepted must not fail a whole list.
  */
 function safeBaseURL(value: string): boolean {
   const match = baseURLPattern.exec(value);

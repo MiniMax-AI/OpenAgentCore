@@ -50,7 +50,7 @@ func TestOptionsRejectInvalidProvider(t *testing.T) {
 	}{
 		{"unknown protocol", "protocol", "unknown"},
 		{"protocol alias", "protocol", "chat-completions"},
-		{"remote HTTP", "base_url", "http://provider.example/v1"},
+		{"unsupported scheme", "base_url", "ftp://provider.example/v1"},
 		{"empty key", "api_key", ""},
 		{"missing context", "context_window", 0},
 		{"missing output", "max_output_tokens", 0},

@@ -9,7 +9,7 @@ export const coreErrors = {
   "model_configuration_model_invalid": "请输入模型 ID，最多 1024 个 UTF-8 字节，且不能包含控制字符。",
   "harness_config_invalid": "请检查支持的原生字段及其取值。JSON 对象不能超过 16 KiB，也不能重复定义 Core 管理的设置。",
   "invalid_model_provider": "请填写完整的模型服务配置。",
-  "model_provider_base_url_invalid": "请使用 HTTPS 地址，不要包含凭证、查询参数或片段。",
+  "model_provider_base_url_invalid": "请使用 HTTP 或 HTTPS 地址，地址不要包含凭证、查询参数或片段。",
   "model_provider_protocol_unsupported": "此执行引擎不支持该协议。",
   "model_provider_api_key_invalid": "请输入有效的 API Key，不要包含控制字符。",
   "model_provider_token_limits_invalid": "请填写有效的 token 限制；输出不能超过上下文，必填限制必须大于零。",

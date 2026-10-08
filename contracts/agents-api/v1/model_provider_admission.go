@@ -9,7 +9,14 @@ import (
 	"golang.org/x/net/idna"
 )
 
-const providerScheme = "https"
+// providerSchemes are the schemes a model provider base_url may use. The
+// operator chooses whether the endpoint is served over TLS; a self-hosted
+// provider on another host is as valid a target as a public one. Credentials,
+// query and fragment stay rejected either way.
+var providerSchemes = map[string]bool{
+	"https": true,
+	"http":  true,
+}
 
 // providerHost converts a domain as URL host parsing does (UTS #46 without
 // hyphen or STD3 restrictions), rejecting invalid labels such as bad punycode.
@@ -52,7 +59,10 @@ func ModelProviderRequired(environment string) bool {
 
 func validModelProviderBaseURL(base string) bool {
 	u, err := url.Parse(base)
-	return err == nil && u.Scheme == providerScheme && validModelProviderHost(u) && u.User == nil && u.RawQuery == "" && u.Fragment == "" && !strings.ContainsAny(base, "\x00\r\n")
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !validModelProviderHost(u) || strings.ContainsAny(base, "\x00\r\n") {
+		return false
+	}
+	return providerSchemes[u.Scheme]
 }
 
 // validModelProviderHost requires a usable host: an IP address, or a domain

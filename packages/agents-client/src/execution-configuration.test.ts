@@ -37,6 +37,12 @@ describe("frozen execution configuration", () => {
       expect(await clientReturning(value).retrieveSessionExecutionConfiguration(projectId, id)).toEqual(value);
     }
   });
+  it.each(["http://model.example/v1", "https://model.example/v1", "http://192.168.20.15:3721"])(
+    "accepts the operator-chosen provider scheme %s", async (baseURL) => {
+      const value = structuredClone(snapshot);
+      value.model_provider.configuration!.base_url = baseURL;
+      expect(await clientReturning(value).retrieveSessionExecutionConfiguration(projectId, id)).toEqual(value);
+    });
   it.each([
     { status: "redacted", source: "deployment", configuration: null },
     { status: "available", source: "deployment", configuration: { protocol: "responses", base_url: "https://deployment.example/v1", api_key_configured: true } },
