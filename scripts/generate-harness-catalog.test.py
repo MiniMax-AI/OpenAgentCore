@@ -46,7 +46,16 @@ class HarnessCatalogTests(unittest.TestCase):
         self.assertIn("example.Declaration", cli)
         self.assertIn("example.Installation()", cli)
         self.assertTrue(cli.startswith("//go:build linux\n"))
-        self.assertIn('const NativeVersion = "1.2.3"', generated[Path("internal/harnessconfig/example/version.go")])
+
+    def test_go_version_gates_use_catalog_pins(self):
+        entries = catalog.load_catalog(catalog.ROOT / catalog.CATALOG)
+        generated = catalog.render(entries)
+        for entry in entries:
+            path = Path(f"internal/harnessconfig/{entry['configuration']}/version.go")
+            if entry["kind"] == "claude_sdk":
+                self.assertNotIn(path, generated)
+            else:
+                self.assertIn(f'const NativeVersion = "{entry["version"]}"', generated[path])
 
     def test_manifest_projection_preserves_other_owners_and_detects_stale_pins(self):
         entries = catalog.load_catalog(catalog.ROOT / catalog.CATALOG)

@@ -140,7 +140,11 @@ Each declaration in {tick}internal/harnessconfig/<package>{tick} states the Harn
 ''',
     }
 
+    # Only these adapters gate support against a Go version constant. Claude
+    # validates the SDK dependency in its packaged manifest instead.
     for entry in entries:
+        if entry["kind"] not in ("codex", "mcode"):
+            continue
         package = entry["configuration"]
         result[Path(f"internal/harnessconfig/{package}/version.go")] = go(
             f'package {package}\n\n// NativeVersion is the packaged native Harness version.\nconst NativeVersion = {json.dumps(entry["version"])}\n')
