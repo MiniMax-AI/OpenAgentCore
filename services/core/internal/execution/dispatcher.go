@@ -108,7 +108,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 		return sessions.Turn{}, err
 	}
 	req.DisableExecutionEnvironment = true
-	if err := peer.Bind(ctx, bound.Device.Assignment, bound.Device.EnvironmentID); err != nil {
+	if err := peer.Bind(ctx, bound.Device.Assignment, bound.Device.SessionEnvironmentID); err != nil {
 		return sessions.Turn{}, err
 	}
 	prepared, err := d.prepareTurnExecutor(ctx, peer, bound.Device.Assignment, tenantID, sessionID, turnID, req, sessions.TurnQueued)

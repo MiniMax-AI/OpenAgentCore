@@ -43,7 +43,7 @@ func assignedRuntimePeer(ctx context.Context, devices sessions.DeviceReader, reg
 	if err != nil {
 		return nil, err
 	}
-	if err := peer.Bind(ctx, bound.Assignment, bound.EnvironmentID); err != nil {
+	if err := peer.Bind(ctx, bound.Assignment, bound.SessionEnvironmentID); err != nil {
 		return nil, err
 	}
 	return peer, nil

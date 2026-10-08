@@ -140,14 +140,14 @@ func checkInitializationOwner(owner EnvironmentInitialization, environment Envir
 	return nil
 }
 
-// checkInitializationDevice confirms that the device the initialization was
-// listed with is still the Session's device for this Environment. A Session
-// without a device is ErrNotFound and another binding ErrTurnConflict.
-func checkInitializationDevice(owner EnvironmentInitialization, environment Environment, bound ExecutionDevice, found bool) error {
+// checkInitializationDevice confirms that the Runtime the initialization was
+// listed with is still the one the Session is bound to. A Session without a
+// bound Runtime is ErrNotFound and another binding ErrTurnConflict.
+func checkInitializationDevice(owner EnvironmentInitialization, bound ExecutionDevice, found bool) error {
 	if !found {
 		return ErrNotFound
 	}
-	if bound.ID != owner.DeviceID || bound.EnvironmentID != environment.ID {
+	if bound.ID != owner.DeviceID {
 		return ErrTurnConflict
 	}
 	return nil
@@ -180,7 +180,7 @@ func (o *ExecutionOperations) advanceInitialization(ctx context.Context, owner E
 		if err != nil {
 			return err
 		}
-		if err := checkInitializationDevice(owner, environment, bound, found); err != nil {
+		if err := checkInitializationDevice(owner, bound, found); err != nil {
 			return err
 		}
 		applied, err := transition(ctx, tx, environment)

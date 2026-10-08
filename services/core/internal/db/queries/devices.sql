@@ -40,26 +40,28 @@ WHERE session_runtime_assignments.runtime_id = EXCLUDED.runtime_id AND session_r
 RETURNING runtime_id;
 
 -- name: GetSessionDevice :one
-SELECT d.id, d.name, d.environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
+-- The Session's bound Runtime: a device of its tenant or the deployment's
+-- agent host. environment_id is the device's own Environment and
+-- session_environment_id the Session's, which the assignment binds.
+SELECT d.id, d.name, d.environment_id, e.id AS session_environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+JOIN devices d ON d.id = b.runtime_id AND (d.tenant_id = s.tenant_id OR (d.agent_host AND d.tenant_id IS NULL))
+LEFT JOIN environments e ON e.session_id = s.id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-));
+AND (d.environment_id IS NULL OR d.environment_id = e.id);
 
 -- name: GetSessionExecutionBinding :one
-SELECT d.id, d.name, b.native_session_id, d.environment_id, b.assignment_id, b.epoch,
+-- The bound Runtime as GetSessionDevice reads it, with the native session.
+SELECT d.id, d.name, b.native_session_id, d.environment_id, e.id AS session_environment_id, b.assignment_id, b.epoch,
     EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.started_at IS NOT NULL) AS has_started_turn
 FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+JOIN devices d ON d.id = b.runtime_id AND (d.tenant_id = s.tenant_id OR (d.agent_host AND d.tenant_id IS NULL))
+LEFT JOIN environments e ON e.session_id = s.id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-));
+AND (d.environment_id IS NULL OR d.environment_id = e.id);
 
 -- name: RememberNativeSession :execrows
 UPDATE session_runtime_assignments SET native_session_id = $2 WHERE session_id = $1;

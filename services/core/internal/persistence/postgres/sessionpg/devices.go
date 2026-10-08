@@ -45,7 +45,7 @@ func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session 
 	}
 	return sessions.ExecutionBinding{
 		Device: sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID),
-			Assignment: assignmentRef(lookup.ID, row.AssignmentID, row.Epoch)},
+			Assignment: assignmentRef(lookup.ID, row.AssignmentID, row.Epoch), SessionEnvironmentID: optionalID(row.SessionEnvironmentID)},
 		NativeSessionID: row.NativeSessionID,
 		HasStartedTurn:  row.HasStartedTurn,
 	}, nil
@@ -101,7 +101,7 @@ func loadSessionDevice(ctx context.Context, q *sqlc.Queries, tenant, session pgt
 		return sessions.ExecutionDevice{}, false, err
 	}
 	return sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID),
-		Assignment: assignmentRef(session, row.AssignmentID, row.Epoch)}, true, nil
+		Assignment: assignmentRef(session, row.AssignmentID, row.Epoch), SessionEnvironmentID: optionalID(row.SessionEnvironmentID)}, true, nil
 }
 
 // assignmentRef is the reference of a Session's assignment; an absent

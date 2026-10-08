@@ -27,8 +27,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -48,7 +50,8 @@ type linkHarness struct {
 }
 
 // newLinkHarness binds the Session to an unmarked operator device, or, for a
-// guest, to the allocation's own device, as an in-sandbox daemon is bound.
+// guest, to the allocation's own device, as an in-sandbox daemon is bound, and
+// runs a Worker with the Link route's relay.
 func newLinkHarness(t *testing.T, guest bool) *linkHarness {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), guest)
@@ -62,11 +65,29 @@ func newLinkHarness(t *testing.T, guest bool) *linkHarness {
 	}
 	l := &linkHarness{dispatchHarness: h, relay: startLinkRoute(t, h.s), serve: []byte(uuid.NewString()),
 		resource: sandboxbootstrap.Resource{TenantID: h.tenant, EnvironmentID: h.session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}}
-	if _, err := h.s.pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,state,create_settled,deployment_generation,serve_credential_hash)
-		VALUES($1,$2,$3,$4,'running',true,(SELECT generation FROM runtime_deployment),$5)`, l.resource.ID, l.resource.EnvironmentID, device, uuid.NewString(), serveHash(l.serve)); err != nil {
+	insertAllocation(t, h.s, l.resource, device, l.serve)
+	dispatcher := *h.d
+	dispatcher.Links = l.relay.Relay
+	runWorker(t, startWorker(t, t.Context(), h.s, &dispatcher))
+	return l
+}
+
+// insertAllocation inserts a running allocation of device that is resource
+// and Serves with the credential.
+func insertAllocation(t *testing.T, s *Store, resource sandboxbootstrap.Resource, device string, serve []byte) {
+	t.Helper()
+	if _, err := s.pool.Exec(t.Context(), `INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,state,create_settled,deployment_generation,serve_credential_hash)
+		VALUES($1,$2,$3,$4,'running',true,(SELECT generation FROM runtime_deployment),$5)`, resource.ID, resource.EnvironmentID, device, uuid.NewString(), serveHash(serve)); err != nil {
 		t.Fatal(err)
 	}
-	return l
+}
+
+// runWorker runs w until the test ends.
+func runWorker(t *testing.T, w *execution.Worker) {
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- w.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
 }
 
 // startLinkRoute serves Core's Link Authority at the Link route of the API
@@ -107,23 +128,14 @@ func (l *linkHarness) exec(query string, args ...any) {
 	}
 }
 
-// bind binds the Session's current assignment to h.device through Core's
-// gateway and returns it with the payload the Runtime received.
+// bind has the Worker bind the Session's current assignment to h.device and
+// returns it with the payload the Runtime received. Until Sessions are placed
+// on an agent host, the Environment's initialization is its one production
+// bind, so bind reopens the initialization, which has nothing to install.
 func (l *linkHarness) bind() (proto.AssignmentRef, proto.AssignmentBindPayload) {
 	t := l.t
 	t.Helper()
-	ref := proto.AssignmentRef{SessionID: l.session.ID}
-	var epoch int64
-	if err := l.s.pool.QueryRow(t.Context(), "SELECT assignment_id::text, epoch FROM session_runtime_assignments WHERE session_id=$1", l.session.ID).Scan(&ref.AssignmentID, &epoch); err != nil {
-		t.Fatal(err)
-	}
-	ref.Epoch = uint64(epoch)
-	peer, err := l.registry.LookupDevice(l.device.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bound := make(chan error, 1)
-	go func() { bound <- peer.Bind(t.Context(), ref, l.session.Environment.ID) }()
+	l.exec("UPDATE environments SET initialization = 'pending' WHERE id = $1", l.session.Environment.ID)
 	frame := l.read(proto.TypeAssignmentBind)
 	var payload proto.AssignmentBindPayload
 	if err := frame.DecodePayload(&payload); err != nil {
@@ -131,15 +143,13 @@ func (l *linkHarness) bind() (proto.AssignmentRef, proto.AssignmentBindPayload) 
 	}
 	reply, _ := assignmentReply(frame)
 	l.writeMu.Lock()
-	err = l.conn.WriteJSON(reply)
+	err := l.conn.WriteJSON(reply)
 	l.writeMu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := within(t, bound); err != nil {
-		t.Fatal(err)
-	}
-	return ref, payload
+	awaitInitialization(t, l.s, l.tenant, l.session.Environment.ID, "complete")
+	return frame.Assignment, payload
 }
 
 func (l *linkHarness) attach(runtime string, credential []byte) (*sandboxlink.AttachLink, error) {
@@ -356,13 +366,6 @@ func TestLinkAuthorityReleaseRevokesBeforeSend(t *testing.T) {
 	if _, err := l.open(link, sandboxlink.ServiceFile, ref, payload.AttachGrant); linkCode(err) != sandboxlink.ResourceNotFound {
 		t.Fatal("a released assignment opened a service", err)
 	}
-	dispatcher := *l.d
-	dispatcher.Links = l.relay.Relay
-	worker := startWorker(t, t.Context(), l.s, &dispatcher)
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { done <- worker.Run(ctx) }()
-	t.Cleanup(func() { cancel(); <-done })
 	if release := l.read(proto.TypeAssignmentRelease); release.Assignment.AssignmentID != ref.AssignmentID || release.Assignment.Epoch != ref.Epoch+1 {
 		t.Fatal("release of", release.Assignment)
 	}
@@ -535,5 +538,65 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	}
 	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), device.ID, config.AgentHostCredentialHash); err == nil {
 		t.Fatal("registration took over a tenant device")
+	}
+}
+
+// TestInitializationBindsAgentHost binds a hosted Session to the registered
+// agent host and runs the Environment's initialization. The bind carries the
+// Environment's live Link resource and an attach grant; without a live
+// resource, initialization fails before any bind is sent.
+func TestInitializationBindsAgentHost(t *testing.T) {
+	for name, live := range map[string]bool{"live resource": true, "no live resource": false} {
+		t.Run(name, func(t *testing.T) {
+			s, _ := newManagedTestStore(t)
+			tenant, host, credential := uuid.NewString(), uuid.NewString(), uuid.NewString()
+			if err := sessionAdapter(s).RegisterAgentHost(t.Context(), host, runtimedevice.HashCredential(credential)); err != nil {
+				t.Fatal(err)
+			}
+			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+				Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted"}}`),
+				InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Placement does not choose the agent host yet.
+			if _, err := s.pool.Exec(t.Context(), "INSERT INTO session_runtime_assignments(session_id, runtime_id) VALUES($1, $2)", session.ID, host); err != nil {
+				t.Fatal(err)
+			}
+			resource := sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}
+			if live {
+				device, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "sandbox", runtimedevice.HashCredential(uuid.NewString()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				insertAllocation(t, s, resource, device.ID, []byte(uuid.NewString()))
+			}
+			server := httptest.NewUnstartedServer(nil)
+			endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
+			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server.Config.Handler = handler
+			server.Start()
+			t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+			runWorker(t, startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry}))
+			peer := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1)}
+			peer.setRuntimeGateway(t, endpoint, registry)
+			if err := peer.connect(sandbox.Bootstrap{DeviceID: host, Credential: credential}); err != nil {
+				t.Fatal(err)
+			}
+			if !live {
+				awaitInitialization(t, s, tenant, session.Environment.ID, "failed")
+				if len(peer.binds) != 0 {
+					t.Fatal("bound without a live resource", <-peer.binds)
+				}
+				return
+			}
+			if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
+				t.Fatalf("agent host bind = %+v", bind)
+			}
+			awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
+		})
 	}
 }
