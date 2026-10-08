@@ -19,7 +19,7 @@ func TestObserveVerifiesOwnershipThenReadsOneShotStats(t *testing.T) {
 	installationID := uuid.NewString()
 	target := runtimeobs.Target{
 		TenantID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
-		Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), ProviderKey: installationID, DeviceID: uuid.NewString()},
+		Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), ProviderKey: installationID},
 	}
 	observed := time.Now().UTC().Truncate(time.Microsecond)
 	started := observed.Add(-time.Minute)

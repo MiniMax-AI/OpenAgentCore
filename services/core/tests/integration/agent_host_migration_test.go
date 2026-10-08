@@ -12,7 +12,7 @@ import (
 )
 
 func TestAgentHostMigration(t *testing.T) {
-	for _, scenario := range []string{"bound_assignment", "retained_history", "settled_session"} {
+	for _, scenario := range []string{"bound_assignment", "subagent_history", "pending_write", "live_allocation", "settled_session"} {
 		t.Run(scenario, func(t *testing.T) {
 			s, pool := newManagedTestStore(t)
 			ctx := t.Context()
@@ -54,13 +54,19 @@ func TestAgentHostMigration(t *testing.T) {
 				}
 			}
 			exec(`UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1`, session.ID)
-			if scenario == "retained_history" {
+			if scenario == "subagent_history" || scenario == "pending_write" || scenario == "live_allocation" {
 				exec(`INSERT INTO environments(id,session_id) VALUES($1,$2)`, environment, session.ID)
-				exec(`INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, session.ID, turn)
-				exec(`INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, uuid.NewString(), session.ID, device, turn)
-				exec(`INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), environment, device, strings.Repeat("b", 64))
-				// The allocation still owns a real resource, even after Session deletion.
-				exec(`INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key) VALUES($1,$2,$3,$4)`, uuid.NewString(), environment, device, uuid.NewString())
+				if scenario == "subagent_history" {
+					exec(`INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, session.ID, turn)
+					exec(`INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, uuid.NewString(), session.ID, device, turn)
+				}
+				if scenario == "pending_write" {
+					exec(`INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), environment, device, strings.Repeat("b", 64))
+				}
+				if scenario == "live_allocation" {
+					// The allocation still owns a real resource, even after Session deletion.
+					exec(`INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,deployment_generation) VALUES($1,$2,$3,$4,0)`, uuid.NewString(), environment, device, uuid.NewString())
+				}
 			}
 			histories := map[string]string{}
 			for _, table := range []string{"sessions", "turns", "turn_events", "subagent_identities", "environment_file_writes"} {
@@ -77,10 +83,12 @@ func TestAgentHostMigration(t *testing.T) {
 			if snapshot("devices") != "[]" || snapshot("session_runtime_assignments") != "[]" {
 				t.Fatal("guest execution authority survived upgrade")
 			}
-			if scenario == "retained_history" {
-				var count int
-				if err := pool.QueryRow(ctx, `SELECT count(*) FROM runtime_allocations WHERE state='creating' AND NOT create_settled`).Scan(&count); err != nil || count != 1 {
-					t.Fatal("upgrade discarded Provider cleanup", count, err)
+			if scenario == "subagent_history" || scenario == "pending_write" || scenario == "live_allocation" {
+				if scenario == "live_allocation" {
+					var count int
+					if err := pool.QueryRow(ctx, `SELECT count(*) FROM runtime_allocations WHERE state='creating' AND NOT create_settled`).Scan(&count); err != nil || count != 1 {
+						t.Fatal("upgrade discarded Provider cleanup", count, err)
+					}
 				}
 				before := snapshot("runtime_allocations")
 				if _, err := migrations.DownTo(ctx, 97); err == nil || !strings.Contains(err.Error(), "Cannot restore device constraints") {
@@ -105,6 +113,18 @@ func TestAgentHostMigration(t *testing.T) {
 			host := uuid.NewString()
 			exec(`INSERT INTO devices(id,name,credential_hash) VALUES($1,'host',$2)`, host, strings.Repeat("c", 64))
 			exec(`INSERT INTO session_runtime_assignments(session_id,runtime_id,native_session_id,desired_state,remove_home,epoch,applied_epoch) VALUES($1,$2,'native-host-history','released',true,2,2)`, session.ID, host)
+			if scenario == "settled_session" {
+				exec(`UPDATE session_runtime_assignments SET applied_epoch=1 WHERE session_id=$1`, session.ID)
+				before := snapshot("session_runtime_assignments")
+				hosts := snapshot("devices")
+				if _, err := migrations.DownTo(ctx, 97); err == nil || !strings.Contains(err.Error(), "Cannot restore device constraints") {
+					t.Fatal("rollback discarded pending home cleanup", err)
+				}
+				if snapshot("session_runtime_assignments") != before || snapshot("devices") != hosts {
+					t.Fatal("refused rollback changed pending cleanup")
+				}
+				exec(`UPDATE session_runtime_assignments SET applied_epoch=epoch WHERE session_id=$1`, session.ID)
+			}
 			if _, err := migrations.DownTo(ctx, 97); err != nil {
 				t.Fatal("settled Session prevented rollback", err)
 			}
