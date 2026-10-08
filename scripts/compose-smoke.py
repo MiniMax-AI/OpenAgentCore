@@ -66,7 +66,7 @@ def build_images(directory, tag):
 
     contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress', 'agent-host')}
     core = contexts['core']
-    for name, package in (('oac-core', 'server'), ('oac-core-device', 'device'),
+    for name, package in (('oac-core', 'server'),
                           ('oac-core-environment-key', 'environment-key'), ('oac', 'oac')):
         go_build('services/core/cmd/' + package, core / 'bin' / name)
     (core / 'e2b').mkdir()

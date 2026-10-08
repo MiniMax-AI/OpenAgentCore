@@ -34,8 +34,7 @@ const (
 //
 // The daemon credential comes from a Provider bootstrap file
 // (--bootstrap-file), self-hosted Environment enrollment
-// (--remote/--environment-id/--credential-file) or the saved profile
-// written by oac-core-device.
+// (--remote/--environment-id/--credential-file) or the saved profile.
 //
 // -b re-execs the binary in the background with stdio redirected to
 // connect.log and the child PID written to connect.pid. The child

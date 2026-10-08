@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 873d25773a865039ae1f1f8983d7b26e3bc772fad7301b36fc03a3ffd7084186
+source_hash: f42768f959577708b0f4bc1db63d42498e032a8668416ae8f62736d184efc543
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon、Sandbox I/O 服务和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
@@ -18,14 +18,13 @@ source_hash: 873d25773a865039ae1f1f8983d7b26e3bc772fad7301b36fc03a3ffd7084186
 | `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | 自托管安装器 | 安装授权 | [安装授权](environment-executor-credentials.md#installation-grant) |
 | `POST agent-daemon/enroll` | 自托管 daemon | 执行器凭据 | [登记自托管 daemon](#enroll-a-self-hosted-daemon) |
 | `GET agent-daemon/connection?environment_id=` | 自托管安装器 | 执行器凭据 | [私有连接确认](environment-executor-credentials.md#private-connection-confirmation) |
-| `POST agent-daemon/bootstrap` | Runtime daemon | daemon 凭据 | [daemon 引导](#daemon-bootstrap) |
-| `GET agent-daemon/device-status?device_id=` | Runtime daemon | daemon 凭据 | [设备状态](#device-status) |
-| WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | daemon 凭据 | [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md) |
+| `POST agent-daemon/bootstrap` | Agent-host Runtime | Agent-host 凭据 | [daemon 引导](#daemon-bootstrap) |
+| WebSocket `GET agent-daemon/ws?device_id=&version=` | Agent-host Runtime | Agent-host 凭据 | [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md) |
 | WebSocket `GET sandbox-link` | Sandbox I/O 服务（serve peer）和 agent-host Runtime（attach peer） | 资源的 Serve 凭据或 agent host 的 Runtime 凭据，在 Link Hello 中发送 | [Sandbox link 协议](../../../docs/zh/sandbox-link-protocol.md) |
 
 所有凭据通过 `Authorization: Bearer` 头传输；`sandbox-link` 例外，各 peer 在升级之后的 Link Hello 中发送凭据。凭据从不放入 URL。Core 从 `OAC_PUBLIC_URL` 派生 [Link URL](../../../docs/zh/configuration.md#changing-the-public-url)。
 
-生成的 [`runtime.openapi.yaml`](../runtime.openapi.yaml) 仅描述 sandbox-node 配置、登记、身份路由、两个安装路由和 `sandbox-link` 升级；该升级上的消息由 Sandbox link 协议定义。`sandbox-node/connect` 和 `agent-daemon/ws` 两个 WebSocket 及 daemon 引导、设备状态、登记和连接路由在 API 路由器外提供，无生成 schema；本文及所链接契约是它们唯一的定义。
+生成的 [`runtime.openapi.yaml`](../runtime.openapi.yaml) 仅描述 sandbox-node 配置、登记、身份路由、两个安装路由和 `sandbox-link` 升级；该升级上的消息由 Sandbox link 协议定义。`sandbox-node/connect` 和 `agent-daemon/ws` 两个 WebSocket 及 daemon 引导、登记和连接路由在 API 路由器外提供，无生成 schema；本文及所链接契约是它们唯一的定义。
 
 ## 凭据 {#credentials}
 
@@ -35,22 +34,9 @@ source_hash: 873d25773a865039ae1f1f8983d7b26e3bc772fad7301b36fc03a3ffd7084186
 | 节点凭据 | 节点自身：生成 32 至 256 个无空白字符的密钥，在登记时注册 | 带 `X-OAC-Node-ID` 的 `sandbox-node/configuration`、`sandbox-node/identity`、`sandbox-node/connect` |
 | 安装授权 | `self_hosted` Session 的 `x_agents_core.installation` 命令；短期有效 | `agent-daemon/installation` 及其 `claim` |
 | 执行器凭据 | 安装领取，或 Core 密钥[执行器凭据路由](environment-executor-credentials.md) | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为该 Environment 的 enrollment 在 `sandbox-link` 上的 Serve 凭据 |
-| 操作者设备配置 | 具有数据库访问权限的操作者运行 `oac-core-device` | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
+| Agent-host 凭据 | 安装初始化写入 [agent-host 身份](../../../docs/zh/configuration.md#agent-host-container)；Core 在启动时注册它 | `agent-daemon/bootstrap`、`agent-daemon/ws` 和作为 attach peer 的 `sandbox-link` |
 
 Core 对存储的每个 token 和凭据仅保留 SHA-256 摘要；安装授权经签名但不存储。凭据不可互换：各自仅适用于自身路由。
-
-### 操作者设备配置 {#operator-device-profile}
-
-`oac-core-device` 直接在数据库中创建 Runtime 设备配置：
-
-```sh
-umask 077
-mkdir -p ~/.oac/daemon/default
-OAC_DATABASE_URL=... oac-core-device --tenant <tenant-uuid> --name 'engine host' --url https://core.example > ~/.oac/daemon/default/auth.json
-oac-daemon connect --profile default
-```
-
-`--tenant` 为 Project 执行租户 UUID，`--url` 为不带路径的 Core origin。命令打印配置一次：`server_url`（origin 加 `/api/v1`）、`runtime_id`（设备 ID）、`runner_credential` 和 `device_name`。使用新配置，不覆盖其他设备文件；私密复制到远程主机相同路径。`oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` 撤销设备：立即拒绝新连接，已有连接在下一次心跳关闭。Core 只把 Session 绑定到部署的 agent host（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)），因此此配置的设备不运行任何 Session。
 
 ## 节点路由 {#node-routes}
 
@@ -102,13 +88,9 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 ### daemon 引导 {#daemon-bootstrap}
 
-`POST /api/v1/agent-daemon/bootstrap` 携带 daemon 凭据及 `{"device_id": "…"}`，返回 `device_id`、`workspace_id`、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）、`heartbeat_seconds` 和 `protocol_version`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
+`POST /api/v1/agent-daemon/bootstrap` 携带 agent-host 凭据及 `{"device_id": "…"}`，返回 `device_id`、`workspace_id`（部署范围的主机为空字符串）、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）、`heartbeat_seconds` 和 `protocol_version`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
 
-### 设备状态 {#device-status}
-
-`GET /api/v1/agent-daemon/device-status?device_id=` 携带 daemon 凭据，返回 `device_id` 和 `online`，后者表示设备当前是否与 Core 保持活动连接。
-
-引导、设备状态和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
+引导和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
 
 ### 登记自托管 daemon {#enroll-a-self-hosted-daemon}
 

@@ -1,5 +1,5 @@
-// Package auth reads the daemon credential profile written by
-// oac-core-device: server URL, runtime row id (= device_id), and the
+// Package auth reads the daemon credential profile: server URL,
+// Runtime row ID (= device_id), and the
 // long-lived runner_credential. Stored as JSON per-profile at
 // ~/.oac/daemon/<profile>/auth.json (0o600).
 package auth

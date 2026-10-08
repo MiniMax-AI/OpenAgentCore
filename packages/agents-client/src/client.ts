@@ -889,13 +889,11 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
   ) return invalidRuntimeObservation();
 
   const allocationId = value.instance.allocation_id === null ? null : canonicalUuid(value.instance.allocation_id);
-  const deviceId = value.instance.device_id === null ? null : canonicalUuid(value.instance.device_id);
   const connectionGeneration = value.instance.connection_generation === null
     ? null
     : canonicalUuid(value.instance.connection_generation);
   if (
     (value.instance.allocation_id !== null && allocationId === null) ||
-    (value.instance.device_id !== null && deviceId === null) ||
     (value.instance.connection_generation !== null && connectionGeneration === null)
   ) return invalidRuntimeObservation();
 
@@ -908,7 +906,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
   if (
     (isNone && (
       value.instance.kind !== "none" || environmentId !== null || value.provider_type !== null ||
-      allocationId !== null || deviceId !== null || connectionGeneration !== null || allocationCreatedAt !== null ||
+      allocationId !== null || connectionGeneration !== null || allocationCreatedAt !== null ||
       value.lifecycle_state !== null
     )) ||
     (isSelfHosted && (
@@ -918,7 +916,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     (isManaged && (
       value.instance.kind !== "managed_allocation" || environmentId === null || connectionGeneration !== null ||
       !isOneOf(runtimeObservationLifecycleStateValues, value.lifecycle_state) ||
-      (allocationId === null && (deviceId !== null || allocationCreatedAt !== null))
+      (allocationId === null && allocationCreatedAt !== null)
     ))
   ) return invalidRuntimeObservation();
 
@@ -977,7 +975,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     id, object: "agent.runtime_observation", session_id: sessionId, environment_id: environmentId,
     mode: value.mode, provider_type: value.provider_type, instance: {
       kind: value.instance.kind as RuntimeObservation["instance"]["kind"],
-      allocation_id: allocationId, device_id: deviceId, connection_generation: connectionGeneration,
+      allocation_id: allocationId, connection_generation: connectionGeneration,
     },
     status: value.status, reason: value.reason as RuntimeObservation["reason"],
     lifecycle_state: value.lifecycle_state as RuntimeObservation["lifecycle_state"],

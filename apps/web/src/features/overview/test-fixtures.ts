@@ -49,7 +49,7 @@ export function hostedObservation(sessionId: string, projectId: string, override
   return {
     id: sessionId, object: "agent.runtime_observation", session_id: sessionId, resolved_at: 1_000,
     environment_id: `env_${sessionId}`, mode: "openai_hosted", provider_type: "docker",
-    instance: { kind: "managed_allocation", allocation_id: `alloc_${sessionId}`, device_id: null, connection_generation: null },
+    instance: { kind: "managed_allocation", allocation_id: `alloc_${sessionId}`, connection_generation: null },
     lifecycle_state: "active", status: "observed", reason: null, allocation_created_at: 100, observed_at: 1_000, started_at: 400,
     cpu: { usage_seconds_total: 10, capacity_cores: 2, usage_cores: 0.5, utilization_ratio: null },
     memory: { usage_bytes: 100, limit_bytes: 400 },

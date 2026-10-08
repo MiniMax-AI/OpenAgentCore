@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 05ee25e01c2a8e9ce0f85c325a4a0e0e2f11eb76861e54740efa8975d9c5a999
+source_hash: 1c52fa06b312330585b304300b61993d2021105196d58aff7ee0daacafd744b8
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -41,7 +41,6 @@ Authorization: Bearer <Core key>
         "instance": {
           "kind": "managed_allocation",
           "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
-          "device_id": "2e434f4f-76aa-4e54-a707-4757036d90ef",
           "connection_generation": null
         },
         "lifecycle_state": "active",
@@ -117,7 +116,6 @@ Authorization: Bearer <Core key>
 | --- | --- |
 | `kind` | `managed_allocation`、`self_hosted_connection` 或 `none`。 |
 | `allocation_id` | 用于标识托管 Session 计算资源的托管分配；其他情况下为 null。 |
-| `device_id` | 存在时，为绑定到托管分配的 Runtime 设备；其他情况下为 null。 |
 | `connection_generation` | 始终为 null：Core 不观测自托管连接。 |
 
 ### `cpu` {#cpu}

@@ -33,7 +33,7 @@ tar -C "$repo_root" -cf - \
 (
   cd "$build_context"
   export GOWORK=off CGO_ENABLED=0
-  for command in server device environment-key sandbox-node oac; do
+  for command in server environment-key sandbox-node oac; do
     artifact="oac-core-$command"
     if [[ "$command" == server ]]; then artifact=oac-core; fi
     if [[ "$command" == sandbox-node ]]; then artifact=oac-node; fi
@@ -45,7 +45,7 @@ tar -C "$repo_root" -cf - \
 
 # Publish only after every command builds successfully.
 mkdir -p "$output_dir"
-for artifact in oac-core oac-core-device oac-core-environment-key oac-node oac; do
+for artifact in oac-core oac-core-environment-key oac-node oac; do
   mv -f "$build_context/bin/$artifact" "$output_dir/$artifact"
 done
 printf 'Core commands: %s\n' "$output_dir"
