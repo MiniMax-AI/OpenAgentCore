@@ -22,7 +22,7 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 		openEventStream(w, http.StatusCreated)
 		return
 	}
-	response, err := sessionResponse(result.Session, h.executorURL())
+	response, err := sessionResponse(result.Session, h.Execution.ExecutorURL)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return
@@ -45,7 +45,7 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 		if err != nil {
 			return false, 0, err
 		}
-		response, err := sessionResponse(session, h.executorURL())
+		response, err := sessionResponse(session, h.Execution.ExecutorURL)
 		return err == nil && sessionSettled(session, response), cursor, err
 	}
 	h.serveSessionEvents(w, r, result.Session, result.Cursor, &created, http.StatusCreated, settlement)

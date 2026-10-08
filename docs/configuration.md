@@ -45,7 +45,7 @@ Model providers are not process settings; see [Default models](#default-models).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | `http://localhost:8080`, set by `compose.yaml`. Core started without it runs no Runtime gateway and executes no Sessions | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
+| `OAC_PUBLIC_URL` | Required; `compose.yaml` sets `http://localhost:8080` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
 | `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. The installer sets `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -81,7 +81,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
 | Sandbox backend: Docker, microsandbox or E2B | **System** → **Manage sandbox configuration**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation, chosen after the first sign-in. Another backend needs **Reset deployment** first; see [change the sandbox configuration](./getting-started/nodes.md#change-the-sandbox-configuration) |
-| Sandbox size, Runtime release, E2B key and template build | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the sizes in [`standard-sizes.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/src/features/sandbox/standard-sizes.json). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
+| Sandbox size, Runtime release, E2B key and template build | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
 | Nodes and their capacity | **Nodes**: **Add node**; **Edit node** and **Remove node** on a node's page | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](./getting-started/nodes.md) |
 | Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
 | Default model per harness | **System** → **Default model configuration**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
@@ -122,11 +122,12 @@ The named Docker volume `<project>_data` contains these paths. Docker manages Li
 
 ## Docker node configuration
 
-The node installer writes Docker’s provider configuration into the node’s configuration file. Deployment resources, Runtime images and capacity remain in [Core’s database](#runtime-settings-web).
+The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources, the Runtime release and capacity remain in [Core’s database](#runtime-settings-web).
 
 | Field | Installer value | Meaning |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
+| `image` | The Runtime image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
 | `network` | `oac-node-<installation-id>` | Runtime container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
 | `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
@@ -181,14 +182,14 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 
 | Variable | Set from |
 | --- | --- |
-| `OAC_PUBLIC_URL` | The [public URL](#settings). Core validates it once and derives the Agents API base, the daemon WebSocket URL, the [sandbox Link URL](#changing-the-public-url), the self-hosted `remote_url`, the installer downloads, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers |
+| `OAC_PUBLIC_URL` | Required. The [public URL](#settings). Core validates it once and derives the Agents API base, the daemon WebSocket URL, the [sandbox Link URL](#changing-the-public-url), the self-hosted `remote_url`, the installer downloads, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers |
 | `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | Required. PostgreSQL without a password |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |
-| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CREDENTIAL_KEY_FILE` | Required. `/run/oac/credential.key`: a base64-encoded random 32-byte key. Core seals stored credentials with it |
 | `OAC_CORE_KEY_DIGESTS_FILE` | Required. `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
-| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL`. Core refuses an ID other than the one its database recorded |
-| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`: the [agent host's identity](#agent-host-container), whose `runtime_id` is a canonical UUID. Required with `OAC_PUBLIC_URL`, and only with it. When Core starts it registers the agent host with that ID and credential; a new credential fences the Links the old one authenticated, and a revoked agent host stays revoked |
+| `OAC_INSTALLATION_ID_FILE` | Required. `/run/oac/installation.id`: the installation ID, a canonical UUID. Core refuses an ID other than the one its database recorded |
+| `OAC_AGENT_HOST_IDENTITY_FILE` | Required. `/run/agent-host/identity.json`: the [agent host's identity](#agent-host-container), whose `runtime_id` is a canonical UUID. When Core starts it registers the agent host with that ID and credential; a new credential fences the Links the old one authenticated, and a revoked agent host stays revoked |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
 | `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 

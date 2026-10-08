@@ -71,7 +71,7 @@ func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, sessions.ErrInvalidInput), errors.Is(err, environmentconfig.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)

@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -19,15 +17,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-var fixtureCipher, _ = credentialcrypto.New(bytes.Repeat([]byte{61}, 32))
-
-// NewModelTestStore is testStore with a fixture credential key, so Sessions
-// can freeze a model provider.
-func NewModelTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
-	_, pool := testStore(t)
-	return NewWithCredentialCipher(pool, fixtureCipher), pool
-}
 
 // FixtureModelProvider is a valid bundle for the harness. No Session runs
 // without one, so fixtures supply it instead of relaxing that check.
@@ -39,7 +28,7 @@ func FixtureModelProvider(harness string) *v1.ModelProviderInput {
 }
 
 // WithFixtureModelProvider adds the fixture provider, as a Session-supplied
-// bundle, to a creation that has none. The store must have a credential key.
+// bundle, to a creation that has none.
 func WithFixtureModelProvider(input sessions.CreateSession) sessions.CreateSession {
 	if input.ModelProvider != nil {
 		return input

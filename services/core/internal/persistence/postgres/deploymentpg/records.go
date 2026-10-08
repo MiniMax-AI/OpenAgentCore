@@ -55,19 +55,15 @@ func translate(err error) error {
 }
 
 // record converts the stored deployment. open opens a stored credential; a
-// view never needs it. Without a key the credential error is
-// credentialcrypto.ErrUnavailable; a credential the key cannot open or
-// authenticate is an internal decryption error.
+// view never needs it. A credential the key cannot open or authenticate is an
+// internal decryption error.
 func record(d sqlc.RuntimeDeployment, cipher *credentialcrypto.Cipher, open bool) deployment.Record {
 	r := deployment.Record{InstallationID: uuidString(d.InstallationID), Provider: d.ProviderKind, BackendFingerprint: d.BackendFingerprint,
-		Generation: uint64(d.Generation), OwnerEpoch: uint64(d.OwnerEpoch), Mode: d.Mode,
-		IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds, Specification: d.Specification,
+		Generation: uint64(d.Generation), OwnerEpoch: uint64(d.OwnerEpoch), Mode: d.Mode, Specification: d.Specification,
 		Configuration: sandbox.ConfigurationRecord{Public: d.ProviderConfig, Metadata: d.ProviderMetadata}, CredentialStored: len(d.ProviderCredential) > 0}
 	if r.CredentialStored && open {
-		if cipher == nil {
-			r.CredentialError = credentialcrypto.ErrUnavailable
-		} else if secret, err := cipher.OpenSandboxDeployment(d.ProviderCredential, r.InstallationID, r.Generation); err != nil {
-			r.CredentialError = errors.New("sandbox deployment credential decryption failed")
+		if secret, err := cipher.OpenSandboxDeployment(d.ProviderCredential, r.InstallationID, r.Generation); err != nil {
+			r.CredentialError = deployment.ErrCredentialUnreadable
 		} else {
 			r.Configuration.Secret = secret
 		}

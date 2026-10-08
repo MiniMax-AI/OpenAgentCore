@@ -1,7 +1,7 @@
 ---
 title: "会话、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: c6141811b426fb0dfb95105b27cc381af5f22e3a7923a171f113f228ae0a5b33
+source_hash: 93ace7d112cbc671039624ec9c999addce715bb08036a50246442a9e14549021
 ---
 
 本契约涵盖会话（Session）内部发生的事情：发送输入、实时事件流，以及读取轮次（Turn）、条目（Item）和使用量的持久化历史。会话资源本身（创建配置、重试标识、更新、列出和删除）见 [Core 线协议行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -41,7 +41,7 @@ Turn 失败后会话仍可使用：新输入会启动一个新 Turn。后来预�
 - **取消。** 排队的 Turn 无需活动 Runtime 即可取消。正在运行的 Turn 只有在 Runtime 确认后才会取消；完成操作可能赢得该竞争。读取到 `cancelled` 时才表示该 Turn 已停止，而不是请求返回时。在没有待处理输入的情况下，对空闲会话执行的取消会被接受且不产生任何效果；而在输入预留待处理期间，取消会返回 409。
 - **函数结果。** `turn_id`、`call_id` 和 `success` 为必填项；`output` 和 `error` 为可选项且可为空（[内容规则](message-content.md#function-results)）。重复提交完全相同的结果会返回 202，不会再次应用或发出事件。harness 应用结果时才会出现结果 Item；如果取消操作导致结果无法应用，结果仍会存储，但不会产生 Item。
 - **排队。** 当一个已连接且支持该会话 harness 和配置的 Runtime 接入，并且 Core 的 [`core.execution_concurrency`](../../../docs/zh/configuration.md#settings) 工作槽位有一个空闲时，排队的 Turn 才会启动。会话始终绑定到首次运行它的 Runtime。
-- **执行可用性。** 不具备执行能力的服务会返回 503 `execution_unavailable`，失去执行所有权的 Worker 会返回 503。
+- **执行可用性。** Core 关闭期间，或其 Worker 失去执行所有权后，请求返回 503 `execution_unavailable`。
 
 ### 包含 Environment 的会话 {#sessions-with-an-environment}
 

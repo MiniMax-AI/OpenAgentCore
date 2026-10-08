@@ -271,6 +271,17 @@ type ConfigurationRequirements struct {
 	CredentialVerification providercontract.Support
 }
 
+// DeploymentPolicy is the deployment declaration. Disk declares independent
+// disk limits; Runtime requires a pinned Runtime release, and RuntimeError is
+// the fixed reason for rejecting one otherwise. DefaultResources is the size
+// setup proposes, or nil when the Provider's configuration selects it.
+type DeploymentPolicy struct {
+	RuntimeError     string     `json:"-"`
+	Disk             bool       `json:"disk"`
+	Runtime          bool       `json:"runtime"`
+	DefaultResources *Resources `json:"default_resources"`
+}
+
 // Configuration is an adapter-owned typed value, never a request or response DTO.
 // Implementations must exclude secrets from JSON and safe diagnostic output.
 type Configuration interface {
@@ -310,6 +321,40 @@ type DirectConfig struct {
 	InstallationID string
 	Selection      Selection
 	Fence          *CallFence
+}
+
+// NodeConfig is a node's configuration for one deployment generation. Native
+// holds only the selected adapter's node-local settings, such as host paths;
+// that adapter alone decodes it, strictly. Resources and the Runtime release
+// are read from Specification, never copied into Native.
+type NodeConfig struct {
+	Specification  DeploymentSpec  `json:"specification"`
+	Generation     uint64          `json:"generation"`
+	CoreURL        string          `json:"core_url"`
+	Provider       string          `json:"provider"`
+	InstallationID string          `json:"installation_id"`
+	Native         json.RawMessage `json:"native"`
+}
+
+// LocalOptions supplies process-local context without changing persisted configuration.
+type LocalOptions struct {
+	// Standalone selects registration or execution without a generation manager.
+	Standalone bool
+	// GenerationStateDirectory is the node state directory when constructing a
+	// retained generation. It must be canonical and absolute, and Standalone
+	// must be false.
+	GenerationStateDirectory string
+}
+
+// Built is a constructed node adapter. Construction fills InstallationID and
+// SpecificationDigest; the adapter fills the rest.
+type Built struct {
+	SpecificationDigest                string
+	Provider                           SandboxProvider
+	InstallationID, BackendFingerprint string
+	Probe                              func(context.Context) error
+	// Quiescent is nil when no helper can outlive its caller.
+	Quiescent func() bool
 }
 
 // ConfigurationDiscoveryInput is a transient read-only request. Query is typed

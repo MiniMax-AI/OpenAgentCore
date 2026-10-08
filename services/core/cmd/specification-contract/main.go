@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"os"
 	"strings"
@@ -14,12 +13,11 @@ import (
 func main() {
 	write := flag.Bool("write", false, "update deploy/node/node_spec.py and packages/agents-client/src/deployment-contract.ts from the repository root")
 	flag.Parse()
-	projection, err := providers.Builtin().PythonDeploymentContract()
+	projection, typescript, err := providers.Builtin().DeploymentContract()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	typescript := sandbox.TypeScriptDeploymentContract()
 	if !*write {
 		fmt.Println(projection)
 		fmt.Print(typescript)

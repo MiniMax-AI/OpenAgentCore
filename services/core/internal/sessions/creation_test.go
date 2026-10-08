@@ -14,7 +14,6 @@ import (
 	"github.com/google/uuid"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -141,7 +140,10 @@ func (s *fakeStorage) FindCreation(_ context.Context, tenant, key string) (Creat
 // fingerprints is a fake FingerprintProviderKey that keeps keys apart.
 func fingerprints(secret string) (string, error) { return "fp-" + secret, nil }
 
-func unavailable(string) (string, error) { return "", credentialcrypto.ErrUnavailable }
+var errFingerprint = errors.New("fingerprint failed")
+
+// failing is a fake FingerprintProviderKey that fails.
+func failing(string) (string, error) { return "", errFingerprint }
 
 // declarations accept every provider and specification.
 type declarations struct{}
@@ -200,8 +202,8 @@ func TestPrepareCreation(t *testing.T) {
 	if prepare(t, withProvider("self_hosted", "one", "session"), fingerprints).RequestHash == prepare(t, withProvider("self_hosted", "two", "session"), fingerprints).RequestHash {
 		t.Fatal("caller keys share an identity")
 	}
-	deployed := prepare(t, withProvider("none", "deployment-key", v1.ModelProviderSourceDeployment), unavailable)
-	plain := prepare(t, func(input *CreateSession) { input.Configuration = creationInput("none").Configuration }, unavailable)
+	deployed := prepare(t, withProvider("none", "deployment-key", v1.ModelProviderSourceDeployment), failing)
+	plain := prepare(t, func(input *CreateSession) { input.Configuration = creationInput("none").Configuration }, failing)
 	if deployed.RequestHash != plain.RequestHash {
 		t.Fatalf("the deployment default joined the identity: %s", deployed.Configuration)
 	}
@@ -223,7 +225,7 @@ func TestPrepareCreation(t *testing.T) {
 		}, fingerprints, ErrInvalidInput},
 		"configuration array":  {func(input *CreateSession) { input.Configuration = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
 		"cancel initial input": {func(input *CreateSession) { input.InitialInputs = []Input{cancelInput} }, fingerprints, ErrInvalidInput},
-		"no credential key":    {withProvider("self_hosted", "key", "session"), unavailable, credentialcrypto.ErrUnavailable},
+		"fingerprint failure":  {withProvider("self_hosted", "key", "session"), failing, errFingerprint},
 		"unreadable intent":    {func(input *CreateSession) { input.CreationRequest = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -261,10 +263,10 @@ func TestIntentHash(t *testing.T) {
 		"over 16 MiB":          {`"` + strings.Repeat("x", 16<<20) + `"`, fingerprints, ErrInvalidInput},
 		"extension not object": {`{"x_agents_core":[]}`, fingerprints, ErrInvalidInput},
 		"provider unreadable":  {`{"x_agents_core":{"model_provider":[]}}`, fingerprints, ErrInvalidInput},
-		"provider no key":      {`{"x_agents_core":{"model_provider":{"api_key":"k"}}}`, unavailable, credentialcrypto.ErrUnavailable},
-		"null extension":       {`{"x_agents_core":null}`, unavailable, nil},
-		"null provider":        {`{"x_agents_core":{"model_provider":null}}`, unavailable, nil},
-		"intent without key":   {`{"agent_id":"a"}`, unavailable, nil},
+		"provider fingerprint": {`{"x_agents_core":{"model_provider":{"api_key":"k"}}}`, failing, errFingerprint},
+		"null extension":       {`{"x_agents_core":null}`, failing, nil},
+		"null provider":        {`{"x_agents_core":{"model_provider":null}}`, failing, nil},
+		"intent without key":   {`{"agent_id":"a"}`, failing, nil},
 	} {
 		if _, err := hash(test.raw, test.fingerprint); test.want == nil && err != nil || test.want != nil && !errors.Is(err, test.want) {
 			t.Errorf("%s: got %v, want %v", name, err, test.want)
@@ -535,7 +537,6 @@ func TestFindSessionCreation(t *testing.T) {
 		{"recorded intent", "create", request, creator, fingerprints, found, nil, []string{"FindCreation tenant create"}},
 		{"missing creation", "create", request, creator, fingerprints, func() (CreationRecord, error) { return CreationRecord{}, ErrNotFound }, ErrNotFound, []string{"FindCreation tenant create"}},
 		{"another creator", "create", request, identity.Subject{Kind: "user", ID: "stranger"}, fingerprints, found, ErrIdempotencyConflict, []string{"FindCreation tenant create"}},
-		{"no credential key", "create", json.RawMessage(`{"x_agents_core":{"model_provider":{"api_key":"k"}}}`), creator, unavailable, nil, ErrNotFound, []string{"FingerprintProviderKey"}},
 		{"no intent", "create", nil, creator, nil, nil, ErrInvalidInput, nil},
 		{"invalid key", " ", request, creator, nil, nil, ErrInvalidInput, nil},
 		{"invalid creator", "create", request, identity.Subject{}, nil, nil, ErrInvalidInput, nil},

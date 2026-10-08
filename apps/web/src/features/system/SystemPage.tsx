@@ -42,11 +42,11 @@ export function SystemPage() {
   const facts = about ? (
     <Section headingId="system-installation-heading" title={t("installation.title")}>
       <dl className="system-facts">
-        <Fact label={t("installation.publicUrl")} help={t("installation.publicUrlHelp")}>{about.public_url ? <code className="system-code">{about.public_url}</code> : <span className="system-muted">{t("installation.notSet")}</span>}</Fact>
+        <Fact label={t("installation.publicUrl")} help={t("installation.publicUrlHelp")}><code className="system-code">{about.public_url}</code></Fact>
         <Fact label={t("installation.apiBaseUrl")} help={t("installation.apiBaseUrlHelp")}>
-          {about.api_base_url ? <CopyableId id={about.api_base_url} label={t("installation.copyApiBaseUrl")} /> : <span className="system-muted">{t("installation.notSet")}</span>}
+          <CopyableId id={about.api_base_url} label={t("installation.copyApiBaseUrl")} />
         </Fact>
-        <Fact label={t("installation.id")}>{about.installation_id ? <CopyableId id={about.installation_id} /> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
+        <Fact label={t("installation.id")}><CopyableId id={about.installation_id} /></Fact>
         <Fact label={t("installation.sourceCommit")}>{about.source_commit ? <code className="system-code" title={about.source_commit}>{about.source_commit.slice(0, 12)}</code> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
       </dl>
     </Section>

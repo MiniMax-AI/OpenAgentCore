@@ -106,9 +106,9 @@ func TestOwnershipEncryptionAndVersions(t *testing.T) {
 	if created.DefaultVersion != 1 || created.LatestVersion != 1 {
 		t.Fatal("initial pointers", created)
 	}
-	metadata, err := skillpg.New(pgunit.NewPool(f.pool), nil).Skill(ctx, tenant, id)
+	metadata, err := skillpg.New(pgunit.NewPool(f.pool), pgtest.CredentialKey(t)).Skill(ctx, tenant, id)
 	if err != nil || metadata.Name != "proof" {
-		t.Fatal("metadata requires no content key", err)
+		t.Fatal("metadata required the content key", err)
 	}
 	var contents []byte
 	if err = f.pool.QueryRow(ctx, "SELECT contents FROM skill_versions WHERE tenant_id=$1", tenant).Scan(&contents); err != nil {
@@ -288,8 +288,8 @@ func TestListsAcceptLimitZero(t *testing.T) {
 func TestMetadataTracksDefaultVersion(t *testing.T) {
 	pool := pgtest.Open(t)
 	f := newFixture(t, pool, testCipher(t, 74))
-	// Metadata reads and default changes need no content key.
-	metadataOnly := newFixture(t, pool, nil)
+	// Metadata reads and default changes work under a replaced key.
+	replaced := newFixture(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	names := []string{"first-proof", "second-proof", "third-proof"}
@@ -308,12 +308,12 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 	}
 	assertStored := func(version, latest int64) {
 		t.Helper()
-		value, err := metadataOnly.store.Skill(ctx, tenant, id)
+		value, err := replaced.store.Skill(ctx, tenant, id)
 		if err != nil {
 			t.Fatal("metadata read without content key", err)
 		}
 		assertMetadata(value, version, latest)
-		page, err := metadataOnly.service.ListSkills(ctx, skills.ListSkills{TenantID: tenant, Limit: 10, Ascending: true})
+		page, err := replaced.service.ListSkills(ctx, skills.ListSkills{TenantID: tenant, Limit: 10, Ascending: true})
 		if err != nil || len(page.Skills) != 1 {
 			t.Fatal("metadata list without content key", page, err)
 		}
@@ -329,28 +329,23 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 	}
 	assertStored(1, 2)
 	for _, version := range []string{"2", "1"} {
-		updated, err := metadataOnly.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: version})
+		updated, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: version})
 		if err != nil {
 			t.Fatal("default update without content key", err)
 		}
 		assertMetadata(updated, updated.DefaultVersion, 2)
 		assertStored(updated.DefaultVersion, 2)
 	}
-	if _, err := metadataOnly.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: foreign, SkillID: id, Version: "2"}); !errors.Is(err, skills.ErrNotFound) {
+	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: foreign, SkillID: id, Version: "2"}); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("foreign default update", err)
 	}
-	if _, err := metadataOnly.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrNotFound) {
+	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("missing default update", err)
 	}
 	assertStored(1, 2)
-	// Uploads and content reads need the key; the failed upload stores nothing.
-	if _, err := metadataOnly.service.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: id, Archive: archives[2]}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("upload without content key", err)
+	if _, err := replaced.service.ReadDefaultVersion(ctx, skills.ReadDefaultVersion{TenantID: tenant, SkillID: id}); err == nil || errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("a replaced key opened content", err)
 	}
-	if _, err := metadataOnly.service.ReadDefaultVersion(ctx, skills.ReadDefaultVersion{TenantID: tenant, SkillID: id}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("content read without content key", err)
-	}
-	assertStored(1, 2)
 	if _, err := f.service.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: id, Archive: archives[2], MakeDefault: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -502,10 +497,7 @@ func TestFreezeReads(t *testing.T) {
 	if _, err := skillpg.ReadVersionForFreeze(ctx, q, cipher, tenantID, first.ID, 2); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("missing version", err)
 	}
-	if _, err := skillpg.ReadVersionForFreeze(ctx, q, nil, tenantID, first.ID, 1); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("read without a key", err)
-	}
-	if _, err := skillpg.ReadVersionForFreeze(ctx, q, testCipher(t, 49), tenantID, first.ID, 1); err == nil || errors.Is(err, skills.ErrNotFound) || errors.Is(err, credentialcrypto.ErrUnavailable) {
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, testCipher(t, 49), tenantID, first.ID, 1); err == nil || errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("another key opened the version", err)
 	}
 }

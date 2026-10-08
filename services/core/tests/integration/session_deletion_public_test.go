@@ -17,20 +17,20 @@ func TestSessionDeletionOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), fixtureDeploymentProvider())
+	h, err := publicHandler(t, s, auth, "codex", fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
-	recoveredStore := NewWithCredentialCipher(s.pool, fixtureCipher)
-	h, err = publicHandler(t, recoveredStore, auth, "codex", storeExecution(t, recoveredStore), fixtureDeploymentProvider())
+	recoveredStore := New(t, s.pool)
+	h, err = publicHandler(t, recoveredStore, auth, "codex", fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

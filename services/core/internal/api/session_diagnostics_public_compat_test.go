@@ -12,6 +12,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -27,7 +28,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
-	databaseSessionReads(pool)(&deps, fakes)
+	databaseSessionReads(t, pool)(&deps, fakes)
 	h := newTestHandler(t, deps)
 	created, err := s.CreateSession(t.Context(), key.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
@@ -67,9 +68,9 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 
 // databaseSessionReads serves Session, Turn, diagnostic and Item reads from
 // the Session adapter on pool.
-func databaseSessionReads(pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
+func databaseSessionReads(t *testing.T, pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, _ *testFakes) {
-		reader := sessionpg.New(pgunit.NewPool(pool), nil)
+		reader := sessionpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 		d.SessionsReader, d.SessionAdmin, d.Items, d.Turns = reader, reader, reader, reader
 	}
 }
@@ -78,7 +79,7 @@ func databaseSessionReads(pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 // pool.
 func submitMessage(t *testing.T, pool *pgxpool.Pool, tenant, session, key, text string) sessions.InputReceipt {
 	t.Helper()
-	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil), nil)
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func diagnosticDatabase(t *testing.T) (*sessions.Service, *pgxpool.Pool) {
 	if err = migrations.Apply(t.Context(), dsn); err != nil {
 		t.Fatal(err)
 	}
-	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil), nil)
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -102,7 +102,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	var all []sessions.SessionChange
 	cursor := int64(0)
 	for {
-		page, err := sessionAdapter(New(pool)).ListSessionEvents(ctx, tenant, session.ID, cursor)
+		page, err := sessionAdapter(New(t, pool)).ListSessionEvents(ctx, tenant, session.ID, cursor)
 		if err != nil {
 			t.Fatal(err)
 		}

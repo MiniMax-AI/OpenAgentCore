@@ -11,7 +11,7 @@ import (
 )
 
 // Template is a saved Template's safe metadata: it holds no confidential
-// setup, file contents or archives, so reading it needs no credential key.
+// setup, file contents or archives.
 type Template struct {
 	ID                    string
 	Name                  *string

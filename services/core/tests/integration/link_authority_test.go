@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -96,7 +97,7 @@ func runWorker(t *testing.T, w *execution.Worker) {
 func startLinkRoute(t *testing.T, s *Store) *sandboxlinktest.Server {
 	t.Helper()
 	rl := relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))
-	handler, err := publicHandler(t, s, fixtureKeyResolver{}, "codex", storeExecution(t, s), func(d *api.Dependencies) { d.Execution.Links = rl })
+	handler, err := publicHandler(t, s, fixtureKeyResolver{}, "codex", func(d *api.Dependencies) { d.Execution.Links = rl })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +379,7 @@ func TestLinkAuthorityReleaseRevokesBeforeSend(t *testing.T) {
 // TestLinkAuthorityEnrollment serves a self_hosted enrollment with its
 // executor key until the key is revoked.
 func TestLinkAuthorityEnrollment(t *testing.T) {
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
 	session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 		Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -494,7 +495,12 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	dir := t.TempDir()
 	runtime, credential := uuid.NewString(), uuid.NewString()
 	identity, _ := json.Marshal(map[string]string{"runtime_id": runtime, "credential": credential})
-	for name, content := range map[string][]byte{"identity.json": identity, "digests.json": []byte(`["` + strings.Repeat("ab", 32) + `"]`)} {
+	for name, content := range map[string][]byte{
+		"identity.json":   identity,
+		"digests.json":    []byte(`["` + strings.Repeat("ab", 32) + `"]`),
+		"installation.id": []byte(uuid.NewString()),
+		"credential.key":  []byte(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x91}, 32))),
+	} {
 		if err := os.WriteFile(filepath.Join(dir, name), content, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -502,6 +508,8 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	t.Setenv("OAC_DATABASE_URL", "postgres://core@database/core")
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", filepath.Join(dir, "digests.json"))
 	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
+	t.Setenv("OAC_INSTALLATION_ID_FILE", filepath.Join(dir, "installation.id"))
+	t.Setenv("OAC_CREDENTIAL_KEY_FILE", filepath.Join(dir, "credential.key"))
 	t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", filepath.Join(dir, "identity.json"))
 	config, err := processconfig.Load()
 	if err != nil {

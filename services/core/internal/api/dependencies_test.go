@@ -62,9 +62,8 @@ type testFakes struct {
 
 // testDependencies returns Dependencies in which every area is a strict fake.
 // A test sets the funcs it expects on the returned fakes; any other call fails
-// it. Engine is "codex", CoreKeys accepts "Bearer admin", and Execution and
-// Sandboxes are disabled until the test sets fakes.execution() or
-// fakes.sandboxes().
+// it. Engine is "codex", CoreKeys accepts "Bearer admin", and Execution reports
+// testExecutorURL without a native installer.
 func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	f := &testFakes{
@@ -115,32 +114,22 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		SessionAdmin:    f.sessionAdmin,
 		Environments:    f.environments, EnvironmentsReader: f.environmentsReader, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,
+		Execution: Execution{
+			ExecutorURL:      testExecutorURL,
+			SessionAdmission: f.sessionAdmission,
+			InputAdmission:   f.inputAdmission,
+			SessionArchive:   f.sessionArchive,
+			Workspaces:       f.workspaces,
+			Links:            f.links,
+		},
+		Sandboxes: Sandboxes{
+			Deployment:             f.deployment,
+			NodeAllocations:        f.nodeAllocations,
+			DeploymentChanges:      f.deploymentChanges,
+			DeploymentReset:        f.deploymentReset,
+			ConfigurationDiscovery: f.configurationDiscovery,
+		},
 	}, f
-}
-
-// execution is an Execution group backed by f's strict fakes, reporting
-// testExecutorURL and without a native installer.
-func (f *testFakes) execution() *Execution {
-	return &Execution{
-		ExecutorURL:      testExecutorURL,
-		SessionAdmission: f.sessionAdmission,
-		InputAdmission:   f.inputAdmission,
-		SessionArchive:   f.sessionArchive,
-		Workspaces:       f.workspaces,
-		Links:            f.links,
-	}
-}
-
-// sandboxes is a Sandboxes group backed by f's strict fakes. It requires
-// Execution.
-func (f *testFakes) sandboxes() *Sandboxes {
-	return &Sandboxes{
-		Deployment:             f.deployment,
-		NodeAllocations:        f.nodeAllocations,
-		DeploymentChanges:      f.deploymentChanges,
-		DeploymentReset:        f.deploymentReset,
-		ConfigurationDiscovery: f.configurationDiscovery,
-	}
 }
 
 // coreKeys accepts each token as a Core key.
@@ -169,13 +158,11 @@ func newTestHandler(t testing.TB, deps Dependencies) http.Handler {
 }
 
 func TestNewHandlerAcceptsCompleteDependencies(t *testing.T) {
-	deps, f := testDependencies(t)
+	deps, _ := testDependencies(t)
 	if _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
-	deps.Execution = f.execution()
 	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/"}
-	deps.Sandboxes = f.sandboxes()
 	if _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
@@ -195,27 +182,11 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		{"Turns", func(d *Dependencies, _ *testFakes) { d.Turns = nil }},
 		{"Items", func(d *Dependencies, _ *testFakes) { d.Items = nil }},
 		{"RuntimeHistory", func(d *Dependencies, _ *testFakes) { d.RuntimeHistory = nil }},
-		{"Execution.ExecutorURL", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.ExecutorURL = ""
-		}},
-		{"Execution.SessionAdmission", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.SessionAdmission = nil
-		}},
-		{"Execution.InputAdmission", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.InputAdmission = nil
-		}},
-		{"Execution.NativeInstaller.Version", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.NativeInstaller = &NativeInstaller{}
-		}},
-		{"Sandboxes requires Execution", func(d *Dependencies, f *testFakes) { d.Sandboxes = f.sandboxes() }},
-		{"Sandboxes.ConfigurationDiscovery", func(d *Dependencies, f *testFakes) {
-			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
-			d.Sandboxes.ConfigurationDiscovery = nil
-		}},
+		{"Execution.ExecutorURL", func(d *Dependencies, _ *testFakes) { d.Execution.ExecutorURL = "" }},
+		{"Execution.SessionAdmission", func(d *Dependencies, _ *testFakes) { d.Execution.SessionAdmission = nil }},
+		{"Execution.InputAdmission", func(d *Dependencies, _ *testFakes) { d.Execution.InputAdmission = nil }},
+		{"Execution.NativeInstaller.Version", func(d *Dependencies, _ *testFakes) { d.Execution.NativeInstaller = &NativeInstaller{} }},
+		{"Sandboxes.ConfigurationDiscovery", func(d *Dependencies, _ *testFakes) { d.Sandboxes.ConfigurationDiscovery = nil }},
 	} {
 		t.Run(test.missing, func(t *testing.T) {
 			deps, f := testDependencies(t)

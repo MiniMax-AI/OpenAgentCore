@@ -315,7 +315,7 @@ class NodeInstallTests(unittest.TestCase):
         self.args.provider = "microsandbox"
         self.install()
         successor = self.prepare_successor_runtime()
-        successor["microsandbox"]["firmware_path"] = str(self.root / installer.MICRO[2])
+        successor["native"]["firmware_path"] = str(self.root / installer.MICRO[2])
         installer.node_generations.atomic_json(self.root / "state/node/generations/2.json", successor)
         original = installer.private_json(self.root / "provider.json")
         self.args.generation = 1
@@ -377,9 +377,9 @@ class NodeInstallTests(unittest.TestCase):
             self.assertFalse((directory / "2.json").exists())
             self.assertEqual(saved["specification"], config["specification"])
             self.assertFalse(json.loads((directory / "2.preparing").read_text())["import_started"])
-            helper = Path(saved["microsandbox"]["helper_path"])
+            helper = Path(saved["native"]["helper_path"])
             inode = helper.stat().st_ino
-            self.assertFalse(Path(saved["microsandbox"]["runtime_path"]).exists())
+            self.assertFalse(Path(saved["native"]["runtime_path"]).exists())
             installer.node_generations.prepare(self.args, installer)
             self.assertEqual(helper.stat().st_ino, inode)
             self.assertEqual(json.loads((directory / "2.json").read_text()), saved)
@@ -436,7 +436,7 @@ class NodeInstallTests(unittest.TestCase):
         system = self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         config = json.loads((self.root / "provider.json").read_text())
-        self.assertEqual(config["docker"]["image"], self.manifest["images"]["runtime"])
+        self.assertEqual(config["native"]["image"], self.manifest["images"]["runtime"])
         self.assertEqual(config["core_url"], self.args.core_url + "/api/v1")
         self.assertEqual(config["installation_id"], self.args.installation_id)
         self.assertFalse((self.root / installer.MICRO[0]).exists())
@@ -455,7 +455,7 @@ class NodeInstallTests(unittest.TestCase):
         self.containerd = True
         self.install()
         expected = self.manifest['image_manifest_digests']['runtime']
-        self.assertEqual(json.loads((self.root / 'provider.json').read_text())['docker']['image'], expected)
+        self.assertEqual(json.loads((self.root / 'provider.json').read_text())['native']['image'], expected)
         before = (self.root / 'provider.json').read_bytes()
         with mock.patch.object(installer.distribution, 'runtime_archive', side_effect=AssertionError('warm Runtime download')):
             self.install()
@@ -464,7 +464,7 @@ class NodeInstallTests(unittest.TestCase):
     def test_retained_provider_image_cannot_bypass_verified_selection(self):
         self.install()
         config = json.loads((self.root / 'provider.json').read_text())
-        config['docker']['image'] = 'sha256:' + 'f' * 64
+        config['native']['image'] = 'sha256:' + 'f' * 64
         (self.root / 'provider.json').write_text(json.dumps(config))
         self.calls.clear()
         with self.assertRaisesRegex(node_spec.SpecificationError, 'Retained Docker image differs'):
@@ -483,14 +483,9 @@ class NodeInstallTests(unittest.TestCase):
     def test_microsandbox_imports_image_and_allows_only_explicit_private_core_endpoint(self):
         self.args.provider = "microsandbox"
         self.install()
-        config = json.loads((self.root / "provider.json").read_text())["microsandbox"]
-        self.assertEqual(config["runtime_sha256"], self.manifest["microsandbox"]["runtime_sha256"])
-        self.assertEqual(config["cpus"], 3)
-        self.assertEqual(config["memory_mib"], 6144)
-        self.assertEqual(config["root_disk_mib"], 10240)
-        self.assertEqual(config["environment_disk_mib"], 12288)
-        for field in ("idle_seconds", "retention_seconds", "max_active", "max_retained"):
-            self.assertNotIn(field, config)
+        config = json.loads((self.root / "provider.json").read_text())["native"]
+        # Resources, the image and artifact hashes are read from the specification.
+        self.assertEqual(set(config), {"helper_path", "runtime_path", "firmware_path", "runtime_home", "network"})
         rules = config["network"]["rules"]
         self.assertIn({"action": "allow", "direction": "egress", "destination": "172.29.144.1", "protocol": "tcp", "port": "24443"}, rules)
         self.assertNotIn("private", [rule["destination"] for rule in rules])
@@ -963,7 +958,7 @@ class NodeInstallTests(unittest.TestCase):
     def test_uninstall_prints_only_an_image_id_from_the_service_home(self):
         root = self.home / "node"
         root.mkdir()
-        (root / "provider.json").write_text(json.dumps({"docker": {"image": "x\nFinish with: sudo sh"}}))
+        (root / "provider.json").write_text(json.dumps({"native": {"image": "x\nFinish with: sudo sh"}}))
         output = io.StringIO()
         with mock.patch.object(installer.sys, "stdout", output):
             installer.remove_node_files(root, self.args.installation_id)
@@ -1082,20 +1077,6 @@ class NodeInstallTests(unittest.TestCase):
                 mock.patch.object(installer.distribution.urllib.request, "build_opener", side_effect=AssertionError("Unexpected artifact download")):
             self.install()
         self.assertEqual(json.loads((self.root / "provider.json").read_text())["specification"], self.args.configuration["specification"])
-
-    def test_changed_local_micro_resources_cannot_reconnect(self):
-        self.args.provider = "microsandbox"
-        self.install()
-        target = self.root / "provider.json"
-        stored = json.loads(target.read_text())
-        stored["microsandbox"]["cpus"] += 1
-        target.write_text(json.dumps(stored))
-        before = target.read_bytes()
-        self.calls.clear()
-        with self.assertRaisesRegex(node_spec.SpecificationError, "microsandbox configuration differs"):
-            self.install()
-        self.assertEqual(target.read_bytes(), before)
-        self.assertFalse(any("register" in call or "enable" in call for call, _ in self.calls))
 
     def test_origin_rejects_other_schemes_credentials_paths_and_redirects(self):
         for value in ("ftp://core.example", "https://user@core.example", "https://@core.example", "https://core.example/v1", "https://core.example?", "https://core.example#", "https://core.example\\path", "https://core.example:bad", ""):

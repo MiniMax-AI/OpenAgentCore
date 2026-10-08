@@ -22,16 +22,16 @@ const diagnostics: Record<string, { label: MessageKey; advice: MessageKey }> = {
   },
   provider_unavailable: {
     label: "Sandbox provider unavailable",
-    advice: "Restore the provider on the assigned node, then refresh. A connected node alone does not confirm that its sandbox provider is ready.",
+    advice: "Restore the provider on the assigned node, then refresh. Running the install command again on the host checks its requirements and names the fix; a manually registered node logs the local error.",
   },
-  // Fixed Runtime preparation and provider readiness diagnostics; Core sends only the code.
-  docker_unavailable: {
-    label: "Docker unavailable",
-    advice: "The node can't reach the Docker daemon. Check that Docker is running and the node can use its socket.",
+  // Provider-neutral readiness classes; Core sends only the code, and the node keeps the local detail.
+  host_unsupported: {
+    label: "Host unsupported",
+    advice: "The host lacks a capability its sandbox provider requires. Running the install command again on the host checks its requirements and names the fix; a manually registered node logs the local error.",
   },
-  docker_limits_unsupported: {
-    label: "Docker limits unsupported",
-    advice: "Docker on this host doesn't enforce CPU and memory limits. Enable cgroup limits.",
+  artifacts_unavailable: {
+    label: "Provider files missing",
+    advice: "Pinned provider files are missing or fail their checksum. Run the install command again.",
   },
   runtime_download_failed: {
     label: "Runtime download failed",
@@ -40,14 +40,6 @@ const diagnostics: Record<string, { label: MessageKey; advice: MessageKey }> = {
   runtime_image_unavailable: {
     label: "Runtime image missing",
     advice: "The pinned Runtime image isn't on the host. Run the install command again.",
-  },
-  kvm_unavailable: {
-    label: "KVM unavailable",
-    advice: "/dev/kvm isn't available to the node. Enable virtualization or use a KVM-capable host.",
-  },
-  microsandbox_artifacts_unavailable: {
-    label: "microsandbox components missing",
-    advice: "microsandbox components are missing or fail their checksum. Run the install command again.",
   },
   capacity_insufficient: {
     label: "Host too small",

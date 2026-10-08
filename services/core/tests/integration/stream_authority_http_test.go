@@ -42,7 +42,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h, err := publicHandler(t, s, nil, "codex", storeKeys(s), storeExecution(t, s))
+			h, err := publicHandler(t, s, nil, "codex", storeKeys(s))
 			if err != nil {
 				t.Fatal(err)
 			}

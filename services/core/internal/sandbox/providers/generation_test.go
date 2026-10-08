@@ -2,13 +2,10 @@ package providers
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
@@ -19,16 +16,18 @@ import (
 	"github.com/google/uuid"
 )
 
-func generationConfig(t *testing.T) Config {
+func generationConfig(t *testing.T) (sandbox.NodeConfig, sandboxmicro.Native) {
 	t.Helper()
 	dir := t.TempDir()
 	spec := validRegistrationSpec()
 	spec.Resources.RootDiskMiB, spec.Resources.EnvironmentDiskMiB = 8192, 8192
-	return Config{Provider: "microsandbox", InstallationID: uuid.NewString(), Generation: 9, Specification: spec,
-		Microsandbox: &Microsandbox{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
-			RuntimeSHA256: spec.Runtime.RuntimeSHA256, FirmwareSHA256: spec.Runtime.FirmwareSHA256, Image: spec.Runtime.MicrosandboxRef,
-			CPUs: uint8(spec.Resources.CPUs), MemoryMiB: spec.Resources.MemoryMiB, RootDiskMiB: spec.Resources.RootDiskMiB, EnvironmentDiskMiB: spec.Resources.EnvironmentDiskMiB,
-			Network: Network{DefaultEgress: "allow", DefaultIngress: "deny"}}}
+	native := sandboxmicro.Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
+		Network: sandboxmicro.Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
+	raw, err := json.Marshal(native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sandbox.NodeConfig{Provider: "microsandbox", InstallationID: uuid.NewString(), Generation: 9, Specification: spec, Native: raw}, native
 }
 
 func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
@@ -54,7 +53,8 @@ func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			built, closeProvider, err := registry.Build(generationConfig(t), LocalOptions{GenerationStateDirectory: state})
+			config, _ := generationConfig(t)
+			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: state})
 			closeProvider()
 			if mode == "private" {
 				info, statErr := os.Lstat(directory)
@@ -74,9 +74,9 @@ func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
 // lease to this generation, installation and specification before any helper runs.
 func TestMicrosandboxGenerationBindsLeaseIdentity(t *testing.T) {
 	registry := Builtin()
-	config := generationConfig(t)
+	config, native := generationConfig(t)
 	state := t.TempDir()
-	built, closeProvider, err := registry.Build(config, LocalOptions{GenerationStateDirectory: state})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: state})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestMicrosandboxGenerationBindsLeaseIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := "#!/bin/sh\n[ \"$OAC_NODE_GENERATION_LEASE_FD\" = 3 ] || exit 1\ncat >/dev/null\nprintf '%s' '" + string(response) + "'\n"
-	if err := os.WriteFile(config.Microsandbox.HelperPath, []byte(script), 0700); err != nil {
+	if err := os.WriteFile(native.HelperPath, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	base := filepath.Join(state, "generations", strconv.FormatUint(config.Generation, 10))
@@ -152,10 +152,9 @@ func TestMicrosandboxGenerationRejectsUnpinnedImage(t *testing.T) {
 	registry := Builtin()
 	for _, image := range []string{"latest", "oac-runtime@sha256:bad", "oac-runtime@sha256:"} {
 		t.Run(image, func(t *testing.T) {
-			config := generationConfig(t)
-			config.Microsandbox.Image = image
+			config, _ := generationConfig(t)
 			config.Specification.Runtime.MicrosandboxRef = image
-			built, closeProvider, err := registry.Build(config, LocalOptions{GenerationStateDirectory: t.TempDir()})
+			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: t.TempDir()})
 			closeProvider()
 			if err == nil || built != nil {
 				t.Fatalf("accepted image %q", image)
@@ -167,55 +166,22 @@ func TestMicrosandboxGenerationRejectsUnpinnedImage(t *testing.T) {
 func TestLocalConstructionRequiresExplicitContext(t *testing.T) {
 	registry := Builtin()
 	state := t.TempDir()
-	for _, options := range []LocalOptions{
+	config, _ := generationConfig(t)
+	for _, options := range []sandbox.LocalOptions{
 		{},
 		{Standalone: true, GenerationStateDirectory: state},
 		{GenerationStateDirectory: "relative"},
 		{GenerationStateDirectory: state + "/../node"},
 	} {
-		built, closeProvider, err := registry.Build(generationConfig(t), options)
+		built, closeProvider, err := registry.Build(config, options)
 		closeProvider()
 		if !errors.Is(err, sandbox.ErrInvalid) || built != nil {
 			t.Fatalf("accepted construction context %+v: %v", options, err)
 		}
 	}
-	built, closeProvider, err := registry.Build(generationConfig(t), LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true})
 	closeProvider()
 	if err != nil || built == nil {
 		t.Fatalf("standalone construction: %v", err)
-	}
-}
-
-func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
-	registry := Builtin()
-	if runtime.GOOS != "linux" {
-		t.Skip("microsandbox requires Linux")
-	}
-	useKVM(t, true)
-	config := generationConfig(t)
-	script := []byte("#!/bin/sh\nprintf '%s' '{}'\n")
-	digest := sha256.Sum256(script)
-	config.Microsandbox.RuntimeSHA256 = hex.EncodeToString(digest[:])
-	config.Microsandbox.FirmwareSHA256 = hex.EncodeToString(digest[:])
-	config.Specification.Runtime.RuntimeSHA256 = config.Microsandbox.RuntimeSHA256
-	config.Specification.Runtime.FirmwareSHA256 = config.Microsandbox.FirmwareSHA256
-	for _, path := range []string{config.Microsandbox.RuntimePath, config.Microsandbox.FirmwarePath, config.Microsandbox.HelperPath} {
-		if err := os.WriteFile(path, script, 0700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.Chmod(config.Microsandbox.RuntimeHome, 0700); err != nil {
-		t.Fatal(err)
-	}
-	for _, options := range []LocalOptions{{Standalone: true}, {GenerationStateDirectory: t.TempDir()}} {
-		built, closeProvider, err := registry.Build(config, options)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = built.Probe(t.Context())
-		closeProvider()
-		if options.Standalone && err != nil || !options.Standalone && !errors.Is(err, sandbox.ErrRuntimeImageUnavailable) {
-			t.Fatalf("readiness for %+v: %v", options, err)
-		}
 	}
 }

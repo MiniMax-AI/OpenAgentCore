@@ -43,9 +43,7 @@ var (
 	_ modelconfiguration.Observer = (*Store)(nil)
 )
 
-// New returns a Store. Without a credential key (cipher nil), Replace and
-// LoadBundle fail with credentialcrypto.ErrUnavailable; List, Delete and
-// observations keep working.
+// New returns a Store that seals and opens bundles with cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -67,16 +65,13 @@ func (s *Store) List(ctx context.Context) ([]modelconfiguration.Configuration, e
 // new revision, which clears the replaced revision's observations, and audits
 // the write in the same transaction.
 func (s *Store) Replace(ctx context.Context, record modelconfiguration.Record) (modelconfiguration.Configuration, error) {
-	if s.cipher == nil {
-		return modelconfiguration.Configuration{}, credentialcrypto.ErrUnavailable
-	}
 	raw, err := json.Marshal(record.Configuration)
 	if err != nil {
 		return modelconfiguration.Configuration{}, err
 	}
 	sealed, err := s.cipher.SealDeploymentModelProvider(raw, record.Harness)
 	if err != nil {
-		return modelconfiguration.Configuration{}, credentialcrypto.ErrUnavailable
+		return modelconfiguration.Configuration{}, errors.New("model provider encryption failed")
 	}
 	var result modelconfiguration.Configuration
 	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
@@ -120,9 +115,6 @@ func (s *Store) LoadBundle(ctx context.Context, harness string) (modelconfigurat
 	}
 	if err != nil {
 		return modelconfiguration.Bundle{}, translate(err)
-	}
-	if s.cipher == nil {
-		return modelconfiguration.Bundle{}, credentialcrypto.ErrUnavailable
 	}
 	raw, err := s.cipher.OpenDeploymentModelProvider(row.EncryptedConfig, harness)
 	if err != nil {

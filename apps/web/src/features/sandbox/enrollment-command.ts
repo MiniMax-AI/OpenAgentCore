@@ -1,3 +1,5 @@
+import type { SandboxProvider } from "@oac/agents-client";
+
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 /**
@@ -43,7 +45,7 @@ const runInstaller = `$s \${s:+--preserve-env=http_proxy,https_proxy,no_proxy,HT
  * environment or sudo's command line.
  */
 export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, installationId, scriptDigest }: {
-  token: string; coreUrl: string; sourceUrl: string; provider: "docker" | "microsandbox"; installationId: string; scriptDigest: string;
+  token: string; coreUrl: string; sourceUrl: string; provider: SandboxProvider; installationId: string; scriptDigest: string;
 }): string {
   return `${nodeInstaller(sourceUrl, scriptDigest)}printf '%s\\n' ${quote(token)} | ${runInstaller} --enrollment-token-stdin --source-url ${quote(sourceUrl)} --core-url ${quote(coreUrl)} --provider ${quote(provider)} --installation-id ${quote(installationId)})`;
 }

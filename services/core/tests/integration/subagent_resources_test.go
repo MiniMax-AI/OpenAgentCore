@@ -146,7 +146,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(value, err)
 	}
 	appendFacts(subagentFact(proto.TypeSubagentLifecycle, resumed), subagentFact(proto.TypeSubagentLifecycle, resumed))
-	reopened := sessionAdapter(New(pool))
+	reopened := sessionAdapter(New(t, pool))
 	value, err = reopened.GetSubagent(ctx, tenant, session.ID, child.ID)
 	if err != nil || value.Status != "active" || value.ClosedAt != nil || value.OpenedAt != 100 {
 		t.Fatal(value, err)

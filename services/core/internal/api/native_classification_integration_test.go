@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -17,8 +18,8 @@ import (
 
 func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
-	h, _, tenant := adminTestHandler(t, databaseSessionReads(pool))
-	reader := sessionpg.New(pgunit.NewPool(pool), nil)
+	h, _, tenant := adminTestHandler(t, databaseSessionReads(t, pool))
+	reader := sessionpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	for _, code := range []string{"authentication_error", "connection_failed", "secret-canary"} {
 		t.Run(code, func(t *testing.T) {
 			created, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "native-classification"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})

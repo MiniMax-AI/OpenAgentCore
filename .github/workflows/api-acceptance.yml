@@ -63,8 +63,9 @@ jobs:
           OAC_TEST_OFFICIAL_SDK_PYTHON: python
         run: |
           python services/core/tests/official_schema_test.py
-          python services/core/tests/official_client.py
+          # The Go Workers need an unclaimed deployment; Core claims it for its installation ID.
           go test ./services/core/tests/integration -run '^(TestFunctionStateOfficialClientReadsAndLiveEvents|TestSavedReferenceRetryOfficialClient|TestAgentUpdateOfficialClient|TestAgentDeletionOfficialClient|TestSessionAgentFilterOfficialClient|TestSessionDeletionOfficialClient|TestEnvironmentInitialFailureOfficialClient|TestSelfHostedInitialCreationOfficialClient|TestSelfHostedCancellationOfficialClient)$' -count=1
+          python services/core/tests/official_client.py
       - uses: ./.github/actions/e2b-provider
         if: inputs.container
       - name: Verify the distribution's Core image

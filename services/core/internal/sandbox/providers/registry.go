@@ -17,16 +17,15 @@ import (
 // Adapter describes configuration and transport independently of compute operations.
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
-	NodeArtifacts                 []providerassets.Artifact
-	Policy                        sandbox.DeploymentPolicy
-	Configuration                 sandbox.ConfigurationAdapter
-	BuildLocal                    func(Config, LocalOptions, *Built) (func(), error)
-	BuildDirect                   func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
-	Mode                          string
-	Operations                    func() providercontract.Operations
-	IdleSeconds, RetentionSeconds int64
-	ValidateSpecification         func(sandbox.DeploymentSpec) error
-	ValidateResources             func(sandbox.Resources) error
+	NodeArtifacts         []providerassets.Artifact
+	Policy                sandbox.DeploymentPolicy
+	Configuration         sandbox.ConfigurationAdapter
+	BuildLocal            func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
+	BuildDirect           func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
+	Mode                  string
+	Operations            func() providercontract.Operations
+	ValidateSpecification func(sandbox.DeploymentSpec) error
+	ValidateResources     func(sandbox.Resources) error
 }
 
 // Registry holds the registered adapters. Core and the node program each build
@@ -41,17 +40,13 @@ func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
 		"docker": {
 			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
+			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: docker.BuildNode,
 			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 		},
 		"microsandbox": {
-			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy,
-				{Path: "native/bin/oac-microsandbox-provider", Suffix: "microsandbox-provider", Role: "runtime"},
-				{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
-				{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
-			Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
-			IdleSeconds: 300, RetentionSeconds: 86400,
+			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
+			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: microsandbox.BuildNode,
 			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 		},
@@ -141,19 +136,21 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	if a.Mode == "direct" {
 		namespace = kind
 	}
-	return sandbox.Description{Mode: a.Mode, BackendFingerprint: BackendFingerprint(kind, namespace+":"+installation), IdleSeconds: a.IdleSeconds, RetentionSeconds: a.RetentionSeconds}, nil
+	return sandbox.Description{Mode: a.Mode, BackendFingerprint: sandbox.BackendFingerprint(kind, namespace+":"+installation)}, nil
 }
 
-// PythonDeploymentContract projects the same registered adapter policies into
-// the node installer; no second provider list exists in another language.
-func (r *Registry) PythonDeploymentContract() (string, error) {
-	policies := make(map[string]sandbox.DeploymentPolicy, len(r.adapters))
+// DeploymentContract projects the registered modes and policies into the node
+// installer and the TypeScript client; no second provider list exists in
+// another language.
+func (r *Registry) DeploymentContract() (python, typescript string, err error) {
+	providers := make(map[string]sandbox.ProviderProjection, len(r.adapters))
 	for kind := range r.adapters {
 		a, err := r.Lookup(kind)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
-		policies[kind] = a.Policy
+		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy}
 	}
-	return sandbox.PythonDeploymentContract(policies), nil
+	python, typescript = sandbox.DeploymentContract(providers)
+	return python, typescript, nil
 }

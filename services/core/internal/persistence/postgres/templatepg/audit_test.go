@@ -114,7 +114,7 @@ func TestInvalidWriteAuditSourcePassesThrough(t *testing.T) {
 	if !errors.Is(err, writeaudit.ErrInvalidSource) {
 		t.Fatal("mismatched source tenant", err)
 	}
-	if page, err := f.keyless.List(t.Context(), tenant, environmenttemplates.ListQuery{Limit: 1}); err != nil || len(page.Templates) != 0 {
+	if page, err := f.replaced.List(t.Context(), tenant, environmenttemplates.ListQuery{Limit: 1}); err != nil || len(page.Templates) != 0 {
 		t.Fatal("rejected source left a Template", err)
 	}
 }
@@ -168,7 +168,7 @@ func TestAdminDeleteAuditCommitsWithTheDeletion(t *testing.T) {
 	if err := f.pool.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM write_audit_operations WHERE tenant_id=$1 AND action='delete'),(SELECT count(*) FROM write_audit_owners WHERE tenant_id=$1 AND resource_type='environment_template' AND resource_id=$2)`, tenant, id).Scan(&operations, &owners); err != nil || operations != 0 || owners != 0 {
 		t.Fatal("administrator impersonated public-key provenance", err)
 	}
-	if _, err := f.keyless.Get(t.Context(), tenant, id); !errors.Is(err, environmenttemplates.ErrNotFound) {
+	if _, err := f.replaced.Get(t.Context(), tenant, id); !errors.Is(err, environmenttemplates.ErrNotFound) {
 		t.Fatal("deleted Template is visible", err)
 	}
 }

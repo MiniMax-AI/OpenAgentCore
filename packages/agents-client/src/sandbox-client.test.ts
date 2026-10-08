@@ -18,7 +18,7 @@ const node = {
 };
 /** Never heard from, enrolled before Core recorded enrollment IDs, with a fixed readiness code. */
 const unready = {
-  ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false, diagnostic: "kvm_unavailable",
+  ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false, diagnostic: "host_unsupported",
   cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, last_seen_at: null, active: 0, retained: 0, enrollment_id: null,
 };
 const detail = {
@@ -156,8 +156,8 @@ describe("Core sandbox credential boundaries", () => {
   it("returns the node's fixed readiness diagnostic unchanged and reads an unknown code as provider_unavailable", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [unready, { ...unready, diagnostic: "future_code" }, node] }));
     const { data } = await new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch }).listNodes();
-    expect(data.map((entry) => entry.diagnostic)).toEqual(["kvm_unavailable", "provider_unavailable", undefined]);
-    expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<undefined | "" | "provider_unavailable" | "docker_unavailable" | "docker_limits_unsupported" | "runtime_download_failed" | "runtime_image_unavailable" | "kvm_unavailable" | "microsandbox_artifacts_unavailable" | "capacity_insufficient">();
+    expect(data.map((entry) => entry.diagnostic)).toEqual(["host_unsupported", "provider_unavailable", undefined]);
+    expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<undefined | "" | "provider_unavailable" | "host_unsupported" | "artifacts_unavailable" | "runtime_download_failed" | "runtime_image_unavailable" | "capacity_insufficient">();
   });
   it("requires each node's enrollment ID: a string, or null for nodes enrolled before Core recorded it", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [node, unready] }));

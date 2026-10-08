@@ -303,8 +303,7 @@ type DeploymentTx interface {
 	// previous owner epoch's node presence.
 	ClaimInstallation(installationID string) error
 	// SaveSelection stores the next generation. It seals a secret bound to the
-	// installation and generation; without a key it returns
-	// credentialcrypto.ErrUnavailable.
+	// installation and generation.
 	SaveSelection(selection SelectionRecord) error
 	RecordConfigurationMetadata(metadata json.RawMessage) error
 	// RetainGeneration keeps the current generation for the allocations that
@@ -344,17 +343,14 @@ type Record struct {
 	Generation         uint64
 	OwnerEpoch         uint64
 	Mode               string
-	IdleSeconds        int64
-	RetentionSeconds   int64
 	// Specification is the stored specification document.
 	Specification json.RawMessage
 	// Configuration holds the public configuration and metadata and, when a
 	// credential is stored and could be opened, its secret.
 	Configuration    sandbox.ConfigurationRecord
 	CredentialStored bool
-	// CredentialError is why the stored credential could not be opened: no key
-	// (credentialcrypto.ErrUnavailable) or a ciphertext the key cannot open or
-	// authenticate (an internal error).
+	// CredentialError is why the stored credential could not be opened: a
+	// ciphertext the key cannot open or authenticate (an internal error).
 	CredentialError error
 	// Reset is nil unless a reset is in progress.
 	Reset *ResetState
@@ -380,7 +376,6 @@ type Snapshot struct {
 type SelectionRecord struct {
 	InstallationID, Provider, BackendFingerprint, Mode string
 	Generation                                         uint64
-	IdleSeconds, RetentionSeconds                      int64
 	Specification                                      json.RawMessage
 	// Configuration carries the secret in plaintext; the adapter seals it.
 	Configuration sandbox.ConfigurationRecord

@@ -27,7 +27,7 @@ def release(manifest):
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"disk\":false,\"runtime\":true},\"e2b\":{\"disk\":false,\"runtime\":false},\"microsandbox\":{\"disk\":true,\"runtime\":true}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
@@ -158,14 +158,5 @@ def verify_provider(stored, configuration, runtime_image):
             or stored.get("generation") != configuration["generation"]
             or stored.get("core_url") != configuration["core_url"] + "/api/v1"):
         raise SpecificationError("Retained node configuration differs from Core; preserve its state")
-    if provider == "docker":
-        if stored.get("docker", {}).get("image") != runtime_image:
-            raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")
-    else:
-        micro = stored.get("microsandbox", {})
-        if any(key in micro for key in ("max_active", "max_retained", "idle_seconds", "retention_seconds")):
-            raise SpecificationError("Node capacity and lifecycle policy belong to Core; regenerate the stale provider file")
-        expected = dict(spec["resources"], image=spec["runtime"]["microsandbox_ref"],
-                        runtime_sha256=spec["runtime"]["runtime_sha256"], firmware_sha256=spec["runtime"]["firmware_sha256"])
-        if any(micro.get(key) != value for key, value in expected.items()):
-            raise SpecificationError("Retained microsandbox configuration differs from Core; preserve its state")
+    if provider == "docker" and stored.get("native", {}).get("image") != runtime_image:
+        raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")

@@ -20,7 +20,7 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
 	worker := startWorker(t, t.Context(), s, &execution.Dispatcher{})
@@ -37,7 +37,7 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	recovered, err := publicHandler(t, NewWithCredentialCipher(s.pool, fixtureCipher), auth, "codex", fixtureDeploymentProvider())
+	recovered, err := publicHandler(t, New(t, s.pool), auth, "codex", fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

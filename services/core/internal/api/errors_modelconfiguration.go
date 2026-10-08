@@ -19,7 +19,7 @@ func writeModelConfigurationError(w http.ResponseWriter, r *http.Request, err er
 		}
 		return
 	}
-	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 		return
 	}
 	writeInternalError(w, r)

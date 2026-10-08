@@ -1,11 +1,8 @@
-package providers
+package microsandbox
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/moby/moby/client"
 )
 
 var smallSandbox = sandbox.Resources{CPUs: 1, MemoryMiB: 512}
@@ -72,7 +68,7 @@ func TestMicrosandboxProbeRequiresPrivateRuntimeDirectory(t *testing.T) {
 				}
 				home = link
 			}
-			probe := microsandboxProbe(Microsandbox{HelperPath: artifact, RuntimePath: artifact, FirmwarePath: artifact, RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), RuntimeHome: home}, smallSandbox)
+			probe := microsandboxProbe(Config{HelperPath: artifact, RuntimePath: artifact, FirmwarePath: artifact, RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), RuntimeHome: home}, smallSandbox)
 			err := probe(t.Context())
 			if tc.rejected {
 				// An unclassified cause keeps the generic readiness code.
@@ -112,7 +108,7 @@ func TestMicrosandboxProbeDiagnostics(t *testing.T) {
 		t.Skip("microsandbox requires Linux")
 	}
 	dir := t.TempDir()
-	missing := Microsandbox{HelperPath: filepath.Join(dir, "helper"), RuntimePath: filepath.Join(dir, "runtime"), FirmwarePath: filepath.Join(dir, "firmware"), RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), RuntimeHome: dir}
+	missing := Config{HelperPath: filepath.Join(dir, "helper"), RuntimePath: filepath.Join(dir, "runtime"), FirmwarePath: filepath.Join(dir, "firmware"), RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), RuntimeHome: dir}
 	for _, tc := range []struct {
 		name      string
 		kvm       bool
@@ -120,67 +116,13 @@ func TestMicrosandboxProbeDiagnostics(t *testing.T) {
 		want      string
 	}{
 		// KVM is reported before capacity and missing artifacts.
-		{name: "kvm", resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}, want: "kvm_unavailable"},
+		{name: "kvm", resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}, want: "host_unsupported"},
 		{name: "capacity", kvm: true, resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}, want: "capacity_insufficient"},
-		{name: "artifacts", kvm: true, resources: smallSandbox, want: "microsandbox_artifacts_unavailable"},
+		{name: "artifacts", kvm: true, resources: smallSandbox, want: "artifacts_unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			useKVM(t, tc.kvm)
 			if got := sandbox.NodeDiagnostic(microsandboxProbe(missing, tc.resources)(t.Context())); got != tc.want {
-				t.Fatalf("diagnostic = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestDockerProbeDiagnostics(t *testing.T) {
-	image := "sha256:" + strings.Repeat("c", 64)
-	for _, tc := range []struct {
-		name                   string
-		limits                 bool
-		cpus                   int
-		imageStatus            int
-		want                   string
-		unreachable, infoFails bool
-	}{
-		{name: "unreachable", unreachable: true, want: "docker_unavailable"},
-		{name: "info", infoFails: true, want: "docker_unavailable"},
-		// The pinned image is also missing below; earlier checks take precedence.
-		{name: "limits", cpus: 8, imageStatus: 404, want: "docker_limits_unsupported"},
-		{name: "capacity", limits: true, cpus: 1, imageStatus: 404, want: "capacity_insufficient"},
-		{name: "image", limits: true, cpus: 8, imageStatus: 404, want: "runtime_image_unavailable"},
-		{name: "image_inspect_fails", limits: true, cpus: 8, imageStatus: 500, want: "docker_unavailable"},
-		{name: "ready", limits: true, cpus: 8, imageStatus: 200},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				switch path := strings.TrimPrefix(r.URL.Path, "/v1.52"); {
-				case path == "/_ping":
-					_, _ = w.Write([]byte("OK"))
-				case path == "/info" && !tc.infoFails:
-					_ = json.NewEncoder(w).Encode(map[string]any{"MemoryLimit": tc.limits, "CpuCfsQuota": tc.limits, "NCPU": tc.cpus, "MemTotal": int64(64) << 30})
-				case path == "/images/"+image+"/json" && tc.imageStatus == 200:
-					_ = json.NewEncoder(w).Encode(map[string]string{"Id": image})
-				case path == "/images/"+image+"/json":
-					w.WriteHeader(tc.imageStatus)
-					_, _ = w.Write([]byte(`{"message":"private daemon detail"}`))
-				default:
-					w.WriteHeader(500)
-					_, _ = w.Write([]byte(`{"message":"private daemon detail"}`))
-				}
-			}))
-			defer server.Close()
-			host := server.URL
-			if tc.unreachable {
-				host = "unix://" + filepath.Join(t.TempDir(), "missing.sock")
-			}
-			c, err := client.New(client.WithHost(host), client.WithAPIVersion("1.52"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer c.Close()
-			if got := sandbox.NodeDiagnostic(dockerProbe(c, image, sandbox.Resources{CPUs: 2, MemoryMiB: 1024})(t.Context())); got != tc.want {
 				t.Fatalf("diagnostic = %q, want %q", got, tc.want)
 			}
 		})
@@ -200,8 +142,8 @@ func TestMicrosandboxProbeRecoversRepairedArtifacts(t *testing.T) {
 	if err := os.Mkdir(home, 0700); err != nil {
 		t.Fatal(err)
 	}
-	probe := microsandboxProbe(Microsandbox{HelperPath: artifact, RuntimePath: artifact, FirmwarePath: artifact, RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), RuntimeHome: home}, smallSandbox)
-	if got := sandbox.NodeDiagnostic(probe(t.Context())); got != "microsandbox_artifacts_unavailable" {
+	probe := microsandboxProbe(Config{HelperPath: artifact, RuntimePath: artifact, FirmwarePath: artifact, RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), RuntimeHome: home}, smallSandbox)
+	if got := sandbox.NodeDiagnostic(probe(t.Context())); got != "artifacts_unavailable" {
 		t.Fatalf("missing artifact diagnostic = %q", got)
 	}
 	if err := os.WriteFile(artifact, content, 0700); err != nil {

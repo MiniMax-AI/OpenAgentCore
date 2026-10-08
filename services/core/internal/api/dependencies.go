@@ -60,14 +60,8 @@ type Dependencies struct {
 
 	EnvironmentTemplatesReader EnvironmentTemplatesReader
 
-	// Execution is nil when this Core runs without a Runtime gateway, and so
-	// without an execution Worker. Work that needs one then answers 503
-	// execution_unavailable.
-	Execution *Execution
-	// Sandboxes is nil when this Core has no managed sandbox installation. The
-	// sandbox node and manager routes are then absent, and openai_hosted
-	// Sessions answer 503 execution_unavailable. It requires Execution.
-	Sandboxes *Sandboxes
+	Execution Execution
+	Sandboxes Sandboxes
 }
 
 // Execution is the execution Worker's surface. Every field is required unless
@@ -145,36 +139,25 @@ func (d Dependencies) validate() error {
 	); err != nil {
 		return err
 	}
-	if e := d.Execution; e != nil {
-		if e.ExecutorURL == "" {
-			return errors.New("api: Execution.ExecutorURL is required")
-		}
-		if e.NativeInstaller != nil && (e.NativeInstaller.Version == "" || e.NativeInstaller.Base == "") {
-			return errors.New("api: Execution.NativeInstaller.Version and Base are required")
-		}
-		if err := required(
-			field{"Execution.SessionAdmission", e.SessionAdmission},
-			field{"Execution.InputAdmission", e.InputAdmission},
-			field{"Execution.SessionArchive", e.SessionArchive},
-			field{"Execution.Workspaces", e.Workspaces},
-			field{"Execution.Links", e.Links},
-		); err != nil {
-			return err
-		}
+	e, s := d.Execution, d.Sandboxes
+	if e.ExecutorURL == "" {
+		return errors.New("api: Execution.ExecutorURL is required")
 	}
-	if s := d.Sandboxes; s != nil {
-		if d.Execution == nil {
-			return errors.New("api: Sandboxes requires Execution")
-		}
-		return required(
-			field{"Sandboxes.Deployment", s.Deployment},
-			field{"Sandboxes.NodeAllocations", s.NodeAllocations},
-			field{"Sandboxes.DeploymentChanges", s.DeploymentChanges},
-			field{"Sandboxes.DeploymentReset", s.DeploymentReset},
-			field{"Sandboxes.ConfigurationDiscovery", s.ConfigurationDiscovery},
-		)
+	if e.NativeInstaller != nil && (e.NativeInstaller.Version == "" || e.NativeInstaller.Base == "") {
+		return errors.New("api: Execution.NativeInstaller.Version and Base are required")
 	}
-	return nil
+	return required(
+		field{"Execution.SessionAdmission", e.SessionAdmission},
+		field{"Execution.InputAdmission", e.InputAdmission},
+		field{"Execution.SessionArchive", e.SessionArchive},
+		field{"Execution.Workspaces", e.Workspaces},
+		field{"Execution.Links", e.Links},
+		field{"Sandboxes.Deployment", s.Deployment},
+		field{"Sandboxes.NodeAllocations", s.NodeAllocations},
+		field{"Sandboxes.DeploymentChanges", s.DeploymentChanges},
+		field{"Sandboxes.DeploymentReset", s.DeploymentReset},
+		field{"Sandboxes.ConfigurationDiscovery", s.ConfigurationDiscovery},
+	)
 }
 
 type field struct {
@@ -189,13 +172,4 @@ func required(fields ...field) error {
 		}
 	}
 	return nil
-}
-
-// executorURL is the daemon URL self-hosted Sessions report, or empty when
-// this Core cannot execute.
-func (h *Handler) executorURL() string {
-	if h.Execution == nil {
-		return ""
-	}
-	return h.Execution.ExecutorURL
 }

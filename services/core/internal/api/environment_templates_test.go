@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
@@ -26,7 +25,6 @@ func TestEnvironmentTemplatesErrors(t *testing.T) {
 		{environmenttemplates.ErrNotFound, 404, "not_found_error"},
 		{fmt.Errorf("create: %w", environmenttemplates.ErrInvalidInput), 400, invalidInputMessage},
 		{textvalue.ErrUnstorable, 400, unstorableTextMessage},
-		{credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
 		{errors.New("template-canary"), 500, "internal_error"},
 	} {
 		response := httptest.NewRecorder()

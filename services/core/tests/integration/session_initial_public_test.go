@@ -29,7 +29,7 @@ func TestInitialSessionInputOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, auth, "codex", workerExecution(t, worker))
+	handler, err := publicHandler(t, s, auth, "codex", workerExecution(t, worker), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

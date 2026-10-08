@@ -18,7 +18,7 @@ type View struct {
 	Configuration        json.RawMessage         `json:"configuration,omitempty" swaggertype:"object"`
 	Metadata             json.RawMessage         `json:"metadata,omitempty" swaggertype:"object"`
 	CredentialConfigured bool                    `json:"credential_configured"`
-	// Idle suspension policy; microsandbox only, otherwise null.
+	// Idle suspension policy; null unless the selected Provider declares checkpoint support.
 	Suspension     *Suspension `json:"suspension" extensions:"x-nullable"`
 	InstallationID string      `json:"installation_id"`
 	Provider       string      `json:"provider"`
@@ -34,8 +34,8 @@ type Resources struct {
 	Pending     int64 `json:"pending"`
 }
 
-// Suspension is the idle suspension policy. Only microsandbox suspends
-// sandboxes; Docker and E2B deployments return null.
+// Suspension is Core's idle suspension policy, which applies to every Provider
+// that declares checkpoint support.
 type Suspension struct {
 	IdleSeconds      int64 `json:"idle_seconds"`
 	RetentionSeconds int64 `json:"retention_seconds"`
@@ -46,7 +46,7 @@ type NodeRollout struct {
 	State string `json:"state" enums:"ready,preparing,failed,update_required,unknown"`
 	// Durable serving-generation pin; online and provider_ready still gate placement.
 	ReadyGeneration *uint64 `json:"ready_generation" extensions:"x-nullable"`
-	Diagnostic      string  `json:"diagnostic,omitempty" enums:"provider_unavailable,docker_unavailable,docker_limits_unsupported,runtime_download_failed,runtime_image_unavailable,kvm_unavailable,microsandbox_artifacts_unavailable,capacity_insufficient"`
+	Diagnostic      string  `json:"diagnostic,omitempty" enums:"provider_unavailable,host_unsupported,artifacts_unavailable,runtime_download_failed,runtime_image_unavailable,capacity_insufficient"`
 }
 
 type RolloutNodes struct {

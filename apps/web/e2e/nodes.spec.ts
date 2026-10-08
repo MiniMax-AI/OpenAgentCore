@@ -15,14 +15,12 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
-  // What a Docker host needs for the default command, which installs the node with sudo.
-  await expect(add.getByText("Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
+  // What a host needs for the default command, which installs the node with sudo.
+  await expect(add.getByText("What the sandbox backend needs on the host; the installer checks it and names anything missing")).toBeVisible();
   await expect(add.getByText("SELinux is not enforcing")).toBeVisible();
   await expect(add.getByText("In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
-  await expect(add.getByText("oac-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
-  await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // Node installation only offers a system service; there is no user-mode alternative.
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   await expect(add.getByLabel("One-time enrollment command without sudo", { exact: true })).toHaveCount(0);
@@ -93,9 +91,9 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(problem).toContainText("Not connected yet");
   await expect(problem).toContainText("sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
-  // Connected, it reports why Docker isn't ready; once ready, the node is connected.
-  await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
-  await expect(problem).toContainText("Docker limits unsupported");
+  // Connected, it reports why its provider isn't ready; once ready, the node is connected.
+  await setNode(request, { id: "node-new", online: true, diagnostic: "host_unsupported" });
+  await expect(problem).toContainText("Host unsupported");
   await expect(progress).toContainText("Waiting for Docker");
   await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
   await expect(progress).toHaveText("edge-04 · Connected");

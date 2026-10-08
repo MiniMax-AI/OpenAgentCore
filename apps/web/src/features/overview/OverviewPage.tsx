@@ -206,7 +206,7 @@ export function OverviewPage() {
               help={t("kpi.slotsHelp")}
               value={capacity ? <><LiveNumber value={capacity.active} /><span className="kpi-unit">/ {formatInteger(capacity.maxActive, locale)}</span></> : MISSING}
               sub={capacity
-                ? fleet?.deployment.provider === "microsandbox"
+                ? fleet?.deployment.suspension
                   ? t("tiles.nodesOnlineSuspended", { online: capacity.online, total: capacity.nodes, suspended: capacity.suspended })
                   : t("tiles.nodesOnline", { online: capacity.online, total: capacity.nodes })
                 : fleetDetail(fleetState, t)}
@@ -313,7 +313,7 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
 }
 
 function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
-  if (fleet?.deployment.provider !== "e2b") return null;
+  if (fleet?.deployment.mode !== "direct") return null;
   return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.configuration?.template || null };
 }
 
@@ -345,6 +345,7 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
         <FleetOverview
           nodes={hosts}
           cloud={cloud}
+          suspends={Boolean(fleet?.deployment.suspension)}
           onOpenBackend={() => navigate("system", { id: "sandbox" })}
           coreLabel={t(`coreStatus.${core}`)}
           coreTone={coreTone[core]}

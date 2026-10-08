@@ -427,17 +427,15 @@ definitions:
       address_bindings:
         $ref: '#/definitions/deployment.AddressBindings'
       api_base_url:
-        description: public_url followed by /v1; null when public_url is null.
+        description: public_url followed by /v1.
         type: string
-        x-nullable: true
       configuration:
         allOf:
           - $ref: '#/definitions/api.InstallationConfiguration'
         description: The process settings Core loaded.
       installation_id:
-        description: The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
+        description: The ID in OAC_INSTALLATION_ID_FILE.
         type: string
-        x-nullable: true
       local_only:
         description: True when public_url names a loopback host, reachable only from the Core host.
         type: boolean
@@ -446,9 +444,8 @@ definitions:
           - core.installation
         type: string
       public_url:
-        description: 'OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.'
+        description: 'OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use.'
         type: string
-        x-nullable: true
       source_commit:
         description: Full source commit Core was built from; null for development builds.
         type: string
@@ -946,12 +943,10 @@ definitions:
         description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
         enum:
           - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
+          - host_unsupported
+          - artifacts_unavailable
           - runtime_download_failed
           - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
           - capacity_insufficient
         type: string
       enrollment_id:
@@ -1037,12 +1032,10 @@ definitions:
         description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
         enum:
           - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
+          - host_unsupported
+          - artifacts_unavailable
           - runtime_download_failed
           - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
           - capacity_insufficient
         type: string
       enrollment_id:
@@ -1106,12 +1099,10 @@ definitions:
       diagnostic:
         enum:
           - provider_unavailable
-          - docker_unavailable
-          - docker_limits_unsupported
+          - host_unsupported
+          - artifacts_unavailable
           - runtime_download_failed
           - runtime_image_unavailable
-          - kvm_unavailable
-          - microsandbox_artifacts_unavailable
           - capacity_insufficient
         type: string
       ready_generation:
@@ -1272,7 +1263,7 @@ definitions:
       suspension:
         allOf:
           - $ref: '#/definitions/deployment.Suspension'
-        description: Idle suspension policy; microsandbox only, otherwise null.
+        description: Idle suspension policy; null unless the selected Provider declares checkpoint support.
         x-nullable: true
     type: object
   projects.APIKey:

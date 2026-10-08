@@ -14,17 +14,16 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 	installation := uuid.NewString()
 	for _, tc := range []struct {
 		kind, mode, namespace string
-		idle, retention       int64
 		checkpoint            bool
 	}{
-		{"docker", "nodes", "nodes", 0, 0, false},
-		{"microsandbox", "nodes", "nodes", 300, 86400, true},
-		{"e2b", "direct", "e2b", 0, 0, false},
+		{"docker", "nodes", "nodes", false},
+		{"microsandbox", "nodes", "nodes", true},
+		{"e2b", "direct", "e2b", false},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			d, err := registry.Describe(tc.kind, installation)
-			if err != nil || d.Mode != tc.mode || d.IdleSeconds != tc.idle || d.RetentionSeconds != tc.retention || d.BackendFingerprint != BackendFingerprint(tc.kind, tc.namespace+":"+installation) {
-				t.Fatalf("wrong namespace or defaults: %+v %v", d, err)
+			if err != nil || d.Mode != tc.mode || d.BackendFingerprint != sandbox.BackendFingerprint(tc.kind, tc.namespace+":"+installation) {
+				t.Fatalf("wrong mode or namespace: %+v %v", d, err)
 			}
 			a, err := registry.Lookup(tc.kind)
 			checkpoint, checkpointErr := registry.SupportsCheckpoint(tc.kind)
@@ -75,7 +74,7 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 		t.Fatal("new entry did not follow shared boundary", err, checkpointErr)
 	}
 	d, err := registry.Describe(kind, uuid.NewString())
-	if err != nil || d.Mode != "nodes" || d.IdleSeconds != 0 {
+	if err != nil || d.Mode != "nodes" {
 		t.Fatal(d, err)
 	}
 	if _, err := registry.Normalize(sandbox.Selection{Provider: kind, Configuration: &e2b.DeploymentConfiguration{APIKey: "wrong-provider"}}); !errors.Is(err, sandbox.ErrInvalid) {

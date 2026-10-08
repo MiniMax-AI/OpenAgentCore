@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 56fd21c7a7be2ddbc7a3c4163473d03fd6d72de05ba79f57d0389ae768f5d534
+source_hash: 9e089104160f06a17495c560f8a40c794046abd925de4f0aa487b58d91e481eb
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -92,12 +92,11 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 409 | `sandbox_deployment_conflict` | 沙箱部署在当前状态下无法更改 |
 | 409 | `sandbox_specification_mismatch` | 已保存的部署规格对其提供商不再有效 |
 | 409 | `runtime_node_in_use` | 节点仍有资源分配、快照、预留资源或待清理项 |
-| 409 | `environment_unavailable` | Session 的环境已不可用，例如在不提供执行的 Core 上归档 |
+| 409 | `environment_unavailable` | Session 的环境已不可用，例如托管环境创建失败 |
 | 409 | `runtime_history_unsupported` | 该 Session 不支持 Runtime 历史 |
 | 500 | `internal_error` | Core 未能完成操作 |
 | 503 | `runtime_node_unavailable` | 没有可用或有剩余容量的沙箱节点 |
-| 503 | `credential_storage_unavailable` | Core 没有凭证加密密钥 |
-| 503 | `execution_unavailable` | 此 Core 不提供执行功能 |
+| 503 | `execution_unavailable` | 执行不可用，例如 Core 正在关闭 |
 | 503 | `runtime_history_unavailable` | 持久 Runtime 历史未配置或暂时不可用 |
 | 503 | `core_metrics_unavailable` | 无法读取 Core 指标 |
 | 503 | `file_transfer_unavailable` | 有界内容传输不可用 |

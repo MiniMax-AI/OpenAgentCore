@@ -83,7 +83,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restored.Close()
-	fresh := New(restored)
+	fresh := New(t, restored)
 	got, err := sessionAdapter(fresh).GetSession(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)

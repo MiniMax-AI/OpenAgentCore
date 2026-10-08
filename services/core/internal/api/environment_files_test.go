@@ -62,9 +62,8 @@ func newEnvironmentFilesFixture() *environmentFilesFixture {
 	}
 }
 
-// environmentFilesHandler serves f's Environment. Without enabled, Core has no
-// execution Worker.
-func environmentFilesHandler(t *testing.T, enabled bool, configure ...func(*Dependencies, *testFakes)) (http.Handler, *environmentFilesFixture) {
+// environmentFilesHandler serves f's Environment.
+func environmentFilesHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (http.Handler, *environmentFilesFixture) {
 	t.Helper()
 	f := newEnvironmentFilesFixture()
 	keys := []APIKey{}
@@ -80,10 +79,7 @@ func environmentFilesHandler(t *testing.T, enabled bool, configure ...func(*Depe
 	deps.Engine = "fake_alpha"
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, keys...).ResolveAPIKey
 	fakes.environmentsReader.getEnvironment = f.GetEnvironment
-	if enabled {
-		deps.Execution = fakes.execution()
-		fakes.workspaces.readEnvironmentDirectory = f.ReadEnvironmentDirectory
-	}
+	fakes.workspaces.readEnvironmentDirectory = f.ReadEnvironmentDirectory
 	for _, c := range configure {
 		c(&deps, fakes)
 	}
@@ -131,7 +127,7 @@ func decodeEnvironmentFiles(t *testing.T, w *httptest.ResponseRecorder) v1.Envir
 func TestEnvironmentFilesOrderingPaginationAndProjection(t *testing.T) {
 	for _, order := range []string{"", "asc", "desc"} {
 		t.Run("order="+order, func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			h, f := environmentFilesHandler(t)
 			f.result.Entries = []proto.WorkspaceDirectoryEntry{
 				environmentFileEntry("a.txt", 14), environmentFileEntry("z.txt", 5), environmentFileEntry("A.txt", 0), environmentFileEntry("a-b.txt", 6),
 				{Name: "directory", Kind: "directory"}, {Name: "symlink", Kind: "symlink"}, {Name: "socket", Kind: "other"},
@@ -173,7 +169,7 @@ func TestEnvironmentFilesOrderingPaginationAndProjection(t *testing.T) {
 }
 
 func TestEnvironmentFilesEmptyRootDefaultsAndSharedAccess(t *testing.T) {
-	h, f := environmentFilesHandler(t, true)
+	h, f := environmentFilesHandler(t)
 	page := decodeEnvironmentFiles(t, requestEnvironmentFiles(h, f.environment.ID, "", "shared-key"))
 	if len(page.Data) != 0 || page.Next != nil || f.directory != "" {
 		t.Fatal("invalid empty root", page, f.directory)
@@ -193,16 +189,14 @@ func TestEnvironmentFilesEmptyRootDefaultsAndSharedAccess(t *testing.T) {
 }
 
 func TestEnvironmentFilesAuthorizationPrecedesInspection(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		for _, query := range []string{"", "?path=/foreign-secret/../&page=invalid&limit=999", "?bad=%GG"} {
-			h, f := environmentFilesHandler(t, enabled)
-			w := requestEnvironmentFiles(h, f.environment.ID, query, "other-key")
-			if w.Code != 404 || f.lookups != 1 || f.reads != 0 || strings.Contains(w.Body.String(), "foreign-secret") || strings.Contains(w.Body.String(), f.environment.ID) {
-				t.Fatal("foreign resource inspected", w.Code, w.Body, f)
-			}
+	for _, query := range []string{"", "?path=/foreign-secret/../&page=invalid&limit=999", "?bad=%GG"} {
+		h, f := environmentFilesHandler(t)
+		w := requestEnvironmentFiles(h, f.environment.ID, query, "other-key")
+		if w.Code != 404 || f.lookups != 1 || f.reads != 0 || strings.Contains(w.Body.String(), "foreign-secret") || strings.Contains(w.Body.String(), f.environment.ID) {
+			t.Fatal("foreign resource inspected", w.Code, w.Body, f)
 		}
 	}
-	h, f := environmentFilesHandler(t, true)
+	h, f := environmentFilesHandler(t)
 	w := requestEnvironmentFiles(h, f.environment.ID, "", "invalid")
 	if w.Code != 401 || f.lookups != 0 || f.reads != 0 {
 		t.Fatal("unauthenticated read", w.Code, f)
@@ -214,7 +208,7 @@ func TestEnvironmentFilesRejectsInvalidRequestsBeforeRead(t *testing.T) {
 		"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "order=ASC", "order=", "path=", "path=relative", "path=/workspace-sibling", "path=/workspace/../workspace", "path=/workspace/a/../../workspace", "path=/workspace/%00", "path=/workspace/%5C", "path=/workspace/%0A", "path=/workspace/%FF", "path=x&path=y", "path=" + strings.Repeat("a", 4097), "page=", "page=not-json", "page=" + strings.Repeat("a", 1025), "bad=%GG", "foo=1;bar=2",
 	} {
 		t.Run(query[:min(len(query), 70)], func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			h, f := environmentFilesHandler(t)
 			w := requestEnvironmentFiles(h, f.environment.ID, "?"+query, "files-key")
 			if w.Code != 400 || f.lookups != 1 || f.reads != 0 {
 				t.Fatal("invalid query reached runtime", w.Code, w.Body, f)
@@ -235,7 +229,7 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 			{sessions.ErrNotFound, 404}, {sessions.ErrInvalidInput, 400}, {execution.ErrExecutionUnavailable, 503}, {errors.New("private-native-secret"), 500},
 		} {
 			unavailable := 0
-			h, f := environmentFilesHandler(t, true, countEnvironmentFilesUnavailable(&unavailable))
+			h, f := environmentFilesHandler(t, countEnvironmentFilesUnavailable(&unavailable))
 			if target == "store" {
 				f.storeError = test.err
 			} else {
@@ -249,10 +243,5 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 				t.Fatal("unavailability not counted", target, unavailable)
 			}
 		}
-	}
-	unavailable := 0
-	h, f := environmentFilesHandler(t, false, countEnvironmentFilesUnavailable(&unavailable))
-	if w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key"); w.Code != 503 || f.reads != 0 || unavailable != 1 {
-		t.Fatal("missing reader accepted", w.Code, f)
 	}
 }

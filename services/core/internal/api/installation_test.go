@@ -24,7 +24,7 @@ func TestInstallationReadNeedsOnlyTheCoreKey(t *testing.T) {
 		return deployment.AddressBindings{Nodes: 2, NodesOnOtherAddress: 1}, nil
 	}
 	// No sandbox deployment: the read is available before any deployment exists.
-	deps.Installation = Installation{InstallationID: &id, PublicURL: &public, Configuration: settings}
+	deps.Installation = Installation{InstallationID: id, PublicURL: public, APIBaseURL: public + "/v1", Configuration: settings}
 	h := newTestHandler(t, deps)
 	get := func(token string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodGet, "/core/v1/installation", nil)

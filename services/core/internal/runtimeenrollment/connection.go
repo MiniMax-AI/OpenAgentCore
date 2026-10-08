@@ -102,9 +102,6 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimeg
 	if credential.CredentialHash != digest {
 		return false, sessions.ErrDeviceBindingConflict
 	}
-	if registry == nil {
-		return false, nil
-	}
 	peer, err := registry.LookupDevice(bound.ID)
 	if errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 		return false, nil

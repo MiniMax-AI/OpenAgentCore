@@ -70,13 +70,13 @@ func subagentFixture(kind string, value any) sessions.ExecutionEvent {
 // routes with the Session's Agent ID, Subagent lists use the common envelope and
 // child Item lists clamp their limit. Tenant B sees none of it.
 func TestSubagentVisibilityPublic(t *testing.T) {
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), fixtureDeploymentProvider())
+	handler, err := publicHandler(t, s, auth, "codex", fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

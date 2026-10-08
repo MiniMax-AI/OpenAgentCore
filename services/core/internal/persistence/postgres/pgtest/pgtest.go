@@ -3,6 +3,7 @@
 package pgtest
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -15,8 +16,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
 )
+
+// CredentialKey returns a cipher under a fixed test credential key, for tests
+// that need a key but not a particular one.
+func CredentialKey(t testing.TB) *credentialcrypto.Cipher {
+	t.Helper()
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{0x7e}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cipher
+}
 
 // Open returns a pool on the dedicated test database named by
 // OAC_TEST_DATABASE_URL, with Core's migrations applied, and skips the test when

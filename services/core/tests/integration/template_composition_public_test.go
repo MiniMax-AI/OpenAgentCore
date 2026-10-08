@@ -39,7 +39,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	serve := func(current *Store) *httptest.Server {
 		t.Helper()
 		// Hosted admission and freezing use the real Store; no Runtime or model runs.
-		h, err := publicHandler(t, current, auth, "codex", storeExecution(t, current), managedSandboxes(t, current), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, auth, "codex", fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}

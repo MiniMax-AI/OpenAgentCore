@@ -1,4 +1,4 @@
-package providers
+package microsandbox
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 func TestMicrosandboxGenerationImageProbe(t *testing.T) {
 	dir := t.TempDir()
 	imageDigest := "sha256:" + strings.Repeat("d", 64)
-	entry := Microsandbox{RuntimePath: filepath.Join(dir, "msb"), RuntimeHome: dir, FirmwarePath: filepath.Join(dir, "firmware"), Image: "oac-runtime@" + imageDigest}
+	entry := Config{RuntimePath: filepath.Join(dir, "msb"), RuntimeHome: dir, FirmwarePath: filepath.Join(dir, "firmware"), Image: "oac-runtime@" + imageDigest}
 	// Check the native argument/environment boundary, including ambient isolation.
 	script := `#!/bin/sh
 [ "$#" = 5 ] && [ "$1" = image ] && [ "$2" = inspect ] && [ "$3" = 'oac-runtime@` + imageDigest + `' ] && [ "$4" = --format ] && [ "$5" = json ] || exit 1
@@ -73,8 +73,8 @@ cat "$MSB_HOME/output"
 }
 
 func TestMicrosandboxGenerationProbeRetainsEarlierFailures(t *testing.T) {
-	for _, failure := range []error{context.Canceled, sandbox.ErrKVMUnavailable, sandbox.ErrCapacityInsufficient, sandbox.ErrMicrosandboxArtifactsUnavailable, errors.New("microsandbox state directory is unavailable")} {
-		probe := microsandboxGenerationProbe(Microsandbox{RuntimePath: "/missing"}, func(context.Context) error { return failure })
+	for _, failure := range []error{context.Canceled, sandbox.ErrHostUnsupported, sandbox.ErrCapacityInsufficient, sandbox.ErrArtifactsUnavailable, errors.New("microsandbox state directory is unavailable")} {
+		probe := microsandboxGenerationProbe(Config{RuntimePath: "/missing"}, func(context.Context) error { return failure })
 		if got := probe(t.Context()); got != failure {
 			t.Fatalf("earlier failure changed: got %v, want %v", got, failure)
 		}
