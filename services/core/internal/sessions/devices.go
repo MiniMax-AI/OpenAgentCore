@@ -29,34 +29,11 @@ func NewDeviceRegistration(name, credentialHash string) (DeviceRegistration, err
 	return DeviceRegistration{Name: name, CredentialHash: hex.EncodeToString(digest)}, nil
 }
 
-// RuntimeEnrollment is the resource binding an enrolled user-managed Runtime
-// receives. It never carries another secret.
-type RuntimeEnrollment struct {
-	DeviceID           string
-	SessionID          string
-	EnvironmentID      string
-	WorkspaceDirectory string
-}
-
-// EnrolledRuntimeBinding identifies user-managed compute, without an
-// allocation or any promise of live authorization. The Worker rechecks the
-// socket's key.
-type EnrolledRuntimeBinding struct {
-	DeviceID, TenantID, EnvironmentID, SessionID string
-}
-
 // SandboxResource is a live Link resource. Quiesced compute is between a
 // quiesce and the wake that resumes it.
 type SandboxResource struct {
 	Resource sandboxbootstrap.Resource
 	Quiesced bool
-}
-
-// EnrollmentAuthority is what an executor credential authorizes when it
-// enrolls a Runtime: the key and the Environment's workspace directory.
-type EnrollmentAuthority struct {
-	KeyID              string
-	WorkspaceDirectory string
 }
 
 // DeviceReader reads Runtime devices and their Session bindings.
@@ -77,19 +54,19 @@ type DeviceReader interface {
 	// Session leaves the device's exact authenticated delivery of one of
 	// runIDs; without one it is the zero receipt.
 	ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error)
-	// ListEnrolledRuntimeBindings lists the enrolled user-managed Runtimes of
-	// live Environments.
-	ListEnrolledRuntimeBindings(ctx context.Context) ([]EnrolledRuntimeBinding, error)
 	// ListLiveSandboxResources lists the live Link resources.
 	ListLiveSandboxResources(ctx context.Context) ([]SandboxResource, error)
+	// GetEnvironmentResource reads the live Link resource of the tenant's
+	// Environment; without one it is ErrNotFound.
+	GetEnvironmentResource(ctx context.Context, tenant, environment string) (runtimedevice.ServeAuthority, error)
 	// GetSessionExecutionBinding reads the Runtime device that executes the
 	// Session's Turns, with the native session that continues its history,
 	// once its Environment preparation completed; before that, and without an
 	// authorized bound device, it is ErrNotFound.
 	GetSessionExecutionBinding(ctx context.Context, tenant, session string) (ExecutionBinding, error)
-	// ListExecutionDevices lists the tenant's unrevoked devices that belong
-	// to no Environment, in ID order.
-	ListExecutionDevices(ctx context.Context, tenant string) ([]ExecutionDevice, error)
+	// ListAgentHosts lists the unrevoked agent hosts that may run the
+	// tenant's Sessions, in ID order.
+	ListAgentHosts(ctx context.Context, tenant string) ([]ExecutionDevice, error)
 }
 
 // DeviceStorage stores Runtime devices.
@@ -115,18 +92,15 @@ type DeviceStorage interface {
 // EnrollmentTx is the Session transaction EnrollRuntime runs in.
 type EnrollmentTx interface {
 	// AuthorizeEnrollment rechecks, under the Session lock, that the
-	// credential still authorizes enrolling a Runtime for the live self_hosted
-	// Environment, and holds the key's lock until the transaction ends, so
-	// revocation cannot race enrollment. Without that authority it is
-	// ErrNotFound.
-	AuthorizeEnrollment(ctx context.Context) (EnrollmentAuthority, error)
-	// EnrollDevice creates the Environment's user-managed Runtime device for
-	// the key, or returns the device the same key already enrolled. A device
-	// of another key, or a revoked one, is ErrDeviceBindingConflict.
-	EnrollDevice(ctx context.Context, key string) (string, error)
-	// BindDevice binds the device to the Session. A Session bound to another
-	// device is ErrDeviceBindingConflict.
-	BindDevice(ctx context.Context, device string) error
+	// credential still authorizes enrolling a sandbox for the live
+	// self_hosted Environment, returns its key and holds the key's lock until
+	// the transaction ends, so revocation cannot race enrollment. Without
+	// that authority it is ErrNotFound.
+	AuthorizeEnrollment(ctx context.Context) (string, error)
+	// EnrollSandbox records the Environment's enrollment by the key and
+	// returns its Link resource, or the resource the same key already
+	// enrolled. An enrollment by another key is ErrDeviceBindingConflict.
+	EnrollSandbox(ctx context.Context, key string) (sandboxbootstrap.Resource, error)
 }
 
 // CreateDevice provisions a device for an operator. It is not a tenant-facing
@@ -171,29 +145,24 @@ func heartbeatStatus(current bool) runtimedevice.HeartbeatStatus {
 	return runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: !current}
 }
 
-// EnrollRuntime binds a user-managed Runtime to one self_hosted Environment
-// with the executor credential whose digest is credentialHash. A retry keeps
-// the same device and key; it cannot replace compute or adopt another native
-// history.
-func (s *Service) EnrollRuntime(ctx context.Context, environment, credentialHash string) (RuntimeEnrollment, error) {
-	var result RuntimeEnrollment
-	err := s.storage.WithEnrollment(ctx, environment, credentialHash, func(ctx context.Context, tx EnrollmentTx, current Environment, locked LockedSession) error {
+// EnrollRuntime enrolls a user-managed sandbox for one self_hosted
+// Environment with the executor credential whose digest is credentialHash,
+// and returns the Link resource the sandbox serves with that credential. The
+// first key to enroll keeps the Environment: a retry with it returns the
+// same resource, and another key is ErrDeviceBindingConflict. Placement binds
+// the Session to an agent host once the sandbox serves.
+func (s *Service) EnrollRuntime(ctx context.Context, environment, credentialHash string) (sandboxbootstrap.Resource, error) {
+	var result sandboxbootstrap.Resource
+	err := s.storage.WithEnrollment(ctx, environment, credentialHash, func(ctx context.Context, tx EnrollmentTx, _ Environment, locked LockedSession) error {
 		if err := locked.Public(); err != nil {
 			return err
 		}
-		authority, err := tx.AuthorizeEnrollment(ctx)
+		key, err := tx.AuthorizeEnrollment(ctx)
 		if err != nil {
 			return err
 		}
-		device, err := tx.EnrollDevice(ctx, authority.KeyID)
-		if err != nil {
-			return err
-		}
-		if err := tx.BindDevice(ctx, device); err != nil {
-			return err
-		}
-		result = RuntimeEnrollment{DeviceID: device, SessionID: current.SessionID, EnvironmentID: current.ID, WorkspaceDirectory: authority.WorkspaceDirectory}
-		return nil
+		result, err = tx.EnrollSandbox(ctx, key)
+		return err
 	})
 	return result, err
 }

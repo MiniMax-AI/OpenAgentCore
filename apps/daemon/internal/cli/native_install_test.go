@@ -41,6 +41,11 @@ func nativeInstallFixture(t *testing.T) (*runContext, []string, string, string) 
 			t.Fatal(err)
 		}
 	}
+	for _, name := range nativeBundlePrograms {
+		if err := os.WriteFile(filepath.Join(bundle, name), []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	raw, _ := json.Marshal(b)
 	if err := os.WriteFile(filepath.Join(bundle, "bundle.json"), raw, 0600); err != nil {
 		t.Fatal(err)

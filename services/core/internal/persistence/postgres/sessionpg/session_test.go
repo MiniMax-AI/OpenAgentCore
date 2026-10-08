@@ -251,20 +251,20 @@ func TestTerminateEnvironmentThroughTheBindingExpires(t *testing.T) {
 	}
 }
 
-func TestCreateEnvironmentDeviceBindsOneDevice(t *testing.T) {
+func TestCreateEnvironmentDeviceCreatesOneDevice(t *testing.T) {
 	pool := pgtest.Open(t)
 	hash := strings.Repeat("a", 64)
 	create := func(tenant, session, environment pgtype.UUID, device uuid.UUID, commit bool) error {
-		dedicated := sessions.ExecutionDevice{ID: device.String(), Name: "runtime", EnvironmentID: uuid.UUID(environment.Bytes).String()}
+		dedicated := sessions.ExecutionDevice{ID: device.String(), Name: "runtime"}
 		return pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
-			if err := sessions.CreateEnvironmentDevice(t.Context(), BindSession(sqlc.New(tx), tenant, session), dedicated, hash); err != nil || commit {
+			if err := sessions.CreateEnvironmentDevice(t.Context(), BindSession(sqlc.New(tx), tenant, session), uuid.UUID(environment.Bytes).String(), dedicated, hash); err != nil || commit {
 				return err
 			}
 			return errRollback
 		})
 	}
-	bound := func(session pgtype.UUID) []uuid.UUID {
-		rows, err := pool.Query(t.Context(), `SELECT runtime_id FROM session_runtime_assignments WHERE session_id = $1`, session)
+	created := func(session pgtype.UUID) []uuid.UUID {
+		rows, err := pool.Query(t.Context(), `SELECT d.id FROM devices d JOIN environments e ON e.id = d.environment_id WHERE e.session_id = $1`, session)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,15 +276,15 @@ func TestCreateEnvironmentDeviceBindsOneDevice(t *testing.T) {
 	}
 
 	tenant, session, environment := newEnvironment(t, pool, "openai_hosted", "pending")
-	if err := create(tenant, session, environment, uuid.New(), false); !errors.Is(err, errRollback) || len(bound(session)) != 0 {
-		t.Fatalf("rolled back creation bound %v: %v", bound(session), err)
+	if err := create(tenant, session, environment, uuid.New(), false); !errors.Is(err, errRollback) || len(created(session)) != 0 {
+		t.Fatalf("rolled back creation created %v: %v", created(session), err)
 	}
-	if err := create(pgID(uuid.New()), session, environment, uuid.New(), true); !errors.Is(err, sessions.ErrDeviceBindingConflict) || len(bound(session)) != 0 {
-		t.Fatalf("other tenant bound %v: %v", bound(session), err)
+	if err := create(pgID(uuid.New()), session, environment, uuid.New(), true); !errors.Is(err, sessions.ErrDeviceBindingConflict) || len(created(session)) != 0 {
+		t.Fatalf("other tenant created %v: %v", created(session), err)
 	}
 	device := uuid.New()
-	if err := create(tenant, session, environment, device, true); err != nil || !reflect.DeepEqual(bound(session), []uuid.UUID{device}) {
-		t.Fatalf("bound %v: %v", bound(session), err)
+	if err := create(tenant, session, environment, device, true); err != nil || !reflect.DeepEqual(created(session), []uuid.UUID{device}) {
+		t.Fatalf("created %v: %v", created(session), err)
 	}
 	if err := create(tenant, session, environment, uuid.New(), true); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		t.Fatalf("second device: %v", err)

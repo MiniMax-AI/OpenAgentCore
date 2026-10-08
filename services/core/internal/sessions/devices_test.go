@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
@@ -192,9 +193,10 @@ func TestDeviceUseCases(t *testing.T) {
 	}
 }
 
-func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
+func TestEnrollRuntimeEnrollsUnderTheSessionLock(t *testing.T) {
 	environment := Environment{ID: "environment", SessionID: "session"}
-	authorized := returns(EnrollmentAuthority{KeyID: "key", WorkspaceDirectory: "/workspace"})
+	authorized := returns("key")
+	resource := sandboxbootstrap.Resource{TenantID: "tenant", EnvironmentID: "environment", Kind: "enrollment", ID: "enrollment", Generation: 1}
 	for _, test := range []struct {
 		name   string
 		tx     fakeTx
@@ -202,15 +204,15 @@ func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
 		want   error
 		calls  []string
 	}{
-		{"enrolls", fakeTx{authorizeEnrollment: authorized, enrollDevice: returns("device"), bindDevice: done},
-			LockedSession{}, nil, []string{"AuthorizeEnrollment", "EnrollDevice key", "BindDevice device"}},
+		{"enrolls", fakeTx{authorizeEnrollment: authorized, enrollSandbox: returns(resource)},
+			LockedSession{}, nil, []string{"AuthorizeEnrollment", "EnrollSandbox key"}},
 		{"deleted Session", fakeTx{}, LockedSession{Deleted: true}, ErrNotFound, nil},
-		{"revoked key", fakeTx{authorizeEnrollment: func() (EnrollmentAuthority, error) { return EnrollmentAuthority{}, ErrNotFound }},
+		{"revoked key", fakeTx{authorizeEnrollment: func() (string, error) { return "", ErrNotFound }},
 			LockedSession{}, ErrNotFound, []string{"AuthorizeEnrollment"}},
-		{"device of another key", fakeTx{authorizeEnrollment: authorized, enrollDevice: func() (string, error) { return "", ErrDeviceBindingConflict }},
-			LockedSession{}, ErrDeviceBindingConflict, []string{"AuthorizeEnrollment", "EnrollDevice key"}},
-		{"Session bound elsewhere", fakeTx{authorizeEnrollment: authorized, enrollDevice: returns("device"), bindDevice: func() error { return ErrDeviceBindingConflict }},
-			LockedSession{}, ErrDeviceBindingConflict, []string{"AuthorizeEnrollment", "EnrollDevice key", "BindDevice device"}},
+		{"enrollment of another key", fakeTx{authorizeEnrollment: authorized, enrollSandbox: func() (sandboxbootstrap.Resource, error) {
+			return sandboxbootstrap.Resource{}, ErrDeviceBindingConflict
+		}},
+			LockedSession{}, ErrDeviceBindingConflict, []string{"AuthorizeEnrollment", "EnrollSandbox key"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			tx := test.tx
@@ -220,10 +222,10 @@ func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
 			if test.want == nil && err != nil || test.want != nil && !errors.Is(err, test.want) {
 				t.Fatalf("got %v, want %v", err, test.want)
 			}
-			if want := (RuntimeEnrollment{DeviceID: "device", SessionID: "session", EnvironmentID: "environment", WorkspaceDirectory: "/workspace"}); test.want == nil && enrolled != want {
+			if test.want == nil && enrolled != resource {
 				t.Fatalf("enrollment %+v", enrolled)
 			}
-			if test.want != nil && enrolled != (RuntimeEnrollment{}) {
+			if test.want != nil && enrolled != (sandboxbootstrap.Resource{}) {
 				t.Fatalf("failed enrollment returned %+v", enrolled)
 			}
 			if storage.calls[0] != "WithEnrollment environment "+credentialDigest {

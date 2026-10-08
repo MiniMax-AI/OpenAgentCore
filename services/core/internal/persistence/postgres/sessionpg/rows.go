@@ -42,11 +42,17 @@ func TurnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) 
 	return p, err
 }
 
+// Lookup is a tenant and the internal identifier of one of its resources.
+type Lookup struct {
+	TenantID pgtype.UUID
+	ID       pgtype.UUID
+}
+
 // ResourceLookup parses a tenant and the internal identifier of one of its
 // resources, such as a device, Session or Environment; a malformed one is
 // sessions.ErrInvalidInput.
-func ResourceLookup(tenantID, id string) (sqlc.GetDeviceParams, error) {
-	var p sqlc.GetDeviceParams
+func ResourceLookup(tenantID, id string) (Lookup, error) {
+	var p Lookup
 	var err error
 	if p.TenantID, err = parseID(tenantID); err != nil {
 		return p, err

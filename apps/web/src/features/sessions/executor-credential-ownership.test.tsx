@@ -24,7 +24,7 @@ function read(revoked = false): ExecutorCredentialList {
       { key_id: boundId, created_at: "2026-09-28T01:00:00Z", revoked_at: revoked ? "2026-09-28T02:00:00Z" : null },
       { key_id: newId, created_at: "2026-09-28T03:00:00Z", revoked_at: null },
     ],
-    connection: { status: "disconnected", bound_key_id: boundId, enrolled_at: "2026-09-28T01:00:00Z", last_seen_at: "2026-09-28T01:30:00Z" },
+    connection: { status: "disconnected", bound_key_id: boundId, enrolled_at: "2026-09-28T01:00:00Z" },
   };
 }
 function render(value: ExecutorCredentialList | null, failed = false) {

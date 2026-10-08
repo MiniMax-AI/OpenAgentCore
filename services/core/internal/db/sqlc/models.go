@@ -349,10 +349,11 @@ type RuntimePlacement struct {
 }
 
 type SandboxEnrollment struct {
-	ID            pgtype.UUID `json:"id"`
-	EnvironmentID pgtype.UUID `json:"environment_id"`
-	ExecutorKeyID pgtype.UUID `json:"executor_key_id"`
-	Generation    int64       `json:"generation"`
+	ID            pgtype.UUID        `json:"id"`
+	EnvironmentID pgtype.UUID        `json:"environment_id"`
+	ExecutorKeyID pgtype.UUID        `json:"executor_key_id"`
+	Generation    int64              `json:"generation"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
 type SandboxResource struct {

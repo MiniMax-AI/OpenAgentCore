@@ -44,15 +44,15 @@ type ExecutorCredential struct {
 	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable"`
 }
 
-// ExecutorConnectionState is an internal durable observation, never a wire payload.
-// In particular the current credential digest must not be serialized.
+// ExecutorConnectionState is the Environment's enrollment: the key that
+// enrolled it and when, and the digest of the credential that may Serve its
+// Link resource while that resource is live. It is internal and never a wire
+// payload; in particular the credential digest must not be serialized.
 type ExecutorConnectionState struct {
-	DeviceID          string     `json:"-"`
-	BoundKeyID        *string    `json:"-"`
-	EnrolledAt        *time.Time `json:"-"`
-	LastSeenAt        *time.Time `json:"-"`
-	CredentialHash    string     `json:"-"`
-	EnvironmentStatus string     `json:"-"`
+	Enrolled       bool       `json:"-"`
+	BoundKeyID     *string    `json:"-"`
+	EnrolledAt     *time.Time `json:"-"`
+	CredentialHash string     `json:"-"`
 }
 
 type ExecutorCredentialState struct {

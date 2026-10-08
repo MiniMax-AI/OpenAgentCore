@@ -18,7 +18,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	awaitFixtureCapabilities(t, runtime, caps)
 	frames := workerFrames(t, h, runtime)
 
-	h.session = publicSession(t, h, "scan-barrier")
+	h.session = ordinarySession(t, h, "scan-barrier")
 	receipt := h.message("barrier", "ordinary work")
 	scanned := time.Now()
 	_, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
@@ -66,7 +66,7 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 	runtime := connectFixtureRuntime(t, h, session)
 	h.environments[last.SessionID] = runtime
 	frames := workerFrames(t, h, runtime)
-	h.session = publicSession(t, h, "page-barrier")
+	h.session = ordinarySession(t, h, "page-barrier")
 	receipt := h.message("barrier", "ordinary work")
 	scanned := time.Now()
 	_, stop := startEnvironmentExpiryWorker(t, h.s, h.d)

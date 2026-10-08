@@ -40,37 +40,20 @@ import (
 
 const linkWait = 10 * time.Second
 
-// linkHarness is a hosted Session bound to h.device whose Environment has an
-// allocation with a Serve credential, and Core's Link Authority behind the
-// Link route.
+// linkHarness is a dispatch harness whose Worker runs with the harness's
+// relay: the Session is bound to the agent host, and its Environment's Link
+// resource Serves at the relay.
 type linkHarness struct {
 	*dispatchHarness
-	relay    *sandboxlinktest.Server
-	resource sandboxbootstrap.Resource
-	serve    []byte
 }
 
-// newLinkHarness binds the Session to an unmarked operator device, or, for a
-// guest, to the allocation's own device, as an in-sandbox daemon is bound, and
-// runs a Worker with the Link route's relay.
-func newLinkHarness(t *testing.T, guest bool) *linkHarness {
+const hostedLinkSession = `{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`
+
+func newLinkHarness(t *testing.T, configuration string) *linkHarness {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), guest)
-	device := h.device.ID
-	if !guest {
-		allocated, err := sessionService(t, h.s).CreateDevice(t.Context(), h.tenant, "sandbox", runtimedevice.HashCredential(uuid.NewString()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		device = allocated.ID
-	}
-	l := &linkHarness{dispatchHarness: h, relay: startLinkRoute(t, h.s), serve: []byte(uuid.NewString()),
-		resource: sandboxbootstrap.Resource{TenantID: h.tenant, EnvironmentID: h.session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}}
-	insertAllocation(t, h.s, l.resource, device, l.serve)
-	dispatcher := *h.d
-	dispatcher.Links = l.relay.Relay
-	runWorker(t, startWorker(t, t.Context(), h.s, &dispatcher))
-	return l
+	h := newDispatchHarnessForSession(t, []byte(configuration))
+	runWorker(t, startWorker(t, t.Context(), h.s, h.d))
+	return &linkHarness{dispatchHarness: h}
 }
 
 // insertAllocation inserts a running allocation of device that is resource
@@ -129,11 +112,10 @@ func (l *linkHarness) exec(query string, args ...any) {
 	}
 }
 
-// bind has the Worker bind the Session's current assignment to h.device and
-// returns it with the payload the Runtime received. Until Sessions are placed
-// on an agent host, the Environment's initialization is its one production
-// bind, so bind reopens the initialization, which has nothing to install. The
-// Worker claims it only while the Environment's resource is Serving.
+// bind has the Worker bind the Session's current assignment to the agent host
+// and returns it with the payload the agent host received. It reopens the
+// Environment's initialization, which has nothing to install and binds first;
+// the Worker claims it only while the Environment's resource is Serving.
 func (l *linkHarness) bind() (proto.AssignmentRef, proto.AssignmentBindPayload) {
 	t := l.t
 	t.Helper()
@@ -155,7 +137,7 @@ func (l *linkHarness) bind() (proto.AssignmentRef, proto.AssignmentBindPayload) 
 }
 
 func (l *linkHarness) attach(runtime string, credential []byte) (*sandboxlink.AttachLink, error) {
-	return attachLink(l.t, l.relay, runtime, credential)
+	return attachLink(l.t, l.link, runtime, credential)
 }
 
 func attachLink(t *testing.T, srv *sandboxlinktest.Server, runtime string, credential []byte) (*sandboxlink.AttachLink, error) {
@@ -253,9 +235,8 @@ func within[T any](t *testing.T, ch <-chan T) T {
 // from a marked agent host, and checks that each part of the grant's
 // authority is current at every Open and renewal.
 func TestLinkAuthorityAgentHost(t *testing.T) {
-	l := newLinkHarness(t, false)
-	p := startLinkServe(t, l.relay, l.serve, l.resource.Ref())
-	within(t, p.connected)
+	l := newLinkHarness(t, hostedLinkSession)
+	p := l.served
 
 	otherID, otherEnvironment := l.resource, l.resource
 	otherID.ID, otherEnvironment.EnvironmentID = uuid.NewString(), uuid.NewString()
@@ -263,15 +244,18 @@ func TestLinkAuthorityAgentHost(t *testing.T) {
 		resource sandboxbootstrap.Resource
 		want     sandboxlink.Code
 	}{{otherID, sandboxlink.AuthenticationFailed}, {otherEnvironment, sandboxlink.PermissionDenied}} {
-		if got := startLinkServe(t, l.relay, l.serve, test.resource.Ref()).refused(t); got != test.want {
+		if got := startLinkServe(t, l.link, l.serve, test.resource.Ref()).refused(t); got != test.want {
 			t.Fatalf("Serve of another resource refused with %v, want %v", got, test.want)
 		}
 	}
-	if _, err := l.attach(l.device.ID, []byte(l.credential)); linkCode(err) != sandboxlink.AuthenticationFailed {
+	operator := uuid.NewString()
+	unmarked, err := sessionService(t, l.s).CreateDevice(t.Context(), l.tenant, "operator", runtimedevice.HashCredential(operator))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.attach(unmarked.ID, []byte(operator)); linkCode(err) != sandboxlink.AuthenticationFailed {
 		t.Fatal("an unmarked device attached", err)
 	}
-
-	l.exec("UPDATE devices SET agent_host = true WHERE id = $1", l.device.ID)
 	link, err := l.attach(l.device.ID, []byte(l.credential))
 	if err != nil {
 		t.Fatal(err)
@@ -330,30 +314,11 @@ func TestLinkAuthorityAgentHost(t *testing.T) {
 	}
 }
 
-// TestLinkAuthorityGuest checks that an in-sandbox daemon's assignment
-// carries no grant and that its device can neither attach nor be marked.
-func TestLinkAuthorityGuest(t *testing.T) {
-	l := newLinkHarness(t, true)
-	within(t, startLinkServe(t, l.relay, l.serve, l.resource.Ref()).connected)
-	if _, payload := l.bind(); payload.Resource != nil || payload.AttachGrant != nil {
-		t.Fatalf("guest bind = %+v", payload)
-	}
-	if _, err := l.attach(l.device.ID, []byte(l.credential)); linkCode(err) != sandboxlink.AuthenticationFailed {
-		t.Fatal("a guest attached", err)
-	}
-	if _, err := l.s.pool.Exec(t.Context(), "UPDATE devices SET agent_host = true WHERE id = $1", l.device.ID); err == nil || !strings.Contains(err.Error(), "devices_agent_host") {
-		t.Fatal("a guest device was marked as an agent host", err)
-	}
-}
-
 // TestLinkAuthorityReleaseRevokesBeforeSend checks that a released
 // assignment's grant opens nothing from the commit on, and that the Worker
 // has the relay close its attachments before it sends the release.
 func TestLinkAuthorityReleaseRevokesBeforeSend(t *testing.T) {
-	l := newLinkHarness(t, false)
-	p := startLinkServe(t, l.relay, l.serve, l.resource.Ref())
-	within(t, p.connected)
-	l.exec("UPDATE devices SET agent_host = true WHERE id = $1", l.device.ID)
+	l := newLinkHarness(t, hostedLinkSession)
 	ref, payload := l.bind()
 	link, err := l.attach(l.device.ID, []byte(l.credential))
 	if err != nil {
@@ -411,26 +376,15 @@ func TestLinkAuthorityEnrollment(t *testing.T) {
 }
 
 // TestLinkAuthorityEnrollmentRotation checks that rotating an executor key
-// advances its enrollment's generation: the serve peer of the old secret stays
-// connected but no Open or renewal for the old generation is authorized, and
-// the new secret serves the new generation.
+// advances its enrollment's generation and the epoch of the Session's bound
+// assignment. No Open or renewal for the old generation is authorized, the
+// Worker's pass ends the old secret's Serve, and after the machine re-enrolls
+// and Serves the new generation, the agent host's next bind opens on it.
 func TestLinkAuthorityEnrollmentRotation(t *testing.T) {
-	l := newLinkHarness(t, false)
-	// The Session's Link resource becomes an enrollment of an executor key.
-	l.exec("UPDATE runtime_allocations SET serve_credential_hash = NULL WHERE id = $1", l.resource.ID)
-	l.exec(`UPDATE sessions SET configuration = jsonb_set(configuration, '{environment,type}', '"self_hosted"') WHERE id = $1`, l.session.ID)
-	principal := FixtureExecutorPrincipal(t, l.s, l.tenant)
-	key, err := sessionService(t, l.s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), l.session.Environment.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	l.resource.Kind, l.resource.ID = "enrollment", uuid.NewString()
-	l.exec("INSERT INTO sandbox_enrollments(id, environment_id, executor_key_id) VALUES($1, $2, $3)", l.resource.ID, l.resource.EnvironmentID, key.KeyID)
-	p := startLinkServe(t, l.relay, []byte(key.Token), l.resource.Ref())
-	within(t, p.connected)
-	l.exec("UPDATE devices SET agent_host = true WHERE id = $1", l.device.ID)
+	l := newLinkHarness(t, `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)
+	p := l.served
 	ref, payload := l.bind()
-	if payload.Resource == nil || *payload.Resource != l.resource {
+	if payload.Resource == nil || *payload.Resource != l.resource || len(payload.AttachGrant) == 0 {
 		t.Fatalf("agent host bind = %+v", payload)
 	}
 	link, err := l.attach(l.device.ID, []byte(l.credential))
@@ -443,19 +397,41 @@ func TestLinkAuthorityEnrollmentRotation(t *testing.T) {
 	}
 	within(t, p.binds)
 
-	rotated, err := sessionService(t, l.s).RotateExecutorCredential(t.Context(), principal, key.KeyID)
+	var key string
+	if err := l.s.pool.QueryRow(t.Context(), "SELECT executor_key_id::text FROM sandbox_enrollments WHERE id = $1", l.resource.ID).Scan(&key); err != nil {
+		t.Fatal(err)
+	}
+	principal := FixtureExecutorPrincipal(t, l.s, l.tenant)
+	rotated, err := sessionService(t, l.s).RotateExecutorCredential(t.Context(), principal, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.open(link, sandboxlink.ServiceFile, ref, payload.AttachGrant); linkCode(err) != sandboxlink.StaleGeneration {
-		t.Fatal("an Open reached the old secret's serve peer", err)
+	var epoch uint64
+	if err := l.s.pool.QueryRow(t.Context(), "SELECT epoch FROM session_runtime_assignments WHERE session_id = $1", l.session.ID).Scan(&epoch); err != nil || epoch != ref.Epoch+1 {
+		t.Fatal("rotation left the assignment at epoch", epoch, err)
 	}
-	if err := l.renew(link, file, payload.AttachGrant); linkCode(err) != sandboxlink.StaleGeneration {
-		t.Fatal("an attachment to the old secret's serve peer renewed", err)
+	if _, err := l.open(link, sandboxlink.ServiceFile, ref, payload.AttachGrant); err == nil {
+		t.Fatal("an Open reached the old secret's serve peer")
 	}
-	next := l.resource
-	next.Generation++
-	within(t, startLinkServe(t, l.relay, []byte(rotated.Token), next.Ref()).connected)
+	if err := l.renew(link, file, payload.AttachGrant); err == nil {
+		t.Fatal("an attachment to the old secret's serve peer renewed")
+	}
+	if got := p.refused(t); got != sandboxlink.AuthenticationFailed {
+		t.Fatal("the old secret's Serve ended with", got)
+	}
+	resource, err := sessionService(t, l.s).EnrollRuntime(t.Context(), l.resource.EnvironmentID, runtimedevice.HashCredential(rotated.Token))
+	if next := l.resource; err != nil || resource != func() sandboxbootstrap.Resource { next.Generation++; return next }() {
+		t.Fatalf("re-enrollment = %+v %v", resource, err)
+	}
+	l.resource = resource
+	within(t, startLinkServe(t, l.link, []byte(rotated.Token), resource.Ref()).connected)
+	next, payload := l.bind()
+	if next.Epoch != ref.Epoch+1 || payload.Resource == nil || *payload.Resource != resource {
+		t.Fatalf("bind after rotation = %+v %+v", next, payload)
+	}
+	if _, err := l.open(link, sandboxlink.ServiceFile, next, payload.AttachGrant); err != nil {
+		t.Fatal("the new generation did not open", err)
+	}
 }
 
 // TestLinkAuthorityDestroyedAllocation checks that the Worker's cleanup of an
@@ -493,7 +469,7 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 // accept its credential, a second startup changes nothing, and another
 // device's ID is never taken over.
 func TestRegisteredAgentHostAuthenticates(t *testing.T) {
-	s, _ := testStore(t)
+	s, _ := newManagedTestStore(t)
 	dir := t.TempDir()
 	runtime, credential := uuid.NewString(), uuid.NewString()
 	identity, _ := json.Marshal(map[string]string{"runtime_id": runtime, "credential": credential})
@@ -551,62 +527,57 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 	}
 }
 
-// TestInitializationBindsAgentHost binds a hosted Session to the registered
-// agent host and runs the Environment's initialization once its Link resource
-// is Serving. The bind carries the resource and an attach grant. A bind that
-// fails before any effect, here because the agent host's connection closes,
-// leaves the initialization unclaimed, and a later pass completes it.
+// TestInitializationBindsAgentHost places a hosted and a self_hosted Session
+// on the registered agent host and runs each Environment's initialization once
+// its Link resource is Serving. The bind carries the resource and an attach
+// grant. A bind that fails before any effect, here because the agent host's
+// connection closes, leaves the initialization unclaimed, and a later pass
+// completes it.
 func TestInitializationBindsAgentHost(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	tenant, host, credential := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), host, runtimedevice.HashCredential(credential)); err != nil {
-		t.Fatal(err)
-	}
-	session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
-		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted"}}`),
-		InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Placement does not choose the agent host yet.
-	if _, err := s.pool.Exec(t.Context(), "INSERT INTO session_runtime_assignments(session_id, runtime_id) VALUES($1, $2)", session.ID, host); err != nil {
-		t.Fatal(err)
-	}
-	resource := sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}
-	device, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "sandbox", runtimedevice.HashCredential(uuid.NewString()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	serve := []byte(uuid.NewString())
-	insertAllocation(t, s, resource, device.ID, serve)
-	server := httptest.NewUnstartedServer(nil)
-	endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.Config.Handler = handler
-	server.Start()
-	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
-	link := startLinkRoute(t, s)
-	runWorker(t, startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: link.Relay}))
-	within(t, startLinkServe(t, link, serve, resource.Ref()).connected)
+	for _, environment := range []string{`{"type":"openai_hosted"}`, `{"type":"self_hosted","workspace_directory":"/workspace"}`} {
+		t.Run(environment, func(t *testing.T) {
+			s, _ := newManagedTestStore(t)
+			tenant, host := uuid.NewString(), registerAgentHost(t, s, "")
+			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+				Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":` + environment + `}`),
+				InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			resource, serve := fixtureLinkResource(t, s, tenant, session)
+			server := httptest.NewUnstartedServer(nil)
+			endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
+			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server.Config.Handler = handler
+			server.Start()
+			t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+			link := startLinkRoute(t, s)
+			runWorker(t, startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: link.Relay}))
+			within(t, startLinkServe(t, link, serve, resource.Ref()).connected)
 
-	dropped := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1), closeOnBind: true}
-	dropped.setRuntimeGateway(t, endpoint, registry, nil)
-	if err := dropped.connect(sandbox.Bootstrap{DeviceID: host, Credential: credential}); err != nil {
-		t.Fatal(err)
-	}
-	within(t, dropped.binds)
-	awaitInitialization(t, s, tenant, session.Environment.ID, "pending")
+			dropped := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1), closeOnBind: true, host: host}
+			dropped.setRuntimeGateway(t, s, endpoint, registry, nil)
+			if err := dropped.connect(sandbox.Bootstrap{}); err != nil {
+				t.Fatal(err)
+			}
+			within(t, dropped.binds)
+			awaitInitialization(t, s, tenant, session.Environment.ID, "pending")
 
-	peer := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1)}
-	peer.setRuntimeGateway(t, endpoint, registry, nil)
-	if err := peer.connect(sandbox.Bootstrap{DeviceID: host, Credential: credential}); err != nil {
-		t.Fatal(err)
+			peer := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1), host: host}
+			peer.setRuntimeGateway(t, s, endpoint, registry, nil)
+			if err := peer.connect(sandbox.Bootstrap{}); err != nil {
+				t.Fatal(err)
+			}
+			if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
+				t.Fatalf("agent host bind = %+v", bind)
+			}
+			awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
+			if bound, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID); err != nil || bound.ID != host.ID {
+				t.Fatal("Session placed on", bound.ID, err)
+			}
+		})
 	}
-	if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
-		t.Fatalf("agent host bind = %+v", bind)
-	}
-	awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
 }

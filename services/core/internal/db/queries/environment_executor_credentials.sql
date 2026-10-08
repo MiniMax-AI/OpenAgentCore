@@ -31,7 +31,9 @@ WHERE c.key_id = sqlc.arg(key_id) AND c.tenant_id = sqlc.arg(tenant_id)
 
 -- name: RotateExecutorCredential :one
 -- Rotation advances the generation of the key's enrollments, so the Link
--- authority refuses what the old secret served.
+-- authority refuses what the old secret served, and the epoch of the bound
+-- assignments of their Sessions, so the next Bind carries the new
+-- generation.
 WITH rotated AS (
     UPDATE environment_executor_credentials
     SET token_sha256 = sqlc.arg(token_sha256), issued_at = clock_timestamp(), revoked_at = NULL
@@ -41,6 +43,11 @@ WITH rotated AS (
 ), advanced AS (
     UPDATE sandbox_enrollments n SET generation = n.generation + 1
     FROM rotated r WHERE n.executor_key_id = r.key_id
+    RETURNING n.environment_id
+), rebound AS (
+    UPDATE session_runtime_assignments b SET epoch = b.epoch + 1
+    FROM advanced a JOIN environments e ON e.id = a.environment_id
+    WHERE b.session_id = e.session_id AND b.desired_state = 'bound'
 )
 SELECT key_id, environment_id FROM rotated;
 
@@ -67,11 +74,12 @@ WHERE tenant_id = sqlc.arg(tenant_id) AND environment_id = sqlc.arg(environment_
 ORDER BY created_at, key_id;
 
 -- name: GetEnvironmentExecutorConnection :one
-SELECT d.id AS device_id, d.executor_key_id, d.created_at AS enrolled_at,
-    d.last_seen_at, a.credential_hash, e.status AS environment_status
+-- The Environment's enrollment, with the credential that may Serve it while
+-- its Link resource is live.
+SELECT n.id AS enrollment_id, n.executor_key_id, n.created_at AS enrolled_at, r.credential_hash
 FROM environments e
 JOIN sessions s ON s.id = e.session_id
-LEFT JOIN devices d ON d.environment_id = e.id AND d.tenant_id = s.tenant_id
-LEFT JOIN runtime_device_authority a ON a.id = d.id
+LEFT JOIN sandbox_enrollments n ON n.environment_id = e.id
+LEFT JOIN sandbox_resources r ON r.kind = 'enrollment' AND r.id = n.id AND r.live
 WHERE e.id = sqlc.arg(environment_id) AND s.tenant_id = sqlc.arg(tenant_id)
     AND s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'self_hosted';

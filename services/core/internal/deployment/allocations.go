@@ -81,8 +81,8 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 			}
 			allocation.NodeID, allocation.Generation = reserved.NodeID, reserved.Generation
 		}
-		device := sessions.ExecutionDevice{ID: allocation.DeviceID, Name: registration.Name, EnvironmentID: environment.ID}
-		if err := sessions.CreateEnvironmentDevice(ctx, tx, device, registration.CredentialHash); err != nil {
+		device := sessions.ExecutionDevice{ID: allocation.DeviceID, Name: registration.Name}
+		if err := sessions.CreateEnvironmentDevice(ctx, tx, environment.ID, device, registration.CredentialHash); err != nil {
 			return err
 		}
 		result, err = tx.InsertAllocation(allocation)
@@ -297,7 +297,7 @@ func (e *ExecutionOperations) change(ctx context.Context, owner Allocation, live
 
 // checkAllocation returns the stored allocation when it is still the owner's:
 // the same allocation, device, installation and node. A live change also
-// requires the Session undeleted and bound to the allocation's device.
+// requires the Session undeleted.
 func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, error) {
 	current, err := tx.LoadAllocation()
 	if err != nil {
@@ -311,13 +311,6 @@ func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, 
 	}
 	if current.SessionDeleted {
 		return Allocation{}, sessions.ErrNotFound
-	}
-	device, bound, err := tx.LoadSessionDevice()
-	if err != nil {
-		return Allocation{}, err
-	}
-	if !bound || device.ID != current.DeviceID || device.EnvironmentID != current.EnvironmentID {
-		return Allocation{}, ErrAllocationConflict
 	}
 	return current, nil
 }

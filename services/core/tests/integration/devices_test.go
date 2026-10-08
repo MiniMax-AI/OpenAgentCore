@@ -39,9 +39,8 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	ctx := context.Background()
 	tenant, session := newTurnSession(t, s)
 	otherTenant, otherSession := newTurnSession(t, s)
-	a, _ := registerTestDevice(t, s, tenant)
-	b, _ := registerTestDevice(t, s, tenant)
-	foreign, _ := registerTestDevice(t, s, otherTenant)
+	a, b := registerAgentHost(t, s, tenant), registerAgentHost(t, s, tenant)
+	ordinary, _ := registerTestDevice(t, s, tenant)
 	// The binds run on an execution lease of their own, which closes before
 	// the pool does.
 	lease, err := pgunit.AcquireLease(ctx, pool)
@@ -53,7 +52,8 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][3]string{{tenant, session.ID, foreign.ID}, {otherTenant, session.ID, foreign.ID}, {tenant, otherSession.ID, a.ID}} {
+	// Sessions bind only agent hosts, and only within their own tenant.
+	for _, args := range [][3]string{{tenant, session.ID, ordinary.ID}, {otherTenant, session.ID, a.ID}, {tenant, otherSession.ID, a.ID}} {
 		if err := execution.BindSessionDevice(ctx, args[0], args[1], args[2]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign binding: %v", err)
 		}
@@ -98,18 +98,13 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 		t.Fatal(err)
 	}
 	pool.Close()
-	restarted, _ := testStore(t)
+	restarted, restartedPool := testStore(t)
 	got, err := sessionAdapter(restarted).GetSessionDevice(ctx, tenant, session.ID)
 	if err != nil || got != winner {
 		t.Fatalf("binding after restart: %+v %v", got, err)
 	}
-	if err := sessionService(t, restarted).RevokeDevice(ctx, otherTenant, winner.ID); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatalf("foreign revocation: %v", err)
-	}
-	for range 2 {
-		if err := sessionService(t, restarted).RevokeDevice(ctx, tenant, winner.ID); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := restartedPool.Exec(ctx, `UPDATE devices SET revoked_at = clock_timestamp() WHERE id = $1`, winner.ID); err != nil {
+		t.Fatal(err)
 	}
 	if _, err := sessionAdapter(restarted).GetSessionDevice(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("revoked device remains dispatchable: %v", err)

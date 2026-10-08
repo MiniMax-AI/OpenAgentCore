@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
@@ -42,8 +43,12 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	}
 	// The server composition: daemon transport beside the API handler.
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(sessionService(t, s)))
-	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(sessionAdapter(s), runtimegateway.NewRegistry()))
+	origin, err := deployment.NewPublicOrigin("https://core.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(sessionService(t, s), origin))
+	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(sessionAdapter(s), relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))))
 	mux.Handle("/", handler)
 	server := api.CanonicalPaths(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {

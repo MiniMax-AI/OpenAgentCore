@@ -5,24 +5,24 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 )
 
-func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
+// A self_hosted Environment is connected while its enrollment is Serving. A
+// rotation or revocation ends the old secret's Serve through the Worker's
+// revocation pass, and a restarted Worker observes the same Serve.
+func TestEnrolledSandboxConnectionRevocationAndRestart(t *testing.T) {
 	s, _ := testStore(t)
 	principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
 	session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
@@ -45,13 +45,8 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewUnstartedServer(nil)
-	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	connection := runtimeenrollment.ConnectionHandler(sessionAdapter(s), registry)
+	link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+	connection := runtimeenrollment.ConnectionHandler(sessionAdapter(s), link.Relay)
 	assertConnection := func(target, token, status string, code int) {
 		t.Helper()
 		request := httptest.NewRequest("GET", "/api/v1/agent-daemon/connection?environment_id="+target, nil)
@@ -81,11 +76,8 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertConnection(environment.ID, foreignKey.Token, "", 401)
-	server.Config.Handler = handler
-	server.Start()
-	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
 	start := func() func() {
-		worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry})
+		worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: link.Relay})
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() { done <- worker.Run(ctx) }()
@@ -104,19 +96,6 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 			stop()
 		}
 	}()
-	connect := func(token string) *websocket.Conn {
-		u, _ := url.Parse(wsURL)
-		u.RawQuery = url.Values{"device_id": {bound.DeviceID}, "version": {proto.Version}}.Encode()
-		conn, resp, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + token}})
-		if resp != nil {
-			resp.Body.Close()
-		}
-		if err != nil {
-			t.Fatal("daemon connection rejected")
-		}
-		t.Cleanup(func() { conn.Close() })
-		return conn
-	}
 	await := func(status string) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
@@ -129,7 +108,8 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		}
 		t.Fatalf("environment did not become %s", status)
 	}
-	first := connect(key.Token)
+	first := startLinkServe(t, link, []byte(key.Token), bound.Ref())
+	within(t, first.connected)
 	await("connected")
 	assertConnection(environment.ID, key.Token, "connected", 200)
 	rotated, err := sessionService(t, s).RotateExecutorCredential(t.Context(), principal, key.KeyID)
@@ -138,21 +118,24 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	}
 	assertConnection(environment.ID, key.Token, "", 401)
 	assertConnection(environment.ID, rotated.Token, "disconnected", 200)
-	// No heartbeat is sent: the Worker's authority check must fence the old socket.
+	// The Worker's pass revokes the previous generation, which closes the old
+	// secret's Serve; its redial is refused.
 	await("disconnected")
-	_ = first.SetReadDeadline(time.Now().Add(time.Second))
-	if _, _, err = first.ReadMessage(); err == nil {
-		t.Fatal("rotated socket retained authority")
+	if got := first.refused(t); got != sandboxlink.AuthenticationFailed {
+		t.Fatal("the rotated-out secret's Serve ended with", got)
 	}
-	second := connect(rotated.Token)
+	next := bound
+	next.Generation++
+	second := startLinkServe(t, link, []byte(rotated.Token), next.Ref())
+	within(t, second.connected)
 	await("connected")
 	assertConnection(environment.ID, rotated.Token, "connected", 200)
 	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 	stop()
 	stop = nil
 	awaitRelease()
-	// A new Core owner clears prior transport evidence, then observes the same
-	// live, authorized daemon. No compute allocation or native execution is made.
+	// A new Core owner clears prior connection evidence, then observes the
+	// same Serving resource. No compute allocation or native execution is made.
 	stop = start()
 	await("connected")
 	if err = sessionService(t, s).RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
@@ -160,13 +143,12 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	}
 	assertConnection(environment.ID, rotated.Token, "", 401)
 	await("disconnected")
-	_ = second.SetReadDeadline(time.Now().Add(time.Second))
-	if _, _, err = second.ReadMessage(); err == nil {
-		t.Fatal("revoked socket retained authority")
+	if got := second.refused(t); got != sandboxlink.AuthenticationFailed {
+		t.Fatal("the revoked key's Serve ended with", got)
 	}
 	var allocations int
 	if err = s.pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
-		t.Fatal("user Runtime acquired managed allocation", allocations, err)
+		t.Fatal("self_hosted Environment acquired a managed allocation", allocations, err)
 	}
 	current, err := sessionAdapter(s).GetSession(t.Context(), principal.TenantID, session.ID)
 	if err != nil || current.LastTurn != nil {

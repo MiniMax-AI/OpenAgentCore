@@ -163,7 +163,7 @@ func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOption
 		command.Env = withNativeEnv(map[string]string{"OAC_RUNTIME_HOME": o.Directory, daemonize.BackgroundSentinelEnv: ""})
 		command.Stdout, command.Stderr = rc.stdout, rc.stderr
 		if err := command.Run(); err != nil {
-			fmt.Fprintln(rc.stderr, "Daemon connection: start failed. Rerun this command to resume, or run the installed oac-daemon start.")
+			fmt.Fprintln(rc.stderr, "Host connection: start failed. Rerun this command to resume, or run the installed oac-daemon start.")
 			return errors.New("install: daemon startup failed")
 		}
 	}
@@ -182,12 +182,12 @@ func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOption
 			return err
 		}
 		if connected {
-			fmt.Fprintln(rc.stdout, "Daemon connection: connected to Core.")
+			fmt.Fprintln(rc.stdout, "Host connection: connected to Core.")
 			return nil
 		}
 		select {
 		case <-deadline.Done():
-			fmt.Fprintf(rc.stderr, "Daemon connection: not confirmed. The installed daemon will keep reconnecting. Check %s and Core connectivity, then rerun this command.\n", filepath.Join(o.Directory, "daemon", paths.DefaultProfile, "connect.log"))
+			fmt.Fprintf(rc.stderr, "Host connection: not confirmed. The installed daemon will keep reconnecting. Check %s and Core connectivity, then rerun this command.\n", filepath.Join(o.Directory, "daemon", paths.DefaultProfile, "connect.log"))
 			return errors.New("install: connection verification timed out")
 		case <-ticker.C:
 		}
@@ -206,7 +206,7 @@ func installedEnvironmentConnected(ctx context.Context, base, environment, secre
 	}
 	defer response.Body.Close()
 	if response.StatusCode == 401 || response.StatusCode == 409 {
-		return false, errors.New("Daemon connection: credential rejected; check the Environment credential in Core")
+		return false, errors.New("Host connection: credential rejected; check the Environment credential in Core")
 	}
 	if response.StatusCode != http.StatusOK {
 		return false, nil
@@ -216,7 +216,7 @@ func installedEnvironmentConnected(ctx context.Context, base, environment, secre
 		Status      string `json:"status"`
 	}
 	if json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&result) != nil || result.Environment != environment {
-		return false, errors.New("Daemon connection: invalid status returned by Core")
+		return false, errors.New("Host connection: invalid status returned by Core")
 	}
 	return result.Status == "connected", nil
 }

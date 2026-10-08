@@ -54,6 +54,13 @@ test('bundle requires a selected harness and rejects output inside sources', asy
   await assert.rejects(buildBundle({ daemon: join(source, 'daemon'), node: source, codex: source, output: join(source, 'out') }), /outside/);
 });
 
+test('bundle carries oac-sandbox-io exactly on Linux', async t => {
+  const { source, output } = await fixture(t);
+  const options = { daemon: join(source, 'daemon'), node: source, codex: source, output };
+  if (process.platform === 'linux') await assert.rejects(buildBundle(options), /Missing --sandbox-io/);
+  else await assert.rejects(buildBundle({ ...options, sandboxIo: join(source, 'oac-sandbox-io') }), /Linux-only/);
+});
+
 test('component rejects nonportable paths', { skip: process.platform === 'win32' }, async t => {
   const { source, output } = await fixture(t);
   await writeFile(join(source, 'bad:name'), 'bad');

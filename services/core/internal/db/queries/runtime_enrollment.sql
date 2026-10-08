@@ -1,5 +1,5 @@
 -- name: AuthorizeRuntimeEnrollment :one
-SELECT c.key_id, e.session_id, COALESCE(s.configuration->'environment'->>'workspace_directory', '')::text AS workspace_directory
+SELECT c.key_id
 FROM environment_executor_credentials c
 JOIN environments e ON e.id = sqlc.arg(environment_id)
 JOIN sessions s ON s.id = e.session_id
@@ -12,12 +12,14 @@ WHERE c.token_sha256 = sqlc.arg(token_sha256) AND c.revoked_at IS NULL
     AND s.configuration->'environment'->>'type' = 'self_hosted'
 FOR SHARE OF c;
 
--- name: EnrollRuntimeDevice :one
-INSERT INTO devices (id, tenant_id, name, environment_id, executor_key_id)
-VALUES (sqlc.arg(id), sqlc.arg(tenant_id), 'User-managed Runtime', sqlc.arg(environment_id), sqlc.arg(executor_key_id))
-ON CONFLICT (environment_id) DO UPDATE SET name = devices.name
-WHERE devices.executor_key_id = EXCLUDED.executor_key_id AND devices.revoked_at IS NULL
-RETURNING id, name, environment_id;
+-- name: EnrollSandbox :one
+-- The first key to enroll the Environment keeps its enrollment; the same key
+-- enrolling again returns it, and another key conflicts.
+INSERT INTO sandbox_enrollments (id, environment_id, executor_key_id)
+VALUES (sqlc.arg(id), sqlc.arg(environment_id), sqlc.arg(executor_key_id))
+ON CONFLICT (environment_id) DO UPDATE SET executor_key_id = EXCLUDED.executor_key_id
+WHERE sandbox_enrollments.executor_key_id = EXCLUDED.executor_key_id
+RETURNING id, generation;
 
 -- name: TouchAuthenticatedDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
@@ -25,12 +27,3 @@ WHERE devices.id = sqlc.arg(id) AND EXISTS (
     SELECT 1 FROM runtime_device_authority a
     WHERE a.id = devices.id AND a.credential_hash = sqlc.arg(credential_hash)
 );
-
--- name: ListEnrolledRuntimeBindings :many
-SELECT d.id AS device_id, d.tenant_id, e.id AS environment_id, e.session_id
-FROM devices d
-JOIN environments e ON e.id = d.environment_id
-JOIN sessions s ON s.id = e.session_id AND s.tenant_id = d.tenant_id
-WHERE d.executor_key_id IS NOT NULL AND s.deleted_at IS NULL
-    AND e.status NOT IN ('failed', 'expired')
-ORDER BY d.id;

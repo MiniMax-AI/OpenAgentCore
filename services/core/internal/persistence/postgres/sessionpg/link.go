@@ -54,6 +54,26 @@ func (s *Store) ListLiveSandboxResources(ctx context.Context) ([]sessions.Sandbo
 	return result, nil
 }
 
+// GetEnvironmentResource reads the live Link resource of the tenant's
+// Environment; without one, or for a malformed ID, it is ErrNotFound.
+func (s *Store) GetEnvironmentResource(ctx context.Context, tenant, environment string) (runtimedevice.ServeAuthority, error) {
+	lookup, err := ResourceLookup(tenant, environment)
+	if err != nil {
+		return runtimedevice.ServeAuthority{}, sessions.ErrNotFound
+	}
+	row, err := s.units.Queries().GetEnvironmentResource(ctx, sqlc.GetEnvironmentResourceParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return runtimedevice.ServeAuthority{}, sessions.ErrNotFound
+	}
+	if err != nil {
+		return runtimedevice.ServeAuthority{}, err
+	}
+	return runtimedevice.ServeAuthority{
+		Resource:       linkResource(lookup.TenantID, lookup.ID, pgtype.Text{String: row.Kind, Valid: true}, row.ID, pgtype.Int8{Int64: row.Generation, Valid: true}),
+		CredentialHash: row.CredentialHash.String,
+	}, nil
+}
+
 // GetAgentHostCredential reads a live agent host's credential. A malformed or
 // unknown device, or one that is not an agent host, has none.
 func (s *Store) GetAgentHostCredential(ctx context.Context, runtime string) (runtimedevice.AgentHost, bool, error) {

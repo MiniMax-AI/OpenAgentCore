@@ -90,9 +90,9 @@ func (o *ExecutionOperations) ReserveEnvironmentFileWrite(ctx context.Context, t
 }
 
 // admitFileWrite admits a new write to the Session's live Environment through
-// the device the key names, dedicated to that Environment, while the Session
-// is idle with no pending input. A failed or expired Environment is
-// ErrInvalidInput, a Session without a device ErrNotFound, another device
+// the Session's bound Runtime, which the key names, while the Session is idle
+// with no pending input. A failed or expired Environment is ErrInvalidInput, a
+// Session without a bound Runtime ErrNotFound, another Runtime
 // ErrDeviceBindingConflict, and work in progress ErrTurnConflict.
 func admitFileWrite(ctx context.Context, tx FileWriteReservationTx, owner Environment, key FileWriteIdentity) error {
 	current, err := tx.LoadEnvironment(ctx)
@@ -109,7 +109,7 @@ func admitFileWrite(ctx context.Context, tx FileWriteReservationTx, owner Enviro
 	if !found {
 		return ErrNotFound
 	}
-	if bound.ID != key.DeviceID || bound.EnvironmentID != owner.ID {
+	if bound.ID != key.DeviceID {
 		return ErrDeviceBindingConflict
 	}
 	if err := CheckComputeAdmission(ctx, tx); err != nil {

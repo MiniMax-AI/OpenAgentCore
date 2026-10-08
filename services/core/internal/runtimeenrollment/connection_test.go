@@ -3,16 +3,19 @@ package runtimeenrollment
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/gorilla/websocket"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -31,11 +34,8 @@ func (s *connectionStub) AuthenticateEnvironmentExecutor(_ context.Context, envi
 func (*connectionStub) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
 	return sessions.Environment{ID: "environment", SessionID: "session", Status: "pending"}, nil
 }
-func (*connectionStub) GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error) {
-	return sessions.ExecutionDevice{}, sessions.ErrNotFound
-}
-func (*connectionStub) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
-	panic("unbound lookup")
+func (*connectionStub) GetEnvironmentResource(context.Context, string, string) (runtimedevice.ServeAuthority, error) {
+	return runtimedevice.ServeAuthority{}, sessions.ErrNotFound
 }
 
 func TestConnectionReadContract(t *testing.T) {
@@ -57,7 +57,7 @@ func TestConnectionReadContract(t *testing.T) {
 		req := httptest.NewRequest(tc.method, "/api/v1/agent-daemon/connection?"+tc.query, nil)
 		req.Header.Set("Authorization", tc.bearer)
 		res := httptest.NewRecorder()
-		ConnectionHandler(s, runtimegateway.NewRegistry()).ServeHTTP(res, req)
+		ConnectionHandler(s, relay.New(sandboxlinktest.NewAuthority())).ServeHTTP(res, req)
 		if res.Code != tc.code || s.calls != tc.calls || res.Header().Get("Cache-Control") != "no-store" {
 			t.Fatalf("%s %s: %d, %d calls", tc.method, tc.query, res.Code, s.calls)
 		}
@@ -70,16 +70,15 @@ func TestConnectionReadContract(t *testing.T) {
 	}
 }
 
-// A real gateway peer captures its digest at HTTP upgrade. The test store makes
-// authority changes at the deterministic post-peer recheck, without timing sleeps.
+// The test store changes authority at the post-relay recheck, the second
+// authentication, without timing sleeps.
 type liveConnectionStore struct {
-	digest                 string
-	authCalls              int
-	credentialCalls        int
-	revokeAtRecheck        bool
-	deviceRevokedAtRecheck bool
-	recheckError           error
-	credentialRecheckError error
+	resource        sandboxbootstrap.Resource
+	digest          string
+	authCalls       int
+	revokeAtRecheck bool
+	rotateAtRecheck bool
+	recheckError    error
 }
 
 func (s *liveConnectionStore) AuthenticateEnvironmentExecutor(context.Context, string, string) (string, error) {
@@ -92,75 +91,74 @@ func (s *liveConnectionStore) AuthenticateEnvironmentExecutor(context.Context, s
 			return "", sessions.ErrNotFound
 		}
 	}
-	return "tenant", nil
+	return s.resource.TenantID, nil
 }
 func (s *liveConnectionStore) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
-	return sessions.Environment{ID: "environment", SessionID: "session", Status: "connected"}, nil
+	return sessions.Environment{ID: s.resource.EnvironmentID, SessionID: "session", Status: "connected"}, nil
 }
-func (s *liveConnectionStore) GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error) {
-	return sessions.ExecutionDevice{ID: "device", EnvironmentID: "environment"}, nil
-}
-func (s *liveConnectionStore) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
-	s.credentialCalls++
-	if s.authCalls >= 2 && s.credentialRecheckError != nil {
-		return runtimedevice.Credential{}, false, s.credentialRecheckError
+func (s *liveConnectionStore) GetEnvironmentResource(context.Context, string, string) (runtimedevice.ServeAuthority, error) {
+	resource := s.resource
+	if s.rotateAtRecheck && s.authCalls >= 2 {
+		resource.Generation++
 	}
-	if s.deviceRevokedAtRecheck && s.authCalls >= 2 {
-		return runtimedevice.Credential{}, false, nil
-	}
-	return runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: runtimedevice.RuntimeTypeAgentDaemon, CredentialHash: s.digest}, true, nil
+	return runtimedevice.ServeAuthority{Resource: resource, CredentialHash: s.digest}, nil
 }
-func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
-	for _, name := range []string{"connected", "rotated before read", "revoked after peer", "device revoked after peer", "retired after peer", "store error after peer", "device store error after peer", "closed"} {
-		t.Run(name, func(t *testing.T) {
-			digest := runtimedevice.HashCredential("fixture-key")
-			s := &liveConnectionStore{digest: digest}
-			registry := runtimegateway.NewRegistry()
-			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Registry: registry, Authenticator: runtimegateway.NewAuthenticator(s)})
-			server := httptest.NewServer(http.HandlerFunc(handler.WS))
-			defer server.Close()
-			conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"?device_id=device&version="+proto.Version, http.Header{"Authorization": {"Bearer fixture-key"}})
-			if err != nil {
-				t.Fatal(err)
+
+// Connected follows the enrolled sandbox's serve peer at the relay and the
+// credential's authority after reading it.
+func TestRuntimeConnectedFollowsServeAndCurrentAuthority(t *testing.T) {
+	resource := sandboxbootstrap.Resource{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), Kind: "enrollment", ID: uuid.NewString(), Generation: 1}
+	auth := sandboxlinktest.NewAuthority()
+	auth.AddServe([]byte("fixture-key"), sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource.Ref()})
+	srv := sandboxlinktest.StartRelay(t, auth)
+	ctx, cancel := context.WithCancel(t.Context())
+	connected := make(chan struct{}, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		hold := func(ctx context.Context, _ sandboxlink.Bind, _ uint64, _ sandboxlink.Stream) { <-ctx.Done() }
+		_ = sandboxlink.Serve(ctx, sandboxlink.ServeConfig{URL: srv.URL, TLS: srv.TLS, Credential: []byte("fixture-key"), Resource: resource.Ref(), ServerInstanceID: sandboxwire.NewID(),
+			Services:    []sandboxlink.ServiceHandler{{Service: sandboxlink.ServiceFile, Version: 1, Serve: hold}},
+			OnConnected: func() { connected <- struct{}{} }, MinBackoff: 10 * time.Millisecond, MaxBackoff: 50 * time.Millisecond})
+	}()
+	defer func() { cancel(); <-done }()
+	select {
+	case <-connected:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the sandbox did not serve")
+	}
+	for !srv.Relay.Serving(resource.Ref()) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	digest := runtimedevice.HashCredential("fixture-key")
+	unavailable := errors.New("database unavailable")
+	for _, tc := range []struct {
+		name  string
+		store liveConnectionStore
+		want  bool
+		err   error
+	}{
+		{name: "connected", store: liveConnectionStore{resource: resource, digest: digest}, want: true},
+		{name: "another credential", store: liveConnectionStore{resource: resource, digest: runtimedevice.HashCredential("other-key")}, err: sessions.ErrDeviceBindingConflict},
+		{name: "not served", store: liveConnectionStore{resource: withGeneration(resource, 2), digest: digest}},
+		{name: "revoked after relay", store: liveConnectionStore{resource: resource, digest: digest, revokeAtRecheck: true}, err: sessions.ErrNotFound},
+		{name: "rotated after relay", store: liveConnectionStore{resource: resource, digest: digest, rotateAtRecheck: true}},
+		{name: "store error after relay", store: liveConnectionStore{resource: resource, digest: digest, recheckError: unavailable}, err: unavailable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := tc.store
+			got, err := RuntimeConnected(t.Context(), &s, srv.Relay, resource.EnvironmentID, digest)
+			if got != tc.want || !errors.Is(err, tc.err) {
+				t.Fatalf("connected=%v err=%v", got, err)
 			}
-			defer conn.Close()
-			// Wait for the actual registration, not merely the transport upgrade.
-			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-			defer cancel()
-			peer, err := registry.WaitForDevice(ctx, "device", time.Second)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer peer.Close("test complete")
-			s.authCalls = 0
-			var wantErr error
-			want := name == "connected"
-			switch name {
-			case "rotated before read":
-				s.digest = runtimedevice.HashCredential("new-key")
-				digest = s.digest
-			case "revoked after peer":
-				s.revokeAtRecheck = true
-				wantErr = sessions.ErrNotFound
-			case "device revoked after peer", "retired after peer":
-				s.deviceRevokedAtRecheck = true
-				wantErr = sessions.ErrNotFound
-			case "store error after peer":
-				s.recheckError = errors.New("database unavailable")
-				wantErr = s.recheckError
-			case "device store error after peer":
-				s.credentialRecheckError = errors.New("device authority unavailable")
-				wantErr = s.credentialRecheckError
-			case "closed":
-				peer.Close("closed before observation")
-			}
-			connected, err := RuntimeConnected(t.Context(), s, registry, "environment", digest)
-			if connected != want || !errors.Is(err, wantErr) {
-				t.Fatalf("connected=%v err=%v", connected, err)
-			}
-			if name == "connected" && s.authCalls != 2 {
-				t.Fatal("post-peer authority was not checked")
+			if tc.name == "connected" && s.authCalls != 2 {
+				t.Fatal("authority was not rechecked after the relay")
 			}
 		})
 	}
+}
+
+func withGeneration(resource sandboxbootstrap.Resource, generation uint64) sandboxbootstrap.Resource {
+	resource.Generation = generation
+	return resource
 }

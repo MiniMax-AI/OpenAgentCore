@@ -11,6 +11,12 @@ FROM sandbox_resources r
 LEFT JOIN runtime_allocations a ON r.kind = 'allocation' AND a.id = r.id
 WHERE r.live;
 
+-- name: GetEnvironmentResource :one
+-- The Environment's live Link resource. An Environment has at most one Link
+-- resource: its allocation's or its enrollment's.
+SELECT kind, id, generation, credential_hash FROM sandbox_resources
+WHERE tenant_id = $1 AND environment_id = $2 AND live;
+
 -- name: GetAgentHostCredential :one
 SELECT COALESCE(credential_hash, '')::text AS credential_hash, credential_revision FROM devices
 WHERE id = $1 AND agent_host AND revoked_at IS NULL;

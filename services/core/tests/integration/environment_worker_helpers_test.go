@@ -26,6 +26,16 @@ func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) {
 	})
 }
 
+// ordinarySession creates a Session without an Environment placed on h's agent
+// host: each Environment's fixture Runtime is another agent host of the
+// tenant, which the Worker could otherwise choose.
+func ordinarySession(t *testing.T, h *dispatchHarness, key string) sessions.Session {
+	t.Helper()
+	session := publicSession(t, h, key)
+	assignSession(t, h.s, session.ID, h.device.ID)
+	return session
+}
+
 func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
 	return prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported})
 }
@@ -90,7 +100,7 @@ func workerRuntimeForPreparation(t *testing.T, h *dispatchHarness, frame proto.E
 		t.Fatal("invalid worker preparation")
 	}
 	for _, candidate := range h.environments {
-		if input.SessionID == candidate.session.ID && input.Configuration.LocalEnvironment != nil && input.Configuration.LocalEnvironment.ID == candidate.device.EnvironmentID {
+		if input.SessionID == candidate.session.ID && input.Configuration.LocalEnvironment != nil && input.Configuration.LocalEnvironment.ID == candidate.session.Environment.ID {
 			return candidate
 		}
 	}

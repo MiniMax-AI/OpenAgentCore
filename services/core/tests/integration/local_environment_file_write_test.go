@@ -38,7 +38,7 @@ func awaitLocalWrite(t *testing.T, done <-chan localWriteResult) localWriteResul
 }
 
 func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
-	h, w, environment := localWorker(t, true, false)
+	h, w, environment := localWorker(t, false)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
 	if _, err := w.WriteEnvironmentFile(t.Context(), foreign, "input", nil); !errors.Is(err, sessions.ErrNotFound) {
@@ -92,7 +92,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 }
 
 func TestLocalEnvironmentFileWriteLostReceiptRemainsPending(t *testing.T) {
-	h, w, environment := localWorker(t, true, false)
+	h, w, environment := localWorker(t, false)
 	done := startLocalWrite(t.Context(), w, environment)
 	begin := h.read(proto.TypeWorkspaceWrite)
 	if err := h.conn.Close(); err != nil {
@@ -111,7 +111,7 @@ func TestLocalEnvironmentFileWriteLostReceiptRemainsPending(t *testing.T) {
 }
 
 func TestLocalEnvironmentFileWriteKnownRejectionReleasesMutation(t *testing.T) {
-	h, w, environment := localWorker(t, true, false)
+	h, w, environment := localWorker(t, false)
 	for range 2 {
 		done := startLocalWrite(t.Context(), w, environment)
 		begin := h.read(proto.TypeWorkspaceWrite)
@@ -126,9 +126,10 @@ func TestLocalEnvironmentFileWriteKnownRejectionReleasesMutation(t *testing.T) {
 	}
 }
 
-func TestLocalEnvironmentFileWriteRejectsUnscopedDevice(t *testing.T) {
-	_, w, environment := localWorker(t, false, false)
+func TestLocalEnvironmentFileWriteRejectsUnservedEnvironment(t *testing.T) {
+	h, w, environment := localWorker(t, false)
+	h.stopServing()
 	if _, err := w.WriteEnvironmentFile(t.Context(), environment, "input", nil); !errors.Is(err, execution.ErrExecutionUnavailable) {
-		t.Fatal("unscoped writer selected", err)
+		t.Fatal("an Environment that is not Serving was written", err)
 	}
 }

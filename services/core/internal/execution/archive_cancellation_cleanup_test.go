@@ -100,8 +100,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				t.Fatal(err)
 			}
 			input := inputs[0]
-			// This fixture isolates lifecycle ordering. Protocol-driven waiting is
-			// independently exercised in TestArchiveWaitingCancellationReceipts.
+			// This fixture isolates lifecycle ordering.
 			for _, transition := range []sessions.TurnTransition{{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}, {ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnWaiting}} {
 				if _, err := leased.Sessions.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, transition); err != nil {
 					t.Fatal(err)

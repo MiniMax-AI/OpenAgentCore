@@ -66,12 +66,6 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 			provider, source = extension.ModelProvider, v1.ModelProviderSourceSession
 		}
 	}
-	// The guest daemon of a self_hosted Environment runs on the caller's
-	// machine, so a deployment key must not reach it until the Harness runs on
-	// an agent host.
-	if provider == nil && input.Environment.Type == "self_hosted" {
-		return "", nil, "", uuid.Nil, &modelProviderRequiredError{"self_hosted Sessions need a model provider for harness " + engine + ": pass x_agents_core.model_provider or use an Agent that has one saved."}
-	}
 	if provider == nil && input.deploymentDefaults != nil {
 		provider, source, revision = input.deploymentDefaults.Provider, v1.ModelProviderSourceDeployment, input.deploymentDefaults.Revision
 	}

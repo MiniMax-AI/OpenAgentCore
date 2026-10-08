@@ -32,7 +32,7 @@ The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only th
 | Enrollment token | `POST /core/v1/sandbox/enrollment-tokens` (Web **Add node**), with the node's approved capacity. One use; it expires at the response's `expires_at` | `sandbox-node/configuration` without a node ID, `sandbox-node/enroll` |
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
-| Executor credential | The installation claim, or the Core-key [executor credential routes](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
+| Executor credential | The installation claim, or the Core-key [executor credential routes](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the Serve credential of the Environment's enrollment on `sandbox-link` |
 | Daemon credential of a hosted sandbox | Core, for each managed allocation, delivered in the [bootstrap file](../../docs/runtime-bootstrap.md) | `agent-daemon/bootstrap`, `device-status` and `ws` |
 | Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap`, `device-status` and `ws` |
 
@@ -40,7 +40,7 @@ Core keeps only a SHA-256 digest of each token and credential it stores; install
 
 ### Operator device profile
 
-An engine host for `environment: none` Sessions connects with a device profile that an operator provisions directly in the database:
+`oac-core-device` provisions a Runtime device profile directly in the database:
 
 ```sh
 umask 077
@@ -49,7 +49,7 @@ OAC_DATABASE_URL=... oac-core-device --tenant <tenant-uuid> --name 'engine host'
 oac-daemon connect --profile default
 ```
 
-`--tenant` is the Project's execution tenant UUID and `--url` Core's origin without a path. The command prints the profile once: `server_url` (the origin plus `/api/v1`), `runtime_id` (the device ID), `runner_credential` and `device_name`. Use a new profile rather than overwriting another device's file, and copy it privately to the same path on a remote host. `oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` revokes the device: new connections are refused at once, and an open connection closes at its next heartbeat. The Worker binds each `none` Session to one connected device of its tenant that declares the required capabilities and keeps that binding across retries and restarts; self-hosted Sessions never use this path.
+`--tenant` is the Project's execution tenant UUID and `--url` Core's origin without a path. The command prints the profile once: `server_url` (the origin plus `/api/v1`), `runtime_id` (the device ID), `runner_credential` and `device_name`. Use a new profile rather than overwriting another device's file, and copy it privately to the same path on a remote host. `oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` revokes the device: new connections are refused at once, and an open connection closes at its next heartbeat. Core binds Sessions only to the deployment's agent host ([Session assignments](../../docs/runtime-protocol.md#session-assignments)), so a device of this profile runs no Session.
 
 ## Node routes
 
@@ -111,13 +111,13 @@ The bootstrap, device-status and WebSocket routes share one error body, `{"error
 
 ### Enroll a self-hosted daemon
 
-`POST /api/v1/agent-daemon/enroll` with the executor credential and exactly `{"environment_id": "…"}` (no query) binds one dedicated device to the Environment's Session and returns `device_id`, `session_id`, `environment_id` and `workspace_directory`. It never returns another credential: the executor credential becomes the daemon credential of that device. A retry with the same credential returns the same binding. A successful response carries `Cache-Control: no-store`.
+`POST /api/v1/agent-daemon/enroll` with the executor credential and exactly `{"environment_id": "…"}` (no query) enrolls the machine as the Environment's [Link](../../docs/sandbox-link-protocol.md) resource and returns the [launch input](../../docs/sandbox-bootstrap.md#launch-input) fields Core owns: `link_url` and `resource` (`tenant_id`, `environment_id`, `kind` `enrollment`, `id` and `generation`). It never returns another credential: the executor credential is the resource's Serve credential. The first key to enroll the Environment keeps it, and a retry with that key returns the same resource at its current generation. A successful response carries `Cache-Control: no-store`.
 
 | HTTP | When |
 | --- | --- |
 | 400 | A malformed body or any query |
 | 401 | An invalid, revoked or foreign credential, a deleted Session, or an Environment without current executor authority |
-| 409 | The Environment is already bound to a different key or device |
-| 503 | Storage is unavailable |
+| 409 | Another executor key already enrolled the Environment |
+| 503 | `{"error": "no_sandbox_link", "detail": "a self_hosted sandbox needs an https public URL"}`, before the credential is checked, when the [public URL](../../docs/configuration.md#changing-the-public-url) is not https; otherwise storage is unavailable |
 
-Enrollment creates no managed allocation and grants no Session API access. The daemon keeps the binding beside its credential and refuses another Environment's native history. The gateway and Worker recheck the credential's authority on every connection and dispatch, so rotation, revocation and Session deletion end further use. The [self-hosted guide](../../docs/getting-started/self-hosted.md) gives the operator steps, and the [executor credential contract](./environment-executor-credentials.md#revoked-or-rotated-credential) describes how the daemon handles a permanent rejection.
+Enrollment creates no managed allocation, binds no Session and grants no Session API access. Core binds the Session to the deployment's agent host while the machine serves the resource ([Session assignments](../../docs/runtime-protocol.md#session-assignments)). The relay rechecks the credential's authority on every Serve and Open, so rotation, revocation and Session deletion end further use. The [self-hosted guide](../../docs/getting-started/self-hosted.md) gives the operator steps, and the [executor credential contract](./environment-executor-credentials.md#revoked-or-rotated-credential) describes how the daemon handles a permanent rejection.

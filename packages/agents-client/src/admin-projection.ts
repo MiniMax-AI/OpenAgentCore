@@ -186,11 +186,11 @@ export function projectAdminAudit(value: unknown): AdminAuditPage {
 export function projectExecutorCredentials(value: unknown): ExecutorCredentialList {
   const page = record(value, ["data", "connection"]);
   if (!Array.isArray(page.data)) return invalidAdminResponse();
-  const connection = record(page.connection, ["status", "bound_key_id", "enrolled_at", "last_seen_at"]);
+  const connection = record(page.connection, ["status", "bound_key_id", "enrolled_at"]);
   if (!["never_enrolled", "connected", "disconnected"].includes(connection.status as string) ||
       !(connection.bound_key_id === null || (typeof connection.bound_key_id === "string" && connection.bound_key_id.length > 0)) ||
-      !date(connection.enrolled_at) || !date(connection.last_seen_at)) return invalidAdminResponse();
-  if (connection.status === "never_enrolled" && [connection.bound_key_id, connection.enrolled_at, connection.last_seen_at].some(value => value !== null)) return invalidAdminResponse();
+      !date(connection.enrolled_at)) return invalidAdminResponse();
+  if (connection.status === "never_enrolled" && [connection.bound_key_id, connection.enrolled_at].some(value => value !== null)) return invalidAdminResponse();
   if (connection.status !== "never_enrolled" && connection.enrolled_at === null) return invalidAdminResponse();
   if (connection.status === "connected" && connection.bound_key_id === null) return invalidAdminResponse();
   return { connection: { ...connection } as unknown as ExecutorConnection, data: page.data.map((entry) => {

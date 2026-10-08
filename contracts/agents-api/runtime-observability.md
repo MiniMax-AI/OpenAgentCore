@@ -12,7 +12,7 @@ Core attributes every observation to durable Core identity before it reads a pro
 
 ```text
 managed:     tenant_id -> session_id -> environment_id -> runtime_allocation_id
-self-hosted: tenant_id -> session_id -> environment_id -> device_id + connection_generation
+self-hosted: tenant_id -> session_id -> environment_id
 none:        tenant_id -> session_id (no Session-owned Runtime instance)
 ```
 

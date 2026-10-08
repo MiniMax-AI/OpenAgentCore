@@ -62,6 +62,9 @@ jobs:
         id: build
         run: |
           go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/daemon/cmd/oac-daemon
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$RUNNER_TEMP/oac-sandbox-io" ./apps/sandboxio/cmd/oac-sandbox-io
+          fi
           node --test scripts/build-native-installer.test.mjs
       - name: Build and test the shared Core installer
         run: |
@@ -128,6 +131,7 @@ jobs:
           node scripts/build-native-installer-ci.mjs
       - name: Bootstrap, authenticate, install and connect natively
         id: onboarding
+        if: runner.os == 'Linux'
         run: node scripts/native-onboarding-smoke.mjs
       - name: Verify native Harness protocols without model requests
         id: protocol

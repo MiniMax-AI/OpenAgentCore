@@ -201,31 +201,36 @@ func TestCapabilitiesRejectsWrongChunkReceipt(t *testing.T) {
 	noCapabilityFrame(t, s)
 }
 
-func TestCapabilitiesConnectionOwnershipAndUnknownInterruption(t *testing.T) {
+func TestCapabilitiesConcurrentTransfersAndUnknownInterruption(t *testing.T) {
 	for _, closeConnection := range []bool{false, true} {
 		t.Run(map[bool]string{false: "deadline", true: "disconnect"}[closeConnection], func(t *testing.T) {
 			s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 			defer s.Close("test")
 			ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
 			defer cancel()
-			done := beginCapabilities(s, ctx, uuid.NewString(), skillPreparation(), []byte("data"))
+			first := beginCapabilities(s, ctx, uuid.NewString(), skillPreparation(), []byte("data"))
 			nextCapabilityFrame(t, s)
-			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), testAssignment, skillPreparation(), []byte("second")); err == nil {
-				t.Fatal("concurrent transfer admitted")
+			// An agent host prepares other Sessions' Environments on the same connection.
+			id := uuid.NewString()
+			second := beginCapabilities(s, ctx, id, skillPreparation(), []byte("second"))
+			if env := nextCapabilityFrame(t, s); env.ID != id {
+				t.Fatal("concurrent preparation refused")
 			}
 			if closeConnection {
 				s.Close("lost connection")
-			}
-			result := finishCapabilities(t, done)
-			if result.result.Outcome != "unknown" || result.result.ErrorCode != "runtime_preparation_unconfirmed" {
-				t.Fatal("interruption claimed rejection", result)
 			}
 			expected := error(context.DeadlineExceeded)
 			if closeConnection {
 				expected = ErrSessionClosed
 			}
-			if !errors.Is(result.err, expected) {
-				t.Fatal(result.err)
+			for _, done := range []<-chan capabilityOutcome{first, second} {
+				result := finishCapabilities(t, done)
+				if result.result.Outcome != "unknown" || result.result.ErrorCode != "runtime_preparation_unconfirmed" {
+					t.Fatal("interruption claimed rejection", result)
+				}
+				if !errors.Is(result.err, expected) {
+					t.Fatal(result.err)
+				}
 			}
 			noCapabilityFrame(t, s)
 			s.capabilitiesMu.Lock()

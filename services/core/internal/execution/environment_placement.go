@@ -76,16 +76,9 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	return placement, nil
 }
 
-func environmentDeviceMatches(session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice) bool {
-	if environment.SessionID != session.ID || environment.TenantID != session.TenantID {
-		return false
-	}
-	return bound.EnvironmentID == environment.ID
-}
-
 func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, req *proto.PromptRequestPayload) error {
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
-	if err != nil || !environmentDeviceMatches(session, environment, bound) {
+	if err != nil || environment.SessionID != session.ID || environment.TenantID != session.TenantID || bound.SessionEnvironmentID != environment.ID {
 		return sessions.ErrInvalidInput
 	}
 	sources := &agentcapabilities.Input{Plugins: append([]agentplugin.Metadata(nil), placement.Plugins...), Directories: append([]string(nil), placement.CapabilityDirectories...)}

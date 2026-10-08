@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
@@ -47,7 +49,7 @@ func awaitInitialization(t *testing.T, s *Store, tenant, environment, state stri
 }
 
 func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *testing.T) {
-	for _, outcome := range []string{"completed", "failed", "unknown", "unavailable", "revoked"} {
+	for _, outcome := range []string{"completed", "failed", "unknown", "unavailable"} {
 		t.Run(outcome, func(t *testing.T) {
 			_, pool := newManagedTestStore(t)
 			cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
@@ -81,7 +83,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
-			worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry})
+			link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+			worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: link.Relay})
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
@@ -93,8 +96,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			}()
 			var mu sync.Mutex
 			var actions []string
-			peer := &initializationPeer{unavailable: outcome == "unavailable"}
-			peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry, nil)
+			peer := &initializationPeer{unavailable: outcome == "unavailable", tenant: principal.TenantID}
+			peer.setRuntimeGateway(t, s, "ws"+strings.TrimPrefix(server.URL, "http"), registry, link)
 			peer.apply = func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {
 				if request.EnvironmentID != environment.ID || request.SessionID != session.ID {
 					t.Error("wrong authorization binding")
@@ -109,12 +112,6 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				mu.Lock()
 				actions = append(actions, action)
 				mu.Unlock()
-				if outcome == "revoked" {
-					if err := sessionService(t, s).RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
-						t.Error(err)
-					}
-					return completedInitialization(request, data)
-				}
 				if outcome != "completed" {
 					return proto.RuntimePrepareResultPayload{Outcome: outcome, ErrorCode: "runtime_preparation_unconfirmed"}
 				}
@@ -124,7 +121,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if initializationState(t, s, principal.TenantID, environment.ID) != "pending" {
 				t.Fatal("unconnected preparation was consumed")
 			}
-			bootstrap := sandbox.Bootstrap{DeviceID: enrolled.DeviceID, Credential: key.Token}
+			// The enrolled machine Serves; the agent host runs the initialization.
+			bootstrap := sandbox.Bootstrap{SandboxIO: sandboxbootstrap.Input{Credential: key.Token, Resource: enrolled}}
 			if err := peer.connect(bootstrap); err != nil {
 				t.Fatal(err)
 			}
@@ -156,7 +154,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 					expected = 0
 				}
 				if peer.writes.Load() != expected {
-					t.Fatal("failed, unavailable or revoked effect replayed", peer.writes.Load())
+					t.Fatal("failed or unavailable effect replayed", peer.writes.Load())
 				}
 				value, err := sessionAdapter(s).GetSession(t.Context(), principal.TenantID, session.ID)
 				if err != nil || value.EnvironmentFailure == nil {
@@ -172,6 +170,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
+	owned := executionOwner(t, s).Sessions
+	// Each Environment is enrolled and its Session bound to an agent host of its own.
 	create := func() sessions.EnvironmentInitialization {
 		t.Helper()
 		session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
@@ -190,15 +190,17 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		enrolled, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
-		if err != nil {
+		if _, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token)); err != nil {
 			t.Fatal(err)
 		}
-		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
+		host := registerAgentHost(t, s, principal.TenantID)
+		if err := owned.BindSessionDevice(t.Context(), principal.TenantID, session.ID, host.ID); err != nil {
+			t.Fatal(err)
+		}
+		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: host.ID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	owned := executionOwner(t, s).Sessions
-	if err := sessionService(t, s).RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE devices SET revoked_at = clock_timestamp() WHERE id = $1", revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, sessions.ErrNotFound) {

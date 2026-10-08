@@ -35,6 +35,38 @@ func (q *Queries) GetLatestSessionTurn(ctx context.Context, sessionID pgtype.UUI
 	return i, err
 }
 
+const listAgentHosts = `-- name: ListAgentHosts :many
+SELECT id, name FROM devices
+WHERE agent_host AND revoked_at IS NULL AND (tenant_id IS NULL OR tenant_id = $1)
+ORDER BY id
+`
+
+type ListAgentHostsRow struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+}
+
+// The agent hosts that may run the tenant's Sessions; see GetAgentHost.
+func (q *Queries) ListAgentHosts(ctx context.Context, tenantID pgtype.UUID) ([]ListAgentHostsRow, error) {
+	rows, err := q.db.Query(ctx, listAgentHosts, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAgentHostsRow{}
+	for rows.Next() {
+		var i ListAgentHostsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnvironmentInputWork = `-- name: ListEnvironmentInputWork :many
 SELECT r.id, r.session_id, s.tenant_id
 FROM environment_input_reservations r
@@ -43,8 +75,8 @@ LEFT JOIN session_runtime_assignments b ON b.session_id = s.id
 WHERE r.state = 'pending' AND r.deadline > clock_timestamp()
 AND r.id > $1::uuid AND s.deleted_at IS NULL
 AND EXISTS (
-    SELECT 1 FROM devices d WHERE d.tenant_id = s.tenant_id AND d.revoked_at IS NULL
-        AND d.id = ANY($2::uuid[])
+    SELECT 1 FROM devices d WHERE d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
+        AND d.revoked_at IS NULL AND d.id = ANY($2::uuid[])
         AND (b.runtime_id IS NULL OR d.id = b.runtime_id)
 )
 ORDER BY r.id LIMIT 100
@@ -81,45 +113,14 @@ func (q *Queries) ListEnvironmentInputWork(ctx context.Context, arg ListEnvironm
 	return items, nil
 }
 
-const listExecutionDevices = `-- name: ListExecutionDevices :many
-SELECT id, name FROM devices
-WHERE tenant_id = $1 AND revoked_at IS NULL AND environment_id IS NULL
-ORDER BY id
-`
-
-type ListExecutionDevicesRow struct {
-	ID   pgtype.UUID `json:"id"`
-	Name string      `json:"name"`
-}
-
-func (q *Queries) ListExecutionDevices(ctx context.Context, tenantID pgtype.UUID) ([]ListExecutionDevicesRow, error) {
-	rows, err := q.db.Query(ctx, listExecutionDevices, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListExecutionDevicesRow{}
-	for rows.Next() {
-		var i ListExecutionDevicesRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listExecutionWork = `-- name: ListExecutionWork :many
 SELECT t.id, t.session_id, s.tenant_id, t.status
 FROM turns t JOIN sessions s ON s.id = t.session_id
 WHERE t.status = ANY($1::text[]) AND t.id > $2::uuid
 AND (s.deleted_at IS NULL OR t.status <> 'queued')
 AND (NOT $3::boolean OR EXISTS (
-    SELECT 1 FROM devices d WHERE d.tenant_id = s.tenant_id AND d.revoked_at IS NULL
-        AND d.id = ANY($4::uuid[])
+    SELECT 1 FROM devices d WHERE d.agent_host AND (d.tenant_id IS NULL OR d.tenant_id = s.tenant_id)
+        AND d.revoked_at IS NULL AND d.id = ANY($4::uuid[])
 ))
 ORDER BY t.id LIMIT 100
 `

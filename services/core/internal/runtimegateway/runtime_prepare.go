@@ -42,12 +42,13 @@ func (s *Session) PrepareRuntime(ctx context.Context, id string, ref proto.Assig
 		s.capabilitiesMu.Unlock()
 		return unknown, ErrSessionClosed
 	}
-	if len(s.capabilities) != 0 {
-		s.capabilitiesMu.Unlock()
-		return unknown, errors.New("agentdaemon gateway: Runtime preparation capacity")
-	}
+	// An agent host prepares many Sessions' Environments on one connection;
+	// the Runtime bounds its transfers per Session and per connection.
 	replies := make(chan proto.Envelope, 1)
-	s.capabilities = map[string]chan proto.Envelope{id: replies}
+	if s.capabilities == nil {
+		s.capabilities = map[string]chan proto.Envelope{}
+	}
+	s.capabilities[id] = replies
 	s.capabilitiesMu.Unlock()
 	defer func() { s.capabilitiesMu.Lock(); delete(s.capabilities, id); s.capabilitiesMu.Unlock() }()
 	ctx, cancel := context.WithTimeout(ctx, 195*time.Second)

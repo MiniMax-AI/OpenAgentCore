@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 )
 
 func (f *fakeTx) LoadSessionDevice(context.Context) (ExecutionDevice, bool, error) {
@@ -71,14 +72,14 @@ func (f *fakeTx) BindDevice(_ context.Context, device string) error {
 	return f.bindDevice()
 }
 
-func (f *fakeTx) AuthorizeEnrollment(context.Context) (EnrollmentAuthority, error) {
+func (f *fakeTx) AuthorizeEnrollment(context.Context) (string, error) {
 	f.record("AuthorizeEnrollment", f.authorizeEnrollment != nil)
 	return f.authorizeEnrollment()
 }
 
-func (f *fakeTx) EnrollDevice(_ context.Context, key string) (string, error) {
-	f.record("EnrollDevice", f.enrollDevice != nil, key)
-	return f.enrollDevice()
+func (f *fakeTx) EnrollSandbox(_ context.Context, key string) (sandboxbootstrap.Resource, error) {
+	f.record("EnrollSandbox", f.enrollSandbox != nil, key)
+	return f.enrollSandbox()
 }
 
 // environmentTx is the transaction the Environment family's With methods
@@ -180,7 +181,7 @@ func TestInitializationOwnerAndDeviceRules(t *testing.T) {
 func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
 	owner := EnvironmentInitialization{TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", DeviceID: "device"}
 	listed := func() (ExecutionDevice, bool, error) {
-		return ExecutionDevice{ID: "device", EnvironmentID: "environment"}, true, nil
+		return ExecutionDevice{ID: "device"}, true, nil
 	}
 	checked := []string{"WithInitialization tenant session", "LoadEnvironment", "LoadSessionDevice"}
 	for _, test := range []struct {
@@ -200,7 +201,7 @@ func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
 		{"complete", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, completeInitialization: returns(true)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.CompleteEnvironmentInitialization(t.Context(), owner) },
 			nil, append(checked, "CompleteInitialization environment")},
-		{"device moved", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: loads(ExecutionDevice{ID: "other", EnvironmentID: "environment"}, true)},
+		{"device moved", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: loads(ExecutionDevice{ID: "other"}, true)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.CompleteEnvironmentInitialization(t.Context(), owner) },
 			ErrTurnConflict, checked},
 		{"deleted Session", fakeTx{},

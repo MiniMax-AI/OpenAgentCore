@@ -28,6 +28,37 @@ func (q *Queries) GetAgentHostCredential(ctx context.Context, id pgtype.UUID) (G
 	return i, err
 }
 
+const getEnvironmentResource = `-- name: GetEnvironmentResource :one
+SELECT kind, id, generation, credential_hash FROM sandbox_resources
+WHERE tenant_id = $1 AND environment_id = $2 AND live
+`
+
+type GetEnvironmentResourceParams struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+}
+
+type GetEnvironmentResourceRow struct {
+	Kind           string      `json:"kind"`
+	ID             pgtype.UUID `json:"id"`
+	Generation     int64       `json:"generation"`
+	CredentialHash pgtype.Text `json:"credential_hash"`
+}
+
+// The Environment's live Link resource. An Environment has at most one Link
+// resource: its allocation's or its enrollment's.
+func (q *Queries) GetEnvironmentResource(ctx context.Context, arg GetEnvironmentResourceParams) (GetEnvironmentResourceRow, error) {
+	row := q.db.QueryRow(ctx, getEnvironmentResource, arg.TenantID, arg.EnvironmentID)
+	var i GetEnvironmentResourceRow
+	err := row.Scan(
+		&i.Kind,
+		&i.ID,
+		&i.Generation,
+		&i.CredentialHash,
+	)
+	return i, err
+}
+
 const getLinkAssignment = `-- name: GetLinkAssignment :one
 SELECT b.session_id, b.runtime_id, b.epoch, b.desired_state = 'bound' AS bound,
     (d.agent_host AND d.revoked_at IS NULL)::boolean AS agent_host, d.credential_revision,

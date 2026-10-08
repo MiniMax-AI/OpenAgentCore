@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
@@ -178,7 +179,7 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 			return err
 		}
 	}
-	if err = nativeInstallPhase(rc.stdout, "Installing Runtime", func() error { return installNativeBinary(ctx, o.Directory, len(previous.Harnesses) > 0) }); err != nil {
+	if err = nativeInstallPhase(rc.stdout, "Installing Runtime", func() error { return installNativeBinary(ctx, o.Bundle, o.Directory, len(previous.Harnesses) > 0) }); err != nil {
 		return err
 	}
 	for _, name := range append([]string{"node"}, selected...) {
@@ -199,7 +200,7 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	}
 	fmt.Fprintln(rc.stdout, "Installation: ready; verified Harnesses:", all)
 	if o.OnboardURL == "" {
-		fmt.Fprintln(rc.stdout, "Daemon connection: not checked by install; run the installed oac-daemon start, then check Host connection in Core.")
+		fmt.Fprintln(rc.stdout, "Host connection: not checked by install; run the installed oac-daemon start, then check Host connection in Core.")
 	}
 	fmt.Fprintln(rc.stdout, "Model configuration: not checked; configure the Session model provider in Core and send a Turn.")
 	return nil
@@ -224,7 +225,9 @@ func verifyNativeComponents(ctx context.Context, root string, selected []string)
 	return nil
 }
 
-func installNativeBinary(ctx context.Context, root string, existing bool) error {
+// installNativeBinary installs the running oac-daemon and the distribution's
+// other programs (nativeBundlePrograms) into bin.
+func installNativeBinary(ctx context.Context, bundle, root string, existing bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -233,7 +236,19 @@ func installNativeBinary(ctx context.Context, root string, existing bool) error 
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	dest := filepath.Join(dir, nativeExe("oac-daemon"))
+	if err = installNativeProgram(ctx, exe, dir, nativeExe("oac-daemon"), existing); err != nil {
+		return err
+	}
+	for _, name := range nativeBundlePrograms {
+		if err = installNativeProgram(ctx, filepath.Join(bundle, name), dir, name, existing); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func installNativeProgram(ctx context.Context, source, dir, name string, existing bool) error {
+	dest := filepath.Join(dir, name)
 	digest := func(name string) (string, error) {
 		f, e := os.Open(name)
 		if e != nil {
@@ -244,22 +259,25 @@ func installNativeBinary(ctx context.Context, root string, existing bool) error 
 		_, e = nativeCopy(ctx, h, f)
 		return hex.EncodeToString(h.Sum(nil)), e
 	}
-	want, err := digest(exe)
+	want, err := digest(source)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("install: the distribution has no %s; use the matching native distribution", name)
+	}
 	if err != nil {
 		return err
 	}
 	if got, e := digest(dest); e == nil {
 		if got != want {
-			return errors.New("install: existing daemon binary differs; in-place upgrades are unsupported")
+			return fmt.Errorf("install: existing %s differs; in-place upgrades are unsupported", name)
 		}
 		return nil
 	} else if !errors.Is(e, os.ErrNotExist) {
 		return e
 	}
 	if existing {
-		return errors.New("install: existing daemon binary is missing; preserve the installation and reinstall separately")
+		return fmt.Errorf("install: existing %s is missing; preserve the installation and reinstall separately", name)
 	}
-	in, err := os.Open(exe)
+	in, err := os.Open(source)
 	if err != nil {
 		return err
 	}
@@ -271,7 +289,7 @@ func installNativeBinary(ctx context.Context, root string, existing bool) error 
 	if err = requireNativeSpace(dir, uint64(info.Size())); err != nil {
 		return err
 	}
-	out, err := os.CreateTemp(dir, ".oac-daemon-")
+	out, err := os.CreateTemp(dir, "."+strings.TrimSuffix(name, ".exe")+"-")
 	if err != nil {
 		return err
 	}
@@ -320,32 +338,11 @@ func runStart(rc *runContext, args []string) error {
 	if err == nil {
 		err = validateNativeInstallation(config)
 	}
-	if err == nil && len(config.Harnesses) == 0 {
-		err = errors.New("start: no installed Harnesses; rerun install with --harness")
-	}
-	if err == nil {
-		err = verifyNativeComponents(ctx, root, config.Harnesses)
-	}
-	if err == nil {
-		err = probeNativeInstallation(ctx, root, config.Harnesses)
-	}
 	unlock()
 	if err != nil {
 		return fmt.Errorf("start: installation unavailable or incompatible: %w", err)
 	}
-	previousKinds := rc.installedKinds
-	rc.installedKinds = nativeInstallationKinds(config.Harnesses)
-	defer func() { rc.installedKinds = previousKinds }()
-	values := nativeHarnessEnvironment(root, config.Harnesses)
-	values["OAC_RUNTIME_WORKSPACE"] = config.Workspace
-	values["OAC_RUNTIME_CAPABILITY_DIRECTORY"] = config.CapabilityDirectory
-	values["OAC_RUNTIME_TOOL_ENV_FILE"] = config.ToolEnvironmentFile
-	for key, value := range values {
-		if err = os.Setenv(key, value); err != nil {
-			return err
-		}
-	}
-	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, !*foreground, config.Remote, config.Environment, config.Credential)
+	return runSandboxLauncher(ctx, rc, !*foreground, root, config)
 }
 
 func useInstalledNativeHome() {

@@ -65,8 +65,8 @@ type hostedFailureProvider struct {
 	steps  []string
 }
 
-func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry, link *sandboxlinktest.Server) {
-	p.initializationPeer.setRuntimeGateway(t, endpoint, registry, link)
+func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, s *Store, endpoint string, registry *runtimegateway.Registry, link *sandboxlinktest.Server) {
+	p.initializationPeer.setRuntimeGateway(t, s, endpoint, registry, link)
 	p.apply = p.prepare
 }
 func (p *hostedFailureProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {

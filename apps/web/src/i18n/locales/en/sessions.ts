@@ -150,12 +150,10 @@ export const sessions = {
   executor: {
     connection: {
       title: "Host connection",
-      help: "Core reports a connection only while the executor has current authority and a live connection. Last seen is the last recorded heartbeat and may lag. This does not confirm model or harness readiness.",
+      help: "Core reports a connection only while the bound credential has current authority and the host is serving this Environment.",
       status: { never_enrolled: "Never connected", connected: "Connected", disconnected: "Disconnected", revoked: "Bound credential revoked", unknown: "Unknown" },
       boundKey: "Bound credential",
-      lastSeen: "Last seen",
       notBound: "Not bound",
-      noHeartbeat: "No heartbeat recorded",
       stale: "Refresh failed. Showing the last loaded binding; the current connection is unknown.",
       refreshing: "Refreshing the last loaded binding; the current connection is not yet confirmed.",
       failed: "The connection could not be read. Refresh to try again.",

@@ -36,7 +36,7 @@ Provider precedence is: a complete Session bundle, then a complete saved bundle,
 
 MiniMax Code requires positive context and output limits. Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. Nothing converts between protocols, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
 
-Every source applies to every Environment type, because the key reaches only the [credential gateway](#credential-gateway) on the agent host, never the Harness or the sandbox. For `self_hosted`, that agent host is the application's executor, so a deployment default there hands the operator's key to that executor's gateway. Every Session must resolve a bundle: without one, creation is rejected before any write with 400 `model_provider_required`, param `x_agents_core.model_provider` and a message saying what to configure. A saved Agent may omit its bundle and leave it to the Session or the deployment default.
+Every source applies to every Environment type, because the key reaches only the [credential gateway](#credential-gateway) on the deployment's agent host, never the Harness, the sandbox or a `self_hosted` machine. Every Session must resolve a bundle: without one, creation is rejected before any write with 400 `model_provider_required`, param `x_agents_core.model_provider` and a message saying what to configure. A saved Agent may omit its bundle and leave it to the Session or the deployment default.
 
 | Operation | Omitted | Explicit null |
 | --- | --- | --- |
@@ -82,7 +82,7 @@ Unsupported protocol, Harness or Environment combinations are rejected before th
 
 The resolved provider configuration is frozen and encrypted in the Session creation transaction, with its own encryption purpose and Project and Session binding. Creation retries include a Session's own bundle in their request hash, so a changed key or endpoint under the same Idempotency-Key conflicts; a key enters any stored hash only as a fingerprint keyed by the deployment credential key. No public Session, Agent, Environment, event or ordinary configuration contains the key. The top-level extension is write-only and cannot be updated.
 
-At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session, and the adapter points the Harness at the [credential gateway](#credential-gateway) through native configuration. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. For `self_hosted`, the receiving daemon is the executor enrolled for the Session's own Environment with a current executor credential of the Session creator's principal; rotation or revocation closes the socket before further dispatch. The gateway holds the key in memory for the Session, and the key never enters the Harness's environment, configuration or home, or the sandbox.
+At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session, and the adapter points the Harness at the [credential gateway](#credential-gateway) through native configuration. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. The gateway holds the key in memory for the Session, and the key never enters the Harness's environment, configuration or home, or the sandbox.
 
 ## Credential gateway
 

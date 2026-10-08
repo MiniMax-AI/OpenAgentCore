@@ -29,7 +29,7 @@ The provider creates the account, mounts and workspace, delivers this file, sets
 
 The Runtime validates the input and owns authentication and connection. A successful launch proves only the handoff: an authenticated connection, prepared capabilities and execution readiness are separate observations under the [Core–Runtime protocol](./runtime-protocol.md), and the [Sandbox Provider guide](./sandbox-provider.md#four-distinct-readiness-facts) lists what each one proves.
 
-Self-hosted executors and operator-provisioned devices get their daemon identity in other ways; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. All of them enter the same Runtime execution loop.
+Operator-provisioned devices get their daemon identity in another way; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. A self-hosted machine runs no Runtime: it enrolls and serves its Environment through the [Sandbox I/O service](./sandbox-bootstrap.md).
 
 ## Verification
 

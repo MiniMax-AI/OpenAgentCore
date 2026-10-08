@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: f7e9275feee79ac1fb1299227e148b85c26efc8b8af5ca0e8f498126c563d182
+source_hash: 0aa851ad8d3b6ebcd3d94ad85baad15725f4a7e970b75ae0e6570f58c9dcc271
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动托管 Runtime。本文负责 Provider 到 Runtime 的启动输入。类型与验证器位于 [`internal/runtimebootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/runtimebootstrap/bootstrap.go)；Go provider 使用 [`runtime_bootstrap.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/runtime_bootstrap.go) 中的 `sandbox.Bootstrap.RuntimeConnection()` 构造输入，SDK helper 原样转发序列化对象。provider 不读取或写入 Runtime 的私有认证存储。
@@ -31,7 +31,7 @@ provider 创建账户、挂载和工作区，交付该文件，设置 Runtime �
 
 Runtime 验证输入，并负责认证与连接。启动成功仅证明交付完成：经过认证的连接、已准备的能力和执行就绪是 [Core–Runtime 协议](runtime-protocol.md) 下的独立观测；[Sandbox Provider 指南](sandbox-provider.md#four-distinct-readiness-facts) 列出各自证明的事实。
 
-自托管 executor 和运维人员供应的设备通过其他方式获取 daemon 身份；[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出所有凭据来源。它们都进入同一 Runtime 执行循环。
+运维人员供应的设备通过其他方式获取 daemon 身份；[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出所有凭据来源。自托管机器不运行 Runtime：它完成注册，并通过 [Sandbox I/O 服务](./sandbox-bootstrap.md)为其 Environment 提供服务。
 
 ## 验证 {#verification}
 

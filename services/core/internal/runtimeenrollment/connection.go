@@ -9,21 +9,21 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type ConnectionStore interface {
 	AuthenticateEnvironmentExecutor(context.Context, string, string) (string, error)
 	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
-	GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error)
-	GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error)
+	GetEnvironmentResource(context.Context, string, string) (runtimedevice.ServeAuthority, error)
 }
 
-// ConnectionHandler observes an existing binding without enrollment or execution.
-// Executor authority never grants access to the public Session API.
-func ConnectionHandler(s ConnectionStore, registry *runtimegateway.Registry) http.Handler {
+// ConnectionHandler observes an existing enrollment without enrollment or
+// execution. Executor authority never grants access to the public Session API.
+func ConnectionHandler(s ConnectionStore, links *relay.Relay) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		fail := func(status int) { http.Error(w, http.StatusText(status), status) }
@@ -46,7 +46,7 @@ func ConnectionHandler(s ConnectionStore, registry *runtimegateway.Registry) htt
 		digest := runtimedevice.HashCredential(authorization[1])
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		connected, err := RuntimeConnected(ctx, s, registry, environment, digest)
+		connected, err := RuntimeConnected(ctx, s, links, environment, digest)
 		switch {
 		case errors.Is(err, sessions.ErrNotFound):
 			fail(http.StatusUnauthorized)
@@ -68,9 +68,13 @@ func ConnectionHandler(s ConnectionStore, registry *runtimegateway.Registry) htt
 	})
 }
 
-// RuntimeConnected observes current executor authority and a matching open peer.
-// It rechecks authority after the peer; callers must not supply a stale transaction.
-func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimegateway.Registry, environment, digest string) (bool, error) {
+// RuntimeConnected reports whether the sandbox the executor credential
+// enrolled serves the Environment: the credential authenticates for the
+// Environment, the Environment's live Link resource is that enrollment with
+// the same credential, the relay holds its serve peer, and the credential
+// still has that authority afterwards. A live resource of another credential
+// is ErrDeviceBindingConflict.
+func RuntimeConnected(ctx context.Context, s ConnectionStore, links *relay.Relay, environment, digest string) (bool, error) {
 	tenant, err := s.AuthenticateEnvironmentExecutor(ctx, environment, digest)
 	if err != nil {
 		return false, err
@@ -82,52 +86,32 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimeg
 	if current.Status == "failed" || current.Status == "expired" {
 		return false, sessions.ErrNotFound
 	}
-	bound, err := s.GetSessionDevice(ctx, tenant, current.SessionID)
-	if errors.Is(err, sessions.ErrNotFound) {
-		return false, nil
-	}
-	if err != nil {
+	resource, found, err := enrolledResource(ctx, s, tenant, environment, digest)
+	if err != nil || !found || !links.Serving(resource.Ref()) {
 		return false, err
 	}
-	if bound.EnvironmentID != environment {
-		return false, sessions.ErrDeviceBindingConflict
-	}
-	credential, found, err := s.GetDeviceCredential(ctx, bound.ID)
-	if err != nil {
-		return false, err
-	}
-	if !found {
-		return false, sessions.ErrNotFound
-	}
-	if credential.CredentialHash != digest {
-		return false, sessions.ErrDeviceBindingConflict
-	}
-	peer, err := registry.LookupDevice(bound.ID)
-	if errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if current.Status != "connected" || peer.IsClosed() || !peer.AuthenticatedWith(digest) {
-		return false, nil
-	}
-	// Recheck authority after reading the socket; rotation/revocation never inherits
-	// the connected observation of a socket authenticated with the former key.
+	// Recheck authority after the relay; rotation or revocation never
+	// inherits the serve peer of the former credential.
 	if _, err = s.AuthenticateEnvironmentExecutor(ctx, environment, digest); err != nil {
 		return false, err
 	}
-	// The executor key can remain valid while the device itself is revoked.
-	// Recheck the shared authority view too, including Environment retirement.
-	credential, found, err = s.GetDeviceCredential(ctx, bound.ID)
+	again, found, err := enrolledResource(ctx, s, tenant, environment, digest)
+	return err == nil && found && again == resource && links.Serving(resource.Ref()), err
+}
+
+// enrolledResource reads the Environment's live Link resource and reports
+// whether it has one; the resource must be an enrollment served with the
+// credential.
+func enrolledResource(ctx context.Context, s ConnectionStore, tenant, environment, digest string) (sandboxbootstrap.Resource, bool, error) {
+	authority, err := s.GetEnvironmentResource(ctx, tenant, environment)
+	if errors.Is(err, sessions.ErrNotFound) {
+		return sandboxbootstrap.Resource{}, false, nil
+	}
 	if err != nil {
-		return false, err
+		return sandboxbootstrap.Resource{}, false, err
 	}
-	if !found {
-		return false, sessions.ErrNotFound
+	if authority.Resource.Kind != "enrollment" || authority.CredentialHash != digest {
+		return sandboxbootstrap.Resource{}, false, sessions.ErrDeviceBindingConflict
 	}
-	if credential.CredentialHash != digest {
-		return false, sessions.ErrDeviceBindingConflict
-	}
-	return !peer.IsClosed() && peer.AuthenticatedWith(digest), nil
+	return authority.Resource, true, nil
 }

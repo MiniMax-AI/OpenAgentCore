@@ -68,7 +68,7 @@ test("connection reads govern host completion and bound-key guidance", async ({ 
     if (unavailable) return route.fulfill({ status: 503, json: { error: { code: "internal_error", message: "Unreadable connection", type: "server_error", param: null } } });
     await route.fulfill({ json: {
       data: [{ key_id: keyId, created_at: "2026-09-28T08:00:00Z", revoked_at: revoked ? "2026-09-28T09:01:00Z" : null }],
-      connection: { status: connected ? "connected" : "disconnected", bound_key_id: keyId, enrolled_at: "2026-09-28T08:00:01Z", last_seen_at: "2026-09-28T08:59:00Z" },
+      connection: { status: connected ? "connected" : "disconnected", bound_key_id: keyId, enrolled_at: "2026-09-28T08:00:01Z" },
     } });
   });
   await openConsole(page, request, "sessions");

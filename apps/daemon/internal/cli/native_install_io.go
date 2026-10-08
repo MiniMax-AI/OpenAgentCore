@@ -14,8 +14,8 @@ import (
 // These exact temporary names are reserved by the installer, never workspace data.
 var nativeTemporaryNames = map[string]*regexp.Regexp{
 	"components": regexp.MustCompile(`^\.install-(node|codex|claude|minimax)-[0-9]+$`),
-	"bin":        regexp.MustCompile(`^\.oac-daemon-[0-9]+$`),
-	"daemon":     regexp.MustCompile(`^\.(installation\.json|executor-credential\.json)-[0-9a-f]{24}\.tmp$`),
+	"bin":        regexp.MustCompile(`^\.(oac-daemon|oac-sandbox-io)-[0-9]+$`),
+	"daemon":     regexp.MustCompile(`^\.(installation\.json|executor-credential\.json|sandbox-io-bootstrap\.json)-[0-9a-f]{24}\.tmp$`),
 }
 
 // The caller holds the installation lock, including while recovering a failed copy.

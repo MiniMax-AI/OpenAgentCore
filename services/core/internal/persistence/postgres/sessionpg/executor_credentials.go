@@ -62,8 +62,7 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 			return err
 		}
 		result.EnvironmentID = uuid.UUID(environmentID.Bytes).String()
-		result.Connection.EnvironmentStatus = row.EnvironmentStatus
-		result.Connection.DeviceID = optionalID(row.DeviceID)
+		result.Connection.Enrolled = row.EnrollmentID.Valid
 		if row.ExecutorKeyID.Valid {
 			key := optionalID(row.ExecutorKeyID)
 			result.Connection.BoundKeyID = &key
@@ -71,10 +70,6 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 		if row.EnrolledAt.Valid {
 			at := row.EnrolledAt.Time
 			result.Connection.EnrolledAt = &at
-		}
-		if row.LastSeenAt.Valid {
-			at := row.LastSeenAt.Time
-			result.Connection.LastSeenAt = &at
 		}
 		result.Connection.CredentialHash = row.CredentialHash.String
 		result.Credentials, err = listExecutorCredentials(ctx, q, tenant, environmentID, project.Subject())

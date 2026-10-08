@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: ede6031c1e4761dbbf27dd19829642ff892c2e12f26ec972da46dcb76c43c4fe
+source_hash: 1540a3b84eb1cfa977654b46d407e1a4de7f502bab9c5264e21a8cc57e96d238
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon、Sandbox I/O 服务和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
@@ -34,7 +34,7 @@ source_hash: ede6031c1e4761dbbf27dd19829642ff892c2e12f26ec972da46dcb76c43c4fe
 | 登记 token | `POST /core/v1/sandbox/enrollment-tokens`（Web **Add node**），带节点批准容量。使用一次；在响应 `expires_at` 过期 | 无节点 ID 的 `sandbox-node/configuration`、`sandbox-node/enroll` |
 | 节点凭据 | 节点自身：生成 32 至 256 个无空白字符的密钥，在登记时注册 | 带 `X-OAC-Node-ID` 的 `sandbox-node/configuration`、`sandbox-node/identity`、`sandbox-node/connect` |
 | 安装授权 | `self_hosted` Session 的 `x_agents_core.installation` 命令；短期有效 | `agent-daemon/installation` 及其 `claim` |
-| 执行器凭据 | 安装领取，或 Core 密钥[执行器凭据路由](environment-executor-credentials.md) | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为绑定设备的 daemon 凭据 |
+| 执行器凭据 | 安装领取，或 Core 密钥[执行器凭据路由](environment-executor-credentials.md) | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为该 Environment 的 enrollment 在 `sandbox-link` 上的 Serve 凭据 |
 | 托管沙箱 daemon 凭据 | Core 为每个受管分配签发，通过[引导文件](../../../docs/zh/runtime-bootstrap.md)交付 | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
 | 操作者设备配置 | 具有数据库访问权限的操作者运行 `oac-core-device` | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
 
@@ -42,7 +42,7 @@ Core 对存储的每个 token 和凭据仅保留 SHA-256 摘要；安装授权�
 
 ### 操作者设备配置 {#operator-device-profile}
 
-`environment: none` Session 的引擎主机使用操作者直接在数据库创建的设备配置连接：
+`oac-core-device` 直接在数据库中创建 Runtime 设备配置：
 
 ```sh
 umask 077
@@ -51,7 +51,7 @@ OAC_DATABASE_URL=... oac-core-device --tenant <tenant-uuid> --name 'engine host'
 oac-daemon connect --profile default
 ```
 
-`--tenant` 为 Project 执行租户 UUID，`--url` 为不带路径的 Core origin。命令打印配置一次：`server_url`（origin 加 `/api/v1`）、`runtime_id`（设备 ID）、`runner_credential` 和 `device_name`。使用新配置，不覆盖其他设备文件；私密复制到远程主机相同路径。`oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` 撤销设备：立即拒绝新连接，已有连接在下一次心跳关闭。Worker 将每个 `none` Session 绑定到其租户内声明所需能力的已连接设备，重试和重启保留绑定；自托管 Session 不使用此路径。
+`--tenant` 为 Project 执行租户 UUID，`--url` 为不带路径的 Core origin。命令打印配置一次：`server_url`（origin 加 `/api/v1`）、`runtime_id`（设备 ID）、`runner_credential` 和 `device_name`。使用新配置，不覆盖其他设备文件；私密复制到远程主机相同路径。`oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` 撤销设备：立即拒绝新连接，已有连接在下一次心跳关闭。Core 只把 Session 绑定到部署的 agent host（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)），因此此配置的设备不运行任何 Session。
 
 ## 节点路由 {#node-routes}
 
@@ -113,13 +113,13 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 ### 登记自托管 daemon {#enroll-a-self-hosted-daemon}
 
-`POST /api/v1/agent-daemon/enroll` 携带执行器凭据及精确正文 `{"environment_id": "…"}`（无查询），将一个专用设备绑定到 Environment 的 Session，返回 `device_id`、`session_id`、`environment_id` 和 `workspace_directory`。不返回其他凭据：执行器凭据成为该设备的 daemon 凭据。相同凭据重试返回相同绑定。成功响应包含 `Cache-Control: no-store`。
+`POST /api/v1/agent-daemon/enroll` 携带执行器凭据及精确正文 `{"environment_id": "…"}`（无查询），把机器登记为 Environment 的 [Link](../../../docs/zh/sandbox-link-protocol.md) resource，并返回由 Core 提供的[启动输入](../../../docs/zh/sandbox-bootstrap.md#launch-input)字段：`link_url` 和 `resource`（`tenant_id`、`environment_id`、`kind` 为 `enrollment`、`id` 和 `generation`）。不返回其他凭据：执行器凭据就是该 resource 的 Serve 凭据。最先登记该 Environment 的密钥保有它，用该密钥重试返回同一 resource 及其当前 generation。成功响应包含 `Cache-Control: no-store`。
 
 | HTTP | 时机 |
 | --- | --- |
 | 400 | 正文格式错误或存在任何查询 |
 | 401 | 凭据无效、撤销、属于其他范围，Session 已删除，或 Environment 无当前执行器权限 |
-| 409 | Environment 已绑定到不同密钥或设备 |
-| 503 | 存储不可用 |
+| 409 | 其他执行器密钥已登记该 Environment |
+| 503 | [公共 URL](../../../docs/zh/configuration.md#changing-the-public-url) 不是 https 时，在检查凭据前返回 `{"error": "no_sandbox_link", "detail": "a self_hosted sandbox needs an https public URL"}`；否则表示存储不可用 |
 
-登记不创建受管分配，也不授予 Session API 访问权限。daemon 在凭据旁保存绑定，拒绝其他 Environment 的原生历史。网关与 Worker 在每次连接和分发时重查凭据权限，因此轮换、撤销和删除 Session 终止后续使用。[自托管指南](../../../docs/zh/getting-started/self-hosted.md)提供操作步骤，[执行器凭据契约](environment-executor-credentials.md#revoked-or-rotated-credential)描述 daemon 如何处理永久拒绝。
+登记不创建受管分配，不绑定 Session，也不授予 Session API 访问权限。机器为该 resource 提供服务期间，Core 把 Session 绑定到部署的 agent host（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)）。relay 在每次 Serve 和 Open 时重查凭据权限，因此轮换、撤销和删除 Session 终止后续使用。[自托管指南](../../../docs/zh/getting-started/self-hosted.md)提供操作步骤，[执行器凭据契约](environment-executor-credentials.md#revoked-or-rotated-credential)描述 daemon 如何处理永久拒绝。

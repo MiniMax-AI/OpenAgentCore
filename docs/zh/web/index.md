@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 375d6245441e9f484af64798fb23c665d0ec712eb9a5088e7a41e3293374680a
+source_hash: 6a2501e2a6439aa9e49452d4c7854cc09a34ed0f46b10bad34434fd94cdcf664
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -44,7 +44,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 
 安装不创建 Project 或密钥。打开控制台不分配计算资源，也不调用模型，安装可以没有节点。Web 不启动 Session，也不发送输入。归档托管 Session 会请求取消和回收；[管理员权限](../concepts.md#what-administrators-can-and-cannot-do)说明管理员能执行与不能执行的操作。
 
-部署的沙箱后端服务托管 Session。应用的 `self_hosted` Runtime（包括它自己 E2B 账号中的 Runtime）是独立路径，修改沙箱配置不会影响它。
+部署的沙箱后端服务托管 Session。应用的 `self_hosted` 机器是独立路径，修改沙箱配置不会影响它。
 
 回环公开地址（`local_only`）使节点和远程应用无法访问 Core。控制台仍可通过自己的地址访问，并[展示警告](console-api-usage.md#provenance-and-monitoring)。
 

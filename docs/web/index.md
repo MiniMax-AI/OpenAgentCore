@@ -42,7 +42,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 
 Installation creates no Project or key. Opening the console neither allocates compute nor calls a model, and an installation may have zero nodes. Web never starts a Session or sends input. Archiving a hosted Session requests cancellation and reclamation; [administrator authority](../concepts.md#what-administrators-can-and-cannot-do) state what administrators can and cannot do.
 
-The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` Runtime, including one in its own E2B account, is a separate path that the sandbox configuration does not change.
+The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` machine is a separate path that the sandbox configuration does not change.
 
 A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and [warns about it](./console-api-usage.md#provenance-and-monitoring).
 

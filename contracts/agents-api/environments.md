@@ -51,7 +51,7 @@ Both placements run the same Runtime: the daemon, the selected Harness, native t
 | Provider allocation | Compute and filesystem lifetime: Core's Sandbox Provider for `openai_hosted`, the application for `self_hosted` |
 | Device and daemon connection | Authenticated Runtime identity and the replaceable dispatch transport |
 | Harness process and native session | The native model and tool loop, its execution state and native history |
-| Enrollment | The exact Environment, device and executor-key binding of a `self_hosted` machine |
+| Enrollment | The executor key with which a `self_hosted` machine serves the Environment's [Link](../../docs/sandbox-link-protocol.md) resource |
 
 ### Hosted (`openai_hosted`)
 
@@ -69,18 +69,18 @@ The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [
 The application owns the machine. It creates the Session with a clean absolute `workspace_directory` and optional absolute local `capability_directories`. Core returns the Environment ID, the `remote_url` and an install command in `x_agents_core.installation`; running that command on the machine installs the daemon and enrolls it ([self-hosted guide](../../docs/getting-started/self-hosted.md), [executor credentials](./environment-executor-credentials.md)).
 
 - `remote_url` is the daemon WebSocket URL derived from Core's public URL, never from request headers or a daemon address. It names Core's private daemon transport.
-- Enrollment binds the exact Session, Environment, device and executor key. It creates no allocation and cannot move a Session to another device.
+- Enrollment records the executor key that serves the Environment's Link resource; the first key keeps it. It creates no allocation and binds no Session: the Session runs on the deployment's agent host ([Session assignments](../../docs/runtime-protocol.md#session-assignments)).
 - The Session's workspace must equal the `/workspace` alias or the exact canonical directory the Runtime is bound to. Naming a path grants no access to it.
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
-- The workspace and native history must survive a daemon restart. Losing them never authorizes silent replacement or replay.
+- The workspace must survive a daemon restart. Losing it never authorizes silent replacement or replay.
 
 **Application-managed E2B.** An application can run the Runtime in an E2B sandbox it creates, renews and destroys with the E2B SDK, then enroll that Runtime as a `self_hosted` Environment ([E2B Runtime guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)). Core keeps no E2B allocation for it and never renews or kills it.
 
 ### Ownership rules
 
 - Keep Environment identity, ownership, configuration and lifecycle in Core, separate from Provider compute, device identity, daemon sockets and native sessions. Keep mutable connection state out of immutable configuration; a replacement owner fences stale observations.
-- Callers, devices and Environment connections use distinct credentials. The daemon gateway authenticates the enrolled executor key and the exact device. Connection observations keep generation and revision fencing. Registration and connection do not establish readiness.
+- Callers, devices and Environment connections use distinct credentials. The relay authenticates a `self_hosted` machine's Serve with the enrolled executor key. Connection observations keep generation and revision fencing. Registration and connection do not establish readiness.
 - Rotation, revocation, Session deletion and loss of ownership deny further access; they do not promise that native effects stop at once.
 - Native history stays on the bound Runtime. Preserve it, or demonstrably restore it, across compute replacement; never silently move a bound Session or replay unknown work.
 - Durable metadata reads need no live Runtime. Live file reads need an authorized view of the exact workspace and bounded operation ownership. Operations that write, replace or retire a workspace owner also apply mutation fencing.

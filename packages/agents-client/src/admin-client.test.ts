@@ -138,15 +138,15 @@ describe("AdminClient transport boundary", () => {
 
   it("lists executor credential metadata only and revokes with 204", async () => {
     const credential = { key_id: keyId, created_at: "2026-09-25T00:00:00Z", revoked_at: null };
-    const connection = { status: "never_enrolled", bound_key_id: null, enrolled_at: null, last_seen_at: null };
+    const connection = { status: "never_enrolled", bound_key_id: null, enrolled_at: null };
     expect(await clientWith({ data: [credential], connection }).client.listExecutorCredentials(projectId, resourceId)).toEqual({ data: [credential], connection });
     for (const entry of [{ ...credential, executor_token: "leak" }, { ...credential, revoked_at: "later" }, { key_id: keyId, created_at: "2026-09-25T00:00:00Z" }]) {
       await expect(clientWith({ data: [entry], connection }).client.listExecutorCredentials(projectId, resourceId)).rejects.toMatchObject({ code: "invalid_admin_response" });
     }
-    const enrolled = { status: "connected", bound_key_id: keyId, enrolled_at: credential.created_at, last_seen_at: null };
+    const enrolled = { status: "connected", bound_key_id: keyId, enrolled_at: credential.created_at };
     expect((await clientWith({ data: [credential], connection: enrolled }).client.listExecutorCredentials(projectId, resourceId)).connection).toEqual(enrolled);
     for (const bad of [undefined, { ...enrolled, status: "ready" }, { ...enrolled, enrolled_at: null }, { ...enrolled, bound_key_id: null },
-      { ...enrolled, last_seen_at: "invalid" }, { ...enrolled, credential_hash: "secret" }, { ...connection, last_seen_at: credential.created_at }]) {
+      { ...enrolled, enrolled_at: "invalid" }, { ...enrolled, credential_hash: "secret" }, { ...enrolled, last_seen_at: null }, { ...connection, enrolled_at: credential.created_at }]) {
       await expect(clientWith({ data: [credential], connection: bad }).client.listExecutorCredentials(projectId, resourceId)).rejects.toMatchObject({ code: "invalid_admin_response" });
     }
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => new Response(null, { status: 204 }));

@@ -14,7 +14,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
 	var request proto.PromptRequestPayload
-	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &request)
+	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: environment.ID}, &request)
 	if err != nil || request.LocalEnvironment == nil {
 		t.Fatal("resolved Skill did not use the common installation descriptor", err)
 	}
@@ -26,7 +26,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 	if !LocalWorkspaceConfiguration(environment.Configuration) {
 		t.Fatal("admission demanded installed metadata before the creation transaction")
 	}
-	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
+	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
 		t.Fatal("execution received an unresolved Skill selector")
 	}
 }
@@ -48,7 +48,7 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 	d := &Dispatcher{}
 	for _, scope := range []string{"", "other", environment.ID} {
 		var req proto.PromptRequestPayload
-		err := d.configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: scope}, &req)
+		err := d.configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: scope}, &req)
 		if scope == environment.ID {
 			if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.ID != environment.ID {
 				t.Fatal("local identity was not preserved", err)
@@ -63,7 +63,7 @@ func TestToolEnvironmentRemainsInExecutionBinding(t *testing.T) {
 	session := sessions.Session{ID: "session", TenantID: "tenant"}
 	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","initialization":true,"packages":{"npm":["is-number"]}}`)}
 	var req proto.PromptRequestPayload
-	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &req)
+	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: environment.ID}, &req)
 	if err != nil || req.LocalEnvironment == nil || !req.LocalEnvironment.ToolEnvironment {
 		t.Fatal("tool initialization requirement lost", err)
 	}

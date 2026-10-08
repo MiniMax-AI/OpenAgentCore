@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
@@ -51,8 +52,8 @@ type fakeTx struct {
 	setConnectionStatus      func() error
 	loadDevice               func() (bool, error)
 	bindDevice               func() error
-	authorizeEnrollment      func() (EnrollmentAuthority, error)
-	enrollDevice             func() (string, error)
+	authorizeEnrollment      func() (string, error)
+	enrollSandbox            func() (sandboxbootstrap.Resource, error)
 	loadFileWrite            func() (EnvironmentFileWrite, bool, error)
 	loadPendingInput         func() (bool, error)
 	createFileWrite          func() (EnvironmentFileWrite, error)
@@ -216,8 +217,8 @@ func (f *fakeTx) LoadBoundDevice(context.Context) (bool, error) {
 	return f.loadBoundDevice()
 }
 
-func (f *fakeTx) InsertEnvironmentDevice(_ context.Context, device ExecutionDevice, credentialHash string) error {
-	f.record("InsertEnvironmentDevice", f.insertEnvironmentDevice != nil, device.ID, device.Name, device.EnvironmentID, credentialHash)
+func (f *fakeTx) InsertEnvironmentDevice(_ context.Context, environment string, device ExecutionDevice, credentialHash string) error {
+	f.record("InsertEnvironmentDevice", f.insertEnvironmentDevice != nil, device.ID, device.Name, environment, credentialHash)
 	return f.insertEnvironmentDevice()
 }
 

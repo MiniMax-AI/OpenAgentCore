@@ -93,8 +93,8 @@ Checkpoint support adds `Compute` generation, name and ID and `SnapshotIdentity`
 
 | Fact | Evidence | Does not establish |
 | --- | --- | --- |
-| Compute available | Provider observation for the owned allocation | An authenticated Runtime connection or prepared capabilities |
-| Runtime connected | Gateway authentication and the exact Environment and device binding | Completed preparation or a usable Harness |
+| Compute available | Provider observation for the owned allocation | A Serving Link resource or prepared capabilities |
+| Sandbox connected | The Environment's live [Link](./sandbox-link-protocol.md) resource is Serving at its current generation: the relay holds the serve peer of the allocation's Sandbox I/O service, or, for `self_hosted`, of the service on the machine that enrolled. This is what `connected` means for every Environment type | Completed preparation or a usable Harness |
 | Capabilities prepared | Successful common Runtime preparation with the fixed configuration | Acceptance or completion of a Turn |
 | Execution admitted | Qualified Harness capabilities and the executor and Turn acceptance path | A completed input, cancellation or reclaimed compute |
 

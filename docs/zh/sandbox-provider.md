@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: b6c2a9956d4b4060be3745c1340ece507d03a2b401daa52926555aec84ac9e65
+source_hash: 0f0306c893188c85e6a0c17eb1216a276af074449a80a8eb140fdb70ec0b437a
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -95,8 +95,8 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 
 | 事实 | 证据 | 不证明 |
 | --- | --- | --- |
-| 计算资源可用 | Provider 对所属 allocation 的观测 | 已认证 Runtime 连接或已准备能力 |
-| Runtime 已连接 | Gateway 认证和精确 Environment、device 绑定 | preparation 已完成或 Harness 可用 |
+| 计算资源可用 | Provider 对所属 allocation 的观测 | 正在 Serve 的 Link resource 或已准备能力 |
+| Sandbox 已连接 | Environment 的 live [Link](./sandbox-link-protocol.md) resource 正以当前 generation Serve：relay 持有该 allocation 的 Sandbox I/O 服务的 serve peer；对 `self_hosted`，则是完成 enrollment 的机器上那个服务的 serve peer。这就是每种 Environment 类型的 `connected` 含义 | preparation 已完成或 Harness 可用 |
 | 能力已准备 | 使用固定配置完成公共 Runtime preparation | Turn 已接受或完成 |
 | 执行已准入 | 已验证 Harness 能力及 executor、Turn 接受路径 | 输入已完成、取消已完成或计算资源已回收 |
 

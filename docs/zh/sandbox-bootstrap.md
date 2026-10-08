@@ -1,7 +1,7 @@
 ---
 title: "沙箱引导"
 source: docs/sandbox-bootstrap.md
-source_hash: 1e2f61c5a7bafae47a72cfd66c9e604a5aa3b7120ca29b11e700241d892c5ada
+source_hash: 8b705515313d1d190dac002902748ad9b60d6b24a3ff01cc549fdb70105ea50a
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动 Sandbox I/O 服务。本文负责 Provider 到该服务的启动输入。类型与验证器位于 [`internal/sandboxbootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxbootstrap/bootstrap.go)。服务凭此输入以 [沙箱 Link 协议](./sandbox-link-protocol.md)的 serve peer 身份连接 relay。
@@ -37,6 +37,8 @@ oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json
 ## 职责与就绪状态 {#responsibilities-and-readiness}
 
 Provider 创建账户和沙箱，交付该文件，并以该账户启动 `oac-sandbox-io`。`make build-sandbox-io` 构建静态 Linux 二进制。Provider 为进程重启保留该文件，仅在明确清理自己拥有的资源时删除。
+
+在[自托管机器](./getting-started/self-hosted.md)上，`oac-daemon start` 充当该机器 enrollment 的 Provider。它用执行器凭据注册，并把该文件写入 Runtime 主目录下的 `daemon/sandbox-io-bootstrap.json`，其中包含 Core 返回的 `link_url` 和 `resource`，并以执行器令牌作为 `credential`。它以启动它的账户运行 `oac-sandbox-io`。服务退出时，它重新注册（轮换会推进 generation），然后重写该文件并重启服务。
 
 服务验证输入并负责 link：它以 serve peer 身份连接，服务已绑定的 stream，并在凭据有效期间重连。`resource`（包括其 generation）必须是该凭据服务的资源，否则 relay 拒绝该 link。
 

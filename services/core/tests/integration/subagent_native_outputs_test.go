@@ -7,20 +7,16 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/google/uuid"
 )
 
 func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	s, pool := testStore(t)
 	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
-	host, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "child outputs", runtimedevice.HashCredential(uuid.NewString()))
+	host := registerAgentHost(t, s, tenant)
+	err := sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err = sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "start")
@@ -90,11 +86,9 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	s, _ := testStore(t)
 	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
-	host, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "cancelled child", runtimedevice.HashCredential(uuid.NewString()))
+	host := registerAgentHost(t, s, tenant)
+	err := sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err = sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "start")
