@@ -4,14 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"reflect"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
@@ -169,106 +166,25 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "streaming session creation requires initial input")
 		return
 	}
-	creationRequest, err := sessionCreationRequest(input, initialInputs)
-	if err != nil {
-		writeSessionsError(w, r, err)
-		return
-	}
-	if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-		return
-	}
-	if input.templateID != "" {
-		template, err := h.EnvironmentTemplatesReader.Resolve(r.Context(), tenantID(r), input.templateID)
+	creation, replayed, err := h.createSessionFrom(r.Context(), tenantID(r), sessionCreator(r), key, input, initialInputs)
+	switch {
+	case err != nil:
+		writeSessionCreationError(w, r, err)
+	case input.Stream:
+		// A replayed creation sends no events.
+		if !replayed || h.auditSessionOperation(w, r, creation.Session.ID, "create") {
+			h.respondSessionCreationStream(w, r, creation)
+		}
+	case replayed:
+		session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), creation.Session.ID)
 		if err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeEnvironmentTemplatesError(w, r, err)
-			}
-			return
+			writeSessionsError(w, r, err)
+		} else if h.auditSessionOperation(w, r, session.ID, "create") {
+			h.respondSessionStatus(w, r, session, http.StatusCreated)
 		}
-		if err := applyTemplateEnvironment(&input, template); err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) && !writeFieldError(w, err) {
-				writeSessionsError(w, r, err)
-			}
-			return
-		}
+	default:
+		h.respondSessionStatus(w, r, creation.Session, http.StatusCreated)
 	}
-	saved, inheritedProvider, err := h.sessionAgentDefaults(r.Context(), tenantID(r), input)
-	if err != nil {
-		if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			writeAgentsError(w, r, err)
-		}
-		return
-	}
-	err = h.prepareSessionModelConfiguration(r.Context(), &input, saved, inheritedProvider)
-	var configuration json.RawMessage
-	if err == nil {
-		configuration, err = resolve(input, tenantID(r), key, saved)
-	}
-	if err == nil {
-		configuration, err = freezeSessionHarnessConfig(configuration, input.resolvedHarnessConfig)
-	}
-	if err == nil {
-		configuration, err = h.bindSessionCredentials(r.Context(), tenantID(r), configuration)
-		if err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeVaultsError(w, r, err)
-			}
-			return
-		}
-	}
-	selectedEngine := h.Engine
-	var provider *v1.ModelProviderInput
-	var providerSource string
-	var deploymentRevision uuid.UUID
-	if err == nil {
-		selectedEngine, provider, providerSource, deploymentRevision, err = h.resolveSessionExecution(r.Context(), input, inheritedProvider, configuration)
-	}
-	if err == nil {
-		if invalid := execution.ValidateSessionConfiguration(selectedEngine, configuration); invalid != nil {
-			err = fmt.Errorf("Harness %s does not support the requested Agent/environment configuration: %w", selectedEngine, invalid)
-		}
-	}
-	if err == nil {
-		err = validateSessionModelConfiguration(selectedEngine, provider, configuration)
-	}
-	if err != nil {
-		if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-			return
-		}
-		var required *modelProviderRequiredError
-		switch {
-		case errors.As(err, &required):
-			writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
-		case writeSelectionError(w, err):
-		case writeStoredDataError(w, r, err):
-		case !writeFieldError(w, err):
-			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
-		}
-		return
-	}
-	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
-	createInput := sessions.CreateSession{
-		ExecutionConfiguration:     &executionConfiguration,
-		ModelProvider:              provider,
-		ModelProviderSource:        providerSource,
-		DeploymentProviderRevision: deploymentRevision,
-		Creator:                    sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
-		Engine: selectedEngine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
-	}
-	create := h.SessionCreation.CreateSession
-	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {
-		create = h.Execution.SessionAdmission.CreateSession
-	}
-	result, err := create(r.Context(), tenantID(r), createInput)
-	if err != nil {
-		writeOperationError(w, r, err)
-		return
-	}
-	if input.Stream {
-		h.respondSessionCreationStream(w, r, result)
-		return
-	}
-	h.respondSessionStatus(w, r, result.Session, http.StatusCreated)
 }
 
 func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {

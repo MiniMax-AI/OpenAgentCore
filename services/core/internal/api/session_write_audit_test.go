@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -59,13 +60,18 @@ func TestSessionAuditOnlyRoutesFailClosed(t *testing.T) {
 				routeContext := chi.NewRouteContext()
 				routeContext.URLParams.Add("session_id", session)
 				ctx = context.WithValue(ctx, chi.RouteCtxKey, routeContext)
-				r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"events":[]}`)).WithContext(ctx)
+				body := map[string]string{
+					"empty-events":    `{"events":[]}`,
+					"creation-replay": `{"agent":{"model":"test"},"environment":{"type":"none"},"input":"hello"}`,
+					"stream-replay":   `{"agent":{"model":"test"},"environment":{"type":"none"},"input":"hello","stream":true}`,
+				}[route]
+				r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body)).WithContext(ctx)
 				r.Header.Set("Content-Type", "application/json")
 				w := httptest.NewRecorder()
 				if route == "empty-events" {
 					h.createEvents(w, r)
-				} else if !h.recoverSessionCreation(w, r, "key", json.RawMessage(`{}`), route == "stream-replay") {
-					t.Fatal("replay not handled")
+				} else {
+					h.createSession(w, r)
 				}
 				wantStatus, wantAction := 201, "create"
 				if route == "empty-events" {
@@ -82,5 +88,39 @@ func TestSessionAuditOnlyRoutesFailClosed(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A retry whose Template is gone answers with the Session that a concurrent
+// request with the same key and intent committed after the entry lookup.
+func TestSessionCreationReplaysAfterResolutionFails(t *testing.T) {
+	session, lookups, audits := uuid.NewString(), 0, 0
+	h, _, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
+		f.environmentTemplatesReader.resolve = func(context.Context, string, string) (environmenttemplates.Resolved, error) {
+			return environmenttemplates.Resolved{}, environmenttemplates.ErrNotFound
+		}
+		f.sessionCreation.findSessionCreation = func(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error) {
+			if lookups++; lookups == 1 {
+				return sessions.Creation{}, sessions.ErrNotFound
+			}
+			return sessions.Creation{Session: sessions.Session{ID: session}}, nil
+		}
+		f.sessions.auditSessionOperation = func(context.Context, sessions.AuditSessionOperationCommand) error {
+			audits++
+			return nil
+		}
+		f.sessionsReader.getSession = func(_ context.Context, tenant, id string) (sessions.Session, error) {
+			return sessions.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"},"agent":{"id":"agent","model":"test"}}`)}, nil
+		}
+	})
+	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"saved"},"input":"Start."}`))
+	r.Header.Set("Authorization", "Bearer test-api-key")
+	r.Header.Set("OpenAI-Beta", "agents=v1")
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Idempotency-Key", "retry")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), session) || lookups != 2 || audits != 1 {
+		t.Fatal(w.Code, w.Body.String(), lookups, audits)
 	}
 }

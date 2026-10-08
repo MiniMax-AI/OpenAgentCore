@@ -54,9 +54,9 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 	if (inherited == nil && !explicitProvider) || needsModel {
 		input.deploymentDefaults, err = h.ModelProviders.Resolve(ctx, engine)
 		if err != nil {
-			var configurationError *v1.ModelProviderError
-			if errors.As(err, &configurationError) {
-				return configurationError
+			var invalid *v1.ModelProviderError
+			if errors.As(err, &invalid) {
+				return invalid
 			}
 			return &storedDataError{err}
 		}
@@ -121,16 +121,4 @@ func freezeSessionHarnessConfig(raw json.RawMessage, native json.RawMessage) (js
 	}
 	cfg.Agent.XAgentsCore.HarnessConfig = v1.ResolvedHarnessConfig(native)
 	return json.Marshal(cfg)
-}
-
-func validateSessionModelConfiguration(engine string, provider *v1.ModelProviderInput, raw json.RawMessage) error {
-	var cfg configuration
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return err
-	}
-	var native json.RawMessage
-	if cfg.Agent.XAgentsCore != nil {
-		native = cfg.Agent.XAgentsCore.HarnessConfig
-	}
-	return provider.ValidateConfiguration(engine, native)
 }

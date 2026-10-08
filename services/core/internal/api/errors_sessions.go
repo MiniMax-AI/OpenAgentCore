@@ -4,11 +4,49 @@ import (
 	"errors"
 	"net/http"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
+
+// configurationError marks an error from resolving the model, Harness and
+// execution selection of a Session request. Its message is the 400 answer
+// unless the error is a selection, stored-data or field error, which map first.
+type configurationError struct{ err error }
+
+func (e *configurationError) Error() string { return e.err.Error() }
+func (e *configurationError) Unwrap() error { return e.err }
+
+// writeSessionCreationError maps a Session creation failure. Template, saved
+// Agent (including its provider bundle) and Vault reads map by their domain.
+func writeSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {
+	var required *modelProviderRequiredError
+	var configuration *configurationError
+	var provider *v1.ModelProviderError
+	var credentials *vaults.MCPCredentialSelectionError
+	switch {
+	case errors.As(err, &required):
+		writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
+	case writeSelectionError(w, err):
+	case writeStoredDataError(w, r, err):
+	case writeFieldError(w, err):
+	case errors.As(err, &configuration):
+		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
+	case errors.Is(err, environmenttemplates.ErrNotFound), errors.Is(err, environmenttemplates.ErrInvalidInput):
+		writeEnvironmentTemplatesError(w, r, err)
+	case errors.Is(err, agents.ErrNotFound), errors.Is(err, agents.ErrInvalidInput), errors.As(err, &provider):
+		writeAgentsError(w, r, err)
+	case errors.As(err, &credentials), errors.Is(err, vaults.ErrNotFound), errors.Is(err, vaults.ErrInvalidInput):
+		writeVaultsError(w, r, err)
+	default:
+		writeOperationError(w, r, err)
+	}
+}
 
 // writeInputError reports Session input admission failures. Input that the
 // Session cannot accept in its current state is the official conflict_error;
