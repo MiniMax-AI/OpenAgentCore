@@ -15,7 +15,8 @@ import (
 // assignment_bind and waits for bound, once per connection and reference.
 // Every Session operation on the connection follows its Bind. A bind of an
 // Environment with a live Link resource to an agent host carries the
-// resource and its attach grant.
+// resource and its attach grant; without one, it sends nothing and fails with
+// ErrNoLinkResource.
 func (s *Session) Bind(ctx context.Context, ref proto.AssignmentRef, environmentID string) error {
 	s.assignmentMu.Lock()
 	bound := s.assignments[ref.SessionID] == ref

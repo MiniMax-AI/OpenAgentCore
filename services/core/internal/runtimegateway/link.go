@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
 	"time"
@@ -160,17 +161,25 @@ func (l *LinkAuthority) authorize(ctx context.Context, peer sandboxlink.AttachPe
 	return sandboxlink.Identity{Resource: resource, SessionID: sandboxwire.ID(session), AssignmentID: id, AssignmentEpoch: epoch}, assignment, nil
 }
 
+// ErrNoLinkResource fails an agent host's bind to an Environment without a live
+// Link resource: the agent host reaches an Environment only through one.
+var ErrNoLinkResource = errors.New("agentdaemon gateway: the Environment has no live Link resource")
+
 // bindLink returns the Link resource and attach grant that runtimeID's bind of
 // ref in environmentID carries: none unless runtimeID is the agent host that
-// holds ref bound and environmentID has a live Link resource.
+// holds ref bound, and then environmentID's live Link resource, without which
+// it is ErrNoLinkResource.
 func (l *LinkAuthority) bindLink(ctx context.Context, runtimeID string, ref proto.AssignmentRef, environmentID string) (*sandboxbootstrap.Resource, []byte, error) {
 	if environmentID == "" {
 		return nil, nil, nil
 	}
 	assignment, found, err := l.store.GetLinkAssignment(ctx, ref.AssignmentID)
-	if err != nil || !found || !assignment.AgentHost || !assignment.Bound || assignment.Resource.EnvironmentID != environmentID ||
+	if err != nil || !found || !assignment.AgentHost || !assignment.Bound ||
 		assignment.RuntimeID != runtimeID || assignment.SessionID != ref.SessionID || assignment.Epoch != ref.Epoch {
 		return nil, nil, err
+	}
+	if assignment.Resource.EnvironmentID != environmentID {
+		return nil, nil, ErrNoLinkResource
 	}
 	id, err := uuid.Parse(ref.AssignmentID)
 	if err != nil {

@@ -29,6 +29,7 @@ type initializationPeer struct {
 	deferred     bool
 	unavailable  bool
 	bootstrap    sandbox.Bootstrap
+	binds        chan proto.AssignmentBindPayload // when not nil, receives each bind's payload
 }
 
 func (p *initializationPeer) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry) {
@@ -57,6 +58,10 @@ func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 				return
 			}
 			if reply, ok := assignmentReply(env); ok {
+				var bind proto.AssignmentBindPayload
+				if p.binds != nil && env.DecodePayload(&bind) == nil {
+					p.binds <- bind
+				}
 				if c.WriteJSON(reply) != nil {
 					return
 				}

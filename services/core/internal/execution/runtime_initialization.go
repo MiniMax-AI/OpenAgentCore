@@ -122,7 +122,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	if err != nil {
 		return err
 	}
-	peer, err := w.dispatcher.assignedPeer(ctx, sessions.ExecutionDevice{ID: owner.DeviceID, EnvironmentID: owner.EnvironmentID, Assignment: owner.Assignment})
+	peer, err := w.dispatcher.assignedPeer(ctx, sessions.ExecutionDevice{ID: owner.DeviceID, Assignment: owner.Assignment, SessionEnvironmentID: owner.EnvironmentID})
 	if err != nil {
 		return err
 	}

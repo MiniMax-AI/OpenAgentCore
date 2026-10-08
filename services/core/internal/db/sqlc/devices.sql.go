@@ -129,14 +129,13 @@ func (q *Queries) GetDeviceCredential(ctx context.Context, id pgtype.UUID) (GetD
 }
 
 const getSessionDevice = `-- name: GetSessionDevice :one
-SELECT d.id, d.name, d.environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
+SELECT d.id, d.name, d.environment_id, e.id AS session_environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+JOIN devices d ON d.id = b.runtime_id AND (d.tenant_id = s.tenant_id OR (d.agent_host AND d.tenant_id IS NULL))
+LEFT JOIN environments e ON e.session_id = s.id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-))
+AND (d.environment_id IS NULL OR d.environment_id = e.id)
 `
 
 type GetSessionDeviceParams struct {
@@ -145,13 +144,17 @@ type GetSessionDeviceParams struct {
 }
 
 type GetSessionDeviceRow struct {
-	ID            pgtype.UUID `json:"id"`
-	Name          string      `json:"name"`
-	EnvironmentID pgtype.UUID `json:"environment_id"`
-	AssignmentID  pgtype.UUID `json:"assignment_id"`
-	Epoch         int64       `json:"epoch"`
+	ID                   pgtype.UUID `json:"id"`
+	Name                 string      `json:"name"`
+	EnvironmentID        pgtype.UUID `json:"environment_id"`
+	SessionEnvironmentID pgtype.UUID `json:"session_environment_id"`
+	AssignmentID         pgtype.UUID `json:"assignment_id"`
+	Epoch                int64       `json:"epoch"`
 }
 
+// The Session's bound Runtime: a device of its tenant or the deployment's
+// agent host. environment_id is the device's own Environment and
+// session_environment_id the Session's, which the assignment binds.
 func (q *Queries) GetSessionDevice(ctx context.Context, arg GetSessionDeviceParams) (GetSessionDeviceRow, error) {
 	row := q.db.QueryRow(ctx, getSessionDevice, arg.TenantID, arg.ID)
 	var i GetSessionDeviceRow
@@ -159,6 +162,7 @@ func (q *Queries) GetSessionDevice(ctx context.Context, arg GetSessionDevicePara
 		&i.ID,
 		&i.Name,
 		&i.EnvironmentID,
+		&i.SessionEnvironmentID,
 		&i.AssignmentID,
 		&i.Epoch,
 	)
@@ -166,16 +170,15 @@ func (q *Queries) GetSessionDevice(ctx context.Context, arg GetSessionDevicePara
 }
 
 const getSessionExecutionBinding = `-- name: GetSessionExecutionBinding :one
-SELECT d.id, d.name, b.native_session_id, d.environment_id, b.assignment_id, b.epoch,
+SELECT d.id, d.name, b.native_session_id, d.environment_id, e.id AS session_environment_id, b.assignment_id, b.epoch,
     EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.started_at IS NOT NULL) AS has_started_turn
 FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+JOIN devices d ON d.id = b.runtime_id AND (d.tenant_id = s.tenant_id OR (d.agent_host AND d.tenant_id IS NULL))
+LEFT JOIN environments e ON e.session_id = s.id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
-AND (d.environment_id IS NULL OR EXISTS (
-    SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
-))
+AND (d.environment_id IS NULL OR d.environment_id = e.id)
 `
 
 type GetSessionExecutionBindingParams struct {
@@ -184,15 +187,17 @@ type GetSessionExecutionBindingParams struct {
 }
 
 type GetSessionExecutionBindingRow struct {
-	ID              pgtype.UUID `json:"id"`
-	Name            string      `json:"name"`
-	NativeSessionID string      `json:"native_session_id"`
-	EnvironmentID   pgtype.UUID `json:"environment_id"`
-	AssignmentID    pgtype.UUID `json:"assignment_id"`
-	Epoch           int64       `json:"epoch"`
-	HasStartedTurn  bool        `json:"has_started_turn"`
+	ID                   pgtype.UUID `json:"id"`
+	Name                 string      `json:"name"`
+	NativeSessionID      string      `json:"native_session_id"`
+	EnvironmentID        pgtype.UUID `json:"environment_id"`
+	SessionEnvironmentID pgtype.UUID `json:"session_environment_id"`
+	AssignmentID         pgtype.UUID `json:"assignment_id"`
+	Epoch                int64       `json:"epoch"`
+	HasStartedTurn       bool        `json:"has_started_turn"`
 }
 
+// The bound Runtime as GetSessionDevice reads it, with the native session.
 func (q *Queries) GetSessionExecutionBinding(ctx context.Context, arg GetSessionExecutionBindingParams) (GetSessionExecutionBindingRow, error) {
 	row := q.db.QueryRow(ctx, getSessionExecutionBinding, arg.TenantID, arg.ID)
 	var i GetSessionExecutionBindingRow
@@ -201,6 +206,7 @@ func (q *Queries) GetSessionExecutionBinding(ctx context.Context, arg GetSession
 		&i.Name,
 		&i.NativeSessionID,
 		&i.EnvironmentID,
+		&i.SessionEnvironmentID,
 		&i.AssignmentID,
 		&i.Epoch,
 		&i.HasStartedTurn,

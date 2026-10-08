@@ -73,7 +73,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err := d.configurePreparedEnvironment(session, environment, bound.Device, &req); err != nil {
 		return run, err
 	}
-	if err := peer.Bind(owner, bound.Device.Assignment, bound.Device.EnvironmentID); err != nil {
+	if err := peer.Bind(owner, bound.Device.Assignment, bound.Device.SessionEnvironmentID); err != nil {
 		return run, err
 	}
 	prepared, err := newPreparedStart(peer, bound.Device.Assignment)

@@ -156,19 +156,17 @@ func TestInitializationOwnerAndDeviceRules(t *testing.T) {
 			t.Fatalf("owner %s: %v", test.name, err)
 		}
 	}
-	environment := Environment{ID: "environment"}
 	for _, test := range []struct {
 		name  string
 		bound ExecutionDevice
 		found bool
 		want  error
 	}{
-		{"listed device", ExecutionDevice{ID: "device", EnvironmentID: "environment"}, true, nil},
+		{"listed device", ExecutionDevice{ID: "device"}, true, nil},
 		{"no device", ExecutionDevice{}, false, ErrNotFound},
-		{"another device", ExecutionDevice{ID: "other", EnvironmentID: "environment"}, true, ErrTurnConflict},
-		{"another Environment's device", ExecutionDevice{ID: "device", EnvironmentID: "other"}, true, ErrTurnConflict},
+		{"another device", ExecutionDevice{ID: "other"}, true, ErrTurnConflict},
 	} {
-		if err := checkInitializationDevice(owner, environment, test.bound, test.found); !errors.Is(err, test.want) {
+		if err := checkInitializationDevice(owner, test.bound, test.found); !errors.Is(err, test.want) {
 			t.Fatalf("device %s: %v", test.name, err)
 		}
 	}

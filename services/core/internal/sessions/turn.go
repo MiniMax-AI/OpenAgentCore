@@ -84,12 +84,16 @@ type ExecutionEvent struct {
 type ExecutionWork struct{ TenantID, SessionID, TurnID, Status string }
 
 // ExecutionDevice contains safe identity only, never a device credential.
-// Assignment is the Session's bound assignment to the device.
+// EnvironmentID is the device's own Environment, empty for a device of none.
+// Assignment is the Session's bound assignment to the device, and
+// SessionEnvironmentID the Session's Environment, which that assignment binds;
+// it is empty for a Session without one.
 type ExecutionDevice struct {
-	ID            string
-	Name          string
-	EnvironmentID string
-	Assignment    proto.AssignmentRef
+	ID                   string
+	Name                 string
+	EnvironmentID        string
+	Assignment           proto.AssignmentRef
+	SessionEnvironmentID string
 }
 
 // ExecutionBinding identifies the Runtime and native history selected for one API Session.
