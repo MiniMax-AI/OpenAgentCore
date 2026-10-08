@@ -44,7 +44,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	handler, err := publicHandler(t, s, auth, "codex", executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

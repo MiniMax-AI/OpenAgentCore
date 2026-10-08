@@ -43,7 +43,7 @@ Model providers are not process settings; see [Default models](#default-models).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | `http://localhost:8080`, set by `compose.yaml`. Core started without it runs no Runtime gateway and executes no Sessions | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
+| `OAC_PUBLIC_URL` | Required; `compose.yaml` sets `http://localhost:8080` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
 | `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. The installer sets `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -150,13 +150,13 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 
 | Variable | Set from |
 | --- | --- |
-| `OAC_PUBLIC_URL` | The [public URL](#settings). Core validates it once and derives the Agents API base, the daemon WebSocket URL, the self-hosted `remote_url`, the installer downloads, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers |
+| `OAC_PUBLIC_URL` | Required. The [public URL](#settings). Core validates it once and derives the Agents API base, the daemon WebSocket URL, the self-hosted `remote_url`, the installer downloads, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers |
 | `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | Required. PostgreSQL without a password |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |
-| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CREDENTIAL_KEY_FILE` | Required. `/run/oac/credential.key`: a base64-encoded random 32-byte key. Core seals stored credentials with it |
 | `OAC_CORE_KEY_DIGESTS_FILE` | Required. `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
-| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL`. Core refuses an ID other than the one its database recorded |
+| `OAC_INSTALLATION_ID_FILE` | Required. `/run/oac/installation.id`: the installation ID, a canonical UUID. Core refuses an ID other than the one its database recorded |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
 | `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 

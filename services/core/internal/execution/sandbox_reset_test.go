@@ -1,7 +1,6 @@
 package execution
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"reflect"
@@ -45,19 +44,8 @@ func resetManagerConfig(t *testing.T, configure func(*pgxpool.Config)) (Owner, *
 func resetManagerDB(t *testing.T, configure func(*pgxpool.Config)) (Owner, *deployment.Service, deployment.Reader, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, configure)
-	owner, deployments, reader := testOwner(t, pool, testCredentialCipher(t))
+	owner, deployments, reader := testOwner(t, pool, pgtest.CredentialKey(t))
 	return owner, deployments, reader, pool
-}
-
-// testCredentialCipher is the credential key of the adapters these tests
-// build on one database.
-func testCredentialCipher(t *testing.T) *credentialcrypto.Cipher {
-	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return cipher
 }
 
 // testOwner acquires the execution lease on pool and builds the deployment and
@@ -195,7 +183,7 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 	id := initializeE2BDeployment(t, owner)
 	// The manager reads the deployment through a reader that fails every read
 	// of the committed reset, so publication cannot depend on one.
-	adapter := deploymentpg.New(pgunit.NewPool(pool), nil)
+	adapter := deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	errCommittedRead := errors.New("committed deployment read failed")
 	committedReads := 0
 	reader := &strictDeploymentReader{t: t, snapshot: func(ctx context.Context) (deployment.Snapshot, error) {

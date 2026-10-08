@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -81,7 +82,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 }
 func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()
-	_, service := testSessions(t, f.pool, nil)
+	_, service := testSessions(t, f.pool, pgtest.CredentialKey(t))
 	receipts, err := service.SubmitInputs(t.Context(), f.tenant, f.session.ID, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`)}})
 	if err != nil {
 		t.Fatal(err)
@@ -200,7 +201,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool), nil)}
+				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))}
 				started := time.Now()
 				d.observeDeploymentProvider(f.tenant, f.session.ID, turn)
 				if elapsed := time.Since(started); elapsed < 900*time.Millisecond || elapsed > 2*time.Second {
@@ -226,7 +227,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 			if cleanup != nil {
 				cleanup()
 			}
-			persisted, err := sessionpg.New(pgunit.NewPool(f.pool), nil).GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
+			persisted, err := sessionpg.New(pgunit.NewPool(f.pool), pgtest.CredentialKey(t)).GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
 			if err != nil || persisted.Status != sessions.TurnCompleted {
 				t.Fatal("terminal outcome lost", err)
 			}

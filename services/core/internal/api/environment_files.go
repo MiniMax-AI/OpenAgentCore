@@ -33,7 +33,7 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok || !environmentFilesAccessible(w, environment) {
 		return
 	}
-	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+	if !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}

@@ -33,7 +33,6 @@ func TestSessionCreationRejectsSandboxNodeSelector(t *testing.T) {
 	} {
 		recorder := &sandboxCreationRecorder{}
 		handler, _ := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
-			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
 			f.sessionAdmission.createSession = recorder.CreateSession
 		})
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))

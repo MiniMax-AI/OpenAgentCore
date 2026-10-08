@@ -8,7 +8,6 @@ import (
 )
 
 // fixtureVaults builds the Vault adapter and service on s, as cmd/server does.
-// A keyless s leaves the operations that need no credential key available.
 func fixtureVaults(s *Store) (*vaultpg.Store, *vaults.Service, error) {
 	refresher, err := oauthrefresh.NewClient(nil)
 	if err != nil {

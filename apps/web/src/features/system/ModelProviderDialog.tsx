@@ -116,9 +116,6 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
         setRejection(caught);
         if (caught.param === "harness_config" || ["context_window", "max_output_tokens", "model_provider.context_window", "model_provider.max_output_tokens"].includes(caught.param ?? "")) setAdvancedOpen(true);
         setError(coreError(caught, tCommon));
-      } else if (caught instanceof AgentCoreError && caught.code === "credential_storage_unavailable") {
-        // A deployment without a credential key stores nothing: a configuration error, not an unknown outcome.
-        setError(t("models.form.noCredentialKey"));
       } else {
         setError(t("models.form.uncertain"));
         onReread();

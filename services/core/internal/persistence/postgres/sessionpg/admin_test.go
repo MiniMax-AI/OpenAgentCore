@@ -15,7 +15,7 @@ import (
 
 func TestListAdminRuntimeTargetsPagesLiveSessionsOfTenants(t *testing.T) {
 	pool := pgtest.Open(t)
-	store := New(pgunit.NewPool(pool), nil)
+	store := New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	first, second, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	created := time.Now().UTC().Add(-time.Hour)
 	session := func(tenant string, offset time.Duration, deleted bool) sessions.AdminRuntimeTarget {
@@ -64,7 +64,7 @@ func TestListAdminRuntimeTargetsPagesLiveSessionsOfTenants(t *testing.T) {
 
 func TestReadAdminSummaryVisitsTheSelectedSessions(t *testing.T) {
 	pool := pgtest.Open(t)
-	store := New(pgunit.NewPool(pool), nil)
+	store := New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	tenant, created := uuid.NewString(), time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
 	session := func(offset time.Duration, deleted bool) string {
 		id := uuid.NewString()

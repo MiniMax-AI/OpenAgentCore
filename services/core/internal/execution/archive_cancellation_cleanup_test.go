@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
@@ -77,7 +78,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, service := testSessions(t, pool, testCredentialCipher(t))
+			_, service := testSessions(t, pool, pgtest.CredentialKey(t))
 			created, err := service.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ModelProviderSourceSession})
 			if err != nil {
 				t.Fatal(err)
@@ -117,7 +118,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if scenario.delivery {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-				credentials, heartbeat := testSessions(t, pool, testCredentialCipher(t))
+				credentials, heartbeat := testSessions(t, pool, pgtest.CredentialKey(t))
 				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, credentials, wsURL)
 				if err != nil {
 					t.Fatal(err)
@@ -157,7 +158,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			sessionReader, _ := testSessions(t, pool, testCredentialCipher(t))
+			sessionReader, _ := testSessions(t, pool, pgtest.CredentialKey(t))
 			kills := 0
 			expectedStatus := sessions.TurnWaiting
 			provider := waitingCleanupProvider{beforeKill: func() {

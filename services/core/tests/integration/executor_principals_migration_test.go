@@ -103,7 +103,7 @@ func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(migrated.Close)
-	s := New(migrated)
+	s := New(t, migrated)
 	p := FixtureExecutorPrincipal(t, s, tenant)
 	credentials := sessionService(t, s)
 	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, sessions.ErrNotFound) {

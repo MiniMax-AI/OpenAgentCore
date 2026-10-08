@@ -164,7 +164,6 @@ export const chinese = {
   "Clean up the host": "清理主机",
   "{{name}} is removed from Core. To remove its service and files from the host, run:": "{{name}} 已从 Core 移除。要删除它在主机上的服务和文件，请运行：",
   "{{name}} is removed from Core, but its service and files stay on the host.": "{{name}} 已从 Core 移除，但它的服务和文件仍留在主机上。",
-  "An uninstall command needs a public URL that other machines can reach, and this installation has none.": "卸载命令需要其他机器能访问的公开地址，而当前安装没有。",
   "Other machines can't reach this installation's public URL, {{url}}, so no uninstall command can be given.": "其他机器无法访问本安装的公开地址 {{url}}，因此无法生成卸载命令。",
   "Uninstall command": "卸载命令",
   "Copy {{command}}": "复制 {{command}}",

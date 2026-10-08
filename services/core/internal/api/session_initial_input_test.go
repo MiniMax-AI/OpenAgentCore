@@ -8,12 +8,11 @@ import (
 	"testing"
 )
 
-// admitInto enables Execution whose Worker admits Session creation into s,
+// admitInto makes the Worker admit Session creation into s,
 // apart from the store that creates Sessions without execution work. Input
 // submission stays unexpected.
 func admitInto(s *recordingStore) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, f *testFakes) {
-		d.Execution = f.execution()
 		f.sessionAdmission.createSession = s.CreateSession
 	}
 }

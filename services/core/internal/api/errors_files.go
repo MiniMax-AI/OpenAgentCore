@@ -12,7 +12,7 @@ import (
 // writeFilesError maps a files error to its public response. notFoundParam
 // names the parameter a missing File came from.
 func writeFilesError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
-	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 		return
 	}
 	switch {

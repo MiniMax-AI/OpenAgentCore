@@ -27,7 +27,7 @@ func TestUnstorableTextRejectsWithoutWritesPostgres(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "nul-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

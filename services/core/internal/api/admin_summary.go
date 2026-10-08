@@ -125,7 +125,7 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			groups[""] = &AdminSummaryRow{ProjectID: project.ID}
 		}
 		counts, err := h.Admin.ReadAdminSummary(ctx, project.TenantID, sessions.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session sessions.Session, creationKeyID *string) error {
-			projected, err := sessionResponse(session, h.executorURL())
+			projected, err := sessionResponse(session, h.Execution.ExecutorURL)
 			if err != nil {
 				return err
 			}

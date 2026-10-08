@@ -66,9 +66,8 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 // The pinned upstream /v1 set is checked by TestEveryRouteAuthenticatesItsCanonicalPath
 // and the contract tests.
 func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) {
-	// Every optional group that gates a route registration, as the server enables them.
-	deps, fakes := testDependencies(t)
-	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
+	// The native installer gates its routes, as a release build enables them.
+	deps, _ := testDependencies(t)
 	deps.Execution.NativeInstaller = &NativeInstaller{Version: "contract-test", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{}}
 	h := &Handler{Dependencies: deps}
 	contracts := map[string]string{"/v1": "openapi.yaml", "/core/v1": "core.openapi.yaml", "/api/v1": "runtime.openapi.yaml"}

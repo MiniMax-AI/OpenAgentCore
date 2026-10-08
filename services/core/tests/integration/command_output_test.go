@@ -73,7 +73,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Reopening the Store recovers committed Items without creating events.
-	reopened := New(pool)
+	reopened := New(t, pool)
 	before, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	page, err = sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 3 {

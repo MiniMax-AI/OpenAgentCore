@@ -38,7 +38,6 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := managementFakes(t, key)
 	fixture := &archiveManagementFixture{}
-	deps.Execution = fakes.execution()
 	fakes.sessionArchive.archiveSession = fixture.ArchiveSession
 	fakes.sessionAdmin.getManagedSessionArchive = fixture.GetManagedSessionArchive
 	h := newTestHandler(t, deps)

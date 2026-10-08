@@ -70,7 +70,7 @@ func count(t *testing.T, pool *pgxpool.Pool, query string, args ...any) int {
 
 func TestAgentsPersistIndependentlyAndStayTenantScoped(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, nil)
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenantA, tenantB := uuid.NewString(), uuid.NewString()
 	// Configuration is preserved without applying one harness's capabilities.
@@ -116,7 +116,7 @@ func TestAgentsPersistIndependentlyAndStayTenantScoped(t *testing.T) {
 
 func TestAgentsRejectInvalidTenantsAndEmptyMetadataIsAMap(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, nil)
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	valid := agents.CreateCommand{Configuration: []byte(`{"model":"x"}`)}
@@ -144,7 +144,7 @@ func TestAgentsRejectInvalidTenantsAndEmptyMetadataIsAMap(t *testing.T) {
 
 func TestAgentListPaginationIsolationAndReconnect(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, nil)
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, other := uuid.NewString(), uuid.NewString()
 	empty, err := store.ListAgents(ctx, agents.ListQuery{TenantID: tenant, Limit: 2})
@@ -230,7 +230,7 @@ func TestAgentListPaginationIsolationAndReconnect(t *testing.T) {
 
 func TestAgentUpdateRollbackAndCompleteSizeBound(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, nil)
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	configuration, err := json.Marshal(map[string]any{"model": "original", "instructions": strings.Repeat("x", 400*1024), "number": json.Number("9007199254740993")})
@@ -286,7 +286,7 @@ func TestAgentUpdateRollbackAndCompleteSizeBound(t *testing.T) {
 
 func TestAgentDeleteIsTenantScoped(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, nil)
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	agent, err := service.Create(ctx, agents.CreateCommand{TenantID: tenant, Configuration: []byte(`{"model":"x"}`)})
@@ -347,22 +347,11 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	if _, inherited := snapshot(store); inherited == nil || *inherited != *provider {
 		t.Fatal("provider snapshot mismatch")
 	}
-	// Omitted provider updates and plain reads do not require the encryption key.
-	keylessStore, keyless := open(t, pool, nil)
-	if _, err := keyless.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"model":"new-model"}`)}); err != nil {
+	if _, err := service.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"model":"new-model"}`)}); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := keylessStore.GetAgent(ctx, tenant, agent.ID); err != nil {
-		t.Fatal("plain read required Agent decryption", err)
-	}
-	if _, _, err := keylessStore.GetAgentWithModelProvider(ctx, tenant, agent.ID); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("missing key opened the bundle", err)
 	}
 	if _, _, err := agentpg.New(pgunit.NewPool(pool), testCipher(t, 99)).GetAgentWithModelProvider(ctx, tenant, agent.ID); err == nil || err.Error() != "agent model provider decryption failed" {
 		t.Fatal("wrong key was not a decryption failure", err)
-	}
-	if _, err := keyless.Create(ctx, create); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("unencrypted Agent create accepted", err)
 	}
 	replacement := providerFixture(1)
 	replace := func(tenant string) agents.UpdateCommand {
@@ -370,9 +359,6 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	}
 	if _, err := service.Update(ctx, replace(uuid.NewString())); !errors.Is(err, agents.ErrNotFound) {
 		t.Fatal("foreign tenant replacement accepted", err)
-	}
-	if _, err := keyless.Update(ctx, replace(tenant)); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("unencrypted replacement accepted", err)
 	}
 	if current, inherited := snapshot(store); inherited == nil || *inherited != *provider || !bytes.Contains(current.Configuration, []byte("new-model")) {
 		t.Fatal("failed replacement changed snapshot")
@@ -385,9 +371,6 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	if current, inherited := snapshot(store); inherited == nil || *inherited != *provider || !bytes.Contains(current.Configuration, []byte("new-model")) {
 		t.Fatal("database rejection left a partial replacement")
 	}
-	if n := count(t, pool, "SELECT count(*) FROM agents WHERE tenant_id=$1", tenant); n != 1 {
-		t.Fatal("failed create persisted partial Agent", n)
-	}
 	if _, err := service.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"x_agents_core":{"harness":"claude_sdk"}}`)}); !errors.Is(err, agents.ErrInvalidInput) {
 		t.Fatal("incompatible Harness-only update accepted", err)
 	}
@@ -399,13 +382,13 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	if current, inherited := snapshot(store); inherited == nil || *inherited != *replacement || !bytes.Contains(current.Configuration, []byte(`"harness": "codex"`)) {
 		t.Fatal("provider-only replacement failed")
 	}
-	if _, err := keyless.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"x_agents_core":{"harness":"codex"}}`)}); err != nil {
+	if _, err := service.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"x_agents_core":{"harness":"codex"}}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if _, inherited := snapshot(store); inherited == nil || *inherited != *replacement {
 		t.Fatal("harness-only update lost provider")
 	}
-	if _, err := keyless.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"x_agents_core":{"model_provider":null}}`), ModelProvider: &agents.ModelProviderChange{}}); err != nil {
+	if _, err := service.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"x_agents_core":{"model_provider":null}}`), ModelProvider: &agents.ModelProviderChange{}}); err != nil {
 		t.Fatal(err)
 	}
 	if current, inherited := snapshot(store); inherited != nil || !bytes.Contains(current.Configuration, []byte(`"harness": "codex"`)) {
@@ -645,7 +628,7 @@ func TestAgentWritesAuditInTheirTransaction(t *testing.T) {
 // after another key updates and deletes the Agent.
 func TestAgentAuditReadsFailuresAndStableOwnership(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, nil)
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	tenant := uuid.NewString()
 	first, err := service.Create(auditContext(t.Context(), tenant, uuid.NewString(), "a"), agents.CreateCommand{TenantID: tenant, Configuration: []byte(`{"model":"fixture"}`)})
 	if err != nil {
@@ -686,7 +669,7 @@ func TestAgentAuditReadsFailuresAndStableOwnership(t *testing.T) {
 // Malformed supplied provenance fails the write closed.
 func TestAgentWriteRejectsInvalidAuditSource(t *testing.T) {
 	pool := pgtest.Open(t)
-	_, service := open(t, pool, nil)
+	_, service := open(t, pool, pgtest.CredentialKey(t))
 	tenant := uuid.NewString()
 	ctx := writeaudit.WithSource(t.Context(), writeaudit.Source{KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Prefix: "pc_aaaaaaaa", Kind: "issued", TenantID: tenant, RequestID: uuid.NewString()})
 	if _, err := service.Create(ctx, agents.CreateCommand{TenantID: tenant, Configuration: []byte(`{"model":"x"}`)}); !errors.Is(err, writeaudit.ErrInvalidSource) {

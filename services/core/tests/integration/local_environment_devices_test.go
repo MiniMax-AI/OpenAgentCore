@@ -34,10 +34,10 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 	sibling, _ := localEnvironment(t, s, tenant)
 	foreign, _ := localEnvironment(t, s, foreignTenant)
 	digest := runtimedevice.HashCredential(uuid.NewString())
-	if _, err := FixtureEnvironmentDevice(t.Context(), pool, foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := FixtureEnvironmentDevice(t, t.Context(), pool, foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign provisioning: %v", err)
 	}
-	bound, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, environment.ID, "dedicated", digest)
+	bound, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "dedicated", digest)
 	if err != nil || bound.EnvironmentID != environment.ID {
 		t.Fatalf("provision: %+v %v", bound, err)
 	}
@@ -81,7 +81,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, environment.ID, "runtime", runtimedevice.HashCredential(uuid.NewString()))
+			_, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "runtime", runtimedevice.HashCredential(uuid.NewString()))
 			results <- err
 		}()
 	}
@@ -105,7 +105,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	if err := sessionService(t, s).RevokeDevice(t.Context(), tenant, bound.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
+	if _, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		t.Fatalf("silent placement replacement: %v", err)
 	}
 }

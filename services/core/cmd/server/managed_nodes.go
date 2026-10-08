@@ -22,12 +22,8 @@ type managedNodes struct {
 // configureManagedNodes serves the nodes of the Web-managed deployment. Node
 // presence and health and the generation of each allocation go through the
 // deployment service; the owner epoch that fences connections and the
-// allocations each generation retains are read from the deployment reader. It
-// returns nil without an installation ID.
+// allocations each generation retains are read from the deployment reader.
 func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, registry *providers.Registry, config processconfig.Config, owner func(context.Context) error) *managedNodes {
-	if config.InstallationID == "" {
-		return nil
-	}
 	result := &managedNodes{}
 	result.hub = node.NewHub(node.HubOptions{
 		Generations: func(ctx context.Context, n node.Identity, connection string, epoch uint64, health node.Health) error {
@@ -74,17 +70,10 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
 		},
 	})
-	// Load requires OAC_PUBLIC_URL with an installation ID.
 	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI()}
 	result.runtime = execution.NewDeferredRuntimeProvider(config.InstallationID, result.setup.load, result.setup.prepare)
 	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
 	return result
-}
-
-func (m *managedNodes) close() {
-	if m != nil {
-		m.hub.Close()
-	}
 }
 
 func nodeHealthRecord(health node.Health) deployment.NodeHealth {

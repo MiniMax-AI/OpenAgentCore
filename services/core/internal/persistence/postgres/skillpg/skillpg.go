@@ -33,8 +33,7 @@ var (
 	_ skills.Reader  = (*Store)(nil)
 )
 
-// New builds the Skill store. Without a cipher, uploads and content reads
-// fail with credentialcrypto.ErrUnavailable and metadata reads still work.
+// New builds the Skill store, which seals archives with cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -301,9 +300,6 @@ func (s *Store) DefaultVersionContent(ctx context.Context, tenantID string, skil
 
 // insertVersion seals the archive under a new version ID and stores it.
 func (s *Store) insertVersion(ctx context.Context, q *sqlc.Queries, tenant, skill pgtype.UUID, version int64, name, description string, archive []byte) (skills.Version, error) {
-	if s.cipher == nil {
-		return skills.Version{}, credentialcrypto.ErrUnavailable
-	}
 	id := newID()
 	body, err := s.cipher.SealSkill(archive, credentialcrypto.NewSkillBinding(tenant.Bytes, skill.Bytes, id.Bytes, version))
 	if err != nil {
@@ -338,8 +334,7 @@ func LockSkills(ctx context.Context, q *sqlc.Queries, tenant pgtype.UUID, ids []
 
 // ReadVersionForFreeze reads, on q, a version of the tenant's Skill, opens
 // it with cipher and verifies it is still the archive the version records. A
-// missing version is skills.ErrNotFound and a missing cipher
-// credentialcrypto.ErrUnavailable; one that does not open or verify is
+// missing version is skills.ErrNotFound; one that does not open or verify is
 // corrupt stored data, an internal error.
 func ReadVersionForFreeze(ctx context.Context, q *sqlc.Queries, cipher *credentialcrypto.Cipher, tenant pgtype.UUID, skillID string, version int64) (skills.Content, error) {
 	key, err := skills.ParseID(skillID)
@@ -361,9 +356,6 @@ func ReadVersionForFreeze(ctx context.Context, q *sqlc.Queries, cipher *credenti
 }
 
 func open(cipher *credentialcrypto.Cipher, row sqlc.SkillVersion) (skills.Content, error) {
-	if cipher == nil {
-		return skills.Content{}, credentialcrypto.ErrUnavailable
-	}
 	archive, err := cipher.OpenSkill(row.Contents, credentialcrypto.NewSkillBinding(row.TenantID.Bytes, row.SkillID.Bytes, row.ID.Bytes, row.Version))
 	if err != nil {
 		return skills.Content{}, err

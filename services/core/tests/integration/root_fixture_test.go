@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
@@ -34,18 +36,16 @@ type Store struct {
 // providers and an unset public URL.
 var defaultPlacement, _ = placement.NewRules(providers.Builtin(), "")
 
-// New is the fixture on pool without a credential key, under defaultPlacement.
-func New(pool *pgxpool.Pool) *Store {
-	pooled := pgunit.NewPool(pool)
-	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled, placement: defaultPlacement}
+// New is the fixture on pool under the shared test credential key and
+// defaultPlacement.
+func New(t testing.TB, pool *pgxpool.Pool) *Store {
+	return NewWithCredentialCipher(pool, pgtest.CredentialKey(t))
 }
 
-// NewWithCredentialCipher is New with a credential key, so Sessions can freeze
-// sealed resources.
+// NewWithCredentialCipher is New under another credential key.
 func NewWithCredentialCipher(pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) *Store {
-	s := New(pool)
-	s.credentialCipher = cipher
-	return s
+	pooled := pgunit.NewPool(pool)
+	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled, credentialCipher: cipher, placement: defaultPlacement}
 }
 
 // NewExecution is s with its Session transactions on lease.

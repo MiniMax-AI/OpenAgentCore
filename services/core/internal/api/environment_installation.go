@@ -25,17 +25,8 @@ type NativeInstaller struct {
 	Catalog *nativeinstaller.Catalog
 }
 
-// nativeInstaller returns this Core's native installer, or nil when it serves
-// none.
-func (h *Handler) nativeInstaller() *NativeInstaller {
-	if h.Execution == nil {
-		return nil
-	}
-	return h.Execution.NativeInstaller
-}
-
 func (h *Handler) installationFor(ctx context.Context, principal identity.Principal, environment string) (*v1.EnvironmentInstallation, error) {
-	installer := h.nativeInstaller()
+	installer := h.Execution.NativeInstaller
 	result := &v1.EnvironmentInstallation{Status: "unavailable", Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
 	if installer == nil {
 		return result, nil
@@ -52,7 +43,7 @@ func (h *Handler) installationFor(ctx context.Context, principal identity.Princi
 }
 
 func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request, response *v1.Session) error {
-	if response.Environment.Type != "self_hosted" || h.nativeInstaller() == nil {
+	if response.Environment.Type != "self_hosted" || h.Execution.NativeInstaller == nil {
 		return nil
 	}
 	principal, ok := r.Context().Value(principalContextKey{}).(identity.Principal)
@@ -69,7 +60,7 @@ func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *Handler) registerNativeInstallationRoutes(r chi.Router) {
-	installer := h.nativeInstaller()
+	installer := h.Execution.NativeInstaller
 	if installer == nil {
 		return
 	}
@@ -123,7 +114,7 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 		writeSessionsError(w, r, err)
 		return
 	}
-	response, err := sessionResponse(session, h.executorURL())
+	response, err := sessionResponse(session, h.Execution.ExecutorURL)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return

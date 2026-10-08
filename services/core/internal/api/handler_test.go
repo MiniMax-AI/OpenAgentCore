@@ -75,10 +75,9 @@ func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (ht
 	return newTestHandler(t, deps), s, tenant
 }
 
-// admitSessions enables Execution whose Worker admits Session creation, as it
-// does for a Session with initial input, into the recording store.
+// admitSessions makes the Worker admit Session creation, as it does for a
+// Session with initial input, into the recording store.
 func admitSessions(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	f.sessionAdmission.createSession = f.sessionCreation.createSession
 }
 
@@ -144,10 +143,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"invalid auth", "Bearer wrong", "agents=v1", "/v1/agents/sessions", valid, 401},
 		{"missing beta", "Bearer test-api-key", "", "/v1/agents/sessions", valid, 400},
 		{"tenant body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"tenant_id":"other","agent":`, 1), 400},
-		{"hosted environment without managed deployment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(strings.Replace(valid, `"none"`, `"openai_hosted"`, 1), `"input":`, fixtureSessionProvider+`,"input":`, 1), 503},
 		{"self-hosted environment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"self_hosted"`, 1), 400},
-		{"initial input", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid, 503},
-		{"stream unavailable", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"stream":true,"agent":`, 1), 503},
 		{"unknown saved agent", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 404},
 		{"saved agent without its model provider bundle", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 500},
 		{"unknown agent option", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"model":`, `"tools":[{}],"model":`, 1), 400},

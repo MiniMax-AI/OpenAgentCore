@@ -10,7 +10,7 @@ import (
 // writeVaultsError maps a Vault, Credential or Session credential selection
 // error to its public error response.
 func writeVaultsError(w http.ResponseWriter, r *http.Request, err error) {
-	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 		return
 	}
 	var selection *vaults.MCPCredentialSelectionError

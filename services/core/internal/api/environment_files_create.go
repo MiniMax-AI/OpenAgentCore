@@ -105,7 +105,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+	if !execution.LocalWorkspaceConfiguration(environment.Configuration) {
 		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}

@@ -8,7 +8,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -136,17 +135,6 @@ func writeTextValueError(w http.ResponseWriter, r *http.Request, err error) bool
 		return false
 	}
 	writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)
-	return true
-}
-
-// writeCredentialUnavailableError reports a request that needs credential
-// encryption on a service without a credential key, and returns false for any
-// other error.
-func writeCredentialUnavailableError(w http.ResponseWriter, r *http.Request, err error) bool {
-	if !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		return false
-	}
-	writeError(w, http.StatusServiceUnavailable, "credential_storage_unavailable", "Credential encryption is not configured on this service.")
 	return true
 }
 

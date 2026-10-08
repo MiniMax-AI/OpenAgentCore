@@ -83,7 +83,7 @@ CPU quietness, heartbeat age, connection state and keepalive time are not idle t
 
 ### Periodic sampling
 
-Periodic collection runs only with the execution worker (Core started with `OAC_PUBLIC_URL`; see the [Core environment](../../docs/configuration.md#appendix-core-environment-without-the-installer)) and under the worker's database lease. A Core without it stores no history and answers every history read with 503; current reads work on either.
+Periodic collection runs in the execution Worker, under its database lease.
 
 The sampler sweeps once at startup and again each sampling interval after the previous sweep ends. A sweep is a keyset scan, in Session ID order, of the Sessions that are not deleted, are `openai_hosted` and have no released allocation. It reads pages of 32 Sessions through the same resolver and sources as current reads, with eight concurrent reads and two seconds per source. The sampler checks the lease before each page and every 100 ms during a sweep, cancels in-flight reads when ownership is lost, and checks it again before handing each record to export. A failed row does not stop the sweep, and an incomplete sweep is repeated at the next interval.
 

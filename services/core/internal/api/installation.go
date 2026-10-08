@@ -11,12 +11,12 @@ import (
 // environment and build; configuration is the process settings it loaded.
 type Installation struct {
 	Object string `json:"object" enums:"core.installation"`
-	// The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
-	InstallationID *string `json:"installation_id" extensions:"x-nullable"`
-	// OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.
-	PublicURL *string `json:"public_url" extensions:"x-nullable"`
-	// public_url followed by /v1; null when public_url is null.
-	APIBaseURL *string `json:"api_base_url" extensions:"x-nullable"`
+	// The ID in OAC_INSTALLATION_ID_FILE.
+	InstallationID string `json:"installation_id"`
+	// OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use.
+	PublicURL string `json:"public_url"`
+	// public_url followed by /v1.
+	APIBaseURL string `json:"api_base_url"`
 	// True when public_url names a loopback host, reachable only from the Core host.
 	LocalOnly bool `json:"local_only"`
 	// Full source commit Core was built from; null for development builds.

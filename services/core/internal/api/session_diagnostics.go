@@ -72,7 +72,7 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 		writeSessionsError(w, r, err)
 		return
 	}
-	public, err := sessionResponse(session, h.executorURL())
+	public, err := sessionResponse(session, h.Execution.ExecutorURL)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return

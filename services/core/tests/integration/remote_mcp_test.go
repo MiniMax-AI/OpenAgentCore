@@ -99,7 +99,7 @@ func selfHostedMCPAdmissionFixture(t *testing.T) (*Store, string, vaults.Vault, 
 func selfHostedMCPAdmissionHandler(t *testing.T, s *Store, tenant string) http.Handler {
 	t.Helper()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	handler, err := publicHandler(t, s, auth, "codex", executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

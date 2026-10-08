@@ -86,7 +86,7 @@ Summary figures are cumulative per Session and are not billing records. Sessions
 | Operation | Route | Console use |
 | --- | --- | --- |
 | List harnesses | `GET /core/v1/harnesses` | System's Default model cards: each harness's read-only `enabled` and `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (a default model on the default harness, or on any enabled harness when none is default) |
-| Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form, and a 503 `credential_storage_unavailable` says Core has no credential encryption key; then the list is read again |
+| Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form; then the list is read again |
 | Clear | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**, confirmed, then the list is read again |
 
 The list carries each harness's configuration, so the console does not read `GET /core/v1/harnesses/{harness}/model-configuration`.

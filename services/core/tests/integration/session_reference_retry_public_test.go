@@ -37,7 +37,7 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	recovered, err := publicHandler(t, New(s.pool), auth, "codex")
+	recovered, err := publicHandler(t, New(t, s.pool), auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -39,13 +39,13 @@ var hostedConfiguration = json.RawMessage(`{"agent":{"model":"m"},"environment":
 
 // creationService returns the Session store and service over pool with the
 // built-in placement rules.
-func creationService(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) (*Store, *sessions.Service) {
+func creationService(t *testing.T, pool *pgxpool.Pool) (*Store, *sessions.Service) {
 	t.Helper()
 	rules, err := placement.NewRules(providers.Builtin(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	store := New(pgunit.NewPool(pool), cipher)
+	store := New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	service, err := sessions.NewService(store, rules)
 	if err != nil {
 		t.Fatal(err)
@@ -53,9 +53,9 @@ func creationService(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.
 	return store, service
 }
 
-func skillService(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) *skills.Service {
+func skillService(t *testing.T, pool *pgxpool.Pool) *skills.Service {
 	t.Helper()
-	store := skillpg.New(pgunit.NewPool(pool), cipher)
+	store := skillpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	service, err := skills.NewService(store, store)
 	if err != nil {
 		t.Fatal(err)
@@ -133,8 +133,8 @@ func awaitWaiters(t *testing.T, pool *pgxpool.Pool, holder int32, count int) {
 // submitting the input again.
 func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := creationService(t, pool, nil)
-	_, other := creationService(t, pgtest.Open(t), nil)
+	store, service := creationService(t, pool)
+	_, other := creationService(t, pgtest.Open(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "initial", CreationRequest: json.RawMessage(`{"agent_id":"source"}`), InitialInputs: []sessions.Input{messageInput("first"), messageInput("second")}}
@@ -232,7 +232,7 @@ func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 // one creates.
 func TestCreationIdentity(t *testing.T) {
 	pool := pgtest.Open(t)
-	_, service := creationService(t, pool, nil)
+	_, service := creationService(t, pool)
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	request := json.RawMessage(`{"agent_id":"source","agent":{"tools":[{"parameters":{"const":9007199254740993}}]}}`)
@@ -326,7 +326,7 @@ func TestCreationIdentity(t *testing.T) {
 }
 
 // The provider-key fingerprint in retry identities depends on the credential
-// key and needs one.
+// key.
 func TestProviderKeyFingerprintIsKeyed(t *testing.T) {
 	fingerprint := func(seed byte) string {
 		cipher, err := credentialcrypto.New(bytes.Repeat([]byte{seed}, 32))
@@ -342,9 +342,6 @@ func TestProviderKeyFingerprintIsKeyed(t *testing.T) {
 	if fingerprint(71) == fingerprint(72) {
 		t.Fatal("fingerprint ignores the credential key")
 	}
-	if _, err := New(nil, nil).FingerprintProviderKey("provider-key"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal(err)
-	}
 }
 
 // A new Session freezes its provider, Skills and initial files sealed under
@@ -352,9 +349,8 @@ func TestProviderKeyFingerprintIsKeyed(t *testing.T) {
 // bytes conflict, and a foreign source is missing.
 func TestCreationFreezesResourcesOnce(t *testing.T) {
 	pool := pgtest.Open(t)
-	cipher := frozenCipher(t)
-	store, service := creationService(t, pool, cipher)
-	skillsService := skillService(t, pool, cipher)
+	store, service := creationService(t, pool)
+	skillsService := skillService(t, pool)
 	filesService, err := files.NewService(filepg.New(pgunit.NewPool(pool)))
 	if err != nil {
 		t.Fatal(err)
@@ -444,21 +440,13 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 	if _, err := service.CreateSession(ctx, tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed bytes accepted", err)
 	}
-	_, keyless := creationService(t, pool, nil)
-	sealedInput := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "keyless", Configuration: hostedConfiguration, InitialFiles: changed.InitialFiles[:1]}
-	if _, err := keyless.CreateSession(ctx, tenant, sealedInput); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("sealed without a credential key", err)
-	}
-	if countRows(t, pool, "SELECT count(*) FROM sessions WHERE tenant_id=$1 AND idempotency_key='keyless'", tenant) != 0 {
-		t.Fatal("a failed creation left a Session")
-	}
 }
 
 // An Environment Session reserves its initial input, tracking its activity,
 // instead of admitting a Turn.
 func TestEnvironmentCreationReservesItsInitialInput(t *testing.T) {
 	pool := pgtest.Open(t)
-	_, service := creationService(t, pool, nil)
+	_, service := creationService(t, pool)
 	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "environment", InitialInputs: []sessions.Input{messageInput("first")},
 		Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}
 	created, err := service.CreateSession(t.Context(), uuid.NewString(), input)
@@ -479,7 +467,7 @@ func TestEnvironmentCreationReservesItsInitialInput(t *testing.T) {
 // nothing and still returns its Session.
 func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 	pool := pgtest.OpenIsolated(t, nil)
-	_, service := creationService(t, pool, nil)
+	_, service := creationService(t, pool)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tenant := uuid.NewString()
@@ -531,9 +519,8 @@ func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 // whichever goes first decides, and no Session refers to a missing version.
 func TestSkillFreezeSerializesWithVersionDeletion(t *testing.T) {
 	pool := pgtest.Open(t)
-	cipher := frozenCipher(t)
-	store, service := creationService(t, pool, cipher)
-	skillsService := skillService(t, pool, cipher)
+	store, service := creationService(t, pool)
+	skillsService := skillService(t, pool)
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	for _, freezeFirst := range []bool{true, false} {
@@ -605,7 +592,7 @@ func TestSkillFreezeSerializesWithVersionDeletion(t *testing.T) {
 // creation closed and rolls it back.
 func TestCreationAudit(t *testing.T) {
 	pool := pgtest.Open(t)
-	_, service := creationService(t, pool, nil)
+	_, service := creationService(t, pool)
 	tenant := uuid.NewString()
 	source := writeaudit.Source{KeyID: uuid.NewString(), Prefix: "pc_aaaaaaaa", Name: "test key", Kind: "issued", TenantID: uuid.NewString(), RequestID: uuid.NewString(), TraceID: uuid.NewString()}
 	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "audited", InitialInputs: []sessions.Input{messageInput("first")},

@@ -28,7 +28,7 @@ func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	lease := executionWriter(t, s).lease
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
-	host, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := FixtureEnvironmentDevice(t, t.Context(), pool, tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
