@@ -47,8 +47,8 @@ esac
 # Build one selected Linux architecture image and write the ID the local image store gives it to
 # $stage/NAME.id. BuildKit's --iidfile reports the config digest, which is the
 # image ID only in Docker's classic store; the containerd store (Docker 29's
-# default) uses the manifest digest and cannot resolve the config digest. The
-# build metadata carries both, and built-image keeps the one the store resolves.
+# default) uses the manifest digest and cannot resolve the config digest.
+# built-image verifies the local identity from the digests the exporter reports.
 # Without provenance attestations each image is one platform manifest in both
 # stores, as the archive verifier requires.
 build_image() {

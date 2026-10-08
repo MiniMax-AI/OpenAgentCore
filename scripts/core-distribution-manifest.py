@@ -85,6 +85,14 @@ def built_image(metadata_file, architecture="amd64"):
     # by its manifest digest; the other value never resolves to itself there.
     config = metadata.get("containerimage.config.digest")
     manifest = metadata.get("containerimage.digest", config)
+    # The Docker/OCI exporter may omit the config digest. Its manifest must
+    # itself identify the loaded image; archive verification still binds both.
+    if "containerimage.config.digest" not in metadata:
+        if not isinstance(manifest, str) or not DIGEST.fullmatch(manifest):
+            raise ValueError("Build metadata lacks valid image digests")
+        verify_image(manifest, architecture)
+        print(manifest)
+        return
     print(resolve_image(config, manifest, architecture))
 
 
