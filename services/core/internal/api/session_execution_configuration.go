@@ -18,13 +18,6 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 		} `json:"agent"`
 	}
 	_ = json.Unmarshal(raw, &configuration) // The resolved configuration was already validated.
-	modelSource := v1.ExecutionSourceSession
-	if saved != nil && (input.Agent == nil || input.Agent.Model == nil) {
-		modelSource = v1.ExecutionSourceAgent
-	}
-	if input.modelSource != "" {
-		modelSource = input.modelSource
-	}
 	harnessSource := v1.ExecutionSourceDeployment
 	if _, overridden := input.agentFields["x_agents_core"]; overridden {
 		if input.Agent != nil && input.Agent.XAgentsCore != nil && input.Agent.XAgentsCore.Harness != "" {
@@ -50,14 +43,10 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 	if configuration.Agent.Core != nil {
 		native = v1.ResolvedHarnessConfig(configuration.Agent.Core.HarnessConfig)
 	}
-	nativeSource := input.harnessConfigSource
-	if nativeSource == "" {
-		nativeSource = v1.ExecutionSourceUnknown
-	}
 	return v1.SessionExecutionConfiguration{
-		HarnessConfig: v1.ExecutionHarnessConfigSelection{Value: native, Source: nativeSource},
+		HarnessConfig: v1.ExecutionHarnessConfigSelection{Value: native, Source: input.harnessConfigSource},
 		Object:        "agent.session.execution_configuration", SchemaVersion: 1,
-		Model:   v1.ExecutionSelection{Value: &configuration.Agent.Model, Source: modelSource},
+		Model:   v1.ExecutionSelection{Value: &configuration.Agent.Model, Source: input.modelSource},
 		Harness: v1.ExecutionSelection{Value: &engine, Source: harnessSource}, ModelProvider: selection,
 	}
 }

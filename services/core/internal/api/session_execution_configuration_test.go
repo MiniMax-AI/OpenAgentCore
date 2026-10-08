@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -16,19 +17,20 @@ func TestExecutionConfigurationSources(t *testing.T) {
 	provider := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://saved.example/v1", APIKey: "secret-canary"}
 	saved := &v1.SavedAgent{SavedAgentConfiguration: v1.SavedAgentConfiguration{Model: "saved-model", XAgentsCore: &v1.SavedAgentCore{Harness: "codex", ModelProvider: provider.SafeView()}}}
 	for _, tc := range []struct {
-		name, agent, extension                             string
-		saved                                              *v1.SavedAgent
-		inherited, provider                                *v1.ModelProviderInput
-		modelSource, harnessSource, providerSource, status string
+		name, agent, extension                                           string
+		saved                                                            *v1.SavedAgent
+		inherited, provider                                              *v1.ModelProviderInput
+		modelSource, nativeSource, harnessSource, providerSource, status string
 	}{
-		{"saved", ``, ``, saved, provider, provider, "agent", "agent", "agent", "available"},
-		{"model override", `,"agent":{"model":"override"}`, ``, saved, provider, provider, "session", "agent", "agent", "available"},
-		{"harness override", `,"agent":{"x_agents_core":{"harness":"codex"}}`, ``, saved, provider, provider, "agent", "session", "agent", "available"},
-		{"harness reset", `,"agent":{"x_agents_core":null}`, ``, saved, provider, provider, "agent", "deployment", "agent", "available"},
-		{"explicit bundle", ``, `,"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://explicit.example/v1","api_key":"explicit-secret"}}`, saved, nil, provider, "agent", "agent", "session", "available"},
-		{"provider null inherits", ``, `,"x_agents_core":{"model_provider":null}`, saved, provider, provider, "agent", "agent", "agent", "available"},
-		{"inline deployment", `,"agent":{"model":"inline"}`, ``, nil, nil, provider, "session", "deployment", "deployment", "available"},
-		{"inline explicit harness", `,"agent":{"model":"inline","x_agents_core":{"harness":"codex"}}`, ``, nil, nil, nil, "session", "session", "unknown", "unavailable"},
+		{"saved", ``, ``, saved, provider, provider, "agent", "agent", "agent", "agent", "available"},
+		{"model override", `,"agent":{"model":"override"}`, ``, saved, provider, provider, "session", "session", "agent", "agent", "available"},
+		{"harness override", `,"agent":{"x_agents_core":{"harness":"codex"}}`, ``, saved, provider, provider, "agent", "agent", "session", "agent", "available"},
+		{"harness reset", `,"agent":{"x_agents_core":null}`, ``, saved, provider, provider, "agent", "agent", "deployment", "agent", "available"},
+		{"explicit bundle", ``, `,"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://explicit.example/v1","api_key":"explicit-secret"}}`, saved, nil, provider, "agent", "session", "agent", "session", "available"},
+		{"provider null inherits", ``, `,"x_agents_core":{"model_provider":null}`, saved, provider, provider, "agent", "agent", "agent", "agent", "available"},
+		{"deployment defaults", ``, ``, nil, nil, provider, "deployment", "deployment", "deployment", "deployment", "available"},
+		{"inline deployment", `,"agent":{"model":"inline"}`, ``, nil, nil, provider, "session", "session", "deployment", "deployment", "available"},
+		{"inline explicit harness", `,"agent":{"model":"inline","x_agents_core":{"harness":"codex"}}`, ``, nil, nil, nil, "session", "session", "session", "unknown", "unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var decoded decodedSessionRequest
@@ -39,8 +41,19 @@ func TestExecutionConfigurationSources(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			deps, fakes := testDependencies(t)
+			fakes.modelProviders.resolve = func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+				if tc.provider == nil {
+					return nil, nil
+				}
+				return &modelconfiguration.Snapshot{Provider: tc.provider, Model: "deployment-model"}, nil
+			}
+			h := &Handler{Dependencies: deps}
+			if err := h.prepareSessionModelConfiguration(t.Context(), &input, tc.saved, tc.inherited); err != nil {
+				t.Fatal(err)
+			}
 			p := sessionExecutionProjection(input, tc.saved, tc.inherited, tc.provider, "codex", json.RawMessage(`{"agent":{"model":"resolved"}}`))
-			if string(p.Model.Source) != tc.modelSource || string(p.Harness.Source) != tc.harnessSource || string(p.ModelProvider.Source) != tc.providerSource || string(p.ModelProvider.Status) != tc.status {
+			if string(p.Model.Source) != tc.modelSource || string(p.HarnessConfig.Source) != tc.nativeSource || string(p.Harness.Source) != tc.harnessSource || string(p.ModelProvider.Source) != tc.providerSource || string(p.ModelProvider.Status) != tc.status {
 				t.Fatalf("wrong sources: %#v", p)
 			}
 			raw, _ := json.Marshal(p)
