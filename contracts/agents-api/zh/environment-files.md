@@ -1,7 +1,7 @@
 ---
 title: "Environment 文件与 Artifact"
 source: contracts/agents-api/environment-files.md
-source_hash: 1b58aa02aaccddb9675ef41ebfe2506a6fba0bb12139efb67e0da378d879aee7
+source_hash: 11d3609d81455a3f0c203f341802e3fec1a9f318ab0e9977d2de0f2a84b8b63c
 ---
 
 Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/environments/{environment_id}/files` 列出一个工作区目录，并在其中创建文件。Turn 完成时，Core 将工作区 `outputs/` 目录中的文件复制为不可变 Artifact，通过 `/agents/sessions/{session_id}/artifacts` 读取。Artifact 的生命周期长于 Environment；工作区文件则不是。
@@ -32,7 +32,6 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 - `path` 不存在、指向普通文件或经过符号链接时返回空页。不跟随链接。
 - 每页重新读取目录，不提供快照。token 签发后目录普通文件（名称或大小）或请求参数改变时，token 被拒绝。名称和大小未变不证明内容未变。
 - 目录中任何类型条目合计超过 1,024 个时返回 503，不返回部分页。权限错误、工作区根缺失和传输失败也返回 503。
-- daemon 无本地工作区绑定时，改由 Claude Code 适配器回答读取：路径缺失返回 404，普通文件或符号链接返回 503。
 
 查询错误的 type 和 code 均为 `invalid_request_error`，除另有说明外 `param` 为 null：
 

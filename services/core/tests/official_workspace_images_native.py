@@ -1,4 +1,4 @@
-"""Common hosted image acceptance through fixed SDK, HTTP and real native tools."""
+"""Image acceptance through the pinned SDK, HTTP and real native workspace tools."""
 
 import base64
 import importlib.metadata
@@ -11,22 +11,23 @@ from image_fixture import picture
 from session_cleanup import delete_session
 
 
-def verify_workspace_images(client, foreign, http, model, kind, restart, evidence):
-    """restart(session_id, environment_id) cold-restarts the owned Core/Runtime."""
+def verify_workspace_images(client, foreign, http, agent_options, session_options, ready, restart, record):
+    """Run against the selected workspace; restart, when supplied, restarts its agent host."""
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
     distribution = importlib.metadata.distribution("openai")
     assert distribution.version == pin["sdk_version"]
     assert json.loads(distribution.read_text("direct_url.json"))["vcs_info"]["commit_id"] == pin["commit"]
     sessions = client.beta.agents.sessions
+    workspace = session_options["environment"].get("workspace_directory", "/workspace").rstrip("/")
     root = str(client.base_url).rstrip("/") + "/agents"
     headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
     foreign_headers = {**headers, "Authorization": "Bearer " + foreign.api_key}
-    proof = {"engine": kind, "checks": [], "runs": [], "calls": []}
+    proof = {"engine": agent_options["x_agents_core"]["harness"], "checks": [], "runs": [], "calls": []}
     expected_messages = []
     sid = None
 
     def save():
-        Path(evidence).write_text(json.dumps(proof, indent=2))
+        record(proof)
 
     def check(name):
         proof["checks"].append(name)
@@ -80,17 +81,19 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
         return http.post(root + "/sessions/" + sid + "/events", headers=hdr, json={"events": events})
 
     def verify_file(path, expected, turn):
+        assert path.startswith(workspace + "/")
+        public_path = "/workspace" + path[len(workspace):]
         answers = [i for i in items() if i["type"] == "message" and i.get("role") == "assistant"]
         answer = " ".join(p["text"] for p in answers[-1]["content"] if p["type"] == "output_text").lower()
         positions = [answer.find(color) for color in expected]
         assert all(p >= 0 for p in positions) and positions == sorted(positions), answer
         artifacts = list(sessions.artifacts.list(sid, limit=100))
-        matches = [a for a in artifacts if a.path == path and a.turn_id == turn]
+        matches = [a for a in artifacts if a.path == public_path and a.turn_id == turn]
         assert len(matches) == 1, [a.to_dict() for a in artifacts]
         artifact = matches[0]
         with sessions.artifacts.with_streaming_response.content(artifact.id, session_id=sid) as response:
             assert response.read() == ",".join(expected).encode()
-        assert any(f.path == path for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
+        assert any(f.path == public_path for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
         for suffix in ("", "/content"):
             assert http.get(root + "/sessions/" + sid + "/artifacts/" + artifact.id + suffix, headers=foreign_headers).status_code == 404
 
@@ -134,7 +137,7 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
         key = "result-" + action.call_id
         before = items()
         if validate:
-            if kind == "claude_sdk":
+            if agent_options["x_agents_core"]["harness"] == "claude_sdk":
                 invalid = [{**result, "success": False}, {**result, "output": [{"type": "input_image", "image_url": "https://example.test/image.png"}]}]
                 for bad in invalid:
                     assert post([bad], key).status_code == 400
@@ -150,12 +153,13 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
 
     colors = ["red", "green", "blue", "yellow"]
     secrets.SystemRandom().shuffle(colors)
-    initial = image_messages(picture(colors), "/workspace/outputs/initial.txt")
+    initial = image_messages(picture(colors), f"{workspace}/outputs/initial.txt")
     try:
-        session = sessions.create(agent={"model": model, "tools": [{"type": "function", "name": "get_visual",
+        session = sessions.create(agent={**agent_options, "tools": [{"type": "function", "name": "get_visual",
             "description": "Wait for a visual supplied by the caller.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}]},
-            environment={"type": "openai_hosted"}, input=initial)
+            **session_options, input=initial)
         sid, eid = session.id, session.environment.id
+        ready(session)
         proof.update(session=sid, environment=eid, initial_colors=colors)
         expected_messages.extend(initial)
         save()
@@ -168,20 +172,20 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
             return turns[0]
 
         first = until(initial_done)
-        verify_file("/workspace/outputs/initial.txt", colors, first.id)
+        verify_file(f"{workspace}/outputs/initial.txt", colors, first.id)
         history()
         check("initial_png_native_workspace_files_artifact")
 
         jpeg = "data:image/jpeg;base64," + base64.b64encode((Path(__file__).parent / "testdata/function-bands.jpg").read_bytes()).decode()
         idle = messages([{"type": "input_image", "image_url": jpeg}]) + messages([text(
-            "Write this image's four lowercase band colors from left to right, comma-separated with no newline, to /workspace/outputs/idle.txt using native tools. Reply with those colors. Do not call get_visual.")])
+            f"Write this image's four lowercase band colors from left to right, comma-separated with no newline, to {workspace}/outputs/idle.txt using native tools. Reply with those colors. Do not call get_visual.")])
         turn = run(idle)
-        verify_file("/workspace/outputs/idle.txt", ["yellow", "blue", "red", "green"], turn.id)
+        verify_file(f"{workspace}/outputs/idle.txt", ["yellow", "blue", "red", "green"], turn.id)
         check("prepared_image_only_jpeg_and_message_boundary")
 
         active_colors = colors[1:] + colors[:1]
         def active(action):
-            incoming = image_messages(picture(active_colors), "/workspace/outputs/active.txt")
+            incoming = image_messages(picture(active_colors), f"{workspace}/outputs/active.txt")
             batch = [event(incoming)]
             sessions.events.create(sid, events=batch, idempotency_key="active-image")
             expected_messages.extend(incoming)
@@ -189,14 +193,14 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
             assert post([event(messages([text("conflict")]))], "active-image").status_code == 409
             submit(action, "The user supplied an image. Follow its instructions, then stop.")
         turn = run(messages([text("Call get_visual once and wait. Then follow the incoming image instructions.")]), active)
-        verify_file("/workspace/outputs/active.txt", active_colors, turn.id)
+        verify_file(f"{workspace}/outputs/active.txt", active_colors, turn.id)
         check("active_image_input_retry_and_native_tools")
 
         result_colors = colors[2:] + colors[:2]
         output = [text("Inspect this visual."), {"type": "input_image", "image_url": picture(result_colors, 15)}, text("Remember these band colors.")]
-        turn = run(messages([text("Call get_visual exactly once. Read its returned image and use native tools to write its four lowercase band colors in left-to-right order, comma-separated with no newline, to /workspace/outputs/result.txt. Reply with the colors. Do not call get_visual again.")]),
+        turn = run(messages([text(f"Call get_visual exactly once. Read its returned image and use native tools to write its four lowercase band colors in left-to-right order, comma-separated with no newline, to {workspace}/outputs/result.txt. Reply with the colors. Do not call get_visual again.")]),
                    lambda action: submit(action, output, validate=True))
-        verify_file("/workspace/outputs/result.txt", result_colors, turn.id)
+        verify_file(f"{workspace}/outputs/result.txt", result_colors, turn.id)
         check("large_function_image_result_receipt_retry_isolation_and_artifact")
 
         before = history()
@@ -209,8 +213,9 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
         assert http.get(root + "/environments/" + eid + "/files", headers=foreign_headers).status_code == 404
         check("unsupported_message_batch_is_atomic_and_foreign_resources_hidden")
 
-        other = sessions.create(agent={"model": model}, environment={"type": "openai_hosted"})
+        other = sessions.create(agent=agent_options, **session_options)
         try:
+            ready(other)
             source_artifact = list(sessions.artifacts.list(sid, limit=100))[0]
             for suffix in ("", "/content"):
                 assert http.get(root + "/sessions/" + other.id + "/artifacts/" + source_artifact.id + suffix, headers=headers).status_code == 404
@@ -227,12 +232,13 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
         finally:
             delete_session(sessions, other.id)
 
-        restart(sid, eid)
+        if restart is not None:
+            restart()
         assert history() == before
-        turn = run(messages([text("Recall the most recent image returned by get_visual from conversation history, without reading any file or calling get_visual. Write its four lowercase band colors in order, comma-separated with no newline, to /workspace/outputs/resumed.txt using native tools, then reply with them.")]))
-        verify_file("/workspace/outputs/resumed.txt", result_colors, turn.id)
+        turn = run(messages([text(f"Recall the most recent image returned by get_visual from conversation history, without reading any file or calling get_visual. Write its four lowercase band colors in order, comma-separated with no newline, to {workspace}/outputs/resumed.txt using native tools, then reply with them.")]))
+        verify_file(f"{workspace}/outputs/resumed.txt", result_colors, turn.id)
         assert len(sessions.turns.list(sid, limit=100).data) == 5
-        check("cold_core_runtime_history_continuation_without_replay")
+        check(("cold_agent_host" if restart is not None else "warm") + "_history_continuation_without_replay")
 
         pending = []
         def cancel(action):
