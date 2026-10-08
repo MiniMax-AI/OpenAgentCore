@@ -20,7 +20,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 			req := preparationRequest()
 			schema := `{"type":"object","properties":{"n":{"const":9007199254740992}}}`
 			req.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(schema)}}
-			e, err := NewExecutorFactory(config)(t.Context(), req)
+			e, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
 			if mode == "structured-missing" {
 				if err == nil || !strings.Contains(err.Error(), "workspace structured output") {
 					t.Fatal("unqualified bundle admitted", err)

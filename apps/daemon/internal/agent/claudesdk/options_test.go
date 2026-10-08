@@ -1,43 +1,37 @@
 package claudesdk
 
 import (
-	"errors"
-	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-// A request needs a model and a provider: device credentials never stand in.
-func TestModelAndProviderAreRequired(t *testing.T) {
+// Device credentials never stand in for the prepared provider.
+func TestPreparedModelAndProviderReachTheBridge(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "device-key")
-	for _, tc := range []struct {
-		name string
-		req  proto.PromptRequestPayload
-		want string
-		err  error
-	}{
-		{"no system prompt", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "test-model"}, "", nil},
-		{"system prompt", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "test-model", SystemPrompt: "instructions"}, "instructions", nil},
-		{"no model", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), SystemPrompt: "instructions"}, "", harnessconfig.ErrModel},
-		{"no provider", proto.PromptRequestPayload{Model: "test-model"}, "", harnessconfig.ErrModelProvider},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-			start, _, err := prepareConfiguration(config, tc.req)
-			if !errors.Is(err, tc.err) || (err == nil) != (tc.err == nil) || start.SystemPrompt != tc.want {
-				t.Fatalf("system prompt %q, error %v", start.SystemPrompt, err)
-			}
-			if _, statErr := os.Stat(config.StateDir); tc.err != nil && !os.IsNotExist(statErr) {
-				t.Fatal("rejected request created native state")
-			}
-		})
+	for _, prompt := range []string{"", "instructions"} {
+		root := t.TempDir()
+		t.Setenv("OAC_RUNTIME_HOME", root)
+		config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
+		start, env, err := prepareConfiguration(config, prepared(t, proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "test-model", SystemPrompt: prompt}))
+		if err != nil || start.Model != "test-model" || start.SystemPrompt != prompt || !slices.Contains(env, "ANTHROPIC_API_KEY=fixture-key") {
+			t.Fatalf("model %q, system prompt %q, error %v", start.Model, start.SystemPrompt, err)
+		}
 	}
+}
+
+// prepared is req as the registry hands it to the factory.
+func prepared(t testing.TB, req proto.PromptRequestPayload) agent.PrepareRequest {
+	t.Helper()
+	configuration, err := Declaration.Configuration.Prepare(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration}
 }
 
 // fixtureProvider is the provider every Claude request carries.

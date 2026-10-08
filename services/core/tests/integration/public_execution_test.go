@@ -56,7 +56,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 		t.Fatal(retry, err)
 	}
 	request := h.read(testExecutionRequest)
-	var prompt proto.PromptRequestPayload
+	var prompt testExecution
 	if err := request.DecodePayload(&prompt); err != nil {
 		t.Fatal(err)
 	}

@@ -45,8 +45,9 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 			return startViewBridge(options, requests)
 		},
 	}
-	req := proto.PromptRequestPayload{DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: "/workspace", NetworkAccess: "enabled"},
-		Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder}}
+	req := prepared(t, proto.PromptRequestPayload{DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{ID: "environment"},
+		Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder}})
+	req.WorkspaceRoot = "/workspace"
 	executor, err := view.Executor(t.Context(), req, session)
 	if err != nil {
 		t.Fatal(err)
@@ -110,12 +111,11 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 	// The Harness gets the installed Skill in the sandbox's capability root
 	// and runs a stdio binding's alias without arguments.
 	docs := session.MCP
-	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
-	installed, local := req, *req.LocalEnvironment
-	local.CapabilityRoot, local.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
+	installed := req
+	installed.CapabilityRoot, installed.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
 		Metadata: agentskill.Metadata{Type: "inline", Name: "review", Description: "Review."}, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
-	installed.LocalEnvironment = &local
 	stdio, err := view.Executor(t.Context(), installed, session)
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 
 	// With environment none the bridge runs without a workspace in the work directory.
 	none := req
-	none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
+	none.LocalEnvironment, none.DisableExecutionEnvironment, none.WorkspaceRoot = nil, true, ""
 	session.MCP = docs
 	noneExecutor, err := view.Executor(t.Context(), none, session)
 	if err != nil {

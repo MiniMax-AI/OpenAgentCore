@@ -38,7 +38,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	reg := agent.NewRegistry()
 	sender := &recSender{}
 	sessions := map[string]*functionSession{}
-	registerSession(reg, proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported})}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
+	registerSession(reg, proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported})}, func(ctx context.Context, p fixtureRun, out chan<- proto.Envelope) (fixtureSession, error) {
 		s := &functionSession{fakeSession: &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}}
 		sessions[p.RunID] = s
 		return s, nil
@@ -150,7 +150,7 @@ func rejectsBeforeFactory(t *testing.T, caps proto.AgentKindCapabilities, req pr
 	t.Helper()
 	reg := agent.NewRegistry()
 	var called atomic.Bool
-	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: req.AgentKind, Available: true, Capabilities: caps}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: req.AgentKind, Available: true, Capabilities: caps}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		called.Store(true)
 		return nil, errors.New("unexpected executor preparation")
 	})

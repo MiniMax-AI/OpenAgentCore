@@ -60,71 +60,6 @@
     "reason": "This persisted model-provider key fingerprint purpose remains stable across upgrade and request replay."
   },
   {
-    "path": "apps/daemon/internal/agent/codex/preparation_router_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "apps/daemon/internal/dispatch/local_directory_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "apps/daemon/internal/dispatch/preparation_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "apps/daemon/internal/localworkspace/binding.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "apps/daemon/internal/localworkspace/native_binding.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "apps/daemon/internal/localworkspace/binding_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/internal/execution/directory_preparation.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/internal/execution/request.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/internal/execution/recovery_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/tests/integration/dispatch_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/tests/integration/environment_directory_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/tests/integration/environment_worker_helpers_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
-    "path": "services/core/tests/integration/environment_worker_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
     "path": "services/core/tests/integration/oac_runtime_names_migration_test.go",
     "regex": "parsar-core-runtime@sha256:|parsar_worker /home/runtime/\\.parsar",
     "reason": "Migration input and historical Session content assertions prove only the Runtime reference changes, never stored conversation data."
@@ -185,54 +120,9 @@
     "reason": "The explicitly named Parsar application example retains product branding; it does not rename the Core runtime."
   },
   {
-    "path": "apps/daemon/internal/cli/connect_cleanup_test.go",
-    "regex": "\"agents-api-cleanup\"",
-    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
-  },
-  {
     "path": "apps/daemon/internal/dispatch/executor.go",
     "regex": "\"agents-api-(?:session)?\"",
-    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
-  },
-  {
-    "path": "apps/daemon/internal/dispatch/executor_handoff_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
-  },
-  {
-    "path": "apps/daemon/internal/dispatch/executor_test.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
-  },
-  {
-    "path": "apps/daemon/internal/agenthost/agenthost_linux_test.go",
-    "regex": "\"agents-api-\"",
-    "reason": "The test prepares executions through dispatch, whose admission requires the existing Core Session state-key prefix."
-  },
-  {
-    "path": "apps/daemon/internal/agenthostqualify/qualify_linux_test.go",
-    "regex": "\"agents-api-\"",
-    "reason": "The test prepares executions through dispatch, whose admission requires the existing Core Session state-key prefix."
-  },
-  {
-    "path": "services/core/internal/runtimegateway/mcp_bearer_live_linux_test.go",
-    "regex": "\"agents-api-\"",
-    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
-  },
-  {
-    "path": "apps/daemon/internal/localworkspace/capabilities.go",
-    "regex": "\"agents-api-\"",
-    "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."
-  },
-  {
-    "path": "apps/daemon/internal/localworkspace/capability_preparation_test.go",
-    "regex": "\"agents-api-\"",
-    "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."
-  },
-  {
-    "path": "internal/agentdaemon/proto/prototest/wire.go",
-    "regex": "agents-api-session",
-    "reason": "The shared wire scenarios use the existing Core Session state-key prefix required by execution admission."
+    "reason": "Dispatch derives each Session's native state key in the existing agents-api- namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
     "path": "apps/daemon/internal/agent/mcode/tool_environment_test.go",

@@ -34,6 +34,7 @@ type Session struct {
 	frames               chan rpcFrame
 	finished             chan struct{}
 	mu                   sync.Mutex
+	runID                string
 	sessionID            string
 	nativeModel          string
 	outputContext        context.Context
@@ -251,7 +252,7 @@ func (s *Session) call(method string, params any, result any, prompt bool) error
 }
 
 func (s *Session) emit(kind string, payload any) {
-	env, err := proto.NewEnvelope(kind, s.req.RunID, payload)
+	env, err := proto.NewEnvelope(kind, s.runID, payload)
 	if err != nil {
 		return
 	}

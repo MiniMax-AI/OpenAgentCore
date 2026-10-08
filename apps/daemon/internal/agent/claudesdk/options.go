@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 type Config struct {
@@ -39,7 +39,7 @@ type startRequest struct {
 	RequireHistory     bool                 `json:"require_history,omitempty"`
 }
 
-func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
+func prepareConfiguration(config Config, req agent.PrepareRequest) (startRequest, []string, error) {
 	start, provider, err := prepareOptions(req)
 	if err != nil {
 		return startRequest{}, nil, err
@@ -94,15 +94,12 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 // prepareOptions renders the request's execution configuration and the
 // selected model provider. The registered factory already admitted the
 // selection against the declaration.
-func prepareOptions(req proto.PromptRequestPayload) (startRequest, []string, error) {
+func prepareOptions(req agent.PrepareRequest) (startRequest, []string, error) {
 	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ToolSearch: req.ToolSearch}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	modelConfiguration, err := harnessconfiguration.Configuration().Prepare(req)
-	if err != nil {
-		return startRequest{}, nil, err
-	}
+	modelConfiguration := req.Prepared
 	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
@@ -128,9 +125,11 @@ func prepareOptions(req proto.PromptRequestPayload) (startRequest, []string, err
 		}
 		start.Subagents = &subagentOptions{MaxConcurrent: limit}
 	}
-	if start.Functions, err = functionTools(req.FunctionTools); err != nil {
+	functions, err := functionTools(req.FunctionTools)
+	if err != nil {
 		return startRequest{}, nil, err
 	}
+	start.Functions = functions
 	start.Model, start.SystemPrompt = modelConfiguration.Model, req.SystemPrompt
 	// The key renders as ANTHROPIC_API_KEY, which Claude Code sends as the
 	// X-Api-Key header that the anthropic protocol declares.

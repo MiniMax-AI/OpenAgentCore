@@ -382,21 +382,9 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 			return NewSession{}, nil, nil, err
 		}
 	}
-	// The retry identity covers the configuration as requested; the marker
-	// added for a provider bundle below is not caller input.
-	requested := configuration
 	if input.ModelProvider != nil {
 		if err := input.ModelProvider.ValidateHarness(engine); err != nil {
 			return NewSession{}, nil, nil, fmt.Errorf("%w: %s", ErrInvalidInput, err)
-		}
-		// Raw values keep the caller's numbers exact.
-		var fields map[string]json.RawMessage
-		if json.Unmarshal(configuration, &fields) != nil {
-			return NewSession{}, nil, nil, ErrInvalidInput
-		}
-		fields["model_provider_configured"] = json.RawMessage("true")
-		if configuration, err = json.Marshal(fields); err != nil {
-			return NewSession{}, nil, nil, err
 		}
 	}
 	var initialization *environmentconfig.Setup
@@ -404,15 +392,13 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 		initialization = &input.Initialization
 	}
 	// The retry identity carries a caller's provider key only as a keyed
-	// fingerprint. A deployment default is not caller input: leaving it and
-	// its configuration marker out keeps retries equivalent when the default
-	// is set, replaced or removed.
+	// fingerprint. A deployment default is not caller input: leaving it out
+	// keeps retries equivalent when the default is set, replaced or removed.
 	var fingerprinted *v1.ModelProviderInput
-	hashed := configuration
-	if input.ModelProviderSource == v1.ModelProviderSourceDeployment {
-		hashed = requested
-	} else if fingerprinted, err = fingerprintedProvider(input.ModelProvider, fingerprint); err != nil {
-		return NewSession{}, nil, nil, err
+	if input.ModelProviderSource != v1.ModelProviderSourceDeployment {
+		if fingerprinted, err = fingerprintedProvider(input.ModelProvider, fingerprint); err != nil {
+			return NewSession{}, nil, nil, err
+		}
 	}
 	// encoding/json sorts map keys, so key order does not affect retries.
 	canonical, err := json.Marshal(struct {
@@ -423,7 +409,7 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 		InitialInputs  json.RawMessage                 `json:",omitempty"`
 		InitialFiles   []environmentconfig.InitialFile `json:",omitempty"`
 		Initialization *environmentconfig.Setup        `json:",omitempty"`
-	}{fingerprinted, engine, labels, hashed, encodedInput, input.InitialFiles, initialization})
+	}{fingerprinted, engine, labels, configuration, encodedInput, input.InitialFiles, initialization})
 	if err != nil {
 		return NewSession{}, nil, nil, fmt.Errorf("%w: input: %v", ErrInvalidInput, err)
 	}

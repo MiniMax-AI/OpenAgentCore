@@ -34,8 +34,8 @@ type preparationFactory func(context.Context, proto.PromptRequestPayload) (prepa
 
 // Old fault-injection fixtures model disposable executors, not reusable native implementations.
 func preparationExecutorFixture(factory preparationFactory) agent.ExecutorFactory {
-	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-		prepared, err := factory(ctx, req)
+	return func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
+		prepared, err := factory(ctx, req.PromptRequestPayload)
 		if prepared == nil {
 			return nil, err
 		}

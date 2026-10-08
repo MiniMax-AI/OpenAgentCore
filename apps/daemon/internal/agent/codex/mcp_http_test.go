@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -20,7 +21,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
 		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
 	}
-	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
+	req := prepared(t, "public-mcp", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers})
 	plan, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +30,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 	if !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
 		t.Fatal("native profile was not pinned")
 	}
-	home, err := allocCodexHome(req.AgentStateKey)
+	home, err := allocCodexHome(req.StateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,12 +72,8 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 
 func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 	valid := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
-	for _, req := range []proto.PromptRequestPayload{
-		{MCPHTTPServers: &valid},
-	} {
-		if _, _, err := runtimeMCPServers(req); err == nil {
-			t.Fatal("non-service profile accepted")
-		}
+	if _, _, err := runtimeMCPServers(agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{MCPHTTPServers: &valid}}); err == nil {
+		t.Fatal("non-service profile accepted")
 	}
 	for _, server := range []proto.MCPHTTPServer{
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://user:synthetic-secret@docs.example/mcp"},
@@ -84,7 +81,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},
 	} {
 		servers := []proto.MCPHTTPServer{server}
-		if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
+		if _, _, err := runtimeMCPServers(agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
 			t.Fatal("unsupported configuration was accepted or exposed", err)
 		}
 	}
@@ -98,7 +95,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 	if err := os.WriteFile(path, stored, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "credentials", DisableExecutionEnvironment: true, MCPHTTPServers: &valid}
+	req := prepared(t, "credentials", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &valid})
 	if _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil {
 		t.Fatal("existing MCP credentials accepted")
 	}
@@ -135,7 +132,7 @@ func writeMCPHTTPConfigResponse(t *testing.T, path string, response any) {
 }
 
 func TestPublicMCPBearerRequiresHTTPS(t *testing.T) {
-	req := proto.PromptRequestPayload{DisableExecutionEnvironment: true}
+	req := agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true}}
 	token := "synthetic-private-token"
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "http://tools.example/mcp", BearerToken: &token}}
 	req.MCPHTTPServers = &servers

@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -66,7 +67,7 @@ func TestRegistryResolvesOnlyDeclaredViews(t *testing.T) {
 func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 	reg := agent.NewRegistry()
 	declared := validView(t)
-	declared.Executor = func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
+	declared.Executor = func(context.Context, agent.PrepareRequest, agent.ViewSession) (agent.Executor, error) {
 		return nil, errReached
 	}
 	info := proto.SupportedAgentKind{Kind: "viewed", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
@@ -76,25 +77,25 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := func(baseURL, key string) proto.PromptRequestPayload {
-		return proto.PromptRequestPayload{Model: "m", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: baseURL, APIKey: key}}
+	request := func(baseURL, key string) agent.PrepareRequest {
+		return agent.PrepareRequest{Prepared: harnessconfig.PreparedConfiguration{Model: "m", Provider: modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: baseURL, APIKey: key}}}
 	}
 	gatewayRequest := request("http://127.0.0.1:4101", modelprovider.Placeholder)
 	requestMCP, installedMCP := gatewayRequest, gatewayRequest
 	requestMCP.MCPHTTPServers = &[]proto.MCPHTTPServer{}
-	installedMCP.LocalEnvironment = &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{}}}
+	installedMCP.MCP = []agent.EnvironmentMCP{{}}
 	token := "secret"
 	gateway := agent.MCPBinding{ServerLabel: "docs", Transport: "http", ServerURL: "http://127.0.0.1:4100/mcp/docs"}
 	withBearer, withHeaders, remote := gateway, gateway, gateway
 	withBearer.BearerToken = &token
 	withHeaders.HTTPHeaders = map[string]string{"X-Api-Key": token}
 	remote.ServerURL = "https://mcp.example.com/docs"
-	alias := agent.MCPBinding{ServerLabel: "tools", Transport: "stdio", Stdio: &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(1)}}}
+	alias := agent.MCPBinding{ServerLabel: "tools", Transport: "stdio", Stdio: &agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(1)}}}
 	command, misplaced := alias, alias
-	command.Stdio = &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "node", Args: []string{"tools.js"}}}
-	misplaced.Stdio = &proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(0)}}
+	command.Stdio = &agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "node", Args: []string{"tools.js"}}}
+	misplaced.Stdio = &agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(0)}}
 	for name, c := range map[string]struct {
-		req proto.PromptRequestPayload
+		req agent.PrepareRequest
 		mcp []agent.MCPBinding
 	}{
 		"gateway":            {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, alias}},
@@ -134,7 +135,7 @@ func validView(t *testing.T) agent.View {
 		ShimPaths:  []string{"/bin/sh"},
 		ForwardEnv: []string{"GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
-		Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
+		Executor: func(context.Context, agent.PrepareRequest, agent.ViewSession) (agent.Executor, error) {
 			return nil, errors.New("not started")
 		},
 	}

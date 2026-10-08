@@ -157,7 +157,7 @@ func connectRuntime(t *testing.T, peer *corePeer, setupErr error) *runtimeSide {
 	rt := &runtimeSide{conn: conn, executor: &controlledExecutor{turn: make(chan *controlledTurn, 1)}, stopped: make(chan struct{})}
 	kinds := agent.NewRegistry()
 	kinds.RegisterKind(proto.SupportedAgentKind{Kind: prototest.HarnessKind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
-	kinds.RegisterExecutor(prototest.HarnessKind, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	kinds.RegisterExecutor(prototest.HarnessKind, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		return rt.executor, setupErr
 	})
 	router, err := dispatch.New(dispatch.Config{Registry: kinds, Sender: conn})

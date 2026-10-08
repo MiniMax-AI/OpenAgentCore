@@ -242,10 +242,9 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 			WSURL:      wsURL,
 			DeviceID:   boot.DeviceID,
 			Credential: prof.RunnerCredential,
-			// DaemonVersion is the WIRE-PROTOCOL version, not the build
-			// tag. proto.VersionCompatible requires an exact version
-			// match against proto.Version. Build-tag reporting goes
-			// in heartbeat's DaemonVersion field.
+			// DaemonVersion is the wire-protocol version, not the build
+			// tag: proto.VersionCompatible requires an exact match
+			// against proto.Version.
 			DaemonVersion: proto.Version,
 		})
 		if remote != "" && err != nil {
@@ -362,9 +361,6 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, cfg dispatch.Conf
 
 	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
 		return proto.HeartbeatPayload{
-			Timestamp:           time.Now().Unix(),
-			ActiveRequests:      router.ActiveRuns(),
-			DaemonVersion:       Version,
 			SupportedAgentKinds: cfg.Registry.SupportedAgentKinds(),
 			HomeRemoval:         proto.CapabilityFromBool(cfg.RemoveHome != nil),
 		}

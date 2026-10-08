@@ -22,11 +22,11 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
-			s, err := startSingleTurn(ctx, config, request, out)
+			s, err := startSingleTurn(ctx, config, request, "run", proto.TextInput("hello"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -74,14 +74,14 @@ func TestUnsupportedRequestRejectedBeforeLaunch(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), Model: "fake"}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "fake"}
 			switch kind {
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
 			case "outside":
 				config.StateDir = filepath.Dir(root)
 			}
-			_, err := startSingleTurn(context.Background(), config, request, make(chan proto.Envelope, 1))
+			_, err := startSingleTurn(context.Background(), config, request, "run", proto.TextInput("hello"), make(chan proto.Envelope, 1))
 			if err == nil || !strings.HasPrefix(err.Error(), "claudesdk:") {
 				t.Fatalf("expected pre-launch rejection, got %v", err)
 			}

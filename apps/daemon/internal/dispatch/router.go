@@ -224,8 +224,7 @@ func adoptEnvelopeTrace(ctx context.Context, env proto.Envelope) context.Context
 	return ctx
 }
 
-// ActiveRuns returns the in-flight run count. Wired into the heartbeat
-// payload supplier.
+// ActiveRuns returns the in-flight run count.
 func (r *Router) ActiveRuns() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()

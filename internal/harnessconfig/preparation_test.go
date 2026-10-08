@@ -62,6 +62,14 @@ func TestPrepareModelConfiguration(t *testing.T) {
 	if _, err := c.Prepare(proto.PromptRequestPayload{ModelProvider: provider()}); !errors.Is(err, ErrModel) {
 		t.Fatal("model error was not shared")
 	}
+	limited := Configuration{Providers: []Provider{{Protocol: "responses", RequiresTokenLimits: true}}}
+	for _, limits := range [][2]int32{{0, 0}, {64000, 0}} {
+		p := provider()
+		p.ContextWindow, p.MaxOutputTokens = limits[0], limits[1]
+		if _, err := limited.Prepare(proto.PromptRequestPayload{Model: "fixture", ModelProvider: p}); err == nil {
+			t.Fatalf("token limits %v accepted", limits)
+		}
+	}
 }
 
 func TestConfigurationDeclarationRejectsUnknownAndDuplicateProtocols(t *testing.T) {

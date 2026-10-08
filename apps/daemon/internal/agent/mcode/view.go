@@ -12,7 +12,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // In an agent-host view, node runs the CLI from the closure and the native
@@ -136,8 +135,8 @@ func (i viewInstall) view() agent.View {
 	return view
 }
 
-func (i viewInstall) executor(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
-	return startExecutor(ctx, req, i.node, func() (launchOptions, error) {
+func (i viewInstall) executor(ctx context.Context, req agent.PrepareRequest, session agent.ViewSession) (agent.Executor, error) {
+	return startExecutor(ctx, req.PromptRequestPayload, i.node, func() (launchOptions, error) {
 		return i.prepare(req, session)
 	})
 }
@@ -147,27 +146,26 @@ func (i viewInstall) executor(ctx context.Context, req proto.PromptRequestPayloa
 // names and the MCP in session. The request's workspace is the sandbox's, and
 // the workspace tools present it; with environment none the CLI runs in the
 // work directory without them.
-func (i viewInstall) prepare(req proto.PromptRequestPayload, session agent.ViewSession) (launchOptions, error) {
+func (i viewInstall) prepare(req agent.PrepareRequest, session agent.ViewSession) (launchOptions, error) {
 	local := req.LocalEnvironment
 	if (local == nil) != req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view runs Agents API execution in a writable Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
 	dir := path.Join(session.Home.View, agent.ViewWorkName)
 	if local != nil {
-		dir = local.WorkspaceRoot
+		dir = req.WorkspaceRoot
 	}
 	if !path.IsAbs(dir) || path.Clean(dir) != dir || dir == "/" {
 		return launchOptions{}, errors.New("mcode: the workspace is not a canonical absolute path")
 	}
 	// The Harness runs each stdio alias without arguments.
-	servers, err := workspaceMCP(session.MCP, func(stdio proto.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
+	servers, err := workspaceMCP(session.MCP, func(stdio agent.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
 	if err != nil {
 		return launchOptions{}, err
 	}
 	private := req
 	private.LocalEnvironment, private.DisableExecutionEnvironment, private.MCPHTTPServers = nil, true, nil
-	prepared, err := validateOptions(private)
-	if err != nil {
+	if err := validateExecutionRequest(private.PromptRequestPayload); err != nil {
 		return launchOptions{}, err
 	}
 
@@ -193,13 +191,13 @@ func (i viewInstall) prepare(req proto.PromptRequestPayload, session agent.ViewS
 	var tools *workspaceTools
 	opts.MCP = []map[string]any{}
 	if local != nil {
-		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir, "network": "enabled"}, skills: local.Skills}
+		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir, "network": "enabled"}, skills: req.Skills}
 		opts.MCP = append(opts.MCP, tools.server(dataDir))
 	}
-	if err := writeNativeConfig(private, prepared, data, dataDir, tools); err != nil {
+	if err := writeNativeConfig(private, data, dataDir, tools); err != nil {
 		return opts, err
 	}
-	opts.Model = prepared.Model
+	opts.Model = req.Prepared.Model
 	opts.MCP = append(opts.MCP, servers...)
 	opts.Env = []string{
 		"PATH=" + path.Join(agent.ViewPrivateRoot, agent.ViewShimName),
@@ -212,7 +210,7 @@ func (i viewInstall) prepare(req proto.PromptRequestPayload, session agent.ViewS
 	if i.loader.LibraryPath != "" {
 		opts.Env = append(opts.Env, "LD_LIBRARY_PATH="+i.loader.LibraryPath)
 	}
-	opts.Env = append(opts.Env, nativeEnvironment(private, dataDir)...)
+	opts.Env = append(opts.Env, nativeEnvironment(private.PromptRequestPayload, dataDir)...)
 	opts.spawn = session.Spawn
 	opts.reader = clirunner.StartOptions{Binary: i.node, Args: []string{path.Join(path.Dir(i.bridge), "subagent-snapshot.mjs"), dataDir}, Dir: dataDir, Env: opts.Env}
 	return opts, nil

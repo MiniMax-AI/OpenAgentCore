@@ -215,10 +215,11 @@ func blankTextRune(r rune) bool {
 	return r >= '\u2000' && r <= '\u200a'
 }
 
-// Selection projects a request after its Environment owner configured or
-// prepared it; installed MCP servers appear only after preparation.
+// Selection projects an execution configuration as the Runtime admits it,
+// without the Turn's messages and the Environment's installed MCP servers,
+// which its owner resolves only when it prepares an Executor.
 func (r PromptRequestPayload) Selection() Selection {
-	s := Selection{MultiAgent: r.ObserveSubagentIdentities, Functions: len(r.FunctionTools) > 0, ToolSearch: r.ToolSearch, Messages: r.Input}
+	s := Selection{MultiAgent: r.ObserveSubagentIdentities, Functions: len(r.FunctionTools) > 0, ToolSearch: r.ToolSearch}
 	for _, tool := range r.FunctionTools {
 		s.DeferredFunctions = s.DeferredFunctions || tool.DeferLoading
 	}
@@ -226,9 +227,9 @@ func (r PromptRequestPayload) Selection() Selection {
 		s.Environment = "none"
 	}
 	if local := r.LocalEnvironment; local != nil {
-		s.Environment, s.InstalledCapabilities = "local", local.Capabilities
-		for _, installed := range local.MCP {
-			s.MCP = append(s.MCP, SelectedMCP{Origin: "environment", Label: installed.Server.Name, Installed: true})
+		s.Environment = "local"
+		if sources := local.CapabilitySources; sources != nil {
+			s.InstalledCapabilities = len(sources.Skills)+len(sources.Plugins)+len(sources.Directories) > 0
 		}
 	}
 	if c := r.ExecutionControls; c != nil {

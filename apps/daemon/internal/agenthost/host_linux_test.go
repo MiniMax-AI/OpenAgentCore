@@ -180,7 +180,7 @@ func plantSession(t *testing.T, cfg Config, id sandboxwire.ID) sessionDir {
 func TestRemoveHome(t *testing.T) {
 	f := newViewFixture(t)
 	h, b := &Host{cfg: f.cfg}, newBinding(newResource())
-	req := request("viewed", "/workspace", "https://model.test", "sk-test")
+	req := prepared(request("viewed", "/workspace", "https://model.test", "sk-test"))
 	var dials atomic.Int32
 	// The open stops once it has claimed the Session, before its uid.
 	claimed, proceed := make(chan struct{}), make(chan struct{})

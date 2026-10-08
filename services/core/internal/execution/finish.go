@@ -10,8 +10,8 @@ func finishDelivery(ctx context.Context, journal *journal, result *Result, cance
 	if cancelReply != nil {
 		select {
 		case reply := <-cancelReply:
-			if recordCancellation(ctx, journal, reply, result) != nil {
-				result.ErrorCode = "event_persistence_failed"
+			if err := recordCancellation(ctx, journal, reply, result); err != nil {
+				result.ErrorCode = journalFailure(err)
 				return sessions.TurnFailed
 			}
 			if reply.err == nil && reply.ack.Applied {

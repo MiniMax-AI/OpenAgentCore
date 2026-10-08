@@ -90,7 +90,7 @@ func workerRuntimeForPreparation(t *testing.T, h *dispatchHarness, frame proto.E
 		t.Fatal("invalid worker preparation")
 	}
 	for _, candidate := range h.environments {
-		if input.Configuration.AgentStateKey == "agents-api-"+candidate.session.ID && input.Configuration.LocalEnvironment != nil && input.Configuration.LocalEnvironment.ID == candidate.device.EnvironmentID {
+		if input.SessionID == candidate.session.ID && input.Configuration.LocalEnvironment != nil && input.Configuration.LocalEnvironment.ID == candidate.device.EnvironmentID {
 			return candidate
 		}
 	}

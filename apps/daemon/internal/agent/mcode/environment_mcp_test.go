@@ -10,12 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
-func environmentMCPFixture() proto.EnvironmentMCP {
-	return proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/fixture", Server: agentplugin.MCPServer{
+func environmentMCPFixture() agent.EnvironmentMCP {
+	return agent.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/fixture", Server: agentplugin.MCPServer{
 		Name: "proof.server", Type: "stdio", Command: "never-exec-before-sandbox", Args: []string{"private-argument"},
 		EnvVars: []string{"USER_SELECTED"}, CWD: "resources",
 	}}
@@ -25,8 +26,7 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "load"}[resume], func(t *testing.T) {
 			c, req, record := workspaceFixture(t)
-			c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
-			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
+			req.MCP = []agent.EnvironmentMCP{environmentMCPFixture()}
 			if resume {
 				req.AgentSessionID = "native-1"
 			}
@@ -54,8 +54,8 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 				t.Fatal("environment MCP displaced workspace tools")
 			}
 			cwd, err := os.ReadFile(record + ".cwd")
-			workspace, pathErr := filepath.EvalSymlinks(req.LocalEnvironment.WorkspaceRoot)
-			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.LocalEnvironment.WorkspaceRoot {
+			workspace, pathErr := filepath.EvalSymlinks(req.WorkspaceRoot)
+			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.WorkspaceRoot {
 				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", cwd, params.Cwd)
 			}
 			server := params.MCP[1]
@@ -75,26 +75,25 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "restricted", "disabled", "duplicate"} {
 		t.Run(name, func(t *testing.T) {
 			c, req, _ := workspaceFixture(t)
-			c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
-			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
+			req.MCP = []agent.EnvironmentMCP{environmentMCPFixture()}
 			switch name {
 			case "http-headers", "http-bearer-insecure", "http-bearer-missing":
-				req.LocalEnvironment.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
+				req.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
 				if name == "http-headers" {
-					req.LocalEnvironment.MCP[0].Server.HTTPHeaders = map[string]string{"X-Private": "secret"}
+					req.MCP[0].Server.HTTPHeaders = map[string]string{"X-Private": "secret"}
 				}
 				if name == "http-bearer-missing" {
-					req.LocalEnvironment.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
+					req.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
 				}
 				if name == "http-bearer-insecure" {
-					req.LocalEnvironment.MCP[0].Server.URL = "http://example.invalid/mcp"
+					req.MCP[0].Server.URL = "http://example.invalid/mcp"
 					token := "confidential-http-token"
-					req.LocalEnvironment.MCP[0].BearerToken = &token
+					req.MCP[0].BearerToken = &token
 				}
 			case "restricted", "disabled":
-				c.Network, req.LocalEnvironment.NetworkAccess = name, name
+				c.Network = name
 			case "duplicate":
-				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
+				req.MCP = append(req.MCP, environmentMCPFixture())
 			}
 			if _, err := prepareWorkspaceOptions(c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
@@ -105,8 +104,7 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 
 func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	c, req, _ := workspaceFixture(t)
-	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
-	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
+	req.MCP = []agent.EnvironmentMCP{environmentMCPFixture()}
 	script, err := os.ReadFile(c.Binary)
 	if err != nil {
 		t.Fatal(err)
@@ -180,14 +178,13 @@ func mcpRegistryEntry(server, segment, tool, toolSegment string) map[string]any 
 func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 	for _, authenticated := range []bool{false, true} {
 		c, req, record := workspaceFixture(t)
-		c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
-		item := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
+		item := agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
 		const token = "private-mcp-canary"
 		if authenticated {
 			value := token
 			item.BearerToken = &value
 		}
-		req.LocalEnvironment.MCP = []proto.EnvironmentMCP{item}
+		req.MCP = []agent.EnvironmentMCP{item}
 		resource, err := NewExecutorFactory(&c)(t.Context(), req)
 		if err != nil {
 			t.Fatal(err)
@@ -232,7 +229,6 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 
 func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	c, req, _ := workspaceFixture(t)
-	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	token := "selected-public-vault-canary"
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
 	opts, err := prepareWorkspaceOptions(c, req)

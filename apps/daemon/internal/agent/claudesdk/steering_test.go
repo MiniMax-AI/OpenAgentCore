@@ -27,11 +27,11 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 			if mode == "phased" {
 				config.Env[1] = "SDK_HELPER_MODE=steering-timeout"
 			}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native", Model: "fake-model", SystemPrompt: "instructions"}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
-			running, err := startSingleTurn(ctx, config, request, out)
+			running, err := startSingleTurn(ctx, config, request, "run", proto.TextInput("hello"), out)
 			if err != nil {
 				t.Fatal(err)
 			}

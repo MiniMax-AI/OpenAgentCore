@@ -10,6 +10,13 @@ import (
 // preparation failures consume the actual control frames directly.
 const testExecutionRequest = "test_execution_request"
 
+// testExecution is the payload of a testExecutionRequest.
+type testExecution struct {
+	proto.PromptRequestPayload
+	RunID string             `json:"run_id"`
+	Input proto.MessageInput `json:"input"`
+}
+
 type fixtureAdmission struct {
 	prepare  proto.ExecutionPreparePayload
 	handle   string
@@ -74,8 +81,8 @@ func (h *dispatchHarness) executionFrame(env proto.Envelope) (proto.Envelope, bo
 		if prepare.Configuration.LocalEnvironment != nil || prepare.Configuration.WorkspaceReadOnly {
 			return env, true
 		}
-		if prepare.SessionID == "" || prepare.Configuration.RunID != "" || len(prepare.Configuration.Input) != 0 {
-			h.t.Fatal("preparation changed Session identity or submitted input early")
+		if prepare.SessionID == "" {
+			h.t.Fatal("preparation lost Session identity")
 		}
 		admission := fixtureAdmission{prepare: prepare, handle: uuid.NewString(), executor: "executor-" + prepare.SessionID}
 		h.admissions[env.ID] = admission
@@ -91,9 +98,7 @@ func (h *dispatchHarness) executionFrame(env proto.Envelope) (proto.Envelope, bo
 			h.t.Fatal("Start changed admission, Executor or input identity")
 		}
 		h.write(env.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: admission.handle, ExecutorID: admission.executor, Revision: 2, State: "started", RunID: start.RunID})
-		request := admission.prepare.Configuration
-		request.RunID, request.Input = start.RunID, start.Input
-		projected, err := proto.NewEnvelope(testExecutionRequest, start.RunID, request)
+		projected, err := proto.NewEnvelope(testExecutionRequest, start.RunID, testExecution{PromptRequestPayload: admission.prepare.Configuration, RunID: start.RunID, Input: start.Input})
 		if err != nil {
 			h.t.Fatal(err)
 		}

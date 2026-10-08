@@ -88,10 +88,10 @@ func TestLiveClaudeWorkspaceTurns(t *testing.T) {
 		defer cancel()
 		out := make(chan proto.Envelope, 64)
 		req := workspaceRequest()
-		req.RunID, req.Input, req.AgentSessionID = uuid.NewString(), proto.TextInput(prompt), resume
+		req.AgentSessionID = resume
 		req.Model, req.SystemPrompt = "MiniMax-M3", "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."
-		proof := evidence{RunID: req.RunID}
-		running, err := startSingleTurn(ctx, config, req, out)
+		proof := evidence{RunID: uuid.NewString()}
+		running, err := startSingleTurn(ctx, config, req, proof.RunID, proto.TextInput(prompt), out)
 		if err != nil {
 			if name == "missing-history" && running == nil && strings.Contains(err.Error(), "history_unavailable") {
 				proof.Failure = err.Error()

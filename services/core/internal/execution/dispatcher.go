@@ -20,11 +20,10 @@ import (
 
 // Snapshot is the Session configuration frozen at creation.
 type Snapshot struct {
-	ModelProviderConfigured bool                          `json:"model_provider_configured,omitempty"`
-	Agent                   v1.Agent                      `json:"agent"`
-	Environment             *v1.Environment               `json:"environment"`
-	VaultIDs                []string                      `json:"vault_ids,omitempty"`
-	MCPCredentials          []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
+	Agent          v1.Agent                      `json:"agent"`
+	Environment    *v1.Environment               `json:"environment"`
+	VaultIDs       []string                      `json:"vault_ids,omitempty"`
+	MCPCredentials []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
 
 type Dispatcher struct {
@@ -108,12 +107,11 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	req.Assignment = bound.Device.Assignment
 	req.DisableExecutionEnvironment = true
-	if err := peer.Bind(ctx, req.Assignment, bound.Device.EnvironmentID); err != nil {
+	if err := peer.Bind(ctx, bound.Device.Assignment, bound.Device.EnvironmentID); err != nil {
 		return sessions.Turn{}, err
 	}
-	prepared, err := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, turnID, req, sessions.TurnQueued)
+	prepared, err := d.prepareTurnExecutor(ctx, peer, bound.Device.Assignment, tenantID, sessionID, turnID, req, sessions.TurnQueued)
 	if err != nil {
 		return sessions.Turn{}, err
 	}

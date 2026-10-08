@@ -3,6 +3,7 @@ package items
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -21,7 +22,7 @@ func projectCommandOutput(turn string, raw json.RawMessage) ([]Update, error) {
 
 func mergeCommandOutput(update Update, previous v1.Item) (v1.Item, error) {
 	if previous.ID != update.Item.ID || previous.TurnID != update.Item.TurnID || previous.Type != "command_execution" {
-		return v1.Item{}, errors.New("command output requires its existing command")
+		return v1.Item{}, fmt.Errorf("%w: command output requires its existing command", ErrInvalidObservation)
 	}
 	if previous.Status != "in_progress" {
 		return previous, nil

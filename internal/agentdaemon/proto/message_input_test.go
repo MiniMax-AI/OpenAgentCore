@@ -30,7 +30,7 @@ func TestMessageInputOrderAndTextOnlyRejection(t *testing.T) {
 	if err != nil || actual != " before \n\n after " {
 		t.Fatalf("text changed: %q %v", actual, err)
 	}
-	for _, payload := range []any{PromptRequestPayload{Input: input}, PromptSteerPayload{Input: input}, ExecutionStartPayload{Input: input}} {
+	for _, payload := range []any{PromptSteerPayload{Input: input}, ExecutionStartPayload{Input: input}} {
 		encoded, err := json.Marshal(payload)
 		if err != nil {
 			t.Fatal(err)

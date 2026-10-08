@@ -9,18 +9,18 @@ import (
 func TestSubagentConfigurationUsesExplicitRequestAndFrozenLimit(t *testing.T) {
 	config := workspaceFixture(t)
 	req := workspaceRequest()
-	start, _, err := prepareConfiguration(config, req)
+	start, _, err := prepareConfiguration(config, prepared(t, req))
 	if err != nil || start.Subagents != nil {
 		t.Fatal("ordinary execution changed", err)
 	}
 	req.DisableSubagents, req.ObserveSubagentIdentities = false, true
-	start, _, err = prepareConfiguration(config, req)
+	start, _, err = prepareConfiguration(config, prepared(t, req))
 	if err != nil || start.Subagents == nil || start.Subagents.MaxConcurrent != 6 {
 		t.Fatal("missing default native admission limit", err)
 	}
 	limit := 2
 	req.MaxConcurrentSubagents = &limit
-	start, _, err = prepareConfiguration(config, req)
+	start, _, err = prepareConfiguration(config, prepared(t, req))
 	limit = 4
 	if err != nil || start.Subagents.MaxConcurrent != 2 {
 		t.Fatal("subagent configuration was not frozen", err)
@@ -36,7 +36,7 @@ func TestSubagentConfigurationRejectsUnqualifiedAuthority(t *testing.T) {
 		req := workspaceRequest()
 		req.DisableSubagents, req.ObserveSubagentIdentities = false, true
 		change(&req)
-		if _, _, err := prepareConfiguration(config, req); err == nil {
+		if _, _, err := prepareConfiguration(config, prepared(t, req)); err == nil {
 			t.Fatal("unqualified subagent combination accepted")
 		}
 	}

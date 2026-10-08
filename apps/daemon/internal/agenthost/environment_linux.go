@@ -139,7 +139,7 @@ func canonicalID(s string) (sandboxwire.ID, error) {
 
 // executor returns the binding and Environment of an Executor of req's
 // Session, whose preparation the owner prepared.
-func (h *Host) executor(ctx context.Context, req proto.PromptRequestPayload) (Binding, Environment, error) {
+func (h *Host) executor(ctx context.Context, req agent.PrepareRequest) (Binding, Environment, error) {
 	session, err := canonicalID(req.Assignment.SessionID)
 	if err != nil {
 		return Binding{}, Environment{}, invalidSession("binding: %v", err)
@@ -260,44 +260,36 @@ func (o *environment) Close(ctx context.Context) error {
 }
 
 // Configure checks the request against the owner's Environment, which
-// dispatch resolved from the Session's assignment, and returns it with the
-// sandbox workspace as its root.
-func (o *environment) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
+// dispatch resolved from the Session's assignment.
+func (o *environment) Configure(r proto.PromptRequestPayload) error {
 	local := r.LocalEnvironment
 	switch {
 	case o.id == "":
 		if local != nil || !r.DisableExecutionEnvironment {
-			return r, errors.New("the Session has no Environment")
+			return errors.New("the Session has no Environment")
 		}
-		return r, nil
+		return nil
 	case local == nil || r.DisableExecutionEnvironment || local.ID != o.id:
-		return r, errors.New("the request does not name the Session's Environment")
+		return errors.New("the request does not name the Session's Environment")
 	case r.WorkspaceReadOnly:
-		return r, nil
+		return nil
 	case local.WorkspaceDirectory != sandboxWorkspace:
-		return r, fmt.Errorf("the workspace is not %s", sandboxWorkspace)
+		return fmt.Errorf("the workspace is not %s", sandboxWorkspace)
 	case local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil:
-		return r, agentcapabilities.ErrInvalid
+		return agentcapabilities.ErrInvalid
 	}
-	sources := *local.CapabilitySources
-	if present := len(sources.Skills)+len(sources.Plugins)+len(sources.Directories) > 0; present != local.Capabilities {
-		return r, agentcapabilities.ErrInvalid
-	}
-	configured := *local
-	configured.Skills, configured.MCP, configured.CapabilityRoot, configured.WorkspaceRoot = nil, nil, "", sandboxWorkspace
-	r.LocalEnvironment = &configured
-	return r, nil
+	return nil
 }
 
 // Prepare completes the Session's installation when Core sent no finalize,
-// checks it against the frozen selection, and fills the request's Skills,
-// MCP and capability root as sandbox paths.
-func (o *environment) Prepare(ctx context.Context, r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
+// checks it against the frozen selection, and fills the request's workspace
+// root, Skills, MCP and capability root as sandbox paths.
+func (o *environment) Prepare(ctx context.Context, r agent.PrepareRequest) (agent.PrepareRequest, error) {
 	if r.WorkspaceReadOnly || o.id == "" && r.LocalEnvironment == nil {
 		return r, nil
 	}
 	if o.id == "" || r.LocalEnvironment == nil || r.LocalEnvironment.ID != o.id || r.LocalEnvironment.CapabilitySources == nil ||
-		r.LocalEnvironment.WorkspaceRoot != sandboxWorkspace {
+		r.LocalEnvironment.WorkspaceDirectory != sandboxWorkspace {
 		return r, agentcapabilities.ErrInvalid
 	}
 	if err := o.acquire(ctx); err != nil {
@@ -309,7 +301,7 @@ func (o *environment) Prepare(ctx context.Context, r proto.PromptRequestPayload)
 		return r, err
 	}
 	defer o.done(w)
-	local := *r.LocalEnvironment
+	local := r.LocalEnvironment
 	identity := o.identity()
 	name, body, err := agentcapabilities.Marker(identity, agentcapabilities.Directory)
 	if err != nil {
@@ -340,25 +332,22 @@ func (o *environment) Prepare(ctx context.Context, r proto.PromptRequestPayload)
 			return r, err
 		}
 	}
-	local.Skills, local.MCP, local.CapabilityRoot = manifest.Skills, nil, agentcapabilities.Directory
-	for i := range local.Skills {
-		local.Skills[i].InstallationRoot = agentcapabilities.Directory
-	}
+	var mcp []agent.EnvironmentMCP
 	if len(manifest.MCP) != 0 {
-		if local.NetworkAccess != "enabled" {
-			return r, agentcapabilities.ErrInvalid
-		}
 		tokens, err := agentcapabilities.ResolveMCP(manifest.MCP, values)
 		if err != nil {
 			return r, err
 		}
 		for i, item := range manifest.MCP {
-			local.MCP = append(local.MCP, proto.EnvironmentMCP{InstallationRoot: agentcapabilities.Directory, WorkspaceRoot: sandboxWorkspace,
+			mcp = append(mcp, agent.EnvironmentMCP{InstallationRoot: agentcapabilities.Directory, WorkspaceRoot: sandboxWorkspace,
 				PackageRoot: item.PackageRoot, Server: item.Server, BearerToken: tokens[i]})
 		}
 	}
+	for i := range manifest.Skills {
+		manifest.Skills[i].InstallationRoot = agentcapabilities.Directory
+	}
 	o.tool = values
-	r.LocalEnvironment = &local
+	r.WorkspaceRoot, r.CapabilityRoot, r.Skills, r.MCP = sandboxWorkspace, agentcapabilities.Directory, manifest.Skills, mcp
 	return r, nil
 }
 

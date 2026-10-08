@@ -32,12 +32,12 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		value.AllowedDomains = append([]string(nil), config.AllowedDomains...)
 		frozen = &value
 	}
-	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+	return func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 		binary := defaultBinary()
 		if frozen != nil {
 			binary = frozen.Binary
 		}
-		return startExecutor(ctx, req, binary, func() (launchOptions, error) {
+		return startExecutor(ctx, req.PromptRequestPayload, binary, func() (launchOptions, error) {
 			if frozen == nil {
 				return prepareOptions(req)
 			}
@@ -46,14 +46,10 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 	}
 }
 
-// startExecutor prepares the native owner for req, which carries no Turn
-// input, and starts binary.
+// startExecutor prepares the native owner for req and starts binary.
 func startExecutor(ctx context.Context, req proto.PromptRequestPayload, binary string, prepare func() (launchOptions, error)) (agent.Executor, error) {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	if req.RunID != "" || len(req.Input) != 0 {
-		return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
 	}
 	opts, err := prepare()
 	if err != nil {
@@ -129,10 +125,8 @@ func (e *executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 		return nil, fmt.Errorf("mcode: native process exited")
 	default:
 	}
-	req := e.req
-	req.RunID = runID
-	s := newTurnSession(e.connection.process.Context(), req, e.opts, e.connection, out)
-	s.executor, s.sessionID, s.nativeModel = e, e.nativeSession, e.model
+	s := newTurnSession(e.connection.process.Context(), e.req, e.opts, e.connection, out)
+	s.executor, s.runID, s.sessionID, s.nativeModel = e, runID, e.nativeSession, e.model
 	s.settled, s.inputDone = make(chan struct{}), make(chan struct{})
 	s.outputContext, s.outputCancel = context.WithCancel(context.Background())
 	e.active = s

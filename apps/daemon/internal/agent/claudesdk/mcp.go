@@ -13,7 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func validateMCP(req proto.PromptRequestPayload) error {
+func validateMCP(req agent.PrepareRequest) error {
 	if req.MCPHTTPServers == nil {
 		return nil
 	}

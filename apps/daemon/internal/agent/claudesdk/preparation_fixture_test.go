@@ -30,7 +30,6 @@ func preparationFixture(t *testing.T, mode string) Config {
 
 func preparationRequest() proto.PromptRequestPayload {
 	req := workspaceRequest()
-	req.RunID, req.Input = "", nil
 	req.AgentSessionID = "native-session"
 	return req
 }

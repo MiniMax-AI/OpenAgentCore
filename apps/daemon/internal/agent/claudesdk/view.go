@@ -15,7 +15,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // In an agent-host view, node, the bridge and the SDK's native claude run from
@@ -91,12 +90,9 @@ func declareView(probe Config, info RuntimeInfo, node, root, bridge string, load
 
 func newViewExecutorFactory(probe Config, layout viewLayout) agent.ViewExecutorFactory {
 	checked := &runtimeCheckCache{}
-	return func(ctx context.Context, req proto.PromptRequestPayload, view agent.ViewSession) (agent.Executor, error) {
+	return func(ctx context.Context, req agent.PrepareRequest, view agent.ViewSession) (agent.Executor, error) {
 		if ctx == nil {
 			ctx = context.Background()
-		}
-		if err := preparationOnly(req); err != nil {
-			return nil, err
 		}
 		start, env, err := prepareView(layout, req, view)
 		if err != nil {
@@ -112,14 +108,14 @@ func newViewExecutorFactory(probe Config, layout viewLayout) agent.ViewExecutorF
 // the view: the workspace profile in the sandbox's workspace, or no workspace
 // in the work directory with environment none. MCP comes only from the view,
 // and the environment is closed.
-func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.ViewSession) (startRequest, []string, error) {
+func prepareView(layout viewLayout, req agent.PrepareRequest, view agent.ViewSession) (startRequest, []string, error) {
 	environment := req.LocalEnvironment
-	if (environment == nil) != req.DisableExecutionEnvironment || environment != nil && !workspacePathSyntax(environment.WorkspaceRoot) || view.Launch == nil || view.Proxy == "" {
+	if (environment == nil) != req.DisableExecutionEnvironment || environment != nil && !workspacePathSyntax(req.WorkspaceRoot) || view.Launch == nil || view.Proxy == "" {
 		return startRequest{}, nil, errors.New("claudesdk: a view Executor requires the sandbox workspace or environment none, Launch and the gateway proxy")
 	}
 	// The gateway adds each credential and header, and the Harness runs each
 	// stdio alias without arguments.
-	servers, _, err := mcpServers(view.MCP, func(stdio proto.EnvironmentMCP) (string, []string) { return stdio.Server.Command, nil })
+	servers, _, err := mcpServers(view.MCP, func(stdio agent.EnvironmentMCP) (string, []string) { return stdio.Server.Command, nil })
 	if err != nil {
 		return startRequest{}, nil, err
 	}
@@ -143,9 +139,10 @@ func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.V
 		}
 		return start, env, nil
 	}
-	profile.NetworkAccess, profile.MCP = environment.NetworkAccess, servers
-	profile.Skills, profile.CapabilityRoot = environment.Skills, environment.CapabilityRoot
-	start.Workspace, start.Cwd = profile, environment.WorkspaceRoot
+	// The workspace network is enabled by construction.
+	profile.NetworkAccess, profile.MCP = "enabled", servers
+	profile.Skills, profile.CapabilityRoot = req.Skills, req.CapabilityRoot
+	start.Workspace, start.Cwd = profile, req.WorkspaceRoot
 	return start, env, nil
 }
 

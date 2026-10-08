@@ -111,11 +111,8 @@ func localPreparationHarness(t *testing.T) *harness {
 	return h
 }
 
-// stateKey is the AgentStateKey Core derives for the Session.
-func stateKey(session string) string { return "agents-api-" + session }
-
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: stateKey(preparationSessionID), LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}})}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "prepared", LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}})}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory) *dispatch.Router {
@@ -168,9 +165,6 @@ func TestPreparationReleaseDuringBlockedFactory(t *testing.T) {
 	p := &controlledPreparation{closed: make(chan struct{})}
 	entered, allowReturn := make(chan context.Context, 1), make(chan struct{})
 	r := preparationRouter(t, sender, time.Minute, func(ctx context.Context, req proto.PromptRequestPayload) (preparedFixture, error) {
-		if req.RunID != "" || len(req.Input) != 0 {
-			t.Error("run input reached preparation")
-		}
 		entered <- ctx
 		<-allowReturn
 		return p, nil
@@ -367,28 +361,17 @@ func TestPreparationFailedReadyDeliveryAbandonsAdmission(t *testing.T) {
 	}
 }
 
-func TestPreparationRejectsInputAndProductConfiguration(t *testing.T) {
-	for name, change := range map[string]func(*proto.PromptRequestPayload){
-		"run":   func(p *proto.PromptRequestPayload) { p.RunID = "run" },
-		"input": func(p *proto.PromptRequestPayload) { p.Input = proto.TextInput("input") },
-		"attachment": func(p *proto.PromptRequestPayload) {
-			p.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
-		},
-		"missing environment": func(p *proto.PromptRequestPayload) { p.LocalEnvironment = nil },
-	} {
-		t.Run(name, func(t *testing.T) {
-			r := preparationRouter(t, &recSender{}, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
-				t.Error("invalid preparation reached native factory")
-				return nil, errors.New("invalid")
-			})
-			req := preparationRequest()
-			change(&req.Configuration)
-			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", req)); err == nil {
-				t.Fatal("invalid preparation accepted")
-			}
-			if r.ActiveRuns() != 0 {
-				t.Fatal("invalid configuration became a Run")
-			}
-		})
+func TestPreparationRequiresEnvironment(t *testing.T) {
+	r := preparationRouter(t, &recSender{}, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
+		t.Error("invalid preparation reached native factory")
+		return nil, errors.New("invalid")
+	})
+	req := preparationRequest()
+	req.Configuration.LocalEnvironment = nil
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", req)); err == nil {
+		t.Fatal("invalid preparation accepted")
+	}
+	if r.ActiveRuns() != 0 {
+		t.Fatal("invalid configuration became a Run")
 	}
 }

@@ -12,7 +12,7 @@ func readyExecutorAttempt(t *testing.T, h *dispatchHarness) (proto.Envelope, pro
 	t.Helper()
 	prepare := h.read(proto.TypeExecutionPrepare)
 	var configuration proto.ExecutionPreparePayload
-	if prepare.DecodePayload(&configuration) != nil || configuration.SessionID != h.session.ID || len(configuration.Configuration.Input) != 0 {
+	if prepare.DecodePayload(&configuration) != nil || configuration.SessionID != h.session.ID {
 		t.Fatal("invalid Executor preparation identity")
 	}
 	handle, executor := uuid.NewString(), uuid.NewString()

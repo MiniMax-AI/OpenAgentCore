@@ -15,8 +15,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 type launchOptions struct {
@@ -42,15 +40,15 @@ type launchOptions struct {
 	home string
 }
 
-func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
+func prepareOptions(req agent.PrepareRequest) (launchOptions, error) {
 	return prepareOptionsWithTools(req, nil)
 }
 
 // prepareOptionsWithTools prepares the Session's native data directory. With
 // tools, the workspace bridge presents the Environment's workspace and Skills.
-func prepareOptionsWithTools(req proto.PromptRequestPayload, tools *workspaceTools) (launchOptions, error) {
+func prepareOptionsWithTools(req agent.PrepareRequest, tools *workspaceTools) (launchOptions, error) {
 	var result launchOptions
-	prepared, err := validateOptions(req)
+	err := validateExecutionRequest(req.PromptRequestPayload)
 	if err != nil {
 		return result, err
 	}
@@ -59,7 +57,7 @@ func prepareOptionsWithTools(req proto.PromptRequestPayload, tools *workspaceToo
 			return result, err
 		}
 	}
-	if result.DataDir, err = dataDirectory(req); err != nil {
+	if result.DataDir, err = dataDirectory(req.StateKey); err != nil {
 		return result, err
 	}
 	result.Dir = filepath.Join(result.DataDir, "workspace")
@@ -74,33 +72,20 @@ func prepareOptionsWithTools(req proto.PromptRequestPayload, tools *workspaceToo
 		return result, err
 	}
 	defer data.Close()
-	if err := writeNativeConfig(req, prepared, data, result.DataDir, tools); err != nil {
+	if err := writeNativeConfig(req, data, result.DataDir, tools); err != nil {
 		return result, err
 	}
-	result.Model = prepared.Model
-	result.Env = append(executionEnvironment(), nativeEnvironment(req, result.DataDir)...)
+	result.Model = req.Prepared.Model
+	result.Env = append(executionEnvironment(), nativeEnvironment(req.PromptRequestPayload, result.DataDir)...)
 	result.MCP = []map[string]any{}
 	return result, nil
-}
-
-// validateOptions checks the request before any native effect and returns its
-// model configuration.
-func validateOptions(req proto.PromptRequestPayload) (harnessconfig.PreparedConfiguration, error) {
-	prepared, err := harnessconfiguration.Configuration().Prepare(req)
-	if err != nil {
-		return prepared, err
-	}
-	if err := validateExecutionRequest(req); err != nil {
-		return prepared, err
-	}
-	return prepared, nil
 }
 
 // writeNativeConfig writes the instructions and native configuration into the
 // data directory, which the native process sees at dataDir. With tools, the
 // workspace bridge replaces native permissions and sandbox, and Subagents use
 // it too.
-func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, data *os.Root, dataDir string, tools *workspaceTools) error {
+func writeNativeConfig(req agent.PrepareRequest, data *os.Root, dataDir string, tools *workspaceTools) error {
 	if len(req.SystemPrompt) > 32*1024 {
 		return fmt.Errorf("mcode: combined instructions exceed the CLI's 32 KiB limit")
 	}
@@ -108,7 +93,7 @@ func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.Pr
 		return err
 	}
 	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
-	config["custom_provider"] = map[string]any{"oac": modelProviderConfig(prepared.Provider, prepared.Model)}
+	config["custom_provider"] = map[string]any{"oac": modelProviderConfig(req.Prepared.Provider, req.Prepared.Model)}
 	configureTextExecution(config)
 	if !req.DisableSubagents {
 		config["agents"] = map[string]any{"default": map[string]any{
@@ -209,21 +194,21 @@ func (o launchOptions) readData(name string) ([]byte, error) {
 	return root.ReadFile(rel)
 }
 
-// dataDirectory returns the native data directory of the request's agent
-// state. It never derives runtime state from the subprocess cwd.
-func dataDirectory(req proto.PromptRequestPayload) (string, error) {
+// dataDirectory returns the native data directory of the Session's state
+// key. It never derives runtime state from the subprocess cwd.
+func dataDirectory(stateKey string) (string, error) {
 	root, err := paths.Root()
 	if err != nil {
 		return "", fmt.Errorf("mcode: resolve data directory: %w", err)
 	}
 	parts := []string{root, "runtime", "mcode", "state"}
-	for _, part := range strings.Split(req.AgentStateKey, "/") {
+	for _, part := range strings.Split(stateKey, "/") {
 		if safe := safePathPart(part); safe != "" {
 			parts = append(parts, safe)
 		}
 	}
 	if len(parts) == 4 {
-		return "", fmt.Errorf("mcode: invalid agent state key %q", req.AgentStateKey)
+		return "", fmt.Errorf("mcode: invalid agent state key %q", stateKey)
 	}
 	return filepath.Join(parts...), nil
 }

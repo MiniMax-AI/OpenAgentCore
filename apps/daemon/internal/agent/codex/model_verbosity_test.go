@@ -38,7 +38,7 @@ func TestPrepareModelVerbosity(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+catalog+"'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentStateKey: "state", Model: "known-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "high"}})
+	plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "known-model", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "high"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestPrepareDefaultModelVerbosity(t *testing.T) {
 	for _, model := range []string{"supported", "unsupported", "unknown-provider-model"} {
 		for _, level := range []string{"low", "medium", "high"} {
 			t.Run(model+"/"+level, func(t *testing.T) {
-				plan, err := BuildSessionPlan(proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentStateKey: "state", Model: model, ExecutionControls: &proto.ExecutionControls{TextVerbosity: level}})
+				plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: model, ExecutionControls: &proto.ExecutionControls{TextVerbosity: level}}))
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -8,12 +8,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // One projection consumes both public and installed Runtime bindings. A non-nil
 // empty public declaration still owns the complete native MCP configuration.
-func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConfig, []string, error) {
+func runtimeMCPServers(req agent.PrepareRequest) (map[string]mcpServerConfig, []string, error) {
 	bindings, err := agent.ResolveMCPBindings(req)
 	if err != nil {
 		return nil, nil, err
@@ -27,7 +26,7 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 // mcpServersFromBindings renders resolved bindings, each stdio binding with
 // the command and arguments stdio gives it and each credential in a private
 // environment variable.
-func mcpServersFromBindings(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (string, []string)) (map[string]mcpServerConfig, []string, error) {
+func mcpServersFromBindings(bindings []agent.MCPBinding, stdio func(agent.EnvironmentMCP) (string, []string)) (map[string]mcpServerConfig, []string, error) {
 	servers := make(map[string]mcpServerConfig, len(bindings))
 	var env []string
 	for _, binding := range bindings {

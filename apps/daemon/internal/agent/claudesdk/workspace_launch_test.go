@@ -41,7 +41,7 @@ esac
 		t.Fatal("readiness did not receive replacement environment", err)
 	}
 	out := make(chan proto.Envelope, 8)
-	s, err := startSingleTurn(t.Context(), config, workspaceRequest(), out)
+	s, err := startSingleTurn(t.Context(), config, workspaceRequest(), "run", proto.TextInput("hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ esac
 	if err := os.WriteFile(config.Node, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := startSingleTurn(t.Context(), config, workspaceRequest(), out); err == nil {
+	if _, err := startSingleTurn(t.Context(), config, workspaceRequest(), "run", proto.TextInput("hello"), out); err == nil {
 		t.Fatal("old packaged bridge accepted workspace execution")
 	}
 	if _, err := os.Stat(filepath.Join(config.StateDir, "unexpected-start")); !os.IsNotExist(err) {

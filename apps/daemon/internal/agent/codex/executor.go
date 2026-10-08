@@ -25,7 +25,7 @@ type Executor struct {
 	closeMu                      sync.Mutex
 }
 
-func PrepareExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+func PrepareExecutor(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 	e, err := newExecutor(ctx, req, defaultSessionConfig())
 	if e == nil {
 		return nil, err
@@ -118,7 +118,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 		}
 	}
 	if err != nil {
-		s.emitTerminal("codex: native start failed", true)
+		s.emitTerminal("codex: native start failed")
 	}
 	go s.settleExecutorTurn(err)
 	return s, err

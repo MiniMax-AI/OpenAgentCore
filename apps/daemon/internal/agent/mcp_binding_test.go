@@ -12,7 +12,7 @@ func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
 	empty := []string{}
 	for _, allow := range []*[]string{nil, &empty} {
 		public := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp", AllowedTools: allow, Required: true, BearerToken: &token}}
-		got, err := ResolveMCPBindings(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &public})
+		got, err := ResolveMCPBindings(PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &public}})
 		if err != nil || len(got) != 1 {
 			t.Fatal("public binding unavailable", err)
 		}
@@ -25,12 +25,12 @@ func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
 			t.Fatal("binding retained mutable credential pointer")
 		}
 	}
-	local := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{
+	installed := []EnvironmentMCP{
 		{Server: agentplugin.MCPServer{Name: "stdio", Type: "stdio", Command: "node", Args: []string{"tool.js"}}, PackageRoot: "plugins/proof", InstallationRoot: "/private/installed"},
 		{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", HTTPHeaders: map[string]string{"X-Selected": "literal"}}, BearerToken: &token},
 		{Server: agentplugin.MCPServer{Name: "configured", Type: "stdio", Command: "node", EnvVars: []string{"TOOL_TOKEN"}}, PackageRoot: "plugins/proof", InstallationRoot: "/private/installed"},
-	}}
-	got, err := ResolveMCPBindings(proto.PromptRequestPayload{LocalEnvironment: local})
+	}
+	got, err := ResolveMCPBindings(PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}}, MCP: installed})
 	if err != nil || len(got) != 3 {
 		t.Fatal("installed bindings unavailable", err)
 	}
@@ -40,18 +40,18 @@ func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
 	}
 	got[0].Stdio.Server.Args[0] = "mutated"
 	got[1].HTTPHeaders["X-Selected"] = "mutated"
-	if local.MCP[0].Server.Args[0] != "tool.js" || local.MCP[1].Server.HTTPHeaders["X-Selected"] != "literal" {
+	if installed[0].Server.Args[0] != "tool.js" || installed[1].Server.HTTPHeaders["X-Selected"] != "literal" {
 		t.Fatal("projection changed frozen installation")
 	}
 }
 
 func TestMCPBindingsDistinguishAbsentAndEmptyProfile(t *testing.T) {
-	got, err := ResolveMCPBindings(proto.PromptRequestPayload{})
+	got, err := ResolveMCPBindings(PrepareRequest{})
 	if err != nil || got != nil {
 		t.Fatal("absent profile changed")
 	}
 	empty := []proto.MCPHTTPServer{}
-	got, err = ResolveMCPBindings(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &empty})
+	got, err = ResolveMCPBindings(PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &empty}})
 	if err != nil || got == nil || len(got) != 0 {
 		t.Fatal("explicit empty profile lost ownership")
 	}
@@ -59,13 +59,13 @@ func TestMCPBindingsDistinguishAbsentAndEmptyProfile(t *testing.T) {
 
 func TestMCPBindingsRejectRelocationAndAmbiguousInstallation(t *testing.T) {
 	public := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
-	local := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}}
-	for _, req := range []proto.PromptRequestPayload{
-		{MCPHTTPServers: &public, LocalEnvironment: local},
-		{DisableExecutionEnvironment: true, LocalEnvironment: local},
-		{LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: append(local.MCP, local.MCP[0])}},
-		{LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "disabled", MCP: local.MCP}},
-		{LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", BearerTokenEnvVar: "MISSING"}}}}},
+	local := &proto.LocalEnvironment{}
+	installed := []EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}
+	for _, req := range []PrepareRequest{
+		{PromptRequestPayload: proto.PromptRequestPayload{MCPHTTPServers: &public, LocalEnvironment: local}, MCP: installed},
+		{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, LocalEnvironment: local}, MCP: installed},
+		{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: local}, MCP: append(installed, installed[0])},
+		{PromptRequestPayload: proto.PromptRequestPayload{LocalEnvironment: local}, MCP: []EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", BearerTokenEnvVar: "MISSING"}}}},
 	} {
 		if _, err := ResolveMCPBindings(req); err == nil {
 			t.Fatal("unsupported authority accepted")
@@ -77,7 +77,7 @@ func TestPublicEnvironmentMCPRetainsVaultAuthority(t *testing.T) {
 	token := "selected-vault-canary"
 	names := []string{"prove"}
 	public := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token, AllowedTools: &names, Required: true}}
-	req := proto.PromptRequestPayload{MCPHTTPServers: &public, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled"}}
+	req := PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{MCPHTTPServers: &public, LocalEnvironment: &proto.LocalEnvironment{}}}
 	got, err := ResolveMCPBindings(req)
 	if err != nil || len(got) != 1 {
 		t.Fatal("environment binding unavailable", err)
@@ -97,11 +97,11 @@ func TestPublicEnvironmentMCPRetainsVaultAuthority(t *testing.T) {
 		}
 	}
 	public[0].ConnectionOrigin = "environment"
-	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}
+	req.MCP = []EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}
 	if _, err := ResolveMCPBindings(req); err == nil {
 		t.Fatal("public/Plugin identity collision accepted")
 	}
-	req.LocalEnvironment = nil
+	req.MCP, req.LocalEnvironment = nil, nil
 	if _, err := ResolveMCPBindings(req); err == nil {
 		t.Fatal("unprepared environment accepted")
 	}

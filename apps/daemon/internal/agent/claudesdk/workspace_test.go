@@ -35,7 +35,7 @@ func workspaceFixture(t *testing.T) Config {
 }
 
 func workspaceRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
+	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableSubagents: true,
 		Model: "fixture"}
 }
 
@@ -44,7 +44,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	t.Setenv("OAC_TEST_PARENT_SECRET", "parent-only")
 	t.Setenv("ANTHROPIC_API_KEY", "unselected-provider")
 	config.Env = append(config.Env, "ANTHROPIC_BASE_URL=https://unselected.example")
-	start, env, err := prepareConfiguration(config, workspaceRequest())
+	start, env, err := prepareConfiguration(config, prepared(t, workspaceRequest()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,13 +81,13 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 	for _, name := range []string{"none", "workspace-root", "mcp", "relative", "missing", "ambient-setting", "duplicate-env", "bad-env"} {
 		t.Run(name, func(t *testing.T) {
 			config := workspaceFixture(t)
-			req := workspaceRequest()
+			req, root := workspaceRequest(), ""
 			switch name {
 			case "none":
 				req.DisableExecutionEnvironment = true
 			case "workspace-root":
 				config.Workspace.NetworkAccess = "enabled"
-				req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.ScratchDir}
+				req.LocalEnvironment, root = &proto.LocalEnvironment{ID: "environment"}, config.Workspace.ScratchDir
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			case "relative":
@@ -113,9 +113,10 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 				config.Env = append(config.Env, "HTTPS_PROXY=http://second.example")
 			case "bad-env":
 				config.Env = append(config.Env, "NO_PROXY=bad\x00value")
-
 			}
-			if _, _, err := prepareConfiguration(config, req); err == nil {
+			bound := prepared(t, req)
+			bound.WorkspaceRoot = root
+			if _, _, err := prepareConfiguration(config, bound); err == nil {
 				t.Fatal("invalid binding or request accepted")
 			}
 			entries, err := os.ReadDir(config.StateDir)
@@ -130,7 +131,7 @@ func TestWorkspaceRetainsDeclaredFunctions(t *testing.T) {
 	config := workspaceFixture(t)
 	req := workspaceRequest()
 	req.FunctionTools = []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}}
-	start, _, err := prepareConfiguration(config, req)
+	start, _, err := prepareConfiguration(config, prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,11 +144,13 @@ func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
 	config := workspaceFixture(t)
 	config.Workspace.NetworkAccess = "enabled"
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.Directory}
+	req.LocalEnvironment = &proto.LocalEnvironment{}
 	token := "vault-selected-canary"
 	tools := []string{"prove"}
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", AllowedTools: &tools, Required: true, BearerToken: &token}}
-	start, env, err := prepareConfiguration(config, req)
+	bound := prepared(t, req)
+	bound.WorkspaceRoot = config.Workspace.Directory
+	start, env, err := prepareConfiguration(config, bound)
 	if err != nil {
 		t.Fatal(err)
 	}

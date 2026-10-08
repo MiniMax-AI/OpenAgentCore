@@ -237,9 +237,9 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	first := h.message("first", "Initial input")
 	result := h.run(ctx, first.TurnID)
 	request := h.read(testExecutionRequest)
-	var prompt proto.PromptRequestPayload
+	var prompt testExecution
 	_ = request.DecodePayload(&prompt)
-	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.AgentStateKey != "agents-api-"+h.session.ID || prompt.Model != "test-model" || prompt.SystemPrompt != "Keep this instruction." {
+	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.Model != "test-model" || prompt.SystemPrompt != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
 	if _, err := h.bound().Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
@@ -284,7 +284,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	result = h.run(ctx, next.TurnID)
 	request = h.read(testExecutionRequest)
 	_ = request.DecodePayload(&prompt)
-	if prompt.AgentSessionID != "native-thread-1" || prompt.AgentStateKey != "agents-api-"+h.session.ID {
+	if prompt.AgentSessionID != "native-thread-1" {
 		t.Fatal("native continuity lost")
 	}
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})

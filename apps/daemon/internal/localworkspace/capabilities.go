@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
@@ -15,12 +16,11 @@ import (
 
 // Prepare runs under the admitted executor's lifetime, before native startup.
 // Reconnection validates installed contents without reopening mutable sources.
-func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
+func (b *Binding) Prepare(ctx context.Context, r agent.PrepareRequest) (agent.PrepareRequest, error) {
 	if b == nil && r.LocalEnvironment == nil || r.WorkspaceReadOnly {
 		return r, nil
 	}
-	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.CapabilitySources == nil ||
-		r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey || r.LocalEnvironment.WorkspaceRoot != b.workspace {
+	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.CapabilitySources == nil || r.LocalEnvironment.ID != b.environment {
 		return r, agentcapabilities.ErrInvalid
 	}
 	b.capabilityMu.Lock()
@@ -47,12 +47,11 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 	if err = ctx.Err(); err != nil {
 		return r, err
 	}
-	local := *r.LocalEnvironment
-	local.Skills, local.MCP, local.CapabilityRoot = manifest.Skills, nil, b.capabilityRoot
-	for i := range local.Skills {
-		local.Skills[i].InstallationRoot = b.capabilityRoot
+	r.WorkspaceRoot, r.CapabilityRoot, r.Skills, r.MCP = b.workspace, b.capabilityRoot, manifest.Skills, nil
+	for i := range r.Skills {
+		r.Skills[i].InstallationRoot = b.capabilityRoot
 	}
-	if local.ToolEnvironment {
+	if r.LocalEnvironment.ToolEnvironment {
 		if _, err = ReadToolEnvironment(); err != nil {
 			return r, err
 		}
@@ -65,16 +64,15 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 		if readErr != nil {
 			return r, readErr
 		}
-		local.MCP, err = resolveEnvironmentMCP(manifest.MCP, values)
-		for i := range local.MCP {
-			local.MCP[i].InstallationRoot = b.capabilityRoot
-			local.MCP[i].WorkspaceRoot = b.workspace
+		r.MCP, err = resolveEnvironmentMCP(manifest.MCP, values)
+		for i := range r.MCP {
+			r.MCP[i].InstallationRoot = b.capabilityRoot
+			r.MCP[i].WorkspaceRoot = b.workspace
 		}
 		if err != nil {
 			return r, err
 		}
 	}
-	r.LocalEnvironment = &local
 	return r, nil
 }
 
@@ -152,7 +150,7 @@ func (b *Binding) loadCapabilitySnapshot(root *os.Root, input agentcapabilities.
 }
 
 func (b *Binding) capabilityIdentity() agentcapabilities.Identity {
-	return agentcapabilities.Identity{EnvironmentID: b.environment, SessionID: strings.TrimPrefix(b.stateKey, "agents-api-")}
+	return agentcapabilities.Identity{EnvironmentID: b.environment, SessionID: b.session}
 }
 
 // The current Linux Runtime layout is shared by user-owned and managed hosts.

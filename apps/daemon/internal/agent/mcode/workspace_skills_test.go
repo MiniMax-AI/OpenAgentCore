@@ -22,8 +22,8 @@ func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(path, "SKILL.md"), []byte(body), 0600); err != nil {
 		t.Fatal(err)
 	}
-	req.LocalEnvironment.CapabilityRoot = root
-	req.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{
+	req.CapabilityRoot = root
+	req.Skills = []agentcapabilities.InstalledSkill{{
 		InstallationRoot: root, RelativeRoot: "plugin/skills/proof", PackageRoot: "plugin",
 		Metadata: agentskill.Metadata{Name: "proof", Description: "Read a marker"},
 	}}

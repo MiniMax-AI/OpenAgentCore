@@ -128,7 +128,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 func TestSessionExecutionConfigurationHistoricalProvenance(t *testing.T) {
 	s, pool := testStore(t)
 	tenant := uuid.NewString()
-	for _, configuration := range []string{`{}`, `{"agent":{"model":null}}`, `{"agent":{"model":"historical-model"},"model_provider_configured":true}`} {
+	for _, configuration := range []string{`{}`, `{"agent":{"model":null}}`, `{"agent":{"model":"historical-model"}}`} {
 		input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: []byte(configuration)}
 		session, err := s.CreateSession(t.Context(), tenant, input)
 		if err != nil {

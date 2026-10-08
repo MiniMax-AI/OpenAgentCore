@@ -53,7 +53,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 		t.Fatal(err)
 	}
 	harnesses := agent.NewRegistry()
-	register(harnesses, "test", &agent.View{Proxy: agent.ViewProxyEnv, Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
+	register(harnesses, "test", &agent.View{Proxy: agent.ViewProxyEnv, Executor: func(context.Context, agent.PrepareRequest, agent.ViewSession) (agent.Executor, error) {
 		return nil, errors.New("the test's factory replaces the view's")
 	}})
 	cfg := Config{StateDir: t.TempDir(), RelayURL: sb.url, RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: harnesses}
@@ -62,7 +62,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	h := &Host{cfg: cfg, owners: owners{d: deps{dial: relayDial(cfg)}}}
 	// The factory records what the owner prepared.
 	prepared := make(chan preparedExecutor, 4)
-	reg := registry(harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+	reg := registry(harnesses, func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 		_, env, err := h.executor(ctx, req)
 		prepared <- preparedExecutor{req: req, env: env}
 		if err != nil {
@@ -75,7 +75,6 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	manifest := []byte("---\nname: probe-skill\ndescription: Probe the installation.\n---\nProbe.\n")
 	req := request("test", sandboxWorkspace, "https://model.invalid", "key")
 	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Skills: []agentskill.Metadata{skill}}
-	req.LocalEnvironment.Capabilities = true
 
 	// Prepare as Core does: configure, a setup step that sees the tool
 	// environment, the Skill and finalize, then the Executor. A plugin whose
@@ -110,10 +109,9 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 		t.Fatalf("the preparation is %s (%s), want ready", status.State, status.ErrorCode)
 	}
 	got := <-prepared
-	local := got.req.LocalEnvironment
-	if local.WorkspaceRoot != sandboxWorkspace || local.CapabilityRoot != agentcapabilities.Directory || len(local.Skills) != 1 ||
-		local.Skills[0].Metadata != skill || local.Skills[0].InstallationRoot != agentcapabilities.Directory || local.Skills[0].RelativeRoot != "skills/probe-skill" {
-		t.Fatalf("the Executor's Environment is %+v", local)
+	if r := got.req; r.WorkspaceRoot != sandboxWorkspace || r.CapabilityRoot != agentcapabilities.Directory || len(r.Skills) != 1 ||
+		r.Skills[0].Metadata != skill || r.Skills[0].InstallationRoot != agentcapabilities.Directory || r.Skills[0].RelativeRoot != "skills/probe-skill" {
+		t.Fatalf("the Executor's Environment is %+v", r)
 	}
 	if got.env.Tool["PROBE"] != "probe-value" || got.env.Sandbox["PATH"] != sandboxBaseline["PATH"] {
 		t.Fatalf("the Executor's environments are %+v", got.env)
@@ -135,8 +133,8 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if status.State != "ready" {
 		t.Fatalf("the reopened preparation is %s (%s), want ready", status.State, status.ErrorCode)
 	}
-	if got := <-prepared; len(got.req.LocalEnvironment.Skills) != 1 || got.env.Tool["PROBE"] != "probe-value" {
-		t.Fatalf("the reopened Executor's Environment is %+v, %+v", got.req.LocalEnvironment, got.env)
+	if got := <-prepared; len(got.req.Skills) != 1 || got.env.Tool["PROBE"] != "probe-value" {
+		t.Fatalf("the reopened Executor's Environment is %+v, %+v", got.req.Skills, got.env)
 	}
 	if requests, mutations := p.counts(); requests == 0 || mutations != 0 {
 		t.Fatalf("the reopen sent %d File requests, %d of them mutations, on the probed world", requests, mutations)
@@ -269,7 +267,7 @@ func TestUnreachableSandboxRejectsRuntimePreparation(t *testing.T) {
 }
 
 type preparedExecutor struct {
-	req proto.PromptRequestPayload
+	req agent.PrepareRequest
 	env Environment
 }
 

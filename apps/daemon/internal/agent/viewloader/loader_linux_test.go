@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestForPresentsTheHostLoader(t *testing.T) {
@@ -36,7 +35,7 @@ func TestForPresentsTheHostLoader(t *testing.T) {
 		t.Fatalf("masks = %+v", fragment.Masks)
 	}
 	view := agent.View{Proxy: agent.ViewProxyNone, LocalExec: []string{fragment.Overlays[0].Path},
-		Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
+		Executor: func(context.Context, agent.PrepareRequest, agent.ViewSession) (agent.Executor, error) {
 			return nil, nil
 		}}
 	fragment.AddTo(&view)

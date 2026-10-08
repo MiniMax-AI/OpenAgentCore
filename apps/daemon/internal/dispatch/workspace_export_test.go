@@ -33,10 +33,10 @@ func (s exportSender) Send(ctx context.Context, env proto.Envelope) error {
 // bytes, and fails after it when fail is set.
 type stubEnvironment struct{ fail bool }
 
-func (stubEnvironment) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
-	return r, nil
+func (stubEnvironment) Configure(proto.PromptRequestPayload) error {
+	return nil
 }
-func (stubEnvironment) Prepare(_ context.Context, r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
+func (stubEnvironment) Prepare(_ context.Context, r agent.PrepareRequest) (agent.PrepareRequest, error) {
 	return r, nil
 }
 func (stubEnvironment) ApplyRuntimePreparation(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {

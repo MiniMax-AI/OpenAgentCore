@@ -102,3 +102,18 @@ func TestExecutionDoesNotCompleteAfterEventPersistenceFailure(t *testing.T) {
 		t.Fatalf("events=%+v err=%v", events, err)
 	}
 }
+
+func TestExecutionFailsUnprojectableRuntimeFrame(t *testing.T) {
+	h := newDispatchHarness(t)
+	ctx := context.Background()
+	input := h.message("start", "Malformed output")
+	result := h.run(ctx, input.TurnID)
+	h.read(testExecutionRequest)
+	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{Delta: "no item", Sequence: 1})
+	turn := h.finished(result, sessions.TurnFailed)
+	var outcome execution.Result
+	_ = json.Unmarshal(turn.Outcome, &outcome)
+	if outcome.ErrorCode != "invalid_executor_result" {
+		t.Fatal(outcome.ErrorCode)
+	}
+}

@@ -3,9 +3,11 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -21,6 +23,16 @@ type journal struct {
 
 type eventWriter interface {
 	AppendTurnEvents(context.Context, string, string, string, int32, []sessions.ExecutionEvent) error
+}
+
+// journalFailure is the Turn's error code for a failed journal write: an
+// observation that projects to no Item is the Runtime's fault, and every other
+// failure is storage's.
+func journalFailure(err error) string {
+	if errors.Is(err, items.ErrInvalidObservation) {
+		return "invalid_executor_result"
+	}
+	return "event_persistence_failed"
 }
 
 func recordCancellation(ctx context.Context, journal *journal, reply cancellationResult, result *Result) error {

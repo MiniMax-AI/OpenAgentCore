@@ -85,12 +85,12 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 	defer persist()
 	request := proto.PromptRequestPayload{DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}, Model: model, ModelProvider: provider, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
 	factory := NewExecutorFactory(config)
-	prepared := time.Now()
-	owner, err := factory(ctx, request)
+	started := time.Now()
+	owner, err := factory(ctx, prepared(t, request))
 	if err != nil {
 		t.Fatal("executor preparation failed", err)
 	}
-	evidence.PrepareMS = time.Since(prepared).Milliseconds()
+	evidence.PrepareMS = time.Since(started).Milliseconds()
 	defer func() {
 		closeCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stop()
@@ -195,7 +195,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		}
 		request.AgentSessionID = native
 		request.RequireExistingNativeSession = true
-		owner, err = factory(ctx, request)
+		owner, err = factory(ctx, prepared(t, request))
 		if err != nil {
 			t.Fatal("history recovery failed", err)
 		}

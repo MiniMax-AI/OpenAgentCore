@@ -93,7 +93,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			registry := agent.NewRegistry()
 			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 			var creates atomic.Int32
-			registry.RegisterExecutor("handoff", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+			registry.RegisterExecutor("handoff", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 				creates.Add(1)
 				return owner, nil
 			})
@@ -147,7 +147,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 					}
 				}
 			}
-			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "handoff", AgentStateKey: "agents-api-session", DisableExecutionEnvironment: true})}
+			request := proto.ExecutionPreparePayload{SessionID: "session", Configuration: prototest.WithModel(proto.PromptRequestPayload{AgentKind: "handoff", DisableExecutionEnvironment: true})}
 			admit := func(id string) proto.PreparationStatusPayload {
 				t.Helper()
 				handle(proto.TypeExecutionPrepare, id, request)

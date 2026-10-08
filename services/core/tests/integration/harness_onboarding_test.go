@@ -145,18 +145,18 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 }
 
-func awaitOnboardingPrompt(t *testing.T, c <-chan proto.PromptRequestPayload) proto.PromptRequestPayload {
+func awaitOnboardingPrompt(t *testing.T, c <-chan testExecution) testExecution {
 	t.Helper()
 	select {
 	case p := <-c:
 		return p
 	case <-time.After(10 * time.Second):
 		t.Fatal("fixture was not dispatched")
-		return proto.PromptRequestPayload{}
+		return testExecution{}
 	}
 }
 
-func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptRequestPayload, func(proto.Envelope) error, proto.SupportedAgentKind) {
+func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan testExecution, func(proto.Envelope) error, proto.SupportedAgentKind) {
 	t.Helper()
 	root, err := filepath.Abs("../../../..")
 	if err != nil {
@@ -182,7 +182,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 	if err = child.Start(); err != nil {
 		t.Fatal(err)
 	}
-	started := make(chan proto.PromptRequestPayload, 4)
+	started := make(chan testExecution, 4)
 	declarations := make(chan proto.SupportedAgentKind, 1)
 	up := make(chan error, 1)
 	down := make(chan error, 1)
@@ -232,8 +232,8 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 					down <- err
 					return
 				}
-				if p.SessionID == "" || p.Configuration.RunID != "" || len(p.Configuration.Input) != 0 {
-					down <- fmt.Errorf("fixture preparation submitted input or lost Session identity")
+				if p.SessionID == "" {
+					down <- fmt.Errorf("fixture preparation lost Session identity")
 					return
 				}
 				preparations[e.ID] = p
@@ -249,9 +249,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 					down <- fmt.Errorf("fixture Start lacks prepared Executor ownership")
 					return
 				}
-				request := p.Configuration
-				request.RunID, request.Input = start.RunID, start.Input
-				started <- request
+				started <- testExecution{PromptRequestPayload: p.Configuration, RunID: start.RunID, Input: start.Input}
 			}
 			if e.Type == proto.TypeExecutionRelease {
 				delete(preparations, e.ID)

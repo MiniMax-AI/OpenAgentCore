@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
@@ -25,7 +24,17 @@ type MCPBinding struct {
 	BearerToken         *string
 	HTTPHeaders         map[string]string
 	// Stdio retains the installed package identity for the fixed Runtime launcher.
-	Stdio *proto.EnvironmentMCP
+	Stdio *EnvironmentMCP
+}
+
+// EnvironmentMCP is one MCP server installed in the Environment. Never log it:
+// HTTP headers and the selected bearer may be confidential.
+type EnvironmentMCP struct {
+	InstallationRoot string
+	WorkspaceRoot    string
+	PackageRoot      string
+	Server           agentplugin.MCPServer
+	BearerToken      *string
 }
 
 // EnvironmentMCPCredentials reports whether an installed MCP server takes
@@ -39,12 +48,12 @@ func EnvironmentMCPCredentials(server agentplugin.MCPServer) bool {
 // ResolveMCPBindings combines public declarations with the frozen installation.
 // Public declarations retain explicit origin and Vault authority; installed MCP
 // retains Environment configuration authority. Neither may relocate implicitly.
-func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
+func ResolveMCPBindings(req PrepareRequest) ([]MCPBinding, error) {
 	var bindings []MCPBinding
 	if req.MCPHTTPServers != nil {
 		bindings = make([]MCPBinding, 0, len(*req.MCPHTTPServers))
 		for _, server := range *req.MCPHTTPServers {
-			if err := server.ValidateConnectionOrigin(req); err != nil {
+			if err := server.ValidateConnectionOrigin(req.PromptRequestPayload); err != nil {
 				return nil, err
 			}
 			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken}
@@ -58,11 +67,11 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			bindings = append(bindings, item)
 		}
 	}
-	if local := req.LocalEnvironment; local != nil && len(local.MCP) > 0 {
-		if req.DisableExecutionEnvironment || local.NetworkAccess != "enabled" {
-			return nil, errors.New("environment MCP requires an enabled workspace network")
+	if len(req.MCP) > 0 {
+		if req.DisableExecutionEnvironment || req.LocalEnvironment == nil {
+			return nil, errors.New("environment MCP requires a workspace")
 		}
-		for _, installed := range local.MCP {
+		for _, installed := range req.MCP {
 			declaration := installed.Server
 			item := MCPBinding{ServerLabel: declaration.Name, ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: declaration.Type, ServerURL: declaration.URL, BearerToken: installed.BearerToken, HTTPHeaders: maps.Clone(declaration.HTTPHeaders)}
 			if declaration.BearerTokenEnvVar != "" && installed.BearerToken == nil {

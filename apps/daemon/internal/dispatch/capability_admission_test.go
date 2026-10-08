@@ -15,7 +15,7 @@ func TestSteeringDoesNotReplayUnsupportedImplementation(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	var calls atomic.Int32
-	factory := func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
+	factory := func(_ context.Context, _ fixtureRun, out chan<- proto.Envelope) (fixtureSession, error) {
 		return &steeringSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}, steer: func(context.Context, proto.PromptSteerPayload, func()) error {
 			calls.Add(1)
 			return fmt.Errorf("%w: fixture has no active input", agent.ErrUnsupportedOperation)

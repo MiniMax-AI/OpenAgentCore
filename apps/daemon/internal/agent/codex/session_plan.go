@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, error) {
+func prepareSessionPlan(ctx context.Context, req agent.PrepareRequest, cfg sessionConfig) (SessionPlan, error) {
 	if err := validateNativeTransportEnvironment(); err != nil {
-		return SessionPlan{}, err
-	}
-	if err := validatePermissionProfile(req); err != nil {
 		return SessionPlan{}, err
 	}
 	mcpServers, mcpEnv, err := runtimeMCPServers(req)
@@ -24,13 +21,13 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err != nil {
 		return SessionPlan{}, fmt.Errorf("codex: build session plan: %w", err)
 	}
-	if err := configureSubagentObservations(&plan, req); err != nil {
+	if err := configureSubagentObservations(&plan, req.PromptRequestPayload); err != nil {
 		plan.Cleanup()
 		return SessionPlan{}, err
 	}
 	disableProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
-		plan.Cwd = req.LocalEnvironment.WorkspaceRoot
+		plan.Cwd = req.WorkspaceRoot
 	} else {
 		// environment:none has no workspace; the Session's private home is its cwd.
 		plan.Cwd = plan.home.View

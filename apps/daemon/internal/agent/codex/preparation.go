@@ -7,16 +7,13 @@ import (
 	"os"
 	"sync"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-func newExecutor(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
+func newExecutor(parent context.Context, req agent.PrepareRequest, cfg sessionConfig) (*Executor, error) {
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
-	}
-	if req.RunID != "" || len(req.Input) != 0 {
-		return nil, errors.New("codex: preparation does not accept a run identity or prompt")
 	}
 	if cfg.logger == nil {
 		cfg.logger = obslog.Bg()
@@ -102,8 +99,8 @@ func newExecutor(parent context.Context, req proto.PromptRequestPayload, cfg ses
 			return e.preparationFailed(err)
 		}
 	}
-	if local := req.LocalEnvironment; local != nil && len(local.Skills) > 0 {
-		if err := registerSkills(cancelCtx, rpc, plan.Cwd, local.Skills); err != nil {
+	if len(req.Skills) > 0 {
+		if err := registerSkills(cancelCtx, rpc, plan.Cwd, req.Skills); err != nil {
 			return e.preparationFailed(err)
 		}
 	}

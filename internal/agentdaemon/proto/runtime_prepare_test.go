@@ -1,8 +1,6 @@
 package proto
 
 import (
-	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -148,27 +146,6 @@ func TestCapabilitiesResultCannotMisrepresentUncertainty(t *testing.T) {
 		if !ValidRuntimePrepareResult(r, "completed", 0, 10) {
 			t.Fatal("safe receipt refused", r)
 		}
-	}
-}
-
-func TestLocalEnvironmentCarriesSelectionButNeverInstalledRoots(t *testing.T) {
-	input := &agentcapabilities.Input{Directories: []string{"/workspace/capabilities"}}
-	original := LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", CapabilitySources: input, Capabilities: true,
-		Skills: []agentcapabilities.InstalledSkill{{RelativeRoot: "private-installed-root"}},
-		MCP:    []EnvironmentMCP{{PackageRoot: "private-mcp-root"}}}
-	raw, err := json.Marshal(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "private-") {
-		t.Fatal("installed roots leaked to wire")
-	}
-	var decoded LocalEnvironment
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatal(err)
-	}
-	if decoded.ID != original.ID || decoded.WorkspaceDirectory != "/workspace" || !reflect.DeepEqual(decoded.CapabilitySources, input) || !decoded.Capabilities || len(decoded.Skills) != 0 || len(decoded.MCP) != 0 {
-		t.Fatal("selection round trip changed", decoded)
 	}
 }
 

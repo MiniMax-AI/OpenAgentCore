@@ -342,11 +342,11 @@ func TestRuntimeInitialFileAtomicReplacement(t *testing.T) {
 }
 func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 	b, req := testBinding(t)
-	configured, err := b.Configure(req)
+	err := b.Configure(req.PromptRequestPayload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = b.Prepare(t.Context(), configured); err != nil {
+	if _, err = b.Prepare(t.Context(), req); err != nil {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(nil)

@@ -362,7 +362,7 @@ func TestSession_HeartbeatDoesNotInferCapabilities(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	conn.Feed([]byte(`{"type":"heartbeat","payload":{"ts":1710000100,"claude_available":true,"home_removal":false}}`))
+	conn.Feed([]byte(`{"type":"heartbeat","payload":{"claude_available":true,"home_removal":false}}`))
 	heartbeat.waitDaemonHeartbeat(t)
 	if info, found, known := sess.AgentKindStatus("claude_sdk"); found || !known {
 		t.Fatalf("undeclared capabilities inferred: %#v", info)

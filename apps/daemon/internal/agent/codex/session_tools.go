@@ -22,7 +22,7 @@ func (s *Session) sendItemEvents(events []proto.Envelope, notification json.RawM
 			var err error
 			tool.Observation, err = normalizeToolObservation(tool.ID, tool.Stage, native.Item)
 			if err != nil {
-				s.emitTerminal("codex: invalid tool observation", true)
+				s.emitTerminal("codex: invalid tool observation")
 				return
 			}
 			payload, err := json.Marshal(tool)

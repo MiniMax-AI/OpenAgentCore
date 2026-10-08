@@ -33,12 +33,9 @@ func NewExecutorFactory(config Config) agent.ExecutorFactory {
 		config.Workspace = &workspace
 	}
 	checked := &runtimeCheckCache{}
-	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+	return func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 		if ctx == nil {
 			ctx = context.Background()
-		}
-		if err := preparationOnly(req); err != nil {
-			return nil, err
 		}
 		start, env, err := prepareConfiguration(config, req)
 		if err != nil {
@@ -46,13 +43,6 @@ func NewExecutorFactory(config Config) agent.ExecutorFactory {
 		}
 		return startExecutor(ctx, checked, config, start, func() (*session, error) { return launch(ctx, config, start, env) })
 	}
-}
-
-func preparationOnly(req proto.PromptRequestPayload) error {
-	if req.RunID != "" || len(req.Input) != 0 {
-		return errors.New("claudesdk: Executor preparation cannot submit input")
-	}
-	return nil
 }
 
 // startExecutor checks the installed bridge against probe, starts it through

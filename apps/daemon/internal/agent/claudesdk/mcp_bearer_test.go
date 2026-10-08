@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -25,7 +26,7 @@ func TestMCPBearerUsesFreshOwnedEnvironmentReferences(t *testing.T) {
 	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, Model: "fixture"}
 	seen := map[string]bool{}
 	for range 2 {
-		start, env, err := prepareConfiguration(config, req)
+		start, env, err := prepareConfiguration(config, prepared(t, req))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -67,7 +68,7 @@ func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 		config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, Model: "fixture"}
-		if _, _, err := prepareConfiguration(config, req); err == nil || err.Error() != "claudesdk: unsupported HTTPS MCP bearer credential" {
+		if _, _, err := prepareConfiguration(config, prepared(t, req)); err == nil || err.Error() != "claudesdk: unsupported HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer accepted or unsafe error returned")
 		}
 		entries, err := os.ReadDir(root)
@@ -78,7 +79,7 @@ func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 	for _, url := range []string{"http://example.invalid/mcp", "https://example.invalid/mcp#", "https://example.invalid/mcp?", "https://user:secret@example.invalid/mcp"} {
 		token := "synthetic-token"
 		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: url, BearerToken: &token}}
-		if err := validateMCP(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil {
+		if err := validateMCP(agent.PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}}); err == nil {
 			t.Fatal("unsafe authenticated endpoint accepted")
 		}
 	}

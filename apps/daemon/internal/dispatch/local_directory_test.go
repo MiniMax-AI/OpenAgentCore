@@ -28,7 +28,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	var harnessCalls atomic.Int32
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, prototest.ModelConfiguration())
-	reg.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	reg.RegisterExecutor("native", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		harnessCalls.Add(1)
 		return nil, errors.New("must not prepare a harness")
 	})
@@ -39,7 +39,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
 	assign(t, r, session, environment)
-	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, WorkspaceReadOnly: true}
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, WorkspaceReadOnly: true}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{SessionID: session, Configuration: request})); err != nil {
 		t.Fatal(err)
 	}
@@ -57,9 +57,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionStart, "idle", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: "forbidden", Input: proto.TextInput("work")})); err == nil {
 		t.Fatal("read preparation admitted execution")
 	}
-	bad := request
-	bad.AgentStateKey = "agents-api-" + uuid.NewString()
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "wrong-session", proto.ExecutionPreparePayload{SessionID: session, Configuration: bad})); err == nil {
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "wrong-session", proto.ExecutionPreparePayload{SessionID: uuid.NewString(), Configuration: request})); err == nil {
 		t.Fatal("wrong Session accepted")
 	}
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionRelease, "idle", proto.ExecutionReleasePayload{Handle: ready.Handle}))
@@ -100,7 +98,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 	}
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, prototest.ModelConfiguration())
-	reg.RegisterExecutor("native", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	reg.RegisterExecutor("native", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
@@ -110,7 +108,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
 	assign(t, r, session, environment)
-	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, WorkspaceReadOnly: true}
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, WorkspaceReadOnly: true}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{SessionID: session, Configuration: request})); err != nil {
 		t.Fatal(err)
 	}

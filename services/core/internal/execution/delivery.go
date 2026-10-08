@@ -58,7 +58,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	defer unsubscribeChanges()
 	status = sessions.TurnFailed
 	result.AppliedThrough = first
-	subscription, err := peer.SubscribeDurable(runID, request.Assignment)
+	subscription, err := peer.SubscribeDurable(runID, prepared.assignment)
 	if err != nil {
 		result.ErrorCode = "device_disconnected"
 		return
@@ -67,7 +67,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	defer peer.Unsubscribe(runID)
 	defer func() {
 		if status == sessions.TurnFailed {
-			abort(peer, request.Assignment, runID)
+			abort(peer, prepared.assignment, runID)
 		}
 	}()
 	journal := &journal{writer: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, next: 1,
@@ -79,7 +79,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			result.ErrorCode, status = "event_persistence_failed", sessions.TurnFailed
 		}
 		if err := journal.flush(finishCtx); err != nil {
-			result.ErrorCode, status = "event_persistence_failed", sessions.TurnFailed
+			result.ErrorCode, status = journalFailure(err), sessions.TurnFailed
 		}
 		if subscription.Err() != nil {
 			result.ErrorCode, status = "event_stream_incomplete", sessions.TurnFailed
@@ -102,7 +102,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{assignment: request.Assignment, kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools}
+	functions := &functionExchange{assignment: prepared.assignment, kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -134,7 +134,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 						result.ErrorCode = "device_disconnected"
 						return
 					}
-					replacement, prepareErr := d.prepareTurnExecutor(ctx, peer, tenantID, sessionID, runID, request, sessions.TurnInProgress)
+					replacement, prepareErr := d.prepareTurnExecutor(ctx, peer, prepared.assignment, tenantID, sessionID, runID, request, sessions.TurnInProgress)
 					if prepareErr != nil {
 						result.ErrorCode = "executor_recovery_failed"
 						return
@@ -166,15 +166,15 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 		case <-flushTicker.C:
-			if journal.flush(ctx) != nil {
-				result.ErrorCode = "event_persistence_failed"
+			if err := journal.flush(ctx); err != nil {
+				result.ErrorCode = journalFailure(err)
 				return
 			}
 		case reply := <-cancelReply:
 			drainErr := journal.drain(upstream, &result)
 			receiptErr := recordCancellation(ctx, journal, reply, &result)
-			if drainErr != nil || receiptErr != nil {
-				result.ErrorCode = "event_persistence_failed"
+			if err := errors.Join(drainErr, receiptErr); err != nil {
+				result.ErrorCode = journalFailure(err)
 				return
 			}
 			if reply.err == nil && reply.ack.Applied {
@@ -206,7 +206,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if writeErr != nil {
-				result.ErrorCode = "event_persistence_failed"
+				result.ErrorCode = journalFailure(writeErr)
 				return
 			}
 			switch env.Type {
@@ -222,7 +222,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				done, upstream = true, nil
 			case proto.TypeFunctionCall:
 				if err := journal.flush(ctx); err != nil {
-					result.ErrorCode = "event_persistence_failed"
+					result.ErrorCode = journalFailure(err)
 					return
 				}
 				if err := functions.record(ctx, env); err != nil {
@@ -285,7 +285,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if !turn.CancelRequestedAt.IsZero() {
-				cancelReply = requestCancellation(cancelCtx, peer, request.Assignment, runID)
+				cancelReply = requestCancellation(cancelCtx, peer, prepared.assignment, runID)
 				cancelSent = time.Now()
 				continue
 			}
@@ -332,7 +332,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}
-				if send(ctx, peer, request.Assignment, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input}) != nil {
+				if send(ctx, peer, prepared.assignment, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input}) != nil {
 					result.ErrorCode = "input_outcome_unknown"
 					return
 				}
