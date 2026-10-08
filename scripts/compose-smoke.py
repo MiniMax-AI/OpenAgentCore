@@ -85,13 +85,14 @@ def build_images(directory, tag):
     payload_revision = prepare_pinned_payload(ingress / 'node-payload')
     go_build('services/core/cmd/oac', ingress / 'oac', payload_revision)
     (ingress / 'Dockerfile').write_bytes((ROOT / 'deploy/distribution/Ingress.Dockerfile').read_bytes())
-    # The agent-host image without its Harnesses: its base, CA roots, the
-    # daemon, the process shim and a manifest that installs none.
+    # The agent-host image without its Harnesses: CA roots, the daemon, the
+    # process shim and a manifest that installs none. Its base is Core's,
+    # because the agent-host base is pinned to an amd64 manifest.
     agent_host = contexts['agent-host']
     for name in ('oac-daemon', 'oac-process-shim'):
         go_build('apps/daemon/cmd/' + name, agent_host / name)
     (agent_host / 'harnesses.json').write_text('{"node": "/usr/local/bin/node", "harnesses": {}}\n')
-    base = re.search(r'^FROM (\S+) AS base$', (ROOT / 'deploy/distribution/AgentHost.Dockerfile').read_text(), re.M).group(1)
+    base = re.search(r'^FROM (\S+)', (ROOT / 'deploy/distribution/Dockerfile').read_text(), re.M).group(1)
     (agent_host / 'Dockerfile').write_text(
         f'FROM {base}\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates'
         ' && rm -rf /var/lib/apt/lists/*\nCOPY oac-daemon oac-process-shim /opt/oac/bin/\nCOPY harnesses.json /opt/oac/\n'
