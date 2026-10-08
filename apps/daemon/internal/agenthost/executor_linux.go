@@ -50,7 +50,8 @@ func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.R
 		if _, viewErr := harnesses.ResolveView(info.Kind); err != nil || viewErr != nil {
 			continue
 		}
-		reg.Register(agent.Declaration{Info: info, Configuration: configuration}, agent.Runtime{Info: info, Executor: factory}, agent.EnvironmentSupport{Local: true, None: true})
+		reg.Register(agent.Declaration{Info: info, Configuration: configuration}, agent.Runtime{Info: info}, agent.EnvironmentSupport{Local: true, None: true})
+		reg.RegisterExecutor(info.Kind, factory)
 	}
 	return reg
 }

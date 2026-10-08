@@ -46,7 +46,7 @@ func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) 
 			return false
 		}
 		if expected.URL != "" {
-			if server["url"] != expected.URL || !matchesMCPHeaderMap(server, "env_http_headers", expected.EnvHTTPHeaders) {
+			if server["url"] != expected.URL {
 				return false
 			}
 			delete(server, "url")
@@ -72,12 +72,6 @@ func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) 
 				return false
 			}
 			delete(server, "required")
-		}
-		if expected.BearerTokenEnvVar != "" {
-			if server["bearer_token_env_var"] != expected.BearerTokenEnvVar {
-				return false
-			}
-			delete(server, "bearer_token_env_var")
 		}
 		if expected.EnabledTools != nil {
 			// Compare sets: native enabled_tools is an allowlist, not an ordered program.
@@ -119,21 +113,5 @@ func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) 
 			}
 		}
 	}
-	return true
-}
-
-func matchesMCPHeaderMap(server map[string]any, field string, expected map[string]string) bool {
-	actual, present := server[field]
-	if len(expected) == 0 {
-		return !present
-	}
-	want := make(map[string]any, len(expected))
-	for key, value := range expected {
-		want[key] = value
-	}
-	if !reflect.DeepEqual(actual, want) {
-		return false
-	}
-	delete(server, field)
 	return true
 }

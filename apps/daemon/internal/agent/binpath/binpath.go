@@ -6,7 +6,7 @@
 // control: e2b's base image, for instance, ships its own
 // /usr/local/bin entries that can shadow the ones we install, and a
 // bare-name lookup then resolves to the wrong (or no) binary. The
-// symptom is the worst kind — `oac-daemon connect` reports
+// symptom is the worst kind — the agent host reports
 // "no supported agent CLI available" and the device never dials in,
 // with no indication of which lookup failed.
 //

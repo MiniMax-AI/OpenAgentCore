@@ -10,9 +10,9 @@ import (
 	configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
-// Declaration owns MiniMax Code discovery, configuration and execution
-// factories. Native preparation verifies the applied admission and tool
-// profile before input.
+// Declaration owns MiniMax Code discovery, configuration and agent-host view.
+// Native preparation verifies the applied admission and tool profile before
+// input.
 var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode", Capabilities: configuration.Configuration().Declaration.Capabilities},
 	Configuration: configuration.Configuration(), Discover: discover}
 
@@ -30,11 +30,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 		return runtime
 	}
 	runtime.Info.Available, runtime.Info.Version = true, version
-	workspace := discoverWorkspace(parent, options, runtime)
-	if runtime.Info.Available {
-		runtime.Executor = NewExecutorFactory(workspace)
-		runtime.View = discoverView(options)
-	}
+	runtime.View = discoverView(options)
 	fmt.Fprintf(options.Stdout, "mcode preflight ok (%s)\n", version)
 	return runtime
 }

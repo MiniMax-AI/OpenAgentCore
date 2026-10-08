@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -104,5 +105,30 @@ func TestPublicEnvironmentMCPRetainsVaultAuthority(t *testing.T) {
 	req.MCP, req.LocalEnvironment = nil, nil
 	if _, err := ResolveMCPBindings(req); err == nil {
 		t.Fatal("unprepared environment accepted")
+	}
+}
+
+func TestPublicMCPHTTPRejectsUnsafeEndpointsAndBearers(t *testing.T) {
+	resolve := func(server proto.MCPHTTPServer) error {
+		servers := []proto.MCPHTTPServer{server}
+		_, err := ResolveMCPBindings(PrepareRequest{PromptRequestPayload: proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}})
+		return err
+	}
+	for _, endpoint := range []string{"https://user:synthetic-secret@docs.example/mcp", "https://docs.example/mcp?token=synthetic-secret", "file:///tmp/mcp"} {
+		if err := resolve(proto.MCPHTTPServer{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: endpoint}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
+			t.Fatal("unsupported endpoint was accepted or exposed", err)
+		}
+	}
+	token := "synthetic-private-token"
+	if err := resolve(proto.MCPHTTPServer{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "http://tools.example/mcp", BearerToken: &token}); err == nil || strings.Contains(err.Error(), token) {
+		t.Fatal("plaintext bearer accepted or exposed")
+	}
+	if err := resolve(proto.MCPHTTPServer{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}); err != nil {
+		t.Fatal("HTTPS bearer declaration rejected", err)
+	}
+	for _, invalid := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
+		if err := resolve(proto.MCPHTTPServer{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &invalid}); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
+			t.Fatal("invalid bearer value accepted or unsafe error returned")
+		}
 	}
 }

@@ -12,41 +12,18 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	return proto.PromptRequestPayload{Model: "fixture", SystemPrompt: "Current instructions",
 		ModelProvider:               &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "fixture-key", ContextWindow: 64000, MaxOutputTokens: 4096},
 		DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 }
 
-// helperRequest selects a protocol fixture scenario as the native CLI.
-func helperRequest(t *testing.T, scenario string, resume bool) proto.PromptRequestPayload {
-	t.Helper()
-	req := testRequest(t)
-	if resume {
-		req.AgentSessionID = "native-1"
-	}
-	t.Setenv("OAC_TEST_MCODE_HELPER", scenario)
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(t.TempDir(), "mcode")
-	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=" + scenario + "\nexec '" + strings.ReplaceAll(exe, "'", "'\\''") + "' -test.run=^TestMCodeProcess$ -- \"$@\"\n"
-	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OAC_RUNTIME_MCODE_BIN", binary)
-	return req
-}
-
-// prepared is req as the registry hands it to the factory, with the state key
-// of one Session.
 func prepared(t testing.TB, req proto.PromptRequestPayload) agent.PrepareRequest {
 	t.Helper()
 	configuration, err := Declaration.Configuration.Prepare(req)
@@ -56,16 +33,51 @@ func prepared(t testing.TB, req proto.PromptRequestPayload) agent.PrepareRequest
 	return agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration, StateKey: "session-state"}
 }
 
-// prepareExecutor prepares req; cleanup closes the Executor and reaps its CLI.
-func prepareExecutor(t *testing.T, ctx context.Context, req proto.PromptRequestPayload) (*executor, error) {
+// fakeInstall is a view install whose node is cli, a fake native CLI that
+// ignores the CLI entry it is given.
+func fakeInstall(cli string) viewInstall {
+	return viewInstall{node: cli, cli: "/opt/mcode-harness/native/cli.js", bridge: "/opt/mcode-harness/bridge.mjs", assets: "/opt/mcode-harness/native/assets"}
+}
+
+// helperInstall is the fake install whose CLI runs scenario of
+// TestMCodeProcess. With record, the CLI records each request method there.
+func helperInstall(t *testing.T, scenario, record string) viewInstall {
 	t.Helper()
-	value, err := NewExecutorFactory(nil)(ctx, prepared(t, req))
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
+	cli := filepath.Join(t.TempDir(), "mcode")
+	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=" + scenario + "\nexport OAC_TEST_MCODE_RECORD=" + quote(record) + "\nexec " + quote(exe) + " -test.run=^TestMCodeProcess$ -- \"$@\"\n"
+	if err := os.WriteFile(cli, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return fakeInstall(cli)
+}
+
+// hostSession is a Session whose home has the same path on this host and in
+// the view, so the view Executor runs on this host as it runs in a view.
+func hostSession(t *testing.T, mcp ...agent.MCPBinding) agent.ViewSession {
+	t.Helper()
+	home := t.TempDir()
+	if err := os.Mkdir(filepath.Join(home, agent.ViewWorkName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return agent.ViewSession{Home: agent.ViewDir{Host: home, View: home}, MCP: mcp, Launch: clirunner.Start, Spawn: clirunner.Start}
+}
+
+// hostExecutor prepares req through install's view Executor in session;
+// cleanup closes the Executor and reaps its CLI.
+func hostExecutor(t *testing.T, ctx context.Context, install viewInstall, req agent.PrepareRequest, session agent.ViewSession) (*executor, error) {
+	t.Helper()
+	value, err := install.executor(ctx, req, session)
 	if value == nil {
 		return nil, err
 	}
 	e := value.(*executor)
 	t.Cleanup(func() {
-		cleanup, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := e.Close(cleanup); err != nil {
 			t.Error("CLI was not reaped:", err)
@@ -74,10 +86,16 @@ func prepareExecutor(t *testing.T, ctx context.Context, req proto.PromptRequestP
 	return e, err
 }
 
-// startTurn prepares an Executor for req and starts input as its Turn run.
-func startTurn(t *testing.T, ctx context.Context, req proto.PromptRequestPayload, run string, input proto.MessageInput, out chan<- proto.Envelope) (*Session, error) {
+// prepareExecutor prepares req through install with environment none.
+func prepareExecutor(t *testing.T, ctx context.Context, install viewInstall, req proto.PromptRequestPayload) (*executor, error) {
 	t.Helper()
-	e, err := prepareExecutor(t, ctx, req)
+	return hostExecutor(t, ctx, install, prepared(t, req), hostSession(t))
+}
+
+// startTurn prepares an Executor for req and starts input as its Turn run.
+func startTurn(t *testing.T, ctx context.Context, install viewInstall, req proto.PromptRequestPayload, run string, input proto.MessageInput, out chan<- proto.Envelope) (*Session, error) {
+	t.Helper()
+	e, err := prepareExecutor(t, ctx, install, req)
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +106,18 @@ func startTurn(t *testing.T, ctx context.Context, req proto.PromptRequestPayload
 	return turn.(*Session), nil
 }
 
+// helperSession starts a Turn of the scenario's native CLI, resuming its
+// native session when resume is set.
 func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan proto.Envelope) {
 	t.Helper()
-	req := helperRequest(t, scenario, resume)
+	req := testRequest(t)
+	if resume {
+		req.AgentSessionID = "native-1"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
 	out := make(chan proto.Envelope, 32)
-	session, err := startTurn(t, ctx, req, "run-1", proto.TextInput("Hello"), out)
+	session, err := startTurn(t, ctx, helperInstall(t, scenario, ""), req, "run-1", proto.TextInput("Hello"), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +211,7 @@ func TestSessionFailuresAreReported(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
-			if e, err := prepareExecutor(t, ctx, helperRequest(t, scenario, false)); err == nil || e != nil {
+			if e, err := prepareExecutor(t, ctx, helperInstall(t, scenario, ""), testRequest(t)); err == nil || e != nil {
 				t.Fatal("preparation failure was not reported", err)
 			}
 		})
@@ -208,12 +231,11 @@ func TestSessionFailuresAreReported(t *testing.T) {
 }
 
 func TestPreparationCancellationStopsWaitingCLI(t *testing.T) {
-	req := helperRequest(t, "hang", false)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	time.AfterFunc(100*time.Millisecond, cancel)
 	started := time.Now()
-	if e, err := prepareExecutor(t, ctx, req); err == nil || e != nil {
+	if e, err := prepareExecutor(t, ctx, helperInstall(t, "hang", ""), testRequest(t)); err == nil || e != nil {
 		t.Fatal("cancelled preparation retained the CLI", err)
 	}
 	if time.Since(started) > 3*time.Second {

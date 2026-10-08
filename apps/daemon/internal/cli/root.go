@@ -19,13 +19,12 @@ type command struct {
 	run     func(ctx *runContext, args []string) error
 }
 
-// runContext carries command I/O and an optional installed Harness selection.
-// Tests inject streams; production uses the OS streams.
+// runContext carries command I/O. Tests inject streams; production uses the
+// OS streams.
 type runContext struct {
-	installedKinds map[string]bool
-	stdin          io.Reader
-	stdout         io.Writer
-	stderr         io.Writer
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
 }
 
 func defaultRunContext() *runContext {
@@ -33,19 +32,13 @@ func defaultRunContext() *runContext {
 }
 
 // commands lists subcommands in --help render order: the user's
-// likely flow connect → status → stop / logs → logout.
+// likely flow install → start → stop / logs.
 var commands = []command{
 	{name: "install", summary: "Install a native daemon and selected Harnesses", run: runInstall},
 	{name: "start", summary: "Start the installed native daemon", run: runStart},
-	{name: "resume", summary: "Wake one planned hosted suspension", run: runResume},
-	{name: "runtime-mcp-exec", summary: "Execute an installed MCP server", run: runRuntimeMCP},
-	{name: "placement", summary: "Enroll or retire an explicitly managed local execution placement", run: runPlacement},
-	{name: "connect", summary: "Open the reverse WebSocket and start serving prompts", run: runConnect},
 	{name: "agent-host", summary: "Serve Sessions from the agent-host container", run: runAgentHost},
-	{name: "status", summary: "Print the credential profile and daemon state", run: runStatus},
-	{name: "stop", summary: "Stop a background `connect -b` daemon", run: runStop},
+	{name: "stop", summary: "Stop the background daemon", run: runStop},
 	{name: "logs", summary: "Tail the background daemon's log file", run: runLogs},
-	{name: "logout", summary: "Forget the credential for a profile", run: runLogout},
 	{name: "version", summary: "Print the daemon version and exit", run: runVersion},
 }
 

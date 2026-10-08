@@ -2,7 +2,6 @@ package claudesdk
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,9 +11,6 @@ import (
 func TestHTTPMCPDeclaration(t *testing.T) {
 	for _, mode := range []string{"unrestricted", "selected", "empty", "nil-slice", "required", "auth", "url-auth", "query", "duplicate", "environment"} {
 		t.Run(mode, func(t *testing.T) {
-			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
 			req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, Model: "fixture"}
 			tools := []string{"echo"}
@@ -41,7 +37,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 			case "environment":
 				req.DisableExecutionEnvironment = false
 			}
-			start, _, err := prepareConfiguration(config, prepared(t, req))
+			start, _, err := prepareTestView(t, prepared(t, req))
 			valid := mode == "unrestricted" || mode == "selected" || mode == "empty" || mode == "nil-slice" || mode == "auth" || mode == "required"
 			if (err == nil) != valid {
 				t.Fatalf("unexpected admission: %v", err)

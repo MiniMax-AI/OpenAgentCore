@@ -5,12 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -53,32 +50,13 @@ type nativeSubagentTask struct {
 	Metadata                                   struct{ ChildSessionID, ParentSessionID, ParentTurnID, SubTurnID, ExecutionMode string }
 }
 
-func subagentReader() (string, string, error) {
-	node, bridge := os.Getenv("OAC_RUNTIME_MCODE_NODE"), os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE")
-	reader := filepath.Join(filepath.Dir(bridge), "subagent-snapshot.mjs")
-	for _, path := range []string{node, bridge, reader} {
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil || !filepath.IsAbs(path) || resolved != path {
-			return "", "", fmt.Errorf("mcode: protected Subagent reader is unavailable")
-		}
-	}
-	return node, reader, nil
-}
-
 func (s *Session) readSubagents(ctx context.Context) (nativeSubagentSnapshot, error) {
 	var snapshot nativeSubagentSnapshot
-	reader, start := s.opts.reader, s.opts.spawn
-	if start == nil {
-		node, script, err := subagentReader()
-		if err != nil {
-			return snapshot, err
-		}
-		reader, start = clirunner.StartOptions{Binary: node, Args: []string{script, s.opts.DataDir}, Env: executionEnvironment()}, clirunner.Start
-	}
+	reader := s.opts.reader
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	reader.Parent, reader.Args = ctx, slices.Concat([]string{"--disable-warning=ExperimentalWarning"}, reader.Args, []string{s.sessionID})
-	process, err := start(reader)
+	process, err := s.opts.spawn(reader)
 	if err != nil {
 		return snapshot, fmt.Errorf("mcode: child history reader is unavailable")
 	}

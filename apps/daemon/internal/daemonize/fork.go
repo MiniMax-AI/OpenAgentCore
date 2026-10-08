@@ -1,4 +1,4 @@
-// Package daemonize gives `oac-daemon connect -b` a no-cgo way to
+// Package daemonize gives `oac-daemon start -b` a no-cgo way to
 // detach from the controlling terminal on macOS, Linux and Windows. Strategy is
 // re-exec-the-binary rather than POSIX double-fork: the parent opens
 // connect.log + connect.pid, then starts a fresh copy of its own

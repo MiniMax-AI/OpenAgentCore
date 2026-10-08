@@ -54,14 +54,7 @@ type Session struct {
 }
 
 func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*Session, error) {
-	start, args := opts.start, []string{"acp"}
-	if start == nil {
-		start = clirunner.Start
-	}
-	if opts.script != "" {
-		args = []string{opts.script, "acp"}
-	}
-	process, err := start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args, Dir: opts.Dir, Env: opts.Env, NeedStdin: true})
+	process, err := opts.start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{opts.script, "acp"}, Dir: opts.Dir, Env: opts.Env, NeedStdin: true})
 	if err != nil {
 		return nil, err
 	}

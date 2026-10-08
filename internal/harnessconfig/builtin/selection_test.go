@@ -47,7 +47,7 @@ func TestSelectionsAgainstEachDeclaration(t *testing.T) {
 		{"local environment", proto.Selection{Environment: "local"}, nil, true},
 		{"installed capabilities", proto.Selection{Environment: "local", InstalledCapabilities: true}, nil, true},
 		{"multi-agent", proto.Selection{Environment: "none", MultiAgent: true}, nil, true},
-		{"native session recovery", proto.Selection{Environment: "none", NativeSessionRecovery: true}, map[string]string{"mcode": ""}, true},
+		{"native session recovery", proto.Selection{Environment: "none", NativeSessionRecovery: true}, map[string]string{"claude_sdk": "", "mcode": ""}, true},
 		{"function tools", proto.Selection{Environment: "none", Functions: true}, map[string]string{"mcode": tool}, true},
 		{"tool search", search, map[string]string{"codex": tool, "mcode": tool}, true},
 		{"json_schema output", proto.Selection{Environment: "none", OutputSchema: schema}, map[string]string{"codex": format, "mcode": format}, true},

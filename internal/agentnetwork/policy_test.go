@@ -46,15 +46,11 @@ func TestTemplateNetworkOverrideCannotBroaden(t *testing.T) {
 	}
 }
 
-func TestPolicyIdentityPreservesPublicInput(t *testing.T) {
+func TestPolicyHostsPreservePublicInput(t *testing.T) {
 	input := []string{"B.example.com", "a.example.com", "B.example.com"}
 	before := append([]string(nil), input...)
-	policy := Policy{Access: "restricted", AllowedDomains: input}
-	other := Policy{Access: "restricted", AllowedDomains: []string{"a.example.com", "b.example.com"}}
-	if !policy.Equal(other) || !reflect.DeepEqual(input, before) {
-		t.Fatal("effective comparison changed caller input or list order affected authority")
-	}
-	if policy.Equal(Policy{Access: "restricted", AllowedDomains: []string{"example.com"}}) {
-		t.Fatal("parent hostname must not grant subdomain authority")
+	hosts := Policy{Access: "restricted", AllowedDomains: input}.Hosts()
+	if !reflect.DeepEqual(hosts, []string{"a.example.com", "b.example.com"}) || !reflect.DeepEqual(input, before) {
+		t.Fatalf("the hosts are %q from %q: list order or case affected authority, or the input changed", hosts, input)
 	}
 }

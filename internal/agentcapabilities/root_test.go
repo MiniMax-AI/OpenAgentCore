@@ -13,8 +13,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
-// The rest of this file applies the installation rules to a local directory,
-// as an os.Root.
+// The tests apply the installation rules to a local directory, as an os.Root,
+// as the agent host applies them to the sandbox over File.
 
 // DirectoryResolver opens a declared source after local authorization and path
 // checks. Finalize owns and closes each returned root; callers retain no handle.

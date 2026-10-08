@@ -8,8 +8,8 @@ import { parseEnvironmentMCP } from "../dist/mcp_environment.js";
 import { immediateInput, parseStart } from "../dist/request.js";
 import { WorkspaceProfile } from "../dist/workspace.js";
 
-const stdio = { server_label: "installed", command: process.execPath, allowed_tools: null,
-  args: ["runtime-mcp-exec", join(process.cwd(), "capabilities"), "plugins/installed", "installed"] };
+// An agent-host view's alias, which runs without arguments.
+const stdio = { server_label: "installed", command: "/.oac/bin/oac-mcp-0", allowed_tools: null };
 const native = "mcp__installed__echo_v1";
 const statuses = [{ name: "installed", status: "connected", tools: [{ name: "echo.v1" }] }];
 const baseline = ["Bash", "Read", "Edit"];
@@ -28,25 +28,16 @@ function fixture(t, declarations = [stdio]) {
   return { dirs, config, request };
 }
 
-test("installed MCP projection uses the common Runtime launcher", t => {
+test("installed MCP projection runs the view alias without arguments", t => {
   const { request } = fixture(t);
   assert.deepEqual(parseStart(JSON.stringify(request)), request);
   assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
-  // An agent-host view's alias runs without arguments.
-  const alias = { server_label: "installed", command: "/.oac/bin/oac-mcp-0", allowed_tools: null };
-  assert.deepEqual(parseEnvironmentMCP([alias]), [alias]);
-  assert.deepEqual(new MCPProfile([alias], []).servers.installed.args, []);
-  for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, command: "/bin/line\n" }], [{ ...stdio, env: { TOKEN: "secret" } }],
-    [{ ...stdio, args: ["-c", "untrusted"] }], [{ ...stdio, allowed_tools: ["*"] }],
-    [{ ...stdio, server_url: "https://example.invalid" }], [{ ...stdio, args: [...stdio.args.slice(0, 2), "../escape", "installed"] }]]) {
+  assert.deepEqual(new MCPProfile([stdio], []).servers.installed.args, []);
+  for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, command: "/bin/../escape" }], [{ ...stdio, command: "/bin/line\n" }],
+    [{ ...stdio, env: { TOKEN: "secret" } }], [{ ...stdio, args: ["-c", "untrusted"] }], [{ ...stdio, allowed_tools: ["*"] }],
+    [{ ...stdio, server_url: "https://example.invalid" }]]) {
     assert.throws(() => parseEnvironmentMCP(value), /invalid_request/);
-  }
-  for (const index of [1]) {
-    for (const invalid of ["/", "relative", "/tmp/../escape", "/tmp/line\n"]) {
-      const args = [...stdio.args]; args[index] = invalid;
-      assert.throws(() => parseEnvironmentMCP([{ ...stdio, args }]), /invalid_request/);
-    }
   }
   assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...request.workspace, network_access: "disabled" } })), /invalid_request/);
   // HTTP MCP needs no installed Capabilities.
@@ -98,32 +89,15 @@ test("combined inventory rejects extra servers, tools and normalized identity co
   }
 });
 
-test("workspace bearer references reach native HTTP without leaking values into the request", t => {
-  const reference = "OAC_RUNTIME_MCP_BEARER_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const http = { server_label: "remote", server_url: "https://example.invalid/mcp", allowed_tools: null, bearer_token_env_var: reference };
-  const { dirs, config } = fixture(t, [http]);
-  process.env[reference] = "selected-user-token";
-  process.env.OAC_RUNTIME_MCP_BEARER_UNSELECTED = "other-token";
-  const mcp = new MCPProfile([http], []);
-  const workspace = new WorkspaceProfile(dirs.work, config, [], mcp);
-  assert.equal(workspace.options.env[reference], "selected-user-token");
-  assert.equal(workspace.options.env.OAC_RUNTIME_MCP_BEARER_UNSELECTED, "other-token");
-  assert.deepEqual(mcp.servers.remote.headers, { Authorization: `Bearer \${${reference}}` });
-  assert.equal(JSON.stringify(mcp.servers).includes("selected-user-token"), false);
-  delete process.env[reference];
-  assert.throws(() => new WorkspaceProfile(dirs.work, config, [], mcp), /invalid_request/);
-});
-
-test("MCP identity validation preserves host functions and ordinary child environment", async t => {
+test("MCP identity validation preserves host functions", async t => {
   const { dirs, config } = fixture(t);
   const functions = ["mcp__functions__lookup"];
   const mcp = new MCPProfile([stdio], functions);
-  const workspace = new WorkspaceProfile(dirs.work, { ...config, tool_env: { USER_VALUE: "initialized" } }, functions, mcp);
+  const workspace = new WorkspaceProfile(dirs.work, config, functions, mcp);
   workspace.verify([...baseline, native, ...functions], [...statuses, { name: "functions", status: "connected" }], "session");
   const signal = new AbortController().signal;
   const input = { hook_event_name: "PreToolUse", session_id: "session", tool_use_id: "call", tool_name: "Bash", tool_input: { command: "printf ok" } };
   assert.deepEqual(await workspace.beforeTool(input, "call", { signal }), {});
-  assert.equal(workspace.options.env.USER_VALUE, "initialized");
   assert.equal((await workspace.canUseTool(functions[0], {}, { signal })).behavior, "allow");
   mcp.close();
 });

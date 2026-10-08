@@ -1,55 +1,33 @@
 package claudesdk
 
-import (
-	"fmt"
-
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-)
+import "github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 
 // Environment servers originate in frozen installed packages. Only native
 // transport projection crosses this private bridge, never package configuration.
 type environmentMCPServer struct {
 	mcpHTTPServer
-	Command string   `json:"command,omitempty"`
-	Args    []string `json:"args,omitempty"`
+	Command string `json:"command,omitempty"`
 }
 
-func prepareRuntimeMCP(req agent.PrepareRequest) ([]environmentMCPServer, []string, error) {
-	bindings, err := agent.ResolveMCPBindings(req)
-	if err != nil {
-		return nil, nil, err
-	}
-	return mcpServers(bindings, localworkspace.MCPStdioCommand)
-}
-
-// mcpServers renders resolved bindings, each stdio binding with the command
-// and arguments stdio gives it and each credential in a private environment
-// variable.
-func mcpServers(bindings []agent.MCPBinding, stdio func(agent.EnvironmentMCP) (string, []string)) ([]environmentMCPServer, []string, error) {
+// mcpServers renders a view's bindings: each HTTP binding as its gateway
+// endpoint, and each stdio binding as its alias, which the Harness runs
+// without arguments.
+func mcpServers(bindings []agent.MCPBinding) []environmentMCPServer {
 	var servers []environmentMCPServer
-	var env []string
 	for _, binding := range bindings {
+		server := environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}}
 		if binding.Stdio != nil {
-			command, args := stdio(*binding.Stdio)
-			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: args})
-			continue
+			server.Command = binding.Stdio.Server.Command
+		} else {
+			server.ServerURL, server.Required = binding.ServerURL, binding.Required
+			if binding.AllowedTools != nil {
+				tools := append([]string{}, (*binding.AllowedTools)...)
+				server.AllowedTools = &tools
+			}
 		}
-		// Native header interpolation and redirect behavior cannot preserve literal
-		// custom-header authority. Reject this unqualified combination explicitly.
-		if len(binding.HTTPHeaders) != 0 {
-			return nil, nil, fmt.Errorf("claudesdk: literal MCP HTTP headers are not supported")
-		}
-		declarations := []proto.MCPHTTPServer{{ServerLabel: binding.ServerLabel, ServerURL: binding.ServerURL, AllowedTools: binding.AllowedTools, Required: binding.Required, BearerToken: binding.BearerToken}}
-		if err := validateMCPServers(declarations); err != nil {
-			return nil, nil, err
-		}
-		projected, credentials := prepareMCPHTTP(&declarations)
-		servers = append(servers, environmentMCPServer{mcpHTTPServer: (*projected)[0]})
-		env = append(env, credentials...)
+		servers = append(servers, server)
 	}
-	return servers, env, nil
+	return servers
 }
 
 func (start startRequest) declaredMCP() []mcpHTTPServer {

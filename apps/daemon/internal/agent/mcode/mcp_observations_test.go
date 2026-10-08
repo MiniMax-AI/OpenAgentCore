@@ -15,7 +15,8 @@ import (
 func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 	t.Helper()
 	out := make(chan proto.Envelope, 16)
-	s := &Session{ctx: context.Background(), outputContext: context.Background(), opts: launchOptions{DataDir: t.TempDir()},
+	dir := t.TempDir()
+	s := &Session{ctx: context.Background(), outputContext: context.Background(), opts: launchOptions{DataDir: dir, home: dir},
 		req: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}}, runID: "run",
 		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, completedMessages: map[string]bool{}, active: true, sessionID: "native-session"}
 	s.opts.bindings, _ = agent.ResolveMCPBindings(agent.PrepareRequest{PromptRequestPayload: s.req, MCP: []agent.EnvironmentMCP{environmentMCPFixture()}})

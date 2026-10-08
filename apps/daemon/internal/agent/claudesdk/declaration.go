@@ -1,7 +1,5 @@
 package claudesdk
 
-import configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
-
 import (
 	"context"
 	"fmt"
@@ -10,17 +8,16 @@ import (
 	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 const claudeSDKEntrypointEnv = "OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT"
 const claudeSDKNodeEnv = "OAC_RUNTIME_CLAUDE_SDK_NODE"
 
-// Declaration owns Claude SDK discovery, configuration and execution
-// factories. Discovery narrows the declared support to what the installed
-// bundle serves.
+// Declaration owns Claude SDK discovery, configuration and the agent-host
+// view. Discovery narrows the declared support to what the installed bundle
+// serves.
 var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: configuration.Configuration().Declaration.Capabilities},
 	Configuration: configuration.Configuration(), Discover: discover}
 
@@ -33,8 +30,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		return nil
 	}
 	out := &agent.Runtime{Info: descriptor}
-	var config Config
-
 	fail := func(err error) *agent.Runtime {
 		fmt.Fprintf(options.Stderr, "oac-daemon: configured Claude SDK runtime unavailable: %v\n", err)
 		return out
@@ -42,18 +37,11 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if !filepath.IsAbs(entrypoint) {
 		return fail(fmt.Errorf("%s must be absolute", claudeSDKEntrypointEnv))
 	}
-	profileDir, err := paths.ProfileDir(options.Profile)
-	if err != nil {
-		return fail(err)
-	}
-	if !filepath.IsAbs(profileDir) {
-		return fail(fmt.Errorf("Claude SDK state requires an absolute OAC_RUNTIME_HOME"))
-	}
 	node := os.Getenv(claudeSDKNodeEnv)
 	if node == "" {
 		node = "node"
 	}
-	node, err = exec.LookPath(node)
+	node, err := exec.LookPath(node)
 	if err != nil {
 		return fail(fmt.Errorf("Claude SDK Node executable is unavailable"))
 	}
@@ -61,37 +49,15 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if err != nil {
 		return fail(err)
 	}
-	config = Config{Node: node, Entrypoint: entrypoint, StateDir: filepath.Join(profileDir, "runtime", "claude-sdk")}
-	binding, err := localworkspace.Load()
-	if err != nil {
-		return fail(err)
-	}
-	if binding != nil {
-		root, err := paths.Root()
-		if err != nil {
-			return fail(err)
-		}
-		config.Node, err = filepath.EvalSymlinks(node)
-		if err != nil {
-			return fail(err)
-		}
-		config, err = ConfigureLocal(config, root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
-		if err != nil {
-			return fail(err)
-		}
-	}
+	config := Config{Node: node, Entrypoint: entrypoint}
 	info, err := check(parent, config)
 	if err != nil {
 		return fail(err)
 	}
-	if config.Workspace != nil && !info.SupportsLocalRuntime() {
-		return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
-	}
 	caps := &out.Info.Capabilities
-	caps.NativeSessionRecovery = proto.CapabilityFromBool(config.Workspace != nil)
-	// One declaration holds for every Executor of the install: the workspace
-	// bridge, the agent-host view and a Runtime without a workspace, so each
-	// feature is its workspace variant, which the others also support.
+	// The view runs the bridge in workspace mode, and without a workspace for
+	// environment none, so each feature is its workspace variant, which
+	// environment none also supports.
 	out.Info.Available, out.Info.Version = true, info.SDK
 	caps.LocalEnvironment = proto.CapabilityFromBool(info.SupportsLocalRuntime())
 	caps.FunctionTools = proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
@@ -103,9 +69,8 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	caps.MCPHTTPTools = proto.CapabilityFromBool(info.SupportsWorkspaceMCP())
 	caps.MCPHTTPBearerAuth = proto.CapabilityFromBool(info.SupportsWorkspaceMCP() && info.SupportsHTTPMCPBearer())
 	caps.MCPHTTPRequired = proto.CapabilityFromBool(info.SupportsWorkspaceMCP() && info.SupportsHTTPMCPRequired())
-	out.Executor = NewExecutorFactory(config)
-	// The view runs the same install; its probe stays on this host.
-	if view, err := newView(Config{Node: node, Entrypoint: entrypoint}, info); err != nil {
+	// The view runs the probed install on this host.
+	if view, err := newView(config, info); err != nil {
 		fmt.Fprintf(options.Stderr, "oac-daemon: Claude SDK agent-host view unavailable: %v\n", err)
 	} else {
 		out.View = view

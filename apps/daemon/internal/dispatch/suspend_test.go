@@ -3,7 +3,6 @@ package dispatch
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,6 +51,31 @@ func suspensionRouter(t *testing.T, sender Sender) *Router {
 	return r
 }
 
+// suspendResult sends a quiesce or resume through Handle and returns its
+// result.
+func suspendResult(t *testing.T, r *Router, frames <-chan proto.Envelope, typ, id string, ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload) proto.EnvironmentSuspendResultPayload {
+	t.Helper()
+	env, err := proto.NewEnvelope(typ, id, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.Assignment = ref
+	if err := r.Handle(t.Context(), env); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		select {
+		case frame := <-frames:
+			var result proto.EnvironmentSuspendResultPayload
+			if frame.ID == id && frame.DecodePayload(&result) == nil {
+				return result
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("%s %s has no result", typ, id)
+		}
+	}
+}
+
 func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 	session := suspendRef.SessionID
 	cases := map[string]func(*Router){
@@ -68,7 +92,7 @@ func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { return nil }))
 			setup(r)
-			err := r.Quiesce(context.Background(), suspendRef, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
+			err := r.fenceEnvironment(suspendRef, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
 			if !errors.Is(err, ErrRouterBusy) {
 				t.Fatalf("quiesce=%v", err)
 			}
@@ -84,76 +108,26 @@ func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 	}
 }
 
-func TestQuiesceDrainsPendingReceiptAndFencesConcurrentAdmission(t *testing.T) {
-	entered, release, once := make(chan struct{}), make(chan struct{}), sync.Once{}
-	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { once.Do(func() { close(entered); <-release }); return nil }))
-	// Rejection receipts run independently of the preparation resource map.
-	_ = r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "invalid"})
-	<-entered
-	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
-	quiet := make(chan error, 1)
-	go func() { quiet <- r.Quiesce(context.Background(), suspendRef, request) }()
-	deadline := time.After(time.Second)
-	for {
-		r.mu.Lock()
-		parked := r.suspensions["env"] != nil
-		r.mu.Unlock()
-		if parked {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("quiesce did not fence admission")
-		default:
-			time.Sleep(time.Millisecond)
-		}
-	}
-	admitted := make(chan error, 1)
-	go func() {
-		admitted <- r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late", Assignment: suspendRef})
-	}()
-	select {
-	case err := <-quiet:
-		t.Fatalf("acknowledged before receipt settled: %v", err)
-	case <-time.After(20 * time.Millisecond):
-	}
-	close(release)
-	if err := <-quiet; err != nil {
-		t.Fatal(err)
-	}
-	if err := <-admitted; !errors.Is(err, ErrRouterQuiesced) {
-		t.Fatalf("new admission = %v", err)
-	}
-}
-
 func TestResumeRequiresExactSuspensionAndAssignment(t *testing.T) {
-	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
-	r := suspensionRouter(t, sender)
+	frames := make(chan proto.Envelope, 16)
+	r := suspensionRouter(t, suspendSender(func(_ context.Context, env proto.Envelope) error { frames <- env; return nil }))
 	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
 	foreign := suspendRef
 	foreign.AssignmentID = "other"
-	if err := r.Quiesce(context.Background(), foreign, request); !errors.Is(err, AssignmentError(proto.AssignmentConflict)) {
-		t.Fatalf("foreign quiesce = %v", err)
+	if got := suspendResult(t, r, frames, proto.TypeEnvironmentQuiesce, "foreign", foreign, request); got.ErrorCode != proto.AssignmentConflict {
+		t.Fatalf("foreign quiesce = %+v", got)
 	}
-	if err := r.Quiesce(context.Background(), suspendRef, request); err != nil {
-		t.Fatal(err)
+	if got := suspendResult(t, r, frames, proto.TypeEnvironmentQuiesce, "quiesce", suspendRef, request); !got.Accepted {
+		t.Fatalf("quiesce = %+v", got)
 	}
-	wrong := request
-	wrong.SuspendID = "obsolete"
-	if err := r.Resume(suspendRef, wrong, sender); err == nil {
-		t.Fatal("stale operation reopened admission")
-	}
-	if err := r.Resume(foreign, request, sender); err == nil {
-		t.Fatal("foreign assignment reopened admission")
-	}
-	// Another bound assignment did not quiesce the Runtime.
+	// Another bound assignment did not quiesce the Environment.
 	other := proto.AssignmentRef{SessionID: "other", AssignmentID: "other", Epoch: 1}
 	bindAssignment(r, other, "env")
-	if err := r.Resume(other, request, sender); !errors.Is(err, AssignmentError(proto.AssignmentConflict)) {
-		t.Fatalf("other assignment resume = %v", err)
+	if got := suspendResult(t, r, frames, proto.TypeEnvironmentResume, "other", other, request); got.ErrorCode != proto.AssignmentConflict {
+		t.Fatalf("other assignment resume = %+v", got)
 	}
-	if err := r.Resume(suspendRef, request, sender); err != nil {
-		t.Fatal(err)
+	if got := suspendResult(t, r, frames, proto.TypeEnvironmentResume, "resume", suspendRef, request); !got.Accepted {
+		t.Fatalf("resume = %+v", got)
 	}
 }
 
@@ -199,25 +173,7 @@ func TestQuiescingOneEnvironmentLeavesAnotherRunning(t *testing.T) {
 	r.mu.Unlock()
 	suspend := func(typ, id string, ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload) proto.EnvironmentSuspendResultPayload {
 		t.Helper()
-		env, err := proto.NewEnvelope(typ, id, request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		env.Assignment = ref
-		if err := r.Handle(t.Context(), env); err != nil {
-			t.Fatal(err)
-		}
-		for {
-			select {
-			case frame := <-frames:
-				var result proto.EnvironmentSuspendResultPayload
-				if frame.ID == id && frame.DecodePayload(&result) == nil {
-					return result
-				}
-			case <-time.After(3 * time.Second):
-				t.Fatalf("%s %s has no result", typ, id)
-			}
-		}
+		return suspendResult(t, r, frames, typ, id, ref, request)
 	}
 	prepare := func(ref proto.AssignmentRef) error {
 		return r.Handle(t.Context(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "prepare", Assignment: ref})
@@ -270,32 +226,36 @@ func TestQuiescingOneEnvironmentLeavesAnotherRunning(t *testing.T) {
 }
 
 func TestShutdownDestroysQuiescedOwnerAndCannotResume(t *testing.T) {
-	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
-	r := suspensionRouter(t, sender)
+	frames := make(chan proto.Envelope, 16)
+	r := suspensionRouter(t, suspendSender(func(_ context.Context, env proto.Envelope) error { frames <- env; return nil }))
 	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
-	if err := r.Quiesce(context.Background(), suspendRef, request); err != nil {
-		t.Fatal(err)
+	if got := suspendResult(t, r, frames, proto.TypeEnvironmentQuiesce, "quiesce", suspendRef, request); !got.Accepted {
+		t.Fatalf("quiesce = %+v", got)
 	}
 	if err := r.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !errors.Is(r.Resume(suspendRef, request, sender), ErrRouterClosed) {
-		t.Fatal("closed Router resurrected")
+	if got := suspendResult(t, r, frames, proto.TypeEnvironmentResume, "resume", suspendRef, request); got.Accepted || got.ErrorCode != "resource_busy" {
+		t.Fatalf("the closed Router's resume = %+v", got)
 	}
 }
 
 func TestQuiesceDrainDeadlineCannotReopenAdmission(t *testing.T) {
 	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { return nil }))
-	r.shutdownWG.Add(1)
+	if err := r.fenceEnvironment(suspendRef, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}); err != nil {
+		t.Fatal(err)
+	}
+	work := &r.assignments[suspendRef.SessionID].work
+	work.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := r.Quiesce(ctx, suspendRef, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}); !errors.Is(err, context.Canceled) {
-		t.Fatalf("quiesce=%v", err)
+	if err := r.drainEnvironment(ctx, "env"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("drain=%v", err)
 	}
 	if err := r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late", Assignment: suspendRef}); !errors.Is(err, ErrRouterQuiesced) {
 		t.Fatalf("deadline reopened admission: %v", err)
 	}
-	r.shutdownWG.Done()
+	work.Done()
 	// Starting cleanup after the drain observer timed out must not reuse a
 	// sync.WaitGroup while an abandoned waiter is still returning from Wait.
 	if err := r.Shutdown(context.Background()); err != nil {

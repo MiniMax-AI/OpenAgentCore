@@ -19,9 +19,8 @@ func TestClassifiedBridgeFailurePreservesTerminalEvidence(t *testing.T) {
 	for _, mode := range []string{"valid", "unconfirmed", "wrong-session", "wrong-result", "success-usage", "cancelled", "unknown", "malformed-code", "after-terminal", "scanner-error", "process-error"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=classified-" + mode, "GORACE=atexit_sleep_ms=0"}}
-			req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+			config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=classified-" + mode, "GORACE=atexit_sleep_ms=0"}}, Home: root}
+			req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

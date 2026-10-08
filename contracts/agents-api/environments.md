@@ -2,7 +2,7 @@
 title: "Environments and Templates"
 ---
 
-An Environment is the execution resource of a Session: the machine, workspace and prepared capabilities that a Harness runs in. A Session creates its Environment through its `environment` configuration; there is no standalone create call. An Environment Template is reusable preparation configuration that a Session resolves when it is created. This contract covers both resources, the two placements, input admission, capability preparation, Skills, Plugins and MCP connection origins.
+An Environment is the execution resource of a Session: the machine, workspace and prepared capabilities that a Harness acts on. A Session creates its Environment through its `environment` configuration; there is no standalone create call. An Environment Template is reusable preparation configuration that a Session resolves when it is created. This contract covers both resources, the two placements, input admission, capability preparation, Skills, Plugins and MCP connection origins.
 
 Related owners:
 
@@ -10,7 +10,7 @@ Related owners:
 - [Executor credentials](./environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
 - [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B, Docker or microsandbox) hosts `openai_hosted` Environments.
 - [Core–Runtime protocol](../../docs/runtime-protocol.md): the `runtime_prepare` transfer and every other wire message.
-- [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
+- [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): tools run on the Environment's machine with the permissions of Sandbox I/O's account; isolation comes from the outer Environment.
 
 ## Resources and states
 
@@ -43,19 +43,20 @@ A managed outer Environment must exclude broader application credentials and oth
 
 ## Placements
 
-Both placements run the same Runtime: the daemon, the selected Harness, native tools and the workspace run together on one machine. They differ only in who owns that machine.
+Both placements run the same way. The selected Harness runs on the agent host, in a [view](./harness-onboarding.md#run-in-an-agent-host-view) of the Environment's machine; Sandbox I/O on that machine serves its files, processes and network over the [Link](../../docs/sandbox-link-protocol.md), so the workspace and every tool the Harness runs stay on the machine. The placements differ only in who owns the machine.
 
 | Object | Responsibility |
 | --- | --- |
 | Session and Environment | Durable ownership, configuration, pending interaction and connection observations (Core) |
 | Provider allocation | Compute and filesystem lifetime: Core's Sandbox Provider for `openai_hosted`, the application for `self_hosted` |
-| Device and daemon connection | Authenticated Runtime identity and the replaceable dispatch transport |
-| Harness process and native session | The native model and tool loop, its execution state and native history |
+| Runtime connection | The agent host's authenticated Runtime identity and the replaceable dispatch transport |
+| Harness process and native session | The native model and tool loop on the agent host, its execution state and native history |
+| Sandbox I/O | `oac-sandbox-io` on the machine, which serves the Environment's Link resource: started by the [Sandbox Provider](../../docs/sandbox-provider.md#oac-sandbox-io) for `openai_hosted` and by `oac-daemon start` for `self_hosted` ([Sandbox bootstrap](../../docs/sandbox-bootstrap.md#responsibilities-and-readiness)) |
 | Enrollment | The executor key with which a `self_hosted` machine serves the Environment's [Link](../../docs/sandbox-link-protocol.md) resource |
 
 ### Hosted (`openai_hosted`)
 
-The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. Every Harness whose declaration supports `local_environment` runs there ([Declare support](./harness-onboarding.md#declare-support)).
+The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. Every Harness whose declaration supports `local_environment` can work in it ([Declare support](./harness-onboarding.md#declare-support)).
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.
@@ -66,18 +67,18 @@ The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [
 
 ### Self-hosted (`self_hosted`)
 
-The application owns the machine. It creates the Session with a clean absolute `workspace_directory` and optional absolute local `capability_directories`. Core returns the Environment ID, the `remote_url` and an install command in `x_agents_core.installation`; running that command on the machine installs the daemon and enrolls it ([self-hosted guide](../../docs/getting-started/self-hosted.md), [executor credentials](./environment-executor-credentials.md)).
+The application owns the machine. It creates the Session with a clean absolute `workspace_directory` and optional absolute local `capability_directories`. Core returns the Environment ID, the `remote_url` and an install command in `x_agents_core.installation`; running that command on the machine installs `oac-daemon`, whose `start` enrolls the machine and runs Sandbox I/O ([self-hosted guide](../../docs/getting-started/self-hosted.md), [executor credentials](./environment-executor-credentials.md)).
 
-- `remote_url` is the daemon WebSocket URL derived from Core's public URL, never from request headers or a daemon address. It names Core's private daemon transport.
+- `remote_url` is Core's daemon WebSocket URL, derived from Core's public URL, never from request headers or a daemon address. The machine derives Core's origin from it to enroll, and Sandbox I/O serves the Link URL that enrollment returns.
 - Enrollment records the executor key that serves the Environment's Link resource; the first key keeps it. It creates no allocation and binds no Session: the Session runs on the deployment's agent host ([Session assignments](../../docs/runtime-protocol.md#session-assignments)).
-- The Session's workspace must equal the `/workspace` alias or the exact canonical directory the Runtime is bound to. Naming a path grants no access to it.
+- The Session's workspace is the machine's `/workspace`: the agent host fails the preparation of an execution whose `workspace_directory` names another path. Naming a path grants no access to it.
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
-- Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
-- The workspace must survive a daemon restart. Losing it never authorizes silent replacement or replay.
+- Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access; the machine owner stops what still runs on the machine and cleans up.
+- The workspace must survive a restart of `oac-daemon start` or Sandbox I/O. Losing it never authorizes silent replacement or replay.
 
 ### Ownership rules
 
-- Keep Environment identity, ownership, configuration and lifecycle in Core, separate from Provider compute, device identity, daemon sockets and native sessions. Keep mutable connection state out of immutable configuration; a replacement owner fences stale observations.
+- Keep Environment identity, ownership, configuration and lifecycle in Core, separate from Provider compute, device identity, Runtime connections and native sessions. Keep mutable connection state out of immutable configuration; a replacement owner fences stale observations.
 - Callers, devices and Environment connections use distinct credentials. The relay authenticates a `self_hosted` machine's Serve with the enrolled executor key. Connection observations keep generation and revision fencing. Registration and connection do not establish readiness.
 - Rotation, revocation, Session deletion and loss of ownership deny further access; they do not promise that native effects stop at once.
 - Native history stays on the bound Runtime. Preserve it, or demonstrably restore it, across compute replacement; never silently move a bound Session or replay unknown work.
@@ -159,7 +160,7 @@ Closing an Executor, cancelling a Turn or losing the transport keeps the install
 
 ### Preparation order
 
-Core freezes resource versions, metadata and source selections at Session creation. Initialization then runs in this order, each step over `runtime_prepare` with the same daemon:
+Core freezes resource versions, metadata and source selections at Session creation. Initialization then runs in this order, each step over `runtime_prepare` with the same agent host:
 
 1. initial files and tool configuration;
 2. Skill and Plugin bundle import;
@@ -180,41 +181,40 @@ The runner uses only neutral Environment and Session identity and a Runtime peer
 
 Changing `environment` to `{"type":"openai_hosted"}` reuses the same preparation input. Resource resolution, Project authorization, concrete Skill versions, encrypted file contents and confidential tool variables freeze at Session creation. Retries and reconnects reuse those snapshots; new Sessions resolve new versions. A `self_hosted` Environment never needs an allocation record.
 
-**Readiness.** Transport `connected` is a connection observation, not readiness. Execution and live file access wait for initialization; then the native preparation owner validates the installed snapshot and Harness before admitting a Turn. File reads keep their own readiness and authorization and do not require capability or native readiness. Deployment model credentials are never sent to application-owned machines.
+**Readiness.** Transport `connected` is a connection observation, not readiness. Execution and live file access wait for initialization; then the native preparation owner validates the installed snapshot and Harness before admitting a Turn. File reads keep their own readiness and authorization and do not require capability or native readiness. Deployment model credentials never reach the Environment's machine; the agent host keeps them in the Session's [credential gateway](./model-execution.md#credential-gateway).
 
-**Transfer.** Initial files, configure, npm, Python and setup operations, inert Skill and Plugin archives and finalization selections travel as typed `runtime_prepare` operations with canonical Session and Environment identities; the [protocol](../../docs/runtime-protocol.md#preparation-and-execution-order) owns chunking and receipts. Files and setup working directories use logical `/workspace` addresses; the Runtime chooses executables and physical destinations, and Core supplies no executable or host-platform field. Source selections accept portable absolute Unix, Windows drive and UNC paths; Core never resolves them on its own host, and the daemon applies its local path and access checks.
+**Transfer.** Initial files, configure, npm, Python and setup operations, inert Skill and Plugin archives and finalization selections travel as typed `runtime_prepare` operations with canonical Session and Environment identities; the [protocol](../../docs/runtime-protocol.md#preparation-and-execution-order) owns chunking and receipts. Files and setup working directories use logical `/workspace` addresses; the Runtime chooses executables and physical destinations, and Core supplies no executable or host-platform field. Core checks only the spelling of source selections and never resolves them on its own host; the agent host reads each as a clean absolute path on the Environment's machine.
 
 ### Installed snapshot
 
-Both origins use the common Runtime parser and an `installed.json` manifest on Linux, macOS and Windows. The Runtime operator chooses the capability root ([installer options](../../docs/getting-started/self-hosted.md#options-for-automation)); Core and transfer requests cannot.
+Both placements use the common parser and an `installed.json` manifest in the capability root, `/environment/initialization/capabilities` on the Environment's machine. Core and transfer requests cannot choose another root.
 
 - The manifest binds the Session and Environment to the ordered source-selection digest. The preparation owner verifies or creates it before native execution, also for an empty selection.
-- After the setup commands, the initializer snapshots the declared workspace-contained capability directories into Runtime storage. Directory bytes are read after setup, not at Session creation.
-- A filesystem lock prevents concurrent installation. A private completion record keeps only the operator's installation root, so a deleted snapshot is never mistaken for a first preparation or captured again.
+- After the setup commands, finalization copies the declared capability directories into the capability root. Directory bytes are read after setup, not at Session creation.
+- The Session's Environment owner runs one operation at a time, so installations never overlap. A private completion record keeps only the capability root, so a deleted snapshot is never mistaken for a first preparation or captured again.
 - Missing, partial, conflicting or foreign snapshots fail without deleting data, repairing or replaying.
 - Reconnecting and replacement Executors load the installed contents without rereading sources. Source edits reach only a new Session.
 - Recursive references to the snapshot and directory entries that escape it are rejected.
-- Read-only snapshot modes are integrity hints, not protection from the launching user.
+- Read-only snapshot modes are integrity hints, not protection from tools on the machine.
 
 Executor admission validates only the frozen descriptor. The preparation owner makes the capabilities ready before calling the native factory; adapters receive only the resolved Runtime-owned Skill paths and MCP declarations. A reused Executor keeps its original configuration.
 
 ### System dependencies and Runtime directories
 
-The daemon runs as its launching account and never uses sudo or raises its permissions. Only user-directory dependencies install during preparation.
+Preparation runs on the Environment's machine as Sandbox I/O's account and never uses sudo or raises its permissions. Only user-directory dependencies install during preparation.
 
 - System dependencies must be preinstalled in the managed image or by the owner of a self-hosted machine. A missing executable or library fails the operation that needs it.
 - `packages.system` is rejected in Templates and inline configuration, including a null or empty list (400, param `packages.system`). Package responses still carry the official required `system: []`.
-- npm installs into a local prefix and Python/pip into a local target under the Runtime package directory; Node/npm and Python/pip must already be installed. Their dependencies are visible to native tools in every working directory.
-- Setup commands run with Bash; on Windows, Git Bash is required and no other shell substitutes. The default working directory is `/workspace`.
-- On Windows, npm installation and stdio MCP commands named `npm` or `npx` (including their `.cmd` shims) run through npm's JavaScript entry point with Node, without an extra shell.
+- npm installs into the prefix `/environment/packages/npm` and pip into the target `/environment/packages/python`; Node/npm and Python/pip must already be installed. The [tool environment](#explicit-local-tool-environment) puts their commands on `PATH` and the Python packages on `PYTHONPATH`, so native tools see them in every working directory.
+- Setup commands run with Bash, without profile or rc files. The default working directory is `/workspace`.
 
-Initialization and package directories default to `initialization` and `packages` under the Runtime home (`OAC_RUNTIME_HOME`) and can be set with `OAC_RUNTIME_INITIALIZATION_DIRECTORY` and `OAC_RUNTIME_PACKAGE_DIRECTORY`; packaged Linux images use `/environment/initialization` and `/environment/packages`. These are resource paths, never Environment-source or operating-system switches in Core.
+The machine's layout is fixed: the workspace is `/workspace`, initialization records and the tool environment live in `/environment/initialization`, and packages in `/environment/packages`. Managed Providers create the initialization and package directories for Sandbox I/O's account. These are resource paths, never Environment-source or operating-system switches in Core.
 
-Every command uses the launching user's permissions and the host network. Process ownership waits for exit and I/O settlement. Command output is discarded; a confirmed failure keeps only a bounded integer exit status.
+Every command uses the machine's network. Process ownership waits for exit and I/O settlement. Command output is discarded; a confirmed failure keeps only a bounded integer exit status.
 
 ### Explicit local tool environment
 
-The installer's `--tool-env-file` (`OAC_RUNTIME_TOOL_ENV_FILE`) supplies the Runtime operator's base tool variables. Preparation copies these values into its private initialization snapshot, and the Session's `env` keys override them. The Runtime never rewrites the source file or inherits unrelated ambient credentials. Setup, capability resolution and Harness execution read the same prepared snapshot. Reconnecting keeps that snapshot even if the operator edits the file; a new Session reads the current file. A Harness profile may reference the Runtime-owned file but must not persist copies of its values. A missing or invalid configured file fails preparation.
+The configure step, the first initialization step, freezes the tool environment in `/environment/initialization/tool-env.json`: the Session's `env` values, with the npm and Python package commands ahead of `PATH`, the sandbox image's unless `env` sets one, and the Python packages ahead of `PYTHONPATH`. A Session without a configure step gets the same environment frozen from no values. Package and setup steps run with it over the sandbox's base environment, capability resolution reads MCP values from it, and processes that the Harness runs on the machine get it from the agent host's process broker ([Environment](./harness-onboarding.md#environment)). The Harness itself never receives it, and nothing inherits ambient credentials. Later Executors and reconnects read the same frozen file; once initialization has run, a missing or invalid one fails preparation.
 
 ### Initialization state and failure
 
@@ -238,7 +238,7 @@ On failure, one transaction marks the Environment failed and records `agent.sess
 | Harness not installed on the Runtime | `Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session.` |
 | Anything else: timeouts, unknown effects, missing or malformed receipts, Plugin installation, snapshot finalization, bootstrap rejection, Core restart | `Failed to provision environment: initialization did not complete` |
 
-Every initialization operation returns a typed `rejected`, `failed` or `unknown` outcome, and the daemon confirms process exit and I/O settlement first. Core composes the reason from a fixed label and integers, so commands, env values, package names, paths and process output never reach the reason, events, logs or responses. The failed step is not retried and later steps do not run. Confidential env and setup snapshots are encrypted separately from ordinary metadata. Initial files use the atomic replacing writer and anchored workspace paths on every platform; Files API creation keeps its own no-overwrite rule.
+Every initialization operation returns a typed `rejected`, `failed` or `unknown` outcome, and the agent host confirms process exit and I/O settlement first. Core composes the reason from a fixed label and integers, so commands, env values, package names, paths and process output never reach the reason, events, logs or responses. The failed step is not retried and later steps do not run. Confidential env and setup snapshots are encrypted separately from ordinary metadata. Initial files use the atomic replacing writer and anchored workspace paths; Files API creation keeps its own no-overwrite rule.
 
 ## Templates
 
@@ -308,7 +308,7 @@ Env values are readable by Agent code but never appear in public metadata or ini
 | Referenced file | 50 MiB |
 | Session or Template request body | 16 MiB |
 
-Paths must be canonical, distinct and inside the logical workspace; the Runtime anchors each write to its bound workspace. This is API path scope, not a restriction on native tools running as the same user. Template metadata shows inline files as type, path and size and references as type, path and `file_id`; each Session gets fresh file IDs and sizes for both. File data stays out of ordinary configuration, responses, events and command arguments. A Template keeps references; each Session authorizes and freezes its own encrypted source bytes, so later source deletion cannot change them.
+Paths must be canonical, distinct and inside the logical workspace; the agent host anchors each write to the machine's `/workspace`. This is API path scope, not a restriction on native tools running as the same user. Template metadata shows inline files as type, path and size and references as type, path and `file_id`; each Session gets fresh file IDs and sizes for both. File data stays out of ordinary configuration, responses, events and command arguments. A Template keeps references; each Session authorizes and freezes its own encrypted source bytes, so later source deletion cannot change them.
 
 ### Skills
 
@@ -333,7 +333,7 @@ An inline Skill carries `name`, `description` and a base64 ZIP `source` (`media_
 
 A Plugin is an inline ZIP with type, name and description whose single archive root contains `.codex-plugin/plugin.json`. The manifest's `skills` names Skill directories; the whole package layout is kept. Public Plugin metadata shows only type, name and description.
 
-`openai_hosted` and Template `capability_directories` accept clean absolute paths inside `/workspace`, which initial files and setup can populate. `self_hosted` capability directories are absolute local paths on the machine. Directory-discovered Skills never appear as `skills` or `plugins` entries. Missing directories, duplicate Skill names, unsupported manifests and non-regular files fail initialization.
+`openai_hosted` and Template `capability_directories` accept clean absolute paths inside `/workspace`, which initial files and setup can populate. `self_hosted` capability directories are absolute paths on the machine. Directory-discovered Skills never appear as `skills` or `plugins` entries. Missing directories, duplicate Skill names, unsupported manifests and non-regular files fail initialization.
 
 | Archive and installation limit | Value |
 | --- | --- |
@@ -356,9 +356,9 @@ Inline and referenced Skills use the same confidential snapshot and installer. T
 
 A Plugin declares MCP servers with `mcpServers: "./.mcp.json"` in `.codex-plugin/plugin.json`, or through a root `.mcp.json` when the path is omitted. The file holds `mcpServers` keyed by server name. Selecting a Plugin root as a capability directory activates its MCP declarations; selecting a parent directory discovers Skills without activating nested MCP servers.
 
-The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_headers`, and stdio `command`, `args`, selected `env_vars` and a package-relative `cwd`. Public `env_http_headers` is unsupported. The Runtime re-parses the frozen installed packages and resolves selected values only from the initialized env; a missing value fails instead of falling back to a model or daemon variable.
+The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_headers`, and stdio `command`, `args`, selected `env_vars` and a package-relative `cwd`. Public `env_http_headers` is unsupported. The Runtime re-parses the frozen installed packages and resolves selected values only from the initialized env; a missing value fails instead of falling back to a model or agent-host variable. The agent host fails a Plugin whose server declares literal `http_headers`, or is a stdio server with `env_vars`, before installing it ([Session assignments](../../docs/runtime-protocol.md#session-assignments)).
 
-A stdio server starts through the daemon's stdio helper, which resolves the installed declaration and launches the command with the Harness's permissions. On Unix the helper replaces itself with the server; on Windows it forwards stdio inside the owned process tree. Initialized values override the declaration's variables. Process groups and Windows Jobs own cancellation and descendant cleanup, not isolation.
+A stdio server runs on the machine under its alias ([Stdio MCP](./harness-onboarding.md#stdio-mcp)), with the tool environment over the sandbox's base environment and nothing from the Harness. Process scopes own cancellation and descendant cleanup, not isolation.
 
 Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins, and MiniMax Code rejects them too. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 

@@ -141,20 +141,18 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	}
 	checkSetup(t)
 
-	// Quiesce drains the owner; after Resume it serves a read on a new
+	// A quiesce drains the owner; after the resume it serves a read on a new
 	// attachment.
 	second.release(t, b, id, status.Handle)
 	suspension := proto.EnvironmentSuspendPayload{EnvironmentID: environmentID(b), SuspendID: "suspend-" + uuid.NewString()}
-	ctx, cancel := context.WithTimeout(context.Background(), wait)
-	defer cancel()
-	if err := second.router.Quiesce(ctx, ref(b), suspension); err != nil {
-		t.Fatalf("Quiesce: %v", err)
+	if r := second.suspend(t, b, proto.TypeEnvironmentQuiesce, suspension); !r.Accepted {
+		t.Fatalf("the quiesce is %+v", r)
 	}
 	if !h.drained(t, b) {
 		t.Fatal("the quiesced owner kept its attachment")
 	}
-	if err := second.router.Resume(ref(b), suspension, second); err != nil {
-		t.Fatalf("Resume: %v", err)
+	if r := second.suspend(t, b, proto.TypeEnvironmentResume, suspension); !r.Accepted {
+		t.Fatalf("the resume is %+v", r)
 	}
 	id, status = second.prepare(t, b, req)
 	if status.State != "ready" {

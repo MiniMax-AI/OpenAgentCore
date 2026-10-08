@@ -19,15 +19,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-func persistentConfig(t *testing.T, mode string) (Config, proto.PromptRequestPayload) {
+func persistentConfig(t *testing.T, mode string) (testBridge, proto.PromptRequestPayload) {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
 	entry := filepath.Join(root, "worker")
 	if err := os.WriteFile(entry, []byte("version-one"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, Model: "fixture"}
+	return testBridge{Config: Config{Node: os.Args[0], Entrypoint: entry, Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, Home: root}, proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, Model: "fixture"}
 }
 
 func runPersistentExecutorHelper() {
@@ -152,7 +151,7 @@ func awaitExecutorTurn(t *testing.T, turn agent.Turn, out <-chan proto.Envelope,
 func TestExecutorRetainsProcessAcrossTurnsAndCancellation(t *testing.T) {
 	config, req := persistentConfig(t, "")
 	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example/anthropic", APIKey: "fixture-key"}
-	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+	owner, err := config.factory()(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +187,7 @@ func TestExecutorRetainsProcessAcrossTurnsAndCancellation(t *testing.T) {
 }
 func TestExecutorLateTurnEventInvalidatesWithoutRetargeting(t *testing.T) {
 	config, req := persistentConfig(t, "late")
-	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+	owner, err := config.factory()(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +210,7 @@ func TestExecutorLateTurnEventInvalidatesWithoutRetargeting(t *testing.T) {
 }
 func TestExecutorCachesReadinessUntilInstalledArtifactChanges(t *testing.T) {
 	config, req := persistentConfig(t, "")
-	factory := NewExecutorFactory(config)
+	factory := config.factory()
 	for range 2 {
 		owner, err := factory(t.Context(), prepared(t, req))
 		if err != nil {
@@ -244,7 +243,7 @@ func TestExecutorCachesReadinessUntilInstalledArtifactChanges(t *testing.T) {
 
 func TestExecutorSeparatesPreInputRejectionFromUnknownWrite(t *testing.T) {
 	config, req := persistentConfig(t, "block")
-	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+	owner, err := config.factory()(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +277,7 @@ func TestExecutorSeparatesPreInputRejectionFromUnknownWrite(t *testing.T) {
 
 func TestExecutorCancellationDeadlineInterruptsBlockedTransport(t *testing.T) {
 	config, req := persistentConfig(t, "block")
-	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+	owner, err := config.factory()(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +313,7 @@ func TestExecutorCancellationDeadlineInterruptsBlockedTransport(t *testing.T) {
 
 func TestSharedTextLifecycle(t *testing.T) {
 	config, req := persistentConfig(t, "text_contract")
-	owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+	owner, err := config.factory()(t.Context(), prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}

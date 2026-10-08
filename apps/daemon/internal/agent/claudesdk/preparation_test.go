@@ -24,14 +24,14 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	result := make(chan agent.Executor, 1)
 	failed := make(chan error, 1)
 	go func() {
-		e, err := NewExecutorFactory(config)(ctx, prepared(t, req))
+		e, err := config.factory()(ctx, prepared(t, req))
 		if err != nil {
 			failed <- err
 			return
 		}
 		result <- e
 	}()
-	raw := waitPreparationFile(t, filepath.Join(config.StateDir, "prepare.json"))
+	raw := waitPreparationFile(t, filepath.Join(config.StateDir(), "prepare.json"))
 	select {
 	case <-result:
 		t.Fatal("preparation returned before its native receipt")
@@ -39,7 +39,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 		t.Fatal(err)
 	default:
 	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "ready"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(config.StateDir(), "ready"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var resource agent.Executor
@@ -53,7 +53,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	e := resource.(*executor)
 	defer e.Close(context.Background())
 	pid := e.base.process.Cmd.Process.Pid
-	if _, err := os.Stat(filepath.Join(config.StateDir, "start.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(config.StateDir(), "start.json")); !os.IsNotExist(err) {
 		t.Fatal("preparation submitted input")
 	}
 	var frozen startRequest
@@ -63,8 +63,6 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if frozen.Model != "fixture" || frozen.Resume != "native-session" || frozen.Workspace == nil {
 		t.Fatal("configuration-only request was not retained")
 	}
-	config.Env[0] = "HTTPS_PROXY=http://changed.example"
-	config.Workspace.Directory = "/changed"
 	req.Model = "changed"
 	req.AgentSessionID = "changed"
 	out := make(chan proto.Envelope, 16)
@@ -91,30 +89,28 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || done.Usage.Raw["claude_sdk_result"] == nil {
 		t.Fatal("prepared execution lost ordinary output or frozen resume", done)
 	}
-	if _, err := os.Stat(filepath.Join(config.StateDir, "released")); err != nil {
+	if _, err := os.Stat(filepath.Join(config.StateDir(), "released")); err != nil {
 		t.Fatal("completion preceded process release", err)
 	}
 }
 
 func TestPreparationRejectsUnavailableProfilesBeforeLaunch(t *testing.T) {
-	for _, name := range []string{"subagents", "none", "functions", "mcp", "old-runtime"} {
+	for _, name := range []string{"subagents", "functions", "mcp", "old-runtime"} {
 		t.Run(name, func(t *testing.T) {
 			config := preparationFixture(t, name)
 			req := preparationRequest()
 			switch name {
 			case "subagents":
 				req.ObserveSubagentIdentities = true
-			case "none":
-				req.DisableExecutionEnvironment = true
 			case "functions":
 				req.FunctionTools = []proto.FunctionTool{{Name: "hello", Parameters: json.RawMessage(`{"type":"object"}`)}}
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			}
-			if _, err := NewExecutorFactory(config)(t.Context(), prepared(t, req)); err == nil {
+			if _, err := config.factory()(t.Context(), prepared(t, req)); err == nil {
 				t.Fatal("invalid preparation was accepted")
 			}
-			if _, err := os.Stat(filepath.Join(config.StateDir, "launched")); !os.IsNotExist(err) {
+			if _, err := os.Stat(filepath.Join(config.StateDir(), "launched")); !os.IsNotExist(err) {
 				t.Fatal("rejection launched native preparation")
 			}
 		})
@@ -127,7 +123,7 @@ func TestPreparationFailureAndUnusedRelease(t *testing.T) {
 			config := preparationFixture(t, mode)
 			owner, stop := context.WithCancel(t.Context())
 			defer stop()
-			resource, err := NewExecutorFactory(config)(owner, prepared(t, preparationRequest()))
+			resource, err := config.factory()(owner, prepared(t, preparationRequest()))
 			if mode == "history-missing" || mode == "invalid-receipt" {
 				if err == nil || mode == "history-missing" && !strings.Contains(err.Error(), "history_unavailable") {
 					t.Fatal("preparation failure was lost", err)

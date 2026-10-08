@@ -169,7 +169,7 @@ func TestEnsureLogFileIdempotentOnExisting(t *testing.T) {
 }
 
 func TestEnsureLogFileCreatesMissingParentDir(t *testing.T) {
-	// Regression: first-ever `oac-daemon connect -b` on a host without
+	// Regression: first-ever `oac-daemon start -b` on a host without
 	// ~/.oac/daemon/<profile>/ used to fail with ENOENT —
 	// O_CREATE only creates the file leaf.
 	dir := privateTempDir(t)

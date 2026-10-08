@@ -3,28 +3,20 @@ package dispatch_test
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/google/uuid"
 )
 
 func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing.T) {
-	workspace := t.TempDir()
-
 	environment, session := uuid.NewString(), preparationSessionID
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	owner := newTestOwner(environment, session)
 	var harnessCalls atomic.Int32
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, prototest.ModelConfiguration())
@@ -33,7 +25,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: binding.Resolve})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: owner.Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,22 +79,16 @@ func waitWorkspaceRead(t *testing.T, sender *recSender, id string) proto.Workspa
 }
 
 func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
-	workspace := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspace, "file"), nil, 0600); err != nil {
-		t.Fatal(err)
-	}
 	environment, session := uuid.NewString(), preparationSessionID
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	owner := newTestOwner(environment, session)
+	owner.put("file", []byte{})
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{Kind: "native", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	reg.RegisterExecutor("native", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: binding.Resolve})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: owner.Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}

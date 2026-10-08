@@ -2,21 +2,18 @@ package claudesdk
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+// Config locates the installed bridge: the Node executable and the bridge's
+// absolute entrypoint. Env adds to the runtime check's environment, as the
+// native installer's check sets it.
 type Config struct {
 	Node       string
 	Entrypoint string
-	StateDir   string
 	Env        []string
-	Workspace  *WorkspaceConfig
 }
 
 type subagentOptions struct {
@@ -37,58 +34,6 @@ type startRequest struct {
 	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
 	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
 	RequireHistory     bool                 `json:"require_history,omitempty"`
-}
-
-func prepareConfiguration(config Config, req agent.PrepareRequest) (startRequest, []string, error) {
-	start, provider, err := prepareOptions(req)
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	if !filepath.IsAbs(config.Entrypoint) {
-		return startRequest{}, nil, fmt.Errorf("claudesdk: SDK entrypoint must be absolute")
-	}
-	config.Env = withProvider(config.Env, provider)
-	if config.Workspace != nil {
-		profile, env, err := prepareWorkspace(config, req)
-		if err != nil {
-			return startRequest{}, nil, err
-		}
-		start.Workspace = profile
-		start.Cwd = workspaceCwd(config.Workspace)
-		return start, env, nil
-	}
-	if req.LocalEnvironment != nil {
-		return startRequest{}, nil, fmt.Errorf("claudesdk: local execution requires a dedicated workspace")
-	}
-	root, err := paths.Root()
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	relative, err := filepath.Rel(root, config.StateDir)
-	if err != nil || !filepath.IsAbs(root) || !filepath.IsAbs(config.StateDir) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return startRequest{}, nil, fmt.Errorf("claudesdk: SDK state must be in a managed runtime subdirectory")
-	}
-	start.Cwd = filepath.Join(config.StateDir, "work")
-	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return startRequest{}, nil, err
-		}
-	}
-	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
-	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	if req.MCPHTTPServers != nil {
-		servers := make([]mcpHTTPServer, 0, len(projectedMCP))
-		for _, server := range projectedMCP {
-			servers = append(servers, server.mcpHTTPServer)
-		}
-		start.MCPHTTPServers = &servers
-	}
-	env = append(env, mcpEnv...)
-	return start, env, nil
 }
 
 // prepareOptions renders the request's execution configuration and the

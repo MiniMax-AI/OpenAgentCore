@@ -1,7 +1,6 @@
 package claudesdk
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -57,16 +56,7 @@ type bridgeEvent struct {
 	Observation *proto.ToolObservation      `json:"observation"`
 }
 
-func launch(ctx context.Context, config Config, start startRequest, env []string) (*session, error) {
-	binary := config.Node
-	if binary == "" {
-		binary = "node"
-	}
-	return startSession(clirunner.Start, clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true})
-}
-
-// startSession runs the bridge through start: clirunner.Start, or an agent-host
-// view's Launch.
+// startSession runs the bridge through start, the agent-host view's Launch.
 func startSession(start func(clirunner.StartOptions) (*clirunner.Process, error), options clirunner.StartOptions) (*session, error) {
 	process, err := start(options)
 	if err != nil {

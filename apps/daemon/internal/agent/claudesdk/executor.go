@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,25 +23,6 @@ type executor struct {
 	done     chan struct{}
 	invalid  bool
 	nativeID string
-}
-
-func NewExecutorFactory(config Config) agent.ExecutorFactory {
-	config.Env = slices.Clone(config.Env)
-	if config.Workspace != nil {
-		workspace := *config.Workspace
-		config.Workspace = &workspace
-	}
-	checked := &runtimeCheckCache{}
-	return func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		start, env, err := prepareConfiguration(config, req)
-		if err != nil {
-			return nil, err
-		}
-		return startExecutor(ctx, checked, config, start, func() (*session, error) { return launch(ctx, config, start, env) })
-	}
 }
 
 // startExecutor checks the installed bridge against probe, starts it through
@@ -108,9 +88,6 @@ func validateExecutorFeatures(info RuntimeInfo, start startRequest) error {
 		for _, server := range servers {
 			if server.Required && !info.SupportsHTTPMCPRequired() {
 				return errors.New("claudesdk: packaged runtime does not support required HTTP MCP")
-			}
-			if server.BearerTokenEnvVar != "" && !info.SupportsHTTPMCPBearer() {
-				return errors.New("claudesdk: packaged runtime does not support authenticated HTTP MCP")
 			}
 		}
 	}

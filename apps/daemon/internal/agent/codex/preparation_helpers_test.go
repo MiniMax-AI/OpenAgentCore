@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -22,25 +23,27 @@ type preparationFrame struct {
 	Params json.RawMessage `json:"params"`
 }
 
+// preparationFixture prepares a fake codex, which records each frame under
+// root, in a test view whose home is root/home.
 func preparationFixture(t *testing.T) (agent.PrepareRequest, sessionConfig, string) {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
-	t.Setenv("OAC_TEST_PREPARATION_FAKE", "1")
 	t.Setenv("OAC_TEST_PREPARATION_FRAMES", filepath.Join(root, "frames.jsonl"))
 	t.Setenv("OAC_TEST_PREPARATION_STATUS", filepath.Join(root, "environment-status"))
 	t.Setenv("OAC_TEST_PREPARATION_BLOCK", "")
-	for _, key := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
-		t.Setenv(key, "")
-	}
 	binary := filepath.Join(root, "fake-codex")
 	executable := "'" + strings.ReplaceAll(os.Args[0], "'", "'\\''") + "'"
-	body := "#!/bin/sh\nexec " + executable + " -test.run=^TestPreparationFakeCodexProcess$ -- \"$@\"\n"
+	body := "#!/bin/sh\nOAC_TEST_PREPARATION_FAKE=1 exec " + executable + " -test.run=^TestPreparationFakeCodexProcess$ -- \"$@\"\n"
 	if err := os.WriteFile(binary, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := defaultSessionConfig()
-	cfg.codexBinary = binary
+	cfg := testView(t, binary, filepath.Join(root, "home"))
+	// A view always owns the native MCP configuration, empty without MCP.
+	config := filepath.Join(root, "mcp-config.json")
+	if err := os.WriteFile(config, []byte(`{"config":{"mcp_servers":{},"features":{"plugins":false,"apps":false},"mcp_oauth_credentials_store":"file"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", config)
 	req := prepared(t, "prepared-session", proto.PromptRequestPayload{
 		AgentKind:                   "codex",
 		Model:                       "fixture-model",
@@ -50,6 +53,34 @@ func preparationFixture(t *testing.T) (agent.PrepareRequest, sessionConfig, stri
 		FunctionTools:               []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
 	})
 	return req, cfg, root
+}
+
+// testView runs binary as codex in a view whose home is home, at the same
+// path on the host and in the view. Launch runs binary on this host, with the
+// plan's environment over the test's.
+func testView(t testing.TB, binary, home string) sessionConfig {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(home, agent.ViewWorkName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := defaultSessionConfig()
+	cfg.codexBinary = binary
+	cfg.view = &viewLaunch{binary: binary, ViewSession: agent.ViewSession{
+		Home:  agent.ViewDir{Host: home, View: home},
+		Proxy: "http://127.0.0.1:9",
+		Launch: func(opts clirunner.StartOptions) (*clirunner.Process, error) {
+			opts.Env = append(os.Environ(), opts.Env...)
+			return clirunner.Start(opts)
+		},
+	}}
+	return cfg
+}
+
+// testPlan builds req's session plan with CODEX_HOME in a new directory.
+func testPlan(t testing.TB, req agent.PrepareRequest) (SessionPlan, error) {
+	t.Helper()
+	home := t.TempDir()
+	return buildSessionPlan(req, func() (agent.ViewDir, error) { return agent.ViewDir{Host: home, View: home}, nil })
 }
 
 // prepared is req as the registry and dispatch hand it to a Codex factory.
@@ -116,7 +147,7 @@ func assertPreparationOnly(t *testing.T, root string) {
 
 func preparedCatalogs(t *testing.T, root string) []string {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(root, "daemon", "agent-sessions", "*", "model-catalog-*.json"))
+	files, err := filepath.Glob(filepath.Join(root, "home", viewCodexHome, "model-catalog-*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

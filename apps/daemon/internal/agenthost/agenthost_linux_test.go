@@ -272,6 +272,19 @@ func (dm *daemon) assign(t *testing.T, b Binding) {
 	}
 }
 
+// suspend sends Core's quiesce or resume of b's Environment and returns its
+// result.
+func (dm *daemon) suspend(t *testing.T, b Binding, typ string, request proto.EnvironmentSuspendPayload) proto.EnvironmentSuspendResultPayload {
+	t.Helper()
+	id := sandboxwire.NewID().String()
+	dm.handle(t, ref(b), typ, id, request)
+	var result proto.EnvironmentSuspendResultPayload
+	if err := dm.next(t, id).DecodePayload(&result); err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
 // status returns the assignment status sent with id.
 func (dm *daemon) status(t *testing.T, id string) proto.AssignmentStatusPayload {
 	t.Helper()

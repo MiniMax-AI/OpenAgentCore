@@ -111,35 +111,3 @@ func joinURL(base, path string) (string, error) {
 	u.Path = u.Path + path
 	return u.String(), nil
 }
-
-// DeriveWSURL turns a Bootstrap response's ws_url into the absolute URL
-// to dial. Empty ws_url (dev mode without a separate public hostname)
-// is derived from serverBase by swapping http→ws / https→wss. Non-
-// absolute ws_url is rejected — the server-side handler is the only
-// component that knows the externally-reachable host.
-func DeriveWSURL(boot BootstrapResponse, serverBase string) (string, error) {
-	if abs := strings.TrimSpace(boot.WSURL); abs != "" {
-		u, err := url.Parse(abs)
-		if err != nil {
-			return "", fmt.Errorf("transport: parse ws_url %q: %w", abs, err)
-		}
-		if u.Scheme != "ws" && u.Scheme != "wss" {
-			return "", fmt.Errorf("transport: ws_url %q must use ws:// or wss://", abs)
-		}
-		return abs, nil
-	}
-	u, err := url.Parse(strings.TrimRight(serverBase, "/"))
-	if err != nil {
-		return "", fmt.Errorf("transport: parse serverBase: %w", err)
-	}
-	switch u.Scheme {
-	case "https":
-		u.Scheme = "wss"
-	case "http":
-		u.Scheme = "ws"
-	default:
-		return "", fmt.Errorf("transport: serverBase scheme %q must be http or https", u.Scheme)
-	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/agent-daemon/ws"
-	return u.String(), nil
-}

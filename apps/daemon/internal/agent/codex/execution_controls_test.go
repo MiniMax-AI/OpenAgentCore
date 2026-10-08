@@ -8,8 +8,7 @@ import (
 )
 
 func TestExecutionControlsSelectNativeSettings(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
+	plan, err := testPlan(t, prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +17,7 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 		t.Fatal("native settings without ExecutionControls", plan.ExtraConfig)
 	}
 	for _, verbosity := range []string{"low", "medium", "high"} {
-		plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), ExecutionControls: &proto.ExecutionControls{TextVerbosity: verbosity}}))
+		plan, err := testPlan(t, prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), ExecutionControls: &proto.ExecutionControls{TextVerbosity: verbosity}}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -31,9 +30,8 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 }
 
 func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, controls := range []proto.ExecutionControls{{}, {TextVerbosity: "invalid"}} {
-		if plan, err := BuildSessionPlan(prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), ExecutionControls: &controls})); err == nil {
+		if plan, err := testPlan(t, prepared(t, "state", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), ExecutionControls: &controls})); err == nil {
 			plan.Cleanup()
 			t.Fatal("invalid controls accepted", controls)
 		}

@@ -7,13 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestPublicMCPHTTPEffectiveConfiguration(t *testing.T) {
 	for _, allowlist := range []*[]string{nil, new([]string), {"lookup", "query"}} {
 		servers := map[string]mcpServerConfig{"docs": {URL: "https://docs.example/mcp", EnabledTools: allowlist}}
-		for _, mutation := range []string{"none", "ambient", "url", "header", "header helper", "env header", "auth", "required", "tools", "disabled", "remote", "plugins", "apps", "keyring", "policy"} {
+		for _, mutation := range []string{"none", "ambient", "url", "header", "header helper", "env header", "bearer", "auth", "required", "tools", "disabled", "remote", "plugins", "apps", "keyring", "policy"} {
 			t.Run(mutation+"/"+allowlistName(allowlist), func(t *testing.T) {
 				response := mcpHTTPConfigResponse(servers)
 				config := response["config"].(map[string]any)
@@ -30,6 +31,8 @@ func TestPublicMCPHTTPEffectiveConfiguration(t *testing.T) {
 					server["http_headers_helper"] = "operator-credentials"
 				case "env header":
 					server["env_http_headers"] = map[string]any{"Authorization": "OPERATOR_SECRET"}
+				case "bearer":
+					server["bearer_token_env_var"] = "OPERATOR_SECRET"
 				case "auth":
 					server["auth"] = "chatgpt"
 				case "required":
@@ -126,12 +129,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.ExecutionControls = nil
-			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
-			if mode == "reject bearer reference" {
-				token := "synthetic-private-bearer"
-				servers[0].BearerToken = &token
-			}
-			req.MCPHTTPServers = &servers
+			cfg.view.MCP = []agent.MCPBinding{{ServerLabel: "docs", ConnectionOrigin: "service", CredentialAuthority: "project_vault", Transport: "http", ServerURL: "http://127.0.0.1:17102/mcp"}}
 			if mode == "resume" {
 				req.AgentSessionID = "fixture-native-thread"
 			}
@@ -139,10 +137,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, "unknown-status"), []byte("unknown"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			declarations, _, err := runtimeMCPServers(req)
-			if err != nil {
-				t.Fatal(err)
-			}
+			declarations := mcpServersFromBindings(cfg.view.MCP)
 			response := mcpHTTPConfigResponse(declarations)
 			if mode == "reject" {
 				response["config"].(map[string]any)["mcp_servers"].(map[string]any)["operator"] = map[string]any{"url": "https://operator.example/private"}
@@ -166,10 +161,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertPreparationOnly(t, root)
-			home, err := allocCodexHome(req.StateKey)
-			if err != nil {
-				t.Fatal(err)
-			}
+			work := filepath.Join(root, "home", agent.ViewWorkName)
 			out := make(chan proto.Envelope, 20)
 			turn, err := e.StartTurn(t.Context(), "actual-run", proto.TextInput("actual prompt"), out)
 			if err != nil {
@@ -193,7 +185,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 					if err := json.Unmarshal(frame.Params, &params); err != nil {
 						t.Fatal(err)
 					}
-					if !checked || params["cwd"] != home || (frame.Method == "thread/resume") != (mode == "resume") {
+					if !checked || params["cwd"] != work || (frame.Method == "thread/resume") != (mode == "resume") {
 						t.Fatal("thread started before the check or with another cwd")
 					}
 				}

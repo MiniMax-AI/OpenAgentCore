@@ -2,15 +2,11 @@ package codex
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
@@ -32,31 +28,10 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 	for _, start := range []bool{false, true} {
 		t.Run(map[bool]string{false: "disconnect-before-start", true: "transfer-and-cancel"}[start], func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
-			if err := os.Chmod(root, 0700); err != nil {
-				t.Fatal(err)
-			}
-			t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", filepath.Join(t.TempDir(), "capabilities"))
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
-			environment, session, workspace := uuid.NewString(), uuid.NewString(), filepath.Join(root, "harness")
-			if err := os.MkdirAll(workspace, 0700); err != nil {
-				t.Fatal(err)
-			}
-			for key, value := range map[string]string{
-				"OAC_RUNTIME_ENVIRONMENT_ID": environment,
-				"OAC_RUNTIME_SESSION_ID":     session,
-				"OAC_RUNTIME_WORKSPACE":      workspace,
-				"OAC_RUNTIME_NETWORK_ACCESS": "enabled",
-			} {
-				t.Setenv(key, value)
-			}
-			binding, err := localworkspace.Load()
-			if err != nil {
-				t.Fatal(err)
-			}
-			req.DisableExecutionEnvironment = false
-			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}
+			session := uuid.NewString()
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfiguration.Configuration())
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfiguration.Configuration())
 			prepared := make(chan *Executor, 1)
 			registry.RegisterExecutor("codex", func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
 				e, err := newExecutor(ctx, req, cfg)
@@ -67,8 +42,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				return e, nil
 			})
 			sender := make(preparationWireSender, 64)
-			environments := func(proto.AssignmentRef, proto.AssignmentBindPayload) dispatch.Environment { return binding }
-			r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Environments: environments})
+			r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +64,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			send(proto.TypeAssignmentBind, "bind", proto.AssignmentBindPayload{EnvironmentID: environment})
+			send(proto.TypeAssignmentBind, "bind", proto.AssignmentBindPayload{})
 			await := func(state string) proto.PreparationStatusPayload {
 				t.Helper()
 				timer := time.NewTimer(4 * time.Second)

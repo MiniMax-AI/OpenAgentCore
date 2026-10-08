@@ -29,38 +29,6 @@ type suspension struct {
 	by      proto.AssignmentRef
 }
 
-// Quiesce quiesces the request's Environment for a caller that then
-// suspends the whole Runtime: after fencing the Environment it waits for every
-// output and receipt admitted on the connection, then closes the
-// Environment's Executors and owners before it returns. Busy rejection leaves
-// admission open; a failed drain keeps the Environment quiesced until a
-// matching resume or shutdown. ref must admit work in the Environment.
-func (r *Router) Quiesce(ctx context.Context, ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload) error {
-	if err := r.fenceEnvironment(ref, request); err != nil {
-		return err
-	}
-	if err := r.shutdownWG.waitContext(ctx); err != nil {
-		return err
-	}
-	return r.drainEnvironment(ctx, request.EnvironmentID)
-}
-
-// Resume reopens the quiesced Environment and replaces the sender, after the
-// caller authenticated a new connection and Core confirmed the exact
-// suspension on it under the assignment that quiesced.
-func (r *Router) Resume(ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload, sender Sender) error {
-	if sender == nil {
-		return errors.New("dispatch: no sender")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if err := r.resumeLocked(ref, request); err != nil {
-		return err
-	}
-	r.sender = sender
-	return nil
-}
-
 // handleQuiesce quiesces an Environment for Core on this connection. It
 // replies environment_quiesced once the drain settles, without blocking
 // Handle; a failed drain replies resource_busy.
