@@ -15,13 +15,16 @@ import (
 
 func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "native-model", SystemPrompt: "Keep these exact instructions.\nDo not replace them."}
-	ordinary, _, err := prepareOptions(prepared(t, request))
+	ordinaryRequest := prepared(t, request)
+	ordinary, _, err := prepareOptions(ordinaryRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
 	before, _ := json.Marshal(request)
-	controlled, _, err := prepareOptions(prepared(t, request))
+	controlledRequest := prepared(t, request)
+	controlledRequest.PreparationDeadline = ordinaryRequest.PreparationDeadline
+	controlled, _, err := prepareOptions(controlledRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
