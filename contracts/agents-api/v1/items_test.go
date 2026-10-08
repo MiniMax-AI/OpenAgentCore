@@ -72,6 +72,10 @@ func TestItemWireFieldsAreExplicitlyNull(t *testing.T) {
 	for _, key := range []string{"phase", "error", "output", "content"} {
 		expectField(t, call, key, "")
 	}
+	command := fields(t, Item{ID: "cmd", TurnID: "turn", Type: "command_execution", Status: "in_progress", Command: "ls"})
+	for _, key := range []string{"cwd", "output", "exit_code", "duration_ms"} {
+		expectField(t, command, key, "null")
+	}
 	reasoning := fields(t, Item{ID: "rs", TurnID: "turn", Type: "reasoning"})
 	expectField(t, reasoning, "status", "null")
 	expectField(t, reasoning, "summary", "[]")

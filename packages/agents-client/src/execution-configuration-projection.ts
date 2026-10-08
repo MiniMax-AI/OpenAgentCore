@@ -1,11 +1,11 @@
 import { modelProviderProtocols } from "./harness-catalog";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
+import { modelProviderViewFields } from "./generated/public-api";
 import type { ExecutionConfigurationSource, ModelProviderView, SessionExecutionConfiguration } from "./types";
 
 type Invalid = () => never;
 const sources = new Set(["session", "agent", "deployment", "unknown"]);
 const selectionFields = new Set(["value", "source"]);
-const providerFields = new Set(["protocol", "base_url", "api_key_configured", "context_window", "max_output_tokens"]);
 const protocols: ReadonlySet<unknown> = new Set(modelProviderProtocols);
 
 function selection(value: unknown, invalid: Invalid): SessionExecutionConfiguration["model"] {
@@ -33,7 +33,7 @@ function safeBaseURL(value: string): boolean {
 
 /** The safe provider view shared by frozen Session configuration and saved Agent reads. */
 export function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
-  if (!isRecord(value) || !onlyFields(value, providerFields) ||
+  if (!isRecord(value) || !onlyFields(value, modelProviderViewFields) ||
     !protocols.has(value.protocol) ||
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
     (value.context_window !== undefined && !isNonnegativeInteger(value.context_window)) ||

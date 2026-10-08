@@ -7,7 +7,7 @@ import {
   projectVaultCredential, projectVaultCredentialList, projectSourceFile, projectSourceFileDeleted,
 } from "./client";
 import { projectExecutionConfiguration } from "./execution-configuration-projection";
-import { projectAgentTurn, projectSessionItem, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
+import { projectAgentTurn, projectSessionItem, projectHistoryPage } from "./history-projection";
 import { projectRuntimeHistory } from "./runtime-history-projection";
 import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
 import { CoreRequester } from "./core-request";
@@ -204,7 +204,6 @@ export class AdminClient {
     return projectAdminSessionArchive(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/archive`, options), sessionId);
   }
   async listTurns(projectId: string, sessionId: string, options?: PageOptions) {
-    validateHistoryPageOptions(options);
     const value = await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/turns`, options), options);
     return projectHistoryPage(value, options, (entry) => projectAgentTurn(entry, sessionId, invalidAdminResponse), invalidAdminResponse);
   }
@@ -212,7 +211,6 @@ export class AdminClient {
     return projectAgentTurn(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/turns/${segment(turnId)}`, options), sessionId, invalidAdminResponse, turnId);
   }
   async listItems(projectId: string, sessionId: string, options?: PageOptions) {
-    validateHistoryPageOptions(options);
     const value = await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/items`, options), options);
     return projectHistoryPage(value, options, (entry) => projectSessionItem(entry, invalidAdminResponse), invalidAdminResponse);
   }

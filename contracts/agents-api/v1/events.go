@@ -1,6 +1,9 @@
 package v1
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // TerminalTurnEvent reports whether an event type settles a Turn.
 func TerminalTurnEvent(eventType string) bool {
@@ -17,8 +20,8 @@ func itemEvent(eventType string) bool {
 }
 
 // MarshalJSON keeps the nullable top-level usage on terminal Turn events only,
-// a nullable output_index on every Item event (EVT-09) and a nullable error
-// param on error events.
+// a nullable output_index on every Item event (EVT-09), a nullable error param
+// on error events and a nullable turn_id on Environment events.
 func (e SessionEvent) MarshalJSON() ([]byte, error) {
 	type wire SessionEvent
 	switch {
@@ -39,6 +42,16 @@ func (e SessionEvent) MarshalJSON() ([]byte, error) {
 			wire
 			OutputIndex *int32 `json:"output_index"`
 		}{wire(e), e.OutputIndex})
+	case strings.HasPrefix(e.Type, "agent.session.environment."):
+		e.Usage = nil
+		var turn *string
+		if e.TurnID != "" {
+			turn = &e.TurnID
+		}
+		return json.Marshal(struct {
+			wire
+			TurnID *string `json:"turn_id"`
+		}{wire(e), turn})
 	}
 	e.Usage = nil
 	return json.Marshal(wire(e))
