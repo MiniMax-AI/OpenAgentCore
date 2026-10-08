@@ -83,7 +83,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 The reason is a fixed safe string, never submitted content, a credential or raw native diagnostics. Unsupported guarantees no native side effect and is not a successful empty operation. Installation unavailability, unknown call IDs, native failures and uncertain outcomes keep their own errors and ownership. A nil `Turn` still means that no input was submitted and the output stays with the caller; never use it as an Unsupported marker.
 
-The wire request carries no working directory. The Environment owner checks `local_environment.workspace_directory` against the Environment's workspace and gives the Harness that directory in `PrepareRequest.WorkspaceRoot`; run the native Harness there.
+The execution request carries no working directory. The Environment owner freezes the workspace from `assignment_bind.workspace_directory` before preparation and gives the Harness that directory in `PrepareRequest.WorkspaceRoot`; run the native Harness there.
 
 Workspace reads, writes, output export and read-only preparation belong to the Session's [Environment owner](../../docs/runtime-protocol.md#session-assignments), not the adapter. An adapter implements none of them. Its declaration's `LocalEnvironment` and `EnvironmentNone` state what its Executors run, and `agent.Registry.Register` composes them once with what the Runtime's owner serves (`agent.EnvironmentSupport`), keeping each only where the owner serves it. The composed `LocalEnvironment` also admits the owner's workspace reads, read-only preparation and output export. One declaration holds for every Executor of the install.
 
@@ -287,7 +287,7 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 - shim names and `ForwardEnv` names are unique, no shim is named `oac-process-shim`, which is the process relay's, or starts with `oac-mcp-`, which [stdio aliases](#stdio-mcp) use, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
 - `Proxy` is one of the two values and `Executor` is non-nil.
 
-`harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view.
+`harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view. A workspace must remain entirely in the sandbox world: binding rejects overlap with the common reserved trees or agent-host overlays before any Environment effect, and Harness admission rejects overlap with its declared overlays, masks or shim paths before any native effect. Neither operation substitutes a private home or another directory. At initial launch with a sandbox world, the launcher opens the working directory beneath that world without following symlinks or crossing mounts, then enters the opened directory before forking; changing the path cannot redirect startup into a view-owned mount. An empty-root launch and `Spawn` retain their own directory rules, including native-history helpers in the private home. This startup check does not restrict where the native process may later change directory.
 
 ### Capabilities
 

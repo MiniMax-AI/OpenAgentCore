@@ -290,6 +290,18 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	if err := report.Signal(syscall.SIGKILL); !errors.Is(err, ErrExited) {
 		t.Errorf("Signal after the spawned process exited = %v, want ErrExited", err)
 	}
+	private, err := spawnHelper(context.Background(), v, "cwd", "/.oac/home")
+	if err != nil {
+		t.Fatalf("Spawn in private home: %v", err)
+	}
+	privateOut, err := io.ReadAll(private.Stdout)
+	closeStdio(private)
+	if err != nil || string(privateOut) != "/.oac/home" {
+		t.Fatalf("private Spawn cwd = %q, %v", privateOut, err)
+	}
+	if code, err := private.Wait(); err != nil || code != 0 {
+		t.Fatalf("private Spawn Wait = %d, %v", code, err)
+	}
 	// The directory is entered as the process's user.
 	if err := os.Mkdir(filepath.Join(f.harness, "root-only"), 0o700); err != nil {
 		t.Fatal(err)
@@ -770,6 +782,63 @@ func TestSeccompProgram(t *testing.T) {
 		if got, err := vm.Run(in); err != nil || uint32(got) != c.want {
 			t.Errorf("%s: %#x, %v; want %#x", c.name, got, err, c.want)
 		}
+	}
+}
+
+func TestWorldInitialDirectoryStaysInWorld(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	mkdir(t, filepath.Join(f.world, "data", "project"))
+	for name, target := range map[string]string{"alias": "/.oac/home", "parent": "data"} {
+		if err := os.Symlink(target, filepath.Join(f.world, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, test := range []struct {
+		name, dir string
+		err       error
+	}{
+		{"private alias", "/alias", unix.ELOOP},
+		{"parent symlink", "/parent/project", unix.ELOOP},
+		{"private mount", "/.oac/home", unix.EXDEV},
+		{"overlay mount", "/etc/oac-overlay", unix.EXDEV},
+		{"proc mount", "/proc", unix.EXDEV},
+		{"custom workspace", "/data/project", nil},
+		{"world root", "/", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			marker := filepath.Join(f.home, "started")
+			w := &loopbackWorld{dir: f.world}
+			spec := f.spec(w, "cwd")
+			spec.Process.Dir = test.dir
+			v, err := Start(t.Context(), spec)
+			if test.err != nil {
+				if v != nil {
+					v.Close()
+				}
+				if !errors.Is(err, ErrExec) || !errors.Is(err, test.err) {
+					t.Fatalf("Start = %v, want ErrExec with %v", err, test.err)
+				}
+				if _, err := os.Stat(marker); !errors.Is(err, fs.ErrNotExist) {
+					t.Fatalf("initial process ran: marker stat = %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			defer v.Close()
+			out, err := io.ReadAll(v.Stdout())
+			if err != nil || string(out) != test.dir {
+				t.Fatalf("cwd = %q, %v; want %q", out, err, test.dir)
+			}
+			if exit, err := v.Wait(); err != nil || exit != (Exit{}) {
+				t.Fatalf("Wait = %+v, %v", exit, err)
+			}
+			if err := os.Remove(marker); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -1274,6 +1343,17 @@ func runHelper(mode string) int {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}
+		return 0
+	case "cwd":
+		wd, err := os.Getwd()
+		if err == nil {
+			err = os.WriteFile("/.oac/home/started", nil, 0o600)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Print(wd)
 		return 0
 	case "noop":
 		return 0

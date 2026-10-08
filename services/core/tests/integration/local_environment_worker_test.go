@@ -15,7 +15,12 @@ import (
 
 func localWorker(t *testing.T, execute bool) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`))
+	return localWorkerForSession(t, execute, `{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)
+}
+
+func localWorkerForSession(t *testing.T, execute bool, configuration string) (*dispatchHarness, *execution.Worker, sessions.Environment) {
+	t.Helper()
+	h := newDispatchHarnessForSession(t, []byte(configuration))
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)

@@ -21,8 +21,11 @@ var suspendRef = proto.AssignmentRef{SessionID: "session", AssignmentID: "assign
 func bindAssignment(r *Router, ref proto.AssignmentRef, environmentID string) {
 	r.mu.Lock()
 	a := &assignmentState{ref: ref, environmentID: environmentID}
+	if environmentID != "" {
+		a.workspaceDirectory = "/workspace"
+	}
 	if r.environments != nil {
-		a.environment = r.environments(ref, proto.AssignmentBindPayload{EnvironmentID: environmentID})
+		a.environment = r.environments(ref, proto.AssignmentBindPayload{EnvironmentID: environmentID, WorkspaceDirectory: a.workspaceDirectory})
 	}
 	r.assignments[ref.SessionID] = a
 	r.mu.Unlock()

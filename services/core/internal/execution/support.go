@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -27,7 +28,7 @@ func ValidateSessionConfiguration(engine string, configuration json.RawMessage) 
 	switch snapshot.Environment.Type {
 	case "none":
 	case "self_hosted":
-		if strings.TrimSpace(snapshot.Agent.Model) == "" || !validSelfHostedPlacement(environmentPlacement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
+		if strings.TrimSpace(snapshot.Agent.Model) == "" || !environmentconfig.ValidSelfHostedPlacement(environmentconfig.Placement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
 			return sessions.ErrInvalidInput
 		}
 	case "openai_hosted":

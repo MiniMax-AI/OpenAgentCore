@@ -35,7 +35,7 @@ import (
 // The sandbox layout an Environment owner prepares. Providers create the
 // initialization and package directories for the sandbox's user.
 const (
-	sandboxWorkspace      = "/workspace"
+	logicalWorkspace      = "/workspace"
 	sandboxInitialization = "/environment/initialization"
 	sandboxPackages       = "/environment/packages"
 	toolEnvironmentName   = "tool-env.json"
@@ -63,9 +63,10 @@ type owners struct {
 // operation opens a new one. An uncertain mutation quarantines it: it sends
 // no mutation again while it lives, across drains and Routers.
 type environment struct {
-	d       deps
-	session string // the canonical Session ID
-	id      string // the Environment ID; empty for environment none
+	d         deps
+	session   string // the canonical Session ID
+	id        string // the Environment ID; empty for environment none
+	workspace string // the immutable physical workspace from assignment_bind
 	// sem serializes the owner's operations, Close included. Its holder
 	// owns every field below; a rebind also holds owners.mu.
 	sem       chan struct{}
@@ -86,7 +87,10 @@ type environment struct {
 func (h *Host) Environments(ref proto.AssignmentRef, bind proto.AssignmentBindPayload) dispatch.Environment {
 	session, err := canonicalID(ref.SessionID)
 	assignment, err2 := canonicalID(ref.AssignmentID)
-	if err != nil || err2 != nil || bind.Resource == nil && bind.EnvironmentID != "" {
+	if err != nil || err2 != nil || bind.Validate() != nil {
+		return nil
+	}
+	if bind.EnvironmentID != "" && (bind.Resource == nil || !isViewPath(bind.WorkspaceDirectory) || checkLayout(h.cfg, agent.View{}, bind.WorkspaceDirectory) != nil) {
 		return nil
 	}
 	b := Binding{SessionID: session, AssignmentID: assignment, AssignmentEpoch: ref.Epoch, AttachGrant: slices.Clone(bind.AttachGrant)}
@@ -98,12 +102,12 @@ func (h *Host) Environments(ref proto.AssignmentRef, bind proto.AssignmentBindPa
 	o := h.owners.m[session]
 	switch {
 	case o == nil:
-		o = &environment{d: h.owners.d, session: ref.SessionID, id: bind.EnvironmentID, sem: make(chan struct{}, 1), binding: b}
+		o = &environment{d: h.owners.d, session: ref.SessionID, id: bind.EnvironmentID, workspace: bind.WorkspaceDirectory, sem: make(chan struct{}, 1), binding: b}
 		if h.owners.m == nil {
 			h.owners.m = map[sandboxwire.ID]*environment{}
 		}
 		h.owners.m[session] = o
-	case o.id != bind.EnvironmentID:
+	case o.id != bind.EnvironmentID || o.workspace != bind.WorkspaceDirectory:
 		return nil
 	case !sameBinding(o.binding, b):
 		select {
@@ -272,8 +276,6 @@ func (o *environment) Configure(r proto.PromptRequestPayload) error {
 		return errors.New("the request does not name the Session's Environment")
 	case r.WorkspaceReadOnly:
 		return nil
-	case local.WorkspaceDirectory != sandboxWorkspace:
-		return fmt.Errorf("the workspace is not %s", sandboxWorkspace)
 	case local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil:
 		return agentcapabilities.ErrInvalid
 	}
@@ -287,8 +289,7 @@ func (o *environment) Prepare(ctx context.Context, r agent.PrepareRequest) (agen
 	if r.WorkspaceReadOnly || o.id == "" && r.LocalEnvironment == nil {
 		return r, nil
 	}
-	if o.id == "" || r.LocalEnvironment == nil || r.LocalEnvironment.ID != o.id || r.LocalEnvironment.CapabilitySources == nil ||
-		r.LocalEnvironment.WorkspaceDirectory != sandboxWorkspace {
+	if o.id == "" || r.LocalEnvironment == nil || r.LocalEnvironment.ID != o.id || r.LocalEnvironment.CapabilitySources == nil {
 		return r, agentcapabilities.ErrInvalid
 	}
 	if err := o.acquire(ctx); err != nil {
@@ -338,7 +339,7 @@ func (o *environment) Prepare(ctx context.Context, r agent.PrepareRequest) (agen
 			return r, err
 		}
 		for i, item := range manifest.MCP {
-			mcp = append(mcp, agent.EnvironmentMCP{InstallationRoot: agentcapabilities.Directory, WorkspaceRoot: sandboxWorkspace,
+			mcp = append(mcp, agent.EnvironmentMCP{InstallationRoot: agentcapabilities.Directory, WorkspaceRoot: o.workspace,
 				PackageRoot: item.PackageRoot, Server: item.Server, BearerToken: tokens[i]})
 		}
 	}
@@ -346,7 +347,7 @@ func (o *environment) Prepare(ctx context.Context, r agent.PrepareRequest) (agen
 		manifest.Skills[i].InstallationRoot = agentcapabilities.Directory
 	}
 	o.tool = values
-	r.WorkspaceRoot, r.CapabilityRoot, r.Skills, r.MCP = sandboxWorkspace, agentcapabilities.Directory, manifest.Skills, mcp
+	r.WorkspaceRoot, r.CapabilityRoot, r.Skills, r.MCP = o.workspace, agentcapabilities.Directory, manifest.Skills, mcp
 	return r, nil
 }
 
@@ -458,11 +459,11 @@ func checkPluginCredentials(tree agentcapabilities.Tree) error {
 }
 
 func (o *environment) installFile(ctx context.Context, w *world, target string, data []byte) error {
-	relative, ok := strings.CutPrefix(target, sandboxWorkspace+"/")
+	relative, ok := strings.CutPrefix(target, logicalWorkspace+"/")
 	if !ok || !proto.ValidWorkspacePath(relative) || len(data) > proto.RuntimePrepareMaxBytes {
 		return agentcapabilities.ErrInvalid
 	}
-	workspace, err := w.directory(ctx, w.root, sandboxWorkspace, false)
+	workspace, err := w.directory(ctx, w.root, o.workspace, false)
 	if err != nil {
 		return initializationFailed(err)
 	}
@@ -486,13 +487,13 @@ func (o *environment) initialize(ctx context.Context, w *world, initialization s
 	case program == "":
 		return agentcapabilities.ErrInvalid
 	}
-	cwd := sandboxWorkspace
-	if input.CWD != "" && input.CWD != sandboxWorkspace {
-		relative, ok := strings.CutPrefix(input.CWD, sandboxWorkspace+"/")
+	cwd := o.workspace
+	if input.CWD != "" && input.CWD != logicalWorkspace {
+		relative, ok := strings.CutPrefix(input.CWD, logicalWorkspace+"/")
 		if !ok || !proto.ValidWorkspacePath(relative) {
 			return agentcapabilities.ErrInvalid
 		}
-		cwd = input.CWD
+		cwd = path.Join(o.workspace, relative)
 	}
 	values, err := w.toolEnvironment(ctx, initialization)
 	if err != nil {
@@ -587,7 +588,7 @@ func (o *environment) ListWorkspaceDirectory(ctx context.Context, p string, limi
 		return result, dispatch.ErrWorkspaceReadUnavailable
 	}
 	defer o.done(w)
-	workspace, err := w.directory(ctx, w.root, sandboxWorkspace, false)
+	workspace, err := w.directory(ctx, w.root, o.workspace, false)
 	if err != nil {
 		return result, dispatch.ErrWorkspaceReadUnavailable
 	}
@@ -647,7 +648,7 @@ func (o *environment) WriteWorkspaceFile(ctx context.Context, p string, data []b
 		return result, dispatch.ErrEnvironmentUnavailable
 	}
 	defer o.done(w)
-	workspace, err := w.directory(ctx, w.root, sandboxWorkspace, false)
+	workspace, err := w.directory(ctx, w.root, o.workspace, false)
 	if err != nil {
 		return result, dispatch.ErrEnvironmentUnavailable
 	}
@@ -685,7 +686,7 @@ func (o *environment) ExportOutputs(ctx context.Context, out io.Writer) error {
 		return err
 	}
 	defer o.done(w)
-	workspace, err := w.directory(ctx, w.root, sandboxWorkspace, false)
+	workspace, err := w.directory(ctx, w.root, o.workspace, false)
 	if err != nil {
 		return err
 	}
@@ -884,15 +885,6 @@ func (w *world) finalize(ctx context.Context, root sandboxfs.NodeRef, input agen
 		return err
 	}
 	return w.syncDir(ctx, root)
-}
-
-// overlaps reports whether one of the absolute paths a and b is the other or
-// lies below it.
-func overlaps(a, b string) bool {
-	below := func(parent, child string) bool {
-		return child == parent || strings.HasPrefix(child, strings.TrimSuffix(parent, "/")+"/")
-	}
-	return below(a, b) || below(b, a)
 }
 
 // dirEntry is the name and kind of a listed entry, all that

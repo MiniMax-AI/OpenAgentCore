@@ -27,9 +27,12 @@ func (s *Session) Bind(ctx context.Context, ref proto.AssignmentRef, environment
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	payload := proto.AssignmentBindPayload{EnvironmentID: environmentID}
+	if environmentID != "" && s.links == nil {
+		return ErrNoLinkResource
+	}
 	if s.links != nil {
 		var err error
-		if payload.Resource, payload.AttachGrant, err = s.links.bindLink(ctx, s.DeviceID, ref, environmentID); err != nil {
+		if payload, err = s.links.bindLink(ctx, s.DeviceID, ref, environmentID); err != nil {
 			return err
 		}
 	}

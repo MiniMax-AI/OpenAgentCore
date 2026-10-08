@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 39c9fc5bd3c6010ef018072f81aa9eb8e91f85b37de196d4c45a654c440af05c
+source_hash: 1e1ba9b25d9103671d5562577f297651fe932e793d3494e7172f503d9807bcd8
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 所操作的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -73,7 +73,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 - `remote_url` 是根据 Core 的公共 URL 推导出的 Core daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。机器从中推导 Core 的 origin 以进行注册，Sandbox I/O 则为注册返回的 Link URL 提供服务。
 - 注册记录为该 Environment 的 Link resource 提供服务的 executor key；最先注册的 key 保有它。注册不会创建任何分配，也不绑定 Session：Session 运行在部署的 agent host 上（[Session 分配](../../../docs/zh/runtime-protocol.md#session-assignments)）。
-- Session 的工作区是机器上的 `/workspace`：若执行的 `workspace_directory` 指向其他路径，agent host 会使其准备失败。指定某个路径并不会授予对它的访问权限。
+- Session 的工作区是机器上声明的 `workspace_directory`。agent host 在绑定 assignment 时、任何初始化或文件访问之前冻结此路径。指定某个路径并不会授予对它的访问权限。
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
 - 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问；机器所有者负责停止机器上仍在运行的内容并进行清理。
 - 工作区必须能在 `oac-daemon start` 或 Sandbox I/O 重启后继续存在。丢失它绝不授权进行静默替换或重播。
@@ -208,9 +208,9 @@ Executor 接纳仅验证已冻结的描述符。准备所有者会在调用原�
 - 系统依赖必须预先安装在托管镜像中，或由自托管机器的所有者安装。缺少可执行文件或库时，需要该依赖的操作会失败。
 - Templates 和内联配置都会拒绝 `packages.system`，包括 null 或空列表（400，param `packages.system`）。软件包响应仍会包含官方要求的 `system: []`。
 - npm 安装到 prefix `/environment/packages/npm`，pip 安装到 target `/environment/packages/python`；Node/npm 和 Python/pip 必须已经安装。[工具环境](#explicit-local-tool-environment)会将它们的命令放到 `PATH` 中，并将 Python 软件包放到 `PYTHONPATH` 中，因此每个工作目录中的原生工具都能看到它们。
-- 设置命令使用 Bash 运行，不加载 profile 或 rc 文件。默认工作目录为 `/workspace`。
+- 设置命令使用 Bash 运行，不加载 profile 或 rc 文件。默认工作目录是声明的工作区；逻辑 `/workspace` 下的设置 `cwd` 会解析到该工作区内。命令文本不会被改写。
 
-机器的布局是固定的：工作区为 `/workspace`，初始化记录和工具环境位于 `/environment/initialization`，软件包位于 `/environment/packages`。托管 Provider 会为 Sandbox I/O 的账户创建初始化目录和软件包目录。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
+托管 Environment 使用 `/workspace`；自托管 Environment 使用其声明的工作区。初始化记录和工具环境位于 `/environment/initialization`，软件包位于 `/environment/packages`。托管 Provider 会为 Sandbox I/O 的账户创建初始化目录和软件包目录。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
 
 每条命令都使用机器的网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
 
@@ -310,7 +310,7 @@ Agent 代码可以读取 env 值，但它们绝不会出现在公开元数据或
 | 引用文件 | 50 MiB |
 | Session 或 Template 请求正文 | 16 MiB |
 
-路径必须规范、互不相同且位于逻辑工作区内部；agent host 会将每次写入锚定到机器上的 `/workspace`。这是 API 路径范围，不是对以同一用户身份运行的原生工具的限制。Template 元数据会将内联文件显示为 type、path 和 size，将引用显示为 type、path 和 `file_id`；无论内联文件还是引用，每个 Session 都会获得全新的文件 ID 和大小。文件数据不会出现在普通配置、响应、事件或命令参数中。Template 会保留引用；每个 Session 会授权并冻结自己的加密源字节，因此之后删除源文件无法改变这些字节。
+路径必须规范、互不相同且位于逻辑工作区内部；agent host 会将逻辑 `/workspace` 映射到声明的物理工作区，并将每次写入锚定到那里。这是 API 路径范围，不是对以同一用户身份运行的原生工具的限制。Template 元数据会将内联文件显示为 type、path 和 size，将引用显示为 type、path 和 `file_id`；无论内联文件还是引用，每个 Session 都会获得全新的文件 ID 和大小。文件数据不会出现在普通配置、响应、事件或命令参数中。Template 会保留引用；每个 Session 会授权并冻结自己的加密源字节，因此之后删除源文件无法改变这些字节。
 
 ### Skills {#skills}
 

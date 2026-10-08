@@ -119,7 +119,8 @@ func (s *Store) GetLinkAssignment(ctx context.Context, assignment string) (runti
 	return runtimedevice.LinkAssignment{
 		SessionID: optionalID(row.SessionID), RuntimeID: optionalID(row.RuntimeID), Epoch: uint64(row.Epoch), Bound: row.Bound,
 		AgentHost: row.AgentHost, Revision: uint64(row.CredentialRevision), NetworkEnabled: row.NetworkEnabled,
-		Resource: linkResource(row.ResourceTenantID, row.ResourceEnvironmentID, row.ResourceKind, row.ResourceID, row.ResourceGeneration),
+		EnvironmentConfiguration: row.EnvironmentConfiguration,
+		Resource:                 linkResource(row.ResourceTenantID, row.ResourceEnvironmentID, row.ResourceKind, row.ResourceID, row.ResourceGeneration),
 	}, true, nil
 }
 

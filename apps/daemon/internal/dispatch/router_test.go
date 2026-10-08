@@ -181,7 +181,11 @@ func ref(session string) proto.AssignmentRef {
 // assign binds session to r in environment.
 func assign(t *testing.T, r *dispatch.Router, session, environment string) {
 	t.Helper()
-	if err := r.Handle(t.Context(), scoped(t, session, proto.TypeAssignmentBind, "bind-"+session, proto.AssignmentBindPayload{EnvironmentID: environment})); err != nil {
+	bind := proto.AssignmentBindPayload{EnvironmentID: environment}
+	if environment != "" {
+		bind.WorkspaceDirectory = "/workspace"
+	}
+	if err := r.Handle(t.Context(), scoped(t, session, proto.TypeAssignmentBind, "bind-"+session, bind)); err != nil {
 		t.Fatalf("assignment_bind: %v", err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -39,7 +40,7 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 		`{"type":"openai_hosted","network":{"access":"disabled","allow":["example.com"]}}`,
 		`{"type":"openai_hosted","network":{"access":"disabled"},"workspace_directory":"/override"}`,
 	} {
-		if _, err := parseEnvironmentPlacement([]byte(configuration)); err == nil {
+		if _, err := environmentconfig.ParsePlacement([]byte(configuration)); err == nil {
 			t.Fatalf("unqualified private profile accepted: %s", configuration)
 		}
 	}

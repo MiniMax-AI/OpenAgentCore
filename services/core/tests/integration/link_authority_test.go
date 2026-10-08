@@ -526,7 +526,11 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 // connection closes, leaves the initialization unclaimed, and a later pass
 // completes it.
 func TestInitializationBindsAgentHost(t *testing.T) {
-	for _, environment := range []string{`{"type":"openai_hosted"}`, `{"type":"self_hosted","workspace_directory":"/workspace"}`} {
+	for _, tc := range []struct{ environment, workspace string }{
+		{`{"type":"openai_hosted"}`, "/workspace"},
+		{`{"type":"self_hosted","workspace_directory":"/home/user/project"}`, "/home/user/project"},
+	} {
+		environment := tc.environment
 		t.Run(environment, func(t *testing.T) {
 			// Hosted work is admitted only on a configured deployment.
 			s, _ := configuredStore(t)
@@ -561,7 +565,7 @@ func TestInitializationBindsAgentHost(t *testing.T) {
 			if err := peer.connect(sandbox.Bootstrap{}); err != nil {
 				t.Fatal(err)
 			}
-			if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
+			if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.WorkspaceDirectory != tc.workspace || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
 				t.Fatalf("agent host bind = %+v", bind)
 			}
 			awaitInitialization(t, s, tenant, session.Environment.ID, "complete")

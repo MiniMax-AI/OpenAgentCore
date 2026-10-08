@@ -14,8 +14,9 @@ import (
 // protects it. A released assignment stays recorded, so its frames stay fenced;
 // a confirmed release drops its owner, grant and resource.
 type assignmentState struct {
-	ref           proto.AssignmentRef
-	environmentID string
+	ref                proto.AssignmentRef
+	environmentID      string
+	workspaceDirectory string
 	// resource and grant are the bind's Link resource and attach grant; the
 	// resource's Kind is empty when the bind carried none.
 	resource sandboxbootstrap.Resource
@@ -109,14 +110,14 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 				break
 			}
 		}
-		r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, resource: resource, grant: input.AttachGrant, environment: environment}
+		r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, workspaceDirectory: input.WorkspaceDirectory, resource: resource, grant: input.AttachGrant, environment: environment}
 	case a.ref.AssignmentID != ref.AssignmentID:
 		code = proto.AssignmentConflict
 	case ref.Epoch > a.ref.Epoch && (!a.released || a.superseding != nil):
 		// The bind supersedes the earlier epoch, or a pending supersede. A
-		// Session's Environment never changes, so another one is refused
+		// Session's Environment and workspace never change, so conflicts are refused
 		// before anything is fenced.
-		if input.EnvironmentID != a.environmentID {
+		if input.EnvironmentID != a.environmentID || input.WorkspaceDirectory != a.workspaceDirectory {
 			code = proto.AssignmentConflict
 			break
 		}
@@ -138,7 +139,7 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 		return nil
 	case ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released:
 		code = proto.AssignmentStale
-	case a.ref != ref || a.environmentID != input.EnvironmentID || a.resource != resource || !bytes.Equal(a.grant, input.AttachGrant):
+	case a.ref != ref || a.environmentID != input.EnvironmentID || a.workspaceDirectory != input.WorkspaceDirectory || a.resource != resource || !bytes.Equal(a.grant, input.AttachGrant):
 		code = proto.AssignmentConflict
 	}
 	r.mu.Unlock()
@@ -201,7 +202,7 @@ func (r *Router) supersede(ctx context.Context, env proto.Envelope, a *assignmen
 }
 
 func sameBind(a, b proto.AssignmentBindPayload) bool {
-	return a.EnvironmentID == b.EnvironmentID && (a.Resource == nil) == (b.Resource == nil) && (a.Resource == nil || *a.Resource == *b.Resource) && bytes.Equal(a.AttachGrant, b.AttachGrant)
+	return a.EnvironmentID == b.EnvironmentID && a.WorkspaceDirectory == b.WorkspaceDirectory && (a.Resource == nil) == (b.Resource == nil) && (a.Resource == nil || *a.Resource == *b.Resource) && bytes.Equal(a.AttachGrant, b.AttachGrant)
 }
 
 // handleAssignmentRelease fences the assignment, then settles the Session's

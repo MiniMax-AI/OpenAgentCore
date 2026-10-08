@@ -23,11 +23,12 @@ WHERE id = $1 AND revoked_at IS NULL;
 
 -- name: GetLinkAssignment :one
 -- The assignment with its Runtime's Attach authority, the live Link resource
--- of its Session's Environment and that Environment's network access.
+-- of its Session's Environment and that Environment's frozen configuration and network access.
 SELECT b.session_id, b.runtime_id, b.epoch, b.desired_state = 'bound' AS bound,
     (d.revoked_at IS NULL)::boolean AS agent_host, d.credential_revision,
     r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
     r.id AS resource_id, r.generation AS resource_generation,
+    (s.configuration->'environment')::jsonb AS environment_configuration,
     (COALESCE(s.configuration->'environment'->'network'->>'access', 'enabled') = 'enabled')::boolean AS network_enabled
 FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id

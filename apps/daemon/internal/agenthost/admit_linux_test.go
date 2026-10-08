@@ -57,6 +57,11 @@ func newViewFixture(t *testing.T) *viewFixture {
 	masked := view
 	masked.Masks = []agent.ViewMask{{Path: "/etc/passwd"}}
 	register(reg, "masked", &masked)
+	covered := view
+	covered.Masks = []agent.ViewMask{{Path: "/masked", Dir: true}}
+	covered.Overlays = []agent.ViewOverlay{{Path: "/overlay", Source: t.TempDir()}}
+	covered.ShimPaths = []string{"/tools/command"}
+	register(reg, "covered", &covered)
 	shimmed := view
 	shimmed.Shims = []string{"git"}
 	register(reg, "shimmed", &shimmed)
@@ -77,7 +82,15 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"view meeting the agent host's /etc": {"masked", func(*agent.PrepareRequest) {}, []error{ErrUnsupported, agent.ErrInvalidView}},
 		"incomplete binding":                 {"viewed", func(r *agent.PrepareRequest) { r.LocalEnvironment = nil }, []error{ErrInvalidSession}},
 		"shim name without PATH":             {"shimmed", func(*agent.PrepareRequest) {}, []error{ErrInvalidSession}},
-		"relative workspace":                 {"viewed", func(r *agent.PrepareRequest) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
+		"relative workspace":                 {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "workspace" }, []error{ErrInvalidSession}},
+		"private workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/.oac/home" }, unsupported},
+		"control workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/proc" }, unsupported},
+		"host CA workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = f.cfg.CADir }, unsupported},
+		"host overlay ancestor":              {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/etc" }, unsupported},
+		"masked workspace":                   {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/masked" }, unsupported},
+		"masked workspace child":             {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/masked/project" }, unsupported},
+		"overlay workspace":                  {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/overlay/project" }, unsupported},
+		"shim workspace ancestor":            {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/tools" }, unsupported},
 		"credentialed stdio MCP": {"viewed", func(r *agent.PrepareRequest) {
 			r.MCP = []agent.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
 		}, []error{ErrUnsupported, agent.ErrViewHandoff}},
@@ -88,7 +101,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 			r.MCP = []agent.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
 		}, []error{ErrInvalidSession}},
 	} {
-		req := prepared(request(c.kind, "/workspace", "https://model.test", "sk-test"))
+		req := prepared(request(c.kind, "https://model.test", "sk-test"))
 		c.change(&req)
 		var dials atomic.Int32
 		e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
@@ -113,7 +126,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		b := newBinding(newResource())
 		change(&b)
 		var dials atomic.Int32
-		e, err := open(context.Background(), f.cfg, prepared(request("viewed", "/workspace", "https://model.test", "sk-test")), bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
+		e, err := open(context.Background(), f.cfg, prepared(request("viewed", "https://model.test", "sk-test")), bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
 		if e != nil || !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
 			t.Errorf("%s: open = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
 		}
@@ -131,7 +144,7 @@ func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := prepared(request("viewed", "/workspace", "https://model.test", "sk-test"))
+	req := prepared(request("viewed", "https://model.test", "sk-test"))
 	req.MCP = []agent.EnvironmentMCP{
 		{Server: agentplugin.MCPServer{Name: "docs", Type: "http", URL: "https://mcp.test/docs"}},
 		{InstallationRoot: "/capabilities", PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "bin/tools", Args: []string{"--stdio"}, CWD: "run"}},
@@ -161,7 +174,7 @@ func TestRegistryRunsKindsWithViews(t *testing.T) {
 		}
 	}
 	slices.Sort(kinds)
-	if !slices.Equal(kinds, []string{"masked", "shimmed", "viewed"}) {
+	if !slices.Equal(kinds, []string{"covered", "masked", "shimmed", "viewed"}) {
 		t.Errorf("kinds %v, want those that declare a view", kinds)
 	}
 }
@@ -169,7 +182,7 @@ func TestRegistryRunsKindsWithViews(t *testing.T) {
 func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	f := newViewFixture(t)
 	bearer := "mcp-secret"
-	req := prepared(request("viewed", "/workspace", "https://model.test", "sk-test"))
+	req := prepared(request("viewed", "https://model.test", "sk-test"))
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
 	skills := []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
 	req.CapabilityRoot, req.Skills = agentcapabilities.Directory, skills
@@ -215,7 +228,7 @@ func TestReleaseRemovesTheHome(t *testing.T) {
 	var dials atomic.Int32
 	d := newDaemon(t, f.cfg, deps{dial: countingDial(&dials), tasks: noTasks})
 	b := newBinding(sandboxlink.ResourceRef{})
-	none := request("viewed", "", "https://model.test", "sk-test")
+	none := request("viewed", "https://model.test", "sk-test")
 	none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
 	if _, p := d.prepare(t, b, none); p.State != "failed" {
 		t.Fatalf("the preparation is %s, want failed with the factory", p.State)

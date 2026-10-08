@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: aace6aceea7229f9950eeca914b8e1de131973b49d48258649d4e596ec8054b1
+source_hash: a571ca6ea6b43f89f1669be989ecaf52838181705ba5facbc4f66a72cccd9e57
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -85,7 +85,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 原因必须是固定的安全字符串，绝不能是已提交内容、凭据或原始原生诊断信息。Unsupported 保证不会产生原生副作用，也不表示操作成功且为空。安装不可用、未知调用 ID、原生失败和不确定结果应保留各自的错误和所有权。nil `Turn` 仍表示没有提交任何输入，并且输出归调用方所有；绝不能将其用作 Unsupported 标记。
 
-线协议请求不携带工作目录。Environment owner 将 `local_environment.workspace_directory` 与 Environment 的工作区进行核对，并通过 `PrepareRequest.WorkspaceRoot` 向 Harness 提供该目录；必须在该目录中运行原生 Harness。
+执行请求不携带工作目录。Environment owner 在准备之前冻结 `assignment_bind.workspace_directory` 中的工作区，并通过 `PrepareRequest.WorkspaceRoot` 向 Harness 提供该目录；必须在该目录中运行原生 Harness。
 
 工作区读取、写入、输出导出和只读 preparation 属于 Session 的 [Environment owner](../../../docs/zh/runtime-protocol.md#session-assignments)，不属于 adapter。adapter 不实现其中任何操作。其声明中的 `LocalEnvironment` 和 `EnvironmentNone` 表示其 Executor 能运行的内容，`agent.Registry.Register` 将二者与 Runtime 的 owner 所提供的内容（`agent.EnvironmentSupport`）组合一次，仅在 owner 提供时保留。组合后的 `LocalEnvironment` 同时准入 owner 的工作区读取、只读 preparation 和输出导出。一份声明适用于该安装的每个 Executor。
 
@@ -289,7 +289,7 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 - shim 名称和 `ForwardEnv` 名称各自唯一，没有 shim 名为 `oac-process-shim`（该名称属于进程 relay）或以 `oac-mcp-` 开头（该前缀属于 [stdio 别名](#stdio-mcp)），变量名不含 `=`，且 `ForwardEnv` 不指定视图或 broker 设置的变量（[环境](#environment)）；
 - `Proxy` 是两个取值之一，且 `Executor` 非 nil。
 
-`harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。
+`harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。工作区必须完整地位于沙箱世界中：绑定会在任何 Environment 副作用之前拒绝与公共保留树或 agent-host overlay 的重叠；Harness 准入会在任何原生副作用之前拒绝与其声明的 overlay、mask 或 shim 路径的重叠。这两种操作都不会改用私有 home 或其他目录。带沙箱世界的初次启动中，launcher 会在该世界内打开工作目录，不跟随符号链接也不跨越挂载点，然后在 fork 前进入已打开的目录；路径被修改也不能将启动重定向到视图所属挂载点。空根启动和 `Spawn` 保留各自的目录规则，包括在私有 home 中运行原生历史 helper。此启动检查不会限制原生进程随后切换目录的位置。
 
 ### 能力 {#capabilities}
 

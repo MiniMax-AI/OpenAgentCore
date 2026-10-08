@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -83,7 +84,7 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 	if err != nil {
 		return false, err
 	}
-	if _, err := parseEnvironmentPlacement(environment.Configuration); err != nil || environment.Initialization != "complete" {
+	if _, err := environmentconfig.ParsePlacement(environment.Configuration); err != nil || environment.Initialization != "complete" {
 		return false, nil
 	}
 	allocation, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: environment.ID})

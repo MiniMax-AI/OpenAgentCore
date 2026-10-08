@@ -128,7 +128,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	defer func() { h.Close() }()
 	// The sandbox's world is this container's /, which holds one Environment
 	// at a time: each Session in it starts from an empty initialization area.
-	workspace := sandboxWorkspace
+	workspace := logicalWorkspace
 	if err := os.MkdirAll(workspace, 0o777); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	req := request("test", workspace, upstream.URL, upstreamKey)
+	req := request("test", upstream.URL, upstreamKey)
 	// Each subtest's daemon drives its Sessions over the relay.
 	newRun := func(t *testing.T) *daemon { return newDaemon(t, cfg, deps{dial: relayDial(cfg), tasks: taskUIDs}) }
 	beat := filepath.Join(workspace, "beat")
@@ -203,7 +203,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	t.Run("environment none runs in an empty root", func(t *testing.T) {
 		var dials atomic.Int32
 		d, b := newDaemon(t, cfg, deps{dial: countingDial(&dials), tasks: taskUIDs}), newBinding(sandboxlink.ResourceRef{})
-		none := request("test", "", upstream.URL, upstreamKey)
+		none := request("test", upstream.URL, upstreamKey)
 		none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
 		r := d.turn(t, b, none, "none")
 		for _, name := range []string{"empty root", "work directory", "model through the gateway", "no direct route", "no sandbox network"} {

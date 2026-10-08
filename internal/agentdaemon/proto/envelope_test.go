@@ -71,6 +71,7 @@ func TestDecodeRequestRejectsUndeclaredMembers(t *testing.T) {
 		payload string
 		out     any
 	}{
+		"workspace in preparation":     {TypeExecutionPrepare, `{"session_id":"s","configuration":{"local_environment":{"id":"env","workspace_directory":"/other"}}}`, &ExecutionPreparePayload{}},
 		"unknown key":                  {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","model":"m","unknown":true}}`, &ExecutionPreparePayload{}},
 		"agent_options in preparation": {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","agent_options":{}}}`, &ExecutionPreparePayload{}},
 	} {

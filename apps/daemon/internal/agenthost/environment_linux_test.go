@@ -3,6 +3,7 @@
 package agenthost
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"context"
@@ -42,14 +43,21 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if os.Getenv(gateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a throwaway container; see the view suite", gateEnv)
 	}
+	const workspace = "/projects/custom-workspace"
 	sb := startSandbox(t, os.Getenv(sandboxIOEnv))
 	// The sandbox's world is this container's /.
-	for _, p := range []string{sandboxInitialization, path.Join(sandboxWorkspace, "setup.txt"), path.Join(sandboxWorkspace, "notes")} {
+	for _, p := range []string{sandboxInitialization, workspace, logicalWorkspace} {
 		if err := os.RemoveAll(p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.MkdirAll(sandboxWorkspace, 0o777); err != nil {
+	if err := os.MkdirAll(workspace, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(logicalWorkspace, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path.Join(logicalWorkspace, "decoy.txt"), []byte("untouched"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	harnesses := agent.NewRegistry()
@@ -73,14 +81,14 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	b := sb.bind(cfg.RuntimeID, time.Minute)
 	skill := agentskill.Metadata{Type: "inline", Name: "probe-skill", Description: "Probe the installation."}
 	manifest := []byte("---\nname: probe-skill\ndescription: Probe the installation.\n---\nProbe.\n")
-	req := request("test", sandboxWorkspace, "https://model.invalid", "key")
+	req := request("test", "https://model.invalid", "key")
 	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Skills: []agentskill.Metadata{skill}}
 
 	// Prepare as Core does: configure, a setup step that sees the tool
 	// environment, the Skill and finalize, then the Executor. A plugin whose
 	// stdio MCP server takes credentials from the Environment fails first,
 	// before anything of it is staged.
-	first := &daemon{host: h}
+	first := &daemon{host: h, workspace: workspace}
 	first.route(t, reg)
 	first.assign(t, b)
 	plugin := agentplugin.Metadata{Type: "inline", Name: "package", Description: "Package proof."}
@@ -92,12 +100,25 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if _, err := os.Lstat(path.Join(agentcapabilities.Directory, "plugins")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the refused plugin was staged: %v", err)
 	}
+	// File creation before preparation must use the bound physical root.
+	if r := first.write(t, b, "before.txt", []byte("before")); r.Outcome != "completed" {
+		t.Fatalf("before preparation: %+v", r)
+	}
+	if r := first.write(t, b, "before.txt", []byte("replacement")); r.Outcome != "rejected" {
+		t.Fatalf("overwrite: %+v", r)
+	}
+	req.LocalEnvironment.CapabilitySources.Plugins = []agentplugin.Metadata{plugin}
+	validPlugin := archive(t, "package", map[string][]byte{".codex-plugin/plugin.json": []byte(`{"name":"package","description":"Package proof."}`), ".mcp.json": []byte(`{"mcpServers":{"local":{"command":"bash"}}}`)})
 	for _, step := range []struct {
 		begin proto.RuntimePreparePayload
 		data  []byte
 	}{
+		{proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/initial.txt"}}, []byte("old")},
+		{proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/initial.txt"}}, []byte("initial")},
+		{proto.RuntimePreparePayload{Action: "plugin", Plugin: &plugin}, validPlugin},
 		{proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure", Env: map[string]string{"PROBE": "probe-value"}}}, nil},
 		{proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: `printf '%s\n' "$PROBE" >> setup.txt`}}, nil},
+		{proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", CWD: "/workspace/notes", Command: "pwd > cwd.txt"}}, nil},
 		{proto.RuntimePreparePayload{Action: "skill", Skill: &skill}, archive(t, "probe-skill", map[string][]byte{"SKILL.md": manifest})},
 		{proto.RuntimePreparePayload{Action: "finalize", Sources: req.LocalEnvironment.CapabilitySources}, nil},
 	} {
@@ -105,13 +126,22 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 			t.Fatalf("runtime_prepare %s: %+v, want completed", step.begin.Action, r)
 		}
 	}
-	if _, status := first.prepare(t, b, req); status.State != "ready" {
+	initialID, initialStatus := first.prepare(t, b, req)
+	if status := initialStatus; status.State != "ready" {
 		t.Fatalf("the preparation is %s (%s), want ready", status.State, status.ErrorCode)
 	}
 	got := <-prepared
-	if r := got.req; r.WorkspaceRoot != sandboxWorkspace || r.CapabilityRoot != agentcapabilities.Directory || len(r.Skills) != 1 ||
+	if r := got.req; r.WorkspaceRoot != workspace || r.CapabilityRoot != agentcapabilities.Directory || len(r.Skills) != 1 ||
 		r.Skills[0].Metadata != skill || r.Skills[0].InstallationRoot != agentcapabilities.Directory || r.Skills[0].RelativeRoot != "skills/probe-skill" {
 		t.Fatalf("the Executor's Environment is %+v", r)
+	}
+	if len(got.req.MCP) != 1 || got.req.MCP[0].WorkspaceRoot != workspace {
+		t.Fatalf("MCP workspace: %+v", got.req.MCP)
+	}
+	for name, want := range map[string]string{"before.txt": "before", "notes/initial.txt": "initial", "notes/cwd.txt": workspace + "/notes\n"} {
+		if body, err := os.ReadFile(path.Join(workspace, name)); err != nil || string(body) != want {
+			t.Fatalf("%s: %q, %v; want %q", name, body, err, want)
+		}
 	}
 	if got.env.Tool["PROBE"] != "probe-value" || got.env.Sandbox["PATH"] != sandboxBaseline["PATH"] {
 		t.Fatalf("the Executor's environments are %+v", got.env)
@@ -119,7 +149,38 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if body, err := os.ReadFile(path.Join(agentcapabilities.Directory, "skills/probe-skill/SKILL.md")); err != nil || !bytes.Equal(body, manifest) {
 		t.Fatalf("the installed Skill is %q, %v", body, err)
 	}
-	checkSetup(t)
+	checkSetup(t, workspace)
+	first.release(t, b, initialID, initialStatus.Handle)
+	if r := first.write(t, b, "outputs/result.txt", []byte("output")); r.Outcome != "completed" {
+		t.Fatalf("output write: %+v", r)
+	}
+	owner := first.host.owners.m[b.SessionID]
+	var exported bytes.Buffer
+	if err := owner.ExportOutputs(t.Context(), &exported); err != nil {
+		t.Fatal(err)
+	}
+	tr := tar.NewReader(&exported)
+	entry, err := tr.Next()
+	if err != nil || entry.Name != "outputs/result.txt" {
+		t.Fatalf("export entry: %+v %v", entry, err)
+	}
+	if body, err := io.ReadAll(tr); err != nil || string(body) != "output" {
+		t.Fatalf("export content: %q %v", body, err)
+	}
+	if err := os.Symlink(logicalWorkspace, path.Join(workspace, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if r := first.write(t, b, "escape/escaped.txt", []byte("escape")); r.Outcome == "completed" {
+		t.Fatalf("symlink write: %+v", r)
+	}
+	if body, err := os.ReadFile(path.Join(logicalWorkspace, "decoy.txt")); err != nil || string(body) != "untouched" {
+		t.Fatalf("decoy: %q %v", body, err)
+	}
+	for _, name := range []string{"before.txt", "notes", "setup.txt", "outputs", "escaped.txt"} {
+		if _, err := os.Lstat(path.Join(logicalWorkspace, name)); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("operation reached decoy %s: %v", name, err)
+		}
+	}
 	if err := first.shutdown(); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +188,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	// Reopen: a new Router checks the completed installation and neither
 	// changes the world nor runs a step.
 	p := h.probe(t, b, 0)
-	second := &daemon{host: h}
+	second := &daemon{host: h, workspace: workspace}
 	second.route(t, reg)
 	id, status := second.prepare(t, b, req)
 	if status.State != "ready" {
@@ -139,7 +200,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if requests, mutations := p.counts(); requests == 0 || mutations != 0 {
 		t.Fatalf("the reopen sent %d File requests, %d of them mutations, on the probed world", requests, mutations)
 	}
-	checkSetup(t)
+	checkSetup(t, workspace)
 
 	// A quiesce drains the owner; after the resume it serves a read on a new
 	// attachment.
@@ -179,14 +240,14 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if err := second.shutdown(); err != nil || !h.drained(t, b) {
 		t.Fatalf("the Router's shutdown is %v, want a drained owner", err)
 	}
-	third := &daemon{host: h}
+	third := &daemon{host: h, workspace: workspace}
 	third.route(t, reg)
 	third.assign(t, b)
 	if r := third.runtimePrepare(t, b, proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/file.txt"}}, []byte("file")); r.Outcome != "unknown" || !h.drained(t, b) {
 		t.Fatalf("the runtime_prepare after an uncertain write is %+v, want unknown without an attachment", r)
 	}
 	for _, name := range []string{"uncertain.txt", "file.txt"} {
-		if _, err := os.Lstat(path.Join(sandboxWorkspace, "notes", name)); !errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Lstat(path.Join(workspace, "notes", name)); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("%s exists: %v", name, err)
 		}
 	}
@@ -202,11 +263,11 @@ func TestSupersedingBindRebindsTheOwner(t *testing.T) {
 	}
 	sb := startSandbox(t, os.Getenv(sandboxIOEnv))
 	for _, name := range []string{"before.txt", "after.txt"} {
-		if err := os.RemoveAll(path.Join(sandboxWorkspace, name)); err != nil {
+		if err := os.RemoveAll(path.Join(logicalWorkspace, name)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.MkdirAll(sandboxWorkspace, 0o777); err != nil {
+	if err := os.MkdirAll(logicalWorkspace, 0o777); err != nil {
 		t.Fatal(err)
 	}
 	cfg := Config{StateDir: t.TempDir(), RelayURL: sb.url, RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: agent.NewRegistry()}
@@ -233,7 +294,7 @@ func TestSupersedingBindRebindsTheOwner(t *testing.T) {
 	if r := dm.write(t, next, "after.txt", []byte("after")); r.Outcome != "completed" {
 		t.Fatalf("the write at epoch 2 is %+v", r)
 	}
-	if body, err := os.ReadFile(path.Join(sandboxWorkspace, "after.txt")); err != nil || string(body) != "after" {
+	if body, err := os.ReadFile(path.Join(logicalWorkspace, "after.txt")); err != nil || string(body) != "after" {
 		t.Fatalf("the sandbox has %q, %v", body, err)
 	}
 }
@@ -262,9 +323,9 @@ type preparedExecutor struct {
 }
 
 // checkSetup checks that the setup step ran once.
-func checkSetup(t *testing.T) {
+func checkSetup(t *testing.T, workspace string) {
 	t.Helper()
-	if body, err := os.ReadFile(path.Join(sandboxWorkspace, "setup.txt")); err != nil || string(body) != "probe-value\n" {
+	if body, err := os.ReadFile(path.Join(workspace, "setup.txt")); err != nil || string(body) != "probe-value\n" {
 		t.Fatalf("the setup step wrote %q, %v", body, err)
 	}
 }
@@ -466,4 +527,42 @@ func (s *probed) Write(b []byte) (int, error) {
 		return 0, errors.New("the probe broke the stream")
 	}
 	return s.ReadWriteCloser.Write(b)
+}
+
+func TestEnvironmentOwnerKeepsWorkspaceAcrossRouters(t *testing.T) {
+	var dials atomic.Int32
+	h := &Host{cfg: Config{CADir: "/trust"}, owners: owners{d: deps{dial: countingDial(&dials)}}}
+	b := newBinding(newResource())
+	payload := bindPayload(b)
+	payload.WorkspaceDirectory = "/projects/one"
+	owner := h.Environments(ref(b), payload)
+	if owner == nil {
+		t.Fatal("initial bind rejected")
+	}
+	for _, epoch := range []uint64{1, 2} {
+		other := b
+		other.AssignmentEpoch = epoch
+		changed := payload
+		changed.WorkspaceDirectory = "/projects/two"
+		if h.Environments(ref(other), changed) != nil {
+			t.Fatalf("changed workspace accepted at epoch %d", epoch)
+		}
+		if h.Environments(ref(other), payload) != owner {
+			t.Fatalf("owner lost at epoch %d", epoch)
+		}
+	}
+	for _, workspace := range []string{"", "relative", "/projects/../two", "C:/project", "/", "/.oac", "/.oac/home", "/proc/1", "/dev/shm", "/etc", "/etc/passwd", "/trust", "/trust/roots"} {
+		fresh := newBinding(newResource())
+		invalid := bindPayload(fresh)
+		invalid.WorkspaceDirectory = workspace
+		if h.Environments(ref(fresh), invalid) != nil {
+			t.Fatalf("unsupported workspace accepted: %q", workspace)
+		}
+	}
+	if len(h.owners.m) != 1 {
+		t.Fatal("a refused bind created an owner")
+	}
+	if dials.Load() != 0 {
+		t.Fatal("bind performed I/O")
+	}
 }

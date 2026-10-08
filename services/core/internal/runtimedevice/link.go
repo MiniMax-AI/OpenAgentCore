@@ -1,6 +1,10 @@
 package runtimedevice
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+import (
+	"encoding/json"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+)
 
 // ServeAuthority is a live Link resource and the SHA-256 hex digest of the
 // credential that serves it.
@@ -25,6 +29,8 @@ type LinkAssignment struct {
 	// NetworkEnabled reports that the Environment's network access is
 	// enabled.
 	NetworkEnabled bool
+	// EnvironmentConfiguration is the Session's frozen Environment selection.
+	EnvironmentConfiguration json.RawMessage
 }
 
 // AgentHost is a live agent host's credential digest and revision.

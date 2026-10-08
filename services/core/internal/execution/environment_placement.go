@@ -1,83 +1,24 @@
 package execution
 
 import (
-	"bytes"
 	"encoding/json"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-type environmentPlacement struct {
-	Plugins               []agentplugin.Metadata            `json:"plugins,omitempty"`
-	Skills                []environmentconfig.SkillMetadata `json:"skills,omitempty"`
-	Type                  string                            `json:"type"`
-	ToolEnvironment       bool                              `json:"initialization,omitempty"`
-	NetworkAccess         string                            `json:"-"`
-	AllowedDomains        []string                          `json:"-"`
-	WorkspaceDirectory    string                            `json:"workspace_directory"`
-	CapabilityDirectories []string                          `json:"capability_directories"`
-}
-
 // LocalWorkspaceConfiguration recognizes the qualified stored V1 profile. It
 // does not provision a Runtime, validate live authority, or admit hosted creation.
 func LocalWorkspaceConfiguration(configuration json.RawMessage) bool {
-	placement, err := parseEnvironmentPlacement(configuration)
+	placement, err := environmentconfig.ParsePlacement(configuration)
 	return err == nil && (placement.Type == "openai_hosted" || placement.Type == "self_hosted")
 }
 
-func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacement, error) {
-	var placement environmentPlacement
-	if json.Unmarshal(configuration, &placement) != nil {
-		return placement, sessions.ErrInvalidInput
-	}
-	var local struct {
-		Plugins               []agentplugin.Metadata                  `json:"plugins,omitempty"`
-		Skills                []environmentconfig.SkillMetadata       `json:"skills,omitempty"`
-		Files                 []environmentconfig.InitialFileMetadata `json:"files"`
-		Packages              *v1.EnvironmentPackages                 `json:"packages,omitempty"`
-		Initialization        bool                                    `json:"initialization,omitempty"`
-		Type                  string                                  `json:"type"`
-		WorkspaceDirectory    string                                  `json:"workspace_directory,omitempty"`
-		CapabilityDirectories []string                                `json:"capability_directories"`
-		Network               *v1.EnvironmentNetworkInput             `json:"network"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(configuration))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&local) != nil || agentcapabilities.ValidateSourceDirectories(local.CapabilityDirectories) != nil {
-		return placement, sessions.ErrInvalidInput
-	}
-	// Placement selects a workspace; all preparation fields are shared.
-	switch placement.Type {
-	case "openai_hosted":
-		if local.WorkspaceDirectory != "" || agentcapabilities.ValidateDirectories(local.CapabilityDirectories) != nil {
-			return placement, sessions.ErrInvalidInput
-		}
-		placement.WorkspaceDirectory = "/workspace"
-	case "self_hosted":
-		if !validSelfHostedPlacement(placement) {
-			return placement, sessions.ErrInvalidInput
-		}
-	default:
-		return placement, sessions.ErrInvalidInput
-	}
-	placement.NetworkAccess = "enabled"
-	if local.Network != nil {
-		if (agentnetwork.Policy{Access: local.Network.Access, AllowedDomains: local.Network.AllowedDomains}).Validate() != nil {
-			return placement, sessions.ErrInvalidInput
-		}
-		placement.NetworkAccess, placement.AllowedDomains = local.Network.Access, append([]string(nil), local.Network.AllowedDomains...)
-	}
-	return placement, nil
-}
-
 func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, req *proto.PromptRequestPayload) error {
-	placement, err := parseEnvironmentPlacement(environment.Configuration)
+	placement, err := environmentconfig.ParsePlacement(environment.Configuration)
 	if err != nil || environment.SessionID != session.ID || environment.TenantID != session.TenantID || bound.SessionEnvironmentID != environment.ID {
 		return sessions.ErrInvalidInput
 	}
@@ -88,11 +29,6 @@ func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, envi
 		}
 		sources.Skills = append(sources.Skills, (environmentconfig.Skill{Metadata: metadata}).InstallationMetadata())
 	}
-	req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, WorkspaceDirectory: placement.WorkspaceDirectory, CapabilitySources: sources, ToolEnvironment: placement.ToolEnvironment}
+	req.LocalEnvironment = &proto.LocalEnvironment{ID: environment.ID, CapabilitySources: sources, ToolEnvironment: placement.ToolEnvironment}
 	return nil
-}
-
-func validSelfHostedPlacement(placement environmentPlacement) bool {
-	return agentcapabilities.ValidateSourceDirectories([]string{placement.WorkspaceDirectory}) == nil &&
-		agentcapabilities.ValidateSourceDirectories(placement.CapabilityDirectories) == nil
 }

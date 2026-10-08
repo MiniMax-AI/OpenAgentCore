@@ -20,7 +20,7 @@ type directoryResult struct {
 
 func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`))
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/home/user/project"}}`))
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -115,6 +115,12 @@ func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing
 		t.Fatal("wrong Session admitted", err)
 	}
 	result := startDirectoryRead(t.Context(), w, environment)
+	bind := h.read(proto.TypeAssignmentBind)
+	var binding proto.AssignmentBindPayload
+	if bind.DecodePayload(&binding) != nil || binding.EnvironmentID != environment.ID || binding.WorkspaceDirectory != "/home/user/project" {
+		t.Fatal("read did not bind the frozen workspace before preparation", binding)
+	}
+	h.assignmentFrame(bind)
 	request, read := prepareDirectoryRead(t, h, environment)
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), environment, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("second idle reader bypassed Session owner", err)
