@@ -69,10 +69,7 @@ func (q *Queries) EnrollSandbox(ctx context.Context, arg EnrollSandboxParams) (E
 
 const touchAuthenticatedDevice = `-- name: TouchAuthenticatedDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
-WHERE devices.id = $1 AND EXISTS (
-    SELECT 1 FROM runtime_device_authority a
-    WHERE a.id = devices.id AND a.credential_hash = $2
-)
+WHERE id = $1 AND revoked_at IS NULL AND credential_hash = $2
 `
 
 type TouchAuthenticatedDeviceParams struct {

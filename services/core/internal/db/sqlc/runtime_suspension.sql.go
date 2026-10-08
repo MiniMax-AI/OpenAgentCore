@@ -113,7 +113,7 @@ SET compute_phase_changed_at = CASE WHEN compute_phase = $1::text THEN compute_p
 WHERE runtime_allocations.id = $4 AND compute_revision = $5
     AND state = 'running' AND EXISTS (SELECT 1 FROM environments e WHERE e.id = runtime_allocations.environment_id AND e.initialization = 'complete')
     AND (compute_phase IN ('disabled','running') OR compute_retained_until > clock_timestamp())
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation, serve_credential_hash, serve_generation
+RETURNING id, environment_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation, serve_credential_hash, serve_generation
 `
 
 type SetRuntimeComputeParams struct {
@@ -136,7 +136,6 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 	err := row.Scan(
 		&i.ID,
 		&i.EnvironmentID,
-		&i.DeviceID,
 		&i.ProviderKey,
 		&i.State,
 		&i.CreateSettled,
