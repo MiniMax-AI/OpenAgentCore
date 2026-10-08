@@ -49,7 +49,7 @@ An unknown Create is never repeated. A Create whose connection material was lost
 
 ## Inspection and cleanup
 
-Inspection uses SDK metadata and ID reads only. SDK `connect` is never used because it can resume paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
+Inspection accepts the SDK's nullable sandbox-information domain and checks any reported domain against the configured sandbox domain. This information field never supplies connection material: Create's connection domain must match before any envd request, and restoring saved connection material repeats that check. SDK `connect` is never used because it can resume paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
 
 `CreateSettled` proves that the original Create and bootstrap can no longer mutate; it is independent of `BootstrapComplete`. An empty lookup never settles an unknown Create. Kill destroys every matching sandbox, confirms that none remains and only then records a settled tombstone; it returns `State=absent` with `CreateSettled`. A settled rejected Create with no sandbox IDs proves absence without a cloud request, so GetInfo and Kill still succeed when the key is invalid. Ordinary missing compute has no such proof.
 

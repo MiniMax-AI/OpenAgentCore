@@ -9,7 +9,8 @@ import unittest
 from unittest.mock import Mock, patch
 from uuid import uuid4
 
-from e2b import SandboxState
+from e2b import SandboxInfo, SandboxState
+from e2b.api.client.models.sandbox_detail import SandboxDetail
 from e2b.exceptions import AuthenticationException, SandboxNotFoundException
 
 from provider import Provider
@@ -47,17 +48,121 @@ class ProviderTest(unittest.TestCase):
         self.patch.start()
         self.addCleanup(self.patch.stop)
         self.runtime = patch('provider.restore', return_value=self.cloud)
-        self.runtime.start()
+        self.restore_mock = self.runtime.start()
         self.addCleanup(self.runtime.stop)
         self.command = patch('provider.run', return_value=0)
-        self.command.start()
+        self.run_mock = self.command.start()
         self.addCleanup(self.command.stop)
 
     def call(self, operation):
         return Provider(dict(self.request, Operation=operation)).execute()
 
     def record(self):
-        return json.loads(next(Path(self.temporary.name).glob('*.json')).read_text())
+        return json.loads(next(Path(self.config['StateDir']).glob('*.json')).read_text())
+
+    def sdk_info(self, **fields):
+        resources = self.config.get('Resources') or {'cpus': 2, 'memory_mib': 2048}
+        wire = dict(templateID=self.config['Template'].split(':', 1)[0], sandboxID=self.cloud.sandbox_id,
+                    clientID='fixture', startedAt=datetime.now(timezone.utc).isoformat(),
+                    endAt=self.request['Deadline'], envdVersion='0.5.0', cpuCount=resources['cpus'],
+                    memoryMB=resources['memory_mib'], diskSizeMB=4096, state='running', metadata=self.cloud.metadata,
+                    **fields)
+        return SandboxInfo._from_sandbox_detail(SandboxDetail.from_dict(wire))
+
+    def test_sdk_nullable_info_domain_allows_create_inspect_renew_and_cleanup(self):
+        self.config['Resources'] = {'cpus': 2, 'memory_mib': 2048}
+        self.api.get_info.return_value = self.sdk_info(domain=None)
+        self.assertIsNone(self.api.get_info.return_value.sandbox_domain)
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        # The SDK also maps an omitted detail domain to None.
+        self.api.get_info.return_value = self.sdk_info()
+        self.assertIsNone(self.api.get_info.return_value.sandbox_domain)
+        for operation in ('inspect', 'renew'):
+            result = self.call(operation)
+            self.assertEqual(result['ErrorCode'], '')
+            self.assertEqual(result['Info']['State'], 'running')
+            self.assertTrue(result['Info']['BootstrapComplete'])
+        self.assertEqual(self.record()['connection']['sandbox_domain'], 'e2b.app')
+        self.api.set_timeout.assert_called_once()
+        self.api.kill.side_effect = lambda *args, **kwargs: setattr(
+            self.api.get_info, 'side_effect', SandboxNotFoundException())
+        result = self.call('kill')
+        self.assertEqual(result['ErrorCode'], '')
+        self.assertEqual(result['Info']['State'], 'absent')
+        self.assertTrue(result['Info']['CreateSettled'])
+        self.api.kill.assert_called_once()
+        self.api.connect.assert_not_called()
+
+    def test_sdk_info_reported_domain_remains_checked_before_credentials(self):
+        self.api.get_info.return_value = self.sdk_info(domain='foreign.example')
+        self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
+        self.assertEqual(self.record()['status'], 'configuration_rejected')
+        self.cloud.files.write.assert_not_called()
+        self.cloud.files.read.assert_not_called()
+        self.run_mock.assert_not_called()
+
+    def test_sdk_info_foreign_domain_blocks_inspect_and_renew(self):
+        self.api.get_info.return_value = self.sdk_info(domain=None)
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.api.get_info.return_value = self.sdk_info(domain='foreign.example')
+        for operation in ('inspect', 'renew'):
+            self.assertEqual(self.call(operation)['ErrorCode'], 'ownership')
+        self.api.set_timeout.assert_not_called()
+
+    def test_sdk_null_info_does_not_relax_owner_template_or_resource_checks(self):
+        self.config['Resources'] = {'cpus': 2, 'memory_mib': 2048}
+        for field, value, error in [('metadata', {}, 'ownership'),
+                                    ('template_id', 'other-template', 'invalid'),
+                                    ('cpu_count', 1, 'invalid'), ('memory_mb', 1024, 'invalid')]:
+            with self.subTest(field=field):
+                info = self.sdk_info(domain=None)
+                setattr(info, field, value)
+                self.api.get_info.return_value = info
+                with tempfile.TemporaryDirectory() as directory:
+                    self.config['StateDir'] = directory
+                    self.assertEqual(self.call('create')['ErrorCode'], error)
+                    self.assertEqual(self.call('inspect')['ErrorCode'], error)
+                    self.assertEqual(self.call('renew')['ErrorCode'], error)
+        self.api.set_timeout.assert_not_called()
+        self.cloud.files.write.assert_not_called()
+        self.cloud.files.read.assert_not_called()
+
+    def test_nullable_info_cannot_restore_rejected_create_connection(self):
+        self.api.get_info.return_value = self.sdk_info(domain=None)
+        for domain in (None, '', 'foreign.example', 'e2b.app.foreign.example'):
+            with self.subTest(domain=domain):
+                with tempfile.TemporaryDirectory() as directory:
+                    self.config['StateDir'] = directory
+                    self.cloud.sandbox_domain = domain
+                    self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
+                    self.assertEqual(self.record()['ids'], ['owned-id'])
+                    self.assertEqual(self.call('inspect')['ErrorCode'], 'ownership')
+                    self.assertEqual(self.call('renew')['ErrorCode'], 'ownership')
+        self.api.set_timeout.assert_not_called()
+        self.cloud.files.write.assert_not_called()
+        self.cloud.files.read.assert_not_called()
+        self.run_mock.assert_not_called()
+        self.restore_mock.assert_not_called()
+
+    def test_lost_create_with_null_info_is_discovered_without_bootstrap_replay(self):
+        self.api.create.side_effect = TimeoutError()
+        self.assertEqual(self.call('create')['ErrorCode'], 'unconfirmed')
+        info = self.sdk_info(domain=None)
+        paginator = SimpleNamespace(has_next=True)
+        def next_items(**options):
+            paginator.has_next = False
+            return [info]
+        paginator.next_items = next_items
+        self.api.list.return_value = paginator
+        result = self.call('inspect')
+        self.assertEqual(result['ErrorCode'], '')
+        self.assertFalse(result['Info']['BootstrapComplete'])
+        self.assertFalse(result['Info']['CreateSettled'])
+        self.assertEqual(self.record()['ids'], [info.sandbox_id])
+        self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+        self.cloud.files.write.assert_not_called()
+        self.cloud.files.read.assert_not_called()
+        self.api.connect.assert_not_called()
 
     def test_create_recover_and_never_replay(self):
         result = self.call('create')
