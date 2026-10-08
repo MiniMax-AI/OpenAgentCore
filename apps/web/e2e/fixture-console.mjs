@@ -122,7 +122,6 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: null,
-    // Whether the console has its node installation payload, and so serves both installers.
     installers,
     // The providers whose releases Core can serve from its installation distribution.
     nodeArtifacts: artifacts.split(",").filter(Boolean),
@@ -632,7 +631,6 @@ http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${port}`);
   try {
     if (url.pathname.startsWith("/__fixture/")) return await fixtureRoute(request, response, url);
-    // The console service serves its distribution manifest to anyone, as nodes download it.
     if (request.headers.authorization) state.violations.push(`Authorization header on ${request.method} ${url.pathname}`);
     if (url.pathname.startsWith("/console/")) return await consoleRoute(request, response, url);
     const signedIn = state.auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE);
