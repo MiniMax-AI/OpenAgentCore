@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -110,7 +111,9 @@ func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
 	if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(future.Deadline) {
 		t.Fatal("future input changed", got, err)
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 	stop()
+	awaitRelease()
 	makeEnvironmentExpiryDue(t, s.pool, &future)
 	_, stop = startEnvironmentExpiryWorker(t, s, d)
 	waitEnvironmentExpiry(t, s, futureTenant, future)
