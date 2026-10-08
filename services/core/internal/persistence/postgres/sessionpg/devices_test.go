@@ -15,12 +15,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// newAgentHost stores an agent host of tenant, or of none when tenant is not
-// valid, and returns its ID.
-func newAgentHost(t *testing.T, pool *pgxpool.Pool, tenant pgtype.UUID) string {
+// newAgentHost stores a deployment agent host and returns its ID.
+func newAgentHost(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 	id := uuid.NewString()
-	exec(t, pool, `INSERT INTO devices(id, tenant_id, name, credential_hash, agent_host) VALUES ($1, $2, 'agent host', $3, true)`, id, tenant, strings.Repeat("a", 64))
+	exec(t, pool, `INSERT INTO devices(id, name, credential_hash) VALUES ($1, 'agent host', $2)`, id, strings.Repeat("a", 64))
 	return id
 }
 
@@ -50,20 +49,15 @@ func TestBindSessionDeviceTranslatesTheBindingOutcome(t *testing.T) {
 	}
 	tenantID, sessionID, environmentID := newEnvironment(t, pool, "self_hosted", "pending")
 	tenant, session := uuidText(tenantID), uuidText(sessionID)
-	otherTenant, _, _ := newEnvironment(t, pool, "self_hosted", "pending")
-	device, replacement := newAgentHost(t, pool, pgtype.UUID{}), newAgentHost(t, pool, tenantID)
-	revoked := newAgentHost(t, pool, pgtype.UUID{})
+	device, replacement := newAgentHost(t, pool), newAgentHost(t, pool)
+	revoked := newAgentHost(t, pool)
 	exec(t, pool, `UPDATE devices SET revoked_at = clock_timestamp() WHERE id = $1`, revoked)
-	tenantDevice := uuid.NewString()
-	exec(t, pool, `INSERT INTO devices(id, tenant_id, name, credential_hash) VALUES ($1, $2, 'runtime', $3)`, tenantDevice, tenantID, strings.Repeat("a", 64))
 
 	for name, test := range map[string]struct {
 		device string
 		want   error
 	}{
-		"another tenant's agent host":         {newAgentHost(t, pool, otherTenant), sessions.ErrNotFound},
 		"revoked agent host":                  {revoked, sessions.ErrNotFound},
-		"device that is no agent host":        {tenantDevice, sessions.ErrNotFound},
 		"malformed device":                    {"device", sessions.ErrInvalidInput},
 		"Environment without a live resource": {device, sessions.ErrDeviceBindingConflict},
 	} {

@@ -38,9 +38,8 @@ type DeviceReader interface {
 	// once its Environment preparation completed; before that, and without an
 	// authorized bound device, it is ErrNotFound.
 	GetSessionExecutionBinding(ctx context.Context, tenant, session string) (ExecutionBinding, error)
-	// ListAgentHosts lists the unrevoked agent hosts that may run the
-	// tenant's Sessions, in ID order.
-	ListAgentHosts(ctx context.Context, tenant string) ([]ExecutionDevice, error)
+	// ListAgentHosts lists the deployment's unrevoked agent hosts in ID order.
+	ListAgentHosts(ctx context.Context) ([]ExecutionDevice, error)
 }
 
 // DeviceStorage stores Runtime devices.

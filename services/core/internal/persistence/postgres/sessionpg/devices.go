@@ -62,11 +62,7 @@ func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup Lookup) err
 	return err
 }
 
-func (s *Store) ListAgentHosts(ctx context.Context, tenant string) ([]sessions.ExecutionDevice, error) {
-	_, err := parseID(tenant)
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) ListAgentHosts(ctx context.Context) ([]sessions.ExecutionDevice, error) {
 	rows, err := s.units.Queries().ListAgentHosts(ctx)
 	if err != nil {
 		return nil, err
