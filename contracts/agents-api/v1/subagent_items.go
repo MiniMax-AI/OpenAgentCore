@@ -7,8 +7,9 @@ import (
 
 // MarshalJSON renders the wire shape, which is also the stored encoding.
 // Messages always carry content and a nullable phase, function results a
-// nullable output and error, and web search a nullable action. Coordination
-// and reasoning variants keep their required fields and nulls.
+// nullable output and error, commands a nullable cwd, output, exit code and
+// duration, and web search a nullable action. Coordination and reasoning
+// variants keep their required fields and nulls.
 func (i Item) MarshalJSON() ([]byte, error) {
 	type wire Item
 	switch i.Type {
@@ -26,6 +27,14 @@ func (i Item) MarshalJSON() ([]byte, error) {
 			Phase   *string       `json:"phase"`
 			Content []ItemContent `json:"content"`
 		}{wire(i), phase, content})
+	case "command_execution":
+		return json.Marshal(struct {
+			wire
+			Cwd        *string `json:"cwd"`
+			Output     any     `json:"output"`
+			ExitCode   *int64  `json:"exit_code"`
+			DurationMS *int64  `json:"duration_ms"`
+		}{wire(i), i.Cwd, i.Output, i.ExitCode, i.DurationMS})
 	case "web_search_call":
 		return json.Marshal(struct {
 			wire

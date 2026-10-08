@@ -89,6 +89,29 @@ class PublicAPITests(unittest.TestCase):
         self.assertEqual(generator.field_type({}, {'type': 'array', 'items': {'type': 'string'}}, True, {}), '[]string')
         self.assertEqual(generator.go_type({}, {'oneOf': [{'type': 'string'}, {'type': 'integer'}]}, {}), 'json.RawMessage')
 
+    def test_generated_client_types_are_current(self):
+        actual = generator.ts_module(self.public['components']['schemas'], 'contracts/agents-api/openapi.yaml')
+        self.assertEqual(actual, generator.CLIENT_TYPES.read_bytes())
+
+    def test_client_types_project_values_fields_and_unions(self):
+        ref = '#/components/schemas/'
+        generated = generator.ts_module({
+            'Color': {'type': 'string', 'enum': ['red', 'blue']},
+            'Paint': {'type': 'object', 'required': ['type', 'color'], 'properties': {
+                'type': {'type': 'string', 'enum': ['paint']}, 'color': {'$ref': ref + 'Color'}, 'note': {'type': ['string', 'null']},
+                'shade': {'allOf': [{'$ref': '#/definitions/Color'}], 'x-nullable': True},
+            }},
+            'Item': {'oneOf': [{'$ref': ref + 'Paint'}], 'discriminator': {'propertyName': 'type', 'mapping': {'paint': ref + 'Paint'}}},
+        }, 'test').decode()
+        for line in (
+            'export const colorValues = ["red", "blue"] as const;', 'export type Color = (typeof colorValues)[number];',
+            '  color: Color;', '  note?: string | null;', '  shade?: Color | null;',
+            'export const paintFields = ["type", "color", "note", "shade"] as const;',
+            'export const paintRequired = ["type", "color"] as const;', 'export type Item = Paint;',
+            'export const itemFields = {\n  "paint": paintFields,\n} as const;',
+        ):
+            self.assertIn(line, generated)
+
     def test_every_public_reference_resolves_and_no_other_apis_leak(self):
         self.assertEqual({p.split('/')[1] for p in self.public['paths']}, {'agents', 'vaults', 'files', 'skills'})
         generator.prune_components(copy.deepcopy(self.public))

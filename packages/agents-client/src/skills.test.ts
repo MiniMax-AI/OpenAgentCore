@@ -171,13 +171,13 @@ describe("Skill response validation", () => {
       json({ ...list, object: "page" }),
       json({ ...list, next: null }),
       json(list),
-      json({ object: "list", data: [], has_more: true }),
+      json({ object: "list", data: [], first_id: null, last_id: null, has_more: true }),
     );
     for (let index = 0; index < 6; index += 1) {
       await expect(client.listSkillVersions(skillId)).rejects.toMatchObject({ code: "invalid_skill_resource" });
     }
     await expect(client.listSkillVersions(skillId, { limit: 1 })).rejects.toMatchObject({ code: "invalid_skill_resource" });
-    // Limit 0 reports only whether entries follow; first_id/last_id are optional.
+    // Limit 0 reports only whether entries follow.
     await expect(client.listSkillVersions(skillId, { limit: 0 })).resolves.toMatchObject({ data: [], has_more: true, first_id: null });
   });
 
@@ -202,10 +202,6 @@ describe("Skill response validation", () => {
 describe("Skill request validation", () => {
   it("rejects invalid query parameters and identifiers before sending", async () => {
     const { client, calls } = clientFor();
-    await expect(client.listSkills({ limit: 101 })).rejects.toThrow(TypeError);
-    await expect(client.listSkills({ limit: -1 })).rejects.toThrow(TypeError);
-    await expect(client.listSkills({ limit: 1.5 })).rejects.toThrow(TypeError);
-    await expect(client.listSkills({ order: "" as "asc" })).rejects.toThrow("asc or desc");
     await expect(client.listSkills({ after: "skillver_1" })).rejects.toThrow("cursor");
     await expect(client.listSkillVersions(skillId, { after: "2" })).rejects.toThrow("cursor");
     await expect(client.listSkillVersions(skillId, { after: skillId })).rejects.toThrow("cursor");
@@ -242,9 +238,7 @@ describe("Skill request validation", () => {
   it("rejects unsafe folder uploads before sending", async () => {
     const { client, calls } = clientFor();
     const file = new Blob(["x"]);
-    const tooMany = Array.from({ length: 501 }, (_, index) => ({ path: `report/${index}.txt`, file }));
     await expect(client.uploadSkill({ kind: "directory", files: [] })).rejects.toThrow(TypeError);
-    await expect(client.uploadSkill({ kind: "directory", files: tooMany })).rejects.toThrow("500");
     await expect(client.uploadSkill({ kind: "directory", files: [{ path: "report/../x", file }] })).rejects.toThrow(TypeError);
     await expect(client.uploadSkill({ kind: "directory", files: [{ path: "report\\SKILL.md", file }] })).rejects.toThrow(TypeError);
     await expect(client.uploadSkill({

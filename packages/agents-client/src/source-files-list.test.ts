@@ -96,17 +96,10 @@ describe("Files list", () => {
     await expect(client.listSourceFiles({ limit: 2 })).rejects.toBeInstanceOf(AgentCoreError);
   });
 
-  it.each([
-    [{ limit: 0 }],
-    [{ limit: 10001 }],
-    [{ limit: 1.5 }],
-    [{ order: "newest" }],
-    [{ after: "notes.txt" }],
-    [{ purpose: "assistants" }],
-  ])("refuses %j before any request", async (options) => {
+  it("refuses a cursor that is not a File ID before any request", async () => {
     const { client, calls } = recordingClient(responses.list_empty);
 
-    await expect(client.listSourceFiles(options as never)).rejects.toBeInstanceOf(TypeError);
+    await expect(client.listSourceFiles({ after: "notes.txt" })).rejects.toBeInstanceOf(TypeError);
     expect(calls).toHaveLength(0);
   });
 

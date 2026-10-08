@@ -20,10 +20,11 @@ Every constructor also takes `baseUrl` and `fetch`. A token may be a string or a
 
 Behavior shared by the clients:
 
+- **Generated types.** `make openapi` generates `src/generated/public-api.ts` from the [public schema](../../contracts/agents-api/openapi.yaml): each schema's type, each enum's values and each object's field names. `types.ts` builds on the types and the validators read the value and field lists; `make check-openapi` rejects a stale copy, so change the schema and regenerate instead of editing the file.
 - **Strict responses.** Session, history, event, Environment and Core API responses are checked against their pinned shapes before they are returned. A malformed one throws `AgentCoreError` with status 502 and a code such as `invalid_session_resource` or `invalid_admin_response` (`CoreMetricsClient`: status 0, `invalid_response`) instead of passing on a guessed value. Agent responses are typed but not checked at run time.
-- **Errors.** A non-2xx response throws `AgentCoreError` with `status`, `code`, `param`, `errorType` and, from the Core API, the optional `details` of the [Core error envelope](../../contracts/agents-api/core-errors.md). Invalid caller input throws `TypeError` before any request.
+- **Errors.** A non-2xx response throws `AgentCoreError` with `status`, `code`, `param`, `errorType` and, from the Core API, the optional `details` of the [Core error envelope](../../contracts/agents-api/core-errors.md). Input the client cannot send, such as a malformed resource ID, throws `TypeError` before any request; Core enforces size, count and range limits.
 - **No retries or timeouts.** No client retries a request. Pass `signal` to cancel one.
-- **Idempotency.** `createSession` takes an idempotency key and generates one when omitted; pass your own to retry a creation safely. `sendMessage`, `submitEvents`, `cancelTurn` and `submitFunctionResult` require a key of at most 128 bytes. `createIdempotencyKey()` makes one.
+- **Idempotency.** `createSession` takes an idempotency key and generates one when omitted; pass your own to retry a creation safely. `sendMessage`, `submitEvents`, `cancelTurn` and `submitFunctionResult` require one. `createIdempotencyKey()` makes one.
 - **Streams.** `streamEvents` and `createSessionStream` decode the live event stream with `createSSEDecoder` and validate each event. Recover missed events with ordinary reads; the decoder does not resume with `Last-Event-ID`.
 
 ### Saved Agent and deployment defaults

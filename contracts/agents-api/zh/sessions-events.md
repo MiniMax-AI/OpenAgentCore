@@ -1,7 +1,7 @@
 ---
 title: "会话、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 93ace7d112cbc671039624ec9c999addce715bb08036a50246442a9e14549021
+source_hash: f37a947b5ae72b98b0da76da02fb13bb02ef6c346d3bf4b7830848c1196a2675
 ---
 
 本契约涵盖会话（Session）内部发生的事情：发送输入、实时事件流，以及读取轮次（Turn）、条目（Item）和使用量的持久化历史。会话资源本身（创建配置、重试标识、更新、列出和删除）见 [Core 线协议行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -101,7 +101,7 @@ Turn 失败后会话仍可使用：新输入会启动一个新 Turn。后来预�
 
 ### 事件规则 {#event-rules}
 
-- 会话事件携带 `event_id`、`type`，以及该次状态转换时的 `session` 快照。Turn 事件携带 `session_id` 和 `turn_id`。不存在 Turn `waiting` 事件。
+- 会话事件携带 `event_id`、`type`，以及该次状态转换时的 `session` 快照。Turn 事件携带 `session_id` 和 `turn_id`；环境（Environment）事件携带 `session_id` 和值为 null 的 `turn_id`。不存在 Turn `waiting` 事件。
 - 新 Turn 会在一个事务中依次发布 `agent.session.turn.created`、用户条目的 `item.added`、`agent.session.in_progress`，然后发布 `agent.session.turn.in_progress`。当一个批次包含多条消息时，后续消息对应的条目事件会排在会话活动之后。
 - Turn 终止事件（`completed`、`failed`、`cancelled`）携带顶层的 `usage`，其值复制自当时的 Turn 快照；未知时为 null。其他事件省略此字段。
 - `item.added` 和 `item.done` 始终携带 `output_index`；输入 Item 的该值为 null。函数结果只发出 `item.added`；`item.done` 用于代理输出。
@@ -125,7 +125,7 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `mcp_call` | 服务器和工具标识、参数、结构化结果或错误 |
 | `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。原生文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
 | `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`） |
-| `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以缺失或为 null |
+| `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以为 null |
 
 工具失败不会导致其 Turn 失败。会话的 Project 可以读取工具输出，其中可能包含该工具自己的诊断文本。
 
@@ -152,5 +152,3 @@ Turn 和会话的 `usage` 使用固定的 `TokenUsage` 字段：输入、缓存�
 会话读取和列表操作会返回同一个会话，正在等待 Environment 的输入也会在同一快照中结算为失败。GET 流和创建流会在 `agent.session.failed` 之后结束。新输入会返回 409（[输入错误](#input-errors)）；该会话可以被删除。
 
 [Environment 初始化契约](environments.md#initialization-state-and-failure)定义了固定的失败原因。
-
-Core 自身的 `stream_interrupted` 错误事件携带 `type`、`code` 和 `message`，但不携带 `param`；与官方错误事件结构相同的 `error` 事件会携带 `param: null`。

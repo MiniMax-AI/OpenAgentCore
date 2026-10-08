@@ -211,7 +211,7 @@ describe("AdminClient response contracts", () => {
   });
 
   it("reuses Session identity and state validation", async () => {
-    const agent = { id: "a", model: "model", name: null, instructions: null, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: {}, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [] };
+    const agent = { id: "a", model: "model", name: null, instructions: null, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [] };
     const session = { id: sessionId, object: "agent.session", agent, environment: { type: "none" }, status: "idle", error: null, metadata: {}, required_actions: [], vault_ids: [], usage: null, created_at: 1, last_active_at: 1 };
     expect(await clientWith(session).client.retrieveSession(projectId, sessionId)).toEqual(session);
     await expect(clientWith(session).client.retrieveSession(projectId, resourceId)).rejects.toBeInstanceOf(AgentCoreError);
