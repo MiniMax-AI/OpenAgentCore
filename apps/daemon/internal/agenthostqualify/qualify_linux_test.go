@@ -153,6 +153,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 	code, _ := rand.Int(rand.Reader, big.NewInt(90))
 	exit := code.Int64() + 3
 	prompt := "Use your tools for each step.\n" +
+		"QUALIFY_VALUE and QUALIFY_EXIT are already set in the sandbox environment. Do not assign or modify either variable.\n" +
 		"1. Create the file " + name + " in the current directory with exactly this content: " + content + "\n" +
 		"2. Run this shell command exactly once: echo \"$QUALIFY_VALUE\"; exit \"$QUALIFY_EXIT\"\n" +
 		"   It prints a value and exits with a non-zero status; that is expected.\n" +
