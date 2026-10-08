@@ -250,12 +250,15 @@ class DistributionTests(unittest.TestCase):
         config, manifest, other = ("sha256:" + digit * 64 for digit in "123")
         metadata = self.stage / "build.json"
         both = {"containerimage.config.digest": config, "containerimage.digest": manifest}
-        # Classic stores resolve the config digest, containerd stores the manifest digest. A digest
-        # resolving to another image, or metadata without a config digest, identifies nothing.
+        # Classic stores resolve the config digest, containerd stores the manifest digest.
+        # A digest resolving to another image identifies nothing.
         cases = ((dict(both, **{"containerimage.digest": config}), {config: config}, config),
+                 ({"containerimage.config.digest": config}, {config: config}, config),
+                 (both, {config: config}, config),
                  (both, {manifest: manifest}, manifest),
+                 (both, {config: config, manifest: manifest}, "does not identify"),
                  (both, {config: other}, "does not identify"),
-                 ({"containerimage.digest": manifest}, {manifest: manifest}, "lacks valid image digests"))
+                 ({"containerimage.digest": manifest}, {manifest: manifest}, manifest))
         for build, store, expected in cases:
             with self.subTest(build=build, store=store):
                 metadata.write_text(json.dumps(build))
@@ -272,6 +275,50 @@ class DistributionTests(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError, expected):
                             distribution.built_image(metadata)
                         verify.assert_not_called()
+
+    def test_manifest_only_metadata_requires_the_exact_loaded_linux_image(self):
+        manifest, other = ("sha256:" + digit * 64 for digit in "12")
+        metadata = self.stage / "build.json"
+        metadata.write_text(json.dumps({"containerimage.digest": manifest}))
+        correct = {"Id": manifest, "Os": "linux", "Architecture": "amd64"}
+        for details in (correct, dict(correct, Id=other), dict(correct, Os="windows"),
+                        dict(correct, Architecture="arm64")):
+            with self.subTest(details=details), \
+                    mock.patch.object(distribution.subprocess, "check_output", return_value=json.dumps([details])) as inspect, \
+                    mock.patch("builtins.print") as output:
+                if details == correct:
+                    distribution.built_image(metadata)
+                    output.assert_called_once_with(manifest)
+                else:
+                    with self.assertRaisesRegex(ValueError, "selected Linux architecture"):
+                        distribution.built_image(metadata)
+                    output.assert_not_called()
+                inspect.assert_called_once_with(["docker", "image", "inspect", manifest], text=True)
+        with mock.patch.object(distribution.subprocess, "check_output",
+                               side_effect=subprocess.CalledProcessError(1, "docker")), \
+                mock.patch("builtins.print") as output:
+            with self.assertRaises(subprocess.CalledProcessError):
+                distribution.built_image(metadata)
+            output.assert_not_called()
+
+    def test_missing_config_does_not_accept_invalid_digests(self):
+        metadata = self.stage / "build.json"
+        manifest = "sha256:" + "1" * 64
+        cases = [{}]
+        for invalid in (None, "", "image:latest", "sha256:123", 123, {}):
+            cases.append({"containerimage.digest": invalid})
+            cases.append({"containerimage.digest": manifest, "containerimage.config.digest": invalid})
+        for build in cases:
+            with self.subTest(build=build), \
+                    mock.patch.object(distribution.subprocess, "run") as resolve, \
+                    mock.patch.object(distribution.subprocess, "check_output") as inspect, \
+                    mock.patch("builtins.print") as output:
+                metadata.write_text(json.dumps(build))
+                with self.assertRaisesRegex(ValueError, "lacks valid image digests"):
+                    distribution.built_image(metadata)
+                resolve.assert_not_called()
+                inspect.assert_not_called()
+                output.assert_not_called()
 
     def test_containerd_build_ids_still_publish_archive_config_ids(self):
         for name, identity in self.identities.items():
