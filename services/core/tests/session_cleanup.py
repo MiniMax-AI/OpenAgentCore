@@ -36,4 +36,4 @@ def delete_session(sessions, session_id, timeout=60):
     except Exception as exc:
         if original is None:
             raise
-        print(f"Session {session_id} cleanup failed after an earlier error: {exc!r}", file=sys.stderr)
+        print(f"Session {session_id} cleanup failed after an earlier error: {type(exc).__name__}", file=sys.stderr)

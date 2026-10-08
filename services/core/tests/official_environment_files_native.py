@@ -1,8 +1,4 @@
-"""Opt-in live check; stdin supplies engine, base and two tenants with session_id and token_file/token_env.
-
-Optional directory_reader is "local" (default, a local workspace binding) or, for
-claude_sdk only, "claude_sdk_adapter" for a daemon without that binding.
-"""
+"""Opt-in live check; stdin supplies engine, base and two tenants with session_id and token_file/token_env."""
 
 import importlib.metadata
 import json
@@ -52,11 +48,13 @@ def generate_files(client, session_id, label):
     workspace = PurePosixPath(session.environment.workspace_directory)
     assert workspace.is_absolute(), "Absolute workspace required"
     assert client.beta.agents.environments.retrieve(environment_id).status == "connected", "Connect the Environment first"
-    directory = str(workspace / ("files-list-" + label + "-" + uuid.uuid4().hex))
+    name = "files-list-" + label + "-" + uuid.uuid4().hex
+    directory = str(workspace / name)
+    public_directory = "/workspace/" + name
     contents = {"A.txt": "A\n", "a-b.txt": "three\n", "a.txt": "fourteen-bytes\n", "z.txt": "last\n"}
-    expected = {directory + "/" + name: len(content.encode()) for name, content in contents.items()}
+    expected = {public_directory + "/" + name: len(content.encode()) for name, content in contents.items()}
     sibling = directory + "-sibling"
-    sibling_expected = {sibling + "/one.txt": 3, sibling + "/two.txt": 3}
+    sibling_expected = {public_directory + "-sibling/one.txt": 3, public_directory + "-sibling/two.txt": 3}
     command = "mkdir -- " + shlex.quote(directory) + " " + shlex.quote(sibling)
     for name, content in contents.items():
         command += " && printf %s " + shlex.quote(content) + " > " + shlex.quote(directory + "/" + name)
@@ -74,17 +72,16 @@ def generate_files(client, session_id, label):
             assert turns[0].status not in ("failed", "cancelled"), "File generation Turn failed"
             if turns[0].status == "completed" and sessions.retrieve(session_id).status == "idle":
                 return {"session_id": session_id, "environment_id": environment_id, "turn_id": turns[0].id,
-                        "directory": directory, "expected": expected,
-                        "sibling_directory": sibling, "sibling_expected": sibling_expected}
+                        "directory": public_directory, "expected": expected,
+                        "sibling_directory": public_directory + "-sibling", "sibling_expected": sibling_expected}
         time.sleep(0.2)
     raise AssertionError("File generation Turn did not complete")
 
 
 def main():
     settings = json.load(sys.stdin)
-    assert settings["engine"] in ("codex", "claude_sdk"), "Select one qualified native engine"
-    reader = settings.get("directory_reader", "local")
-    assert reader == "local" or (reader == "claude_sdk_adapter" and settings["engine"] == "claude_sdk"), "Unsupported directory reader"
+    assert settings["engine"] in ("codex", "claude_sdk", "mcode"), "Select one qualified native engine"
+    assert "directory_reader" not in settings, "Files are served by the Environment owner"
     assert len(settings["tenants"]) == 2, "Two independent tenant Sessions are required"
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
     distribution = importlib.metadata.distribution("openai")
@@ -107,12 +104,12 @@ def main():
                 client, http, fixture["environment_id"], fixture["sibling_directory"], fixture["sibling_expected"])
             fixture["wire_rows"] = verify_file_list_rows(client, http, fixture["environment_id"], {
                 "directory": fixture["directory"], "missing": fixture["directory"] + "-missing",
-                "file": next(iter(fixture["expected"]))}, empty_pages=reader == "local")
+                "file": next(iter(fixture["expected"]))}, empty_pages=True)
             verify_file_tenant_isolation(client, clients[1 - index], http, fixture["environment_id"],
                                         fixture["directory"], page, fixture["expected"] | fixture["sibling_expected"])
             assert [turn.to_dict() for turn in client.beta.agents.sessions.turns.list(fixture["session_id"])] == before, "Files.list changed Turns"
             fixture["cross_tenant_denied"] = True
-    proof = {"engine": settings["engine"], "directory_reader": reader, "sdk_version": distribution.version, "sdk_commit": pin["commit"],
+    proof = {"engine": settings["engine"], "sdk_version": distribution.version, "sdk_commit": pin["commit"],
              "scope": "Public input-generated flat files, SDK/raw listing, sorting, pagination and two-tenant isolation",
              "fixtures": generated, "unverified": UNVERIFIED}
     serialized = json.dumps(proof, indent=2)

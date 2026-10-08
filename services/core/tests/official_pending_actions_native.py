@@ -1,4 +1,4 @@
-"""Real hosted function-action recovery through the pinned SDK and public HTTP."""
+"""Real function-action recovery through the pinned SDK and public HTTP."""
 
 import importlib.metadata
 import json
@@ -8,7 +8,7 @@ import uuid
 from session_cleanup import delete_session
 
 
-def verify_pending_actions(client, foreign, http, model, evidence):
+def verify_pending_actions(client, foreign, http, agent_options, session_options, ready, record):
     """The private runner supplies an isolated Core/native provider deployment."""
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
     distribution = importlib.metadata.distribution("openai")
@@ -21,7 +21,7 @@ def verify_pending_actions(client, foreign, http, model, evidence):
     proof = {"sdk": pin, "checks": [], "rounds": [], "passed": False}
     created = []
     marker = "pending-value-" + uuid.uuid4().hex
-    agent = {"model": model, "instructions": "Call lookup exactly once when asked. Never retry a failed tool call. Use no other tools.", "tools": [{
+    agent = {**agent_options, "instructions": "Call lookup exactly once when asked. Never retry a failed tool call. Use no other tools.", "tools": [{
         "type": "function", "name": "lookup", "description": "Retrieve the requested test value.",
         "parameters": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"], "additionalProperties": False},
     }]}
@@ -57,10 +57,12 @@ def verify_pending_actions(client, foreign, http, model, evidence):
         return {"request": key, "status": response.status_code}
 
     try:
-        session = sessions.create(agent=agent, environment={"type": "openai_hosted"})
+        session = sessions.create(agent=agent, **session_options)
         created.append(session.id)
-        other = sessions.create(agent=agent, environment={"type": "openai_hosted"})
+        ready(session)
+        other = sessions.create(agent=agent, **session_options)
         created.append(other.id)
+        ready(other)
         proof.update(session=session.id, other_session=other.id)
         for index, mode in enumerate(("success", "error", "cancel")):
             current = {"mode": mode, "before_disconnect": [], "after_reconnect": [], "refusals": []}
@@ -172,6 +174,6 @@ def verify_pending_actions(client, foreign, http, model, evidence):
         proof["passed"] = True
         return proof["checks"]
     finally:
-        Path(evidence).write_text(json.dumps(proof, indent=2))
+        record(proof)
         for sid in reversed(created):
             delete_session(sessions, sid)

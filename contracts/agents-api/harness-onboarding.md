@@ -208,6 +208,34 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 | MiniMax native history binding | `mcode/session_test.go` |
 | Explicit refusals without native effects or fabricated results | `mcode/unsupported_test.go` |
 
+## Qualify the public path
+
+`services/core/tests/qualify_public_native.py` runs the pinned official SDK and raw HTTP assertions against an already installed, isolated Core deployment with its real agent host. It creates and deletes its own Sessions and uses the selected real model; it does not provision a deployment or replace the executor. Set `OPENAI_BASE_URL` to the deployment's `/v1` endpoint and `OPENAI_API_KEY` to its Project key. Supply a second Project's key in a private file. [Installation](../../docs/getting-started/install.md) owns deployment setup; [Projects and keys](./admin-api.md#projects-and-keys) owns credential issuance.
+
+The private settings JSON has exactly `agent`, `model_provider` and `environment`. `agent` contains `model` and an explicit `x_agents_core.harness`, with optional `harness_config` inside that extension. `model_provider` is the complete [provider bundle](./model-execution.md#session-override); `environment` is the public Session Environment input. Keep settings and foreign-key files absolute and mode 0600, outside the repository. Evidence must be a new absolute path under `~/.oac`; it contains public responses and check names, never the settings. The runner refuses to write evidence containing any of its three supplied credentials.
+
+```bash
+python services/core/tests/qualify_public_native.py \
+  --settings "$HOME/.oac/qualification/codex-none.json" \
+  --foreign-key-file "$HOME/.oac/qualification/foreign-project.key" \
+  --suite none \
+  --evidence "$HOME/.oac/qualification/codex-none-result.json"
+```
+
+| Suite | Operations | Placement |
+| --- | --- | --- |
+| `none` | Creation retry, foreign history rejection, two native text Turns, history recall, SSE ordering and SDK/raw Item and Turn parity | `none` |
+| `pending-actions` | Query/reconnect pending calls, success/error results, cancellation, exact target rejection, retries and durable Items | Any declared placement with function tools |
+| `functions` | SDK handlers, success/error, native file and Artifact bytes, continuation, pending cancellation and tenant isolation | Workspace |
+| `images` | Initial and active images, image results, retry/atomic rejection, native files/Artifacts, isolation and continuation | Workspace with declared image and function support |
+| `structured` | Saved and inline schema, function-assisted native files, exact JSON/SSE, cancellation and text override | Workspace with declared structured output and function support |
+
+For `self_hosted`, choose a custom absolute `workspace_directory`. When the runner prints each new Session ID, connect a separate isolated machine or container using that Session's public installation command; the runner waits up to five minutes. Multiple Sessions must not share a workspace. Use the existing Environment setup, package and capability assertions separately to qualify preparation semantics. The separate `official_environment_files_native.py` check accepts two already connected self-hosted Sessions and checks Files.list sorting, pagination and isolation through the Environment owner.
+
+Warm continuation is the default and records cold recovery as `unverified`. To qualify cold continuation, additionally pass `--compose-directory` with the owned installation's absolute directory and `--compose-project` with its exact project name. The runner restarts only that project's `agent-host`, confirms its container start time changed, and then runs the unchanged history assertions. This does not qualify a Core restart or a sandbox checkpoint restore. The `pending-actions` suite reconnects the public client, not the agent-host process, and rejects those restart options. Select cold recovery only where the [declaration and coverage ledger](./index.md#known-gaps) support it; unsupported recovery remains a gap, never a successful skipped check. An API rejection fails the selected suite.
+
+Run `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py` with the pinned SDK to check credential handling and the owned restart boundary without a model. Existing deterministic Core integration tests remain the authority for schema validation, atomic admission, durable receipts and rejection semantics. Real-model results qualify only the selected suite, protocol, Harness and placement. Provider lifecycle, native identity, credential isolation, deferred discovery and unselected suites need separate evidence; view-only results do not qualify the public path.
+
 ## Native installer participation
 
 An adapter supplies `agent.Installation` from `installation.go` in its own package: its registered kind and activation environment. The agent host uses this declaration to activate the packaged Harness. Adapters own native layout; validate the packaged content and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
