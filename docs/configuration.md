@@ -112,7 +112,7 @@ The initialization service generates secrets and the installation ID once, then 
 | `secrets/core/` | Credential encryption key, installation ID and Core key digest | Core |
 | `secrets/web/` | Generated Core sign-in key | Web |
 | `secrets/agent-host/` | `identity.json`, the [agent host's identity](#agent-host-container) | Core and the agent host |
-| `state/` | Private Provider state, mounted in Core at `/state`. Each adapter owns a subdirectory; E2B uses `e2b/`, with no group or other access | Core |
+| `state/` | Private Provider state, mounted in Core at `/state`. Each adapter creates and owns its subdirectory; E2B uses `e2b/`, with no group or other access | Core |
 | `agent-host/` | The [agent host's state directory](#agent-host-container) | The agent host; initialization checks whether it is empty |
 | `node-payload/` | Verified node installation metadata, mounted read-only at `/opt/oac/node-payload` | Core |
 

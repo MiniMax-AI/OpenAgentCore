@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 93f76a4b608e08bb4c4a9f215b2c9802015d9c0782c19403e1f31ba0ea5e3633
+source_hash: 50bb9c230b1f4a8b0531932cc0ba6bb41fdd465ab5594d6164e78d2bd3481995
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -116,7 +116,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `secrets/core/` | 凭据加密密钥、安装 ID 和 Core 密钥摘要 | Core |
 | `secrets/web/` | 生成的 Core 登录密钥 | Web |
 | `secrets/agent-host/` | `identity.json`，即 [agent host 的身份](#agent-host-container) | Core 和 agent host |
-| `state/` | 私有 Provider 状态，在 Core 中挂载到 `/state`。每个适配器拥有一个子目录；E2B 使用 `e2b/`，不允许组或其他用户访问 | Core |
+| `state/` | 私有 Provider 状态，在 Core 中挂载到 `/state`。每个适配器创建并拥有自己的子目录；E2B 使用 `e2b/`，不允许组或其他用户访问 | Core |
 | `agent-host/` | [agent host 的状态目录](#agent-host-container) | agent host；初始化时检查它是否为空 |
 | `node-payload/` | 已验证的节点安装元数据，只读挂载于 `/opt/oac/node-payload` | Core |
 
