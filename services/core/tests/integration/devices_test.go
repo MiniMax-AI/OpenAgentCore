@@ -81,6 +81,9 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if _, err := sessionAdapter(s).GetSessionDevice(ctx, otherTenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign lookup: %v", err)
 	}
+	if err := execution.BindSessionDevice(ctx, otherTenant, otherSession.ID, a.ID); err != nil {
+		t.Fatal("deployment host could not serve another tenant", err)
+	}
 	if err := lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 	for _, action := range []string{"cancel", "expire", "delete", "prepare-failure", "disconnect"} {
 		t.Run(action, func(t *testing.T) {
 			h, pending := preparedDispatchHarness(t)
-			_, pool := testStore(t)
+			pool := h.s.pool
 			result := runPreparedDispatch(h, t.Context(), pending)
 			frame := h.read(proto.TypeExecutionPrepare)
 			handle := acknowledgePreparation(h, frame.ID)
