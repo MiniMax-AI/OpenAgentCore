@@ -12,8 +12,7 @@ import (
 )
 
 func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	old := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	worker, stop := managedWorker(t, s, key, old)
 	tenant, _, environment := managedSession(t, s)
@@ -23,15 +22,9 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	}
 	stop()
 	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	start := func(runtimes *execution.RuntimeProvider) error {
-		_, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
-		return err
-	}
-	if err := start(webRuntimes(t, s, uuid.NewString(), replacement, nil)); !errors.Is(err, deployment.ErrConflict) {
+	_, err = startNextWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: webRuntimes(t, s, uuid.NewString(), replacement, nil)})
+	if !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("startup switched the claimed installation", err)
-	}
-	if err := start(nil); !errors.Is(err, deployment.ErrConflict) {
-		t.Fatal("startup without runtimes abandoned the claimed deployment", err)
 	}
 	if replacement.creates != 0 || replacement.kills != 0 {
 		t.Fatal("rejected startup touched new backend")

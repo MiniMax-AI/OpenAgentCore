@@ -1,21 +1,17 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
 func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
-	st := NewWithCredentialCipher(pool, cipher)
+	st, _ := configuredStore(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "catalog-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	handler, err := publicHandler(t, st, auth, "codex")

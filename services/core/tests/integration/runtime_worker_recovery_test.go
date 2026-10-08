@@ -26,9 +26,8 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`), true)
 	enableWorkerEnvironment(t, h)
-	_, pool := testStore(t)
-	insertWorkerRuntimeAllocation(t, pool, h, "waking")
-	return h, pool
+	insertWorkerRuntimeAllocation(t, h.s.pool, h, "waking")
+	return h, h.s.pool
 }
 
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
@@ -76,9 +75,12 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This enters the same binding gate as scheduled input and returns without
-	// a native preparation, despite the socket already advertising capabilities.
-	if _, err := worker.ReadEnvironmentDirectory(t.Context(), environment, ""); !errors.Is(err, execution.ErrExecutionUnavailable) {
+	// The read waits for the compute to wake and gives up at its deadline
+	// without a native preparation, despite the socket already advertising
+	// capabilities.
+	read, stop := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer stop()
+	if _, err := worker.ReadEnvironmentDirectory(read, environment, ""); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("waking connection was treated as work-ready", err)
 	}
 	select {
@@ -143,7 +145,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := startWorkerErr(t.Context(), h.s, h.d)
+	worker, err := startWorkerErr(t, t.Context(), h.s, h.d)
 	if err != nil {
 		t.Fatal("queued wake blocked Core startup", err)
 	}

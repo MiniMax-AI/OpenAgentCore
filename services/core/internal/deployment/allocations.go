@@ -99,11 +99,16 @@ func (e *ExecutionOperations) ObserveRunning(ctx context.Context, owner Allocati
 	})
 }
 
-// KeepAllocation follows an authenticated connection and a successful
-// provider observation. A keepalive never revives cleanup or an expired lease.
-func (e *ExecutionOperations) KeepAllocation(ctx context.Context, owner Allocation) (Allocation, error) {
-	return e.change(ctx, owner, true, func(tx AllocationTx, current Allocation) (Allocation, error) {
-		return tx.Keep(current)
+// CheckRunning returns the stored allocation while it is still the owner's
+// running compute: its Session undeleted and bound to the allocation's
+// device. It follows an authenticated connection and a successful provider
+// observation and changes nothing.
+func (e *ExecutionOperations) CheckRunning(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.change(ctx, owner, true, func(_ AllocationTx, current Allocation) (Allocation, error) {
+		if current.State != "running" {
+			return Allocation{}, ErrAllocationConflict
+		}
+		return current, nil
 	})
 }
 

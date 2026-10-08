@@ -103,7 +103,6 @@ definitions:
           - runtime_mode_not_observable
           - allocation_pending
           - runtime_not_running
-          - source_not_configured
           - sample_timeout
           - sample_unavailable
         type: string
@@ -725,7 +724,6 @@ definitions:
     properties:
       connected_daemons:
         type: integer
-        x-nullable: true
       in_progress_turns:
         type: integer
         x-nullable: true
@@ -746,10 +744,8 @@ definitions:
         type: array
       slots_in_use:
         type: integer
-        x-nullable: true
       slots_total:
         type: integer
-        x-nullable: true
       unavailable:
         type: integer
         x-nullable: true
@@ -2489,7 +2485,6 @@ definitions:
           - runtime_mode_not_observable
           - allocation_pending
           - runtime_not_running
-          - source_not_configured
           - sample_timeout
           - sample_unavailable
         type: string

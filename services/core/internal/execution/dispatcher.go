@@ -49,7 +49,8 @@ type Dispatcher struct {
 	Sessions *sessions.Service
 	// SessionsReader serves the plain Session reads. It is required.
 	SessionsReader sessions.Reader
-	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
+	// ManagedRuntimes provisions hosted Environments on the sandbox deployment.
+	// It is required.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
 	// Zero uses DefaultExecutionConcurrency. It is independent of sandbox capacity.

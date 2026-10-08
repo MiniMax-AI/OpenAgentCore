@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -16,13 +15,9 @@ import (
 // Deleting a Skill's sole version deletes the Skill, but committed Session
 // snapshots and their idempotent retries are unchanged.
 func TestSoleSkillVersionDeletionKeepsFrozenSetup(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{63}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
-	skillService := SkillService(t, pool, cipher)
+	s, _ := configuredStore(t)
+	pool := s.pool
+	skillService := SkillService(t, pool, s.credentialCipher)
 	tenant := uuid.NewString()
 	archive := skillArchive(t, "sole-version-frozen")
 	skill, err := skillService.CreateSkill(t.Context(), skills.CreateSkill{TenantID: tenant, Archive: archive})

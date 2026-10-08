@@ -37,9 +37,10 @@ func open(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) (*a
 	return store, service
 }
 
-func testCipher(t *testing.T, seed byte) *credentialcrypto.Cipher {
+// otherKey is a credential key other than pgtest.CredentialKey.
+func otherKey(t *testing.T) *credentialcrypto.Cipher {
 	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{seed}, 32))
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{0x5a}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +312,7 @@ func TestAgentDeleteIsTenantScoped(t *testing.T) {
 
 func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	pool := pgtest.Open(t)
-	c := testCipher(t, 31)
+	c := pgtest.CredentialKey(t)
 	store, service := open(t, pool, c)
 	ctx, tenant := t.Context(), uuid.NewString()
 	provider := providerFixture(0)
@@ -350,7 +351,7 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 	if _, err := service.Update(ctx, agents.UpdateCommand{TenantID: tenant, AgentID: agent.ID, Configuration: []byte(`{"model":"new-model"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := agentpg.New(pgunit.NewPool(pool), testCipher(t, 99)).GetAgentWithModelProvider(ctx, tenant, agent.ID); err == nil || err.Error() != "agent model provider decryption failed" {
+	if _, _, err := agentpg.New(pgunit.NewPool(pool), otherKey(t)).GetAgentWithModelProvider(ctx, tenant, agent.ID); err == nil || err.Error() != "agent model provider decryption failed" {
 		t.Fatal("wrong key was not a decryption failure", err)
 	}
 	replacement := providerFixture(1)
@@ -418,7 +419,7 @@ func TestAgentModelExecutionAtomicEncryptedSnapshot(t *testing.T) {
 // key or a missing bundle.
 func TestAgentBundleSealedToAnotherAgentDoesNotOpen(t *testing.T) {
 	pool := pgtest.Open(t)
-	c := testCipher(t, 32)
+	c := pgtest.CredentialKey(t)
 	store, service := open(t, pool, c)
 	ctx, tenant := t.Context(), uuid.NewString()
 	provider := providerFixture(0)
@@ -444,7 +445,7 @@ func TestAgentBundleSealedToAnotherAgentDoesNotOpen(t *testing.T) {
 
 func TestAgentModelExecutionConcurrentSnapshots(t *testing.T) {
 	pool := pgtest.Open(t)
-	store, service := open(t, pool, testCipher(t, 32))
+	store, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx, tenant := t.Context(), uuid.NewString()
 	p := providerFixture(0)
 	agent, err := service.Create(ctx, agents.CreateCommand{TenantID: tenant, Configuration: providerConfiguration(t, p, "codex"), ModelProvider: p})
@@ -504,7 +505,7 @@ func auditContext(ctx context.Context, tenant, request, key string) context.Cont
 // together. An administrator delete records administrator audit only.
 func TestAgentWritesAuditInTheirTransaction(t *testing.T) {
 	pool := pgtest.OpenIsolated(t, nil)
-	_, service := open(t, pool, testCipher(t, 91))
+	_, service := open(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION reject_agent_audit_fixture() RETURNS trigger LANGUAGE plpgsql AS $$
 	BEGIN IF NEW.request_id = 'reject-agent-audit' THEN RAISE EXCEPTION 'forced audit insertion failure'; END IF; RETURN NEW; END $$;

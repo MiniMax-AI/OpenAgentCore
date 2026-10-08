@@ -148,8 +148,7 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, s *Store, tenant, 
 }
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, env := managedSession(t, s)
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
 	w, stop := managedWorker(t, s, key, p)
@@ -187,8 +186,7 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, env := managedSession(t, s)
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
 	w, _ := managedWorker(t, s, key, p)
@@ -217,8 +215,7 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 }
 
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, _, env := managedSession(t, s)
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, _ := managedWorker(t, s, key, p)

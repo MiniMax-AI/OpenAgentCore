@@ -7,7 +7,7 @@ func TestWorkerConfiguredConcurrencyReportsActualCapacity(t *testing.T) {
 		worker := &Worker{concurrency: limit}
 		worker.observeSlots(limit)
 		snapshot := worker.MetricsSnapshot()
-		if *snapshot.SlotsTotal != int64(limit) || *snapshot.SlotsInUse != int64(limit) {
+		if snapshot.SlotsTotal != int64(limit) || snapshot.SlotsInUse != int64(limit) {
 			t.Fatal("metrics do not reflect execution concurrency", snapshot)
 		}
 	}

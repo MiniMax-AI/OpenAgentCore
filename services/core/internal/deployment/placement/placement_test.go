@@ -46,9 +46,12 @@ func rules(t *testing.T, declarations Declarations, url string) *Rules {
 
 func generation(value uint64) *uint64 { return &value }
 
-func TestNewRulesRequiresDeclarations(t *testing.T) {
+func TestNewRulesRequiresDeclarationsAndPublicURL(t *testing.T) {
 	if _, err := NewRules(nil, publicURL); err == nil {
 		t.Fatal("NewRules accepted nil declarations")
+	}
+	if _, err := NewRules(&fakeDeclarations{t: t}, ""); !errors.Is(err, ErrPublicURLRequired) {
+		t.Fatalf("NewRules without a public URL = %v", err)
 	}
 	if got := rules(t, &fakeDeclarations{t: t}, publicURL).PublicURL(); got != publicURL {
 		t.Fatalf("PublicURL = %q", got)
@@ -93,14 +96,14 @@ func TestCheckAdmission(t *testing.T) {
 		want         error
 		message      string
 	}{
-		"unclaimed admits everything": {Deployment{Resetting: true}, installation, nil, ""},
-		"admitted":                    {valid, installation, nil, ""},
-		"new Session":                 {valid, "", nil, ""},
-		"reset":                       {with(func(d *Deployment) { d.Resetting = true }), installation, ErrResetAdmission, "hosted admission is paused for a sandbox reset"},
-		"malformed specification":     {with(func(d *Deployment) { d.Specification = json.RawMessage(`[`) }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation requires a deployment specification"},
-		"rejected specification":      {with(func(d *Deployment) { d.Specification = json.RawMessage(`{"resources":{"cpus":3}}`) }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation requires a deployment specification"},
-		"no provider":                 {with(func(d *Deployment) { d.Provider, d.Specification = "", json.RawMessage(`[`) }), installation, nil, ""},
-		"other installation":          {valid, uuid.NewString(), ErrAdmissionClosed, "environment is no longer available: sandbox installation does not match deployment"},
+		"unclaimed":               {with(func(d *Deployment) { d.InstallationID = "" }), "", ErrNodeUnavailable, "sandbox node unavailable"},
+		"no provider":             {with(func(d *Deployment) { d.Provider, d.Specification = "", json.RawMessage(`[`) }), "", ErrNodeUnavailable, "sandbox node unavailable"},
+		"admitted":                {valid, installation, nil, ""},
+		"new Session":             {valid, "", nil, ""},
+		"reset":                   {with(func(d *Deployment) { d.Resetting = true }), installation, ErrResetAdmission, "hosted admission is paused for a sandbox reset"},
+		"malformed specification": {with(func(d *Deployment) { d.Specification = json.RawMessage(`[`) }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation requires a deployment specification"},
+		"rejected specification":  {with(func(d *Deployment) { d.Specification = json.RawMessage(`{"resources":{"cpus":3}}`) }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation requires a deployment specification"},
+		"other installation":      {valid, uuid.NewString(), ErrAdmissionClosed, "environment is no longer available: sandbox installation does not match deployment"},
 	} {
 		err := rules(t, declarations, publicURL).CheckAdmission(test.d, test.installation)
 		if !errors.Is(err, test.want) || (test.want == nil) != (err == nil) || (err != nil && err.Error() != test.message) {
@@ -139,8 +142,8 @@ func TestDecidePlacement(t *testing.T) {
 		"reset":                       {origin(false), publicURL, with(func(d *Deployment) { d.Resetting = true }), nil, nil, ErrResetAdmission},
 		"loopback public origin":      {origin(true), "http://localhost:8091", nodes, []Node{ready("a", 1, 0)}, nil, ErrPublicURLUnreachable},
 		"direct":                      {origin(false), publicURL, with(func(d *Deployment) { d.Mode = "direct" }), nil, nil, nil},
-		"no provider":                 {&fakeDeclarations{t: t}, publicURL, Deployment{}, nil, nil, nil},
-		"no provider on Web":          {&fakeDeclarations{t: t}, publicURL, Deployment{InstallationID: "installation"}, nil, nil, ErrNodeUnavailable},
+		"unclaimed":                   {&fakeDeclarations{t: t}, publicURL, Deployment{}, nil, nil, ErrNodeUnavailable},
+		"no provider":                 {&fakeDeclarations{t: t}, publicURL, Deployment{InstallationID: "installation"}, nil, nil, ErrNodeUnavailable},
 		"no nodes":                    {origin(false), publicURL, nodes, nil, nil, ErrNodeUnavailable},
 		"only ineligible nodes":       {origin(false), publicURL, nodes, []Node{offline, unready, full, retainedFull, elsewhere, {ID: "never", Online: true, ServingReady: true, MaxActive: 1, MaxRetained: 1, CoreURL: publicURL}}, nil, ErrNodeUnavailable},
 		"preparing":                   {origin(false), publicURL, nodes, []Node{offline, preparing}, nil, ErrNodesPreparing},

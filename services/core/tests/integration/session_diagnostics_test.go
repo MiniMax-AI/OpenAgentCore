@@ -198,7 +198,8 @@ func TestDiagnosticTimingBoundOrderAndIsolation(t *testing.T) {
 }
 
 func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
-	s, pool := testStore(t)
+	s, installation := configuredStore(t)
+	pool := s.pool
 	tenant := uuid.NewString()
 	input := environmentInput("safe-detail", "openai_hosted", "/workspace")
 	input.InitialInputs = []sessions.Input{messageInput("initial")}
@@ -207,7 +208,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := executionWriter(t, s)
-	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -65,6 +65,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.SessionsReader == nil {
 		return nil, errors.New("execution worker requires the Session reader")
 	}
+	if dispatcher.ManagedRuntimes == nil {
+		return nil, errors.New("execution worker requires the sandbox runtime provider")
+	}
 	owned, err := dispatcher.Bind(owner)
 	if err != nil {
 		return nil, err
@@ -78,20 +81,15 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if err != nil {
 		return nil, err
 	}
-	if worker.runtimes != nil {
-		defer func() {
-			if err != nil {
-				worker.runtimes.stop()
-			}
-		}()
-		err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID)
-		if err == nil {
-			_, err = worker.runtimes.ensureDeployment(ctx)
+	defer func() {
+		if err != nil {
+			worker.runtimes.stop()
 		}
-	} else {
-		err = owner.Deployment.RequireUnclaimed(ctx)
+	}()
+	if err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID); err != nil {
+		return nil, err
 	}
-	if err != nil {
+	if _, err = worker.runtimes.ensureDeployment(ctx); err != nil {
 		return nil, err
 	}
 	if err = owned.sessionExecution.ReconcileEnvironmentConnections(ctx); err != nil {
@@ -150,14 +148,10 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	defer func() {
 		w.observeWorkerStop(runErr, ctx.Err())
 		cancel()
-		if w.runtimes != nil {
-			w.runtimes.stop()
-		}
+		w.runtimes.stop()
 		running.Wait()
-		if w.runtimes != nil {
-			// Drain an external provisioning caller before releasing the writer lease.
-			w.runtimes.drain()
-		}
+		// Drain an external provisioning caller before releasing the writer lease.
+		w.runtimes.drain()
 		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
 	active := make(map[string]bool)
@@ -171,13 +165,11 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	running.Add(1)
 	go func() { defer running.Done(); preparationDone <- w.runEnvironmentInitializations(ctx) }()
 	lifecycleDone := make(chan error, 1)
-	if w.runtimes != nil {
-		running.Add(1)
-		go func() {
-			defer running.Done()
-			lifecycleDone <- w.runManagedRuntimes(ctx)
-		}()
-	}
+	running.Add(1)
+	go func() {
+		defer running.Done()
+		lifecycleDone <- w.runManagedRuntimes(ctx)
+	}()
 	type readCompletion struct {
 		id      string
 		request directoryReadRequest

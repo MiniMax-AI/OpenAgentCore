@@ -2,7 +2,7 @@
 title: "Sandbox deployment"
 ---
 
-The sandbox deployment selects the Sandbox Provider, the per-sandbox resources and the immutable Runtime release for Core-managed `openai_hosted` execution. PostgreSQL holds one active selection per installation; Web and the Core API write the same configuration. A node's files hold an installed copy of it plus host-specific paths and cannot override its resources or Runtime. The selection is independent of the Harness, and a deployment can stay unconfigured, with no nodes and no hosted admission.
+The sandbox deployment selects the Sandbox Provider, the per-sandbox resources and the immutable Runtime release for Core-managed `openai_hosted` execution. PostgreSQL holds one active selection per installation; Web and the Core API write the same configuration. A node's files hold an installed copy of it plus host-specific paths and cannot override its resources or Runtime. The selection is independent of the Harness. A deployment can stay unconfigured, with no nodes; it then refuses hosted admission.
 
 This contract owns the Core API routes below and their semantics. The [nodes guide](../../docs/getting-started/nodes.md) owns the operator workflow, the [machine connection API](./machine-api.md#node-routes) the routes nodes call, and the [sandbox node protocol](./node-generation-protocol.md) the node connection.
 

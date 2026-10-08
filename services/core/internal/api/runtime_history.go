@@ -18,9 +18,8 @@ const (
 	runtimeHistoryRequestBudget = 15 * time.Second
 )
 
-// RuntimeHistory queries durable Runtime history. Its capabilities declare
-// whether this Core collects any; one that does not answers 503
-// runtime_history_unavailable.
+// RuntimeHistory queries the durable Runtime history Core samples
+// periodically.
 type RuntimeHistory interface {
 	Capabilities() runtimehistory.Capabilities
 	QuerySession(context.Context, string, string, runtimehistory.Range) (runtimehistory.Response, error)
@@ -29,10 +28,6 @@ type RuntimeHistory interface {
 // getRuntimeHistory serves the administrator per-Session history read.
 func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	capabilities := h.RuntimeHistory.Capabilities()
-	if capabilities.Validate() != nil || !capabilities.Durable() {
-		writeError(w, http.StatusServiceUnavailable, "runtime_history_unavailable", "Durable Runtime history is not configured on this service.")
-		return
-	}
 	requested, ok := readRuntimeHistoryRange(w, r, capabilities, time.Now().UTC())
 	if !ok {
 		return
@@ -95,7 +90,7 @@ func readRuntimeHistoryRange(w http.ResponseWriter, r *http.Request, capabilitie
 }
 
 func runtimeHistoryResponse(value runtimehistory.Response, expectedTenantID, expectedSessionID string, expectedRange runtimehistory.Range) (v1.RuntimeHistory, error) {
-	if err := value.Validate(time.Now().UTC()); err != nil || !value.Durable() ||
+	if err := value.Validate(time.Now().UTC()); err != nil ||
 		value.TenantID != expectedTenantID || value.SessionID != expectedSessionID ||
 		!value.Requested.Start.Equal(expectedRange.Start) || !value.Requested.End.Equal(expectedRange.End) || value.Requested.MaxPoints != expectedRange.MaxPoints {
 		return v1.RuntimeHistory{}, runtimehistory.ErrInvalidResult

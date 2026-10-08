@@ -18,7 +18,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -98,19 +97,6 @@ func (p *hostedFailureProvider) prepare(request proto.RuntimePreparePayload, _ [
 	return completedInitialization(request, nil)
 }
 
-// hostedFailureStore returns a store whose Web deployment is claimed by the
-// returned installation.
-func hostedFailureStore(t *testing.T) (*Store, string) {
-	t.Helper()
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
-	return s, webDeployment(t, s, "e2b")
-}
-
 func hostedFailureSession(t *testing.T, s *Store, tenant string, input sessions.CreateSession) (sessions.Session, sessions.Environment) {
 	t.Helper()
 	input.Creator, input.Engine, input.IdempotencyKey = FixtureCreator(), "codex", uuid.NewString()
@@ -182,7 +168,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			"Failed to provision environment: Skill installation failed", []string{"configure", "skill"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s, key := hostedFailureStore(t)
+			s, key := configuredStore(t)
 			tenant := uuid.NewString()
 			session, environment := hostedFailureSession(t, s, tenant, test.input)
 			p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}},
@@ -247,7 +233,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 // A pending initial input settles exactly as before; the one failed snapshot
 // carries both that settlement and the provisioning failure.
 func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
-	s, key := hostedFailureStore(t)
+	s, key := configuredStore(t)
 	tenant := uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "exit 3"}}},
@@ -281,7 +267,7 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 // stream ends after agent.session.failed; later input gets the observed 409;
 // delete succeeds; tenant B sees nothing; the canary never appears.
 func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
-	s, key := hostedFailureStore(t)
+	s, key := configuredStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 3"}}},

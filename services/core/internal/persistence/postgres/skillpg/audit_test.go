@@ -100,7 +100,7 @@ func snapshot(t *testing.T, pool *pgxpool.Pool, tenant string, tables ...string)
 // write. Comparing complete tenant rows proves the write rolled back.
 func TestWriteAuditTransactions(t *testing.T) {
 	pool := pgtest.OpenIsolated(t, nil)
-	f := newFixture(t, pool, testCipher(t, 91))
+	f := newFixture(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION reject_resource_audit_fixture() RETURNS trigger LANGUAGE plpgsql AS $$
 	BEGIN IF NEW.request_id = 'reject-resource-audit' THEN RAISE EXCEPTION 'forced audit insertion failure'; END IF; RETURN NEW; END $$;
@@ -158,7 +158,7 @@ const rejectedAdminRequest = "reject-admin-mutation-fixture"
 // operation, and a failed administrator audit rolls the deletion back.
 func TestAdminDeleteAuditTransactions(t *testing.T) {
 	pool := pgtest.OpenIsolated(t, nil)
-	f := newFixture(t, pool, testCipher(t, 94))
+	f := newFixture(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION reject_admin_mutation_fixture() RETURNS trigger LANGUAGE plpgsql AS $$
  BEGIN IF NEW.request_id = 'reject-admin-mutation-fixture' THEN RAISE EXCEPTION 'forced administrator audit failure'; END IF; RETURN NEW; END $$;

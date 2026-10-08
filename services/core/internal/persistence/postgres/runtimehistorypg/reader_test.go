@@ -20,7 +20,7 @@ const (
 
 func testCapabilities() runtimehistory.Capabilities {
 	return runtimehistory.Capabilities{
-		CollectionMode: runtimehistory.CollectionPeriodic, SampleInterval: 30 * time.Second,
+		SampleInterval: 30 * time.Second,
 		Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour,
 		MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory},

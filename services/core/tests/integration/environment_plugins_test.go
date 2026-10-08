@@ -9,19 +9,13 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 func TestPluginsFrozenInSession(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{23}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := configuredStore(t)
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for path, body := range map[string]string{
@@ -37,7 +31,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err = writer.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
 	setup := environmentconfig.Setup{Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin-proof", Description: "A proof."}, Archive: archive.Bytes()}}, CapabilityDirectories: []string{"/workspace/generated"}}

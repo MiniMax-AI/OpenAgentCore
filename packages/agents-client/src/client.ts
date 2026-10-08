@@ -315,7 +315,7 @@ const runtimeCPUFields = new Set(["usage_seconds_total", "capacity_cores", "usag
 const runtimeMemoryFields = new Set(["usage_bytes", "limit_bytes"]);
 const runtimeObservationReasons = new Set([
   "runtime_mode_not_observable", "allocation_pending", "runtime_not_running",
-  "source_not_configured", "sample_timeout", "sample_unavailable",
+  "sample_timeout", "sample_unavailable",
 ]);
 const runtimeProviderTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
 const runtimeLifecycleStates = new Set(["active", "sleeping", "transitioning", "pending", "stopped"]);

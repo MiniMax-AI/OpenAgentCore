@@ -44,13 +44,13 @@ type Pool struct {
 	Max   *int64 `json:"max" extensions:"x-nullable"`
 }
 type Execution struct {
-	SlotsInUse          *int64            `json:"slots_in_use" extensions:"x-nullable"`
-	SlotsTotal          *int64            `json:"slots_total" extensions:"x-nullable"`
+	SlotsInUse          int64             `json:"slots_in_use"`
+	SlotsTotal          int64             `json:"slots_total"`
 	QueuedTurns         *int64            `json:"queued_turns" extensions:"x-nullable"`
 	WaitingForDaemon    *int64            `json:"waiting_for_daemon" extensions:"x-nullable"`
 	InProgressTurns     *int64            `json:"in_progress_turns" extensions:"x-nullable"`
 	OldestQueuedSeconds *float64          `json:"oldest_queued_seconds" extensions:"x-nullable"`
-	ConnectedDaemons    *int64            `json:"connected_daemons" extensions:"x-nullable"`
+	ConnectedDaemons    int64             `json:"connected_daemons"`
 	Interrupted         *int64            `json:"interrupted" extensions:"x-nullable"`
 	Unavailable         *int64            `json:"unavailable" extensions:"x-nullable"`
 	QueueWaitMS         Latency           `json:"queue_wait_ms"`
@@ -104,7 +104,7 @@ type Sample struct {
 	Process                              Process
 }
 type Live struct {
-	SlotsInUse, SlotsTotal, ConnectedDaemons *int64
+	SlotsInUse, SlotsTotal, ConnectedDaemons int64
 	ExecutionOwner                           *bool
 	Pool                                     Pool
 	Scheduler                                Job

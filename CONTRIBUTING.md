@@ -111,7 +111,7 @@ The [CI selection policy](docs/maintainers.md#continuous-integration) names affe
 | `OAC_TEST_DATABASE_URL` | A dedicated test database. The full gate fails when it is missing. |
 | `OAC_TEST_OFFICIAL_SDK_PYTHON` | The pinned official SDK interpreter |
 
-The role needs `CREATE DATABASE`: tests of database-wide state, such as the execution lease and the provider identity, create and drop isolated `oac_*_tests` databases. Tests must not bypass the production provider-switch guard.
+The role needs `CREATE DATABASE`: tests of database-wide state, such as the execution lease and the provider identity, create and drop isolated `oac_*_tests` databases. They copy them from a migrated template, the test database's name with `_template` before `_tests`, which stays beside it. Tests must not bypass the production provider-switch guard.
 
 ### Contract and schema rules
 

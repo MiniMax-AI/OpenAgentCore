@@ -20,7 +20,7 @@ The resolver (`services/core/internal/deployment/observation.go`) reads the Sess
 
 Managed Docker, microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
 
-Every managed allocation is read through the deployment's selected Sandbox Provider, which verifies the allocation's installation (`provider_key`) and labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, `cleanup_pending` or `released` gives `runtime_not_running`, and a Core without an installation identity gives `source_not_configured`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
+Every managed allocation is read through the deployment's selected Sandbox Provider, which verifies the allocation's installation (`provider_key`) and labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, and `cleanup_pending` or `released` gives `runtime_not_running`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
 
 `Observe` belongs to the [Sandbox Provider protocol](../../docs/sandbox-provider.md); `services/core/internal/runtimeobs/source.go` owns the observation types and the `Source` view of a Provider. Core loads the selected Provider and its registered kind once per page and uses that same immutable Provider for every read on that page, reading each running target with `Observe`. Without a selection the load returns typed `ErrUnavailable`, which produces `sample_unavailable` without a provider type. Other load errors follow the provider-read error rules above.
 
@@ -77,7 +77,7 @@ These durations answer different questions and stay separate:
 - compute uptime: the sample's `started_at` to `observed_at`;
 - busy Turn duration: `turns.started_at` to `completed_at`, or now.
 
-CPU quietness, heartbeat age, connection state and keepalive time are not idle time.
+CPU quietness, heartbeat age and connection state are not idle time.
 
 ## Retained history and optional export
 
@@ -95,7 +95,7 @@ The PostgreSQL store keeps only periodic `openai_hosted` records, so API reads c
 
 The history service resolves the Project, Session and Environment before it queries; the query always carries that scope and bounded times, never provider identity. The store keeps seven days. A read covers at most 24 hours, reads at most 20,000 raw samples, starts two sampling intervals before the range to find CPU baselines, and returns at most 1,000 buckets per array, 64 series and 10,000 points in total. Results outside the requested scope, range or limits fail the read. The API's [Series](./runtime-observability-api.md#series) section describes the aggregation.
 
-`runtimehistory.Capabilities` states the collection mode, interval, seven-day retention, minimum bucket width (30 seconds or the interval, whichever is longer), 24-hour range and point limits; the history route answers 503 unless they are valid and periodic.
+`runtimehistory.Capabilities` states the sampling interval, seven-day retention, minimum bucket width (30 seconds or the interval, whichever is longer), 24-hour range and point limits; Core does not start unless they are valid.
 
 A cleanup loop runs every minute, even without active Runtimes. Each pass has at most two seconds and deletes expired Runtime and node host rows in batches of 256 per table, at most 16 batches. Reads never return rows older than the retention.
 

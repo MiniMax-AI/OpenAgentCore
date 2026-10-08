@@ -50,7 +50,16 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 
 func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
 	t.Helper()
+	var snapshot struct {
+		Environment struct {
+			Type string `json:"type"`
+		} `json:"environment"`
+	}
+	_ = json.Unmarshal(configuration, &snapshot)
 	s, _ := testStore(t)
+	if snapshot.Environment.Type == "openai_hosted" {
+		s, _ = configuredStore(t)
+	}
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
@@ -60,12 +69,6 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	secret := uuid.NewString()
 	h.credential = secret
-	var snapshot struct {
-		Environment struct {
-			Type string `json:"type"`
-		} `json:"environment"`
-	}
-	_ = json.Unmarshal(configuration, &snapshot)
 	if snapshot.Environment.Type == "self_hosted" {
 		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
 		secret = h.credential

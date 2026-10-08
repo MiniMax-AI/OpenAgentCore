@@ -17,11 +17,12 @@ import (
 
 func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, deployment.Allocation) {
 	t.Helper()
-	s, pool := testStore(t)
+	s, installation := configuredStore(t)
+	pool := s.pool
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +179,7 @@ func TestRuntimeSuspensionWakeDoesNotLoseNewerWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deploymentExecution(t, w).KeepAllocation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).CheckRunning(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionAdapter(s).GetSession(t.Context(), owner.TenantID, owner.SessionID); err != nil {
@@ -232,10 +233,9 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 	for _, phase := range []string{"quiescing", "suspending", "suspended"} {
 		owner = runtimeSuspensionStep(t, w, owner, phase, &until)
 	}
-	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
 	retained, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 	if err != nil || retained.Expired {
-		t.Fatal("suspended snapshot expired by disconnected heartbeat", retained, err)
+		t.Fatal("suspended snapshot expired within its retention", retained, err)
 	}
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID)
 	expired, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
@@ -312,14 +312,9 @@ func TestRuntimeSuspensionWakeRemainsUntilRunning(t *testing.T) {
 	}
 }
 
-func TestRuntimeSuspensionExpiredRunningAndLostWriterAreFenced(t *testing.T) {
+func TestRuntimeSuspensionLostWriterIsFenced(t *testing.T) {
 	_, w, pool, owner := runtimeSuspensionFixture(t)
 	runtimeSuspensionCompleted(t, pool, owner)
-	until := time.Now().Add(time.Hour)
-	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, deployment.ErrAllocationConflict) {
-		t.Fatal("expired running allocation entered checkpoint", err)
-	}
 	if err := w.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}

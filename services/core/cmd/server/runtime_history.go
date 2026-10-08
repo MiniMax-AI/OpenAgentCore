@@ -26,10 +26,9 @@ type runtimeHistoryExporter interface {
 }
 
 func runtimeHistory(ctx context.Context, units *pgunit.Pool, config processconfig.RuntimeHistory) (runtimeHistorySetup, error) {
-	interval := config.SampleInterval
 	capabilities := runtimehistory.Capabilities{
-		CollectionMode: runtimehistory.CollectionPeriodic, SampleInterval: interval, Retention: 7 * 24 * time.Hour,
-		MinimumStep: max(30*time.Second, interval), MaximumRange: 24 * time.Hour,
+		SampleInterval: config.SampleInterval, Retention: 7 * 24 * time.Hour,
+		MinimumStep: max(30*time.Second, config.SampleInterval), MaximumRange: 24 * time.Hour,
 		MaximumPoints: 1000, MaximumSeries: 64, MaximumTotalPoints: 10000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},
 	}
@@ -38,7 +37,7 @@ func runtimeHistory(ctx context.Context, units *pgunit.Pool, config processconfi
 		return runtimeHistorySetup{}, err
 	}
 	options := runtimeobs.ExportOptions{QueueCapacity: config.QueueCapacity, Timeout: config.Timeout}
-	setup := runtimeHistorySetup{Options: []runtimeobs.ServiceOption{runtimeobs.WithExporter(backend, options)}, Reader: backend, SampleInterval: interval, Prune: backend.Prune}
+	setup := runtimeHistorySetup{Options: []runtimeobs.ServiceOption{runtimeobs.WithExporter(backend, options)}, Reader: backend, SampleInterval: config.SampleInterval, Prune: backend.Prune}
 	if config.Endpoint != "" {
 		exporter, err := otlpexporter.New(ctx, otlpexporter.Config{Endpoint: config.Endpoint, Headers: config.Headers, Insecure: config.Insecure, RequestTimeout: config.Timeout})
 		if err != nil {

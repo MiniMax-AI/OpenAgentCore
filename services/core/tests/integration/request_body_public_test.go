@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -24,12 +23,7 @@ import (
 // sent as text/plain, change nothing for the owner or another tenant.
 func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	_, pool := newManagedTestStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{64}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := newManagedTestStore(t)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "body-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
@@ -165,12 +159,7 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 // Core extension routes keep their own body handling, without the Content-Type
 // rule or the official body messages.
 func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{65}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := testStore(t)
 	token, tenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	h, err := publicHandler(t, s, auth, "codex")

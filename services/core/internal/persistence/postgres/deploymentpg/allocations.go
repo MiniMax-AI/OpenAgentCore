@@ -25,7 +25,7 @@ func allocation(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted
 		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: timestamp(row.ComputeRetainedUntil),
 		ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID), SessionID: uuidString(session), TenantID: uuidString(tenant),
 		DeviceID: uuidString(row.DeviceID), ProviderKey: uuidString(row.ProviderKey), State: row.State, CreateSettled: row.CreateSettled,
-		SessionDeleted: deleted.Valid, Expired: expired, CreatedAt: row.CreatedAt.Time, KeptAt: row.KeptAt.Time,
+		SessionDeleted: deleted.Valid, Expired: expired, CreatedAt: row.CreatedAt.Time,
 	}
 }
 
@@ -269,10 +269,6 @@ func (t *allocationTx) LoadRestore(current deployment.Allocation) (placement.Res
 
 func (t *allocationTx) ObserveRunning(current deployment.Allocation) (deployment.Allocation, error) {
 	return t.change(current, t.q.ObserveRuntimeRunning)
-}
-
-func (t *allocationTx) Keep(current deployment.Allocation) (deployment.Allocation, error) {
-	return t.change(current, t.q.KeepRuntimeAllocation)
 }
 
 func (t *allocationTx) SettleCreation(current deployment.Allocation) (deployment.Allocation, error) {

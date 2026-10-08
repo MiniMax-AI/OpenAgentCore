@@ -135,7 +135,6 @@ export const sessions = {
       runtime_mode_not_observable: "无法观测",
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",
-      source_not_configured: "未配置指标来源",
       sample_timeout: "采样超时",
       sample_unavailable: "采样不可用",
     },

@@ -1,7 +1,6 @@
 package vaultpg_test
 
 import (
-	"bytes"
 	"context"
 	"reflect"
 	"strings"
@@ -141,7 +140,7 @@ func prepareAuditMutation(t *testing.T, service *vaults.Service, tenant, name st
 // table snapshots prove the rollback of ciphertext, timestamps and cascades.
 func TestVaultMutationsRollBackWithTheirAudit(t *testing.T) {
 	pool := pgtest.OpenIsolated(t, nil)
-	service := newService(t, pool, newCipher(t, bytes.Repeat([]byte{91}, 32)), nil)
+	service := newService(t, pool, pgtest.CredentialKey(t), nil)
 	rejectAudits(t, pool)
 	secrets := []string{"audit-private-token", "audit-private-replacement"}
 	for _, provenance := range []string{"public", "admin"} {

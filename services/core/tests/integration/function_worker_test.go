@@ -10,7 +10,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
@@ -120,12 +119,7 @@ const mcpWorkerConfiguration = `{"agent":{"model":"gpt-5.5","tools":[{"type":"mc
 
 func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, string) {
 	t.Helper()
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New([]byte(strings.Repeat("k", 32)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	h.s = NewWithCredentialCipher(pool, cipher)
+	h.s, _ = testStore(t)
 	_, service, err := fixtureVaults(h.s)
 	if err != nil {
 		t.Fatal(err)

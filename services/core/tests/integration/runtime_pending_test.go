@@ -14,8 +14,7 @@ import (
 )
 
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, idle, idleEnvironment := managedSession(t, s)
 	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{messageInput("hello")}})
 	if err != nil {

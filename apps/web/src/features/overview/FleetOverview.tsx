@@ -189,7 +189,7 @@ function CoreGlance({ label, tone }: { label: string; tone: Tone }) {
         <Fact label={t("fleet.facts.uptime")}>{started === null ? MISSING : formatDuration(Math.max(0, now - started))}</Fact>
         <Fact label={t("fleet.facts.slots")}>
           {count(metrics.execution.slots_in_use)}
-          {metrics.execution.slots_total === null ? null : <span className="kpi-unit">/ {count(metrics.execution.slots_total)}</span>}
+          <span className="kpi-unit">/ {count(metrics.execution.slots_total)}</span>
         </Fact>
         <Fact label={t("fleet.facts.queued")}>{count(metrics.execution.queued_turns)}</Fact>
         <Fact label={t("fleet.facts.daemons")}>{count(metrics.execution.connected_daemons)}</Fact>
