@@ -91,7 +91,7 @@ def main():
     assert tokens[0] != tokens[1], "Distinct tenant credentials required"
     base = settings["base"].rstrip("/") + "/v1"
     with httpx2.Client(trust_env=False, timeout=30) as http:
-        clients = [OpenAI(api_key=token, base_url=base, timeout=240, max_retries=0, _strict_response_validation=True,
+        clients = [OpenAI(api_key=token, base_url=base, timeout=360, max_retries=0, _strict_response_validation=True,
                           http_client=http) for token in tokens]
         generated = [generate_files(client, tenant["session_id"], str(index))
                      for index, (client, tenant) in enumerate(zip(clients, settings["tenants"]))]

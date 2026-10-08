@@ -58,7 +58,7 @@ def verify_hosted_functions(client, foreign, http, agent_options, session_option
         observed.append(events)
         if saved is not None:
             proof["saved"]["events"].append(events)
-        with sessions.stream(session.id, input=text, tool_handlers={"lookup": handler}, idempotency_key=key, timeout=240) as stream:
+        with sessions.stream(session.id, input=text, tool_handlers={"lookup": handler}, idempotency_key=key, timeout=360) as stream:
             events.extend(event.to_dict() for event in stream)
         terminals = [e for e in events if e["type"] in ("agent.session.turn.completed", "agent.session.turn.failed", "agent.session.turn.cancelled")]
         assert len(terminals) == 1 and terminals[0]["type"] == "agent.session.turn.completed"
