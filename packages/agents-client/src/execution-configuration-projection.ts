@@ -1,8 +1,8 @@
 import { modelProviderProtocols } from "./harness-catalog";
 import { modelProviderViewFields } from "./generated/public-api";
 import {
-  executionHarnessConfigSelectionFields, executionProviderSelectionFields, executionSelectionFields, executionSelectionSourceValues,
-  sessionExecutionConfigurationFields, type ExecutionSelectionSource,
+  executionHarnessConfigSelectionFields, executionProviderSelectionFields, executionSelectionFields, executionSourceValues,
+  sessionExecutionConfigurationFields, type ExecutionSource,
 } from "./generated/core-api";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId } from "./response-projection";
 import type { ModelProviderView, SessionExecutionConfiguration } from "./types";
@@ -11,10 +11,10 @@ type Invalid = () => never;
 const protocols: ReadonlySet<unknown> = new Set(modelProviderProtocols);
 
 function selection(value: unknown, invalid: Invalid): SessionExecutionConfiguration["model"] {
-  if (!isRecord(value) || !exactFields(value, executionSelectionFields) || !isOneOf(executionSelectionSourceValues, value.source) ||
+  if (!isRecord(value) || !exactFields(value, executionSelectionFields) || !isOneOf(executionSourceValues, value.source) ||
     (value.value !== null && (typeof value.value !== "string" || value.value.length === 0)) ||
     (value.value === null && value.source !== "unknown")) return invalid();
-  return { value: value.value as string | null, source: value.source as ExecutionSelectionSource };
+  return { value: value.value as string | null, source: value.source as ExecutionSource };
 }
 
 // Splits an absolute URL as RFC 3986 appendix B does, without parsing its host.
@@ -56,7 +56,7 @@ export function projectExecutionConfiguration(value: unknown, sessionId: string,
     !isRecord(value.model_provider) || !exactFields(value.model_provider, executionProviderSelectionFields)) return invalid();
   const native = value.harness_config;
   if (!isRecord(native) || !exactFields(native, executionHarnessConfigSelectionFields) || !isRecord(native.value) ||
-    !isOneOf(executionSelectionSourceValues, native.source) || (native.source === "unknown" && Object.keys(native.value).length !== 0)) return invalid();
+    !isOneOf(executionSourceValues, native.source) || (native.source === "unknown" && Object.keys(native.value).length !== 0)) return invalid();
   const provider = value.model_provider;
   let configuration: ModelProviderView | null = null;
   if (provider.status === "available" && (provider.source === "session" || provider.source === "agent" || provider.source === "deployment")) {
@@ -66,7 +66,7 @@ export function projectExecutionConfiguration(value: unknown, sessionId: string,
   return {
     object: "agent.session.execution_configuration", schema_version: 1, session_id: value.session_id,
     model: selection(value.model, invalid), harness: selection(value.harness, invalid),
-    harness_config: { value: { ...native.value }, source: native.source as ExecutionSelectionSource },
-    model_provider: { source: provider.source as ExecutionSelectionSource, status: provider.status as SessionExecutionConfiguration["model_provider"]["status"], configuration },
+    harness_config: { value: { ...native.value }, source: native.source as ExecutionSource },
+    model_provider: { source: provider.source as ExecutionSource, status: provider.status as SessionExecutionConfiguration["model_provider"]["status"], configuration },
   };
 }

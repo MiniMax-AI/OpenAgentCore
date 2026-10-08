@@ -9,14 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 // RuntimeProvider binds one deployment to one sandbox installation.
@@ -85,10 +84,10 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 		return RuntimeProvider{}, err
 	}
 	copied := *config
-	if copied.ProviderKind == "" || (copied.Mode != "nodes" && copied.Mode != "direct") {
+	if copied.ProviderKind == "" || (copied.Mode != string(sandbox.DeploymentNodes) && copied.Mode != string(sandbox.DeploymentDirect)) {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == "direct" && copied.Suspension != nil {
+	if copied.Mode == string(sandbox.DeploymentDirect) && copied.Suspension != nil {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	if config.Suspension != nil {

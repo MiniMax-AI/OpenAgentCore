@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 // ReserveAllocation commits the allocation of the tenant's hosted Environment
@@ -68,7 +67,7 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 			return ErrInvalidInput
 		}
 		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation}
-		if d.Mode == "nodes" {
+		if d.Mode == string(sandbox.DeploymentNodes) {
 			reserved, err := tx.LoadReserved()
 			if err != nil {
 				return err
@@ -352,7 +351,7 @@ func (s *Service) LifecycleNode(ctx context.Context, tenant, environment string)
 	if err != nil {
 		return "", err
 	}
-	if p.Provider == "" || p.Mode == "direct" {
+	if p.Provider == "" || p.Mode == string(sandbox.DeploymentDirect) {
 		if p.PlacementNodeID != "" || p.AllocationNodeID != "" {
 			return "", placement.ErrNodeUnavailable
 		}

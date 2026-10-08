@@ -214,7 +214,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	selectedEngine := h.Engine
 	var provider *v1.ModelProviderInput
-	var providerSource string
+	var providerSource v1.ExecutionSource
 	var deploymentRevision uuid.UUID
 	if err == nil {
 		selectedEngine, provider, providerSource, deploymentRevision, err = h.resolveSessionExecution(r.Context(), input, inheritedProvider, configuration)

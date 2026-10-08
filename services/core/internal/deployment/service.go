@@ -44,7 +44,7 @@ func (s *Service) View(ctx context.Context) (View, error) {
 // view reports the public URL as the deployment's read-only core_url.
 func (s *Service) view(snapshot Snapshot) (View, error) {
 	d := snapshot.Record
-	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: d.Mode, Rollout: snapshot.Rollout, Resources: snapshot.Resources}
+	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: sandbox.DeploymentMode(d.Mode), Rollout: snapshot.Rollout, Resources: snapshot.Resources}
 	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(d.Specification, &spec) == nil {
@@ -69,7 +69,7 @@ func (s *Service) view(snapshot Snapshot) (View, error) {
 		}
 	}
 	if d.Reset != nil {
-		result.Reset = &Reset{Clear: d.Reset.Clear, RequestedAt: d.Reset.RequestedAt, DeadlineAt: d.Reset.DeadlineAt, ForcedAt: d.Reset.ForcedAt, Remaining: snapshot.Remaining}
+		result.Reset = &Reset{Clear: ResetMode(d.Reset.Clear), RequestedAt: d.Reset.RequestedAt, DeadlineAt: d.Reset.DeadlineAt, ForcedAt: d.Reset.ForcedAt, Remaining: snapshot.Remaining}
 	}
 	return result, nil
 }
@@ -204,7 +204,7 @@ func (s *Service) GenerationPage(ctx context.Context, after int64) ([]Setup, err
 		if err != nil {
 			return nil, err
 		}
-		v.Mode, v.Operations = adapter.Mode, adapter.Operations()
+		v.Mode, v.Operations = string(adapter.Mode), adapter.Operations()
 		result = append(result, v)
 	}
 	return result, nil
@@ -245,7 +245,7 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 	if err := s.rules.CheckPublicOrigin(input.Provider); err != nil {
 		return Setup{}, err
 	}
-	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}
+	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: string(description.Mode), Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}
 	return s.describe(result)
 }
 

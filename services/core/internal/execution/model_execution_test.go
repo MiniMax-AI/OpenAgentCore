@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
@@ -35,7 +35,7 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 	for _, engine := range []string{"codex", "claude_sdk", "mcode"} {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(engine+"/"+protocol, func(t *testing.T) {
-				provider := &v1.ModelProviderInput{Protocol: protocol, BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000, MaxOutputTokens: 8000}
+				provider := &v1.ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000, MaxOutputTokens: 8000}
 				got, err := resolvedSessionModelOptions(provider, engine)
 				native := engine == "mcode" || engine == "codex" && protocol == "responses" || engine == "claude_sdk" && protocol == "anthropic"
 				if !native {
@@ -43,7 +43,7 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 					if got != nil || !errors.As(err, &protocolError) || strings.Contains(err.Error(), provider.APIKey) {
 						t.Fatal("non-native provider was not safely rejected")
 					}
-					if provider.Protocol != protocol {
+					if string(provider.Protocol) != protocol {
 						t.Fatal("rejection rewrote the frozen provider protocol")
 					}
 					return

@@ -55,14 +55,14 @@ var errPanicked = errors.New("periodic job pass panicked")
 // New reports the scheduler, which the Source reads live, and then jobs in
 // their order. Run runs the jobs. An enabled job needs a positive Every.
 func New(started time.Time, revision string, source Source, jobs ...Periodic) (*Service, error) {
-	s := &Service{source: source, started: started.UTC(), now: time.Now, jobIDs: []string{"scheduler"}, jobs: map[string]Job{"scheduler": {ID: "scheduler", Status: "unknown"}}, periodic: jobs}
+	s := &Service{source: source, started: started.UTC(), now: time.Now, jobIDs: []string{"scheduler"}, jobs: map[string]Job{"scheduler": {ID: "scheduler", Status: JobUnknown}}, periodic: jobs}
 	if revisionPattern.MatchString(revision) {
 		s.revision = &revision
 	}
 	for _, job := range jobs {
-		status := "unknown"
+		status := JobUnknown
 		if job.Run == nil {
-			status = "stopped"
+			status = JobStopped
 		} else if job.Every <= 0 {
 			return nil, errors.New("coremetrics: periodic job " + job.ID + " needs a positive interval")
 		}
@@ -88,9 +88,9 @@ func (s *Service) RecordUnavailable() {
 	s.refusals[i].count++
 }
 func (s *Service) reportJob(id string, at time.Time, processed *int64, failed *int64, err error) {
-	status := "ok"
+	status := JobOk
 	if err != nil || (failed != nil && *failed > 0) {
-		status = "failing"
+		status = JobFailing
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -103,7 +103,7 @@ func (s *Service) stopJob(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.jobs[id]; ok {
-		j.Status = "stopped"
+		j.Status = JobStopped
 		s.jobs[id] = j
 	}
 }
@@ -196,12 +196,12 @@ func (s *Service) Read(ctx context.Context, name string) (View, error) {
 		return View{}, err
 	}
 	live := s.source.Live()
-	view := View{Object: "core.metrics", Range: window, Service: ServiceState{Status: "running", Revision: s.revision, StartedAt: ptr(s.started), ExecutionOwner: live.ExecutionOwner},
+	view := View{Object: "core.metrics", Range: window, Service: ServiceState{Status: ServiceRunning, Revision: s.revision, StartedAt: ptr(s.started), ExecutionOwner: live.ExecutionOwner},
 		Execution: Execution{SlotsInUse: live.SlotsInUse, SlotsTotal: live.SlotsTotal, ConnectedDaemons: live.ConnectedDaemons}, Database: Database{Pool: live.Pool}, Jobs: make([]Job, 0, len(s.jobIDs))}
 	s.mu.Lock()
 	latest := s.latest
 	if latest.At.IsZero() || now.Sub(latest.At) > 2*SampleInterval || !latest.Healthy {
-		view.Service.Status = "degraded"
+		view.Service.Status = ServiceDegraded
 	}
 	if !latest.At.IsZero() && now.Sub(latest.At) <= 2*SampleInterval {
 		view.Execution.QueuedTurns, view.Execution.WaitingForDaemon, view.Execution.InProgressTurns = latest.Queued, latest.WaitingForDaemon, latest.InProgress
@@ -223,7 +223,7 @@ func (s *Service) Read(ctx context.Context, name string) (View, error) {
 	defer cancel()
 	history, err := s.source.History(query, window.Start, window.End, time.Duration(window.ResolutionSeconds)*time.Second)
 	if err != nil {
-		view.Service.Status = "degraded"
+		view.Service.Status = ServiceDegraded
 	} else {
 		view.Execution.Interrupted = ptr(history.Interrupted)
 		view.Execution.QueueWaitMS = history.QueueWaitMS
@@ -232,11 +232,11 @@ func (s *Service) Read(ctx context.Context, name string) (View, error) {
 		}
 	}
 	if live.ExecutionOwner == nil || !*live.ExecutionOwner {
-		view.Service.Status = "degraded"
+		view.Service.Status = ServiceDegraded
 	}
 	for _, job := range view.Jobs {
-		if job.Status == "failing" {
-			view.Service.Status = "degraded"
+		if job.Status == JobFailing {
+			view.Service.Status = ServiceDegraded
 		}
 	}
 	var memory runtime.MemStats

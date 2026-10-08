@@ -272,7 +272,7 @@ func (e *ExecutionOperations) saveSelection(tx DeploymentTx, d Record, input san
 	if err != nil {
 		return err
 	}
-	return tx.SaveSelection(SelectionRecord{InstallationID: d.InstallationID, Provider: input.Provider, BackendFingerprint: description.BackendFingerprint, Mode: description.Mode,
+	return tx.SaveSelection(SelectionRecord{InstallationID: d.InstallationID, Provider: input.Provider, BackendFingerprint: description.BackendFingerprint, Mode: string(description.Mode),
 		Generation: d.Generation + 1, Specification: specification,
 		Configuration: sandbox.ConfigurationRecord{Public: configurationJSON(record.Public), Metadata: configurationJSON(record.Metadata), Secret: record.Secret}})
 }

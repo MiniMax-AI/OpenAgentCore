@@ -55,9 +55,9 @@ func (s *Store) CreateSkill(ctx context.Context, in skills.NewSkill) (skills.Ski
 			return err
 		}
 		result = skillFromRow(row)
-		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, "create", "skill", result.ID, "",
-			writeaudit.Resource{Type: "skill", ID: result.ID},
-			writeaudit.Resource{Type: "skill_version", ID: initial.ID, ParentID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, writeaudit.ActionCreate, writeaudit.ResourceSkill, result.ID, "",
+			writeaudit.Resource{Type: writeaudit.ResourceSkill, ID: result.ID},
+			writeaudit.Resource{Type: writeaudit.ResourceSkillVersion, ID: initial.ID, ParentID: result.ID})
 	})
 	if err != nil {
 		return skills.Skill{}, translate(err)
@@ -87,8 +87,8 @@ func (s *Store) CreateVersion(ctx context.Context, in skills.NewVersion) (skills
 		if err := q.AdvanceSkillVersion(ctx, sqlc.AdvanceSkillVersionParams{TenantID: owner.TenantID, ID: owner.ID, MakeDefault: in.MakeDefault, Name: in.Name, Description: in.Description}); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, "upload_version", "skill_version", result.ID, result.SkillID,
-			writeaudit.Resource{Type: "skill_version", ID: result.ID, ParentID: result.SkillID})
+		return auditpg.RecordWriteAudit(ctx, q, in.TenantID, writeaudit.ActionUploadVersion, writeaudit.ResourceSkillVersion, result.ID, result.SkillID,
+			writeaudit.Resource{Type: writeaudit.ResourceSkillVersion, ID: result.ID, ParentID: result.SkillID})
 	})
 	if err != nil {
 		return skills.Version{}, translate(err)
@@ -116,7 +116,7 @@ func (s *Store) SetDefaultVersion(ctx context.Context, tenantID string, skillID 
 			return err
 		}
 		result = skillFromRow(row)
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update_default_version", "skill", result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdateDefaultVersion, writeaudit.ResourceSkill, result.ID, "")
 	})
 	if err != nil {
 		return skills.Skill{}, translate(err)
@@ -134,7 +134,7 @@ func (s *Store) DeleteSkill(ctx context.Context, tenantID string, skillID uuid.U
 		if _, err := q.DeleteSkill(ctx, sqlc.DeleteSkillParams{TenantID: tenant, ID: pgID(skillID)}); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "skill", skills.FormatID(skillID), "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceSkill, skills.FormatID(skillID), "")
 	})
 	return translate(err)
 }
@@ -194,7 +194,7 @@ func (d *versionDeletion) ApplyVersionDeletion(decision skills.VersionDeletion) 
 			}
 		}
 	}
-	return translate(auditpg.RecordWriteAudit(d.ctx, d.q, d.tenantID, "delete", "skill_version", decision.Target.ID, decision.Target.SkillID))
+	return translate(auditpg.RecordWriteAudit(d.ctx, d.q, d.tenantID, writeaudit.ActionDelete, writeaudit.ResourceSkillVersion, decision.Target.ID, decision.Target.SkillID))
 }
 
 func (s *Store) Skill(ctx context.Context, tenantID string, id uuid.UUID) (skills.Skill, error) {

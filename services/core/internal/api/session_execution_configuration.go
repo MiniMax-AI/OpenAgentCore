@@ -18,32 +18,32 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 		} `json:"agent"`
 	}
 	_ = json.Unmarshal(raw, &configuration) // The resolved configuration was already validated.
-	modelSource := "session"
+	modelSource := v1.ExecutionSourceSession
 	if saved != nil && (input.Agent == nil || input.Agent.Model == nil) {
-		modelSource = "agent"
+		modelSource = v1.ExecutionSourceAgent
 	}
 	if input.modelSource != "" {
 		modelSource = input.modelSource
 	}
-	harnessSource := "deployment"
+	harnessSource := v1.ExecutionSourceDeployment
 	if _, overridden := input.agentFields["x_agents_core"]; overridden {
 		if input.Agent != nil && input.Agent.XAgentsCore != nil && input.Agent.XAgentsCore.Harness != "" {
-			harnessSource = "session"
+			harnessSource = v1.ExecutionSourceSession
 		} else if input.Agent != nil && input.Agent.XAgentsCore != nil && saved != nil && saved.XAgentsCore != nil && saved.XAgentsCore.Harness != "" {
-			harnessSource = "agent"
+			harnessSource = v1.ExecutionSourceAgent
 		}
 	} else if saved != nil && saved.XAgentsCore != nil && saved.XAgentsCore.Harness != "" {
-		harnessSource = "agent"
+		harnessSource = v1.ExecutionSourceAgent
 	}
-	selection := v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"}
+	selection := v1.ExecutionProviderSelection{Source: v1.ExecutionSourceUnknown, Status: v1.ExecutionProviderUnavailable}
 	if provider != nil {
 		// Deployment defaults are readable with the same Core key, so new
 		// Sessions record their safe view too; historical rows stay redacted.
-		selection.Source, selection.Status, selection.Configuration = "deployment", "available", provider.SafeView()
+		selection.Source, selection.Status, selection.Configuration = v1.ExecutionSourceDeployment, v1.ExecutionProviderAvailable, provider.SafeView()
 		if input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil {
-			selection.Source = "session"
+			selection.Source = v1.ExecutionSourceSession
 		} else if inherited != nil {
-			selection.Source = "agent"
+			selection.Source = v1.ExecutionSourceAgent
 		}
 	}
 	native := json.RawMessage(`{}`)
@@ -52,7 +52,7 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 	}
 	nativeSource := input.harnessConfigSource
 	if nativeSource == "" {
-		nativeSource = "unknown"
+		nativeSource = v1.ExecutionSourceUnknown
 	}
 	return v1.SessionExecutionConfiguration{
 		HarnessConfig: v1.ExecutionHarnessConfigSelection{Value: native, Source: nativeSource},

@@ -7,13 +7,30 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
+type NodeRolloutState string
+
+const (
+	NodeRolloutReady          NodeRolloutState = "ready"
+	NodeRolloutPreparing      NodeRolloutState = "preparing"
+	NodeRolloutFailed         NodeRolloutState = "failed"
+	NodeRolloutUpdateRequired NodeRolloutState = "update_required"
+	NodeRolloutUnknown        NodeRolloutState = "unknown"
+)
+
+type RolloutState string
+
+const (
+	RolloutSettled   RolloutState = "settled"
+	RolloutPreparing RolloutState = "preparing"
+)
+
 // View is the sandbox deployment as administrators read it.
 type View struct {
 	Rollout              Rollout                 `json:"rollout" binding:"required"`
 	Specification        *sandbox.DeploymentSpec `json:"specification,omitempty"`
 	SpecificationDigest  string                  `json:"specification_digest,omitempty"`
 	Generation           uint64                  `json:"generation" binding:"required"`
-	Mode                 string                  `json:"mode" enums:",nodes,direct" binding:"required"`
+	Mode                 sandbox.DeploymentMode  `json:"mode" binding:"required"`
 	Resources            Resources               `json:"resources" binding:"required"`
 	Configuration        json.RawMessage         `json:"configuration,omitempty" swaggertype:"object"`
 	Metadata             json.RawMessage         `json:"metadata,omitempty" swaggertype:"object"`
@@ -43,10 +60,10 @@ type Suspension struct {
 
 type NodeRollout struct {
 	// Target preparation, independent of an old pin's serving readiness.
-	State string `json:"state" enums:"ready,preparing,failed,update_required,unknown" binding:"required"`
+	State NodeRolloutState `json:"state" binding:"required"`
 	// Durable serving-generation pin; online and provider_ready still gate placement.
-	ReadyGeneration *uint64 `json:"ready_generation" extensions:"x-nullable" binding:"required"`
-	Diagnostic      string  `json:"diagnostic,omitempty" enums:"provider_unavailable,host_unsupported,artifacts_unavailable,runtime_download_failed,runtime_image_unavailable,capacity_insufficient"`
+	ReadyGeneration *uint64                    `json:"ready_generation" extensions:"x-nullable" binding:"required"`
+	Diagnostic      sandbox.NodeDiagnosticCode `json:"diagnostic,omitempty"`
 }
 
 type RolloutNodes struct {
@@ -58,14 +75,14 @@ type RolloutNodes struct {
 }
 
 type Rollout struct {
-	State                       string        `json:"state" enums:"settled,preparing" binding:"required"`
+	State                       RolloutState  `json:"state" binding:"required"`
 	PreviousGenerationSandboxes int64         `json:"previous_generation_sandboxes" binding:"required"`
 	Nodes                       *RolloutNodes `json:"nodes" extensions:"x-nullable" binding:"required"`
 }
 
 // Reset contains only durable state and a single-snapshot resource partition.
 type Reset struct {
-	Clear       string         `json:"clear" enums:"auto,force" binding:"required"`
+	Clear       ResetMode      `json:"clear" binding:"required"`
 	RequestedAt time.Time      `json:"requested_at" binding:"required"`
 	DeadlineAt  *time.Time     `json:"deadline_at" extensions:"x-nullable" binding:"required"`
 	ForcedAt    *time.Time     `json:"forced_at" extensions:"x-nullable" binding:"required"`

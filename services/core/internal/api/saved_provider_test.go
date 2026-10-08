@@ -172,14 +172,14 @@ func TestSavedProviderProtocolHarnessMatrix(t *testing.T) {
 					if path == "/v1/agents" {
 						want = http.StatusCreated
 					}
-					if response.Code != want || s.provider == nil || s.provider.Protocol != protocol || s.provider.APIKey != "saved-provider-secret" {
+					if response.Code != want || s.provider == nil || string(s.provider.Protocol) != protocol || s.provider.APIKey != "saved-provider-secret" {
 						t.Fatalf("provider bundle rejected or changed: status=%d", response.Code)
 					}
 					assertSavedProviderRedacted(t, response.Body.String())
 					var result struct {
 						Core v1.SavedAgentCore `json:"x_agents_core"`
 					}
-					if json.Unmarshal(response.Body.Bytes(), &result) != nil || result.Core.Harness != harness || result.Core.ModelProvider == nil || result.Core.ModelProvider.Protocol != protocol {
+					if json.Unmarshal(response.Body.Bytes(), &result) != nil || result.Core.Harness != harness || result.Core.ModelProvider == nil || string(result.Core.ModelProvider.Protocol) != protocol {
 						t.Fatal("safe view changed the selected harness or upstream protocol")
 					}
 				}

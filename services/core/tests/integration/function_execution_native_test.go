@@ -14,7 +14,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 	model, output, requests := nativeFunctionModel(t, home)
 	defer model.Close()
 	var err error
-	h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "native-functions", Configuration: json.RawMessage(functionConfiguration), ModelProvider: nativeModelProvider(model), ModelProviderSource: v1.ModelProviderSourceDeployment})
+	h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "native-functions", Configuration: json.RawMessage(functionConfiguration), ModelProvider: nativeModelProvider(model), ModelProviderSource: v1.ExecutionSourceDeployment})
 	if err != nil {
 		t.Fatal(err)
 	}

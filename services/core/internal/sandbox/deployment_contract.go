@@ -41,7 +41,7 @@ var runtimeContract = []runtimeRule{
 
 // ProviderProjection is one registered Provider in the generated projections.
 type ProviderProjection struct {
-	Mode string `json:"mode"`
+	Mode DeploymentMode `json:"mode"`
 	DeploymentPolicy
 }
 

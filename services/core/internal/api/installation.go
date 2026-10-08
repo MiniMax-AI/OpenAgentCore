@@ -7,6 +7,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
+type InstallationService string
+
+const (
+	InstallationCore InstallationService = "core"
+	InstallationWeb  InstallationService = "web"
+)
+
 // Installation reports Core's installation facts. Core reads them from its
 // environment and build; configuration is the process settings it loaded.
 type Installation struct {
@@ -43,7 +50,7 @@ type InstallationSetting struct {
 	Changeable bool `json:"changeable" binding:"required"`
 	Sensitive  bool `json:"sensitive" binding:"required"`
 	// Services that restart when the setting changes.
-	Restarts []string `json:"restarts" enums:"core,web" binding:"required"`
+	Restarts []InstallationService `json:"restarts" binding:"required"`
 }
 
 // InstallationBindings counts what is bound to the current public URL.

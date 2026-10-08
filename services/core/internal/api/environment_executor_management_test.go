@@ -172,7 +172,7 @@ func TestExecutorConnectionListObservation(t *testing.T) {
 			}
 			if tc.status == 200 {
 				var got ExecutorCredentialList
-				if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || got.Connection.Status != tc.want || got.Connection.BoundKeyID == nil || *got.Connection.BoundKeyID != bound {
+				if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || string(got.Connection.Status) != tc.want || got.Connection.BoundKeyID == nil || *got.Connection.BoundKeyID != bound {
 					t.Fatal("projection", err, w.Body)
 				}
 			}

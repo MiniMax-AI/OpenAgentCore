@@ -168,7 +168,7 @@ func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) 
 	if err := r.CheckPublicOrigin(d.Provider); err != nil {
 		return nil, err
 	}
-	if d.Mode == "direct" {
+	if d.Mode == string(sandbox.DeploymentDirect) {
 		return nil, nil
 	}
 	var chosen *Node

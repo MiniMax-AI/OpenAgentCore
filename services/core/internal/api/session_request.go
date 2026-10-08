@@ -30,8 +30,8 @@ type sessionRequest struct {
 	originalEnvironment   json.RawMessage
 	modelProviderNull     bool
 	deploymentDefaults    *modelconfiguration.Snapshot
-	modelSource           string
-	harnessConfigSource   string
+	modelSource           v1.ExecutionSource
+	harnessConfigSource   v1.ExecutionSource
 	resolvedHarnessConfig json.RawMessage
 	v1.CreateSessionRequest
 	Input               json.RawMessage

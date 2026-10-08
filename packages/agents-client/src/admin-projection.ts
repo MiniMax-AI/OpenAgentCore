@@ -8,11 +8,11 @@ import {
   addressBindingsFields, adminAssetCountsFields, adminauditOperationFields, adminauditPageFields, adminRuntimeObservationFields,
   adminRuntimeObservationListFields, adminSessionCountsFields, adminSummaryResponseFields, adminSummaryRowFields, adminUsageCoverageFields,
   coreHarnessFields, coreHarnessListFields, executorConnectionFields, executorConnectionStatusValues, executorCredentialFields,
-  executorCredentialListFields, harnessModelConfigurationFields, harnessModelConfigurationLastErrorCodeValues, installationConfigurationFields,
-  installationFields, installationSettingFields, installationSettingRequired, installationSettingRestartsValues, issuedExecutorCredentialFields,
+  executorCredentialListFields, harnessModelConfigurationFields, providerErrorCodeValues, installationConfigurationFields,
+  installationFields, installationSettingFields, installationSettingRequired, installationServiceValues, issuedExecutorCredentialFields,
   managedArchiveFields, managedArchiveStateValues, modelConfigurationSupportFields, projectFields, projectsAPIKeyFields, resourceOwnerFields,
-  resourceOwnerListFields, runtimeDiskObservationFields, writeauditAPIKeyFields, writeauditOperationActionValues, writeauditOperationFields,
-  writeauditOperationResourceTypeValues, writeauditPageFields,
+  resourceOwnerListFields, runtimeDiskObservationFields, writeauditAPIKeyFields, actionValues, writeauditOperationFields,
+  resourceTypeValues, writeauditPageFields,
 } from "./generated/core-api";
 import type { CoreHarness, CoreHarnessKind, HarnessModelConfiguration, ListPage, SavedAgent, SessionArtifact } from "./types";
 import type {
@@ -119,7 +119,7 @@ export function projectWriteOperations(value: unknown): AdminWriteOperationPage 
   const data = page.data.map((entry) => {
     const operation = record(entry, writeauditOperationFields);
     strings(operation, ["id", "created_at", "action", "resource_id", "parent_id", "request_id", "trace_id"]);
-    if (!date(operation.created_at) || !isOneOf(writeauditOperationActionValues, operation.action) || !isOneOf(writeauditOperationResourceTypeValues, operation.resource_type)) return invalidAdminResponse();
+    if (!date(operation.created_at) || !isOneOf(actionValues, operation.action) || !isOneOf(resourceTypeValues, operation.resource_type)) return invalidAdminResponse();
     return { ...operation, api_key: projectProvenance(operation.api_key) };
   });
   return { data, has_more: page.has_more, next_cursor: page.next_cursor } as AdminWriteOperationPage;
@@ -212,7 +212,7 @@ export function projectHarnessModelConfiguration(value: unknown, harness?: CoreH
   const { object, harness: kind, updated_at, last_used_at, last_error_code, last_error_at, model_provider, model, harness_config } = value;
   if ((last_used_at !== null && (typeof last_used_at !== "string" || !date(last_used_at))) ||
     (last_error_at !== null && (typeof last_error_at !== "string" || !date(last_error_at))) ||
-    (last_error_code !== null && !isOneOf(harnessModelConfigurationLastErrorCodeValues, last_error_code)) ||
+    (last_error_code !== null && !isOneOf(providerErrorCodeValues, last_error_code)) ||
     ((last_error_code === null) !== (last_error_at === null))) return invalidAdminResponse();
   if (object !== "core.model_configuration" || !isOneOf(coreHarnessKinds, kind) || (harness !== undefined && kind !== harness) ||
     typeof updated_at !== "string" || !date(updated_at)) return invalidAdminResponse();
@@ -255,7 +255,7 @@ function projectInstallationSetting(value: unknown): CoreInstallationSetting {
   // `configured` is present exactly for a sensitive setting.
   const setting = record(value, value.sensitive ? installationSettingFields : installationSettingRequired);
   if (typeof setting.key !== "string" || !settingKey.test(setting.key) || typeof setting.changeable !== "boolean" ||
-    !Array.isArray(setting.restarts) || !setting.restarts.every((service) => isOneOf(installationSettingRestartsValues, service)) ||
+    !Array.isArray(setting.restarts) || !setting.restarts.every((service) => isOneOf(installationServiceValues, service)) ||
     (setting.sensitive && (setting.value !== null || setting.default !== null || typeof setting.configured !== "boolean"))) return invalidAdminResponse();
   return { ...setting } as unknown as CoreInstallationSetting;
 }
