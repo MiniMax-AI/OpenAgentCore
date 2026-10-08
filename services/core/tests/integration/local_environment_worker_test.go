@@ -100,8 +100,9 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), unassigned, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("unassigned environment selected general device", err)
 	}
-	if _, err := sessionAdapter(h.s).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatal("read persisted an unauthorized placement", err)
+	// Managed-runtime maintenance may bind its own device to the Session; the read must never bind the general one.
+	if device, err := sessionAdapter(h.s).GetSessionDevice(t.Context(), h.tenant, other.ID); err == nil && device.ID == h.device.ID || err != nil && !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatal("read persisted an unauthorized placement", device, err)
 	}
 }
 
