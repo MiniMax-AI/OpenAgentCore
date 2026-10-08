@@ -1,6 +1,6 @@
 import type { SandboxEnrollment, SandboxNode } from "@oac/agents-client";
 
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 
 /**
@@ -11,7 +11,7 @@ import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 export const NODE_READY_WAIT_MS = 60_000;
 
 export interface HostPrerequisite {
-  label: MessageKey;
+  label: ParseKeys<"sandbox">;
 }
 
 /**
