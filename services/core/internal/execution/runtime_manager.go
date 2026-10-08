@@ -88,7 +88,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 		m.mu.Unlock()
 		return nil, errRuntimeTransition
 	}
-	if m.closed || m.config.Provider == nil || (id == "") != (m.config.Mode == "direct") {
+	if m.closed || m.config.Provider == nil || (id == "") != (m.config.Mode == string(sandbox.DeploymentDirect)) {
 		m.mu.Unlock()
 		return nil, ErrExecutionUnavailable
 	}

@@ -109,7 +109,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if snapshot.Model.Value == nil || *snapshot.Model.Value != model || snapshot.Model.Source != modelSource || snapshot.HarnessConfig.Source != nativeSource || snapshot.ModelProvider.Source != providerSource {
+		if snapshot.Model.Value == nil || *snapshot.Model.Value != model || snapshot.Model.Source != v1.ExecutionSource(modelSource) || snapshot.HarnessConfig.Source != v1.ExecutionSource(nativeSource) || snapshot.ModelProvider.Source != v1.ExecutionSource(providerSource) {
 			t.Fatalf("wrong frozen selections: %#v", snapshot)
 		}
 		equalJSON(snapshot.HarnessConfig.Value, native)

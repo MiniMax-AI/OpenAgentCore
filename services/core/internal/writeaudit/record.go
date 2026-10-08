@@ -15,14 +15,44 @@ import (
 // vocabulary. The write it belongs to fails closed.
 var ErrInvalidSource = errors.New("invalid write audit source")
 
+type ResourceType string
+
+const (
+	ResourceAgent               ResourceType = "agent"
+	ResourceSession             ResourceType = "session"
+	ResourceEnvironment         ResourceType = "environment"
+	ResourceEnvironmentTemplate ResourceType = "environment_template"
+	ResourceSkill               ResourceType = "skill"
+	ResourceSkillVersion        ResourceType = "skill_version"
+	ResourceFile                ResourceType = "file"
+	ResourceVault               ResourceType = "vault"
+	ResourceCredential          ResourceType = "credential"
+	ResourceArtifact            ResourceType = "artifact"
+)
+
+type Action string
+
+const (
+	ActionCreate               Action = "create"
+	ActionUpdate               Action = "update"
+	ActionDelete               Action = "delete"
+	ActionSendEvents           Action = "send_events"
+	ActionUploadFile           Action = "upload_file"
+	ActionUploadVersion        Action = "upload_version"
+	ActionUpdateDefaultVersion Action = "update_default_version"
+)
+
 // Resource identifies a resource genuinely created by the current transaction.
-type Resource struct{ Type, ID, ParentID string }
+type Resource struct {
+	Type         ResourceType
+	ID, ParentID string
+}
 
 // ValidResourceType reports whether value is an audited resource type. The list
 // is closed; recording and owner queries share it.
 func ValidResourceType(value string) bool {
-	switch value {
-	case "agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact":
+	switch ResourceType(value) {
+	case ResourceAgent, ResourceSession, ResourceEnvironment, ResourceEnvironmentTemplate, ResourceSkill, ResourceSkillVersion, ResourceFile, ResourceVault, ResourceCredential, ResourceArtifact:
 		return true
 	}
 	return false
@@ -46,17 +76,17 @@ func (s Source) Validate(tenant string) error {
 // ValidateRecord checks a write record in tenant: source must be well-formed
 // provenance from tenant, action an audited write action, and every resource
 // an audited resource.
-func ValidateRecord(source Source, tenant, action string, resources []Resource) error {
+func ValidateRecord(source Source, tenant string, action Action, resources []Resource) error {
 	if err := source.Validate(tenant); err != nil {
 		return err
 	}
 	switch action {
-	case "create", "update", "delete", "send_events", "upload_file", "upload_version", "update_default_version":
+	case ActionCreate, ActionUpdate, ActionDelete, ActionSendEvents, ActionUploadFile, ActionUploadVersion, ActionUpdateDefaultVersion:
 	default:
 		return fmt.Errorf("%w: invalid action", ErrInvalidSource)
 	}
 	for _, resource := range resources {
-		if !ValidResourceType(resource.Type) || !ValidText(resource.ID, 256, true) || !ValidText(resource.ParentID, 256, false) {
+		if !ValidResourceType(string(resource.Type)) || !ValidText(resource.ID, 256, true) || !ValidText(resource.ParentID, 256, false) {
 			return fmt.Errorf("%w: invalid resource", ErrInvalidSource)
 		}
 	}

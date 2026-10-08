@@ -27,7 +27,7 @@ type NativeInstaller struct {
 
 func (h *Handler) installationFor(ctx context.Context, principal identity.Principal, environment string) (*v1.EnvironmentInstallation, error) {
 	installer := h.Execution.NativeInstaller
-	result := &v1.EnvironmentInstallation{Status: "unavailable", Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
+	result := &v1.EnvironmentInstallation{Status: v1.InstallationUnavailable, Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
 	if installer == nil {
 		return result, nil
 	}
@@ -39,7 +39,7 @@ func (h *Handler) installationFor(ctx context.Context, principal identity.Princi
 	if err != nil {
 		return nil, err
 	}
-	return &v1.EnvironmentInstallation{Status: "available", Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(installer.Base, token)}, nil
+	return &v1.EnvironmentInstallation{Status: v1.InstallationAvailable, Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(installer.Base, token)}, nil
 }
 
 func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request, response *v1.Session) error {

@@ -8,15 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func presenceContext(t *testing.T) context.Context {
@@ -278,15 +277,15 @@ func TestNodeDiagnosticReachesListAndDetail(t *testing.T) {
 		{reported: "dial unix /var/run/docker.sock: permission denied", want: "provider_unavailable"},
 		{reported: "artifacts_unavailable", want: "", ready: true},
 	} {
-		if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: tc.ready, Diagnostic: tc.reported}); err != nil {
+		if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: tc.ready, Diagnostic: sandbox.NodeDiagnosticCode(tc.reported)}); err != nil {
 			t.Fatal(tc.reported, err)
 		}
 		list, err := f.service.ListNodes(t.Context())
-		if err != nil || len(list) != 1 || list[0].Diagnostic != tc.want {
+		if err != nil || len(list) != 1 || string(list[0].Diagnostic) != tc.want {
 			t.Fatal(tc.reported, list, err)
 		}
 		detail, err := f.service.NodeDetail(t.Context(), node.NodeID, "1h")
-		if err != nil || detail.Diagnostic != tc.want {
+		if err != nil || string(detail.Diagnostic) != tc.want {
 			t.Fatal(tc.reported, detail.Diagnostic, err)
 		}
 		var stored string

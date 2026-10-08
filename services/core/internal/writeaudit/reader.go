@@ -36,15 +36,15 @@ type ResourceOwner struct {
 
 // Operation is one committed write.
 type Operation struct {
-	ID           string    `json:"id" binding:"required"`
-	Action       string    `json:"action" enums:"create,update,delete,send_events,upload_file,upload_version,update_default_version" binding:"required"`
-	ResourceType string    `json:"resource_type" enums:"agent,session,environment,environment_template,skill,skill_version,file,vault,credential,artifact" binding:"required"`
-	ResourceID   string    `json:"resource_id" binding:"required"`
-	ParentID     string    `json:"parent_id" binding:"required"`
-	RequestID    string    `json:"request_id" binding:"required"`
-	TraceID      string    `json:"trace_id" binding:"required"`
-	APIKey       APIKey    `json:"api_key" binding:"required"`
-	CreatedAt    time.Time `json:"created_at" binding:"required"`
+	ID           string       `json:"id" binding:"required"`
+	Action       Action       `json:"action" binding:"required"`
+	ResourceType ResourceType `json:"resource_type" binding:"required"`
+	ResourceID   string       `json:"resource_id" binding:"required"`
+	ParentID     string       `json:"parent_id" binding:"required"`
+	RequestID    string       `json:"request_id" binding:"required"`
+	TraceID      string       `json:"trace_id" binding:"required"`
+	APIKey       APIKey       `json:"api_key" binding:"required"`
+	CreatedAt    time.Time    `json:"created_at" binding:"required"`
 }
 
 // Filter selects committed writes, newest first. A zero Limit is the default

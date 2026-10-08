@@ -8,6 +8,14 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
+type ManagedArchiveState string
+
+const (
+	ManagedArchiveActive         ManagedArchiveState = "active"
+	ManagedArchiveCleanupPending ManagedArchiveState = "cleanup_pending"
+	ManagedArchiveReleased       ManagedArchiveState = "released"
+)
+
 // SessionReader reads Sessions, their public change journal and their
 // diagnostics.
 type SessionReader interface {
@@ -67,7 +75,7 @@ type TurnDiagnosticsSnapshot struct {
 // ManagedArchive reports resource disposal, not archive request provenance
 // or Turn settlement. Existing expiry and failed provisioning use the same states.
 type ManagedArchive struct {
-	SessionID     string `json:"session_id" binding:"required"`
-	EnvironmentID string `json:"environment_id" binding:"required"`
-	State         string `json:"state" enums:"active,cleanup_pending,released" binding:"required"`
+	SessionID     string              `json:"session_id" binding:"required"`
+	EnvironmentID string              `json:"environment_id" binding:"required"`
+	State         ManagedArchiveState `json:"state" binding:"required"`
 }

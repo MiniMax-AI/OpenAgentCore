@@ -4,6 +4,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 )
 
 // WorkerMetrics contains only observations from this worker's existing
@@ -18,7 +20,7 @@ type WorkerMetrics struct {
 // WorkerJobMetrics describes the last completed scheduling poll. Failed counts
 // failed polls, not failed Turns; Processed is unknown when a poll fails.
 type WorkerJobMetrics struct {
-	Status    string
+	Status    coremetrics.JobStatus
 	LastRunAt *time.Time
 	Processed *int64
 	Failed    *int64
@@ -41,7 +43,7 @@ func (w *Worker) MetricsSnapshot() WorkerMetrics {
 	value.Scheduler.Processed = copyMetric(value.Scheduler.Processed)
 	value.Scheduler.Failed = copyMetric(value.Scheduler.Failed)
 	if value.Scheduler.Status == "" {
-		value.Scheduler.Status = "unknown"
+		value.Scheduler.Status = coremetrics.JobUnknown
 	}
 	return value
 }
@@ -75,10 +77,10 @@ func (w *Worker) observeOwnership(err error) {
 
 func (w *Worker) observeSchedulerPoll(processed int, err error) {
 	now, handled, failed := time.Now().UTC(), int64(processed), int64(0)
-	job := WorkerJobMetrics{Status: "ok", LastRunAt: &now, Processed: &handled, Failed: &failed}
+	job := WorkerJobMetrics{Status: coremetrics.JobOk, LastRunAt: &now, Processed: &handled, Failed: &failed}
 	if err != nil {
 		failed = 1
-		job.Status, job.Processed = "failing", nil
+		job.Status, job.Processed = coremetrics.JobFailing, nil
 	}
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
@@ -88,9 +90,9 @@ func (w *Worker) observeSchedulerPoll(processed int, err error) {
 func (w *Worker) observeWorkerStop(runErr, contextErr error) {
 	w.metrics.mu.Lock()
 	defer w.metrics.mu.Unlock()
-	w.metrics.value.Scheduler.Status = "stopped"
+	w.metrics.value.Scheduler.Status = coremetrics.JobStopped
 	if runErr != nil && (contextErr == nil || !errors.Is(runErr, contextErr)) {
-		w.metrics.value.Scheduler.Status = "failing"
+		w.metrics.value.Scheduler.Status = coremetrics.JobFailing
 	}
 }
 

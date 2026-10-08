@@ -46,11 +46,11 @@ type Enrollment struct {
 type NodeHealth struct {
 	Host *NodeHost `json:"-"`
 	// Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-	Diagnostic           string `json:"diagnostic,omitempty" enums:"provider_unavailable,host_unsupported,artifacts_unavailable,runtime_download_failed,runtime_image_unavailable,capacity_insufficient"`
-	ProviderReady        bool   `json:"provider_ready" binding:"required"`
-	CPUCount             *int64 `json:"cpu_count" extensions:"x-nullable" binding:"required"`
-	AvailableMemoryBytes *int64 `json:"available_memory_bytes" extensions:"x-nullable" binding:"required"`
-	AvailableDiskBytes   *int64 `json:"available_disk_bytes" extensions:"x-nullable" binding:"required"`
+	Diagnostic           sandbox.NodeDiagnosticCode `json:"diagnostic,omitempty"`
+	ProviderReady        bool                       `json:"provider_ready" binding:"required"`
+	CPUCount             *int64                     `json:"cpu_count" extensions:"x-nullable" binding:"required"`
+	AvailableMemoryBytes *int64                     `json:"available_memory_bytes" extensions:"x-nullable" binding:"required"`
+	AvailableDiskBytes   *int64                     `json:"available_disk_bytes" extensions:"x-nullable" binding:"required"`
 }
 
 type Node struct {

@@ -9,6 +9,14 @@ import (
 	"regexp"
 )
 
+type DeploymentMode string
+
+const (
+	DeploymentUnconfigured DeploymentMode = ""
+	DeploymentNodes        DeploymentMode = "nodes"
+	DeploymentDirect       DeploymentMode = "direct"
+)
+
 // ValidationError preserves the sandbox error text and identity while identifying
 // a fixed configuration field and, for numeric limits, fixed inclusive bounds.
 type ValidationError struct {
@@ -111,7 +119,8 @@ func (s DeploymentSpec) Digest(provider string) string {
 // Description is what a provider registration says about a deployment of it:
 // its mode and its backend namespace fingerprint.
 type Description struct {
-	Mode, BackendFingerprint string
+	Mode               DeploymentMode
+	BackendFingerprint string
 }
 
 func BackendFingerprint(kind, namespace string) string {

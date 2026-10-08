@@ -3,25 +3,25 @@ import { CoreRequester, type CoreClientOptions } from "./core-request";
 import { deploymentContract } from "./deployment-contract";
 import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId, schemaFields } from "./response-projection";
 import {
-  deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentViewModeValues, deploymentViewRequired,
+  deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
   hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields, nodeDetailRequired,
-  nodeDiagnosticValues, nodeFields, nodeHostFields, nodeRequired, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetClearValues,
+  nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRequired, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
   resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues, runtimeReleaseFields,
   sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
-  type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnostic,
+  type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
   type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout, type RuntimeRelease,
   type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
 } from "./generated/core-api";
 import type { ReadOptions } from "./types";
 
 /** Checked against Core's shared node-diagnostics.json fixture. */
-export const sandboxNodeDiagnostics = nodeDiagnosticValues;
+export const sandboxNodeDiagnostics = nodeDiagnosticCodeValues;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */
-export type SandboxNodeDiagnostic = NodeDiagnostic;
+export type SandboxNodeDiagnostic = NodeDiagnosticCode;
 
 /** Keep a known readiness cause; never expose unclassified node-supplied text. */
 export function normalizeSandboxNodeDiagnostic(value: string): SandboxNodeDiagnostic {
-  return isOneOf(nodeDiagnosticValues, value) ? value : "provider_unavailable";
+  return isOneOf(nodeDiagnosticCodeValues, value) ? value : "provider_unavailable";
 }
 
 /** A registered Provider kind; deploymentContract.providers holds each one's declaration. */
@@ -121,7 +121,7 @@ function projectReset(value: unknown, held: number): SandboxReset | null {
   if (value === null) return null;
   const reset = members(value, resetFields);
   const remaining = members(reset.remaining, resetRemainingFields);
-  valid(isOneOf(resetClearValues, reset.clear) && timestamp(reset.requested_at) &&
+  valid(isOneOf(resetModeValues, reset.clear) && timestamp(reset.requested_at) &&
     nullable(timestamp)(reset.deadline_at) && nullable(timestamp)(reset.forced_at) &&
     (reset.clear === "auto" ? reset.deadline_at !== null && reset.forced_at === null : reset.forced_at !== null) &&
     [remaining.busy, remaining.idle, remaining.cleanup, remaining.on_offline_nodes].every(isNonnegativeInteger) && Array.isArray(remaining.offline_nodes));
@@ -161,7 +161,7 @@ function projectDeployment(value: unknown): SandboxDeployment {
   const resources = members(deployment.resources, deploymentResourcesFields);
   const suspension = deployment.suspension === null ? null : members(deployment.suspension, suspensionFields);
   const configured = hasOwn(deployment, "specification");
-  valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && isOneOf(deploymentViewModeValues, deployment.mode) &&
+  valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && isOneOf(deploymentModeValues, deployment.mode) &&
     [deployment.owner_epoch, deployment.generation, resources.allocations, resources.pending].every(isNonnegativeInteger) &&
     (suspension === null || [suspension.idle_seconds, suspension.retention_seconds].every(isNonnegativeInteger)) &&
     configured === hasOwn(deployment, "specification_digest") && (!configured || (typeof deployment.specification_digest === "string" && deployment.specification_digest !== "")));

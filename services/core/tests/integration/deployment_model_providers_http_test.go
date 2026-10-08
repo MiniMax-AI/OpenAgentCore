@@ -205,7 +205,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		} {
 			id := text(call("POST", "/v1/agents/sessions", projectKey, tc.body, 201)["id"])
 			projection, err := sessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, id)
-			if providerOf(id) != tc.key || err != nil || projection.ModelProvider.Source != tc.source {
+			if providerOf(id) != tc.key || err != nil || string(projection.ModelProvider.Source) != tc.source {
 				t.Fatal("Session did not freeze its provider", name, tc.source, err)
 			}
 		}

@@ -3,7 +3,7 @@ import { invalidAdminResponse } from "./admin-projection";
 import { turnStatusResourceValues } from "./generated/public-api";
 import {
   diagnosticFailureFields, itemDiagnosticTimingFields, sessionDiagnosticFailureFields, sessionDiagnosticFailureRequired,
-  sessionDiagnosticFailureSourceValues, sessionDiagnosticsFields, sessionDiagnosticsStatusValues, turnDiagnosticsFields,
+  diagnosticSourceValues, sessionDiagnosticsFields, sessionDiagnosticsStatusValues, turnDiagnosticsFields,
   type DiagnosticFailure as DiagnosticFailureResource, type DiagnosticFailureCode, type ItemDiagnosticTiming,
   type SessionDiagnosticFailure as SessionDiagnosticFailureResource, type SessionDiagnostics as SessionDiagnosticsResource,
   type TurnDiagnostics as TurnDiagnosticsResource,
@@ -50,7 +50,7 @@ export function projectSessionDiagnostics(value: unknown, sessionId: string): Se
       canonicalUuid(value.session_id) === null || !sameResourceId(value.session_id as string, sessionId) || !isOneOf(sessionDiagnosticsStatusValues, value.status)) return invalidAdminResponse();
   let projected: SessionDiagnosticFailure | null = null;
   if (value.status === "failed") {
-    if (!isRecord(value.failure) || !isOneOf(sessionDiagnosticFailureSourceValues, value.failure.source)) return invalidAdminResponse();
+    if (!isRecord(value.failure) || !isOneOf(diagnosticSourceValues, value.failure.source)) return invalidAdminResponse();
     const f = value.failure;
     const source = value.failure.source;
     projected = { ...failure(f, source === "turn" ? turnCodes : source === "environment_input" ? inputCodes : environmentCodes, true), source };

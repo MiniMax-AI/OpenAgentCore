@@ -61,9 +61,9 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 			return &storedDataError{err}
 		}
 	}
-	input.modelSource = "session"
+	input.modelSource = v1.ExecutionSourceSession
 	if !explicitModel && saved != nil {
-		input.modelSource = "agent"
+		input.modelSource = v1.ExecutionSourceAgent
 	}
 	if needsModel && input.deploymentDefaults != nil {
 		if input.Agent == nil {
@@ -74,26 +74,26 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 		}
 		model := input.deploymentDefaults.Model
 		input.Agent.Model = &model
-		input.modelSource = "deployment"
+		input.modelSource = v1.ExecutionSourceDeployment
 	}
 	raw := json.RawMessage(`{}`)
-	source := "unknown"
+	source := v1.ExecutionSourceUnknown
 	supplied := inline
 	if len(session) > 0 {
 		supplied = session
 	}
 	if len(supplied) > 0 {
-		raw, source = supplied, "session"
+		raw, source = supplied, v1.ExecutionSourceSession
 	} else if explicitModel || explicitProvider {
-		source = "session"
+		source = v1.ExecutionSourceSession
 	} else if saved != nil {
-		source = "agent"
+		source = v1.ExecutionSourceAgent
 		// Changing the harness also discards the former adapter's parameters.
 		if _, overridden := input.agentFields["x_agents_core"]; !overridden && saved.XAgentsCore != nil {
 			raw = v1.ResolvedHarnessConfig(saved.XAgentsCore.HarnessConfig)
 		}
 	} else if input.deploymentDefaults != nil {
-		raw, source = v1.ResolvedHarnessConfig(input.deploymentDefaults.HarnessConfig), "deployment"
+		raw, source = v1.ResolvedHarnessConfig(input.deploymentDefaults.HarnessConfig), v1.ExecutionSourceDeployment
 	}
 	model := ""
 	if input.Agent != nil && input.Agent.Model != nil {
