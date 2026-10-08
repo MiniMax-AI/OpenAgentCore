@@ -4,12 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -129,5 +131,60 @@ func TestCatalogRejectsUnsupportedPlatforms(t *testing.T) {
 				t.Fatal("unsupported platform accepted")
 			}
 		})
+	}
+}
+
+func TestDownloadResponsesKeepConditionalRangesAndJSONErrors(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "linux-amd64.tar.gz")
+	if err := os.WriteFile(file, []byte("archive fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog := &Catalog{Version: "build", directory: dir, local: map[string]bool{"linux-amd64": true}, Artifacts: map[string]Artifact{"linux-amd64": {}}}
+	target := "/api/v1/agent-daemon/install/build/linux-amd64.tar.gz"
+	get := func(method string, headers http.Header) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(method, target, nil)
+		if headers != nil {
+			request.Header = headers
+		}
+		response := httptest.NewRecorder()
+		catalog.ServeHTTP(response, request)
+		return response
+	}
+	full := get("GET", nil)
+	if full.Code != 200 || full.Body.String() != "archive fixture" || full.Header().Get("Content-Length") != "15" || full.Header().Get("Last-Modified") == "" {
+		t.Fatalf("full: %v", full)
+	}
+	head := get("HEAD", nil)
+	if head.Code != 200 || head.Body.Len() != 0 || head.Header().Get("Content-Length") != "15" || head.Header().Get("Last-Modified") != full.Header().Get("Last-Modified") {
+		t.Fatalf("head: %v", head)
+	}
+	for _, method := range []string{"GET", "HEAD"} {
+		cached := get(method, http.Header{"If-Modified-Since": {full.Header().Get("Last-Modified")}})
+		if cached.Code != 304 || cached.Body.Len() != 0 {
+			t.Fatalf("conditional %s: %v", method, cached)
+		}
+	}
+	partial := get("GET", http.Header{"Range": {"bytes=2-5"}})
+	if partial.Code != 206 || partial.Body.String() != "chiv" || partial.Header().Get("Content-Range") != "bytes 2-5/15" || partial.Header().Get("Content-Length") != "4" {
+		t.Fatalf("range: %v", partial)
+	}
+	invalid := get("GET", http.Header{"Range": {"bytes=99-100"}})
+	if invalid.Code != 416 || invalid.Header().Get("Content-Range") != "bytes */15" {
+		t.Fatalf("invalid range: %v", invalid)
+	}
+	if err := os.Remove(file); err != nil {
+		t.Fatal(err)
+	}
+	missing := get("GET", nil)
+	if missing.Code != 404 {
+		t.Fatalf("missing: %v", missing)
+	}
+	for _, response := range []*httptest.ResponseRecorder{invalid, missing} {
+		var body v1.ErrorResponse
+		if response.Header().Get("Content-Type") != "application/json" || response.Header().Get("Content-Length") != "" || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.Error.Message == "" {
+			t.Fatalf("download error: %v", response)
+		}
 	}
 }

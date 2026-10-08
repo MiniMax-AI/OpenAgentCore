@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/gorilla/websocket"
 )
 
 // These tests run Core's gateway against a scripted Runtime that replays the
@@ -138,11 +138,9 @@ func TestWireRejectsIncompatibleVersions(t *testing.T) {
 			if err == nil || response == nil || response.StatusCode != prototest.IncompatibleVersionStatus {
 				t.Fatalf("upgrade with version %q: %v", version, err)
 			}
-			var body struct {
-				Error string `json:"error"`
-			}
-			if json.NewDecoder(response.Body).Decode(&body) != nil || body.Error != prototest.IncompatibleVersionCode {
-				t.Fatalf("rejection code %q", body.Error)
+			var body v1.ErrorResponse
+			if json.NewDecoder(response.Body).Decode(&body) != nil || body.Error.Code == nil || *body.Error.Code != prototest.IncompatibleVersionCode {
+				t.Fatalf("rejection code %v", body.Error.Code)
 			}
 			if devices := reg.Devices(); len(devices) != 0 {
 				t.Fatalf("rejected connection registered %v", devices)

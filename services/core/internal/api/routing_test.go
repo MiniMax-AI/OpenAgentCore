@@ -276,7 +276,13 @@ func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	handler, router, s := routingFixture(t)
 	selfAuthenticated := map[string]bool{"GET /healthz": false, "GET /docs": false, "GET /docs/{document}": false, "POST /api/v1/sandbox-node/enroll": false, "GET /api/v1/sandbox-node/identity": false, "GET /api/v1/sandbox-node/configuration": false,
 		// The Link authenticates in its Hello, after the upgrade.
-		"GET /api/v1/sandbox-link": false, "HEAD /api/v1/sandbox-link": false}
+		"GET /api/v1/sandbox-link": false, "HEAD /api/v1/sandbox-link": false,
+		"POST /api/v1/agent-daemon/bootstrap": false, "GET /api/v1/agent-daemon/ws": false, "HEAD /api/v1/agent-daemon/ws": false}
+	for _, route := range []string{"/api/v1/agent-daemon", "/api/v1/agent-daemon/install", "/api/v1/agent-daemon/enroll", "/api/v1/agent-daemon/connection", "/api/v1/sandbox-node/connect"} {
+		for _, method := range []string{"CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE", "QUERY"} {
+			selfAuthenticated[method+" "+route] = false
+		}
+	}
 	credentials := []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
 		withHeaders([]string{"Authorization", "Basic " + routingKey}, beta), withHeaders([]string{"Authorization", "Bearer wrong"}),
 		withHeaders(project), withHeaders(project, []string{"OpenAI-Beta", "agents=v0"}),

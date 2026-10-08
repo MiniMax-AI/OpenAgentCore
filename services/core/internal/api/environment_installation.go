@@ -59,18 +59,6 @@ func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request,
 	return nil
 }
 
-func (h *Handler) registerNativeInstallationRoutes(r chi.Router) {
-	installer := h.Execution.NativeInstaller
-	if installer == nil {
-		return
-	}
-	if installer.Catalog != nil {
-		r.Handle("/api/v1/agent-daemon/install/*", installer.Catalog)
-	}
-	r.Post("/api/v1/agent-daemon/installation", h.prepareNativeInstallation)
-	r.Post("/api/v1/agent-daemon/installation/claim", h.claimNativeInstallation)
-}
-
 // installationAuthorization validates a grant route's bearer grant. The routes
 // are registered only when this Core serves a native installer.
 func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Request) (sessions.InstallationAuthorization, string, bool) {
@@ -97,7 +85,7 @@ func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Reque
 // @Tags Native Installation
 // @Produce json
 // @Success 200 {object} v1.NativeInstallationContext
-// @Failure 401,404,503 {object} CoreErrorResponse
+// @Failure 401,404,503 {object} v1.ErrorResponse
 // @Router /api/v1/agent-daemon/installation [post]
 func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Request) {
 	claim, _, ok := h.installationAuthorization(w, r)
@@ -132,7 +120,7 @@ type NativeInstallationClaim struct {
 // @Accept json
 // @Param body body api.NativeInstallationClaim true "Locally persisted executor secret"
 // @Success 204
-// @Failure 400,401,409,503 {object} CoreErrorResponse
+// @Failure 400,401,409,503 {object} v1.ErrorResponse
 // @Router /api/v1/agent-daemon/installation/claim [post]
 func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request) {
 	_, token, ok := h.installationAuthorization(w, r)

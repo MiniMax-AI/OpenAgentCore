@@ -14,8 +14,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/gorilla/websocket"
 	"github.com/libp2p/go-yamux/v5"
 )
 
@@ -382,7 +384,7 @@ type splice struct {
 // ServeHTTP upgrades a peer's request to a WebSocket and serves the link until
 // it ends.
 func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := sandboxlink.UpgradeWebSocket(w, r)
+	conn, err := sandboxlink.UpgradeWebSocket(w, r, websocket.Upgrader{HandshakeTimeout: sandboxlink.HandshakeTimeout, Error: v1.WebSocketError})
 	if err != nil {
 		return
 	}

@@ -76,6 +76,8 @@ type Execution struct {
 	Workspaces       EnvironmentWorkspaces
 	// Links is the Link relay, served at GET /api/v1/sandbox-link.
 	Links http.Handler
+	// Machine handlers authenticate their own callers.
+	Bootstrap, RuntimeConnect, Enrollment, Connection http.Handler
 	// NativeInstaller is nil for a build without a source revision: the native
 	// installation routes are then absent and Sessions carry no installation.
 	NativeInstaller *NativeInstaller
@@ -84,6 +86,7 @@ type Execution struct {
 // Sandboxes is the managed sandbox deployment's surface. Every field is
 // required.
 type Sandboxes struct {
+	NodeConnect            http.Handler
 	Deployment             Deployment
 	NodeAllocations        NodeAllocations
 	DeploymentChanges      DeploymentChanges
@@ -152,6 +155,9 @@ func (d Dependencies) validate() error {
 		field{"Execution.SessionArchive", e.SessionArchive},
 		field{"Execution.Workspaces", e.Workspaces},
 		field{"Execution.Links", e.Links},
+		field{"Execution.Bootstrap", e.Bootstrap}, field{"Execution.RuntimeConnect", e.RuntimeConnect},
+		field{"Execution.Enrollment", e.Enrollment}, field{"Execution.Connection", e.Connection},
+		field{"Sandboxes.NodeConnect", s.NodeConnect},
 		field{"Sandboxes.Deployment", s.Deployment},
 		field{"Sandboxes.NodeAllocations", s.NodeAllocations},
 		field{"Sandboxes.DeploymentChanges", s.DeploymentChanges},

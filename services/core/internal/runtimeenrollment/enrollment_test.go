@@ -66,7 +66,7 @@ func TestEnrollmentConnectionContract(t *testing.T) {
 			if response.Code == 200 && (response.Body.String() != `{"link_url":"wss://core.example/api/v1/sandbox-link","resource":{"tenant_id":"tenant","environment_id":"environment","kind":"enrollment","id":"enrollment","generation":2}}`+"\n" || response.Header().Get("Cache-Control") != "no-store") {
 				t.Fatalf("enrollment response %s", response.Body.String())
 			}
-			if test.name == "no wss Link" && !strings.Contains(response.Body.String(), `"error":"no_sandbox_link"`) {
+			if test.name == "no wss Link" && !strings.Contains(response.Body.String(), `"code":"no_sandbox_link"`) {
 				t.Fatalf("no Link response %s", response.Body.String())
 			}
 		})

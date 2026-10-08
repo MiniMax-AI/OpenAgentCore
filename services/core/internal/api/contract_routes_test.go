@@ -16,10 +16,11 @@ import (
 // Registered routes that are deliberately not contract operations, keyed
 // "METHOD /path"; the method * matches every method.
 var unpublishedRoutes = map[string]string{
-	"GET /healthz":                     "liveness probe, not part of the Agent API",
-	"GET /docs":                        "reference page rendering the published contracts",
-	"GET /docs/{document}":             "the published contract documents themselves",
-	"* /api/v1/agent-daemon/install/*": "public immutable native release content, not an API operation",
+	"GET /healthz":                   "liveness probe, not part of the Agent API",
+	"GET /docs":                      "reference page rendering the published contracts",
+	"GET /docs/{document}":           "the published contract documents themselves",
+	"* /api/v1/agent-daemon/install": "canonical installer prefix redirect, not an operation",
+	"* /api/v1/agent-daemon":         "canonical daemon prefix redirect, not an operation",
 }
 
 // contractOperations reads one committed contract as "METHOD /path" keys and
@@ -84,6 +85,18 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 				return nil
 			}
 		}
+		// These handlers own their method errors; Handle preserves their
+		// existing status and credential precedence for unsupported methods.
+		methods := map[string][]string{
+			"/api/v1/sandbox-node/connect":    {http.MethodGet},
+			"/api/v1/agent-daemon/enroll":     {http.MethodPost},
+			"/api/v1/agent-daemon/connection": {http.MethodGet},
+			"/api/v1/agent-daemon/install/*":  {http.MethodGet, http.MethodHead},
+		}
+		if supported, exists := methods[route]; exists && !slices.Contains(supported, method) {
+			return nil
+		}
+		route = strings.ReplaceAll(route, "/install/*", "/install/{path}")
 		// An explicit HEAD or OPTIONS 405 guard is not an operation.
 		if f, ok := handler.(http.HandlerFunc); ok && (method == http.MethodHead || method == http.MethodOptions) && reflect.ValueOf(f).Pointer() == guard {
 			return nil

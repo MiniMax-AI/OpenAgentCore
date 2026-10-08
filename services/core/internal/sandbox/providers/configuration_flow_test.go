@@ -161,8 +161,9 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 			Links:            struct{ http.Handler }{},
+			Bootstrap:        http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unexpected machine bootstrap") }), RuntimeConnect: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unexpected Runtime connection") }), Enrollment: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unexpected enrollment") }), Connection: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unexpected connection") }),
 		},
-		Sandboxes: api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
+		Sandboxes: api.Sandboxes{NodeConnect: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("unexpected node connection") }), Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
 			DeploymentReset: leaseSetup{t: t, changes: changes, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {

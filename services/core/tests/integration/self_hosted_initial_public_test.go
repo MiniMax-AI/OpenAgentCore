@@ -54,6 +54,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 					SessionArchive:   strictStandIn{t},
 					Workspaces:       strictStandIn{t},
 					Links:            strictStandIn{t},
+					Bootstrap:        strictStandIn{t}, RuntimeConnect: strictStandIn{t}, Enrollment: strictStandIn{t}, Connection: strictStandIn{t},
 				}
 			})
 		}

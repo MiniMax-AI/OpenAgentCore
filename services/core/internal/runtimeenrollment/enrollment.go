@@ -9,11 +9,20 @@ import (
 	"strings"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
+
+type EnrollmentRequest struct {
+	EnvironmentID string `json:"environment_id" binding:"required"`
+}
+type EnrollmentResponse struct {
+	LinkURL  string                    `json:"link_url" binding:"required"`
+	Resource sandboxbootstrap.Resource `json:"resource" binding:"required"`
+}
 
 type EnrollmentStore interface {
 	EnrollRuntime(context.Context, string, string) (sandboxbootstrap.Resource, error)
@@ -31,7 +40,7 @@ func EnrollmentHandler(s EnrollmentStore, origin deployment.PublicOrigin) http.H
 	}
 	noLink := err != nil
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fail := func(status int) { http.Error(w, http.StatusText(status), status) }
+		fail := func(status int) { v1.WriteHTTPError(w, status, "", http.StatusText(status)) }
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			fail(http.StatusMethodNotAllowed)
@@ -42,9 +51,7 @@ func EnrollmentHandler(s EnrollmentStore, origin deployment.PublicOrigin) http.H
 			fail(http.StatusUnauthorized)
 			return
 		}
-		var input struct {
-			EnvironmentID string `json:"environment_id"`
-		}
+		var input EnrollmentRequest
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		decoder.DisallowUnknownFields()
 		if len(r.URL.Query()) != 0 || decoder.Decode(&input) != nil || input.EnvironmentID == "" || decoder.Decode(new(any)) != io.EOF {
@@ -52,12 +59,7 @@ func EnrollmentHandler(s EnrollmentStore, origin deployment.PublicOrigin) http.H
 			return
 		}
 		if noLink {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(struct {
-				Error  string `json:"error"`
-				Detail string `json:"detail"`
-			}{"no_sandbox_link", "a self_hosted sandbox needs an https public URL"})
+			v1.WriteHTTPError(w, http.StatusServiceUnavailable, "no_sandbox_link", "a self_hosted sandbox needs an https public URL")
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
@@ -73,10 +75,7 @@ func EnrollmentHandler(s EnrollmentStore, origin deployment.PublicOrigin) http.H
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Cache-Control", "no-store")
-			_ = json.NewEncoder(w).Encode(struct {
-				LinkURL  string                    `json:"link_url"`
-				Resource sandboxbootstrap.Resource `json:"resource"`
-			}{link, resource})
+			_ = json.NewEncoder(w).Encode(EnrollmentResponse{link, resource})
 		}
 	})
 }

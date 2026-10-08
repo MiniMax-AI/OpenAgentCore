@@ -72,13 +72,11 @@ func DialWebSocket(ctx context.Context, rawURL string, tlsConfig *tls.Config) (n
 	return newWSConn(ws), nil
 }
 
-var upgrader = websocket.Upgrader{HandshakeTimeout: HandshakeTimeout}
-
 // UpgradeWebSocket upgrades a relay request to a WebSocket byte stream. On
 // failure the upgrader has already answered the request. The relay is served
 // behind the installation's HTTPS ingress, so it accepts the request the
 // ingress forwards; peers enforce TLS when they dial.
-func UpgradeWebSocket(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
+func UpgradeWebSocket(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) (net.Conn, error) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return nil, err

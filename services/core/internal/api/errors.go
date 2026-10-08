@@ -29,27 +29,12 @@ func writeError(w http.ResponseWriter, status int, code, message string, param .
 
 func writeAPIError(w http.ResponseWriter, status int, code, message string, details CoreErrorDetails, param ...string) {
 	reportAPIError(w, code)
-	kind := "invalid_request_error"
-	if status >= 500 {
-		kind = "server_error"
-	} else if status == http.StatusConflict {
-		kind = "conflict_error"
-	} else if code == "not_found_error" || code == "invalid_beta" {
-		kind = code
-	}
-	var errorCode *string
-	if code != "" {
-		errorCode = &code
-	}
-	var errorParam *string
-	if len(param) > 0 {
-		errorParam = &param[0]
-	}
+	response := v1.NewAPIError(status, code, message, param...)
 	if isCoreErrorWriter(w) {
-		writeJSON(w, status, CoreErrorResponse{Error: CoreAPIError{Message: message, Type: kind, Code: errorCode, Param: errorParam, Details: validCoreDetails(details)}})
+		writeJSON(w, status, CoreErrorResponse{Error: CoreAPIError{Message: response.Message, Type: response.Type, Code: response.Code, Param: response.Param, Details: validCoreDetails(details)}})
 		return
 	}
-	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
+	writeJSON(w, status, v1.ErrorResponse{Error: response})
 }
 
 // writeContentTooLarge reports uploaded or copied content beyond the

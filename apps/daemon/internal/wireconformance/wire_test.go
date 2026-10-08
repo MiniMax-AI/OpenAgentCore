@@ -5,7 +5,6 @@ package wireconformance
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,13 +14,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/gorilla/websocket"
 )
 
 const wait = 3 * time.Second
@@ -48,9 +47,7 @@ func newCorePeer(t *testing.T) *corePeer {
 			return
 		}
 		if query.Get("version") != proto.Version {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(prototest.IncompatibleVersionStatus)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": prototest.IncompatibleVersionCode})
+			v1.WriteHTTPError(w, prototest.IncompatibleVersionStatus, prototest.IncompatibleVersionCode, "incompatible Runtime version")
 			return
 		}
 		ws, err := upgrader.Upgrade(w, r, nil)

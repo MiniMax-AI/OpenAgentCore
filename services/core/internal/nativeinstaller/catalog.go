@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -86,12 +87,12 @@ func Load(directory, version string) (*Catalog, error) {
 
 func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		v1.WriteHTTPError(w, http.StatusMethodNotAllowed, "", http.StatusText(http.StatusMethodNotAllowed))
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/api/v1/agent-daemon/install/"+c.Version+"/")
 	if strings.Contains(name, "/") {
-		http.NotFound(w, r)
+		v1.WriteHTTPError(w, http.StatusNotFound, "", "404 page not found")
 		return
 	}
 	if name == "bootstrap.sh" {
@@ -103,7 +104,7 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	platform := strings.TrimSuffix(strings.TrimSuffix(name, ".sha256"), ".tar.gz")
 	artifact, ok := c.Artifacts[platform]
 	if !ok {
-		http.NotFound(w, r)
+		v1.WriteHTTPError(w, http.StatusNotFound, "", "404 page not found")
 		return
 	}
 	if name == platform+".sha256" {
@@ -112,11 +113,11 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if name != platform+".tar.gz" {
-		http.NotFound(w, r)
+		v1.WriteHTTPError(w, http.StatusNotFound, "", "404 page not found")
 		return
 	}
 	if c.local[platform] {
-		http.ServeFile(w, r, filepath.Join(c.directory, name))
+		http.ServeFile(&downloadResponse{ResponseWriter: w}, r, filepath.Join(c.directory, name))
 		return
 	}
 	http.Redirect(w, r, artifact.URL, http.StatusTemporaryRedirect)
@@ -133,4 +134,34 @@ func (c *Catalog) Commands(installerBase, authorization string) map[string]strin
 	return map[string]string{
 		"posix": "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
 	}
+}
+
+// downloadResponse adapts standard-library download failures to the machine
+// envelope. Successful content is streamed unchanged, without buffering.
+type downloadResponse struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *downloadResponse) WriteHeader(status int) {
+	if w.status != 0 {
+		return
+	}
+	w.status = status
+	if status >= 400 {
+		w.Header().Del("Content-Length")
+		v1.WriteHTTPError(w.ResponseWriter, status, "", http.StatusText(status))
+		return
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *downloadResponse) Write(body []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	if w.status >= 400 {
+		return len(body), nil
+	}
+	return w.ResponseWriter.Write(body)
 }

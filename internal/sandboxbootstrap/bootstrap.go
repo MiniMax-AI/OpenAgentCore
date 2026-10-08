@@ -32,11 +32,11 @@ type Input struct {
 
 // Resource is the sandbox the serve credential serves: a Link ResourceRef.
 type Resource struct {
-	TenantID      string `json:"tenant_id"`
-	EnvironmentID string `json:"environment_id"`
-	Kind          string `json:"kind"`
-	ID            string `json:"id"`
-	Generation    uint64 `json:"generation"`
+	TenantID      string `json:"tenant_id" binding:"required"`
+	EnvironmentID string `json:"environment_id" binding:"required"`
+	Kind          string `json:"kind" binding:"required"`
+	ID            string `json:"id" binding:"required"`
+	Generation    uint64 `json:"generation" binding:"required"`
 }
 
 var resourceKinds = map[string]sandboxlink.ResourceKind{

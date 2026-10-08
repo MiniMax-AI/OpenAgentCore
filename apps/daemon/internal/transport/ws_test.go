@@ -12,10 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/gorilla/websocket"
 )
 
 // fakeGateway is a minimal stand-in for the server-side
@@ -364,7 +363,7 @@ func TestDialMarksOperatorFixableUpgradeRejectionsAsPermanent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.code)
-				_, _ = w.Write([]byte(`{"error":"x","detail":"y"}`))
+				_, _ = w.Write([]byte(`{"error":{"code":"x","message":"y","type":"invalid_request_error","param":null}}`))
 			}))
 			defer srv.Close()
 			_, err := transport.Dial(context.Background(), transport.DialOptions{
