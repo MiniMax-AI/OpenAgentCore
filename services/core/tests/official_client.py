@@ -178,7 +178,14 @@ def main():
                     assert first.agent.tools == [] and first.agent.multi_agent.enabled is False
                     default_raw = sessions.with_raw_response.retrieve(first.id)
                     assert default_raw.http_response.json()["agent"]["tools"] == []
-                    assert first.created_at == first.last_active_at and isinstance(first.created_at, int)
+                    first_turns = list(sessions.turns.list(first.id))
+                    assert len(first_turns) == 1
+                    first_turn = first_turns[0]
+                    assert first_turn.status == "queued"
+                    assert first_turn.started_at is None and first_turn.completed_at is None
+                    assert isinstance(first.created_at, int)
+                    assert first.created_at <= first_turn.created_at
+                    assert first.last_active_at == first_turn.created_at
                     replay = sessions.create(**spec, metadata={"workspace": "untrusted-reference"}, extra_headers=headers)
                     assert replay == first
                     assert sessions.retrieve(first.id) == first
@@ -242,7 +249,6 @@ def main():
                     assert "SECRET" not in repr(recovered) and "PRIVATE" not in repr(recovered)
                     assert [turn.id for turn in turns.list(turn_session.id, limit=2)] == list(reversed([initial_turn.id, *turn_ids]))
                     assert list(turns.list(turn_session.id, after=turn_ids[-1], order="asc")) == []
-                    assert len(list(turns.list(first.id))) == 1
                     assert turns.retrieve(turn_ids[0], session_id=turn_session.id) == recovered[0]
                     expect_error(NotFoundError, lambda: b.beta.agents.sessions.turns.list(turn_session.id))
                     expect_error(NotFoundError, lambda: b.beta.agents.sessions.turns.retrieve(turn_ids[0], session_id=turn_session.id))
