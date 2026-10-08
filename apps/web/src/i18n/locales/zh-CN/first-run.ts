@@ -1,4 +1,4 @@
-export const consoleAuthChinese = {
+export const firstRun = {
   "Try again": "重试",
   "Sign in to OpenAgentCore": "登录 OpenAgentCore",
   "Core key": "Core Key",

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { NameCell, RowActions } from "../../components/list-ui";
 import { epochSeconds, formatDateTime, formatRelative } from "../../lib/format";
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes } from "../fleet/fleet-model";
@@ -36,7 +36,7 @@ export function nodeState(node: SandboxNode, allocations: readonly SandboxAlloca
 }
 
 const stateTone: Record<NodeState, Tone> = { unconfirmed: "neutral", old_address: "warning", offline: "danger", degraded: "warning", attention: "warning", available: "ok" };
-const stateLabel: Record<NodeState, MessageKey> = {
+const stateLabel: Record<NodeState, ParseKeys<"sandbox">> = {
   unconfirmed: "Status unconfirmed",
   old_address: "Old address",
   offline: "Offline",

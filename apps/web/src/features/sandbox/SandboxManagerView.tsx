@@ -25,7 +25,7 @@ import "./SandboxManagerView.css";
 /** Nodes owns node enrollment, the list and individual node management. */
 export function SandboxManagerView() {
   const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { data: config, isError, isFetching, refetch } = useQuery(sandboxConsoleConfigQuery);
   return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={locale}>
     {config ? <SandboxManager consoleConfig={config} /> : <>
@@ -53,7 +53,7 @@ function NodesPageHeader({ title, count, back, actions, headingRef }: { title?: 
 
 function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig }) {
   const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { params, navigate, back: goBack } = useConsoleNavigation();
   const client = sandboxAdmin;
   const queryClient = useQueryClient();
