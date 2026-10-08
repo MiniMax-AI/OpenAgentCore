@@ -39,18 +39,8 @@ func (e *ExecutionOperations) Claim(ctx context.Context, installationID string) 
 		if err != nil {
 			return err
 		}
-		if d.InstallationID != "" {
-			if d.InstallationID != id {
-				return ErrConflict
-			}
-		} else {
-			resources, err := tx.CountResources()
-			if err != nil {
-				return err
-			}
-			if resources.Allocations != 0 || resources.Pending != 0 {
-				return ErrConflict
-			}
+		if d.InstallationID != "" && d.InstallationID != id {
+			return ErrConflict
 		}
 		if d.Provider != "" {
 			if _, err := e.service.specification(d); err != nil {
@@ -58,21 +48,6 @@ func (e *ExecutionOperations) Claim(ctx context.Context, installationID string) 
 			}
 		}
 		return tx.ClaimInstallation(id)
-	})
-}
-
-// RequireUnclaimed lets an execution owner without sandbox runtimes start
-// only on a deployment no installation has claimed.
-func (e *ExecutionOperations) RequireUnclaimed(ctx context.Context) error {
-	return e.storage.WithDeployment(ctx, func(tx DeploymentTx) error {
-		d, err := tx.LoadDeployment()
-		if err != nil {
-			return err
-		}
-		if d.InstallationID != "" {
-			return ErrConflict
-		}
-		return nil
 	})
 }
 

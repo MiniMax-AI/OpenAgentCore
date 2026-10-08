@@ -30,7 +30,7 @@ func (s *coreMetricsSource) Live() coremetrics.Live {
 	return coremetrics.Live{Pool: coremetrics.Pool{InUse: metricPtr(int64(stat.AcquiredConns())), Idle: metricPtr(int64(stat.IdleConns())), Max: metricPtr(int64(stat.MaxConns()))},
 		Scheduler:      coremetrics.Job{ID: "scheduler", Status: w.Scheduler.Status, LastRunAt: w.Scheduler.LastRunAt, Processed: w.Scheduler.Processed, Failed: w.Scheduler.Failed},
 		ExecutionOwner: w.ExecutionOwner, SlotsTotal: w.SlotsTotal, SlotsInUse: w.SlotsInUse,
-		ConnectedDaemons: metricPtr(int64(len(s.registry.Devices())))}
+		ConnectedDaemons: int64(len(s.registry.Devices()))}
 }
 func (s *coreMetricsSource) Sample(ctx context.Context) coremetrics.Sample {
 	sample := coremetrics.Sample{Healthy: true, PoolInUse: metricPtr(int64(s.pool.Stat().AcquiredConns()))}

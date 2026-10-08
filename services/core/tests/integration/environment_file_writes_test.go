@@ -24,7 +24,8 @@ type fileWriteFixture struct {
 
 func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	t.Helper()
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	lease := executionWriter(t, s).lease
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
@@ -50,7 +51,7 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "committed"); err == nil {
 		t.Fatal("lost writer settled an upload")
 	}
-	reopened, _ := testStore(t)
+	reopened := New(t, f.s.pool)
 	next := sessionExecution(t, executionWriter(t, reopened).lease)
 	got, err := next.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key)
 	if err != nil || !got.Replayed || got.State != "pending" || !got.CreatedAt.Equal(first.CreatedAt) || got.Identity != f.key {

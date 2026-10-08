@@ -231,7 +231,7 @@ func (s *Service) Read(ctx context.Context, name string) (View, error) {
 			view.Execution.Series[i].QueueWaitP95MS = history.Buckets[view.Execution.Series[i].Start]
 		}
 	}
-	if live.ExecutionOwner == nil || (live.SlotsTotal != nil && *live.SlotsTotal > 0 && !*live.ExecutionOwner) {
+	if live.ExecutionOwner == nil || !*live.ExecutionOwner {
 		view.Service.Status = "degraded"
 	}
 	for _, job := range view.Jobs {

@@ -71,7 +71,8 @@ func TestSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T) {
 }
 
 func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind string) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant, session, environment, turn := artifactTurn(t, s, kind)
 	before := largeObjectCount(t, pool)
 	data := bytes.Repeat([]byte("immutable\x00"), 100000)
@@ -187,7 +188,8 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 	for _, status := range []string{sessions.TurnFailed, sessions.TurnCancelled} {
 		t.Run(status, func(t *testing.T) {
-			s, pool := testStore(t)
+			s, _ := configuredStore(t)
+			pool := s.pool
 			tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
 			before := largeObjectCount(t, pool)
 			body := artifactArchive(t, map[string][]byte{"outputs/a": []byte("private")})
@@ -211,7 +213,8 @@ func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T) {
 	for _, operation := range []string{"delete", "cancel"} {
 		t.Run(operation, func(t *testing.T) {
-			s, pool := testStore(t)
+			s, _ := configuredStore(t)
+			pool := s.pool
 			tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
 			before := largeObjectCount(t, pool)
 			reader, writer := io.Pipe()
@@ -312,7 +315,8 @@ func publishedPaths(published map[string]sessions.Artifact) []string {
 // Later Turns publish a path only when it is new, its bytes differ from the
 // newest remaining Artifact for that path, or no Artifact remains for it (HE-52).
 func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant, session, environment, first := artifactTurn(t, s, "openai_hosted")
 	before := largeObjectCount(t, pool)
 	turnNumber := 1
@@ -432,7 +436,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 // Publication time can come from the Runtime's reported completion and invert
 // the order of Turns; the newest version for a path still follows Turn order.
 func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
-	s, _ := testStore(t)
+	s, _ := configuredStore(t)
 	tenant := uuid.NewString()
 	created, err := s.CreateSession(t.Context(), tenant, environmentInput("artifact-order", "openai_hosted", "/workspace"))
 	if err != nil {
@@ -476,7 +480,8 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 // A deletion that holds the Session lock while Turn completion waits for it is
 // seen by the completion transaction, which then republishes the path.
 func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
-	s, pool := testStore(t)
+	s, _ := configuredStore(t)
+	pool := s.pool
 	tenant, session, environment, first := artifactTurn(t, s, "openai_hosted")
 	before := largeObjectCount(t, pool)
 	stageArtifactOutputs(t, s, tenant, session, environment, first, map[string]string{"a.txt": "alpha"})

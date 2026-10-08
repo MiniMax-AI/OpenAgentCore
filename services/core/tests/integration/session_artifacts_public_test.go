@@ -89,7 +89,7 @@ func artifactHTTPServer(t *testing.T, s *Store) (server *httptest.Server, owner,
 // environment_id filter matches nothing like another Environment's ID (HE-56),
 // without weakening tenant or Session scoping.
 func TestSessionArtifactListEnvelopeAndEnvironmentFilterPostgres(t *testing.T) {
-	s, _ := testStore(t)
+	s, _ := configuredStore(t)
 	sessionService, err := newSessionService(s)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +213,7 @@ func TestSessionArtifactsOfficialClientPostgres(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := testStore(t)
+	s, _ := configuredStore(t)
 	sessionStore := sessionAdapter(s)
 	sessionService, err := newSessionService(s)
 	if err != nil {

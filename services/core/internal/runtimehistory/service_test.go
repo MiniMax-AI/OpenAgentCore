@@ -77,7 +77,6 @@ func (r *fakeReader) Query(_ context.Context, query Query) (Result, error) {
 
 func capabilities() Capabilities {
 	return Capabilities{
-		CollectionMode:     CollectionPeriodic,
 		SampleInterval:     30 * time.Second,
 		Retention:          7 * 24 * time.Hour,
 		MinimumStep:        30 * time.Second,
@@ -116,7 +115,7 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(reader.queries) != 1 || reader.queries[0].Scope != scope || reader.queries[0].Step != time.Minute || response.Resolution != time.Minute || !response.Durable() {
+	if len(reader.queries) != 1 || reader.queries[0].Scope != scope || reader.queries[0].Step != time.Minute || response.Resolution != time.Minute {
 		t.Fatalf("unexpected bounded history query: query=%+v response=%+v", reader.queries, response)
 	}
 	ratio = .9
@@ -329,7 +328,7 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 func TestServiceRejectsUnsafeCapabilities(t *testing.T) {
 	base := capabilities()
 	for _, mutate := range []func(*Capabilities){
-		func(value *Capabilities) { value.CollectionMode = CollectionOnRead },
+		func(value *Capabilities) { value.SampleInterval = 0 },
 		func(value *Capabilities) { value.MaximumRange = value.Retention + time.Second },
 		func(value *Capabilities) { value.Metrics = []Metric{MetricCPU, MetricCPU} },
 	} {

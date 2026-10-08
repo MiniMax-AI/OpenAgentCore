@@ -105,9 +105,6 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 // waitRuntimeAwake is called only for live Environment file operations, before
 // entering the Worker's work queues. Persisted history/artifact reads bypass it.
 func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) error {
-	if w.runtimes == nil {
-		return nil
-	}
 	key := deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}
 	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
 	if errors.Is(err, deployment.ErrNotFound) {

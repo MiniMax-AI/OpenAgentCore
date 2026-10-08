@@ -84,7 +84,8 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *testing.T) {
 	for _, kind := range []string{"self_hosted", "openai_hosted"} {
 		t.Run(kind, func(t *testing.T) {
-			s, pool := testStore(t)
+			s, _ := configuredStore(t)
+			pool := s.pool
 			tenant := uuid.NewString()
 			input := environmentInput("initial", kind, "/workspace")
 			input.InitialInputs = []sessions.Input{messageInput("first"), messageInput("second")}
@@ -126,7 +127,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			if err != nil || len(events) != expectedEvents || (expectedEvents > 0 && (events[0].Event.Type != "agent.session."+status || events[0].Turn != nil)) {
 				t.Fatal("creation cursor lost initial activity", events, err)
 			}
-			other, _ := testStore(t)
+			other := reopenStore(t, s)
 			retry, err := createSession(t.Context(), other, tenant, input)
 			// A retry returns the current projection; the reservation is unchanged.
 			if err != nil || retry.Created || retry.Cursor != int64(expectedEvents) || retry.Session.ID != session.ID || activityStatus(retry.Session) != activityStatus(session) || retry.Session.LastTurn != nil {
@@ -200,7 +201,8 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 	for _, kind := range []string{"self_hosted", "openai_hosted"} {
 		t.Run(kind, func(t *testing.T) {
-			s, pool := testStore(t)
+			s, _ := configuredStore(t)
+			pool := s.pool
 			tenant := uuid.NewString()
 			input := environmentInput("initial-expiry", kind, "/workspace")
 			input.InitialInputs = []sessions.Input{messageInput("private initial text")}
@@ -237,8 +239,9 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitRelease()
+			reopened := reopenStore(t, s)
 			pool.Close()
-			reopened, reopenedPool := testStore(t)
+			reopenedPool := reopened.pool
 			writer = executionWriter(t, reopened)
 			if _, err := reopened.CreateSession(t.Context(), tenant, input); err != nil {
 				t.Fatal(err)

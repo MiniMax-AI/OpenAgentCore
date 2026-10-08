@@ -221,7 +221,6 @@ type RuntimeAllocation struct {
 	State                 string             `json:"state"`
 	CreateSettled         bool               `json:"create_settled"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	KeptAt                pgtype.Timestamptz `json:"kept_at"`
 	ReleasedAt            pgtype.Timestamptz `json:"released_at"`
 	ComputePhase          string             `json:"compute_phase"`
 	ComputeRevision       int64              `json:"compute_revision"`

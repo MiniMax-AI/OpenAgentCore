@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"net/http/httptest"
 	"os"
@@ -9,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/google/uuid"
 )
 
@@ -20,12 +19,7 @@ func TestListQueryOfficialClientPostgres(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{72}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, _ := testStore(t)
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "query-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
@@ -33,7 +27,7 @@ func TestListQueryOfficialClientPostgres(t *testing.T) {
 	})
 	// Use real admission while leaving dispatch paused. Public cancellation retains
 	// the queued history; this fixture does not perform native or model execution.
-	worker := startWorker(t, t.Context(), s, &execution.Dispatcher{})
+	worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
 	t.Cleanup(func() {
 		stopped, cancel := context.WithCancel(context.Background())
 		cancel()

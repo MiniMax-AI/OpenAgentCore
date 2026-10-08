@@ -995,7 +995,6 @@ export type RuntimeObservationReason =
   | "runtime_mode_not_observable"
   | "allocation_pending"
   | "runtime_not_running"
-  | "source_not_configured"
   | "sample_timeout"
   | "sample_unavailable";
 

@@ -21,8 +21,7 @@ import (
 )
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
-	s, _ := newManagedTestStore(t)
-	key := webDeployment(t, s, "e2b")
+	s, key := configuredStore(t)
 	tenant, session, environment := managedSession(t, s)
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"

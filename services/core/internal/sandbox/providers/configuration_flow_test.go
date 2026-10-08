@@ -99,7 +99,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// registry it is built with.
 	deployments := func() *deployment.Service {
 		storage := deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
-		rules, err := placement.NewRules(registry, "")
+		rules, err := placement.NewRules(registry, "https://core.example")
 		if err != nil {
 			t.Fatal(err)
 		}

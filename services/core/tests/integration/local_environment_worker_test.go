@@ -17,8 +17,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), scoped)
 	if scoped {
-		_, pool := testStore(t)
-		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
+		insertWorkerRuntimeAllocation(t, h.s.pool, h, "disabled")
 	}
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {

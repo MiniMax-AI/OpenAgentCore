@@ -36,11 +36,10 @@ type Service struct {
 
 // NewService reads managed Runtimes through source, which returns the Sandbox
 // Provider of the deployment's current selection and its registered kind, or
-// ErrUnavailable while none is selected. A nil source means this Core has no
-// managed deployment.
+// ErrUnavailable while none is selected.
 func NewService(resolver TargetResolver, source func(context.Context) (Source, string, error), options ...ServiceOption) (*Service, error) {
-	if resolver == nil {
-		return nil, errors.New("Runtime observation resolver is required")
+	if resolver == nil || source == nil {
+		return nil, errors.New("Runtime observation resolver and source are required")
 	}
 	config := serviceOptions{}
 	for _, option := range options {
@@ -224,9 +223,6 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 	case "running":
 	default:
 		return Observation{}, nil, errors.New("invalid managed Runtime allocation state")
-	}
-	if s.source == nil {
-		return Observation{Target: target, Status: StatusUnavailable, Reason: "source_not_configured", ResolvedAt: resolvedAt}, nil, nil
 	}
 	return Observation{}, &sourceRead{target: target}, nil
 }

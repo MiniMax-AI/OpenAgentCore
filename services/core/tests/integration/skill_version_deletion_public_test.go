@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/google/uuid"
@@ -20,12 +18,7 @@ import (
 // other versions remain (V2), nondefault latest deletion (V3) and tenant
 // isolation (V4).
 func TestSkillVersionDeletionHTTPPostgres(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{64}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s, pool := testStore(t)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "skill-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
@@ -56,7 +49,7 @@ func TestSkillVersionDeletionHTTPPostgres(t *testing.T) {
 	}
 	missing := expect(owner, http.MethodDelete, "/v1/skills/skill_"+uuid.NewString()+"/versions/1", http.StatusNotFound)
 
-	skillService := SkillService(t, pool, cipher)
+	skillService := SkillService(t, pool, s.credentialCipher)
 	sole, err := skillService.CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: skillArchive(t, "sole-http")})
 	if err != nil {
 		t.Fatal(err)

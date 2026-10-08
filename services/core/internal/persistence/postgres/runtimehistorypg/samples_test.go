@@ -14,7 +14,7 @@ import (
 )
 
 func historyCapabilities() runtimehistory.Capabilities {
-	return runtimehistory.Capabilities{CollectionMode: runtimehistory.CollectionPeriodic, SampleInterval: 30 * time.Second,
+	return runtimehistory.Capabilities{SampleInterval: 30 * time.Second,
 		Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour, MaximumPoints: 1000, MaximumSeries: 64, MaximumTotalPoints: 10000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens}}
 }

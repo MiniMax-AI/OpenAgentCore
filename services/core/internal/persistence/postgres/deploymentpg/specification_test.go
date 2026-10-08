@@ -44,9 +44,6 @@ func TestSandboxSpecificationRoundTripAndClaimStays(t *testing.T) {
 			if _, err := changes.Initialize(t.Context(), view.InstallationID, changed); !errors.Is(err, deployment.ErrConflict) {
 				t.Fatal("initial setup silently resized a configured deployment", err)
 			}
-			if err := changes.RequireUnclaimed(t.Context()); !errors.Is(err, deployment.ErrConflict) {
-				t.Fatal("an owner without sandbox runtimes started on a claimed deployment", err)
-			}
 			after, err := f.service.View(t.Context())
 			if err != nil || !reflect.DeepEqual(after, view) {
 				t.Fatal("rejected writes changed the committed specification", err)

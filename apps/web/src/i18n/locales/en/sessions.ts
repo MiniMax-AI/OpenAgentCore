@@ -138,7 +138,6 @@ export const sessions = {
       runtime_mode_not_observable: "Not observable",
       allocation_pending: "Allocation pending",
       runtime_not_running: "Not running",
-      source_not_configured: "Metrics source not configured",
       sample_timeout: "Sample timed out",
       sample_unavailable: "Sample unavailable",
     },

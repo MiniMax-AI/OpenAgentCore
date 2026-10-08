@@ -33,10 +33,10 @@ type Allocation struct {
 	// Replayed reports that ReserveAllocation returned an existing allocation,
 	// which never authorizes another Create.
 	Replayed bool
-	// Expired reports, by the database clock, that the allocation's lease or
-	// retention has passed.
-	Expired           bool
-	CreatedAt, KeptAt time.Time
+	// Expired reports, by the database clock, that the retention of the
+	// allocation's suspended compute has passed.
+	Expired   bool
+	CreatedAt time.Time
 }
 
 // Key names the allocation's Environment.

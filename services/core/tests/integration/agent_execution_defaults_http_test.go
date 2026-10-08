@@ -9,16 +9,14 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
 
 func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
-	_, pool := testStore(t)
-	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{19}, 32))
-	st := NewWithCredentialCipher(pool, cipher)
+	st, _ := configuredStore(t)
+	pool := st.pool
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
@@ -131,7 +129,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 		t.Fatal("retry created another Session")
 	}
 	call("POST", "/v1/agents/sessions", body, uuid.NewString(), 404)
-	st = NewWithCredentialCipher(pool, cipher)
+	st = New(t, pool)
 	assertSnapshot(sessionID, "model-original", "https://saved.example/v1", "saved-canary")
 	assertSnapshot(fresh, "model-new", "https://override.example/v1", "override-canary")
 	inline := `{"agent":{"model":"inline-model"},"environment":{"type":"openai_hosted"}}`

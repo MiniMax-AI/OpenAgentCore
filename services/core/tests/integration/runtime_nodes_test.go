@@ -352,9 +352,6 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 days' WHERE id=$1", owner.ID); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
 	}
@@ -370,8 +367,8 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil || resumed.ID != owner.ID || resumed.DeviceID != owner.DeviceID || resumed.NodeID != owner.NodeID {
 		t.Fatal("reconnect changed instance", resumed, err)
 	}
-	if _, err := deploymentExecution(t, w).KeepAllocation(t.Context(), resumed); err != nil {
-		t.Fatal("offline observation lease could not renew", err)
+	if _, err := deploymentExecution(t, w).CheckRunning(t.Context(), resumed); err != nil {
+		t.Fatal("reconnected allocation stopped running", err)
 	}
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_phase='suspended',compute_state=$2::jsonb,compute_retained_until=clock_timestamp()+interval '1 day' WHERE id=$1", owner.ID, json.RawMessage(`{"snapshot":{"id":"same-snapshot"}}`)); err != nil {
 		t.Fatal(err)

@@ -95,7 +95,7 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 | 500 | `internal_error` | Core could not complete the operation |
 | 503 | `runtime_node_unavailable` | No sandbox node is available or has capacity |
 | 503 | `execution_unavailable` | Execution is not available, such as while Core shuts down |
-| 503 | `runtime_history_unavailable` | Durable Runtime history is not configured or temporarily unavailable |
+| 503 | `runtime_history_unavailable` | Durable Runtime history is temporarily unavailable |
 | 503 | `core_metrics_unavailable` | Core metrics could not be read |
 | 503 | `file_transfer_unavailable` | Bounded content transfer is unavailable |
 

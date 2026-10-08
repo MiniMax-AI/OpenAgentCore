@@ -468,7 +468,7 @@ func TestCreateSession(t *testing.T) {
 		calls []string
 	}{
 		{"a reset closes hosted admission", rules, func(tx *fakeCreationTx) {
-			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Resetting: true})
+			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Resetting: true})
 		}, placement.ErrResetAdmission, []string{"UpsertSession create", "LockDeployment"}},
 		{"no node places the Environment", rules, func(tx *fakeCreationTx) {
 			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Specification: json.RawMessage(`{}`)})

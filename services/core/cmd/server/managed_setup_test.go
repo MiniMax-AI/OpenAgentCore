@@ -107,7 +107,7 @@ func committedSetup(value *deployment.Setup) func(context.Context) (deployment.S
 // deployment service does. That needs no storage.
 func credentialService(t *testing.T) func(owner, candidate deployment.Setup) (deployment.Setup, error) {
 	t.Helper()
-	rules, err := placement.NewRules(providers.Builtin(), "")
+	rules, err := placement.NewRules(providers.Builtin(), "https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
