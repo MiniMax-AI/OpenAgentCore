@@ -331,7 +331,7 @@ describe("AdminClient installation", () => {
   };
   it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {
     expect(await clientWith(installation).client.retrieveInstallation()).toEqual(installation);
-    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
+    expect(await clientWith({ ...installation, source_commit: null }).client.retrieveInstallation()).toMatchObject({ source_commit: null });
     const configuration = (settings: unknown[]) => ({ ...installation, configuration: { settings } });
     for (const invalid of [
       configuration([port, { ...headers, value: { authorization: "leak" } }]),
@@ -340,6 +340,8 @@ describe("AdminClient installation", () => {
       { ...installation, address_bindings: { ...installation.address_bindings, nodes_on_other_address: 3 } },
       { ...installation, token: "leak" },
       { ...installation, configuration: null },
+      { ...installation, installation_id: null },
+      { ...installation, public_url: null, api_base_url: null },
       configuration([{ ...port, configured: true }]),
     ]) {
       await expect(clientWith(invalid).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });

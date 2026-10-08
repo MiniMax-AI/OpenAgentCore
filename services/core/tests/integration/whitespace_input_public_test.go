@@ -22,7 +22,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), fixtureDeploymentProvider())
+	h, err := publicHandler(t, s, auth, "codex", fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

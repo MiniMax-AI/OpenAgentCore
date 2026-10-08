@@ -99,7 +99,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// The deployment reaches the registered configuration only through the
 	// registry it is built with.
 	deployments := func() *deployment.Service {
-		storage := deploymentpg.New(pgunit.NewPool(pool), nil)
+		storage := deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 		rules, err := placement.NewRules(registry, "")
 		if err != nil {
 			t.Fatal(err)
@@ -116,7 +116,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close(context.Background())
-	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, nil))
+	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, pgtest.CredentialKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		Environments:    struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{},
 		ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Metrics:             struct{ api.Metrics }{}, RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
-		Execution: &api.Execution{
+		Execution: api.Execution{
 			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
 			SessionAdmission: struct{ api.SessionAdmission }{},
 			InputAdmission:   struct{ api.InputAdmission }{},
@@ -160,7 +160,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 			Links:            struct{ http.Handler }{},
 		},
-		Sandboxes: &api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), nil), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
+		Sandboxes: api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
 			DeploymentReset: leaseSetup{t: t, changes: changes, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {

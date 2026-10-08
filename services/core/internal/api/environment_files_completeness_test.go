@@ -23,7 +23,7 @@ func TestEnvironmentFilesRejectsIncompleteOrMalformedDirectories(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			unavailable := 0
-			h, f := environmentFilesHandler(t, true, countEnvironmentFilesUnavailable(&unavailable))
+			h, f := environmentFilesHandler(t, countEnvironmentFilesUnavailable(&unavailable))
 			f.result = result
 			w := requestEnvironmentFiles(h, f.environment.ID, "?limit=1", "files-key")
 			if w.Code != 503 || unavailable != 1 || strings.Contains(w.Body.String(), `"data"`) || strings.Contains(w.Body.String(), `"next"`) || strings.Contains(w.Body.String(), "secret") {
@@ -36,7 +36,7 @@ func TestEnvironmentFilesRejectsIncompleteOrMalformedDirectories(t *testing.T) {
 func TestEnvironmentFilesCursorRejectsChangesAndAcceptsNativeReordering(t *testing.T) {
 	for _, change := range []string{"limit", "order", "path", "environment", "size", "name", "removed", "added", "native order"} {
 		t.Run(change, func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			h, f := environmentFilesHandler(t)
 			f.result.Entries = []proto.WorkspaceDirectoryEntry{environmentFileEntry("A", 1), environmentFileEntry("B", 2)}
 			page := decodeEnvironmentFiles(t, requestEnvironmentFiles(h, f.environment.ID, "?limit=1", "files-key"))
 			q := url.Values{"limit": {"1"}, "page": {*page.Next}}
@@ -73,7 +73,7 @@ func TestEnvironmentFilesCursorRejectsChangesAndAcceptsNativeReordering(t *testi
 func TestEnvironmentFilesMalformedCursorBounds(t *testing.T) {
 	for _, change := range []string{"version", "binding", "fingerprint", "negative", "overflow", "unknown", "trailing", "non-page offset"} {
 		t.Run(change, func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			h, f := environmentFilesHandler(t)
 			f.result.Entries = []proto.WorkspaceDirectoryEntry{environmentFileEntry("A", 1), environmentFileEntry("B", 2), environmentFileEntry("C", 3)}
 			page := decodeEnvironmentFiles(t, requestEnvironmentFiles(h, f.environment.ID, "?limit=2", "files-key"))
 			raw, _ := base64.RawURLEncoding.DecodeString(*page.Next)

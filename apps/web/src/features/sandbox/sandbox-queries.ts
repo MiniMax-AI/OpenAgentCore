@@ -73,7 +73,7 @@ export const sandboxSnapshotQuery = queryOptions<SandboxSnapshot>({
     signal.throwIfAborted();
     let nodes: SandboxNode[] = [];
     try {
-      if (deployment.provider && deployment.provider !== "e2b") nodes = (await sandboxAdmin.listNodes({ signal })).data;
+      if (deployment.mode === "nodes") nodes = (await sandboxAdmin.listNodes({ signal })).data;
       const allocations = await Promise.all(nodes.map((node) => sandboxAdmin.listAllocations(node.id, { signal })));
       signal.throwIfAborted();
       return { deployment, nodes, allocations: allocations.flatMap((page) => page.data), nodesError: null, readAt };

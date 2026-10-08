@@ -116,7 +116,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				t.Fatal(err)
 			}
 			marker := sessionDeletedAt(t, pool, session.ID)
-			fresh := New(pool)
+			fresh := New(t, pool)
 			// The owner's repeated deletion confirms again without another write.
 			for _, repeat := range []*Store{s, fresh} {
 				if err := sessionService(t, repeat).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
@@ -282,7 +282,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(instrumented.Close)
-		return New(instrumented)
+		return New(t, instrumented)
 	}
 	for _, kind := range admissions {
 		t.Run(kind.name+"/admission-first", func(t *testing.T) {
@@ -339,7 +339,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 		t.Run(kind.name+"/concurrent", func(t *testing.T) {
 			for range 8 {
 				tenant, session := kind.setup(t, plain)
-				other := New(pool)
+				other := New(t, pool)
 				start := make(chan struct{})
 				results := make(chan error, 2)
 				go func() {

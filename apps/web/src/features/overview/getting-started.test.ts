@@ -54,7 +54,7 @@ describe("Getting started steps", () => {
   });
   it("keeps local-only installations to do even with a ready node or cloud deployment", () => {
     for (const provider of ["docker", "e2b"] as const) {
-      const steps = gettingStartedSteps({ sandboxReset: false, fleet: fleet(deployment({ provider })), projects: [], sessions: 1, harnesses: [], localOnly: true });
+      const steps = gettingStartedSteps({ sandboxReset: false, fleet: fleet(deployment({ provider, mode: provider === "e2b" ? "direct" : "nodes" })), projects: [], sessions: 1, harnesses: [], localOnly: true });
       expect(steps.sandboxes).toMatchObject({ state: "todo", action: "nodes", cloud: provider === "e2b" });
     }
   });

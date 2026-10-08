@@ -66,7 +66,7 @@ Several installations can share a machine when they use distinct installation di
 
 ## Sandbox backend
 
-The installer saves no sandbox backend. After signing in, open **System** → **Manage sandbox configuration** and choose Docker, microsandbox or E2B; Web proposes the Standard size in [`standard-sizes.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/src/features/sandbox/standard-sizes.json). The choice is stored in Core's database. To change it later, [reset the deployment](./nodes.md#change-the-sandbox-configuration). Docker shares each node's kernel with its sandboxes, and its node service account is [root-equivalent](./nodes.md#what-the-installer-sets-up). Every backend needs a public HTTPS URL that is not loopback, because sandboxes call Core from outside its host. Prepare an E2B template with the [E2B guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md).
+The installer saves no sandbox backend. After signing in, open **System** → **Manage sandbox configuration** and choose Docker, microsandbox or E2B; Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as Standard. The choice is stored in Core's database. To change it later, [reset the deployment](./nodes.md#change-the-sandbox-configuration). Docker shares each node's kernel with its sandboxes, and its node service account is [root-equivalent](./nodes.md#what-the-installer-sets-up). Every backend needs a public HTTPS URL that is not loopback, because sandboxes call Core from outside its host. Prepare an E2B template with the [E2B guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md).
 
 ## Listeners and access
 

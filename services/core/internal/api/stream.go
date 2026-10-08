@@ -31,7 +31,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		writeSessionsError(w, r, err)
 		return
 	}
-	if _, err = sessionResponse(session, h.executorURL()); err != nil {
+	if _, err = sessionResponse(session, h.Execution.ExecutorURL); err != nil {
 		writeSessionsError(w, r, err)
 		return
 	}
@@ -113,7 +113,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, ses
 			if limit >= 0 && change.Sequence > limit {
 				return
 			}
-			event, err := streamResponse(session, change, h.executorURL())
+			event, err := streamResponse(session, change, h.Execution.ExecutorURL)
 			if err != nil {
 				writeStreamFailure(write, id)
 				return

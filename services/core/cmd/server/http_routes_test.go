@@ -108,7 +108,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
 		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
-		Execution: &api.Execution{
+		Execution: api.Execution{
 			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
 			SessionAdmission: struct{ api.SessionAdmission }{},
 			InputAdmission:   struct{ api.InputAdmission }{},
@@ -116,7 +116,7 @@ func daemonComposition(t testing.TB) http.Handler {
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 			Links:            struct{ http.Handler }{},
 		},
-		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: unusedNodeAllocations{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
+		Sandboxes: api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: unusedNodeAllocations{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
 			DeploymentReset: struct{ api.DeploymentReset }{}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {

@@ -8,12 +8,10 @@ export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "
 /** Checked against Core's shared node-diagnostics.json fixture. */
 export const sandboxNodeDiagnostics = [
   "provider_unavailable",
-  "docker_unavailable",
-  "docker_limits_unsupported",
+  "host_unsupported",
+  "artifacts_unavailable",
   "runtime_download_failed",
   "runtime_image_unavailable",
-  "kvm_unavailable",
-  "microsandbox_artifacts_unavailable",
   "capacity_insufficient",
 ] as const;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */
@@ -25,7 +23,8 @@ export function normalizeSandboxNodeDiagnostic(value: string): Exclude<SandboxNo
   return nodeDiagnostics.has(value) ? value as Exclude<SandboxNodeDiagnostic, ""> : "provider_unavailable";
 }
 
-export type SandboxProvider = "docker" | "microsandbox" | "e2b";
+/** A registered Provider kind; deploymentContract.providers holds each one's declaration. */
+export type SandboxProvider = keyof typeof deploymentContract.providers;
 /** Client-generated, never a Core code: a deployment write whose rejection could echo the key and is withheld. */
 export const sandboxConfigurationUnconfirmed = "sandbox_configuration_unconfirmed";
 const sandboxConfigurationParams = new Set<unknown>(["runtime", ...deploymentContract.resources.map(({ name }) => `resources.${name}`)]);
@@ -88,7 +87,7 @@ export interface SandboxDeployment {
   configuration?: { template?: string; api_url?: string; domain?: string };
   metadata?: { template_build?: SandboxE2BTemplateBuild };
   credential_configured: boolean;
-  /** Idle suspension policy; microsandbox only, otherwise null. */
+  /** Idle suspension policy; null unless the Provider declares checkpoint support. */
   suspension: { idle_seconds: number; retention_seconds: number } | null;
 }
 /** The fixed E2B build as Core read it when the selection was saved; unknown values are null. */
@@ -198,7 +197,6 @@ const measure = (value: unknown) => typeof value === "number" && Number.isFinite
 const nullable = (test: (value: unknown) => boolean) => (value: unknown) => value === null || test(value);
 const strings = (value: Record<string, unknown>, fields: readonly string[]) => fields.every((field) => typeof value[field] === "string");
 
-const providers = new Set(["", "docker", "microsandbox", "e2b"]);
 const modes = new Set(["", "nodes", "direct"]);
 const releaseFields = ["source_commit", "image_id", "image_manifest_digest", "microsandbox_ref", "runtime_sha256", "firmware_sha256"];
 function projectSpecification(value: unknown): SandboxSpecification {
@@ -264,7 +262,7 @@ function projectDeployment(value: unknown): SandboxDeployment {
   const resources = members(deployment.resources, ["allocations", "pending"]);
   const suspension = deployment.suspension === null ? null : members(deployment.suspension, ["idle_seconds", "retention_seconds"]);
   const configured = hasOwn(deployment, "specification");
-  valid(strings(deployment, ["installation_id", "core_url"]) && providers.has(deployment.provider as string) && modes.has(deployment.mode as string) &&
+  valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && modes.has(deployment.mode as string) &&
     [deployment.owner_epoch, deployment.generation, resources.allocations, resources.pending].every(isNonnegativeInteger) &&
     (suspension === null || [suspension.idle_seconds, suspension.retention_seconds].every(isNonnegativeInteger)) &&
     configured === hasOwn(deployment, "specification_digest") && (!configured || (typeof deployment.specification_digest === "string" && deployment.specification_digest !== "")));

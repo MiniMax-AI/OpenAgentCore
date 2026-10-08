@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
@@ -24,15 +25,12 @@ import (
 )
 
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
-	if configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{}, nil) != nil {
-		t.Fatal("sandbox manager started without an installation ID")
-	}
 	origin, err := deployment.NewPublicOrigin("https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{InstallationID: uuid.NewString(), PublicOrigin: &origin}, func(context.Context) error { return nil })
-	defer m.close()
+	m := configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{InstallationID: uuid.NewString(), PublicOrigin: origin}, func(context.Context) error { return nil })
+	defer m.hub.Close()
 	if m.setup == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil || m.setup.runtimeAPI != "https://core.example/api/v1" {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
@@ -113,7 +111,7 @@ func credentialService(t *testing.T) func(owner, candidate deployment.Setup) (de
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), rules)
+	service, err := deployment.NewService(deploymentpg.New(nil, pgtest.CredentialKey(t)), deploymentpg.New(nil, pgtest.CredentialKey(t)), providers.Builtin(), rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,8 +129,12 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 		t.Fatal("matching immutable selection was not reused")
 	}
 	loadErr = errors.New("database unavailable")
-	if _, err := s.load(t.Context()); err == nil {
-		t.Fatal("stale cached selection hid storage failure")
+	if _, err := s.load(t.Context()); err == nil || errors.Is(err, execution.ErrExecutionUnavailable) {
+		t.Fatal("stale cached selection hid storage failure", err)
+	}
+	loadErr = deployment.ErrCredentialUnreadable
+	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) || !errors.Is(err, deployment.ErrCredentialUnreadable) {
+		t.Fatal("an unreadable credential must block execution without stopping Core", err)
 	}
 	loadErr = nil
 	value.Generation = 2

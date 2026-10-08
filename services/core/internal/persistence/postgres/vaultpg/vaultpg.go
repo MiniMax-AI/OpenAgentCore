@@ -30,9 +30,7 @@ type Store struct {
 
 var _ vaults.Storage = (*Store)(nil)
 
-// New returns a Store. Without a credential key (cipher nil), operations that
-// seal or open a secret fail with credentialcrypto.ErrUnavailable; Vaults,
-// Credential metadata, selection and deletion keep working.
+// New returns a Store that seals and opens secrets with cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }

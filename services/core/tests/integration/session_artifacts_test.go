@@ -156,7 +156,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		t.Fatal(err)
 	}
 	for _, a := range page.Artifacts {
-		if err := sessionAdapter(New(pool)).ReadSessionArtifact(t.Context(), tenant, session, a.ID, func(meta sessions.Artifact, r io.Reader) error {
+		if err := sessionAdapter(New(t, pool)).ReadSessionArtifact(t.Context(), tenant, session, a.ID, func(meta sessions.Artifact, r io.Reader) error {
 			if err := sessionAdapter(s).DeleteSessionArtifact(t.Context(), tenant, session, a.ID); err != nil {
 				return err
 			}

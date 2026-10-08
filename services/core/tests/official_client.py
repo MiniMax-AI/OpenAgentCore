@@ -23,12 +23,12 @@ from official_items import verify_items
 from official_agents import verify_agents
 from official_vaults import verify_vaults, verify_vault_recovery
 from official_vault_list import verify_vault_list, verify_vault_list_recovery
-from official_credentials import verify_credentials, verify_credential_recovery, verify_credential_storage_disabled
+from official_credentials import verify_credentials, verify_credential_recovery, create_old_key_credential, verify_old_key_credential
 from official_credential_list import verify_credential_list, verify_credential_list_recovery
 from official_mcp_credentials import verify_mcp_credentials, verify_mcp_credential_recovery
 from official_credential_rotation import verify_credential_rotation, verify_rotation_recovery
-from official_credential_delete import verify_credential_deletion, verify_credential_deletion_recovery, verify_keyless_credential_deletion
-from official_vault_delete import verify_vault_deletion, verify_vault_deletion_recovery, verify_keyless_vault_deletion
+from official_credential_delete import verify_credential_deletion, verify_credential_deletion_recovery, verify_key_lost_credential_deletion
+from official_vault_delete import verify_vault_deletion, verify_vault_deletion_recovery, verify_key_lost_vault_deletion
 from official_agent_list import verify_agent_list
 from official_http_routing import verify_http_routing
 from official_agent_references import verify_agent_references
@@ -80,12 +80,16 @@ def main():
         core_key_digests.write_text(json.dumps([hashlib.sha256(admin_token.encode()).hexdigest()]))
         credential_key = Path(directory) / "credential-key.txt"
         credential_key.touch(mode=0o600)
-        credential_key_value = base64.b64encode(secrets.token_bytes(32)).decode()
-        credential_key.write_text(credential_key_value + "\n")
+        credential_key_values = [base64.b64encode(secrets.token_bytes(32)).decode()]
+        credential_key.write_text(credential_key_values[0] + "\n")
+        # The database records the first installation ID it sees, so every run uses this one.
+        installation_id = Path(directory) / "installation.id"
+        installation_id.touch(mode=0o600)
+        installation_id.write_text("3f8e2c71-5b0d-4e6a-9c47-1d2a8b6f0e53\n")
         env = dict(os.environ, OAC_DATABASE_URL=dsn, OAC_CORE_KEY_DIGESTS_FILE=str(core_key_digests), OAC_ADDR=f"127.0.0.1:{port}", OAC_DEFAULT_HARNESS="codex")
         env["OAC_CREDENTIAL_KEY_FILE"] = str(credential_key)
-        # Enable the real Worker/gateway admission path without connecting a daemon.
-        # Synthetic fixture inputs remain queued; this is not live model acceptance.
+        env["OAC_INSTALLATION_ID_FILE"] = str(installation_id)
+        # No daemon connects: synthetic fixture inputs remain queued; this is not live model acceptance.
         env["OAC_PUBLIC_URL"] = f"http://127.0.0.1:{port}"
         agent_host_identity = Path(directory) / "agent-host.json"
         agent_host_identity.touch(mode=0o600)
@@ -338,24 +342,27 @@ def main():
                 process = start()
                 with client(tokens[0]) as a:
                     verify_mcp_credential_recovery(a, claude_credentials)
+                    old_key_credential = create_old_key_credential(a, credential_canary)
                 process.terminate()
                 process.wait(timeout=15)
                 env["OAC_DEFAULT_HARNESS"] = "codex"
-                env.pop("OAC_CREDENTIAL_KEY_FILE")
+                # The operator lost the key: Core restarts under a new one.
+                credential_key_values.append(base64.b64encode(secrets.token_bytes(32)).decode())
+                credential_key.write_text(credential_key_values[-1] + "\n")
                 process = start()
-                with client(tokens[0]) as without_key, client(tokens[1]) as other, client(peer_key) as peer:
-                    verify_credential_storage_disabled(without_key, saved_credentials[0][0], credential_canary, expect_error)
-                    verify_keyless_credential_deletion(without_key, credential_deletion, expect_error)
-                    verify_keyless_vault_deletion(without_key, vault_deletion, expect_error)
-                    verify_credential_list_recovery(without_key, other, peer, listed_credentials,
-                                                    credential_canary, phase="restart without the storage key")
+                with client(tokens[0]) as a, client(tokens[1]) as other, client(peer_key) as peer:
+                    verify_old_key_credential(a, old_key_credential, credential_canary, expect_error)
+                    verify_key_lost_credential_deletion(a, credential_deletion, expect_error)
+                    verify_key_lost_vault_deletion(a, vault_deletion, expect_error)
+                    verify_credential_list_recovery(a, other, peer, listed_credentials,
+                                                    credential_canary, phase="restart under a replaced credential key")
                 print("Caller principal: SDK/raw HTTP scope checks, shared Project access and persistent scope recovery passed.")
                 print("Official Turn client: lifecycle, Agent identity, safe errors, restart recovery, pagination and tenant/Session isolation passed.")
                 print("Official Go client: creation/retries, retrieval, bidirectional pagination and tenant isolation passed.")
                 print("Official client: upstream and generated response schemas, persistence/restart, retries, pagination, tenant isolation and explicit unsupported options passed.")
             finally:
                 finish_server(process, log, [admin_token, *tokens, credential_canary,
-                                            credential_key_value], sys.exc_info()[1])
+                                            *credential_key_values], sys.exc_info()[1])
 
 
 if __name__ == "__main__":

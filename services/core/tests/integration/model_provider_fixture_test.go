@@ -11,8 +11,7 @@ import (
 )
 
 // Every Session must freeze a model provider. HTTP fixtures supply one here
-// instead of relaxing that check; the store needs a credential key
-// (NewModelTestStore).
+// instead of relaxing that check.
 
 // fixtureDeploymentProvider configures a deployment default for every harness.
 func fixtureDeploymentProvider() func(*api.Dependencies) {

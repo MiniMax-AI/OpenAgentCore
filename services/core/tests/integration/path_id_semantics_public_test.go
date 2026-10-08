@@ -98,7 +98,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), fixtureDeploymentProvider())
+	h, err := publicHandler(t, s, auth, "codex", fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,28 +357,6 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	}
 	if checked < 600 {
 		t.Fatalf("route matrix checked only %d cases", checked)
-	}
-
-	// Storage availability checks also run before the lookup of a missing identifier.
-	h, err = publicHandler(t, New(pool), auth, "codex")
-	if err != nil {
-		t.Fatal(err)
-	}
-	unconfigured := httptest.NewServer(h)
-	defer unconfigured.Close()
-	keyless := pathIDClient{t: t, server: unconfigured}
-	for _, r := range []route{
-		{method: "POST", body: `{"name":"path","auth":{"type":"static_bearer","mcp_server_url":"https://mcp.example/mcp","token":"t"}}`, segments: []string{"/v1/vaults/", vault, "/credentials"}},
-		{method: "POST", body: `{"auth":{"type":"static_bearer","token":"t"}}`, segments: []string{"/v1/vaults/", vault, "/credentials/", credential}},
-		{method: "POST", body: `{"env":{"PATH_ID":"value"}}`, segments: []string{"/v1/agents/environments/templates/", template}},
-	} {
-		for index := 1; index < len(r.segments); index += 2 {
-			wantStatus, wantBody := keyless.do(owner, r.method, path(r.segments, index, uuid.NewString()), "application/json", []byte(r.body))
-			status, body := keyless.do(owner, r.method, path(r.segments, index, "not-a-uuid"), "application/json", []byte(r.body))
-			if status != wantStatus || body != wantBody {
-				t.Errorf("keyless %s %s: malformed %d %s; missing %d %s", r.method, path(r.segments, index, "{id}"), status, body, wantStatus, wantBody)
-			}
-		}
 	}
 
 	// A malformed list cursor answers like any other unresolved cursor of that

@@ -147,27 +147,22 @@ def verify_credential_recovery(client, other, peer, saved):
     print("Static credentials: exact SDK/raw metadata and shared-project reads survived the service restart.")
 
 
-def verify_credential_storage_disabled(client, value, canary, expect_error):
+def create_old_key_credential(client, canary):
+    vault = client.beta.agents.vaults.create(name="Sealed under the old key")
+    return client.beta.agents.vaults.credentials.create(vault.id, name="Old key", auth={
+        "type": "mcp_oauth", "mcp_server_url": "https://example.invalid/old-key", "access_token": canary})
+
+
+def verify_old_key_credential(client, value, canary, expect_error):
     credentials = client.beta.agents.vaults.credentials
     assert credentials.retrieve(value.id, vault_id=value.vault_id) == value
-    request = {"name": "Disabled storage", "auth": {**value.auth.to_dict(), "token": canary}}
-    error = expect_error(InternalServerError, lambda: credentials.create(value.vault_id, **request))
-    assert error.status_code == 503 and error.body["code"] == "credential_storage_unavailable"
+    error = expect_error(InternalServerError, lambda: credentials.update(
+        value.id, vault_id=value.vault_id, auth={"type": "mcp_oauth", "access_token": canary + "replacement"}))
+    assert error.status_code == 500 and error.body["code"] == "internal_error"
     assert canary not in error.response.text
-    with httpx2.Client(trust_env=False, timeout=10) as raw:
-        response = raw.post(str(client.base_url).rstrip("/") + "/vaults/" + value.vault_id + "/credentials",
-                            headers={"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"},
-                            json=request)
-        assert response.status_code == 503 and canary not in response.text
-        replacement = {"auth": {"type": "static_bearer", "token": canary + "replacement"}}
-        error = expect_error(InternalServerError, lambda: credentials.update(value.id, vault_id=value.vault_id, **replacement))
-        assert error.status_code == 503 and error.body["code"] == "credential_storage_unavailable"
-        assert canary not in error.response.text
-        response = raw.post(str(client.base_url).rstrip("/") + "/vaults/" + value.vault_id + "/credentials/" + value.id,
-                            headers={"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"},
-                            json=replacement)
-        assert response.status_code == 503 and canary not in response.text
-        assert credentials.retrieve(value.id, vault_id=value.vault_id) == value
-    vault = client.beta.agents.vaults.create(name="Non-secret resource without credential key")
-    assert client.beta.agents.vaults.retrieve(vault.id) == vault
-    print("Static credentials: absent key rejects SDK/raw writes while safe reads and Vault creation remain available.")
+    assert credentials.retrieve(value.id, vault_id=value.vault_id) == value
+    created = credentials.create(value.vault_id, name="New key", auth={
+        "type": "static_bearer", "mcp_server_url": "https://example.invalid/new-key", "token": canary})
+    assert canary not in created.model_dump_json()
+    assert credentials.delete(created.id, vault_id=created.vault_id).deleted
+    print("Credential key replacement: an old secret fails closed without leaking while new secrets are stored.")

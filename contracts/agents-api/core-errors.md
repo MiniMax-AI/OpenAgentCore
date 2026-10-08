@@ -90,12 +90,11 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 | 409 | `sandbox_deployment_conflict` | The sandbox deployment cannot change in its current state |
 | 409 | `sandbox_specification_mismatch` | The saved deployment specification is no longer valid for its provider |
 | 409 | `runtime_node_in_use` | The node still holds allocations, snapshots, reservations or pending cleanup |
-| 409 | `environment_unavailable` | The Session's environment is no longer available, such as an archive on a Core without execution |
+| 409 | `environment_unavailable` | The Session's environment is no longer available, such as a hosted environment that failed to provision |
 | 409 | `runtime_history_unsupported` | Runtime history is not supported for the Session |
 | 500 | `internal_error` | Core could not complete the operation |
 | 503 | `runtime_node_unavailable` | No sandbox node is available or has capacity |
-| 503 | `credential_storage_unavailable` | Core has no credential encryption key |
-| 503 | `execution_unavailable` | Execution is not available on this Core |
+| 503 | `execution_unavailable` | Execution is not available, such as while Core shuts down |
 | 503 | `runtime_history_unavailable` | Durable Runtime history is not configured or temporarily unavailable |
 | 503 | `core_metrics_unavailable` | Core metrics could not be read |
 | 503 | `file_transfer_unavailable` | Bounded content transfer is unavailable |

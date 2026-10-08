@@ -23,7 +23,7 @@ func writeDeploymentError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, deployment.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.")
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)

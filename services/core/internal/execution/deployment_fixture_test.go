@@ -35,7 +35,6 @@ func fixtureRules(t *testing.T) *placement.Rules {
 
 // testDeployment builds the pooled deployment service and reader and the
 // deployment execution operations on lease, as cmd/server does for the Worker.
-// cipher is nil when the owner has no credential key.
 func testDeployment(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, lease *pgunit.Lease) (*deployment.Service, deployment.Reader, *deployment.ExecutionOperations) {
 	t.Helper()
 	adapter := deploymentpg.New(pgunit.NewPool(pool), cipher)

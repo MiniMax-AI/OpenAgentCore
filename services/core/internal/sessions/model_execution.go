@@ -9,8 +9,7 @@ import (
 // ModelExecutionReader reads the model execution a Session froze at creation.
 type ModelExecutionReader interface {
 	// SessionModelExecution opens the model provider the tenant's Session
-	// froze at creation. A Session without one is ErrNotFound, and a service
-	// without the credential key credentialcrypto.ErrUnavailable; a frozen
+	// froze at creation. A Session without one is ErrNotFound; a frozen
 	// provider that does not open, decode or validate is an internal error.
 	SessionModelExecution(ctx context.Context, tenant, session string) (*v1.ModelProviderInput, error)
 }

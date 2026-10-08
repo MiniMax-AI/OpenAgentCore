@@ -16,7 +16,7 @@ func writeEnvironmentTemplatesError(w http.ResponseWriter, r *http.Request, err 
 	case errors.Is(err, environmenttemplates.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)

@@ -1,11 +1,8 @@
-/** A provider whose nodes install from files this console serves. */
-export type NodeArtifactProvider = "docker" | "microsandbox";
-
 export interface SandboxConsoleConfig {
   node_installer: boolean;
   node_installer_sha256: string;
   /** The providers whose node files this console serves; a null or malformed value reads as none. */
-  node_artifacts: NodeArtifactProvider[];
+  node_artifacts: string[];
 }
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -27,8 +24,8 @@ export async function sandboxConsoleConfig(signal: AbortSignal): Promise<Sandbox
 }
 
 /** A reported list keeps the providers it names; null or any other value means none. */
-function nodeArtifacts(value: unknown): NodeArtifactProvider[] {
-  return Array.isArray(value) ? value.filter((entry): entry is NodeArtifactProvider => entry === "docker" || entry === "microsandbox") : [];
+function nodeArtifacts(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
 /** Whether a node of this provider can install from the console's files. */

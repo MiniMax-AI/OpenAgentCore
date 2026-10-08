@@ -31,7 +31,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "deletion-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "deletion-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	h, err := publicHandler(t, s, auth, "codex", executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

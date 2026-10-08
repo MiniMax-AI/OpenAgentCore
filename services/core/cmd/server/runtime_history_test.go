@@ -18,31 +18,26 @@ func (panicHistoryExporter) Close(context.Context) error                        
 var defaultHistory = processconfig.RuntimeHistory{QueueCapacity: 256, Timeout: 2 * time.Second, SampleInterval: 30 * time.Second}
 
 func TestRuntimeHistoryUsesCoreDatabaseByDefault(t *testing.T) {
-	for _, enabled := range []bool{true, false} {
-		setup, err := runtimeHistory(t.Context(), pgunit.NewPool(nil), defaultHistory, enabled)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(setup.Options) != 1 || setup.Exporter != nil || setup.Reader == nil || setup.Prune == nil {
-			t.Fatal("default history requires extra deployment")
-		}
-		capabilities := setup.Reader.Capabilities()
-		if capabilities.Durable() != enabled || capabilities.Retention != 7*24*time.Hour {
-			t.Fatalf("incorrect default capabilities: %+v", capabilities)
-		}
-		if enabled && setup.SampleInterval != 30*time.Second {
-			t.Fatal("default cadence missing")
-		}
-		if !enabled && setup.SampleInterval != 0 {
-			t.Fatal("sampler requires an execution owner")
-		}
+	setup, err := runtimeHistory(t.Context(), pgunit.NewPool(nil), defaultHistory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(setup.Options) != 1 || setup.Exporter != nil || setup.Reader == nil || setup.Prune == nil {
+		t.Fatal("default history requires extra deployment")
+	}
+	capabilities := setup.Reader.Capabilities()
+	if !capabilities.Durable() || capabilities.Retention != 7*24*time.Hour {
+		t.Fatalf("incorrect default capabilities: %+v", capabilities)
+	}
+	if setup.SampleInterval != 30*time.Second {
+		t.Fatal("default cadence missing")
 	}
 }
 
 func TestRuntimeHistoryOptionalExportAndSamplingConfiguration(t *testing.T) {
 	config := defaultHistory
 	config.Endpoint, config.Headers, config.SampleInterval = "https://collector.example.test/v1/metrics", map[string]string{"Authorization": "Bearer private"}, time.Minute
-	setup, err := runtimeHistory(t.Context(), pgunit.NewPool(nil), config, true)
+	setup, err := runtimeHistory(t.Context(), pgunit.NewPool(nil), config)
 	if err != nil {
 		t.Fatal(err)
 	}

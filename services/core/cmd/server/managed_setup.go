@@ -87,6 +87,11 @@ func (s *managedSetup) publishUnconfigured(generation uint64) { s.publishSelecti
 
 func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, error) {
 	setup, err := s.deployment.Setup(ctx)
+	if errors.Is(err, deployment.ErrCredentialUnreadable) {
+		// A replaced credential key blocks hosted execution, not Core.
+		log.Warn(ctx, "Hosted provider credential is unreadable; administrator recovery remains available", "error", err)
+		return nil, fmt.Errorf("%w: %w", execution.ErrExecutionUnavailable, err)
+	}
 	if err != nil {
 		return nil, err
 	}

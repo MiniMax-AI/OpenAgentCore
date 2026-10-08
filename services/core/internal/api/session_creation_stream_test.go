@@ -149,7 +149,6 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 	fakes.sessionCreation.findSessionCreation = fixture.FindSessionCreation
 	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = fixture.SessionEventCursor, fixture.SessionStreamSnapshot, fixture.ListSessionEvents
 	fakes.modelProviders.resolve = fixtureDeploymentProvider
-	deps.Execution = fakes.execution()
 	fakes.sessionAdmission.createSession = fixture.CreateSession
 	handler := newTestHandler(t, deps)
 	h := &creationStreamHarness{t: t, fixture: fixture}

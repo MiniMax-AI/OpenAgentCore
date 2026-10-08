@@ -72,7 +72,7 @@ func TestConcurrentTerminalTransitionsKeepOneOutcome(t *testing.T) {
 	if _, err := transition(t.Context(), pool, tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"late":true}`)}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("late terminal callback accepted: %v", err)
 	}
-	got, err := New(pgunit.NewPool(pgtest.Open(t)), nil).GetTurn(t.Context(), text(tenant), text(session), turn)
+	got, err := New(pgunit.NewPool(pgtest.Open(t)), pgtest.CredentialKey(t)).GetTurn(t.Context(), text(tenant), text(session), turn)
 	if err != nil || !reflect.DeepEqual(got, winner) {
 		t.Fatalf("terminal outcome changed: %+v, %v", got, err)
 	}
@@ -154,7 +154,7 @@ func TestCompleteExecutionSettlesTheTurnOnTheLease(t *testing.T) {
 // and a cursor or Session outside the tenant's Session is missing.
 func TestTurnPagesKeepScopeAndOrder(t *testing.T) {
 	pool := pgtest.Open(t)
-	store := New(pgunit.NewPool(pool), nil)
+	store := New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenantID, sessionID, first := newTurn(t, pool, sessions.TurnCancelled)
 	tenant, session := text(tenantID), text(sessionID)

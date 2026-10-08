@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -92,12 +91,8 @@ func (s *Store) GetLinkAssignment(ctx context.Context, assignment string) (runti
 	}, true, nil
 }
 
-// SignAttachGrant returns the keyed digest of an attach grant's payload. A
-// service without the credential key cannot sign or verify a grant.
+// SignAttachGrant returns the keyed digest of an attach grant's payload.
 func (s *Store) SignAttachGrant(_ context.Context, payload string) (string, error) {
-	if s.cipher == nil {
-		return "", credentialcrypto.ErrUnavailable
-	}
 	return s.cipher.Fingerprint(attachGrantPurpose, payload)
 }
 

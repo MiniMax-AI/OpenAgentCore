@@ -2,14 +2,14 @@ package providers
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // ValidateRegistration checks wiring before configuration parsing or construction.
-// Only configuration requirements and operation declarations are read.
+// Only configuration requirements and operation declarations are read, and the
+// resource validator only for a declared default size, after every other check.
 func ValidateRegistration(a Adapter) error {
 	invalid := func(field string) error {
 		return fmt.Errorf("%w: invalid registration %s", providercontract.ErrContract, field)
@@ -51,16 +51,13 @@ func ValidateRegistration(a Adapter) error {
 	if err := sandbox.ValidateOperations(operations); err != nil {
 		return err
 	}
-	// The current common lifecycle admits checkpoint suspension only on nodes,
-	// and creates its policy whenever checkpoint support is declared.
-	if operations["Initial"].State == providercontract.Supported {
-		const maximumSeconds = int64((1<<63 - 1) / time.Second)
-		if a.Mode != "nodes" || a.IdleSeconds < 1 || a.RetentionSeconds < 1 ||
-			a.IdleSeconds > maximumSeconds || a.RetentionSeconds > maximumSeconds {
-			return invalid("checkpoint policy")
-		}
-	} else if a.IdleSeconds != 0 || a.RetentionSeconds != 0 {
-		return invalid("non-checkpoint policy")
+	// The common lifecycle suspends only node allocations, so only a nodes
+	// registration may declare checkpoint support.
+	if operations["Initial"].State == providercontract.Supported && a.Mode != "nodes" {
+		return invalid("checkpoint support outside nodes mode")
+	}
+	if a.Policy.DefaultResources != nil && a.ValidateResources(*a.Policy.DefaultResources) != nil {
+		return invalid("default resources")
 	}
 	return nil
 }

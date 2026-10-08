@@ -151,13 +151,9 @@ func run(config processconfig.Config) error {
 		return err
 	}
 	sandboxProviders := providers.Builtin()
-	var public string
-	if config.PublicOrigin != nil {
-		public = config.PublicOrigin.String()
-	}
 	// The placement rules are built once: the provider declarations and the
 	// public URL never change while Core runs.
-	placementRules, err := placement.NewRules(sandboxProviders, public)
+	placementRules, err := placement.NewRules(sandboxProviders, config.PublicOrigin.String())
 	if err != nil {
 		return err
 	}
@@ -171,26 +167,18 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	var workerDone chan error
+	// Node callbacks run only once the HTTP server serves, after the Worker starts.
 	var worker *execution.Worker
 	managedNodes := configureManagedNodes(deploymentService, deploymentStore, sandboxProviders, config, func(ctx context.Context) error {
-		if worker == nil {
-			return errors.New("sandbox execution owner is unavailable")
-		}
 		return worker.CheckOwnership(ctx)
 	})
-	defer managedNodes.close()
-	var managed *execution.RuntimeProvider
-	var observationSource func(context.Context) (runtimeobs.Source, string, error)
-	if managedNodes != nil {
-		managed = managedNodes.runtime
-		observationSource = managedNodes.setup.observationSource
-	}
+	defer managedNodes.hub.Close()
+	observationSource := managedNodes.setup.observationSource
 	observationResolver, err := deployment.NewObservationResolver(sessionStore, deploymentStore)
 	if err != nil {
 		return err
 	}
-	history, err := runtimeHistory(ctx, units, config.RuntimeHistory, config.PublicOrigin != nil)
+	history, err := runtimeHistory(ctx, units, config.RuntimeHistory)
 	if err != nil {
 		return err
 	}
@@ -218,98 +206,86 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	var daemonHandler http.Handler
-	var registry *runtimegateway.Registry
-	var linkRelay *relay.Relay
-	var executorURL string
+	if err := sessionStore.RegisterAgentHost(ctx, config.AgentHostID, config.AgentHostCredentialHash); err != nil {
+		return fmt.Errorf("agent host registration failed: %w", err)
+	}
+	executorURL := config.PublicOrigin.DaemonWebSocket()
+	links := runtimegateway.NewLinkAuthority(sessionStore)
+	daemonHandler, registry, err := runtime.NewGateway(sessionStore, sessionService, sessionStore, links, executorURL)
+	if err != nil {
+		return err
+	}
+	defer runtime.CloseConnections(registry)
+	linkRelay := relay.New(links)
+	defer linkRelay.Close()
+	var catalog *nativeinstaller.Catalog
+	if config.NativeInstallers != "" {
+		catalog, err = nativeinstaller.Load(config.NativeInstallers, buildRevision)
+		if err != nil {
+			return err
+		}
+	}
 	var nativeInstaller *api.NativeInstaller
-	if origin := config.PublicOrigin; origin != nil {
-		if err := sessionStore.RegisterAgentHost(ctx, config.AgentHostID, config.AgentHostCredentialHash); err != nil {
-			return fmt.Errorf("agent host registration failed: %w", err)
-		}
-		executorURL = origin.DaemonWebSocket()
-		links := runtimegateway.NewLinkAuthority(sessionStore)
-		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, sessionStore, links, executorURL)
-		if err != nil {
-			return err
-		}
-		defer runtime.CloseConnections(registry)
-		linkRelay = relay.New(links)
-		defer linkRelay.Close()
-		var catalog *nativeinstaller.Catalog
-		if config.NativeInstallers != "" {
-			catalog, err = nativeinstaller.Load(config.NativeInstallers, buildRevision)
-			if err != nil {
-				return err
-			}
-		}
-		if buildRevision != "" {
-			nativeInstaller = &api.NativeInstaller{Version: buildRevision, Base: origin.InstallerBase(), Catalog: catalog}
-		}
+	if buildRevision != "" {
+		nativeInstaller = &api.NativeInstaller{Version: buildRevision, Base: config.PublicOrigin.InstallerBase(), Catalog: catalog}
 	}
-	var deploymentExecution *deployment.ExecutionOperations
-	if registry != nil {
-		dispatcher := &execution.Dispatcher{Registry: registry,
-			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
-			Sessions:        sessionService,
-			SessionsReader:  sessionStore,
-			Links:           linkRelay,
-			ManagedRuntimes: managed, MaxConcurrentExecutions: config.ExecutionConcurrency}
-		lease, err := pgunit.AcquireLease(ctx, pool)
-		if err != nil {
-			return err
-		}
-		deploymentExecution, err = deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey))
-		if err != nil {
-			return errors.Join(err, lease.Close(ctx))
-		}
-		sessionExecution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
-		if err != nil {
-			return errors.Join(err, lease.Close(ctx))
-		}
-		// From this call on the Worker closes the lease, even when it fails to start.
-		worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{
-			Lease:      lease,
-			Deployment: deploymentExecution,
-			Sessions:   sessionExecution,
-		})
-		if err != nil {
-			return err
-		}
-		workerDone = make(chan error, 1)
-		go func() { workerDone <- worker.Run(ctx) }()
-		defer func() {
-			stop()
-			if workerDone != nil {
-				<-workerDone
-			}
-		}()
+	dispatcher := &execution.Dispatcher{Registry: registry,
+		Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
+		Sessions:        sessionService,
+		SessionsReader:  sessionStore,
+		Links:           linkRelay,
+		ManagedRuntimes: managedNodes.runtime, MaxConcurrentExecutions: config.ExecutionConcurrency}
+	lease, err := pgunit.AcquireLease(ctx, pool)
+	if err != nil {
+		return err
 	}
-	// Sampling runs only with the Worker, which owns every sweep.
-	sampling := coremetrics.Periodic{ID: "runtime_sampler", Every: history.SampleInterval}
-	if worker != nil {
-		sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{})
-		if err != nil {
-			return err
-		}
-		sampling.Run = func(ctx context.Context) (*int64, int64, error) {
-			result := sampler.Sweep(ctx)
-			sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			err := worker.CheckOwnership(sampleCtx)
-			if err == nil {
-				_, err = deploymentStore.SampleHostHistory(sampleCtx)
-			}
-			cancel()
-			fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
-			if !result.Complete {
-				log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
-				err = errors.New("incomplete Runtime sampling sweep")
-			} else {
-				log.Bg().Debug("Runtime history sampling sweep complete", fields...)
-			}
-			return metricPtr(int64(result.Observed)), int64(result.Failed), err
-		}
+	deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey))
+	if err != nil {
+		return errors.Join(err, lease.Close(ctx))
 	}
+	sessionExecution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+	if err != nil {
+		return errors.Join(err, lease.Close(ctx))
+	}
+	// From this call on the Worker closes the lease, even when it fails to start.
+	worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{
+		Lease:      lease,
+		Deployment: deploymentExecution,
+		Sessions:   sessionExecution,
+	})
+	if err != nil {
+		return err
+	}
+	workerDone := make(chan error, 1)
+	go func() { workerDone <- worker.Run(ctx) }()
+	defer func() {
+		stop()
+		if workerDone != nil {
+			<-workerDone
+		}
+	}()
+	// The Worker owns every sampling sweep.
+	sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{})
+	if err != nil {
+		return err
+	}
+	sampling := coremetrics.Periodic{ID: "runtime_sampler", Every: history.SampleInterval, Run: func(ctx context.Context) (*int64, int64, error) {
+		result := sampler.Sweep(ctx)
+		sampleCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		err := worker.CheckOwnership(sampleCtx)
+		if err == nil {
+			_, err = deploymentStore.SampleHostHistory(sampleCtx)
+		}
+		cancel()
+		fields := []any{"listed", result.Listed, "observed", result.Observed, "failed", result.Failed, "complete", result.Complete}
+		if !result.Complete {
+			log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
+			err = errors.New("incomplete Runtime sampling sweep")
+		} else {
+			log.Bg().Debug("Runtime history sampling sweep complete", fields...)
+		}
+		return metricPtr(int64(result.Observed)), int64(result.Failed), err
+	}}
 	metricsSource := &coreMetricsSource{store: coremetricspg.New(units), pool: pool, worker: worker, registry: registry}
 	metrics, err := coremetrics.New(processStartedAt, buildRevision, metricsSource, sampling,
 		prune("history_cleanup", 2*time.Second, history.Prune),
@@ -351,9 +327,7 @@ func run(config processconfig.Config) error {
 		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
 		Admin: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
-	}
-	if worker != nil {
-		deps.Execution = &api.Execution{
+		Execution: api.Execution{
 			ExecutorURL:      executorURL,
 			SessionAdmission: worker,
 			InputAdmission:   worker,
@@ -361,30 +335,23 @@ func run(config processconfig.Config) error {
 			Workspaces:       worker,
 			Links:            linkRelay,
 			NativeInstaller:  nativeInstaller,
-		}
-	}
-	if managedNodes != nil {
-		deps.Sandboxes = &api.Sandboxes{
+		},
+		Sandboxes: api.Sandboxes{
 			Deployment:             deploymentService,
 			NodeAllocations:        deploymentStore,
 			DeploymentChanges:      worker,
 			DeploymentReset:        worker,
 			ConfigurationDiscovery: managedNodes.setup,
-		}
+		},
 	}
-	handler, err := api.NewHandler(deps)
+	apiHandler, err := api.NewHandler(deps)
 	if err != nil {
 		return err
 	}
-	if daemonHandler != nil {
-		routes := daemonRoutes{gateway: daemonHandler,
-			enrollment: runtimeenrollment.EnrollmentHandler(sessionService),
-			connection: runtimeenrollment.ConnectionHandler(sessionStore, registry)}
-		if managedNodes != nil {
-			routes.nodeConnect = managedNodes.hub
-		}
-		handler = serverHandler(handler, &routes)
-	}
+	handler := serverHandler(apiHandler, &daemonRoutes{gateway: daemonHandler,
+		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService),
+		connection:  runtimeenrollment.ConnectionHandler(sessionStore, registry),
+		nodeConnect: managedNodes.hub})
 	server := &http.Server{Addr: config.Addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()

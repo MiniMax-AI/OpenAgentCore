@@ -34,9 +34,6 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string
 	if len(encrypted) == 0 {
 		return setup, nil
 	}
-	if s.cipher == nil {
-		return environmentconfig.Setup{}, credentialcrypto.ErrUnavailable
-	}
 	plaintext, err := s.cipher.OpenEnvironmentSetup(encrypted, setupBinding(lookup.TenantID, lookup.ID))
 	if err != nil {
 		return environmentconfig.Setup{}, fmt.Errorf("open frozen environment setup: %w", err)
@@ -61,9 +58,6 @@ func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session 
 	}
 	if err != nil {
 		return environmentconfig.InitialFileMetadata{}, nil, err
-	}
-	if s.cipher == nil {
-		return environmentconfig.InitialFileMetadata{}, nil, credentialcrypto.ErrUnavailable
 	}
 	id := uuid.UUID(row.ID.Bytes).String()
 	body, err := s.cipher.OpenEnvironmentFile(row.Contents, fileBinding(lookup.TenantID, lookup.ID, id))

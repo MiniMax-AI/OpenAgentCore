@@ -73,7 +73,7 @@ cat "$MSB_HOME/output"
 }
 
 func TestMicrosandboxGenerationProbeRetainsEarlierFailures(t *testing.T) {
-	for _, failure := range []error{context.Canceled, sandbox.ErrKVMUnavailable, sandbox.ErrCapacityInsufficient, sandbox.ErrMicrosandboxArtifactsUnavailable, errors.New("microsandbox state directory is unavailable")} {
+	for _, failure := range []error{context.Canceled, sandbox.ErrHostUnsupported, sandbox.ErrCapacityInsufficient, sandbox.ErrArtifactsUnavailable, errors.New("microsandbox state directory is unavailable")} {
 		probe := microsandboxGenerationProbe(Microsandbox{RuntimePath: "/missing"}, func(context.Context) error { return failure })
 		if got := probe(t.Context()); got != failure {
 			t.Fatalf("earlier failure changed: got %v, want %v", got, failure)

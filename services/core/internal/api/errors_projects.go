@@ -31,7 +31,7 @@ func writeProjectsError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, projects.ErrAPIKeyExists):
 		writeError(w, http.StatusConflict, "project_api_key_exists", "This API key ID already exists. List its metadata and revoke it explicitly if the secret was not saved.")
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)

@@ -71,7 +71,7 @@ func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, 
 			t.Error(err)
 		}
 	})
-	deployments, reader, operations := testDeployment(t, pool, nil, lease)
+	deployments, reader, operations := testDeployment(t, pool, pgtest.CredentialKey(t), lease)
 	return Owner{Lease: lease, Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader, pool
 }
 

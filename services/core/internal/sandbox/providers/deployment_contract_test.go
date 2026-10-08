@@ -19,11 +19,11 @@ func TestDeploymentContractProjectionsAreCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected, err := registry.PythonDeploymentContract()
+	expectedPython, expectedTypeScript, err := registry.DeploymentContract()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(python), expected) || string(typescript) != sandbox.TypeScriptDeploymentContract() {
+	if !strings.Contains(string(python), expectedPython) || string(typescript) != expectedTypeScript {
 		t.Fatal("deployment contract projection is stale; regenerate with go run ./services/core/cmd/specification-contract -write")
 	}
 }

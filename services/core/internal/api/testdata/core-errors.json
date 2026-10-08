@@ -4,7 +4,6 @@
   "console_sign_in_required",
   "core_metrics_unavailable",
   "core_unreachable",
-  "credential_storage_unavailable",
   "environment_unavailable",
   "execution_unavailable",
   "executor_credential_exists",

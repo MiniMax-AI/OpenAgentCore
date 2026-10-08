@@ -41,10 +41,10 @@ export function gettingStartedSteps(input: {
   const { sessions } = input;
   return {
     sandboxes: input.sandboxReset !== false
-      ? { state: input.sandboxReset === "failed" ? "unknown" : input.sandboxReset ? "todo" : null, action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.provider === "e2b" }
+      ? { state: input.sandboxReset === "failed" ? "unknown" : input.sandboxReset ? "todo" : null, action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.mode === "direct" }
       : input.localOnly === undefined || input.localOnly === "failed"
       ? { state: input.localOnly === "failed" ? "unknown" : null, action: "nodes", cloud: false }
-      : input.localOnly ? { state: "todo", action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.provider === "e2b" } : sandboxStep(input.fleet),
+      : input.localOnly ? { state: "todo", action: "nodes", cloud: input.fleet.status === "ready" && input.fleet.snapshot.deployment.mode === "direct" } : sandboxStep(input.fleet),
     model: modelStep(input.harnesses),
     key: keyStep(input.projects),
     session: {
@@ -56,8 +56,8 @@ export function gettingStartedSteps(input: {
 
 /**
  * Own machines are ready once the deployment is saved and a node is online
- * with its provider ready; E2B once the deployment is saved, since Core admits
- * only a ready template build. Only a build Core reports as not ready leaves
+ * with its provider ready; a direct Provider (E2B) once the deployment is
+ * saved, since Core admits only a ready template build. Only a build Core reports as not ready leaves
  * the step to do; a selection saved before Core recorded its build has no
  * status and counts as done.
  */
@@ -65,10 +65,10 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   if (fleet.status !== "ready") {
     return { state: fleet.status === "failed" ? "unknown" : null, action: "nodes", cloud: false };
   }
-  if (fleet.error) return { state: "unknown", action: "nodes", cloud: fleet.snapshot.deployment.provider === "e2b" };
+  if (fleet.error) return { state: "unknown", action: "nodes", cloud: fleet.snapshot.deployment.mode === "direct" };
   const { deployment, nodes } = fleet.snapshot;
   if (!deployment.provider) return { state: "todo", action: "setup", cloud: false };
-  if (deployment.provider === "e2b") {
+  if (deployment.mode === "direct") {
     return { state: templateBuildStatus(deployment.metadata?.template_build) === "notReady" ? "todo" : "done", action: "nodes", cloud: true };
   }
   if (nodes.some(nodeServingReady)) return { state: "done", action: "nodes", cloud: false };

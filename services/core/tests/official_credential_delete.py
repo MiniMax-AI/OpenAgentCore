@@ -12,7 +12,7 @@ def verify_credential_deletion(client, other, invalid, peer, canary, expect_erro
     credentials = client.beta.agents.vaults.credentials
     auth = {"type": "static_bearer", "mcp_server_url": "https://example.invalid/delete", "token": canary}
     values = [credentials.create(vault.id, name=name, auth=auth)
-              for name in ["SDK target", "HTTP target", "Keyless target", "Retained sibling"]]
+              for name in ["SDK target", "HTTP target", "Key-lost target", "Retained sibling"]]
     foreign = other.beta.agents.vaults.credentials.create(foreign_vault.id, name="Foreign", auth=auth)
     headers = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
     endpoint = str(client.base_url).rstrip("/") + "/vaults/" + vault.id + "/credentials"
@@ -69,7 +69,7 @@ def verify_credential_deletion_recovery(client, other, saved, expect_error):
     print("Credential deletion: absent resources and unaffected siblings survived API restart.")
 
 
-def verify_keyless_credential_deletion(client, saved, expect_error):
+def verify_key_lost_credential_deletion(client, saved, expect_error):
     values, _ = saved
     target, sibling = values[2:]
     credentials = client.beta.agents.vaults.credentials
@@ -78,4 +78,4 @@ def verify_keyless_credential_deletion(client, saved, expect_error):
     expect_error(NotFoundError, lambda: credentials.retrieve(target.id, vault_id=target.vault_id))
     assert credentials.retrieve(sibling.id, vault_id=sibling.vault_id) == sibling
     assert list(credentials.list(target.vault_id)) == [sibling]
-    print("Credential deletion: no storage key required; safe sibling metadata remains available.")
+    print("Credential deletion: works under a replaced key; safe sibling metadata remains available.")

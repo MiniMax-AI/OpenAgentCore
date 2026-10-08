@@ -60,7 +60,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 					t.Fatal(err)
 				}
 				// A reader without the encryption key can use the safe snapshot after restart.
-				reader := New(pool)
+				reader := New(t, pool)
 				frozen, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 				if err != nil {
 					t.Fatal(err)

@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: acf47c13134900271924d6d26b62488998cd331df7ad1196f4ce940c0bf7457c
+source_hash: a6920271d21280686ae8df889f8de499da4dc2572bc1a80d4a567e3861a1c520
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -68,7 +68,7 @@ docker compose exec web oac-web core-key
 
 ## 沙箱后端 {#sandbox-backend}
 
-安装程序不保存沙箱后端。登录后，打开 **System** → **Manage sandbox configuration**，选择 Docker、microsandbox 或 E2B；Web 会按 [`standard-sizes.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/src/features/sandbox/standard-sizes.json) 推荐 Standard 尺寸。该选择保存在 Core 的数据库中。以后要更改，请[重置部署](nodes.md#change-the-sandbox-configuration)。Docker 沙箱与每个节点共用该节点的内核，其节点服务账户[等效于 root](nodes.md#what-the-installer-sets-up)。每种后端都需要一个非回环的公共 HTTPS URL，因为沙箱会从 Core 主机之外调用 Core。按照 [E2B 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)准备模板。
+安装程序不保存沙箱后端。登录后，打开 **System** → **Manage sandbox configuration**，选择 Docker、microsandbox 或 E2B；Web 会把 [Provider 声明的默认大小](../sandbox-provider.md#register-the-provider-kind)推荐为 Standard 尺寸。该选择保存在 Core 的数据库中。以后要更改，请[重置部署](nodes.md#change-the-sandbox-configuration)。Docker 沙箱与每个节点共用该节点的内核，其节点服务账户[等效于 root](nodes.md#what-the-installer-sets-up)。每种后端都需要一个非回环的公共 HTTPS URL，因为沙箱会从 Core 主机之外调用 Core。按照 [E2B 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)准备模板。
 
 ## 监听器与访问 {#listeners-and-access}
 

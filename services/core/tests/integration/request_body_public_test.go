@@ -37,7 +37,7 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	})
 	// No Runtime is connected, so a file write that passes the gate is unavailable.
 	unavailable := func(d *api.Dependencies) { d.Execution.Workspaces = unavailableWorkspaces{strictStandIn{t}} }
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), unavailable, acceptUnavailable(t), fixtureDeploymentProvider())
+	h, err := publicHandler(t, s, auth, "codex", unavailable, acceptUnavailable(t), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	token, tenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "excluded-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

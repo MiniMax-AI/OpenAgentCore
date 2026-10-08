@@ -302,7 +302,7 @@ func TestHealthSendsOnlyFixedDiagnosticCode(t *testing.T) {
 		err  error
 		want string
 	}{
-		{fmt.Errorf("%w: dial unix /home/operator/private/docker.sock", sandbox.ErrDockerUnavailable), "docker_unavailable"},
+		{fmt.Errorf("%w: open /home/operator/private/kvm", sandbox.ErrHostUnsupported), "host_unsupported"},
 		{errors.New("open /home/operator/private/runtime: permission denied"), "provider_unavailable"},
 		{nil, ""},
 	} {

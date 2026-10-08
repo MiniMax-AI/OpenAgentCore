@@ -18,8 +18,7 @@ import (
 const oauthRefreshTimeout = 20 * time.Second
 
 // Service runs the Vault and Credential operations. Storage seals and opens
-// the secrets; without a credential key, operations that need a secret return
-// credentialcrypto.ErrUnavailable and the others keep working.
+// the secrets.
 type Service struct {
 	storage   Storage
 	refresher oauthrefresh.Refresher

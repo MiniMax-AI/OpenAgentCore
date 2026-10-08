@@ -88,13 +88,11 @@ type ExecutorCredentialStorage interface {
 	// principal or Project, or an unknown one, is ErrNotFound.
 	LoadExecutorCredentialRestriction(ctx context.Context, principal identity.Principal, key string) (string, error)
 	// SignInstallation returns the signature of an installation authorization
-	// payload under the credential key. Without that key it is
-	// credentialcrypto.ErrUnavailable.
+	// payload under the credential key.
 	SignInstallation(ctx context.Context, payload string) (string, error)
 	// VerifyInstallation checks the signature of an installation
 	// authorization payload: another signature is
-	// ErrInstallationAuthorization, and a service without the credential key
-	// credentialcrypto.ErrUnavailable.
+	// ErrInstallationAuthorization.
 	VerifyInstallation(ctx context.Context, payload, signature string) error
 	// WithExecutorCredentials runs apply in a transaction of the tenant.
 	WithExecutorCredentials(ctx context.Context, tenant string, apply func(context.Context, ExecutorCredentialTx) error) error

@@ -1,5 +1,4 @@
 import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
-import standardSizes from "./standard-sizes.json";
 
 interface Manifest {
   platform?: string;
@@ -10,14 +9,16 @@ interface Manifest {
   microsandbox?: { runtime_sha256?: string; firmware_sha256?: string };
 }
 
-export function defaultSandboxResources(provider: SandboxProvider): SandboxResources {
-  return { ...(provider === "microsandbox" ? standardSizes.microsandbox : standardSizes.docker) };
+/** The size the Provider declares for setup to propose; null when its configuration selects the size. */
+export function defaultSandboxResources(provider: SandboxProvider): SandboxResources | null {
+  const size: SandboxResources | null = deploymentContract.providers[provider].default_resources;
+  return size && { ...size };
 }
 
-/** Core's resource rule: optional disk fields stay zero unless the provider supports disk limits. */
+/** Core's resource rule: optional disk fields stay zero unless the Provider declares disk limits. */
 export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources): boolean {
   return deploymentContract.resources.every((rule) => {
-    const [min, max] = !rule.omit_zero ? [rule.min, rule.max] : provider === "microsandbox" ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
+    const [min, max] = !rule.omit_zero ? [rule.min, rule.max] : deploymentContract.providers[provider].disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
     const value = resources[rule.name] ?? 0;
     return Number.isInteger(value) && value >= min && value <= max;
   });

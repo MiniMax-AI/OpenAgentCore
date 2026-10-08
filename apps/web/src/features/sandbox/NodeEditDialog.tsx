@@ -13,17 +13,19 @@ import { sandboxesThatFit } from "./deployment-specification";
 
 /**
  * A node's name and sandbox limits (`PATCH /core/v1/sandbox/nodes/{id}`). Core
- * takes all three together. Only microsandbox suspends sandboxes, so only it
- * shows the retained limit; for Docker the saved one is kept, raised to at least
+ * takes all three together. Only a deployment whose Provider suspends sandboxes
+ * shows the retained limit; otherwise the saved one is kept, raised to at least
  * the active limit because Core requires it. Under the limit, the host's CPUs
  * and memory from the node's last heartbeat, each sandbox's size and how many
  * of those the host holds.
  */
-export function NodeEditDialog({ client, node, size, onClose, onSaved }: {
+export function NodeEditDialog({ client, node, size, suspends, onClose, onSaved }: {
   client: SandboxAdminClient;
   node: SandboxNode | null;
   /** Each sandbox's CPUs and memory, from the deployment. */
   size: SandboxResources | null;
+  /** Whether the deployment's Provider suspends sandboxes, which its suspension policy declares. */
+  suspends: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -36,7 +38,6 @@ export function NodeEditDialog({ client, node, size, onClose, onSaved }: {
   const [retained, setRetained] = useState(String(node?.max_retained ?? 8));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const suspends = node?.provider === "microsandbox";
   const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
   const activeLimit = whole(active);
   const retainedLimit = suspends ? whole(retained) : Math.max(node?.max_retained ?? 0, activeLimit ?? 0);

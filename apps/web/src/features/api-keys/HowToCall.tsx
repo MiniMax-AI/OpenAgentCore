@@ -64,14 +64,12 @@ export function callSamples(apiBaseUrl: string, apiKey: string | null, keyPlaceh
 
 /**
  * The samples, or why there are none. The console never sends these requests.
- * When Core is reachable only on its own machine it says so, and without a
- * public address it says to set one instead of guessing.
+ * When Core is reachable only on its own machine it says so.
  */
 function HowToCallBody({ apiKey }: { apiKey: string | null }) {
   const { t } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
   const installation = useQuery(installationQuery);
-  const base = installation.data?.api_base_url ?? null;
 
   if (installation.data === undefined) {
     return installation.isError && !installation.isFetching
@@ -79,8 +77,7 @@ function HowToCallBody({ apiKey }: { apiKey: string | null }) {
       // The first sample's place, as the console's other first reads hold theirs.
       : <div className="how-to-call-sample how-to-call-skeleton" role="status" aria-label={t("howToCall.loading")} aria-busy="true"><span className="skeleton-bar" /><span className="skeleton-bar" /></div>;
   }
-  if (base === null) return <p className="how-to-call-note" role="note">{t("howToCall.noAddress")}</p>;
-  const samples = callSamples(base, apiKey, t("howToCall.keyPlaceholder"));
+  const samples = callSamples(installation.data.api_base_url, apiKey, t("howToCall.keyPlaceholder"));
   return (
     <>
       {installation.data.local_only ? <p className="how-to-call-note" role="note">{t("howToCall.localOnly")}</p> : null}

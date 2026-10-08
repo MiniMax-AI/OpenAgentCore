@@ -40,10 +40,6 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 		writeOperationError(w, r, sessions.ErrInvalidInput)
 		return
 	}
-	if h.Execution == nil {
-		writeOperationError(w, r, sessions.ErrEnvironmentUnavailable)
-		return
-	}
 	result, err := h.Execution.SessionArchive.ArchiveSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
 	if err != nil {
 		writeOperationError(w, r, err)

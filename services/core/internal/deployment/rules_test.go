@@ -293,7 +293,7 @@ func TestNodeRollout(t *testing.T) {
 		{"failed without diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "failed", ReadyGeneration: &ready}, "failed", ""},
 		{"ready ignores a diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "ready", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "ready", ""},
 		{"unknown target state", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "other", ReadyGeneration: &ready}, "unknown", ""},
-		{"protocol 1 failed on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "failed", TargetDiagnostic: "kvm_unavailable", ReadyGeneration: &ready}, "failed", "kvm_unavailable"},
+		{"protocol 1 failed on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "failed", TargetDiagnostic: "host_unsupported", ReadyGeneration: &ready}, "failed", "host_unsupported"},
 		{"protocol 1 without a target state", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, ReadyGeneration: &ready}, "unknown", ""},
 	} {
 		got := nodeRollout(c.n)
