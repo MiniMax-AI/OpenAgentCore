@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -56,6 +57,9 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			if len(active) >= w.executionConcurrency() {
 				continue
 			}
+			if owner.Resource.Kind != "" && (!owner.ResourceLive || !w.dispatcher.Links.Serving(owner.Resource.Ref())) {
+				continue
+			}
 			peer, err := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
 			if err != nil {
 				if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, runtimegateway.ErrSessionClosed) || errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
@@ -98,14 +102,24 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	if err == nil {
 		err = w.dispatcher.sessionExecution.CompleteEnvironmentInitialization(operation, owner)
 	}
-	if err != nil {
-		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
-		// A later scan settles an unrecorded failure; it never retries the setup.
-		record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer stop()
-		_ = w.dispatcher.sessionExecution.FailEnvironmentInitialization(record, owner, failure)
+	if err == nil {
+		return
 	}
+	record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer stop()
+	// Nothing took effect, so a later scan starts the preparation again.
+	if errors.Is(err, errBeforeEffect) && w.dispatcher.sessionExecution.UnclaimEnvironmentInitialization(record, owner) == nil {
+		return
+	}
+	log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
+	// A later scan settles an unrecorded failure; it never retries the setup.
+	_ = w.dispatcher.sessionExecution.FailEnvironmentInitialization(record, owner, failure)
 }
+
+// errBeforeEffect ends a preparation before any of its steps took effect: its
+// bind failed because the Runtime is gone or the Environment has no live Link
+// resource, or the Runtime rejected its first step with resource_unavailable.
+var errBeforeEffect = errors.New("environment preparation ended before any effect")
 
 func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization, failure *sessions.ProvisioningFailure) error {
 	environment, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
@@ -123,6 +137,9 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 		return err
 	}
 	peer, err := w.dispatcher.assignedPeer(ctx, sessions.ExecutionDevice{ID: owner.DeviceID, Assignment: owner.Assignment, SessionEnvironmentID: owner.EnvironmentID})
+	if errors.Is(err, runtimegateway.ErrNoLinkResource) || errors.Is(err, runtimegateway.ErrSessionClosed) || errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+		return fmt.Errorf("%w: %w", errBeforeEffect, err)
+	}
 	if err != nil {
 		return err
 	}
@@ -155,6 +172,9 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 		if err != nil {
 			var confirmed *runtimeStepFailure
 			if errors.As(err, &confirmed) {
+				if index == 0 && confirmed.unavailable {
+					return fmt.Errorf("%w: %w", errBeforeEffect, err)
+				}
 				candidate.ExitCode = confirmed.exitCode
 				*failure = candidate
 			}

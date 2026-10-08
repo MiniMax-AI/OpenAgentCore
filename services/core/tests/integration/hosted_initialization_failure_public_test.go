@@ -18,6 +18,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -64,8 +65,8 @@ type hostedFailureProvider struct {
 	steps  []string
 }
 
-func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry) {
-	p.initializationPeer.setRuntimeGateway(t, endpoint, registry)
+func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry, link *sandboxlinktest.Server) {
+	p.initializationPeer.setRuntimeGateway(t, endpoint, registry, link)
 	p.apply = p.prepare
 }
 func (p *hostedFailureProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {

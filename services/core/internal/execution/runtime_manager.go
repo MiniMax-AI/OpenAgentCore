@@ -26,6 +26,7 @@ type runtimeManager struct {
 	lease               Ownership
 	registry            *runtimegateway.Registry
 	links               *relay.Relay
+	connections         *environmentConnections
 	config              RuntimeProvider
 	setupInstallationID string
 	loadDeployment      func(context.Context) (*RuntimeProvider, error)
@@ -93,7 +94,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, links: m.links, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
+			connections: m.connections, wakeHints: make(chan struct{}, 1),
 		}}
 		m.nodes[id] = n
 	}

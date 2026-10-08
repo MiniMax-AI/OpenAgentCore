@@ -26,6 +26,7 @@ type Worker struct {
 	stopped             chan struct{}
 	stopOnce            sync.Once
 	runtimes            *runtimeManager
+	connections         *environmentConnections
 	enrolledConnections map[string]*runtimeConnection
 }
 
@@ -76,8 +77,8 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 		return nil, errors.New("execution worker requires the Link relay")
 	}
 	owned.notifications = &executionNotifications{}
-	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.Links, owned.ManagedRuntimes)
+	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), connections: &environmentConnections{current: make(map[string]*runtimeConnection)}, enrolledConnections: make(map[string]*runtimeConnection)}
+	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.Links, worker.connections, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err
 	}
@@ -292,6 +293,10 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		}
 		if maintenance {
 			if _, err := w.dispatcher.sessionExecution.ExpireEnvironmentInputs(ctx); err != nil {
+				w.observeSchedulerPoll(0, err)
+				return err
+			}
+			if err := w.observeSandboxConnections(ctx); err != nil {
 				w.observeSchedulerPoll(0, err)
 				return err
 			}

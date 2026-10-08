@@ -167,7 +167,10 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 		return err
 	}
 	// Publish disconnected only after receiving the daemon's receipt barrier.
-	if err := observeRuntimeConnection(ctx, r.sessionExecution, r.connections, owner.TenantID, owner.EnvironmentID, nil, false); err != nil {
+	r.connections.mu.Lock()
+	err = observeRuntimeConnection(ctx, r.sessionExecution, r.connections.current, owner.TenantID, owner.EnvironmentID, nil, false)
+	r.connections.mu.Unlock()
+	if err != nil {
 		return err
 	}
 	// The Session-locked phase commit checks pending work and wake requests.

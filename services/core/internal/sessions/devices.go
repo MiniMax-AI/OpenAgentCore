@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
@@ -44,6 +45,13 @@ type EnrolledRuntimeBinding struct {
 	DeviceID, TenantID, EnvironmentID, SessionID string
 }
 
+// SandboxResource is a live Link resource. Quiesced compute is between a
+// quiesce and the wake that resumes it.
+type SandboxResource struct {
+	Resource sandboxbootstrap.Resource
+	Quiesced bool
+}
+
 // EnrollmentAuthority is what an executor credential authorizes when it
 // enrolls a Runtime: the key and the Environment's workspace directory.
 type EnrollmentAuthority struct {
@@ -72,6 +80,8 @@ type DeviceReader interface {
 	// ListEnrolledRuntimeBindings lists the enrolled user-managed Runtimes of
 	// live Environments.
 	ListEnrolledRuntimeBindings(ctx context.Context) ([]EnrolledRuntimeBinding, error)
+	// ListLiveSandboxResources lists the live Link resources.
+	ListLiveSandboxResources(ctx context.Context) ([]SandboxResource, error)
 	// GetSessionExecutionBinding reads the Runtime device that executes the
 	// Session's Turns, with the native session that continues its history,
 	// once its Environment preparation completed; before that, and without an

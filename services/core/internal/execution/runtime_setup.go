@@ -19,7 +19,13 @@ type runtimeSetupOperation struct {
 	Index   int
 }
 
-type runtimeStepFailure struct{ exitCode int }
+// runtimeStepFailure is a step the Runtime rejected or failed. unavailable
+// marks a rejection with resource_unavailable, which ends a step before any
+// effect.
+type runtimeStepFailure struct {
+	exitCode    int
+	unavailable bool
+}
 
 func (*runtimeStepFailure) Error() string { return "environment initialization operation failed" }
 
@@ -92,7 +98,7 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, ref proto.Assign
 		return nil
 	}
 	if err == nil && (result.Outcome == "rejected" || result.Outcome == "failed") {
-		return &runtimeStepFailure{exitCode: result.ExitCode}
+		return &runtimeStepFailure{exitCode: result.ExitCode, unavailable: result.Outcome == "rejected" && result.ErrorCode == "resource_unavailable"}
 	}
 	return errors.New("environment initialization operation unconfirmed")
 }

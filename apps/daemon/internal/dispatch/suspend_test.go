@@ -157,6 +157,34 @@ func TestResumeRequiresExactSuspensionAndAssignment(t *testing.T) {
 	}
 }
 
+// A restarted Runtime has quiesced nothing and holds no assignment, so Core's
+// resume of the Environment it quiesced before the restart succeeds.
+func TestResumeOnFreshRouterSucceeds(t *testing.T) {
+	frames := make(chan proto.Envelope, 1)
+	r, err := New(Config{Registry: agent.NewRegistry(), Sender: suspendSender(func(_ context.Context, env proto.Envelope) error { frames <- env; return nil }), IdleTimeout: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
+	env, err := proto.NewEnvelope(proto.TypeEnvironmentResume, "resume", proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.Assignment = suspendRef
+	if err := r.Handle(t.Context(), env); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case frame := <-frames:
+		var result proto.EnvironmentSuspendResultPayload
+		if frame.Type != proto.TypeEnvironmentResumed || frame.DecodePayload(&result) != nil || !result.Accepted {
+			t.Fatalf("resume = %+v %+v", frame, result)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("resume has no result")
+	}
+}
+
 func TestQuiescingOneEnvironmentLeavesAnotherRunning(t *testing.T) {
 	frames := make(chan proto.Envelope, 16)
 	r := suspensionRouter(t, suspendSender(func(_ context.Context, env proto.Envelope) error { frames <- env; return nil }))
@@ -217,9 +245,9 @@ func TestQuiescingOneEnvironmentLeavesAnotherRunning(t *testing.T) {
 		code    string
 	}{
 		"foreign":  {other, request, proto.AssignmentConflict},
-		"unpaused": {other, proto.EnvironmentSuspendPayload{EnvironmentID: "other", SuspendID: "attempt"}, "not_suspended"},
-		"rollback": {other, proto.EnvironmentSuspendPayload{EnvironmentID: "other", SuspendID: "attempt", Rollback: true}, ""},
+		"unpaused": {other, proto.EnvironmentSuspendPayload{EnvironmentID: "other", SuspendID: "attempt"}, ""},
 		"obsolete": {suspendRef, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "obsolete"}, "not_suspended"},
+		"rollback": {suspendRef, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "obsolete", Rollback: true}, "not_suspended"},
 	} {
 		if got := suspend(proto.TypeEnvironmentResume, id, test.ref, test.request); got.ErrorCode != test.code || got.Accepted != (test.code == "") {
 			t.Fatalf("%s resume = %+v", id, got)

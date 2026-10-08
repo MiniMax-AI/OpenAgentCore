@@ -59,11 +59,11 @@ type runtimeLifecycle struct {
 	reconcileCancel context.CancelFunc
 	cursor          string
 	pendingCursor   string
-	connections     map[string]*runtimeConnection
+	connections     *environmentConnections
 	wakeHints       chan struct{}
 }
 
-func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, links *relay.Relay, config *RuntimeProvider) (*runtimeManager, error) {
+func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, links *relay.Relay, connections *environmentConnections, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -72,7 +72,7 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentR
 		return nil, sandbox.ErrInvalid
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, links: links, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, links: links, connections: connections, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -312,11 +312,6 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 				return nil
 			}
 		}
-		r.clearRuntimeState(owner)
-	} else if owner.ComputePhase == "disabled" || owner.ComputePhase == "running" {
-		if err := r.observeConnection(ctx, owner); err != nil {
-			return err
-		}
 	}
 	if owner.ComputePhase != "disabled" {
 		return r.observeCompute(ctx, owner)
@@ -388,7 +383,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if r.config.Suspension != nil && environment.Initialization == "complete" {
 		return r.enableCompute(ctx, owner)
 	}
-	if peer, err := r.registry.LookupDevice(owner.DeviceID); err != nil || peer.IsClosed() {
+	if !r.links.Serving(serveResource(owner).Ref()) {
 		return nil
 	}
 	renewed, err := provider.Renew(ctx, runtimeReference(owner))
@@ -417,11 +412,6 @@ func (r *runtimeLifecycle) requestCleanup(ctx context.Context, owner deployment.
 // serveResource is the allocation's Link resource.
 func serveResource(owner deployment.Allocation) sandboxbootstrap.Resource {
 	return sandboxbootstrap.Resource{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID, Kind: "allocation", ID: owner.ID, Generation: owner.ServeGeneration}
-}
-
-// Environment identity owns connectivity; preparation has an independent owner.
-func (r *runtimeLifecycle) clearRuntimeState(owner deployment.Allocation) {
-	delete(r.connections, owner.EnvironmentID)
 }
 
 func runtimeReference(owner deployment.Allocation) sandbox.Reference {

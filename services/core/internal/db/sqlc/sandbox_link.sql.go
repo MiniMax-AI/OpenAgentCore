@@ -105,6 +105,52 @@ func (q *Queries) GetSandboxServeAuthority(ctx context.Context, id pgtype.UUID) 
 	return i, err
 }
 
+const listLiveSandboxResources = `-- name: ListLiveSandboxResources :many
+SELECT r.tenant_id, r.environment_id, r.kind, r.id, r.generation,
+    COALESCE(a.compute_phase NOT IN ('disabled', 'running'), false)::boolean AS quiesced
+FROM sandbox_resources r
+LEFT JOIN runtime_allocations a ON r.kind = 'allocation' AND a.id = r.id
+WHERE r.live
+`
+
+type ListLiveSandboxResourcesRow struct {
+	TenantID      pgtype.UUID `json:"tenant_id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	Kind          string      `json:"kind"`
+	ID            pgtype.UUID `json:"id"`
+	Generation    int64       `json:"generation"`
+	Quiesced      bool        `json:"quiesced"`
+}
+
+// Every live Link resource. Quiesced compute is between a quiesce and the
+// wake that resumes it.
+func (q *Queries) ListLiveSandboxResources(ctx context.Context) ([]ListLiveSandboxResourcesRow, error) {
+	rows, err := q.db.Query(ctx, listLiveSandboxResources)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLiveSandboxResourcesRow{}
+	for rows.Next() {
+		var i ListLiveSandboxResourcesRow
+		if err := rows.Scan(
+			&i.TenantID,
+			&i.EnvironmentID,
+			&i.Kind,
+			&i.ID,
+			&i.Generation,
+			&i.Quiesced,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const registerAgentHost = `-- name: RegisterAgentHost :one
 INSERT INTO devices (id, name, credential_hash, agent_host)
 VALUES ($1, 'agent-host', $2, true)

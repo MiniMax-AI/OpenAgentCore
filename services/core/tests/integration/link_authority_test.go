@@ -132,7 +132,8 @@ func (l *linkHarness) exec(query string, args ...any) {
 // bind has the Worker bind the Session's current assignment to h.device and
 // returns it with the payload the Runtime received. Until Sessions are placed
 // on an agent host, the Environment's initialization is its one production
-// bind, so bind reopens the initialization, which has nothing to install.
+// bind, so bind reopens the initialization, which has nothing to install. The
+// Worker claims it only while the Environment's resource is Serving.
 func (l *linkHarness) bind() (proto.AssignmentRef, proto.AssignmentBindPayload) {
 	t := l.t
 	t.Helper()
@@ -333,6 +334,7 @@ func TestLinkAuthorityAgentHost(t *testing.T) {
 // carries no grant and that its device can neither attach nor be marked.
 func TestLinkAuthorityGuest(t *testing.T) {
 	l := newLinkHarness(t, true)
+	within(t, startLinkServe(t, l.relay, l.serve, l.resource.Ref()).connected)
 	if _, payload := l.bind(); payload.Resource != nil || payload.AttachGrant != nil {
 		t.Fatalf("guest bind = %+v", payload)
 	}
@@ -550,61 +552,61 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 }
 
 // TestInitializationBindsAgentHost binds a hosted Session to the registered
-// agent host and runs the Environment's initialization. The bind carries the
-// Environment's live Link resource and an attach grant; without a live
-// resource, initialization fails before any bind is sent.
+// agent host and runs the Environment's initialization once its Link resource
+// is Serving. The bind carries the resource and an attach grant. A bind that
+// fails before any effect, here because the agent host's connection closes,
+// leaves the initialization unclaimed, and a later pass completes it.
 func TestInitializationBindsAgentHost(t *testing.T) {
-	for name, live := range map[string]bool{"live resource": true, "no live resource": false} {
-		t.Run(name, func(t *testing.T) {
-			s, _ := newManagedTestStore(t)
-			tenant, host, credential := uuid.NewString(), uuid.NewString(), uuid.NewString()
-			if err := sessionAdapter(s).RegisterAgentHost(t.Context(), host, runtimedevice.HashCredential(credential)); err != nil {
-				t.Fatal(err)
-			}
-			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
-				Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted"}}`),
-				InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))
-			if err != nil {
-				t.Fatal(err)
-			}
-			// Placement does not choose the agent host yet.
-			if _, err := s.pool.Exec(t.Context(), "INSERT INTO session_runtime_assignments(session_id, runtime_id) VALUES($1, $2)", session.ID, host); err != nil {
-				t.Fatal(err)
-			}
-			resource := sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}
-			if live {
-				device, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "sandbox", runtimedevice.HashCredential(uuid.NewString()))
-				if err != nil {
-					t.Fatal(err)
-				}
-				insertAllocation(t, s, resource, device.ID, []byte(uuid.NewString()))
-			}
-			server := httptest.NewUnstartedServer(nil)
-			endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
-			if err != nil {
-				t.Fatal(err)
-			}
-			server.Config.Handler = handler
-			server.Start()
-			t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
-			runWorker(t, startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry}))
-			peer := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1)}
-			peer.setRuntimeGateway(t, endpoint, registry)
-			if err := peer.connect(sandbox.Bootstrap{DeviceID: host, Credential: credential}); err != nil {
-				t.Fatal(err)
-			}
-			if !live {
-				awaitInitialization(t, s, tenant, session.Environment.ID, "failed")
-				if len(peer.binds) != 0 {
-					t.Fatal("bound without a live resource", <-peer.binds)
-				}
-				return
-			}
-			if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
-				t.Fatalf("agent host bind = %+v", bind)
-			}
-			awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
-		})
+	s, _ := newManagedTestStore(t)
+	tenant, host, credential := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), host, runtimedevice.HashCredential(credential)); err != nil {
+		t.Fatal(err)
 	}
+	session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted"}}`),
+		InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Placement does not choose the agent host yet.
+	if _, err := s.pool.Exec(t.Context(), "INSERT INTO session_runtime_assignments(session_id, runtime_id) VALUES($1, $2)", session.ID, host); err != nil {
+		t.Fatal(err)
+	}
+	resource := sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: session.Environment.ID, Kind: "allocation", ID: uuid.NewString(), Generation: 1}
+	device, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "sandbox", runtimedevice.HashCredential(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	serve := []byte(uuid.NewString())
+	insertAllocation(t, s, resource, device.ID, serve)
+	server := httptest.NewUnstartedServer(nil)
+	endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
+	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.Config.Handler = handler
+	server.Start()
+	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+	link := startLinkRoute(t, s)
+	runWorker(t, startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: link.Relay}))
+	within(t, startLinkServe(t, link, serve, resource.Ref()).connected)
+
+	dropped := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1), closeOnBind: true}
+	dropped.setRuntimeGateway(t, endpoint, registry, nil)
+	if err := dropped.connect(sandbox.Bootstrap{DeviceID: host, Credential: credential}); err != nil {
+		t.Fatal(err)
+	}
+	within(t, dropped.binds)
+	awaitInitialization(t, s, tenant, session.Environment.ID, "pending")
+
+	peer := &initializationPeer{apply: completedInitialization, binds: make(chan proto.AssignmentBindPayload, 1)}
+	peer.setRuntimeGateway(t, endpoint, registry, nil)
+	if err := peer.connect(sandbox.Bootstrap{DeviceID: host, Credential: credential}); err != nil {
+		t.Fatal(err)
+	}
+	if bind := within(t, peer.binds); bind.EnvironmentID != session.Environment.ID || bind.Resource == nil || *bind.Resource != resource || len(bind.AttachGrant) == 0 {
+		t.Fatalf("agent host bind = %+v", bind)
+	}
+	awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
 }

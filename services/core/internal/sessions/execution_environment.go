@@ -81,6 +81,9 @@ type InitializationTx interface {
 	// ClaimInitialization starts the pending preparation of the live
 	// Environment and reports whether it did.
 	ClaimInitialization(ctx context.Context, environment string) (bool, error)
+	// UnclaimInitialization returns the running preparation of the live
+	// Environment to pending and reports whether it did.
+	UnclaimInitialization(ctx context.Context, environment string) (bool, error)
 	// CompleteInitialization completes the running preparation of the live
 	// Environment and reports whether it did.
 	CompleteInitialization(ctx context.Context, environment string) (bool, error)
@@ -196,6 +199,14 @@ func (o *ExecutionOperations) advanceInitialization(ctx context.Context, owner E
 func (o *ExecutionOperations) ClaimEnvironmentInitialization(ctx context.Context, owner EnvironmentInitialization) error {
 	return o.advanceInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) (bool, error) {
 		return tx.ClaimInitialization(ctx, environment.ID)
+	})
+}
+
+// UnclaimEnvironmentInitialization returns the claimed preparation to
+// pending, for a preparation that ended before any step took effect.
+func (o *ExecutionOperations) UnclaimEnvironmentInitialization(ctx context.Context, owner EnvironmentInitialization) error {
+	return o.advanceInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) (bool, error) {
+		return tx.UnclaimInitialization(ctx, environment.ID)
 	})
 }
 

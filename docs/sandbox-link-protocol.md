@@ -53,6 +53,8 @@ Each link carries at most 256 concurrent service streams, and each resource has 
 
 The owner of the relay implements `Authority` from its durable records, and the relay consults it for every Hello, Open and renewal. To revoke, withdraw the authority first, then call `RevokeAttachment` or `RevokeResource` so the relay closes what it holds.
 
+`Serving(ref)` reports whether the relay holds a serve peer of `ref` at `ref.Generation`. Like the rest of the relay state, it is this process's view: the owner uses it to tell whether a resource can carry streams now, and keeps its durable records as the judge of whether the resource exists.
+
 Tests use `sandboxlinktest.NewAuthority`, which holds static credentials and grants, and `sandboxlinktest.StartRelay`, which runs a relay on an `httptest` TLS server and returns its URL and a TLS configuration that trusts it.
 
 ## Framing

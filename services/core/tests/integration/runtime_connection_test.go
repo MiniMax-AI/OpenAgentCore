@@ -3,88 +3,61 @@ package integration
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
+// TestManagedRuntimeConnectionFollowsServe checks that a hosted Environment is
+// connected while the relay holds its allocation's serve peer, and that a
+// restarted Worker publishes it connected again.
+func TestManagedRuntimeConnectionFollowsServe(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	key := webDeployment(t, s, "e2b")
 	tenant, session, environment := managedSession(t, s)
-	server := httptest.NewUnstartedServer(nil)
-	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.Config.Handler = handler
-	server.Start()
-	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+	link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	start := func() *execution.Worker { return startWebWorker(t, s, registry, key, p, nil) }
-	stop := func(w *execution.Worker) {
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-		_ = w.Run(ctx)
+	start := func() (*execution.Worker, func()) {
+		w, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: link.Relay, ManagedRuntimes: webRuntimes(t, s, key, p, nil)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- w.Run(ctx) }()
+		stop := func() {
+			cancel()
+			if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+				t.Error(err)
+			}
+		}
+		return w, stop
 	}
-	w := start()
-	t.Cleanup(func() { stop(w) })
+	w, stop := start()
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertStatus := func(want string) {
-		t.Helper()
-		for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
-			if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
-				t.Fatal(err)
-			}
-			got, err := sessionAdapter(s).GetEnvironment(t.Context(), tenant, environment.ID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got.Status == want {
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		t.Fatal("Environment did not reach", want)
+	if got, err := sessionAdapter(s).GetEnvironment(t.Context(), tenant, environment.ID); err != nil || got.Status != "pending" {
+		t.Fatal("compute existence connected the Environment", got.Status, err)
 	}
-	dial := func(token string) (*websocket.Conn, error) {
-		u, _ := url.Parse(wsURL)
-		u.RawQuery = url.Values{"device_id": {owner.DeviceID}, "version": {proto.Version}}.Encode()
-		conn, response, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + token}})
-		if response != nil && response.Body != nil {
-			response.Body.Close()
-		}
-		return conn, err
+	p.mu.Lock()
+	io := p.serve
+	p.mu.Unlock()
+	serve := func() *linkServe {
+		serve := startLinkServe(t, link, []byte(io.Credential), io.Resource.Ref())
+		within(t, serve.connected)
+		return serve
 	}
-	assertStatus("pending") // Compute existence alone is insufficient.
-	if conn, err := dial(uuid.NewString()); err == nil {
-		conn.Close()
-		t.Fatal("unrelated credential connected")
-	}
-	assertStatus("pending")
-	conn, err := dial(p.credential)
-	if err != nil {
-		t.Fatal("authorized connection failed")
-	}
-	defer conn.Close()
-	assertStatus("connected")
+	served := serve()
+	awaitEnvironmentConnectionState(t, t.Context(), s, tenant, environment.ID, "connected")
 	got, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || got.LastTurn != nil || got.EnvironmentInputActivity != nil {
 		t.Fatal("connection fabricated native execution", err)
@@ -92,29 +65,16 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	if _, err := sessionAdapter(s).GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment access", err)
 	}
-	p.unavailable = true
-	conn.Close()
-	assertStatus("disconnected") // Provider outage cannot conceal socket loss.
-	p.unavailable = false
-	conn, err = dial(p.credential)
-	if err != nil {
-		t.Fatal("authorized reconnection failed")
-	}
-	defer conn.Close()
-	assertStatus("connected")
-	stop(w)
-	w = start()
-	assertStatus("connected")
+	served.stop()
+	awaitEnvironmentConnectionState(t, t.Context(), s, tenant, environment.ID, "disconnected")
+	serve()
+	awaitEnvironmentConnectionState(t, t.Context(), s, tenant, environment.ID, "connected")
+	stop()
+	_, stop = start()
+	t.Cleanup(stop)
+	awaitEnvironmentConnectionState(t, t.Context(), s, tenant, environment.ID, "connected")
 	retained, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
-	if err != nil || retained.ID != owner.ID || retained.DeviceID != owner.DeviceID || p.creates != 1 {
-		t.Fatal("restart replaced Runtime identity", err)
-	}
-	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
-		t.Fatal(err)
-	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
-	if conn, err := dial(p.credential); err == nil {
-		conn.Close()
-		t.Fatal("released Runtime reconnected")
+	if err != nil || retained.ID != owner.ID || p.creates != 1 {
+		t.Fatal("restart replaced the allocation", err)
 	}
 }

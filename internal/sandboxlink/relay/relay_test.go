@@ -327,6 +327,28 @@ func TestGenerations(t *testing.T) {
 	}
 }
 
+// A resource is served at the generation of its current serve peer only, and
+// no longer once the relay revokes it.
+func TestServing(t *testing.T) {
+	f := newFixture(t)
+	if f.srv.Relay.Serving(resource(1)) {
+		t.Fatal("serving before any serve peer")
+	}
+	f.serve(1)
+	if !f.srv.Relay.Serving(resource(1)) || f.srv.Relay.Serving(resource(2)) {
+		t.Fatal("generation 1's serve peer does not serve generation 1 alone")
+	}
+	f.serve(2)
+	if f.srv.Relay.Serving(resource(1)) || !f.srv.Relay.Serving(resource(2)) {
+		t.Fatal("generation 2's serve peer does not replace generation 1")
+	}
+	f.auth.RemoveServe([]byte("serve credential 2"))
+	f.srv.Relay.RevokeResource(resource(2))
+	if f.srv.Relay.Serving(resource(2)) {
+		t.Fatal("serving after revocation")
+	}
+}
+
 func TestLeaseExpiry(t *testing.T) {
 	f := newFixture(t)
 	p := f.serve(1)

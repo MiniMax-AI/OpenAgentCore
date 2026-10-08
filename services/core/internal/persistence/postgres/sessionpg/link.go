@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // attachGrantPurpose is the credential key purpose attach grants are signed
@@ -36,6 +37,21 @@ func (s *Store) GetServeAuthority(ctx context.Context, id string) (runtimedevice
 		Resource:       linkResource(row.TenantID, row.EnvironmentID, pgtype.Text{String: row.Kind, Valid: true}, resource, pgtype.Int8{Int64: row.Generation, Valid: true}),
 		CredentialHash: row.CredentialHash.String,
 	}, true, nil
+}
+
+func (s *Store) ListLiveSandboxResources(ctx context.Context) ([]sessions.SandboxResource, error) {
+	rows, err := s.units.Queries().ListLiveSandboxResources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]sessions.SandboxResource, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, sessions.SandboxResource{
+			Resource: linkResource(row.TenantID, row.EnvironmentID, pgtype.Text{String: row.Kind, Valid: true}, row.ID, pgtype.Int8{Int64: row.Generation, Valid: true}),
+			Quiesced: row.Quiesced,
+		})
+	}
+	return result, nil
 }
 
 // GetAgentHostCredential reads a live agent host's credential. A malformed or

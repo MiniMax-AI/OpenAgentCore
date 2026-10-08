@@ -1,7 +1,7 @@
 ---
 title: "沙箱 Link 协议"
 source: docs/sandbox-link-protocol.md
-source_hash: f9c047631990775331946f78c7fad835a0663932ac6a2d4bd7c2514405f00b6f
+source_hash: 429127c0e7407a565f72d3839739a4530b8336a6a2034a562514862339d2423c
 ---
 
 Link 协议通过 relay 连接沙箱 I/O 的两端。Sandbox I/O 服务运行在沙箱内并为其提供服务，是 serve peer。agent host 上的 Runtime 在沙箱外运行 Harness，并通过该服务使用沙箱，是 attach peer。每个 peer 各自向 relay 认证自己的 link。relay 授权 attach peer 打开的每个服务 stream，将其绑定到该资源当前的 serve peer，然后在两个 stream 之间复制字节而不读取内容。服务帧从不携带凭据或 grant。
@@ -54,6 +54,8 @@ attachment 的生命周期长于其 link。重连后，Runtime 使用相同的 b
 - attach link 在其 Hello 处占用名额，并保留到 link 结束且它承载过的每个 stream 和续期都已结束为止。
 
 relay 的 owner 基于其持久记录实现 `Authority`，relay 对每个 Hello、Open 和续期都咨询它。撤销时，先撤回授权，再调用 `RevokeAttachment` 或 `RevokeResource`，让 relay 关闭其持有的对象。
+
+`Serving(ref)` 报告 relay 是否持有 `ref` 在 `ref.Generation` 的 serve peer。与 relay 的其他状态一样，它是本进程的视图：owner 用它判断资源当前能否承载 stream，而资源是否存在仍由其持久记录裁决。
 
 测试使用 `sandboxlinktest.NewAuthority`（持有静态凭据和 grant）和 `sandboxlinktest.StartRelay`（在 `httptest` TLS server 上运行 relay，并返回其 URL 和信任它的 TLS 配置）。
 

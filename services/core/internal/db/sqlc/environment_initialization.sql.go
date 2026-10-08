@@ -47,23 +47,32 @@ func (q *Queries) FailEnvironmentInitialization(ctx context.Context, id pgtype.U
 }
 
 const listEnvironmentInitializations = `-- name: ListEnvironmentInitializations :many
-SELECT e.id, e.session_id, s.tenant_id, s.engine, e.initialization, b.runtime_id, b.assignment_id, b.epoch
+SELECT e.id, e.session_id, s.tenant_id, s.engine, e.initialization, b.runtime_id, b.assignment_id, b.epoch,
+    r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
+    r.id AS resource_id, r.generation AS resource_generation, COALESCE(r.live, false)::boolean AS resource_live
 FROM environments e JOIN sessions s ON s.id = e.session_id
 LEFT JOIN session_runtime_assignments b ON b.session_id = s.id AND b.desired_state = 'bound'
+LEFT JOIN sandbox_resources r ON r.environment_id = e.id
 WHERE e.id > $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed', 'expired')
  AND e.initialization IN ('pending', 'running')
 ORDER BY e.id LIMIT 32
 `
 
 type ListEnvironmentInitializationsRow struct {
-	ID             pgtype.UUID `json:"id"`
-	SessionID      pgtype.UUID `json:"session_id"`
-	TenantID       pgtype.UUID `json:"tenant_id"`
-	Engine         string      `json:"engine"`
-	Initialization string      `json:"initialization"`
-	RuntimeID      pgtype.UUID `json:"runtime_id"`
-	AssignmentID   pgtype.UUID `json:"assignment_id"`
-	Epoch          pgtype.Int8 `json:"epoch"`
+	ID                    pgtype.UUID `json:"id"`
+	SessionID             pgtype.UUID `json:"session_id"`
+	TenantID              pgtype.UUID `json:"tenant_id"`
+	Engine                string      `json:"engine"`
+	Initialization        string      `json:"initialization"`
+	RuntimeID             pgtype.UUID `json:"runtime_id"`
+	AssignmentID          pgtype.UUID `json:"assignment_id"`
+	Epoch                 pgtype.Int8 `json:"epoch"`
+	ResourceTenantID      pgtype.UUID `json:"resource_tenant_id"`
+	ResourceEnvironmentID pgtype.UUID `json:"resource_environment_id"`
+	ResourceKind          pgtype.Text `json:"resource_kind"`
+	ResourceID            pgtype.UUID `json:"resource_id"`
+	ResourceGeneration    pgtype.Int8 `json:"resource_generation"`
+	ResourceLive          bool        `json:"resource_live"`
 }
 
 func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.UUID) ([]ListEnvironmentInitializationsRow, error) {
@@ -84,6 +93,12 @@ func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.
 			&i.RuntimeID,
 			&i.AssignmentID,
 			&i.Epoch,
+			&i.ResourceTenantID,
+			&i.ResourceEnvironmentID,
+			&i.ResourceKind,
+			&i.ResourceID,
+			&i.ResourceGeneration,
+			&i.ResourceLive,
 		); err != nil {
 			return nil, err
 		}
@@ -93,4 +108,17 @@ func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.
 		return nil, err
 	}
 	return items, nil
+}
+
+const unclaimEnvironmentInitialization = `-- name: UnclaimEnvironmentInitialization :execrows
+UPDATE environments SET initialization = 'pending'
+WHERE id = $1 AND initialization = 'running' AND status NOT IN ('failed', 'expired')
+`
+
+func (q *Queries) UnclaimEnvironmentInitialization(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, unclaimEnvironmentInitialization, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

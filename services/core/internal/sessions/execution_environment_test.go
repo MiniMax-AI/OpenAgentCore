@@ -21,6 +21,11 @@ func (f *fakeTx) ClaimInitialization(_ context.Context, environment string) (boo
 	return f.claimInitialization()
 }
 
+func (f *fakeTx) UnclaimInitialization(_ context.Context, environment string) (bool, error) {
+	f.record("UnclaimInitialization", f.unclaimInitialization != nil, environment)
+	return f.unclaimInitialization()
+}
+
 func (f *fakeTx) CompleteInitialization(_ context.Context, environment string) (bool, error) {
 	f.record("CompleteInitialization", f.completeInitialization != nil, environment)
 	return f.completeInitialization()
