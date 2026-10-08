@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/google/uuid"
 )
 
 // resetTx serves stored and records each reset write, with its arguments.
@@ -37,9 +36,9 @@ func resetTx(t *testing.T, stored Record, resources Resources, source adminaudit
 	}
 }
 
-func resetting(t *testing.T, installation, clear string, requestedAt time.Time, deadline *time.Time) Record {
+func resetting(t *testing.T, installation string, clear ResetMode, requestedAt time.Time, deadline *time.Time) Record {
 	d := webDeployment(t, installation, "docker", 4)
-	d.Reset = &ResetState{Clear: clear, RequestedAt: requestedAt, DeadlineAt: deadline}
+	d.Reset = &ResetState{Clear: string(clear), RequestedAt: requestedAt, DeadlineAt: deadline}
 	return d
 }
 

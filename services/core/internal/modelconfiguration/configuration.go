@@ -19,7 +19,7 @@ type Configuration struct {
 	HarnessConfig json.RawMessage
 	UpdatedAt     time.Time
 	LastUsedAt    *time.Time
-	LastErrorCode *string
+	LastErrorCode *ProviderErrorCode
 	LastErrorAt   *time.Time
 }
 

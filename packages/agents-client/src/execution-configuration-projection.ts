@@ -1,27 +1,29 @@
 import { modelProviderProtocols } from "./harness-catalog";
-import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
-import type { ExecutionConfigurationSource, ModelProviderView, SessionExecutionConfiguration } from "./types";
+import { modelProviderViewFields } from "./generated/public-api";
+import {
+  executionHarnessConfigSelectionFields, executionProviderSelectionFields, executionSelectionFields, executionSourceValues,
+  sessionExecutionConfigurationFields, type ExecutionSource,
+} from "./generated/core-api";
+import { canonicalUuid, exactFields, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId } from "./response-projection";
+import type { ModelProviderView, SessionExecutionConfiguration } from "./types";
 
 type Invalid = () => never;
-const sources = new Set(["session", "agent", "deployment", "unknown"]);
-const selectionFields = new Set(["value", "source"]);
-const providerFields = new Set(["protocol", "base_url", "api_key_configured", "context_window", "max_output_tokens"]);
 const protocols: ReadonlySet<unknown> = new Set(modelProviderProtocols);
 
 function selection(value: unknown, invalid: Invalid): SessionExecutionConfiguration["model"] {
-  if (!isRecord(value) || !exactFields(value, selectionFields) || !sources.has(String(value.source)) ||
+  if (!isRecord(value) || !exactFields(value, executionSelectionFields) || !isOneOf(executionSourceValues, value.source) ||
     (value.value !== null && (typeof value.value !== "string" || value.value.length === 0)) ||
     (value.value === null && value.source !== "unknown")) return invalid();
-  return { value: value.value as string | null, source: value.source as ExecutionConfigurationSource };
+  return { value: value.value as string | null, source: value.source as ExecutionSource };
 }
 
 // Splits an absolute URL as RFC 3986 appendix B does, without parsing its host.
 const baseURLPattern = /^https:\/\/([^/?#]*)[^?#]*(?:\?([^#]*))?(?:#([\s\S]*))?$/iu;
 
 /**
- * Checks a stored base URL no more strictly than Core's write rule: HTTPS with a
- * host and no credentials, query or fragment. Host syntax is Core's to enforce;
- * a value an earlier Core accepted must not fail a whole list.
+ * Checks a stored base URL as Core's write rule does, never more strictly:
+ * HTTPS with a host and no credentials, query or fragment. Host syntax is
+ * Core's to enforce, so one stored value never fails a whole list.
  */
 function safeBaseURL(value: string): boolean {
   const match = baseURLPattern.exec(value);
@@ -33,7 +35,7 @@ function safeBaseURL(value: string): boolean {
 
 /** The safe provider view shared by frozen Session configuration and saved Agent reads. */
 export function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
-  if (!isRecord(value) || !onlyFields(value, providerFields) ||
+  if (!isRecord(value) || !onlyFields(value, modelProviderViewFields) ||
     !protocols.has(value.protocol) ||
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
     (value.context_window !== undefined && !isNonnegativeInteger(value.context_window)) ||
@@ -48,13 +50,13 @@ export function safeProvider(value: unknown, invalid: Invalid): ModelProviderVie
 }
 
 export function projectExecutionConfiguration(value: unknown, sessionId: string, invalid: Invalid): SessionExecutionConfiguration {
-  if (!isRecord(value) || !exactFields(value, new Set(["object", "schema_version", "session_id", "model", "harness", "model_provider", "harness_config"])) ||
+  if (!isRecord(value) || !exactFields(value, sessionExecutionConfigurationFields) ||
     value.object !== "agent.session.execution_configuration" || value.schema_version !== 1 ||
     typeof value.session_id !== "string" || !canonicalUuid(value.session_id) || !sameResourceId(value.session_id, sessionId) ||
-    !isRecord(value.model_provider) || !exactFields(value.model_provider, new Set(["source", "status", "configuration"]))) return invalid();
+    !isRecord(value.model_provider) || !exactFields(value.model_provider, executionProviderSelectionFields)) return invalid();
   const native = value.harness_config;
-  if (!isRecord(native) || !exactFields(native, selectionFields) || !isRecord(native.value) ||
-    !sources.has(String(native.source)) || (native.source === "unknown" && Object.keys(native.value).length !== 0)) return invalid();
+  if (!isRecord(native) || !exactFields(native, executionHarnessConfigSelectionFields) || !isRecord(native.value) ||
+    !isOneOf(executionSourceValues, native.source) || (native.source === "unknown" && Object.keys(native.value).length !== 0)) return invalid();
   const provider = value.model_provider;
   let configuration: ModelProviderView | null = null;
   if (provider.status === "available" && (provider.source === "session" || provider.source === "agent" || provider.source === "deployment")) {
@@ -64,7 +66,7 @@ export function projectExecutionConfiguration(value: unknown, sessionId: string,
   return {
     object: "agent.session.execution_configuration", schema_version: 1, session_id: value.session_id,
     model: selection(value.model, invalid), harness: selection(value.harness, invalid),
-    harness_config: { value: { ...native.value }, source: native.source as ExecutionConfigurationSource },
-    model_provider: { source: provider.source as ExecutionConfigurationSource, status: provider.status as SessionExecutionConfiguration["model_provider"]["status"], configuration },
+    harness_config: { value: { ...native.value }, source: native.source as ExecutionSource },
+    model_provider: { source: provider.source as ExecutionSource, status: provider.status as SessionExecutionConfiguration["model_provider"]["status"], configuration },
   };
 }

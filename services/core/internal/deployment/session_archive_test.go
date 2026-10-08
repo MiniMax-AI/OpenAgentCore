@@ -51,9 +51,9 @@ func TestCheckArchiveReset(t *testing.T) {
 		reset *ResetState
 		want  error
 	}{
-		"running reset":   {&ResetState{Clear: ResetAuto, RequestedAt: requested}, nil},
+		"running reset":   {&ResetState{Clear: string(ResetAuto), RequestedAt: requested}, nil},
 		"no reset":        {nil, ErrConflict},
-		"another request": {&ResetState{Clear: ResetAuto, RequestedAt: requested.Add(time.Second)}, ErrConflict},
+		"another request": {&ResetState{Clear: string(ResetAuto), RequestedAt: requested.Add(time.Second)}, ErrConflict},
 	} {
 		if err := checkArchiveReset(Record{Reset: test.reset}, requested); !errors.Is(err, test.want) {
 			t.Errorf("%s: got %v, want %v", name, err, test.want)
@@ -279,8 +279,8 @@ func TestArchiveSession(t *testing.T) {
 
 func TestArchiveResetSession(t *testing.T) {
 	requested := time.Unix(100, 0)
-	resetting := func(clear string) Record {
-		return Record{InstallationID: "installation", Provider: "docker", Generation: 1, Reset: &ResetState{Clear: clear, RequestedAt: requested}}
+	resetting := func(clear ResetMode) Record {
+		return Record{InstallationID: "installation", Provider: "docker", Generation: 1, Reset: &ResetState{Clear: string(clear), RequestedAt: requested}}
 	}
 	hosted := &sessions.Environment{ID: "environment", Status: "connected", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 	failed := &sessions.Environment{ID: "environment", Status: "failed", Configuration: hosted.Configuration}

@@ -21,7 +21,7 @@ function item(id: string, status: SessionItem["status"], turn = "t1"): SessionIt
 }
 
 function turn(id: string, status: AgentTurn["status"], overrides: Partial<AgentTurn> = {}): AgentTurn {
-  return { id, agent_id: "agent", session_id: "session", object: "agent.session.turn", status, created_at: 1, started_at: null, completed_at: null, error: null, usage: null, ...overrides };
+  return { id, agent_id: "agent", subagent_id: null, session_id: "session", object: "agent.session.turn", status, created_at: 1, started_at: null, completed_at: null, error: null, usage: null, ...overrides };
 }
 
 function list<T extends { id: string }>(data: T[], hasMore = false): ListPage<T> {

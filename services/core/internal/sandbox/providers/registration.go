@@ -15,14 +15,14 @@ func ValidateRegistration(a Adapter) error {
 		return fmt.Errorf("%w: invalid registration %s", providercontract.ErrContract, field)
 	}
 	switch a.Mode {
-	case "nodes":
+	case sandbox.DeploymentNodes:
 		if err := validateNodeArtifacts(a.NodeArtifacts); err != nil {
 			return err
 		}
 		if a.BuildLocal == nil || a.BuildDirect != nil {
 			return invalid("node constructor")
 		}
-	case "direct":
+	case sandbox.DeploymentDirect:
 		if len(a.NodeArtifacts) != 0 {
 			return invalid("direct node artifacts")
 		}
@@ -53,7 +53,7 @@ func ValidateRegistration(a Adapter) error {
 	}
 	// The common lifecycle suspends only node allocations, so only a nodes
 	// registration may declare checkpoint support.
-	if operations["Initial"].State == providercontract.Supported && a.Mode != "nodes" {
+	if operations["Initial"].State == providercontract.Supported && a.Mode != sandbox.DeploymentNodes {
 		return invalid("checkpoint support outside nodes mode")
 	}
 	if a.Policy.DefaultResources != nil && a.ValidateResources(*a.Policy.DefaultResources) != nil {

@@ -1,4 +1,4 @@
-import type { AgentSession } from "@oac/agents-client";
+import type { AdminProject, AgentSession } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -39,7 +39,6 @@ import { overviewQuery } from "./overview-queries";
 import {
   attentionCount,
   attentionSessions,
-  coverageRatio,
   projectUsageRows,
   recentFailures,
   serviceHealth,
@@ -50,7 +49,7 @@ import {
   type ServiceHealth,
 } from "./overview-model";
 import "./overview.css";
-import { type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
 
 export const OVERVIEW_REFRESH_MS = 30_000;
 const ATTENTION_LIMIT = 8;
@@ -72,7 +71,7 @@ function errorText(error: unknown): string {
  * a refresh retains figures within the same project scope, and the
  * page polls while it is visible.
  */
-function useOverviewData(projects: readonly Project[], projectsReady: boolean) {
+function useOverviewData(projects: readonly AdminProject[], projectsReady: boolean) {
   const query = useQuery({
     ...overviewQuery(projects),
     enabled: projectsReady,
@@ -150,10 +149,10 @@ export function OverviewPage() {
 
   const loading = refreshing || projectsState.state.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = data?.loadedAt ?? fleet?.loadedAt ?? null;
-  const attentionTotal = totals ? attentionCount(totals.sessions) : null;
+  const attentionTotal = totals ? attentionCount(totals) : null;
   const truncated = data?.sessions.truncated ?? [];
   // Whether any Session exists: Core's summary counts them all; without it, any Session read counts.
-  const sessionCount = totals ? totals.sessions.total
+  const sessionCount = totals ? totals.total
     : sessions?.length ? sessions.length
     : summaryError !== null || sessionReadsFailed ? "failed" : null;
 
@@ -190,8 +189,8 @@ export function OverviewPage() {
           <MetricTile
             label={t("kpi.running")}
             help={t("kpi.runningHelp")}
-            value={totals ? <LiveNumber value={totals.sessions.in_progress} /> : MISSING}
-            sub={totals ? t("tiles.sessionSplit", { idle: formatInteger(totals.sessions.idle, locale), total: formatInteger(totals.sessions.total, locale) }) : t("kpi.summaryUnavailable")}
+            value={totals ? <LiveNumber value={totals.in_progress} /> : MISSING}
+            sub={totals ? t("tiles.sessionSplit", { idle: formatInteger(totals.idle, locale), total: formatInteger(totals.total, locale) }) : t("kpi.summaryUnavailable")}
           />
           {cloud ? (
             <MetricTile
@@ -216,7 +215,7 @@ export function OverviewPage() {
             label={t("kpi.attention")}
             help={t("attention.subtitle")}
             value={<LiveNumber value={attentionTotal} />}
-            sub={totals ? t("tiles.attentionSplit", { failed: totals.sessions.failed, waiting: totals.sessions.requires_action }) : t("kpi.summaryUnavailable")}
+            sub={totals ? t("tiles.attentionSplit", { failed: totals.failed, waiting: totals.requires_action }) : t("kpi.summaryUnavailable")}
           />
         </div>
 
@@ -379,12 +378,12 @@ function usageTitle(summary: ProjectSummary, t: TFunction<"overview">, locale: s
   return t("projects.tokenDetail", {
     input: number(summary.usage.input_tokens),
     output: number(summary.usage.output_tokens),
-    cached: number(summary.usage.cached_tokens),
-    reasoning: number(summary.usage.reasoning_tokens),
+    cached: number(summary.usage.input_tokens_details.cached_tokens),
+    reasoning: number(summary.usage.output_tokens_details.reasoning_tokens),
   });
 }
 
-function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRow[] | null; failed: boolean; now: number; onOpen: (project: Project) => void }) {
+function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRow[] | null; failed: boolean; now: number; onOpen: (project: AdminProject) => void }) {
   const { t, i18n } = useTranslation("overview");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
@@ -409,14 +408,13 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
         </thead>
         <tbody>
           {rows.map(({ project, summary }) => {
-            const coverage = summary ? coverageRatio(summary.coverage) : null;
             return (
               <tr key={project.id} className="clickable-row" onClick={() => onOpen(project)}>
                 <th scope="row">
                   <button className="table-link" type="button" onClick={(event) => { event.stopPropagation(); onOpen(project); }} aria-label={t("projects.open", { name: project.name })}>
                     <strong><ProjectName project={project} /></strong>
                   </button>
-                  {project.status === "archived" ? <span className="pill">{t("projects.archived")}</span> : null}
+                  {project.archived_at !== null ? <span className="pill">{t("projects.archived")}</span> : null}
                 </th>
                 <td className="numeric">{count(project.active_key_count)}</td>
                 <td className="numeric">{count(summary?.sessions.total)}</td>
@@ -424,8 +422,8 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
                 <td className="numeric">{count(summary?.sessions.requires_action)}</td>
                 <td className={summary?.sessions.failed ? "numeric numeric-danger" : "numeric"}>{count(summary?.sessions.failed)}</td>
                 <td className="numeric" title={summary ? usageTitle(summary, t, locale) : undefined}>{summary?.usage ? formatCompact(summary.usage.total_tokens, locale) : MISSING}</td>
-                <td className="numeric" title={summary && summary.coverage.sessions ? t("projects.coverageDetail", { reported: summary.coverage.reported, total: summary.coverage.sessions }) : undefined}>
-                  {formatPercent(coverage, locale)}
+                <td className="numeric" title={summary && summary.coverage.total_sessions ? t("projects.coverageDetail", { reported: summary.coverage.measured_sessions, total: summary.coverage.total_sessions }) : undefined}>
+                  {formatPercent(summary?.coverage.ratio, locale)}
                 </td>
                 <td className="numeric">{formatRelative(summary?.last_active_at ?? null, now, locale)}</td>
               </tr>

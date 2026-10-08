@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Modal } from "../../components/Modal";
 import { HelpTip, RefreshButton } from "../../components/console-ui";
 import { formatBytes, formatPeriod, MISSING } from "../../lib/format";
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { sandboxProviderLabel } from "../../lib/sandbox-labels";
 import { sandboxSize, templateBuildSize, templateBuildStatus } from "./deployment-specification";
 import { SandboxRolloutSummary } from "./SandboxRolloutSummary";
@@ -12,7 +12,7 @@ import { SandboxResetControls } from "./SandboxResetControls";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 
 const MIB = 2 ** 20;
-const buildStatusLabel: Record<ReturnType<typeof templateBuildStatus>, MessageKey> = { ready: "Ready", notReady: "Not ready", unknown: "Unknown state" };
+const buildStatusLabel: Record<ReturnType<typeof templateBuildStatus>, ParseKeys<"sandbox">> = { ready: "Ready", notReady: "Not ready", unknown: "Unknown state" };
 
 export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset, onCancelReset, onUpdate, writeFailure, onRefresh, refreshing, pending }: {
   deployment: SandboxDeployment;
@@ -28,7 +28,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const { t: tNavigation } = useTranslation("sandboxNavigation");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const [changing, setChanging] = useState(false);
   const [editKey, setEditKey] = useState(0);
   const spec = deployment.specification;

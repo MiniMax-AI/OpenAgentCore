@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -120,5 +122,13 @@ func TestDiagnosticsHostedFailureOverridesInputWithoutParsingReason(t *testing.T
 		if !strings.Contains(w.Body.String(), want) || !strings.Contains(w.Body.String(), `"failed_at":null`) {
 			t.Fatal("historical reason parsed or time invented", w.Body)
 		}
+	}
+}
+
+func TestDiagnosticStatusMatchesOfficialSession(t *testing.T) {
+	official, _ := reflect.TypeFor[v1.Session]().FieldByName("Status")
+	diagnostic, _ := reflect.TypeFor[SessionDiagnostics]().FieldByName("Status")
+	if diagnostic.Type != official.Type || diagnostic.Tag.Get("enums") != official.Tag.Get("enums") {
+		t.Fatal("diagnostics must preserve the pinned official Session status set")
 	}
 }

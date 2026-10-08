@@ -32,19 +32,27 @@ func CheckCapacity(r Resources, cpus int, memory uint64) error {
 	return nil
 }
 
-// NodeProviderUnavailable also reports every readiness failure without a class.
-const NodeProviderUnavailable = "provider_unavailable"
+type NodeDiagnosticCode string
+
+const (
+	NodeProviderUnavailable     NodeDiagnosticCode = "provider_unavailable"
+	NodeHostUnsupported         NodeDiagnosticCode = "host_unsupported"
+	NodeArtifactsUnavailable    NodeDiagnosticCode = "artifacts_unavailable"
+	NodeRuntimeDownloadFailed   NodeDiagnosticCode = "runtime_download_failed"
+	NodeRuntimeImageUnavailable NodeDiagnosticCode = "runtime_image_unavailable"
+	NodeCapacityInsufficient    NodeDiagnosticCode = "capacity_insufficient"
+)
 
 var nodeDiagnostics = []struct {
 	err  error
-	code string
+	code NodeDiagnosticCode
 }{
 	{ErrProviderUnavailable, NodeProviderUnavailable},
-	{ErrHostUnsupported, "host_unsupported"},
-	{ErrArtifactsUnavailable, "artifacts_unavailable"},
-	{ErrRuntimeDownloadFailed, "runtime_download_failed"},
-	{ErrRuntimeImageUnavailable, "runtime_image_unavailable"},
-	{ErrCapacityInsufficient, "capacity_insufficient"},
+	{ErrHostUnsupported, NodeHostUnsupported},
+	{ErrArtifactsUnavailable, NodeArtifactsUnavailable},
+	{ErrRuntimeDownloadFailed, NodeRuntimeDownloadFailed},
+	{ErrRuntimeImageUnavailable, NodeRuntimeImageUnavailable},
+	{ErrCapacityInsufficient, NodeCapacityInsufficient},
 }
 
 // NodeDiagnostic maps a readiness probe result to its class code: empty when
@@ -55,10 +63,10 @@ func NodeDiagnostic(err error) string {
 	}
 	for _, d := range nodeDiagnostics {
 		if errors.Is(err, d.err) {
-			return d.code
+			return string(d.code)
 		}
 	}
-	return NodeProviderUnavailable
+	return string(NodeProviderUnavailable)
 }
 
 // NormalizeNodeDiagnostic keeps an empty or known code. Any other reported value
@@ -68,9 +76,9 @@ func NormalizeNodeDiagnostic(code string) string {
 		return code
 	}
 	for _, d := range nodeDiagnostics {
-		if code == d.code {
+		if code == string(d.code) {
 			return code
 		}
 	}
-	return NodeProviderUnavailable
+	return string(NodeProviderUnavailable)
 }

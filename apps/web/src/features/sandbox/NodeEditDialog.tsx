@@ -30,7 +30,7 @@ export function NodeEditDialog({ client, node, size, suspends, onClose, onSaved 
   onSaved: () => void;
 }) {
   const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { t: tCommon } = useTranslation("common");
   const id = useId();
   const [name, setName] = useState(node?.name ?? "");
@@ -61,7 +61,7 @@ export function NodeEditDialog({ client, node, size, suspends, onClose, onSaved 
     t("Host: {{host}}.", { host: measure(hostCpus, hostMemory) }),
     ...(size ? [t("Each sandbox: {{size}}.", { size: measure(size.cpus, size.memory_mib * 2 ** 20) })] : []),
     ...(fit !== null && fit > 0 ? [t("Suggested: at most {{count}} at once.", { count: fit })] : []),
-  ].join(locale === "zh" ? "" : " ") : null;
+  ].join(locale === "zh-CN" ? "" : " ") : null;
 
   async function save() {
     if (!ready || !node) return;

@@ -34,7 +34,7 @@ function DeploymentHeader({ actions }: { actions?: ReactNode }) {
 /** System's secondary page is the sole owner of deployment configuration controls. */
 export function SandboxDeploymentPage() {
   const { i18n } = useTranslation("sandbox");
-  return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en"}>
+  return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en"}>
     <DeploymentConfiguration />
   </section>;
 }
@@ -42,7 +42,7 @@ export function SandboxDeploymentPage() {
 function DeploymentConfiguration() {
   const { t, i18n } = useTranslation("sandbox");
   const { t: tNavigation } = useTranslation("sandboxNavigation");
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { navigate } = useConsoleNavigation();
   const queryClient = useQueryClient();
   const { deploymentQuery, snapshot, installation, loading, busy, setupNeedsRefresh, confirmed, fresh, refresh, configurationKey } = useSandboxPageState();

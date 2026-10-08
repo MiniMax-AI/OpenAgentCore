@@ -1,6 +1,5 @@
-import type { CoreHarness } from "@oac/agents-client";
+import type { AdminProject, CoreHarness } from "@oac/agents-client";
 
-import { type Project } from "../../lib/admin-view";
 import { nodeServingReady } from "../fleet/fleet-model";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
 import { templateBuildStatus } from "../sandbox/deployment-specification";
@@ -20,9 +19,9 @@ export interface GettingStartedSteps {
   sandboxes: { state: StepState; action: SandboxAction; cloud: boolean };
   model: StepState;
   /** `project` is the active project a key would be issued for; null means create one first. */
-  key: { state: StepState; project: Project | null };
+  key: { state: StepState; project: AdminProject | null };
   /** `project` is the active project whose call samples the step opens; null leads to the project list. */
-  session: { state: StepState; project: Project | null };
+  session: { state: StepState; project: AdminProject | null };
 }
 
 export function gettingStartedSteps(input: {
@@ -32,7 +31,7 @@ export function gettingStartedSteps(input: {
   /** Undefined while reading; a failed installation read cannot confirm readiness. */
   localOnly?: boolean | "failed";
   /** Undefined until the project list is read. */
-  projects: readonly Project[] | "failed" | undefined;
+  projects: readonly AdminProject[] | "failed" | undefined;
   /** Sessions in every project, by Core's summary; null until it is read. */
   sessions: number | "failed" | null;
   /** Core's harnesses; undefined until they are read. */
@@ -87,13 +86,13 @@ export function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefin
 }
 
 /** The newest of the projects, most likely the one just created. */
-function newestOf(projects: readonly Project[]): Project | null {
-  return projects.reduce<Project | null>((best, project) => (!best || project.created_at > best.created_at ? project : best), null);
+function newestOf(projects: readonly AdminProject[]): AdminProject | null {
+  return projects.reduce<AdminProject | null>((best, project) => (!best || Date.parse(project.created_at) > Date.parse(best.created_at) ? project : best), null);
 }
 
-function keyStep(projects: readonly Project[] | "failed" | undefined): GettingStartedSteps["key"] {
+function keyStep(projects: readonly AdminProject[] | "failed" | undefined): GettingStartedSteps["key"] {
   if (!projects || projects === "failed") return { state: projects ? "unknown" : null, project: null };
-  const active = projects.filter((project) => project.status === "active");
+  const active = projects.filter((project) => project.archived_at === null);
   if (active.some((project) => project.active_key_count > 0)) return { state: "done", project: null };
   return { state: "todo", project: newestOf(active) };
 }
@@ -102,9 +101,9 @@ function keyStep(projects: readonly Project[] | "failed" | undefined): GettingSt
  * Where the first Session's call samples are: the newest active project with
  * an active key, else the newest active project (whose page issues one).
  */
-function callProject(projects: readonly Project[] | "failed" | undefined): Project | null {
+function callProject(projects: readonly AdminProject[] | "failed" | undefined): AdminProject | null {
   if (!projects || projects === "failed") return null;
-  const active = projects.filter((project) => project.status === "active");
+  const active = projects.filter((project) => project.archived_at === null);
   return newestOf(active.filter((project) => project.active_key_count > 0)) ?? newestOf(active);
 }
 

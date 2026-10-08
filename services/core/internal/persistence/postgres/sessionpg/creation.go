@@ -6,10 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -24,6 +20,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // modelProviderKeyPurpose keys the provider-key fingerprint in creation
@@ -232,7 +231,7 @@ func (t *creationTx) PruneChanges(ctx context.Context) error {
 }
 
 func (t *creationTx) AuditCreation(ctx context.Context, created ...writeaudit.Resource) error {
-	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, "create", "session", optionalID(t.session), "", created...)
+	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, writeaudit.ActionCreate, writeaudit.ResourceSession, optionalID(t.session), "", created...)
 }
 
 func (t *creationTx) LoadSession(ctx context.Context) (sessions.Session, error) {

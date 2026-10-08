@@ -8,11 +8,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 )
 
+type ResetMode string
+
 // ResetRequest starts or escalates a reset of the sandbox deployment.
 type ResetRequest struct {
-	ExpectedGeneration uint64 `json:"expected_generation" binding:"required" minimum:"0"`
-	Clear              string `json:"clear" binding:"required" enums:"auto,force"`
-	DeadlineSeconds    *int32 `json:"deadline_seconds,omitempty" minimum:"300" maximum:"86400"`
+	ExpectedGeneration uint64    `json:"expected_generation" binding:"required" minimum:"0"`
+	Clear              ResetMode `json:"clear" binding:"required"`
+	DeadlineSeconds    *int32    `json:"deadline_seconds,omitempty" minimum:"300" maximum:"86400"`
 }
 
 // ResetSession is a hosted Session a reset still has to archive.
@@ -21,9 +23,9 @@ type ResetSession struct{ SessionID, TenantID string }
 const (
 	// ResetAuto archives idle Sessions and escalates to ResetForce at the
 	// deadline.
-	ResetAuto = "auto"
+	ResetAuto ResetMode = "auto"
 	// ResetForce archives every hosted Session, busy ones included.
-	ResetForce = "force"
+	ResetForce ResetMode = "force"
 
 	defaultResetDeadlineSeconds = 3600
 )
@@ -72,7 +74,7 @@ func (e *ExecutionOperations) StartReset(ctx context.Context, installation strin
 			return ErrNotConfigured
 		}
 		if d.Reset != nil {
-			if d.Reset.Clear == input.Clear {
+			if d.Reset.Clear == string(input.Clear) {
 				return nil
 			}
 			if input.Clear != ResetForce {
@@ -87,7 +89,7 @@ func (e *ExecutionOperations) StartReset(ctx context.Context, installation strin
 		if !ok {
 			return ErrInvalidInput
 		}
-		if err := tx.StartReset(input.Clear, deadline, source); err != nil {
+		if err := tx.StartReset(string(input.Clear), deadline, source); err != nil {
 			return err
 		}
 		return tx.RecordAudit("reset_start", installation)
@@ -126,7 +128,7 @@ func (e *ExecutionOperations) AdvanceResetDeadline(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if d.Reset == nil || d.Reset.Clear != ResetAuto || d.Reset.DeadlineAt == nil || time.Now().Before(*d.Reset.DeadlineAt) {
+		if d.Reset == nil || d.Reset.Clear != string(ResetAuto) || d.Reset.DeadlineAt == nil || time.Now().Before(*d.Reset.DeadlineAt) {
 			return nil
 		}
 		source, err := tx.LoadResetSource()

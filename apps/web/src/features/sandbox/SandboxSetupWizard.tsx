@@ -13,7 +13,7 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreFieldError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { sandboxConfigurationRejection, sandboxProviderLabel } from "../../lib/sandbox-labels";
 import { defaultSandboxResources, distributionRuntime, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
@@ -81,7 +81,7 @@ function presets(provider: SandboxProvider): Record<Preset, SandboxResources> | 
   return { small: scale(0.5), standard, large: scale(2) };
 }
 
-const releaseLabels: Record<keyof SandboxRuntimeRelease, MessageKey> = {
+const releaseLabels: Record<keyof SandboxRuntimeRelease, ParseKeys<"sandbox">> = {
   source_commit: "Source commit",
   image_id: "Image ID",
   image_manifest_digest: "Image manifest digest",
@@ -125,7 +125,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const { t, i18n } = useTranslation("sandbox");
   const { t: tCommon } = useTranslation("common");
   const id = useId();
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const currentMode: Where | null = current ? deploymentContract.providers[current.provider].mode : null;
   const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "e2b" : "size" : "where");
   const [where, setWhere] = useState<Where | null>(currentMode);
@@ -542,7 +542,7 @@ function NumberField({ id, label, value, onChange, error }: { error?: string | n
   );
 }
 
-function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?: () => void; nextDisabled?: boolean; t: (key: MessageKey) => string }) {
+function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?: () => void; nextDisabled?: boolean; t: (key: ParseKeys<"sandbox">) => string }) {
   return (
     <div className="wizard-nav">
       <button className="button ghost" type="button" onClick={onBack}><ArrowLeft size={14} aria-hidden="true" />{t("Back")}</button>

@@ -88,7 +88,7 @@ func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	}
 	return receipt
 }
-func (f finishObservationFixture) fields(t *testing.T) (*time.Time, *string) {
+func (f finishObservationFixture) fields(t *testing.T) (*time.Time, *modelconfiguration.ProviderErrorCode) {
 	t.Helper()
 	rows, err := f.defaults.List(t.Context())
 	if err != nil || len(rows) != 1 {

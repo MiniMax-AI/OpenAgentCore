@@ -23,7 +23,7 @@ import (
 )
 
 // resource names Templates in credential bindings and audit rows.
-const resource = "environment_template"
+const resource = string(writeaudit.ResourceEnvironmentTemplate)
 
 // Store implements environmenttemplates.Storage and environmenttemplates.Reader.
 type Store struct {
@@ -62,7 +62,7 @@ func (s *Store) Create(ctx context.Context, tenantID string, in environmenttempl
 		if result, err = template(metadataRow(row)); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", resource, result.ID, "", writeaudit.Resource{Type: resource, ID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionCreate, writeaudit.ResourceEnvironmentTemplate, result.ID, "", writeaudit.Resource{Type: writeaudit.ResourceEnvironmentTemplate, ID: result.ID})
 	})
 	return result, storageError(err)
 }
@@ -90,7 +90,7 @@ func (s *Store) Update(ctx context.Context, tenantID, templateID string, in envi
 		if result, err = template(metadataRow(row)); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", resource, result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdate, writeaudit.ResourceEnvironmentTemplate, result.ID, "")
 	})
 	return result, storageError(err)
 }
@@ -108,7 +108,7 @@ func (s *Store) Delete(ctx context.Context, tenantID, templateID string) (string
 			return err
 		}
 		deleted = uuid.UUID(id.Bytes).String()
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", resource, deleted, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceEnvironmentTemplate, deleted, "")
 	})
 	if err != nil {
 		return "", storageError(err)

@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func apiKey(id, name, prefix, kind string, revoked pgtype.Timestamptz) writeaudit.APIKey {
@@ -105,7 +104,7 @@ func (s *Store) ListWriteOperations(ctx context.Context, tenantID string, filter
 		rows = rows[:filter.Limit]
 	}
 	for _, row := range rows {
-		page.Data = append(page.Data, writeaudit.Operation{ID: uuid.UUID(row.ID.Bytes).String(), Action: row.Action, ResourceType: row.ResourceType, ResourceID: row.ResourceID, ParentID: row.ParentID, RequestID: row.RequestID, TraceID: row.TraceID, APIKey: apiKey(row.KeyID, row.KeyName, row.KeyPrefix, row.KeyKind, row.RevokedAt), CreatedAt: row.CreatedAt.Time})
+		page.Data = append(page.Data, writeaudit.Operation{ID: uuid.UUID(row.ID.Bytes).String(), Action: writeaudit.Action(row.Action), ResourceType: writeaudit.ResourceType(row.ResourceType), ResourceID: row.ResourceID, ParentID: row.ParentID, RequestID: row.RequestID, TraceID: row.TraceID, APIKey: apiKey(row.KeyID, row.KeyName, row.KeyPrefix, row.KeyKind, row.RevokedAt), CreatedAt: row.CreatedAt.Time})
 	}
 	if page.HasMore {
 		page.NextCursor = encodeCursor(page.Data[len(page.Data)-1].ID, scope)

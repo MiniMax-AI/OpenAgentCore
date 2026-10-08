@@ -32,10 +32,10 @@ type ProjectsReader interface {
 	ResolveAPIKey(context.Context, [sha256.Size]byte) (projects.KeyBinding, error)
 }
 type ProjectRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" binding:"required"`
 }
 type ProjectAPIKeyRequest struct {
-	Name string `json:"name"`
+	Name string `json:"name" binding:"required"`
 }
 
 func (h *Handler) registerProjectAPIKeyRoutes(r chi.Router) {

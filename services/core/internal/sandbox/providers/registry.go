@@ -7,7 +7,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -22,7 +21,7 @@ type Adapter struct {
 	Configuration         sandbox.ConfigurationAdapter
 	BuildLocal            func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
 	BuildDirect           func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
-	Mode                  string
+	Mode                  sandbox.DeploymentMode
 	Operations            func() providercontract.Operations
 	ValidateSpecification func(sandbox.DeploymentSpec) error
 	ValidateResources     func(sandbox.Resources) error
@@ -40,18 +39,18 @@ func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
 		"docker": {
 			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: docker.BuildNode,
+			Policy:        docker.Policy(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
 			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 		},
 		"microsandbox": {
 			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
-			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: microsandbox.BuildNode,
+			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
 			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 		},
 		"e2b": {
-			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: e2b.BuildDirect,
+			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: e2b.BuildDirect,
 			Configuration:         e2b.ConfigurationAdapter{},
 			ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
 		},
@@ -104,7 +103,7 @@ func (r *Registry) RetainedLimit(kind string, active, retained int) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if a.Mode == "nodes" && a.Operations()["Initial"].State != providercontract.Supported {
+	if a.Mode == sandbox.DeploymentNodes && a.Operations()["Initial"].State != providercontract.Supported {
 		return active, nil
 	}
 	return retained, nil
@@ -132,8 +131,8 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	if e != nil {
 		return sandbox.Description{}, e
 	}
-	namespace := a.Mode
-	if a.Mode == "direct" {
+	namespace := string(a.Mode)
+	if a.Mode == sandbox.DeploymentDirect {
 		namespace = kind
 	}
 	return sandbox.Description{Mode: a.Mode, BackendFingerprint: sandbox.BackendFingerprint(kind, namespace+":"+installation)}, nil

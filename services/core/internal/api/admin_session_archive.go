@@ -15,7 +15,7 @@ type SessionArchive interface {
 }
 
 type AdminSessionArchiveRequest struct {
-	ExpectedGeneration uint64 `json:"expected_generation"`
+	ExpectedGeneration uint64 `json:"expected_generation" binding:"required"`
 }
 
 // @Summary Release a managed Session's execution resources while retaining history

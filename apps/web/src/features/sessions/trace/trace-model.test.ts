@@ -8,6 +8,7 @@ function turn(id: string, overrides: Partial<AgentTurn> = {}): AgentTurn {
   return {
     id,
     agent_id: "agent-1",
+    subagent_id: null,
     session_id: "session-1",
     object: "agent.session.turn",
     status: "completed",

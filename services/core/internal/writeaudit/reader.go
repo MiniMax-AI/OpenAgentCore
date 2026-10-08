@@ -20,31 +20,31 @@ type Reader interface {
 // APIKey is the recorded identity of the key that made a write, with its
 // current revocation time.
 type APIKey struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Prefix    string     `json:"prefix"`
-	Kind      string     `json:"kind"`
-	RevokedAt *time.Time `json:"revoked_at"`
+	ID        string     `json:"id" binding:"required"`
+	Name      string     `json:"name" binding:"required"`
+	Prefix    string     `json:"prefix" binding:"required"`
+	Kind      string     `json:"kind" enums:"issued" binding:"required"`
+	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable" binding:"required"`
 }
 
 // ResourceOwner is the recorded creator of one resource. APIKey is null for a
 // resource without recorded creation provenance.
 type ResourceOwner struct {
-	ResourceID string  `json:"resource_id"`
-	APIKey     *APIKey `json:"api_key"`
+	ResourceID string  `json:"resource_id" binding:"required"`
+	APIKey     *APIKey `json:"api_key" extensions:"x-nullable" binding:"required"`
 }
 
 // Operation is one committed write.
 type Operation struct {
-	ID           string    `json:"id"`
-	Action       string    `json:"action"`
-	ResourceType string    `json:"resource_type"`
-	ResourceID   string    `json:"resource_id"`
-	ParentID     string    `json:"parent_id"`
-	RequestID    string    `json:"request_id"`
-	TraceID      string    `json:"trace_id"`
-	APIKey       APIKey    `json:"api_key"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           string       `json:"id" binding:"required"`
+	Action       Action       `json:"action" binding:"required"`
+	ResourceType ResourceType `json:"resource_type" binding:"required"`
+	ResourceID   string       `json:"resource_id" binding:"required"`
+	ParentID     string       `json:"parent_id" binding:"required"`
+	RequestID    string       `json:"request_id" binding:"required"`
+	TraceID      string       `json:"trace_id" binding:"required"`
+	APIKey       APIKey       `json:"api_key" binding:"required"`
+	CreatedAt    time.Time    `json:"created_at" binding:"required"`
 }
 
 // Filter selects committed writes, newest first. A zero Limit is the default
@@ -56,9 +56,9 @@ type Filter struct {
 }
 
 type Page struct {
-	Data       []Operation `json:"data"`
-	HasMore    bool        `json:"has_more"`
-	NextCursor string      `json:"next_cursor"`
+	Data       []Operation `json:"data" binding:"required"`
+	HasMore    bool        `json:"has_more" binding:"required"`
+	NextCursor string      `json:"next_cursor" binding:"required"`
 }
 
 // Validate checks f and returns it with the default page size applied. The

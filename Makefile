@@ -43,12 +43,12 @@ openapi:
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
 	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --swag-roots "$$output/roots.go"; \
 	$(SWAG) init \
-	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,$$output" \
+	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,./internal/modelprovider,$$output" \
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
-	go run ./scripts/openapi-split $(OPENAPI_FLAGS) "$$output/swagger.yaml" "$$output/extensions.json" contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml; \
-	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --extensions "$$output/extensions.json"
+	go run ./scripts/openapi-split $(OPENAPI_FLAGS) "$$output/swagger.yaml" "$$output/extensions.json" "$$output/core.json" contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml; \
+	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --extensions "$$output/extensions.json" --core "$$output/core.json"
 
 check-sqlc:
 	python3 scripts/check-sqlc.py

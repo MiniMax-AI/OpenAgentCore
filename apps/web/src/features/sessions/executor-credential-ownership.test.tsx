@@ -9,7 +9,7 @@ import { executorConnectionQuery } from "./executor-connection-query";
 const project = vi.hoisted(() => ({ archived: false }));
 vi.mock("../../lib/projects", async (original) => ({
   ...await original<typeof import("../../lib/projects")>(),
-  useProjects: () => ({ byId: new Map([["project", { status: project.archived ? "archived" : "active" }]]), refresh: () => undefined }),
+  useProjects: () => ({ byId: new Map([["project", { archived_at: project.archived ? "2026-09-28T04:00:00Z" : null }]]), refresh: () => undefined }),
 }));
 vi.mock("./ExecutorInstallPanel", () => ({
   useExecutorInstall: () => ({ kind: "unavailable" }),

@@ -172,12 +172,11 @@ export const keys = {
   },
   operations: {
     title: "Write operations",
-    help: "Every successful write in this project, with the key that made it, recorded by Core, newest first. Reads are not recorded; request bodies and secrets are never stored. Unknown: no recorded key.",
+    help: "Every successful write in this project, with the key that made it, recorded by Core, newest first. Reads are not recorded; request bodies and secrets are never stored.",
     filterLabel: "Filter write operations",
     allTypes: "All resources",
     allKeys: "All keys",
     revokedKeyOption: "{{name}} · revoked",
-    unknownKey: "Unknown",
     columns: {
       time: "Time",
       action: "Action",

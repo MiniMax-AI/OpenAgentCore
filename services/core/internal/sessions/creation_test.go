@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -20,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
 )
 
 // fakeCreationTx is fakeInputTx with the creation methods, equally strict.
@@ -80,7 +79,7 @@ func (f *fakeCreationTx) SaveModelExecution(_ context.Context, provider v1.Model
 }
 
 func (f *fakeCreationTx) SaveExecutionConfiguration(_ context.Context, projection v1.SessionExecutionConfiguration, revision uuid.UUID) error {
-	f.record("SaveExecutionConfiguration", f.saveExecutionConfiguration != nil, projection.ModelProvider.Status, revision.String())
+	f.record("SaveExecutionConfiguration", f.saveExecutionConfiguration != nil, string(projection.ModelProvider.Status), revision.String())
 	return f.saveExecutionConfiguration()
 }
 
@@ -111,7 +110,7 @@ func (f *fakeCreationTx) PruneChanges(context.Context) error {
 func (f *fakeCreationTx) AuditCreation(_ context.Context, created ...writeaudit.Resource) error {
 	var resources []string
 	for _, resource := range created {
-		resources = append(resources, strings.TrimSuffix(resource.Type+":"+resource.ID+":"+resource.ParentID, ":"))
+		resources = append(resources, strings.TrimSuffix(string(resource.Type)+":"+resource.ID+":"+resource.ParentID, ":"))
 	}
 	f.record("AuditCreation", f.auditCreation != nil, resources...)
 	return f.auditCreation()
@@ -176,7 +175,7 @@ func TestPrepareCreation(t *testing.T) {
 		}
 		return session
 	}
-	withProvider := func(environment, key, source string) func(*CreateSession) {
+	withProvider := func(environment, key string, source v1.ExecutionSource) func(*CreateSession) {
 		return func(input *CreateSession) {
 			copy := *provider
 			copy.APIKey = key
@@ -204,7 +203,7 @@ func TestPrepareCreation(t *testing.T) {
 	if prepare(t, withProvider("self_hosted", "one", "session"), fingerprints).RequestHash == prepare(t, withProvider("self_hosted", "two", "session"), fingerprints).RequestHash {
 		t.Fatal("caller keys share an identity")
 	}
-	deployed := prepare(t, withProvider("none", "deployment-key", v1.ModelProviderSourceDeployment), failing)
+	deployed := prepare(t, withProvider("none", "deployment-key", v1.ExecutionSourceDeployment), failing)
 	plain := prepare(t, func(input *CreateSession) { input.Configuration = creationInput("none").Configuration }, failing)
 	if !strings.Contains(string(deployed.Configuration), `"model_provider_configured":true`) || deployed.RequestHash != plain.RequestHash {
 		t.Fatalf("the deployment default joined the identity: %s", deployed.Configuration)
@@ -227,7 +226,7 @@ func TestPrepareCreation(t *testing.T) {
 		}, fingerprints, ErrInvalidInput},
 		"configuration array":    {func(input *CreateSession) { input.Configuration = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
 		"cancel initial input":   {func(input *CreateSession) { input.InitialInputs = []Input{cancelInput} }, fingerprints, ErrInvalidInput},
-		"deployment self_hosted": {withProvider("self_hosted", "key", v1.ModelProviderSourceDeployment), fingerprints, ErrInvalidInput},
+		"deployment self_hosted": {withProvider("self_hosted", "key", v1.ExecutionSourceDeployment), fingerprints, ErrInvalidInput},
 		"fingerprint failure":    {withProvider("self_hosted", "key", "session"), failing, errFingerprint},
 		"unreadable intent":      {func(input *CreateSession) { input.CreationRequest = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
 	} {
@@ -281,7 +280,7 @@ func TestFreezeProjection(t *testing.T) {
 	model, harness := "gpt", "codex"
 	session := Session{ID: "session", Engine: harness, Configuration: json.RawMessage(`{"agent":{"model":"gpt"}}`)}
 	revision := uuid.New()
-	projection := func(source, status string, view *v1.ModelProviderView) v1.SessionExecutionConfiguration {
+	projection := func(source v1.ExecutionSource, status v1.ExecutionProviderStatus, view *v1.ModelProviderView) v1.SessionExecutionConfiguration {
 		return v1.SessionExecutionConfiguration{
 			Model: v1.ExecutionSelection{Value: &model, Source: "session"}, Harness: v1.ExecutionSelection{Value: &harness, Source: "agent"},
 			ModelProvider: v1.ExecutionProviderSelection{Source: source, Status: status, Configuration: view},
@@ -293,13 +292,13 @@ func TestFreezeProjection(t *testing.T) {
 	for name, test := range map[string]struct {
 		projection   v1.SessionExecutionConfiguration
 		provider     *v1.ModelProviderInput
-		source       string
-		status       string
+		source       v1.ExecutionSource
+		status       v1.ExecutionProviderStatus
 		revision     uuid.UUID
 		want         error
 		hasProjected bool
 	}{
-		"deployment records its revision":  {projection("deployment", "", nil), provider, v1.ModelProviderSourceDeployment, "available", revision, nil, true},
+		"deployment records its revision":  {projection("deployment", "", nil), provider, v1.ExecutionSourceDeployment, "available", revision, nil, true},
 		"deployment from another source":   {projection("deployment", "", nil), provider, "session", "available", uuid.Nil, nil, true},
 		"deployment without a provider":    {projection("deployment", "", nil), nil, "", "", uuid.Nil, ErrInvalidInput, false},
 		"caller provider matches":          {projection("session", "available", provider.SafeView()), provider, "session", "available", uuid.Nil, nil, true},

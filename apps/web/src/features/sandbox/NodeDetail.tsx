@@ -4,13 +4,13 @@ import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
-import { formatDateTime, formatInteger, formatRelative, formatSpan, MISSING } from "../../lib/format";
+import { epochSeconds, formatDateTime, formatInteger, formatRelative, formatSpan, MISSING } from "../../lib/format";
 import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { NodeRolloutStatus } from "./NodeRolloutStatus";
 import { phaseTiming } from "./allocation-phase";
-import { nodeState, NodeStatus, OldAddressHint, seconds } from "./NodeList";
+import { nodeState, NodeStatus, OldAddressHint } from "./NodeList";
 
 /** Why a node is not serving: disconnected, or the reason its provider is not ready. */
 function nodeDiagnostic(node: SandboxNode): string {
@@ -19,7 +19,7 @@ function nodeDiagnostic(node: SandboxNode): string {
 
 function Diagnostic({ value }: { value: string }) {
   const { i18n } = useTranslation("sandbox");
-  const message = sandboxDiagnosticMessage(value, i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en");
+  const message = sandboxDiagnosticMessage(value, i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en");
   if (!message) return <>{MISSING}</>;
   return <span className="node-diagnostic">{message.label}<HelpTip label={message.label}>{message.advice}</HelpTip></span>;
 }
@@ -49,7 +49,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage;
-  const shortLocale = locale?.startsWith("zh") ? "zh" : "en";
+  const shortLocale = locale?.startsWith("zh") ? "zh-CN" : "en";
   const now = Math.floor(Date.now() / 1000);
   const own = allocations.filter((allocation) => allocation.node_id === node.id);
   const reporting = !stale && node.online;
@@ -73,14 +73,14 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
         </div>
         <div>
           <dt>{t("Last seen")}</dt>
-          <dd title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
-            {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}
+          <dd title={node.last_seen_at ? formatDateTime(epochSeconds(node.last_seen_at), locale) : undefined}>
+            {node.last_seen_at ? formatRelative(epochSeconds(node.last_seen_at), now, locale) : t("Never")}
           </dd>
         </div>
         <div><dt>{t("Target generation")}</dt><dd>{targetGeneration ?? MISSING}</dd></div>
         <div><dt>{t("Target preparation")}</dt><dd><NodeRolloutStatus node={node} stale={stale} /></dd></div>
         <div><dt>{t("Serving generation")}<HelpTip>{t("The saved serving generation is not proof that this node is online, ready or has free capacity.")}</HelpTip></dt><dd>{node.rollout.ready_generation ?? MISSING}</dd></div>
-        <div><dt>{t("Added")}</dt><dd>{formatDateTime(seconds(node.created_at), locale)}</dd></div>
+        <div><dt>{t("Added")}</dt><dd>{formatDateTime(epochSeconds(node.created_at), locale)}</dd></div>
       </dl>
 
       {/* Cleanup and host resources are on Sandbox metrics; the node's limit is here as well, beside Edit node that sets it. */}
@@ -123,7 +123,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
                     <td>{allocation.compute_phase ? sandboxStateLabel(allocation.compute_phase, shortLocale) : MISSING}</td>
                     {suspension ? <PhaseTime allocation={allocation} retentionSeconds={suspension.retention_seconds} now={now} /> : null}
                     <td>{allocation.diagnostic ? <Diagnostic value={allocation.diagnostic} /> : MISSING}</td>
-                    <td className="nodes-nowrap">{formatDateTime(seconds(allocation.created_at), locale)}</td>
+                    <td className="nodes-nowrap">{formatDateTime(epochSeconds(allocation.created_at), locale)}</td>
                   </tr>
                 ))}
               </tbody>
