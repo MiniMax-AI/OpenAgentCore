@@ -9,11 +9,17 @@ import (
 	"strings"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
+
+type ConnectionResponse struct {
+	EnvironmentID string `json:"environment_id" binding:"required"`
+	Status        string `json:"status" enums:"connected,disconnected" binding:"required"`
+}
 
 type ConnectionStore interface {
 	AuthenticateEnvironmentExecutor(context.Context, string, string) (string, error)
@@ -31,7 +37,7 @@ type Connections struct {
 // Executor authority never grants access to the public Session API.
 func (c *Connections) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	fail := func(status int) { http.Error(w, http.StatusText(status), status) }
+	fail := func(status int) { v1.WriteHTTPError(w, status, "", http.StatusText(status)) }
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
 		fail(http.StatusMethodNotAllowed)
@@ -65,10 +71,7 @@ func (c *Connections) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			status = "connected"
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(struct {
-			EnvironmentID string `json:"environment_id"`
-			Status        string `json:"status"`
-		}{environment, status})
+		_ = json.NewEncoder(w).Encode(ConnectionResponse{environment, status})
 	}
 }
 

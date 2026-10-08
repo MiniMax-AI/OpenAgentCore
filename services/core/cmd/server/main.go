@@ -67,7 +67,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -205,8 +204,6 @@ func run(config processconfig.Config) error {
 		Authenticator: runtimegateway.NewAuthenticator(sessionStore), Registry: registry,
 		Heartbeat: sessionService, Links: links, PublicWSURL: executorURL,
 	})
-	daemonHandler := chi.NewRouter()
-	daemonHandler.Route("/api/v1", func(r chi.Router) { runtimegateway.RegisterRoutes(r, gateway) })
 	defer registry.CloseConnections()
 	linkRelay := relay.New(links)
 	defer linkRelay.Close()
@@ -338,8 +335,11 @@ func run(config processconfig.Config) error {
 			Workspaces:       worker,
 			Links:            linkRelay,
 			NativeInstaller:  nativeInstaller,
+			Bootstrap:        http.HandlerFunc(gateway.Bootstrap), RuntimeConnect: http.HandlerFunc(gateway.WS),
+			Enrollment: runtimeenrollment.EnrollmentHandler(sessionService, config.PublicOrigin), Connection: connections,
 		},
 		Sandboxes: api.Sandboxes{
+			NodeConnect:            managedNodes,
 			Deployment:             deploymentService,
 			NodeAllocations:        deploymentStore,
 			DeploymentChanges:      worker,
@@ -351,11 +351,8 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	handler := serverHandler(apiHandler, &daemonRoutes{gateway: daemonHandler,
-		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService, config.PublicOrigin),
-		connection:  connections,
-		nodeConnect: managedNodes})
-	server := &http.Server{Addr: config.Addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+
+	server := &http.Server{Addr: config.Addr, Handler: apiHandler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()
 	select {

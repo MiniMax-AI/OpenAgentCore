@@ -88,7 +88,7 @@ func TestBootstrapNonSuccessSurfacesBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"error":"bad_credential","detail":"wrong key"}`))
+		_, _ = w.Write([]byte(`{"error":{"code":"bad_credential","message":"wrong key","type":"invalid_request_error","param":null}}`))
 	}))
 	defer srv.Close()
 

@@ -56,14 +56,6 @@ type NodeAllocations interface {
 	NodeAllocations(ctx context.Context, nodeID string) ([]deployment.NodeAllocation, error)
 }
 
-// registerSandboxNodeRoutes serves node machine connections. They authenticate
-// with an enrollment token or node credential, never the Core key.
-func (h *Handler) registerSandboxNodeRoutes(r chi.Router) {
-	r.Post("/api/v1/sandbox-node/enroll", h.enrollSandboxNode)
-	r.Get("/api/v1/sandbox-node/identity", h.sandboxNodeIdentity)
-	r.Get("/api/v1/sandbox-node/configuration", h.sandboxNodeConfiguration)
-}
-
 // registerSandboxManagerRoutes adds sandbox deployment and node administration
 // to the Core-key-authenticated /core/v1 router.
 func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {

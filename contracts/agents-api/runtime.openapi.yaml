@@ -1,40 +1,11 @@
 basePath: /
 definitions:
-  api.CoreAPIError:
-    properties:
-      code:
-        type: string
-        x-nullable: true
-      details:
-        description: |-
-          Details contains only documented, Core-owned facts: string, finite number,
-          boolean, null or string array values. Never include request echoes, secrets
-          or native/provider error text. Empty or invalid details are omitted.
-        type: object
-      message:
-        type: string
-      param:
-        type: string
-        x-nullable: true
-      type:
-        type: string
-    required:
-      - code
-      - message
-      - param
-      - type
-    type: object
-  api.CoreErrorResponse:
-    properties:
-      error:
-        $ref: '#/definitions/api.CoreAPIError'
-    required:
-      - error
-    type: object
   api.NativeInstallationClaim:
     properties:
       executor_token:
         type: string
+    required:
+      - executor_token
     type: object
   deployment.Enrollment:
     properties:
@@ -113,6 +84,62 @@ definitions:
       specification_digest:
         type: string
     type: object
+  runtimeenrollment.ConnectionResponse:
+    properties:
+      environment_id:
+        type: string
+      status:
+        enum:
+          - connected
+          - disconnected
+        type: string
+    required:
+      - environment_id
+      - status
+    type: object
+  runtimeenrollment.EnrollmentRequest:
+    properties:
+      environment_id:
+        type: string
+    required:
+      - environment_id
+    type: object
+  runtimeenrollment.EnrollmentResponse:
+    properties:
+      link_url:
+        type: string
+      resource:
+        $ref: '#/definitions/sandboxbootstrap.Resource'
+    required:
+      - link_url
+      - resource
+    type: object
+  runtimegateway.BootstrapRequest:
+    properties:
+      device_id:
+        type: string
+    required:
+      - device_id
+    type: object
+  runtimegateway.BootstrapResponse:
+    properties:
+      device_id:
+        type: string
+      heartbeat_seconds:
+        type: integer
+      protocol_version:
+        type: string
+      workspace_id:
+        type: string
+      ws_url:
+        type: string
+    required:
+      - device_id
+      - heartbeat_seconds
+      - protocol_version
+      - workspace_id
+      - ws_url
+    type: object
   sandbox.DeploymentSpec:
     properties:
       resources:
@@ -147,6 +174,25 @@ definitions:
     required:
       - artifacts
       - source_commit
+    type: object
+  sandboxbootstrap.Resource:
+    properties:
+      environment_id:
+        type: string
+      generation:
+        type: integer
+      id:
+        type: string
+      kind:
+        type: string
+      tenant_id:
+        type: string
+    required:
+      - environment_id
+      - generation
+      - id
+      - kind
+      - tenant_id
     type: object
   v1.APIError:
     properties:
@@ -197,9 +243,244 @@ info:
   title: OpenAgentCore Machine Connections
   version: "1"
 paths:
+  /api/v1/agent-daemon/bootstrap:
+    post:
+      consumes:
+        - application/json
+      description: Authenticates the agent-host credential and returns its WebSocket URL and heartbeat interval.
+      parameters:
+        - description: Bearer agent-host credential
+          in: header
+          name: Authorization
+          required: true
+          type: string
+        - description: Agent-host identity
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/runtimegateway.BootstrapRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/runtimegateway.BootstrapResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Bootstrap an agent-host Runtime
+      tags:
+        - Runtime Daemon
+  /api/v1/agent-daemon/connection:
+    get:
+      description: Rechecks executor authority around the live Link resource read. Never enrolls the sandbox or starts execution. Responses carry Cache-Control no-store.
+      parameters:
+        - description: Bearer executor credential
+          in: header
+          name: Authorization
+          required: true
+          type: string
+        - description: Environment UUID
+          in: query
+          name: environment_id
+          required: true
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/runtimeenrollment.ConnectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Observe a self-hosted sandbox connection
+      tags:
+        - Runtime Daemon
+  /api/v1/agent-daemon/enroll:
+    post:
+      consumes:
+        - application/json
+      description: Accepts an executor credential and exactly one environment_id. Returns the Environment's Link URL and resource without issuing a credential. Queries and bodies over 4096 bytes are rejected.
+      parameters:
+        - description: Bearer executor credential
+          in: header
+          name: Authorization
+          required: true
+          type: string
+        - description: Environment identity
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/runtimeenrollment.EnrollmentRequest'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/runtimeenrollment.EnrollmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Enroll a self-hosted sandbox
+      tags:
+        - Runtime Daemon
+  /api/v1/agent-daemon/install/{path}:
+    get:
+      description: Public versioned bootstrap script, checksum or Linux amd64 archive. An archive may redirect to its qualified release URL; local archives support conditional and range requests. GET and HEAD share the download headers.
+      parameters:
+        - description: 'Version and filename: {version}/bootstrap.sh, {version}/linux-amd64.sha256 or {version}/linux-amd64.tar.gz'
+          in: path
+          name: path
+          required: true
+          type: string
+      produces:
+        - text/plain
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "206":
+          description: Partial Content
+          schema:
+            type: file
+        "304":
+          description: Not Modified
+        "307":
+          description: Temporary Redirect
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "416":
+          description: Requested Range Not Satisfiable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Download native installation content
+      tags:
+        - Native Installation
+    head:
+      description: Public versioned bootstrap script, checksum or Linux amd64 archive. An archive may redirect to its qualified release URL; local archives support conditional and range requests. GET and HEAD share the download headers.
+      parameters:
+        - description: 'Version and filename: {version}/bootstrap.sh, {version}/linux-amd64.sha256 or {version}/linux-amd64.tar.gz'
+          in: path
+          name: path
+          required: true
+          type: string
+      produces:
+        - text/plain
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "206":
+          description: Partial Content
+          schema:
+            type: file
+        "304":
+          description: Not Modified
+        "307":
+          description: Temporary Redirect
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "416":
+          description: Requested Range Not Satisfiable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Download native installation content
+      tags:
+        - Native Installation
   /api/v1/agent-daemon/installation:
     post:
       description: Accepts a short-lived Environment installation Bearer authorization, not a Project or Core key. Returns frozen connection constraints; it does not claim or rotate credentials.
+      parameters:
+        - description: Bearer installation grant
+          in: header
+          name: Authorization
+          required: true
+          type: string
       produces:
         - application/json
       responses:
@@ -210,15 +491,15 @@ paths:
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Resolve a native installation authorization
       tags:
         - Native Installation
@@ -228,6 +509,11 @@ paths:
         - application/json
       description: A valid installation Bearer authorization can claim one connect-only key. The client persists its generated secret before submitting it. Retries must present that same secret; a different, rotated or revoked credential is never replaced.
       parameters:
+        - description: Bearer installation grant
+          in: header
+          name: Authorization
+          required: true
+          type: string
         - description: Locally persisted executor secret
           in: body
           name: body
@@ -240,32 +526,85 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
         "503":
           description: Service Unavailable
           schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Claim an Environment's installation credential
       tags:
         - Native Installation
+  /api/v1/agent-daemon/ws:
+    get:
+      description: Authenticates the agent-host credential and exact Runtime protocol version before upgrading to the Core–Runtime wire protocol.
+      parameters:
+        - description: Bearer agent-host credential
+          in: header
+          name: Authorization
+          required: true
+          type: string
+        - description: Agent-host device ID
+          in: query
+          name: device_id
+          required: true
+          type: string
+        - description: Runtime protocol version
+          in: query
+          name: version
+          required: true
+          type: string
+      responses:
+        "101":
+          description: Switching Protocols
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "426":
+          description: Upgrade Required
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Open an agent-host Runtime connection
+      tags:
+        - Runtime Daemon
   /api/v1/sandbox-link:
     get:
-      description: 'Upgrades to a WebSocket that carries the Sandbox link protocol. The Sandbox I/O service connects as the serve peer and the agent-host Runtime as the attach peer. The route takes no credential: each peer authenticates in its Link Hello, and the relay ends a link the Hello does not authenticate.'
+      description: Upgrades to a WebSocket that carries the Sandbox link protocol. The Sandbox I/O service connects as the serve peer and the agent-host Runtime as the attach peer. Each peer authenticates in its Link Hello after the upgrade.
       responses:
         "101":
           description: Switching Protocols; the connection carries the Link
         "400":
-          description: The request is not a WebSocket upgrade
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
         "403":
-          description: The request carries an Origin other than its Host
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
       summary: Open a sandbox Link
       tags:
         - Sandbox Link
@@ -313,6 +652,50 @@ paths:
       summary: Read the active configuration for node installation
       tags:
         - Sandbox Node
+  /api/v1/sandbox-node/connect:
+    get:
+      description: Authenticates a node credential before upgrading to the sandbox node wire protocol. Standard HTTP methods other than GET return 503 without authentication or upgrade. Unsupported extension methods are rejected by the shared router with 405 before authentication or upgrade.
+      parameters:
+        - description: Bearer node credential
+          in: header
+          name: Authorization
+          required: true
+          type: string
+        - description: Node UUID
+          in: query
+          name: node_id
+          required: true
+          type: string
+      responses:
+        "101":
+          description: Switching Protocols
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Open a sandbox node connection
+      tags:
+        - Sandbox Nodes
   /api/v1/sandbox-node/enroll:
     post:
       consumes:

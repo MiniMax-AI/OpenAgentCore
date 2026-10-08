@@ -97,8 +97,8 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    sessionStore, Environments: service, EnvironmentsReader: sessionStore, Admin: sessionStore, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
-		Execution: api.Execution{ExecutorURL: testExecutorURL, SessionAdmission: service, InputAdmission: service, SessionArchive: strict, Workspaces: strict, Links: strict},
-		Sandboxes: api.Sandboxes{Deployment: deployments, NodeAllocations: deploymentStore(s), DeploymentChanges: strict, DeploymentReset: strict, ConfigurationDiscovery: strict},
+		Execution: api.Execution{ExecutorURL: testExecutorURL, SessionAdmission: service, InputAdmission: service, SessionArchive: strict, Workspaces: strict, Links: strict, Bootstrap: strict, RuntimeConnect: strict, Enrollment: strict, Connection: strict},
+		Sandboxes: api.Sandboxes{NodeConnect: strict, Deployment: deployments, NodeAllocations: deploymentStore(s), DeploymentChanges: strict, DeploymentReset: strict, ConfigurationDiscovery: strict},
 	}
 	for _, c := range configure {
 		c(&deps)
@@ -154,6 +154,7 @@ func workerExecution(t testing.TB, worker *execution.Worker) func(*api.Dependenc
 			SessionArchive:   strictStandIn{t},
 			Workspaces:       worker,
 			Links:            strictStandIn{t},
+			Bootstrap:        strictStandIn{t}, RuntimeConnect: strictStandIn{t}, Enrollment: strictStandIn{t}, Connection: strictStandIn{t},
 		}
 	}
 }

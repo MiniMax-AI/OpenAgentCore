@@ -27,8 +27,7 @@ import (
 // segment resolves like a literal one, and empty and dot segments are resolved
 // with ServeMux cleanPath semantics, keeping a trailing slash. Other escapes,
 // such as %2F and %5C, stay encoded and never become separators. Path and
-// RawPath are then set consistently, so chi (which prefers RawPath), the
-// ServeMux (which uses EscapedPath) and every middleware see the same path, and
+// RawPath are then set consistently, so chi (which prefers RawPath) and every middleware see the same path, and
 // every spelling reaches exactly the route and authentication of its canonical
 // form written literally. It is idempotent.
 func CanonicalPaths(next http.Handler) http.Handler {

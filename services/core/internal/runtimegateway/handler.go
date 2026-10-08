@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/websocket"
-
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/gorilla/websocket"
 )
 
 // HeartbeatTouch is the persistence interface the gateway uses to
@@ -82,6 +82,7 @@ func NewHandler(cfg HandlerConfig) *Handler {
 			// Daemon is a non-browser client and sends no Origin;
 			// the Authorization bearer is the actual auth boundary.
 			CheckOrigin: func(*http.Request) bool { return true },
+			Error:       v1.WebSocketError,
 		},
 	}
 }
@@ -95,11 +96,11 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	token := bearerFromAuthHeader(r)
 	version := q.Get("version")
 	if deviceID == "" || token == "" || version == "" {
-		writeAuthError(w, http.StatusBadRequest, "missing_params", "device_id, version and Authorization bearer are required")
+		v1.WriteHTTPError(w, http.StatusBadRequest, "missing_params", "device_id, version and Authorization bearer are required")
 		return
 	}
 	if !proto.VersionCompatible(version) {
-		writeAuthError(w, http.StatusUpgradeRequired, "incompatible_version",
+		v1.WriteHTTPError(w, http.StatusUpgradeRequired, "incompatible_version",
 			"daemon protocol "+version+" incompatible with server "+proto.Version)
 		return
 	}
@@ -110,7 +111,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 		// trace; the credential itself stays out of the log.
 		h.cfg.Log("agentdaemon gateway: ws auth rejected device_id=%s code=%s status=%d err=%v",
 			deviceID, code, status, err)
-		writeAuthError(w, status, code, err.Error())
+		v1.WriteHTTPError(w, status, code, err.Error())
 		return
 	}
 	conn, err := h.upgrader.Upgrade(w, r, nil)
@@ -141,29 +142,38 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	sess.Start()
 }
 
+type BootstrapRequest struct {
+	DeviceID string `json:"device_id" binding:"required"`
+}
+type BootstrapResponse struct {
+	DeviceID         string `json:"device_id" binding:"required"`
+	WorkspaceID      string `json:"workspace_id" binding:"required"`
+	WSURL            string `json:"ws_url" binding:"required"`
+	HeartbeatSeconds int    `json:"heartbeat_seconds" binding:"required"`
+	ProtocolVersion  string `json:"protocol_version" binding:"required"`
+}
+
 // Bootstrap is the daemon's first HTTP call with its credential. Validating
 // the bearer in a separate HTTP step (rather than folded into the WS
 // upgrade) lets the daemon fail fast on credential problems with a
 // real HTTP status rather than the opaque WS close code.
 func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeAuthError(w, http.StatusMethodNotAllowed, "method_not_allowed", "")
+		v1.WriteHTTPError(w, http.StatusMethodNotAllowed, "method_not_allowed", "")
 		return
 	}
 	bearer := bearerFromAuthHeader(r)
 	if bearer == "" {
-		writeAuthError(w, http.StatusUnauthorized, "missing_bearer", "Authorization: Bearer <runner_credential> required")
+		v1.WriteHTTPError(w, http.StatusUnauthorized, "missing_bearer", "Authorization: Bearer <runner_credential> required")
 		return
 	}
-	var body struct {
-		DeviceID string `json:"device_id"`
-	}
+	var body BootstrapRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeAuthError(w, http.StatusBadRequest, "bad_json", err.Error())
+		v1.WriteHTTPError(w, http.StatusBadRequest, "bad_json", err.Error())
 		return
 	}
 	if body.DeviceID == "" {
-		writeAuthError(w, http.StatusBadRequest, "missing_device_id", "request body must contain device_id")
+		v1.WriteHTTPError(w, http.StatusBadRequest, "missing_device_id", "request body must contain device_id")
 		return
 	}
 	auth, err := h.cfg.Authenticator.AuthenticateBearer(r.Context(), body.DeviceID, bearer)
@@ -171,16 +181,12 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		status, code := mapAuthError(err)
 		h.cfg.Log("agentdaemon gateway: bootstrap auth rejected device_id=%s code=%s status=%d err=%v",
 			body.DeviceID, code, status, err)
-		writeAuthError(w, status, code, err.Error())
+		v1.WriteHTTPError(w, status, code, err.Error())
 		return
 	}
-	resp := map[string]any{
-		"device_id":         auth.DeviceID,
-		"workspace_id":      auth.WorkspaceID,
-		"ws_url":            h.cfg.PublicWSURL,
-		"heartbeat_seconds": int(h.cfg.HeartbeatInterval.Seconds()),
-		"protocol_version":  proto.Version,
-	}
+	resp := BootstrapResponse{DeviceID: auth.DeviceID, WorkspaceID: auth.WorkspaceID,
+		WSURL: h.cfg.PublicWSURL, HeartbeatSeconds: int(h.cfg.HeartbeatInterval.Seconds()), ProtocolVersion: proto.Version}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
@@ -199,15 +205,6 @@ func bearerFromAuthHeader(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.TrimPrefix(raw, "Bearer "))
-}
-
-func writeAuthError(w http.ResponseWriter, status int, code, detail string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error":  code,
-		"detail": detail,
-	})
 }
 
 // mapAuthError translates a typed auth error into (HTTP status,

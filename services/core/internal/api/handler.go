@@ -69,11 +69,8 @@ func (h *Handler) routes() *chi.Mux {
 		r.Head("/v1/files/{file_id}/content", methodNotAllowed)
 		r.Delete("/v1/files/{file_id}", h.deleteSourceFile)
 	})
-	h.registerSandboxNodeRoutes(router)
 	h.registerCoreRoutes(router)
-	h.registerNativeInstallationRoutes(router)
-	router.Get("/api/v1/sandbox-link", h.sandboxLink)
-	router.Head("/api/v1/sandbox-link", methodNotAllowed)
+	h.registerMachineRoutes(router)
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)
 		r.Post("/vaults", h.createVault)

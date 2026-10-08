@@ -2,7 +2,7 @@
 title: "Machine connection API"
 ---
 
-Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox I/O service and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The reverse proxy sends `/api/v1` directly to Core; Web never serves these routes.
+Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox I/O service and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The public origin forwards `/api/v1` to Core, either directly or through Web's unchanged HTTP and WebSocket proxy. Web adds no console authority to machine requests.
 
 ## Routes
 
@@ -12,7 +12,7 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox 
 | `POST sandbox-node/enroll` | Node installer | Enrollment token | [Enroll a node](#enroll-a-node) |
 | `GET sandbox-node/identity?node_id=` | Node | Node credential | [Recover a node's identity](#recover-a-nodes-identity) |
 | WebSocket `GET sandbox-node/connect?node_id=` | Node | Node credential | [Node generation protocol](./node-generation-protocol.md) |
-| `GET agent-daemon/install/{version}/…` | Self-hosted installer | None | [Installation grant](./environment-executor-credentials.md#installation-grant) |
+| `GET` / `HEAD agent-daemon/install/{version}/…` | Self-hosted installer | None | [Installation grant](./environment-executor-credentials.md#installation-grant) |
 | `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | Self-hosted installer | Installation grant | [Installation grant](./environment-executor-credentials.md#installation-grant) |
 | `POST agent-daemon/enroll` | Self-hosted daemon | Executor credential | [Enroll a self-hosted daemon](#enroll-a-self-hosted-daemon) |
 | `GET agent-daemon/connection?environment_id=` | Self-hosted installer | Executor credential | [Private connection confirmation](./environment-executor-credentials.md#private-connection-confirmation) |
@@ -22,7 +22,13 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox 
 
 Every credential travels in an `Authorization: Bearer` header, except on `sandbox-link`, where each peer sends it in its Link Hello after the upgrade. No credential travels in a URL. Core derives the [Link URL](../../docs/configuration.md#changing-the-public-url) from `OAC_PUBLIC_URL`.
 
-The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes, the two installation routes and the `sandbox-link` upgrade, whose messages the Sandbox link protocol defines. The `sandbox-node/connect` and `agent-daemon/ws` WebSockets and the daemon bootstrap, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
+The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes every machine HTTP operation, including public downloads and WebSocket handshakes. WebSocket messages remain owned by their linked wire protocols.
+
+### HTTP errors and methods
+
+Every HTTP error uses `{"error":{"message":"…","type":"invalid_request_error","code":null,"param":null}}`. `code` carries a route's defined reason when present; `param` identifies a rejected field when present. A 409 has type `conflict_error`, and a 5xx has type `server_error`. Handshake failures use the same envelope before upgrade; errors after upgrade belong to the wire protocol. Consumers use HTTP status for retry and permanent-rejection decisions and may display `error.message`.
+
+`HEAD` never opens a connection or queries a Runtime: daemon WebSocket, Link and connection observation routes reject it with 405; the node connection rejects standard HTTP methods other than GET with 503. Unsupported extension methods such as `PROPFIND` are rejected by the shared router with 405 before authentication or upgrade. Node configuration and identity reads support HEAD with the same credential checks as GET. Installer downloads support GET and HEAD, including archive conditional and range responses; download errors also use the shared envelope. Enrollment accepts POST only. Other rejected methods use the shared error envelope. The bare `/api/v1/agent-daemon` and `/api/v1/agent-daemon/install` prefixes redirect with 301 to their trailing-slash forms, preserving their queries. Unknown machine routes return 404 in the shared envelope.
 
 ## Credentials
 
@@ -88,7 +94,7 @@ The credential is checked before any deployment state, so a rejected credential,
 
 `POST /api/v1/agent-daemon/bootstrap` with the agent-host credential and `{"device_id": "…"}` returns `device_id`, `workspace_id` (an empty string for the deployment-scoped host), `ws_url` (derived from `OAC_PUBLIC_URL`, never from request headers), `heartbeat_seconds` and `protocol_version`. The daemon then dials `ws_url` as the [Core–Runtime protocol](../../docs/runtime-protocol.md#ownership-and-connection) describes.
 
-The bootstrap and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
+The bootstrap and WebSocket routes report these `error.code` values: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
 
 ### Enroll a self-hosted daemon
 
@@ -99,6 +105,6 @@ The bootstrap and WebSocket routes share one error body, `{"error": code, "detai
 | 400 | A malformed body or any query |
 | 401 | An invalid, revoked or foreign credential, a deleted Session, or an Environment without current executor authority |
 | 409 | Another executor key already enrolled the Environment |
-| 503 | `{"error": "no_sandbox_link", "detail": "a self_hosted sandbox needs an https public URL"}`, before the credential is checked, when the [public URL](../../docs/configuration.md#changing-the-public-url) is not https; otherwise storage is unavailable |
+| 503 | `error.code: "no_sandbox_link"` and `error.message: "a self_hosted sandbox needs an https public URL"`, after header/body validation but before executor authority is checked, when the [public URL](../../docs/configuration.md#changing-the-public-url) is not https; otherwise storage is unavailable |
 
 Enrollment creates no managed allocation, binds no Session and grants no Session API access. Core binds the Session to the deployment's agent host while the machine serves the resource ([Session assignments](../../docs/runtime-protocol.md#session-assignments)). The relay rechecks the credential's authority on every Serve and Open, so rotation, revocation and Session deletion end further use. The [self-hosted guide](../../docs/getting-started/self-hosted.md) gives the operator steps, and the [executor credential contract](./environment-executor-credentials.md#revoked-or-rotated-credential) describes how the daemon handles a permanent rejection.

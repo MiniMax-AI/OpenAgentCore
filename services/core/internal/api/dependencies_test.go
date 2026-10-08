@@ -121,8 +121,10 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 			SessionArchive:   f.sessionArchive,
 			Workspaces:       f.workspaces,
 			Links:            f.links,
+			Bootstrap:        f.links, RuntimeConnect: f.links, Enrollment: f.links, Connection: f.links,
 		},
 		Sandboxes: Sandboxes{
+			NodeConnect:            f.links,
 			Deployment:             f.deployment,
 			NodeAllocations:        f.nodeAllocations,
 			DeploymentChanges:      f.deploymentChanges,
@@ -185,6 +187,12 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		{"Execution.ExecutorURL", func(d *Dependencies, _ *testFakes) { d.Execution.ExecutorURL = "" }},
 		{"Execution.SessionAdmission", func(d *Dependencies, _ *testFakes) { d.Execution.SessionAdmission = nil }},
 		{"Execution.InputAdmission", func(d *Dependencies, _ *testFakes) { d.Execution.InputAdmission = nil }},
+
+		{"Execution.Bootstrap", func(d *Dependencies, _ *testFakes) { d.Execution.Bootstrap = nil }},
+		{"Execution.RuntimeConnect", func(d *Dependencies, _ *testFakes) { d.Execution.RuntimeConnect = nil }},
+		{"Execution.Enrollment", func(d *Dependencies, _ *testFakes) { d.Execution.Enrollment = nil }},
+		{"Execution.Connection", func(d *Dependencies, _ *testFakes) { d.Execution.Connection = nil }},
+		{"Sandboxes.NodeConnect", func(d *Dependencies, _ *testFakes) { d.Sandboxes.NodeConnect = nil }},
 		{"Execution.NativeInstaller.Version", func(d *Dependencies, _ *testFakes) { d.Execution.NativeInstaller = &NativeInstaller{} }},
 		{"Sandboxes.ConfigurationDiscovery", func(d *Dependencies, _ *testFakes) { d.Sandboxes.ConfigurationDiscovery = nil }},
 	} {

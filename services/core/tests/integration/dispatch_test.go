@@ -15,13 +15,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -34,9 +34,14 @@ func fixtureGateway(t *testing.T, s *Store, publicWSURL string) (http.Handler, *
 		Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry,
 		Heartbeat: sessionService(t, s), Links: runtimegateway.NewLinkAuthority(sessionAdapter(s)), PublicWSURL: publicWSURL,
 	})
-	r := chi.NewRouter()
-	r.Route("/api/v1", func(r chi.Router) { runtimegateway.RegisterRoutes(r, h) })
-	return r, registry
+	handler, err := publicHandler(t, s, newTestAuthenticator(t, nil), "codex", func(d *api.Dependencies) {
+		d.Execution.RuntimeConnect = http.HandlerFunc(h.WS)
+		d.Execution.Bootstrap = http.HandlerFunc(h.Bootstrap)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return handler, registry
 }
 
 type dispatchHarness struct {

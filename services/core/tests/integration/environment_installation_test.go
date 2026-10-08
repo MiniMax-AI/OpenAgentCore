@@ -4,11 +4,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -32,6 +36,28 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err != nil || expires <= time.Now().Unix() || expires > time.Now().Add(31*time.Minute).Unix() {
 		t.Fatal("authorization", err)
 	}
+	handler, err := publicHandler(t, s, fixtureKeyResolver{}, "codex", func(d *api.Dependencies) {
+		d.Execution.NativeInstaller = &api.NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build"}}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimHTTP := func(path, grant, body string, status int) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/agent-daemon/"+path, strings.NewReader(body))
+		if grant != "" {
+			request.Header.Set("Authorization", "Bearer "+grant)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != status {
+			t.Fatalf("%s returned %d, want %d: %s", path, response.Code, status, response.Body)
+		}
+	}
+	claimHTTP("installation", "", "", http.StatusUnauthorized)
+	claimHTTP("installation/claim", "", "{}", http.StatusUnauthorized)
+	claimHTTP("installation/claim", token, "{}", http.StatusBadRequest)
 	for _, pair := range [][2]string{{token + "x", "build"}, {token, "other-build"}, {"", "build"}} {
 		if _, err := installations.ValidateEnvironmentInstallation(ctx, pair[0], pair[1]); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 			t.Fatal("accepted invalid authorization", err)
@@ -78,6 +104,11 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err := installations.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); err != nil {
 		t.Fatal("lost-response retry", err)
 	}
+	claimBody, err := json.Marshal(api.NativeInstallationClaim{ExecutorToken: secrets[winner]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimHTTP("installation/claim", token, string(claimBody), http.StatusNoContent)
 	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(secrets[winner])); err != nil {
 		t.Fatal(err)
 	}

@@ -141,7 +141,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
                                      "deployment change retired it. Uninstall it with node-install.pyz --uninstall "
                                      "--installation-id " + args.installation_id + ", then add the host with a new command.") from None
         if error.code == 404:
-            raise SpecificationError("Core node configuration was not found (HTTP 404); route /api/v1 on the Core origin directly to Core, not to Web") from None
+            raise SpecificationError("Core node configuration was not found (HTTP 404); route /api/v1 on the public origin to Core, directly or through Web's machine proxy") from None
         if error.code == 409:
             raise SpecificationError("Core refused node configuration (HTTP 409): the deployment is resetting or conflicts with this node's retained specification; inspect the deployment before retrying") from None
         raise SpecificationError("Core rejected the node configuration read (HTTP " + str(error.code) + "); verify the retained or enrollment credential") from None

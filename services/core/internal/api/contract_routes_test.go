@@ -16,10 +16,11 @@ import (
 // Registered routes that are deliberately not contract operations, keyed
 // "METHOD /path"; the method * matches every method.
 var unpublishedRoutes = map[string]string{
-	"GET /healthz":                     "liveness probe, not part of the Agent API",
-	"GET /docs":                        "reference page rendering the published contracts",
-	"GET /docs/{document}":             "the published contract documents themselves",
-	"* /api/v1/agent-daemon/install/*": "public immutable native release content, not an API operation",
+	"GET /healthz":                   "liveness probe, not part of the Agent API",
+	"GET /docs":                      "reference page rendering the published contracts",
+	"GET /docs/{document}":           "the published contract documents themselves",
+	"* /api/v1/agent-daemon/install": "canonical installer prefix redirect, not an operation",
+	"* /api/v1/agent-daemon":         "canonical daemon prefix redirect, not an operation",
 }
 
 // contractOperations reads one committed contract as "METHOD /path" keys and
@@ -84,6 +85,18 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 				return nil
 			}
 		}
+		// These handlers own their method errors; Handle preserves their
+		// existing status and credential precedence for unsupported methods.
+		methods := map[string][]string{
+			"/api/v1/sandbox-node/connect":    {http.MethodGet},
+			"/api/v1/agent-daemon/enroll":     {http.MethodPost},
+			"/api/v1/agent-daemon/connection": {http.MethodGet},
+			"/api/v1/agent-daemon/install/*":  {http.MethodGet, http.MethodHead},
+		}
+		if supported, exists := methods[route]; exists && !slices.Contains(supported, method) {
+			return nil
+		}
+		route = strings.ReplaceAll(route, "/install/*", "/install/{path}")
 		// An explicit HEAD or OPTIONS 405 guard is not an operation.
 		if f, ok := handler.(http.HandlerFunc); ok && (method == http.MethodHead || method == http.MethodOptions) && reflect.ValueOf(f).Pointer() == guard {
 			return nil
@@ -114,5 +127,41 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 				t.Errorf("%s publishes %s, which the server does not register", contracts[prefix], operation)
 			}
 		}
+	}
+}
+
+func TestInstallationContractRequiresGrantAndExecutorToken(t *testing.T) {
+	raw, err := os.ReadFile("../../../../contracts/agents-api/runtime.openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct {
+				Name     string `yaml:"name"`
+				In       string `yaml:"in"`
+				Required bool   `yaml:"required"`
+			}
+		} `yaml:"paths"`
+		Definitions map[string]struct {
+			Required []string `yaml:"required"`
+		} `yaml:"definitions"`
+	}
+	if err := yaml.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/agent-daemon/installation", "/api/v1/agent-daemon/installation/claim"} {
+		present := false
+		for _, parameter := range contract.Paths[path]["post"].Parameters {
+			if parameter.In == "header" && parameter.Name == "Authorization" && parameter.Required {
+				present = true
+			}
+		}
+		if !present {
+			t.Errorf("%s does not require its installation grant", path)
+		}
+	}
+	if !slices.Contains(contract.Definitions["api.NativeInstallationClaim"].Required, "executor_token") {
+		t.Fatal("claim schema does not require the executor secret")
 	}
 }

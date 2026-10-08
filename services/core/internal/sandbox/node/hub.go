@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -91,13 +92,13 @@ func (p *peer) close() { p.once.Do(func() { close(p.done); p.cancel(); _ = p.con
 
 func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet || h.options.Authenticate == nil || h.options.OwnerEpoch == nil {
-		http.Error(w, "node unavailable", http.StatusServiceUnavailable)
+		v1.WriteHTTPError(w, http.StatusServiceUnavailable, "", "node unavailable")
 		return
 	}
 	id := r.URL.Query().Get("node_id")
 	auth := strings.Fields(r.Header.Get("Authorization"))
 	if !validID(id) || len(r.Header.Values("Authorization")) != 1 || len(auth) != 2 || auth[0] != "Bearer" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		v1.WriteHTTPError(w, http.StatusUnauthorized, "", "unauthorized")
 		return
 	}
 	ctx, cancel := h.lifetime(r.Context())
@@ -105,31 +106,31 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	identity, err := callbackValue(ctx, func(ctx context.Context) (Identity, error) { return h.options.Authenticate(ctx, id, auth[1]) })
 	if err != nil {
 		if errors.Is(err, ErrAuthentication) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			v1.WriteHTTPError(w, http.StatusUnauthorized, "", "unauthorized")
 		} else {
-			http.Error(w, "node authentication unavailable", http.StatusServiceUnavailable)
+			v1.WriteHTTPError(w, http.StatusServiceUnavailable, "", "node authentication unavailable")
 		}
 		return
 	}
 	if identity.NodeID != id {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		v1.WriteHTTPError(w, http.StatusUnauthorized, "", "unauthorized")
 		return
 	}
 	epoch, err := callbackValue(ctx, h.options.OwnerEpoch)
 	if err != nil || epoch == 0 {
-		http.Error(w, "owner unavailable", http.StatusServiceUnavailable)
+		v1.WriteHTTPError(w, http.StatusServiceUnavailable, "", "owner unavailable")
 		return
 	}
 
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
-		http.Error(w, "node unavailable", http.StatusServiceUnavailable)
+		v1.WriteHTTPError(w, http.StatusServiceUnavailable, "", "node unavailable")
 		return
 	}
 	if _, reserved := h.reservations[id]; reserved {
 		h.mu.Unlock()
-		http.Error(w, "node identity already connected", http.StatusConflict)
+		v1.WriteHTTPError(w, http.StatusConflict, "", "node identity already connected")
 		return
 	}
 	lifetime := &connectionLifetime{cancel: cancel}
@@ -144,7 +145,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		h.mu.Unlock()
 	}()
-	upgrade := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == "" }}
+	upgrade := websocket.Upgrader{Error: v1.WebSocketError, CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == "" }}
 	conn, err := upgrade.Upgrade(w, r, nil)
 	if err != nil {
 		return
