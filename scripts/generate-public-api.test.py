@@ -134,6 +134,17 @@ class PublicAPITests(unittest.TestCase):
             self.assertIn(line, generated)
         self.assertNotIn('Unused', generated)
 
+    def test_core_names_never_replace_another_type(self):
+        ref = '#/definitions/'
+        for definitions in (
+            {'api.Reset': {'type': 'object', 'properties': {'clear': {'type': 'string', 'enum': ['auto', 'force']}}}, 'api.ResetClear': {'type': 'object'}},
+            {'one.Node': {'type': 'object'}, 'two.Node': {'type': 'object'}, 'api.OneNode': {'type': 'object'}},
+        ):
+            document = {'paths': {'/x': {'get': {'responses': {'200': {'schema': {'type': 'object', 'properties': {
+                name: {'$ref': ref + name} for name in definitions}}}}}}}, 'definitions': definitions}
+            with self.subTest(sorted(definitions)), self.assertRaisesRegex(ValueError, 'collide'):
+                generator.core_module(document, {}, {})
+
     def test_every_public_reference_resolves_and_no_other_apis_leak(self):
         self.assertEqual({p.split('/')[1] for p in self.public['paths']}, {'agents', 'vaults', 'files', 'skills'})
         generator.prune_components(copy.deepcopy(self.public))
