@@ -115,7 +115,7 @@ func (m *runtimeManager) activateDeployment(ctx context.Context, expected deploy
 		m.publishEmptyDeployment(expected.InstallationID, expected.Generation)
 		return nil
 	}
-	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != expected.Mode || config.ProviderKind != expected.Provider {
+	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != string(expected.Mode) || config.ProviderKind != expected.Provider {
 		return sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)

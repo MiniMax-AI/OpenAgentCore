@@ -343,6 +343,9 @@ def unit_name(installation_id):
 
 def configure_node(root, args, token):
     """Read the Core specification and check the host under the installation lock."""
+    stored = private_json(root / "provider.json")
+    if stored is not None:
+        node_spec.canonical_spec(stored["provider"], stored["specification"])
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
     args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not (root / "registered.json").exists())

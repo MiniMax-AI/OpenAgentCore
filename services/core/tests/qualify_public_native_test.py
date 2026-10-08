@@ -2,6 +2,7 @@
 
 import contextlib
 import copy
+import base64
 import io
 import json
 import os
@@ -9,14 +10,18 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx2
-from openai import BadRequestError, OpenAI
 from jsonschema import ValidationError
+from openai import BadRequestError, NotFoundError, OpenAI
 
 from official_environment_files_native import generate_files
+from official_environment_composition import composition_fixture
+from official_environment_initial_files import assert_initial_bytes_script
+import official_environment_composition as composition
 
 import qualify_public_native as qualification
 
@@ -130,6 +135,136 @@ class QualificationTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "Exactly one"):
                 self.run_suite(suite)
         self.assertEqual(json.loads(self.evidence.read_text())["status"], "failed")
+
+    def test_composition_rejects_preselected_environment_before_creating_resources(self):
+        self.settings['environment'] = {'type': 'openai_hosted', 'environment_template_id': 'foreign-template'}
+        (self.root / 'settings.json').write_text(json.dumps(self.settings))
+        self.argv[self.argv.index('none')] = 'composition'
+        with patch('sys.argv', self.argv), patch.object(qualification, 'verify_composition') as suite:
+            with self.assertRaisesRegex(AssertionError, 'fresh hosted'):
+                qualification.main()
+            suite.assert_not_called()
+
+    def test_composition_partial_failure_cleans_sources_and_keeps_provider_selection(self):
+        client, http = MagicMock(), MagicMock()
+        client.base_url = 'https://core.example/v1'
+        client.api_key = 'project-secret'
+        client.files.create.return_value = SimpleNamespace(id='source-file')
+        client.skills.create.side_effect = RuntimeError('upload failed')
+        http.post.return_value = SimpleNamespace(status_code=404, text='not found')
+        with self.assertRaisesRegex(RuntimeError, 'upload failed'), contextlib.ExitStack() as cleanup:
+            composition_fixture(client, SimpleNamespace(api_key='foreign-secret'), http,
+                self.settings['agent'], self.settings['model_provider'], cleanup)
+        client.files.delete.assert_called_once_with('source-file')
+        self.assertEqual(http.post.call_args.kwargs['json']['x_agents_core']['model_provider'], self.settings['model_provider'])
+        self.assertEqual(http.post.call_args.kwargs['headers']['Authorization'], 'Bearer foreign-secret')
+
+    def test_composition_session_failure_cleans_template_and_all_sources(self):
+        client, http = MagicMock(), MagicMock()
+        client.base_url = 'https://core.example/v1'
+        client.api_key = 'project-secret'
+        client.files.create.return_value = SimpleNamespace(id='source-file')
+        client.skills.create.return_value = SimpleNamespace(id='source-skill', name='proof-skill', description='proof', default_version='1')
+        client.beta.agents.environments.templates.create.return_value = SimpleNamespace(id='template')
+        client.beta.agents.sessions.create.side_effect = RuntimeError('session failed')
+        http.post.return_value = SimpleNamespace(status_code=404, text='not found')
+        options = {'environment': {'type': 'openai_hosted'}, 'extra_body': {'x_agents_core': {'model_provider': self.settings['model_provider']}}}
+        with self.assertRaisesRegex(RuntimeError, 'session failed'):
+            qualification.verify_composition(client, SimpleNamespace(api_key='foreign-secret'), http,
+                self.settings['agent'], options, ready=MagicMock(), restart=None, record=MagicMock())
+        client.files.delete.assert_called_once_with('source-file')
+        client.skills.delete.assert_called_once_with('source-skill')
+        client.beta.agents.environments.templates.delete.assert_called_once_with('template')
+        self.assertEqual(client.beta.agents.sessions.create.call_args.kwargs['extra_body'], options['extra_body'])
+        configuration = client.beta.agents.environments.templates.create.call_args.kwargs
+        self.assertEqual(configuration['network'], {'access': 'enabled'})
+        self.assertEqual(set(configuration['packages']), {'npm', 'python'})
+        for plugin in configuration['plugins']:
+            with zipfile.ZipFile(io.BytesIO(base64.b64decode(plugin['source']['data']))) as archive:
+                mcp = json.loads(archive.read('proof/.mcp.json'))
+                for server in mcp['mcpServers'].values():
+                    self.assertNotIn('env_vars', server)
+        # Exercise the actual prepared proof script's byte and freshness checks;
+        # dependency installation and native execution remain live-only checks.
+        workspace = self.root / 'prepared'
+        workspace.mkdir()
+        for item in configuration['files']:
+            body = base64.b64decode(item['data']) if item['type'] == 'inline' else bytes(range(256))
+            (workspace / item['path'].removeprefix('/workspace/')).write_bytes(body)
+        (workspace / 'setup-sub').mkdir()
+        (workspace / 'setup-sub/order').write_text('second')
+        (workspace / 'setup-once').write_text('initialized')
+        (workspace / 'plugin-mcp-setup-count').write_text('1')
+        script = compile((workspace / 'verify.py').read_text(), 'prepared verify.py', 'exec')
+        with contextlib.chdir(workspace), patch.dict(os.environ, configuration['env']), \
+                patch.dict('sys.modules', {'packaging': SimpleNamespace(__version__='26.0')}), \
+                patch.object(subprocess, 'check_output', return_value=b'1.2.3\n'), patch.object(subprocess, 'run'):
+            for run in (1, 2):
+                exec(script, {})
+                self.assertEqual(json.loads((workspace / 'outputs/composition.json').read_text())['run'], run)
+            (workspace / 'initial-source.bin').write_bytes(b'changed')
+            with self.assertRaises(AssertionError):
+                exec(script, {})
+            self.assertEqual((workspace / 'composition-run-count').read_text(), '2')
+
+    def test_initial_byte_assertion_uses_declared_working_directory(self):
+        workspace = self.root / 'custom-workspace'
+        workspace.mkdir()
+        expected = b'\x00\xffbinary'
+        (workspace / 'initial.bin').write_bytes(expected)
+        script = assert_initial_bytes_script({'/workspace/initial.bin': expected})
+        with contextlib.chdir(workspace):
+            exec(compile(script, '<initial byte assertion>', 'exec'), {'Path': Path})
+            (workspace / 'initial.bin').write_bytes(b'changed')
+            with self.assertRaises(AssertionError):
+                exec(compile(script, '<initial byte assertion>', 'exec'), {'Path': Path})
+
+    def test_mcp_hold_waits_for_directory_and_turn_without_hiding_errors(self):
+        request = httpx2.Request('GET', 'https://core.example/v1/files')
+        missing = NotFoundError('missing', response=httpx2.Response(404, request=request), body=None)
+        invalid = BadRequestError('invalid', response=httpx2.Response(400, request=request), body=None)
+        output = SimpleNamespace(path='/workspace/outputs/composition.json', size_bytes=2)
+        ticks = '/workspace/plugin-mcp-hold/ticks.jsonl'
+        invocation = '/workspace/plugin-mcp-hold/invocation.json'
+        growing = [[SimpleNamespace(path=ticks, size_bytes=size), SimpleNamespace(path=invocation, size_bytes=1)]
+                   for size in (5, 10, 15, 20)]
+        fixture = {'configuration': {}, 'prompt': 'verify', 'outputs': {output.path: b'{}'},
+                   'composition_proof': {}, 'hold_prompt': 'hold', 'hold_server': 'server',
+                   'hold_paths': {'ticks': ticks, 'invocation': invocation}}
+        for label, polling, error in (
+            ('delayed directory and turn', [missing, *growing, growing[-1]], None),
+            ('directory disappeared', [missing, growing[0], missing], NotFoundError),
+            ('other error', [invalid], BadRequestError),
+        ):
+            with self.subTest(label), contextlib.ExitStack() as patches:
+                client = MagicMock()
+                sessions = client.beta.agents.sessions
+                session = SimpleNamespace(id='session', environment=SimpleNamespace(id='environment'), status='idle', required_actions=[])
+                sessions.create.return_value = sessions.retrieve.return_value = session
+                sessions.turns.list.side_effect = [[], [], [], [], [SimpleNamespace(id='hold-turn', status='in_progress')]]
+                sessions.turns.retrieve.return_value = SimpleNamespace(status='cancelled')
+                stream_events = [{'type': 'agent.session.turn.completed', 'turn': {'id': 'completed-turn'}},
+                                 {'type': 'agent.session.idle'}]
+                sessions.stream.return_value.__enter__.return_value = [
+                    SimpleNamespace(to_dict=lambda event=event: event) for event in stream_events]
+                client.beta.agents.environments.files.list.side_effect = [[output], [output], *polling]
+                patches.enter_context(patch.object(composition, 'composition_fixture', return_value=fixture))
+                for name in ('change_and_delete_sources', 'verify_composition_metadata', 'verify_session_artifacts', 'verify_plugin_mcp_items'):
+                    patches.enter_context(patch.object(composition, name, return_value={}))
+                patches.enter_context(patch.object(composition.time, 'sleep'))
+                options = {'environment': {'type': 'openai_hosted'},
+                           'extra_body': {'x_agents_core': {'model_provider': self.settings['model_provider']}}}
+                if error is not None:
+                    with self.assertRaises(error):
+                        composition.verify_composition(client, MagicMock(), MagicMock(), self.settings['agent'],
+                            options, ready=MagicMock(), restart=None, record=MagicMock())
+                    sessions.turns.retrieve.assert_not_called()
+                else:
+                    checks = composition.verify_composition(client, MagicMock(), MagicMock(), self.settings['agent'],
+                        options, ready=MagicMock(), restart=None, record=MagicMock())
+                    self.assertIn('native_mcp_cancel_retry_stops_descendant_effects', checks)
+                    sessions.turns.retrieve.assert_called_once_with('hold-turn', session_id='session')
+                    self.assertEqual(sessions.events.create.call_count, 3)
 
 
 class NoneSessionTests(unittest.TestCase):

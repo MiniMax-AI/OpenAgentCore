@@ -32,16 +32,12 @@ import { skills as zhCNSkills } from "./locales/zh-CN/skills";
 import { keys as zhCNKeys } from "./locales/zh-CN/keys";
 import { system as zhCNSystem } from "./locales/zh-CN/system";
 import { onboarding as zhCNOnboarding } from "./locales/zh-CN/onboarding";
-import { consoleAuthChinese } from "../lib/console-auth-strings";
-import { chinese as zhCNSandbox } from "../lib/locale-strings";
+import { firstRun as zhCNFirstRun } from "./locales/zh-CN/first-run";
+import { sandbox as zhCNSandbox } from "./locales/zh-CN/sandbox";
 
 const enSandbox = Object.fromEntries(
   Object.keys(zhCNSandbox).map((key) => [key, key]),
 ) as { [K in keyof typeof zhCNSandbox]: K };
-
-const zhCNFirstRun = {
-  ...consoleAuthChinese,
-} as const;
 
 const enFirstRun = Object.fromEntries(
   Object.keys(zhCNFirstRun).map((key) => [key, key]),

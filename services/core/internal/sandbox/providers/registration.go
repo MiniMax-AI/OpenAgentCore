@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -15,14 +16,14 @@ func ValidateRegistration(a Adapter) error {
 		return fmt.Errorf("%w: invalid registration %s", providercontract.ErrContract, field)
 	}
 	switch a.Mode {
-	case "nodes":
+	case sandbox.DeploymentNodes:
 		if err := validateNodeArtifacts(a.NodeArtifacts); err != nil {
 			return err
 		}
 		if a.BuildLocal == nil || a.BuildDirect != nil {
 			return invalid("node constructor")
 		}
-	case "direct":
+	case sandbox.DeploymentDirect:
 		if len(a.NodeArtifacts) != 0 {
 			return invalid("direct node artifacts")
 		}
@@ -41,8 +42,19 @@ func ValidateRegistration(a Adapter) error {
 	if err := validateConfigurationAdapter(a.Configuration); err != nil {
 		return err
 	}
-	if a.Policy.Runtime == (a.Policy.RuntimeError != "") {
+	if (len(a.Policy.Artifacts) != 0) == (a.Policy.RuntimeError != "") {
 		return invalid("Runtime input policy")
+	}
+	for name, rule := range a.Policy.Artifacts {
+		pattern, err := regexp.Compile("^(?:" + rule.Pattern + ")$")
+		if !regexp.MustCompile(`^[a-z][a-z0-9_]*$`).MatchString(name) || err != nil || pattern.MatchString("") || len(rule.ManifestPath) == 0 {
+			return invalid("Runtime artifact declaration")
+		}
+		for _, key := range rule.ManifestPath {
+			if key == "" {
+				return invalid("Runtime artifact manifest path")
+			}
+		}
 	}
 	if a.Operations == nil {
 		return invalid("operation declaration")
@@ -53,7 +65,7 @@ func ValidateRegistration(a Adapter) error {
 	}
 	// The common lifecycle suspends only node allocations, so only a nodes
 	// registration may declare checkpoint support.
-	if operations["Initial"].State == providercontract.Supported && a.Mode != "nodes" {
+	if operations["Initial"].State == providercontract.Supported && a.Mode != sandbox.DeploymentNodes {
 		return invalid("checkpoint support outside nodes mode")
 	}
 	if a.Policy.DefaultResources != nil && a.ValidateResources(*a.Policy.DefaultResources) != nil {

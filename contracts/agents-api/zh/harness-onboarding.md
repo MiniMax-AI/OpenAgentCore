@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: cca9f9c4fc43a49fdc08af5e8eac860bf8d0bfaa11531d1aacd2e491499ced3d
+source_hash: 84ebd7cebed1995c89a59f8c4c71542ca41ef6ccc890b4eba96340a970ae161c
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -197,7 +197,7 @@ Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/har
 4. **回归。** 现有 Harness 必须继续正常工作。先运行定向测试，然后运行 `make check`；API 更改后运行 `make openapi`，查询更改后运行 `make sqlc-generate`。
 5. **审查。** 遵循 [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
 
-Environment 验收使用 `services/core/tests/official_environment_{templates,setup,skills,plugins,plugin_mcp,composition,initial_files,network,skill_references}.py`。对于组合式准备，请更改 Skill 默认值和 Template，删除源文件，重试并重启；验证冻结字节、一次 setup 执行和 MCP 取消。`official_hosted_structured_native.py` 覆盖托管结构化输出。随每项验收结果记录精确源修订版本、原生版本和命令。
+Environment 验收使用 `services/core/tests/official_environment_{templates,setup,skills,plugins,plugin_mcp,composition,initial_files,network,skill_references}.py`。通过[公共验收运行器](#qualify-the-public-path)的 `composition` 套件运行组合式准备验收。`official_hosted_structured_native.py` 覆盖托管结构化输出。随每项验收结果记录精确源修订版本、原生版本和命令。
 
 将 Provider 密钥保存在私有操作员文件中，绝不能放入提交或日志。相对于 `apps/daemon/internal/agent` 的现有定向测试如下：
 
@@ -231,8 +231,13 @@ python services/core/tests/qualify_public_native.py \
 | `functions` | SDK handler、成功/错误、原生文件和 Artifact 字节、继续执行、待处理调用取消和租户隔离 | 工作区 |
 | `images` | 初始和活动图像、图像结果、重试/原子拒绝、原生文件/Artifact、隔离和继续执行 | 声明支持图像和函数的工作区 |
 | `structured` | 保存和内联 schema、函数辅助原生文件、精确 JSON/SSE、取消和文本覆盖 | 声明支持结构化输出和函数的工作区 |
+| `composition` | 冻结的源快照、初始字节、有序 setup、包、Skills、stdio MCP、继续执行和取消 | `openai_hosted` |
 
-对于 `self_hosted`，选择自定义绝对 `workspace_directory`。运行器打印每个新 Session ID 后，使用该 Session 的公共安装命令连接独立的隔离机器或容器；运行器最多等待五分钟。多个 Session 不得共享工作区。使用现有 Environment setup、包和能力断言单独验证准备语义。独立的 `official_environment_files_native.py` 检查接受两个已连接的 self-hosted Session，通过 Environment owner 验证 Files.list 排序、分页和隔离。
+对于 `composition`，设置中的 `environment` 必须恰好为 `{"type":"openai_hosted"}`；套件创建自己的 Template、文件和 Skill 来源。它检查初始二进制字节、有序 setup、npm 和 Python 包、上传的 Skill、插件 Skill 和目录 Skill，以及三个真实 stdio MCP 工具的身份、Item 和结果。更改或删除源资源后，它通过热继续执行验证冻结的准备结果；选用重启时，还通过现有的 Compose 验证 agent-host 重启流程进行检查。取消必须使 MCP 后代进程停止产生文件副作用。套件清理其创建的全部资源。
+
+私有所有者与凭据隔离仍为 `unverified`；肯定性的 canary 证据需要使用操作员拥有的资源独立验证。套件不请求当前契约拒绝的 `packages.system` 或 stdio MCP `env_vars`。
+
+对于 `self_hosted`，选择自定义绝对 `workspace_directory`。运行器打印每个新 Session ID 后，使用该 Session 的公共安装命令连接独立的隔离机器或容器；运行器最多等待五分钟。多个 Session 不得共享工作区。独立的 `official_environment_files_native.py` 检查接受两个已连接的 self-hosted Session，通过 Environment owner 验证 Files.list 排序、分页和隔离。
 
 默认验证热继续执行，并将冷恢复记录为 `unverified`。验证冷继续执行时，额外传入指向所拥有安装的绝对目录的 `--compose-directory`，以及指定其精确项目名称的 `--compose-project`。运行器仅重启该项目的 `agent-host`，确认容器启动时间已改变，然后执行相同的历史断言。这不能证明 Core 重启或 sandbox 检查点恢复。`pending-actions` 套件重连的是公共客户端，而非 agent-host 进程，因此拒绝这些重启选项。仅在[声明和覆盖台账](./index.md#known-gaps) 支持时选择冷恢复；不支持的恢复仍是缺口，不能把跳过的检查记为成功。API 拒绝会使所选套件失败。
 

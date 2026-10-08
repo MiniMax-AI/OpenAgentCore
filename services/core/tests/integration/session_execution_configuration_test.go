@@ -23,8 +23,8 @@ func executionProjectionInput(source string) sessions.CreateSession {
 		Creator: FixtureCreator(), Engine: harness, IdempotencyKey: uuid.NewString(),
 		Configuration: []byte(`{"agent":{"model":"frozen-model"},"environment":{"type":"openai_hosted"}}`),
 		ExecutionConfiguration: &v1.SessionExecutionConfiguration{
-			Model:         v1.ExecutionSelection{Value: &model, Source: source},
-			Harness:       v1.ExecutionSelection{Value: &harness, Source: source},
+			Model:         v1.ExecutionSelection{Value: &model, Source: v1.ExecutionSource(source)},
+			Harness:       v1.ExecutionSelection{Value: &harness, Source: v1.ExecutionSource(source)},
 			ModelProvider: v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"},
 		},
 	}
@@ -39,7 +39,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				tenant := uuid.NewString()
 				input := executionProjectionInput(source)
 				input.ModelProvider = &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://private-deployment.example/v1", APIKey: "private-projection-key-canary"}
-				input.ExecutionConfiguration.ModelProvider = v1.ExecutionProviderSelection{Source: source, Status: "available", Configuration: input.ModelProvider.SafeView()}
+				input.ExecutionConfiguration.ModelProvider = v1.ExecutionProviderSelection{Source: v1.ExecutionSource(source), Status: "available", Configuration: input.ModelProvider.SafeView()}
 				input.ExecutionConfiguration.Object = "untrusted-object"
 				input.ExecutionConfiguration.SchemaVersion = 99
 				input.ExecutionConfiguration.SessionID = "untrusted-session"
@@ -60,7 +60,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				if err != nil {
 					t.Fatal(err)
 				}
-				if frozen.Object != "agent.session.execution_configuration" || frozen.SchemaVersion != 1 || frozen.SessionID != session.ID || frozen.Model.Source != source || frozen.Harness.Source != source {
+				if frozen.Object != "agent.session.execution_configuration" || frozen.SchemaVersion != 1 || frozen.SessionID != session.ID || frozen.Model.Source != v1.ExecutionSource(source) || frozen.Harness.Source != v1.ExecutionSource(source) {
 					t.Fatal("incorrect frozen projection identity or provenance")
 				}
 				// Deployment defaults are readable with the same Core key, so every

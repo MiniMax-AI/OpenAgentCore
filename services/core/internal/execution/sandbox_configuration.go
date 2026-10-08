@@ -159,7 +159,7 @@ func (w *Worker) ObservationSource(ctx context.Context) (runtimeobs.Source, stri
 // provider builds the setup's provider. The setup carries the mode and
 // declared operations that deployment read from the provider's registration.
 func (s *runtimeManager) provider(setup deployment.Setup) (sandbox.SandboxProvider, error) {
-	if setup.Mode == "nodes" {
+	if setup.Mode == string(sandbox.DeploymentNodes) {
 		if s.nodeProviders == nil {
 			return nil, errors.New("sandbox node transport is unavailable")
 		}

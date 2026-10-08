@@ -14,9 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
@@ -32,6 +29,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var creator = identity.Subject{Kind: "service_account", ID: "test-runner"}
@@ -382,7 +381,7 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 	input := sessions.CreateSession{
 		Creator: creator, Engine: "codex", IdempotencyKey: "frozen", Configuration: environmentConfiguration,
 		ModelProvider:       &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: canary},
-		ModelProviderSource: v1.ModelProviderSourceSession,
+		ModelProviderSource: v1.ExecutionSourceSession,
 		Initialization:      environmentconfig.Setup{Skills: []environmentconfig.Skill{inline, reference}},
 		InitialFiles:        []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte(canary)}, fileID},
 	}
@@ -474,9 +473,7 @@ func TestHostedCreationAdmitsAndPlacesUnderTheDeploymentLock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tenant := uuid.NewString()
-	nodes, err := json.Marshal(sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40),
-		ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64),
-		RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}})
+	nodes, err := json.Marshal(sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), Artifacts: map[string]string{"image_id": "sha256:" + strings.Repeat("b", 64), "image_manifest_digest": "sha256:" + strings.Repeat("c", 64)}}})
 	if err != nil {
 		t.Fatal(err)
 	}

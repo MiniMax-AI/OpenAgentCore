@@ -147,10 +147,10 @@ func TestUnresolvedPreparationRemainsRecoveryOnly(t *testing.T) {
 // Preparation may resolve native state, such as the digest a containerd image
 // store names the loaded Runtime image by; the envelope stays fixed.
 func TestGenerationPlanFixesOnlyTheEnvelope(t *testing.T) {
-	release := sandbox.RuntimeRelease{ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64)}
-	plan := sandbox.NodeConfig{InstallationID: "installation", Generation: 2, Provider: "docker", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &release}, Native: json.RawMessage(`{"image":"` + release.ImageID + `"}`)}
+	release := sandbox.RuntimeRelease{Artifacts: map[string]string{"image_id": "sha256:" + strings.Repeat("b", 64), "image_manifest_digest": "sha256:" + strings.Repeat("c", 64)}}
+	plan := sandbox.NodeConfig{InstallationID: "installation", Generation: 2, Provider: "docker", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &release}, Native: json.RawMessage(`{"image":"` + release.Artifacts["image_id"] + `"}`)}
 	final := plan
-	final.Native = json.RawMessage(`{"image":"` + release.ImageManifestDigest + `"}`)
+	final.Native = json.RawMessage(`{"image":"` + release.Artifacts["image_manifest_digest"] + `"}`)
 	if !sameGenerationPlan(final, plan) {
 		t.Fatal("refused a resolved native image")
 	}

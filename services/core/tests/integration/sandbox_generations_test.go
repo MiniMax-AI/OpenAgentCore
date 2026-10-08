@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
 
@@ -292,14 +292,14 @@ func TestSandboxSnapshotRolloutEquivalence(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			connection := onlineManagerNode(t, s, node.NodeID)
 			want := deployment.RolloutNodes{}
-			wantState := "settled"
+			wantState := deployment.RolloutSettled
 			switch state {
 			case "ready":
 				want.Ready = 1
 			case "preparing":
 				heartbeat(connection, "preparing")
 				want.Preparing = 1
-				wantState = "preparing"
+				wantState = deployment.RolloutPreparing
 			case "failed":
 				heartbeat(connection, "failed")
 				want.Failed = 1

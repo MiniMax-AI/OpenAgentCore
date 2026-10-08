@@ -95,8 +95,9 @@ func testSpecification(provider string) sandbox.DeploymentSpec {
 	if provider == "e2b" {
 		return s
 	}
-	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
+	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), Artifacts: map[string]string{"image_id": "sha256:" + strings.Repeat("b", 64), "image_manifest_digest": "sha256:" + strings.Repeat("c", 64)}}
 	if provider == "microsandbox" {
+		s.Runtime.Artifacts = map[string]string{"microsandbox_ref": "oac-runtime@sha256:" + strings.Repeat("d", 64), "runtime_sha256": strings.Repeat("e", 64), "firmware_sha256": strings.Repeat("f", 64)}
 		s.Resources.RootDiskMiB = 8192
 		s.Resources.EnvironmentDiskMiB = 8192
 	}

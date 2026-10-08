@@ -1,5 +1,5 @@
-import { consoleAuthChinese } from "./console-auth-strings";
-export const chinese = {
+import { firstRun } from "./first-run";
+export const sandbox = {
   "E2B provider": "E2B 服务商",
   "Other E2B-compatible provider": "其他兼容 E2B 的服务商",
   "Loading templates…": "正在读取模板…",
@@ -13,7 +13,7 @@ export const chinese = {
   "Select a ready build": "选择 ready 构建",
   "Core validates the exact ready build again when you save.": "保存时 Core 会再次校验所选的 ready 构建。",
   "The selected provider supplies a default. You can edit it for a compatible endpoint.": "服务商已带出默认地址，也可以修改为兼容接口。",
-  ...consoleAuthChinese,
+  ...firstRun,
   "Hosted Sessions will be archived permanently. Deployment configuration and node registrations will be cleared. Unsaved workspace contents may be lost.": "托管 Session 将归档且无法恢复，部署配置与节点注册将清除。未保存的工作区内容可能丢失。",
   "What reset affects": "重置影响范围",
   "How automatic reset works": "自动清理规则",
@@ -421,4 +421,3 @@ export const chinese = {
   "{{name}} is still bound to an old Core address. Remove it and add it again.": "{{name}} 仍绑定在旧的 Core 地址上，需要移除后重新添加。",
   "{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.": "有 {{count}} 个节点仍绑定在旧的 Core 地址上：{{names}}。需要移除后重新添加。",
 } as const;
-export type MessageKey = keyof typeof chinese;

@@ -6,6 +6,15 @@ import time
 from openai import APIStatusError
 
 
+def delete_source(resource, identifier):
+    """Clean an owned source that the frozen-snapshot check may already delete."""
+    try:
+        resource.delete(identifier)
+    except APIStatusError as exc:
+        if exc.status_code != 404:
+            raise
+
+
 def delete_session(sessions, session_id, timeout=60):
     """Delete an owned Session from a ``finally`` block.
 

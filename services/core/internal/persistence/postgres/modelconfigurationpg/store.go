@@ -10,16 +10,16 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // auditResource is the administrator audit resource type of a deployment
@@ -77,7 +77,7 @@ func (s *Store) Replace(ctx context.Context, record modelconfiguration.Record) (
 	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
 		row, err := q.UpsertDeploymentModelProvider(ctx, sqlc.UpsertDeploymentModelProviderParams{
-			Harness: record.Harness, Protocol: record.Provider.Protocol, BaseUrl: record.Provider.BaseURL,
+			Harness: record.Harness, Protocol: string(record.Provider.Protocol), BaseUrl: record.Provider.BaseURL,
 			ContextWindow: record.Provider.ContextWindow, MaxOutputTokens: record.Provider.MaxOutputTokens,
 			Model: record.Model, HarnessConfig: record.HarnessConfig, EncryptedConfig: sealed,
 			Revision: pgtype.UUID{Bytes: uuid.New(), Valid: true},
@@ -180,10 +180,11 @@ func configuration(row sqlc.ListDeploymentModelProvidersRow) modelconfiguration.
 	result := modelconfiguration.Configuration{
 		Harness: row.Harness, Model: row.Model, HarnessConfig: json.RawMessage(row.HarnessConfig), UpdatedAt: row.UpdatedAt.Time,
 		LastUsedAt: timestamp(row.LastUsedAt), LastErrorAt: timestamp(row.LastErrorAt),
-		Provider: v1.ModelProviderView{Protocol: row.Protocol, BaseURL: row.BaseUrl, ContextWindow: row.ContextWindow, MaxOutputTokens: row.MaxOutputTokens, APIKeyConfigured: true},
+		Provider: v1.ModelProviderView{Protocol: modelprovider.Protocol(row.Protocol), BaseURL: row.BaseUrl, ContextWindow: row.ContextWindow, MaxOutputTokens: row.MaxOutputTokens, APIKeyConfigured: true},
 	}
 	if row.LastErrorCode.Valid {
-		result.LastErrorCode = &row.LastErrorCode.String
+		code := modelconfiguration.ProviderErrorCode(row.LastErrorCode.String)
+		result.LastErrorCode = &code
 	}
 	return result
 }

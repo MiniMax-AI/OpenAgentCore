@@ -17663,6 +17663,19 @@
         "additionalProperties": false,
         "description": "Confirmation that a vault credential was deleted."
       },
+      "modelprovider.Protocol": {
+        "enum": [
+          "anthropic",
+          "responses",
+          "chat_completions"
+        ],
+        "type": "string",
+        "x-enum-varnames": [
+          "Anthropic",
+          "Responses",
+          "ChatCompletions"
+        ]
+      },
       "v1.AgentsCore": {
         "properties": {
           "harness": {
@@ -17694,17 +17707,24 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "available",
-              "unavailable"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/v1.InstallationStatus"
           },
           "version": {
             "type": "string"
           }
         },
         "type": "object"
+      },
+      "v1.InstallationStatus": {
+        "enum": [
+          "available",
+          "unavailable"
+        ],
+        "type": "string",
+        "x-enum-varnames": [
+          "InstallationAvailable",
+          "InstallationUnavailable"
+        ]
       },
       "v1.ModelProviderInput": {
         "properties": {
@@ -17721,12 +17741,7 @@
             "type": "integer"
           },
           "protocol": {
-            "enum": [
-              "anthropic",
-              "responses",
-              "chat_completions"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/modelprovider.Protocol"
           }
         },
         "required": [
@@ -17751,12 +17766,7 @@
             "type": "integer"
           },
           "protocol": {
-            "enum": [
-              "anthropic",
-              "responses",
-              "chat_completions"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/modelprovider.Protocol"
           }
         },
         "required": [

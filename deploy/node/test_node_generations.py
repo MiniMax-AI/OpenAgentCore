@@ -1,4 +1,5 @@
 """Collection retains bytes until local helper ownership settles."""
+import copy
 import fcntl
 import os
 import json
@@ -22,7 +23,7 @@ class CollectionTests(unittest.TestCase):
         self.directory = self.root / "state/node/generations"
         self.directory.mkdir(parents=True, mode=0o700)
         self.value = {"installation_id": "test-installation", "generation": 1, "provider": "docker", "native": {"image": "sha256:" + "a" * 64},
-                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}, "runtime": {"source_commit": "b" * 40, "image_id": "sha256:" + "a" * 64, "image_manifest_digest": "sha256:" + "c" * 64, "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64, "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}}
+                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}, "runtime": {"source_commit": "b" * 40, "artifacts": {"image_id": "sha256:" + "a" * 64, "image_manifest_digest": "sha256:" + "c" * 64}}}}
         self.args = SimpleNamespace(installation_id="test-installation", generation=1, specification_digest=node_spec.digest("docker", self.value["specification"]))
         self.release = self.root / "releases" / ("b" * 40)
         self.value["native"]["seccomp_file"] = str(self.release / "runtime/seccomp.json")
@@ -39,6 +40,31 @@ class CollectionTests(unittest.TestCase):
         with node_generations.collection_lease(self.root, self.args.generation, installer,
                                                node_generations.marker_identity(self.args), initialize=True):
             pass
+
+    def test_old_release_shape_rejects_before_preparation_or_collection_mutates_state(self):
+        old = copy.deepcopy(self.value)
+        release = old["specification"]["runtime"]
+        release.update(release.pop("artifacts"))
+        release.update(microsandbox_ref="oac-runtime@sha256:" + "d" * 64,
+                       runtime_sha256="e" * 64, firmware_sha256="f" * 64)
+        for location in ("provider", "generation", "preparation"):
+            with self.subTest(location=location):
+                node_generations.atomic_json(self.root / "provider.json", self.value)
+                path = self.root / "provider.json" if location == "provider" else self.directory / ("1.json" if location == "generation" else "1.preparing")
+                content = old if location != "preparation" else dict(
+                    node_generations.marker_identity(self.args), import_started=True, configuration=old)
+                node_generations.atomic_json(path, content)
+                before = {str(file.relative_to(self.root)): file.read_bytes() for file in self.root.rglob("*") if file.is_file()}
+                # The install lock is allowed to exist, but no generation journal,
+                # retained configuration or artifact may be created or changed.
+                for action in (node_generations.prepare, node_generations.collect):
+                    with self.assertRaisesRegex(ValueError, "Invalid release fields"):
+                        action(self.args, installer)
+                    after = {str(file.relative_to(self.root)): file.read_bytes() for file in self.root.rglob("*") if file.is_file() and file.name != "install.lock"}
+                    self.assertEqual(after, {name: raw for name, raw in before.items() if name != "install.lock"})
+                    installer.checked.assert_not_called()
+                if location != "provider":
+                    path.unlink()
 
     def test_busy_helper_refuses_all_mutations_then_same_inode_collects(self):
         lease = self.directory / "1.lease"
@@ -166,14 +192,18 @@ class CollectionTests(unittest.TestCase):
 
     def micro_fixture(self):
         self.value["provider"] = "microsandbox"
+        self.value["specification"]["resources"].update(root_disk_mib=8192, environment_disk_mib=8192)
+        self.value["specification"]["runtime"]["artifacts"] = {
+            "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64,
+            "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}
         home = self.root / "micro-store"
         home.mkdir(mode=0o700)
         node_generations.atomic_json(home / "oac-installation.json", {"installation_id": self.args.installation_id})
         runtime = self.release / "msb"
         runtime.write_bytes(b"verified native executable")
         runtime.chmod(0o700)
-        image = self.value["specification"]["runtime"]["microsandbox_ref"]
-        self.value["specification"]["runtime"]["runtime_sha256"] = hashlib.sha256(runtime.read_bytes()).hexdigest()
+        image = self.value["specification"]["runtime"]["artifacts"]["microsandbox_ref"]
+        self.value["specification"]["runtime"]["artifacts"]["runtime_sha256"] = hashlib.sha256(runtime.read_bytes()).hexdigest()
         self.value["native"] = {"helper_path": str(self.release / "helper"), "runtime_home": str(home), "runtime_path": str(runtime), "firmware_path": str(self.release / "firmware")}
         self.args.specification_digest = node_spec.digest("microsandbox", self.value["specification"])
         node_generations.atomic_json(self.root / "provider.json", self.value)

@@ -5,14 +5,14 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var _ sessions.SessionStorage = (*Store)(nil)
@@ -51,7 +51,7 @@ func (t *deletionTx) ApplyDeletion(ctx context.Context) error {
 }
 
 func (t *deletionTx) RecordDeletionAudit(ctx context.Context) error {
-	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, "delete", "session", uuid.UUID(t.session.Bytes).String(), "")
+	return auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, writeaudit.ActionDelete, writeaudit.ResourceSession, uuid.UUID(t.session.Bytes).String(), "")
 }
 
 func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID string, encoded []byte) (sessions.Session, error) {
@@ -66,7 +66,7 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 		if err != nil {
 			return err
 		}
-		if err := auditpg.RecordWriteAudit(ctx, q, tenantID, "update", "session", uuid.UUID(row.ID.Bytes).String(), ""); err != nil {
+		if err := auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdate, writeaudit.ResourceSession, uuid.UUID(row.ID.Bytes).String(), ""); err != nil {
 			return err
 		}
 		if session, err = sessionFromRow(row); err != nil {
@@ -86,6 +86,6 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 
 func (s *Store) AuditSessionOperation(ctx context.Context, tenantID, sessionID, action string) error {
 	return s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, action, "session", uuid.UUID(session.Bytes).String(), "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.Action(action), writeaudit.ResourceSession, uuid.UUID(session.Bytes).String(), "")
 	})
 }

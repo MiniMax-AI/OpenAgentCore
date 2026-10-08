@@ -19,7 +19,7 @@ function nodeDiagnostic(node: SandboxNode): string {
 
 function Diagnostic({ value }: { value: string }) {
   const { i18n } = useTranslation("sandbox");
-  const message = sandboxDiagnosticMessage(value, i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en");
+  const message = sandboxDiagnosticMessage(value, i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en");
   if (!message) return <>{MISSING}</>;
   return <span className="node-diagnostic">{message.label}<HelpTip label={message.label}>{message.advice}</HelpTip></span>;
 }
@@ -49,7 +49,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage;
-  const shortLocale = locale?.startsWith("zh") ? "zh" : "en";
+  const shortLocale = locale?.startsWith("zh") ? "zh-CN" : "en";
   const now = Math.floor(Date.now() / 1000);
   const own = allocations.filter((allocation) => allocation.node_id === node.id);
   const reporting = !stale && node.online;

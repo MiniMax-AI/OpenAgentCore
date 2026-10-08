@@ -8,6 +8,8 @@ A sandbox node runs the Docker or microsandbox Provider on its host and connects
 
 Every frame is one JSON text message whose `version` equals `node.ProtocolVersion`; both peers reject any other version, and there is no fallback decoder. Member names are exact and unique: unknown members, case aliases, duplicates and unexpected nulls are rejected. Control frames (`hello`, `welcome`, `heartbeat`, `heartbeat_ack`, `retention`, `retention_ack`) are at most 32 KiB; `request` and `response` frames at most 1 MiB. An invalid frame closes the connection.
 
+The connection carries generation numbers and opaque specification digests; it does not carry the [Runtime release object](./sandbox-deployment.md#runtime-release). HTTP configuration supplies the specification. Local provider configurations and preparation, collection, drop and lease-identity journals bind that exact specification and digest. Loading a configuration rejects an incompatible release shape before publishing a provider, changing a journal or deleting files; it never adopts or rewrites another installation release's state. See the [installation version policy](../../docs/getting-started/operations.md#installation-version-policy).
+
 ## Connection
 
 1. The node dials `/api/v1/sandbox-node/connect?node_id=<uuid>` on its stored Core origin (`wss` for `https`) with its node credential as a Bearer header. Core answers 401 to a rejected credential, which the node treats as permanent; any other failure, including a 403 from a proxy, is retried with bounded backoff. Core refuses a second connection for a node identity while one is opening, live or closing, with 409.

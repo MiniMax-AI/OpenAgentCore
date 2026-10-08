@@ -7,14 +7,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // The recorders run in the caller's business transaction: q must belong to it,
@@ -26,9 +25,9 @@ import (
 // provenance, such as internal lifecycle work, stays unattributed; malformed
 // provenance fails closed with writeaudit.ErrInvalidSource. A request that
 // already recorded its operation records nothing more.
-func RecordWriteAudit(ctx context.Context, q *sqlc.Queries, tenant, action, resourceType, resourceID, parentID string, created ...writeaudit.Resource) error {
+func RecordWriteAudit(ctx context.Context, q *sqlc.Queries, tenant string, action writeaudit.Action, resourceType writeaudit.ResourceType, resourceID, parentID string, created ...writeaudit.Resource) error {
 	if _, ok := adminaudit.FromContext(ctx); ok {
-		return RecordAdminMutation(ctx, q, tenant, action, resourceType, resourceID)
+		return RecordAdminMutation(ctx, q, tenant, string(action), string(resourceType), resourceID)
 	}
 	source, ok := writeaudit.FromContext(ctx)
 	if !ok {
@@ -45,7 +44,7 @@ func RecordWriteAudit(ctx context.Context, q *sqlc.Queries, tenant, action, reso
 	id, err := q.InsertWriteAuditOperation(ctx, sqlc.InsertWriteAuditOperationParams{
 		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenantID,
 		KeyID: source.KeyID, KeyName: source.Name, KeyPrefix: source.Prefix, KeyKind: source.Kind,
-		Action: action, ResourceType: resourceType, ResourceID: resourceID, ParentID: parentID, RequestID: source.RequestID, TraceID: source.TraceID,
+		Action: string(action), ResourceType: string(resourceType), ResourceID: resourceID, ParentID: parentID, RequestID: source.RequestID, TraceID: source.TraceID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -54,7 +53,7 @@ func RecordWriteAudit(ctx context.Context, q *sqlc.Queries, tenant, action, reso
 		return err
 	}
 	for _, resource := range created {
-		if err := q.InsertWriteAuditOwner(ctx, sqlc.InsertWriteAuditOwnerParams{TenantID: tenantID, ResourceType: resource.Type, ResourceID: resource.ID, ParentID: resource.ParentID, OperationID: id}); err != nil {
+		if err := q.InsertWriteAuditOwner(ctx, sqlc.InsertWriteAuditOwnerParams{TenantID: tenantID, ResourceType: string(resource.Type), ResourceID: resource.ID, ParentID: resource.ParentID, OperationID: id}); err != nil {
 			return err
 		}
 	}

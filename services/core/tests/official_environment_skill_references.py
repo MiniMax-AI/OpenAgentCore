@@ -6,13 +6,15 @@ import zipfile
 
 from official_environment_skills import inline_skill
 from official_session_artifacts import verify_session_artifacts
+from session_cleanup import delete_source
 
 
-def upload_reference_skill(client):
+def upload_reference_skill(client, cleanup):
     inline, expected = inline_skill()
     with zipfile.ZipFile(io.BytesIO(base64.b64decode(inline["source"]["data"]))) as archive:
         files = [(name, archive.read(name), "application/octet-stream") for name in archive.namelist()]
     skill = client.skills.create(files=files)
+    cleanup.callback(delete_source, client.skills, skill.id)
     assert skill.default_version == "1"
     return skill, expected
 

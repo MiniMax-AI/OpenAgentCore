@@ -352,7 +352,7 @@ export interface EnvironmentInstallation {
   commands?: Record<string, string>;
   expires_at?: number;
   message?: string;
-  status?: "available" | "unavailable";
+  status?: InstallationStatus;
   version?: string;
 }
 export const environmentInstallationFields = ["commands", "expires_at", "message", "status", "version"] as const;
@@ -639,6 +639,8 @@ export interface InputTokensDetailsResource {
   cached_tokens: number;
 }
 export const inputTokensDetailsResourceFields = ["cached_tokens"] as const;
+export const installationStatusValues = ["available", "unavailable"] as const;
+export type InstallationStatus = (typeof installationStatusValues)[number];
 export interface InterruptSubagentCallItemResource {
   type: "interrupt_subagent_call";
   id: string;
@@ -768,7 +770,7 @@ export interface ModelProviderInput {
   base_url: string;
   context_window?: number;
   max_output_tokens?: number;
-  protocol: "anthropic" | "responses" | "chat_completions";
+  protocol: Protocol;
 }
 export const modelProviderInputFields = ["api_key", "base_url", "context_window", "max_output_tokens", "protocol"] as const;
 export const modelProviderInputRequired = ["api_key", "base_url", "protocol"] as const;
@@ -777,7 +779,7 @@ export interface ModelProviderView {
   base_url: string;
   context_window?: number;
   max_output_tokens?: number;
-  protocol: "anthropic" | "responses" | "chat_completions";
+  protocol: Protocol;
 }
 export const modelProviderViewFields = ["api_key_configured", "base_url", "context_window", "max_output_tokens", "protocol"] as const;
 export const modelProviderViewRequired = ["api_key_configured", "base_url", "protocol"] as const;
@@ -943,6 +945,8 @@ export interface PersistedMcpTransportResourceStdio {
   env_vars: string[];
 }
 export const persistedMcpTransportResourceStdioFields = ["type", "command", "args", "cwd", "env_vars"] as const;
+export const protocolValues = ["anthropic", "responses", "chat_completions"] as const;
+export type Protocol = (typeof protocolValues)[number];
 export interface PublicEnvironmentResource {
   id: string;
   object: "agent.environment";

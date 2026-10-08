@@ -7,12 +7,12 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/google/uuid"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
 )
 
 var enginePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
@@ -46,7 +46,7 @@ type CreateSession struct {
 	DeploymentProviderRevision uuid.UUID `json:"-"`
 	ExecutionConfiguration     *v1.SessionExecutionConfiguration
 	ModelProvider              *v1.ModelProviderInput
-	ModelProviderSource        string // session, agent or deployment
+	ModelProviderSource        v1.ExecutionSource // session, agent or deployment
 	Initialization             environmentconfig.Setup
 	InitialFiles               []environmentconfig.InitialFile
 	Creator                    identity.Subject
@@ -186,7 +186,7 @@ type AuditSessionOperationCommand struct {
 // replay on the visible Session. It cannot create ownership or admit execution
 // work. Another action is ErrInvalidInput.
 func (s *Service) AuditSessionOperation(ctx context.Context, command AuditSessionOperationCommand) error {
-	if command.Action != "create" && command.Action != "send_events" {
+	if command.Action != string(writeaudit.ActionCreate) && command.Action != string(writeaudit.ActionSendEvents) {
 		return ErrInvalidInput
 	}
 	return s.storage.AuditSessionOperation(ctx, command.TenantID, command.SessionID, command.Action)

@@ -28,7 +28,7 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 	}
 	script := []byte("#!/bin/sh\nprintf '%s' '{}'\n")
 	digest := sha256.Sum256(script)
-	release := sandbox.RuntimeRelease{MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:])}
+	release := sandbox.RuntimeRelease{Artifacts: map[string]string{"microsandbox_ref": "oac-runtime@sha256:" + strings.Repeat("d", 64), "runtime_sha256": hex.EncodeToString(digest[:]), "firmware_sha256": hex.EncodeToString(digest[:])}}
 	config := sandbox.NodeConfig{Provider: "microsandbox", Generation: 9, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192}, Runtime: &release}, Native: raw}
 	for _, path := range []string{native.RuntimePath, native.FirmwarePath, native.HelperPath} {
 		if err := os.WriteFile(path, script, 0700); err != nil {

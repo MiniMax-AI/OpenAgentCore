@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ func generationConfig(t *testing.T) (sandbox.NodeConfig, sandboxmicro.Native) {
 	t.Helper()
 	dir := t.TempDir()
 	spec := validRegistrationSpec()
+	spec.Runtime.Artifacts = map[string]string{"microsandbox_ref": "oac-runtime@sha256:" + strings.Repeat("d", 64), "runtime_sha256": strings.Repeat("e", 64), "firmware_sha256": strings.Repeat("f", 64)}
 	spec.Resources.RootDiskMiB, spec.Resources.EnvironmentDiskMiB = 8192, 8192
 	native := sandboxmicro.Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
 		Network: sandboxmicro.Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
@@ -153,7 +155,7 @@ func TestMicrosandboxGenerationRejectsUnpinnedImage(t *testing.T) {
 	for _, image := range []string{"latest", "oac-runtime@sha256:bad", "oac-runtime@sha256:"} {
 		t.Run(image, func(t *testing.T) {
 			config, _ := generationConfig(t)
-			config.Specification.Runtime.MicrosandboxRef = image
+			config.Specification.Runtime.Artifacts["microsandbox_ref"] = image
 			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: t.TempDir()})
 			closeProvider()
 			if err == nil || built != nil {

@@ -75,7 +75,7 @@ func NewGenerationManager(ctx context.Context, options GenerationManagerOptions)
 			cancel()
 			return nil, sandbox.ErrInvalid
 		}
-		m.values[ref.Generation] = &localGeneration{value: GenerationProvider{Generation: ref.Generation, SpecificationDigest: ref.SpecificationDigest}, state: "failed", diagnostic: sandbox.NodeProviderUnavailable, repairing: true}
+		m.values[ref.Generation] = &localGeneration{value: GenerationProvider{Generation: ref.Generation, SpecificationDigest: ref.SpecificationDigest}, state: "failed", diagnostic: string(sandbox.NodeProviderUnavailable), repairing: true}
 	}
 	for _, ref := range options.Collect {
 		if !validGeneration(ref.Generation) || !validSpecificationDigest(ref.SpecificationDigest) || m.values[ref.Generation] != nil {

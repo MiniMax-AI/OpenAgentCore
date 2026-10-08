@@ -383,6 +383,16 @@ definitions:
       - failed_at
       - params
     type: object
+  api.DiagnosticSource:
+    enum:
+      - turn
+      - environment
+      - environment_input
+    type: string
+    x-enum-varnames:
+      - DiagnosticTurn
+      - DiagnosticEnvironment
+      - DiagnosticEnvironmentInput
   api.EnvironmentExecutorCredentialRequest:
     properties:
       key_id:
@@ -404,16 +414,22 @@ definitions:
         type: string
         x-nullable: true
       status:
-        enum:
-          - never_enrolled
-          - connected
-          - disconnected
-        type: string
+        $ref: '#/definitions/api.ExecutorConnectionStatus'
     required:
       - bound_key_id
       - enrolled_at
       - status
     type: object
+  api.ExecutorConnectionStatus:
+    enum:
+      - never_enrolled
+      - connected
+      - disconnected
+    type: string
+    x-enum-varnames:
+      - ExecutorNeverEnrolled
+      - ExecutorConnected
+      - ExecutorDisconnected
   api.ExecutorCredentialList:
     properties:
       connection:
@@ -441,17 +457,8 @@ definitions:
         type: string
         x-nullable: true
       last_error_code:
-        enum:
-          - authentication_error
-          - connection_failed
-          - rate_limit_exceeded
-          - usage_limit_exceeded
-          - server_overloaded
-          - server_error
-          - resource_not_found
-          - request_timeout
-          - invalid_request
-        type: string
+        allOf:
+          - $ref: '#/definitions/modelconfiguration.ProviderErrorCode'
         x-nullable: true
       last_used_at:
         format: date-time
@@ -525,6 +532,14 @@ definitions:
     required:
       - settings
     type: object
+  api.InstallationService:
+    enum:
+      - core
+      - web
+    type: string
+    x-enum-varnames:
+      - InstallationCore
+      - InstallationWeb
   api.InstallationSetting:
     properties:
       changeable:
@@ -541,10 +556,7 @@ definitions:
       restarts:
         description: Services that restart when the setting changes.
         items:
-          enum:
-            - core
-            - web
-          type: string
+          $ref: '#/definitions/api.InstallationService'
         type: array
       sensitive:
         type: boolean
@@ -743,11 +755,7 @@ definitions:
       params:
         type: object
       source:
-        enum:
-          - turn
-          - environment
-          - environment_input
-        type: string
+        $ref: '#/definitions/api.DiagnosticSource'
       turn_id:
         type: string
     required:
@@ -924,12 +932,7 @@ definitions:
         type: integer
         x-nullable: true
       status:
-        enum:
-          - ok
-          - failing
-          - stopped
-          - unknown
-        type: string
+        $ref: '#/definitions/coremetrics.JobStatus'
     required:
       - failed
       - id
@@ -937,6 +940,18 @@ definitions:
       - processed
       - status
     type: object
+  coremetrics.JobStatus:
+    enum:
+      - ok
+      - failing
+      - stopped
+      - unknown
+    type: string
+    x-enum-varnames:
+      - JobOk
+      - JobFailing
+      - JobStopped
+      - JobUnknown
   coremetrics.Latency:
     properties:
       p50:
@@ -1038,16 +1053,21 @@ definitions:
         type: string
         x-nullable: true
       status:
-        enum:
-          - running
-          - degraded
-        type: string
+        $ref: '#/definitions/coremetrics.ServiceStatus'
     required:
       - execution_owner
       - revision
       - started_at
       - status
     type: object
+  coremetrics.ServiceStatus:
+    enum:
+      - running
+      - degraded
+    type: string
+    x-enum-varnames:
+      - ServiceRunning
+      - ServiceDegraded
   coremetrics.View:
     properties:
       database:
@@ -1147,15 +1167,9 @@ definitions:
       created_at:
         type: string
       diagnostic:
+        allOf:
+          - $ref: '#/definitions/sandbox.NodeDiagnosticCode'
         description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-        enum:
-          - provider_unavailable
-          - host_unsupported
-          - artifacts_unavailable
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - capacity_insufficient
-        type: string
       enrollment_id:
         description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
         type: string
@@ -1282,15 +1296,9 @@ definitions:
       created_at:
         type: string
       diagnostic:
+        allOf:
+          - $ref: '#/definitions/sandbox.NodeDiagnosticCode'
         description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-        enum:
-          - provider_unavailable
-          - host_unsupported
-          - artifacts_unavailable
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - capacity_insufficient
-        type: string
       enrollment_id:
         description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
         type: string
@@ -1382,31 +1390,33 @@ definitions:
   deployment.NodeRollout:
     properties:
       diagnostic:
-        enum:
-          - provider_unavailable
-          - host_unsupported
-          - artifacts_unavailable
-          - runtime_download_failed
-          - runtime_image_unavailable
-          - capacity_insufficient
-        type: string
+        $ref: '#/definitions/sandbox.NodeDiagnosticCode'
       ready_generation:
         description: Durable serving-generation pin; online and provider_ready still gate placement.
         type: integer
         x-nullable: true
       state:
+        allOf:
+          - $ref: '#/definitions/deployment.NodeRolloutState'
         description: Target preparation, independent of an old pin's serving readiness.
-        enum:
-          - ready
-          - preparing
-          - failed
-          - update_required
-          - unknown
-        type: string
     required:
       - ready_generation
       - state
     type: object
+  deployment.NodeRolloutState:
+    enum:
+      - ready
+      - preparing
+      - failed
+      - update_required
+      - unknown
+    type: string
+    x-enum-varnames:
+      - NodeRolloutReady
+      - NodeRolloutPreparing
+      - NodeRolloutFailed
+      - NodeRolloutUpdateRequired
+      - NodeRolloutUnknown
   deployment.NodeUpdate:
     properties:
       max_active:
@@ -1423,10 +1433,7 @@ definitions:
   deployment.Reset:
     properties:
       clear:
-        enum:
-          - auto
-          - force
-        type: string
+        $ref: '#/definitions/deployment.ResetMode'
       deadline_at:
         type: string
         x-nullable: true
@@ -1444,6 +1451,14 @@ definitions:
       - remaining
       - requested_at
     type: object
+  deployment.ResetMode:
+    enum:
+      - auto
+      - force
+    type: string
+    x-enum-varnames:
+      - ResetAuto
+      - ResetForce
   deployment.ResetOfflineNode:
     properties:
       name:
@@ -1481,10 +1496,7 @@ definitions:
   deployment.ResetRequest:
     properties:
       clear:
-        enum:
-          - auto
-          - force
-        type: string
+        $ref: '#/definitions/deployment.ResetMode'
       deadline_seconds:
         maximum: 86400
         minimum: 300
@@ -1515,10 +1527,7 @@ definitions:
       previous_generation_sandboxes:
         type: integer
       state:
-        enum:
-          - settled
-          - preparing
-        type: string
+        $ref: '#/definitions/deployment.RolloutState'
     required:
       - nodes
       - previous_generation_sandboxes
@@ -1543,6 +1552,14 @@ definitions:
       - unknown
       - update_required
     type: object
+  deployment.RolloutState:
+    enum:
+      - settled
+      - preparing
+    type: string
+    x-enum-varnames:
+      - RolloutSettled
+      - RolloutPreparing
   deployment.Suspension:
     properties:
       idle_seconds:
@@ -1569,11 +1586,7 @@ definitions:
       metadata:
         type: object
       mode:
-        enum:
-          - ""
-          - nodes
-          - direct
-        type: string
+        $ref: '#/definitions/sandbox.DeploymentMode'
       owner_epoch:
         type: integer
       provider:
@@ -1608,6 +1621,38 @@ definitions:
       - rollout
       - suspension
     type: object
+  modelconfiguration.ProviderErrorCode:
+    enum:
+      - authentication_error
+      - connection_failed
+      - rate_limit_exceeded
+      - usage_limit_exceeded
+      - server_overloaded
+      - server_error
+      - resource_not_found
+      - request_timeout
+      - invalid_request
+    type: string
+    x-enum-varnames:
+      - ProviderAuthenticationError
+      - ProviderConnectionFailed
+      - ProviderRateLimitExceeded
+      - ProviderUsageLimitExceeded
+      - ProviderServerOverloaded
+      - ProviderServerError
+      - ProviderResourceNotFound
+      - ProviderRequestTimeout
+      - ProviderInvalidRequest
+  modelprovider.Protocol:
+    enum:
+      - anthropic
+      - responses
+      - chat_completions
+    type: string
+    x-enum-varnames:
+      - Anthropic
+      - Responses
+      - ChatCompletions
   projects.APIKey:
     properties:
       created_at:
@@ -1710,6 +1755,16 @@ definitions:
       query:
         type: object
     type: object
+  sandbox.DeploymentMode:
+    enum:
+      - ""
+      - nodes
+      - direct
+    type: string
+    x-enum-varnames:
+      - DeploymentUnconfigured
+      - DeploymentNodes
+      - DeploymentDirect
   sandbox.DeploymentSpec:
     properties:
       resources:
@@ -1719,6 +1774,22 @@ definitions:
     required:
       - resources
     type: object
+  sandbox.NodeDiagnosticCode:
+    enum:
+      - provider_unavailable
+      - host_unsupported
+      - artifacts_unavailable
+      - runtime_download_failed
+      - runtime_image_unavailable
+      - capacity_insufficient
+    type: string
+    x-enum-varnames:
+      - NodeProviderUnavailable
+      - NodeHostUnsupported
+      - NodeArtifactsUnavailable
+      - NodeRuntimeDownloadFailed
+      - NodeRuntimeImageUnavailable
+      - NodeCapacityInsufficient
   sandbox.Resources:
     properties:
       cpus:
@@ -1735,24 +1806,14 @@ definitions:
     type: object
   sandbox.RuntimeRelease:
     properties:
-      firmware_sha256:
-        type: string
-      image_id:
-        type: string
-      image_manifest_digest:
-        type: string
-      microsandbox_ref:
-        type: string
-      runtime_sha256:
-        type: string
+      artifacts:
+        additionalProperties:
+          type: string
+        type: object
       source_commit:
         type: string
     required:
-      - firmware_sha256
-      - image_id
-      - image_manifest_digest
-      - microsandbox_ref
-      - runtime_sha256
+      - artifacts
       - source_commit
     type: object
   sessions.AdminAssetCounts:
@@ -1811,16 +1872,22 @@ definitions:
       session_id:
         type: string
       state:
-        enum:
-          - active
-          - cleanup_pending
-          - released
-        type: string
+        $ref: '#/definitions/sessions.ManagedArchiveState'
     required:
       - environment_id
       - session_id
       - state
     type: object
+  sessions.ManagedArchiveState:
+    enum:
+      - active
+      - cleanup_pending
+      - released
+    type: string
+    x-enum-varnames:
+      - ManagedArchiveActive
+      - ManagedArchiveCleanupPending
+      - ManagedArchiveReleased
   v1.Agent:
     properties:
       id:
@@ -1988,10 +2055,7 @@ definitions:
       message:
         type: string
       status:
-        enum:
-          - available
-          - unavailable
-        type: string
+        $ref: '#/definitions/v1.InstallationStatus'
       version:
         type: string
     type: object
@@ -2121,12 +2185,7 @@ definitions:
   v1.ExecutionHarnessConfigSelection:
     properties:
       source:
-        enum:
-          - session
-          - agent
-          - deployment
-          - unknown
-        type: string
+        $ref: '#/definitions/v1.ExecutionSource'
       value:
         type: object
     required:
@@ -2140,32 +2199,28 @@ definitions:
           - $ref: '#/definitions/v1.ModelProviderView'
         x-nullable: true
       source:
-        enum:
-          - session
-          - agent
-          - deployment
-          - unknown
-        type: string
+        $ref: '#/definitions/v1.ExecutionSource'
       status:
-        enum:
-          - available
-          - redacted
-          - unavailable
-        type: string
+        $ref: '#/definitions/v1.ExecutionProviderStatus'
     required:
       - configuration
       - source
       - status
     type: object
+  v1.ExecutionProviderStatus:
+    enum:
+      - available
+      - redacted
+      - unavailable
+    type: string
+    x-enum-varnames:
+      - ExecutionProviderAvailable
+      - ExecutionProviderRedacted
+      - ExecutionProviderUnavailable
   v1.ExecutionSelection:
     properties:
       source:
-        enum:
-          - session
-          - agent
-          - deployment
-          - unknown
-        type: string
+        $ref: '#/definitions/v1.ExecutionSource'
       value:
         type: string
         x-nullable: true
@@ -2173,6 +2228,18 @@ definitions:
       - source
       - value
     type: object
+  v1.ExecutionSource:
+    enum:
+      - session
+      - agent
+      - deployment
+      - unknown
+    type: string
+    x-enum-varnames:
+      - ExecutionSourceSession
+      - ExecutionSourceAgent
+      - ExecutionSourceDeployment
+      - ExecutionSourceUnknown
   v1.InputTokenDetails:
     properties:
       cached_tokens:
@@ -2180,6 +2247,14 @@ definitions:
     required:
       - cached_tokens
     type: object
+  v1.InstallationStatus:
+    enum:
+      - available
+      - unavailable
+    type: string
+    x-enum-varnames:
+      - InstallationAvailable
+      - InstallationUnavailable
   v1.Item:
     properties:
       action:
@@ -2359,11 +2434,7 @@ definitions:
       max_output_tokens:
         type: integer
       protocol:
-        enum:
-          - anthropic
-          - responses
-          - chat_completions
-        type: string
+        $ref: '#/definitions/modelprovider.Protocol'
     required:
       - api_key
       - base_url
@@ -2380,11 +2451,7 @@ definitions:
       max_output_tokens:
         type: integer
       protocol:
-        enum:
-          - anthropic
-          - responses
-          - chat_completions
-        type: string
+        $ref: '#/definitions/modelprovider.Protocol'
     required:
       - api_key_configured
       - base_url
@@ -3750,18 +3817,28 @@ definitions:
       - prefix
       - revoked_at
     type: object
+  writeaudit.Action:
+    enum:
+      - create
+      - update
+      - delete
+      - send_events
+      - upload_file
+      - upload_version
+      - update_default_version
+    type: string
+    x-enum-varnames:
+      - ActionCreate
+      - ActionUpdate
+      - ActionDelete
+      - ActionSendEvents
+      - ActionUploadFile
+      - ActionUploadVersion
+      - ActionUpdateDefaultVersion
   writeaudit.Operation:
     properties:
       action:
-        enum:
-          - create
-          - update
-          - delete
-          - send_events
-          - upload_file
-          - upload_version
-          - update_default_version
-        type: string
+        $ref: '#/definitions/writeaudit.Action'
       api_key:
         $ref: '#/definitions/writeaudit.APIKey'
       created_at:
@@ -3775,18 +3852,7 @@ definitions:
       resource_id:
         type: string
       resource_type:
-        enum:
-          - agent
-          - session
-          - environment
-          - environment_template
-          - skill
-          - skill_version
-          - file
-          - vault
-          - credential
-          - artifact
-        type: string
+        $ref: '#/definitions/writeaudit.ResourceType'
       trace_id:
         type: string
     required:
@@ -3827,6 +3893,30 @@ definitions:
       - api_key
       - resource_id
     type: object
+  writeaudit.ResourceType:
+    enum:
+      - agent
+      - session
+      - environment
+      - environment_template
+      - skill
+      - skill_version
+      - file
+      - vault
+      - credential
+      - artifact
+    type: string
+    x-enum-varnames:
+      - ResourceAgent
+      - ResourceSession
+      - ResourceEnvironment
+      - ResourceEnvironmentTemplate
+      - ResourceSkill
+      - ResourceSkillVersion
+      - ResourceFile
+      - ResourceVault
+      - ResourceCredential
+      - ResourceArtifact
 info:
   contact: {}
   description: Deployment and operations routes under /core/v1 for Core Web's server and operator scripts. Every operation requires the Core key; Project API keys and machine credentials are not accepted.

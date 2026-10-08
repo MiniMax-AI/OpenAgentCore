@@ -100,7 +100,7 @@ Hosted and self-hosted Environments use the same Runtime preparation; a provider
 
 ## Register the provider kind
 
-`sandbox/providers/registry.go` is the only registration table. Each entry binds the adapter's specification and resource validators, its `sandbox.ConfigurationAdapter`, the deployment mode (`nodes` or `direct`), its `sandbox.DeploymentPolicy` (disk limits, the Runtime input and the default size setup proposes), the operation declaration and a node-local (`BuildLocal`) or direct (`BuildDirect`) constructor. `providers.Build` and `providers.BuildDirect` construct adapters without allocating compute. There is no init-time registration or plugin loading.
+`sandbox/providers/registry.go` is the only registration table. Each entry binds the adapter's specification and resource validators, its `sandbox.ConfigurationAdapter`, the deployment mode (`nodes` or `direct`), its `sandbox.DeploymentPolicy` (disk limits, Runtime artifact declarations and the default size setup proposes), the operation declaration and a node-local (`BuildLocal`) or direct (`BuildDirect`) constructor. `providers.Build` and `providers.BuildDirect` construct adapters without allocating compute. There is no init-time registration or plugin loading.
 
 A new provider takes these steps:
 
@@ -121,7 +121,7 @@ A node configuration, `sandbox.NodeConfig`, holds `provider`, `generation`, `ins
 
 - A `nodes` registration has only `BuildLocal`, and a `direct` registration only `BuildDirect`; missing, mixed or unknown modes are rejected.
 - The specification and resource validators, the configuration adapter and a complete operation declaration are mandatory, so an incomplete registration cannot publish a partial projection. A declared default size must pass the adapter's resource validator.
-- The Runtime input policy either accepts the pinned Runtime or gives the adapter's fixed reason for rejecting it, never both.
+- Runtime artifact declarations own the required names, validation patterns and distribution-manifest selectors. Nonempty declarations require the [Runtime release](../contracts/agents-api/sandbox-deployment.md#runtime-release); without declarations the adapter supplies its fixed rejection reason. There is no separate authored support boolean or shared vendor artifact table.
 - Checkpoint is admitted only for a `nodes` registration, because the common lifecycle suspends only node allocations; registration rejects a `direct` Provider that declares it. A registration carries no suspension values: Core applies its one [suspension policy](#suspension) to every Provider that declares checkpoint support.
 
 The configuration adapter must be non-nil, including its concrete value. Every `ConfigurationRequirements` field needs an explicit valid decision: `Credential` is `Required` or `NotRequired`, and `Discovery`, `SelectionDiscovery` and `CredentialVerification` use the shared supported or unsupported declaration with a safe reason. A new requirement field needs an explicit validation update and never inherits an existing decision. Requiring a credential does not promise the `VerifyCredential` operation. These checks establish complete registration, not correct native SDK behavior; constructor and adapter contract tests still apply.

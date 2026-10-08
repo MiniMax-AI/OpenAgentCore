@@ -14,15 +14,15 @@ import (
 
 // The host's image store decides which release digest names the loaded image.
 func TestNativeImageIsAReleaseIdentity(t *testing.T) {
-	release := sandbox.RuntimeRelease{ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64)}
+	release := sandbox.RuntimeRelease{Artifacts: map[string]string{"image_id": "sha256:" + strings.Repeat("b", 64), "image_manifest_digest": "sha256:" + strings.Repeat("c", 64)}}
 	config := sandbox.NodeConfig{Specification: sandbox.DeploymentSpec{Runtime: &release}}
-	for _, image := range []string{release.ImageID, release.ImageManifestDigest} {
+	for _, image := range []string{release.Artifacts["image_id"], release.Artifacts["image_manifest_digest"]} {
 		config.Native = json.RawMessage(`{"image":"` + image + `"}`)
 		if entry, err := decodeNative(config); err != nil || entry.Image != image {
 			t.Fatalf("rejected release image %s: %v", image, err)
 		}
 	}
-	for _, native := range []string{`{"image":"sha256:` + strings.Repeat("a", 64) + `"}`, `{"image":"` + release.ImageID + `","cpus":2}`, `{"image":null}`} {
+	for _, native := range []string{`{"image":"sha256:` + strings.Repeat("a", 64) + `"}`, `{"image":"` + release.Artifacts["image_id"] + `","cpus":2}`, `{"image":null}`} {
 		config.Native = json.RawMessage(native)
 		if _, err := decodeNative(config); err == nil {
 			t.Fatalf("accepted native %s", native)

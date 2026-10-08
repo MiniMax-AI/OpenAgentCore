@@ -200,7 +200,7 @@ func TestNormalizeHealth(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		in         NodeHealth
-		diagnostic string
+		diagnostic sandbox.NodeDiagnosticCode
 		invalid    bool
 	}{
 		{"ready clears the diagnostic", NodeHealth{ProviderReady: true, Diagnostic: sandbox.NodeProviderUnavailable}, "", false},
@@ -282,8 +282,8 @@ func TestNodeRollout(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		n          NodeRecord
-		state      string
-		diagnostic string
+		state      NodeRolloutState
+		diagnostic sandbox.NodeDiagnosticCode
 	}{
 		{"offline", NodeRecord{TargetState: "ready", ReadyGeneration: &ready}, "unknown", ""},
 		{"protocol 1 on another generation", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 1, TargetGeneration: 2, TargetState: "ready", ReadyGeneration: &ready}, "update_required", ""},

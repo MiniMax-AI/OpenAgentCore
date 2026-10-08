@@ -18,9 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"golang.org/x/net/http/httpguts"
-
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
@@ -31,6 +28,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
+	"golang.org/x/net/http/httpguts"
 )
 
 const (
@@ -176,16 +175,16 @@ func (c Config) Settings() []api.InstallationSetting {
 		origins = []string{}
 	}
 	return []api.InstallationSetting{
-		setting("public_url", c.PublicOrigin.String(), nil, []string{"core", "web"}),
-		setting("log.level", strings.ToLower(c.Log.Level.String()), "info", []string{"core", "web"}),
-		setting("log.format", format, "auto", []string{"core", "web"}),
-		setting("log.add_source", c.Log.AddSource, false, []string{"core", "web"}),
-		setting("core.execution_concurrency", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []string{"core"}),
-		setting("core.harnesses", c.Harnesses, builtin.Kinds(), []string{"core"}),
-		setting("core.default_harness", c.DefaultHarness, defaultHarness, []string{"core"}),
-		setting("core.write_audit_retention", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []string{"core"}),
-		setting("core.oauth_trusted_origins", origins, []string{}, []string{"core"}),
-		sensitive("core.runtime_history", c.RuntimeHistory.File != "", []string{"core"}),
+		setting("public_url", c.PublicOrigin.String(), nil, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("log.level", strings.ToLower(c.Log.Level.String()), "info", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("log.format", format, "auto", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("log.add_source", c.Log.AddSource, false, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("core.execution_concurrency", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []api.InstallationService{api.InstallationCore}),
+		setting("core.harnesses", c.Harnesses, builtin.Kinds(), []api.InstallationService{api.InstallationCore}),
+		setting("core.default_harness", c.DefaultHarness, defaultHarness, []api.InstallationService{api.InstallationCore}),
+		setting("core.write_audit_retention", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []api.InstallationService{api.InstallationCore}),
+		setting("core.oauth_trusted_origins", origins, []string{}, []api.InstallationService{api.InstallationCore}),
+		sensitive("core.runtime_history", c.RuntimeHistory.File != "", []api.InstallationService{api.InstallationCore}),
 	}
 }
 
@@ -202,11 +201,11 @@ func duration(d time.Duration) string {
 	return s
 }
 
-func setting(key string, value, fallback any, restarts []string) api.InstallationSetting {
+func setting(key string, value, fallback any, restarts []api.InstallationService) api.InstallationSetting {
 	return api.InstallationSetting{Key: key, Value: value, Default: fallback, Changeable: true, Sensitive: false, Restarts: restarts}
 }
 
-func sensitive(key string, configured bool, restarts []string) api.InstallationSetting {
+func sensitive(key string, configured bool, restarts []api.InstallationService) api.InstallationSetting {
 	return api.InstallationSetting{Key: key, Configured: &configured, Changeable: true, Sensitive: true, Restarts: restarts}
 }
 

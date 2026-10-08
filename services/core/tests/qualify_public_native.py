@@ -22,6 +22,7 @@ from official_pending_actions_native import verify_pending_actions
 from official_workspace_images_native import verify_workspace_images
 from official_schema import ResponseValidator
 from official_session_initial_input import verify_initial_input_retry
+from official_environment_composition import verify_composition
 from session_cleanup import delete_session
 
 
@@ -151,7 +152,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--settings", required=True, help="Private JSON with agent, model_provider and environment")
     parser.add_argument("--foreign-key-file", required=True, help="Private key of a different Project")
-    parser.add_argument("--suite", required=True, choices=("none", "functions", "pending-actions", "images", "structured"))
+    parser.add_argument("--suite", required=True, choices=("none", "functions", "pending-actions", "images", "structured", "composition"))
     parser.add_argument("--evidence", required=True, type=Path, help="New evidence file under ~/.oac")
     parser.add_argument("--compose-directory", type=Path, help="Owned installation to restart for cold recovery")
     parser.add_argument("--compose-project", help="Exact owned Compose project; required with --compose-directory")
@@ -172,6 +173,8 @@ def main():
     assert placement in {"none", "self_hosted", "openai_hosted"}, "Explicit Environment required"
     if args.suite == "none":
         assert placement == "none", "The none suite requires environment:none"
+    elif args.suite == "composition":
+        assert environment == {"type": "openai_hosted"}, "Composition supplies its own fresh hosted preparation"
     elif args.suite != "pending-actions":
         assert placement != "none", "This suite verifies native workspace tools and Artifacts"
     if placement == "self_hosted":
@@ -238,7 +241,7 @@ def main():
 
         session_options = {"environment": environment, "extra_body": {"x_agents_core": {"model_provider": provider}}}
         suites = {"none": verify_none, "functions": verify_hosted_functions, "pending-actions": verify_pending_actions,
-                  "images": verify_workspace_images, "structured": verify_hosted_structured}
+                  "images": verify_workspace_images, "structured": verify_hosted_structured, "composition": verify_composition}
         try:
             kwargs = {"ready": ready, "record": record}
             if args.suite != "pending-actions":

@@ -23,7 +23,7 @@ class PublicAPITests(unittest.TestCase):
 
     def test_public_projection_is_current_and_keeps_source_immutable(self):
         source = copy.deepcopy(self.source)
-        extensions = {k: v for k, v in self.public['components']['schemas'].items() if k.startswith('v1.')}
+        extensions = {k: v for k, v in self.public['components']['schemas'].items() if k not in source['components']['schemas']}
         actual = generator.public_document(source, extensions, generator.extension_owners(self.bindings), self.pin["beta_header"])
         self.assertEqual(actual, self.public)
         self.assertEqual(source, self.source)

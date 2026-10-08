@@ -13,9 +13,9 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreFieldError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { sandboxConfigurationRejection, sandboxProviderLabel } from "../../lib/sandbox-labels";
-import { defaultSandboxResources, distributionRuntime, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, distributionRuntime, isRuntimeRelease, isRuntimeReleaseField, runtimeReleaseFields, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
 import { sandboxAdmin } from "./sandbox-queries";
 import "./sandbox-wizard.css";
@@ -81,7 +81,7 @@ function presets(provider: SandboxProvider): Record<Preset, SandboxResources> | 
   return { small: scale(0.5), standard, large: scale(2) };
 }
 
-const releaseLabels: Record<keyof SandboxRuntimeRelease, MessageKey> = {
+const releaseLabels: Record<string, ParseKeys<"sandbox">> = {
   source_commit: "Source commit",
   image_id: "Image ID",
   image_manifest_digest: "Image manifest digest",
@@ -125,7 +125,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const { t, i18n } = useTranslation("sandbox");
   const { t: tCommon } = useTranslation("common");
   const id = useId();
-  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const currentMode: Where | null = current ? deploymentContract.providers[current.provider].mode : null;
   const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "e2b" : "size" : "where");
   const [where, setWhere] = useState<Where | null>(currentMode);
@@ -195,11 +195,11 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
 
   // A release the administrator entered comes first, then the saved one of the same backend,
   // then the one this console distributes (the release its node installer verifies).
-  const matched = useQuery({ queryKey: ["sandbox-runtime-release"], queryFn: ({ signal }) => distributionRuntime(signal).catch(() => null), staleTime: Infinity, retry: false });
+  const needsRuntime = policy !== null && Object.keys(policy.artifacts).length > 0;
+  const matched = useQuery({ queryKey: ["sandbox-runtime-release", provider], queryFn: ({ signal }) => distributionRuntime(provider!, signal).catch(() => null), enabled: needsRuntime, staleTime: Infinity, retry: false });
   const release: Partial<SandboxRuntimeRelease> = Object.keys(runtime).length ? runtime : saved?.runtime ?? matched.data ?? {};
 
-  const needsRuntime = policy?.runtime ?? false;
-  const runtimeReady = !needsRuntime || isRuntimeRelease(release);
+  const runtimeReady = !needsRuntime || (provider !== null && isRuntimeRelease(provider, release));
   // Initial setup requires a key; an update may retain the committed key.
   const keyReady = e2bKeyReady(Boolean(editing), replacementRequested, apiKey);
   const connectionChanged = Boolean(editing && (apiURL.trim() !== (current?.e2bAPIURL || E2B_PRESETS.official.apiURL) || domain.trim() !== (current?.e2bDomain || E2B_PRESETS.official.domain)));
@@ -437,11 +437,11 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             <fieldset className="wizard-group">
               <legend>{t("Runtime release")}<HelpTip>{t("Filled in from this console's distribution when it serves one. Otherwise copy these from the distribution manifest that matches your nodes; image configuration IDs and manifest digests are different values.")}</HelpTip></legend>
               {fieldError("runtime") ? <p id={`${id}-runtime-error`} className="field-error" role="alert">{fieldError("runtime")}</p> : null}
-              {RUNTIME_RELEASE_FIELDS.map((field) => {
-                const value = release[field] ?? "";
+              {runtimeReleaseFields(provider!).map((field) => {
+                const value = (field === "source_commit" ? release.source_commit : release.artifacts?.[field]) ?? "";
                 return (
-                  <Field key={field} id={`${id}-${field}`} label={t(releaseLabels[field])} error={value && !isRuntimeReleaseField(field, value) ? t("Check this value") : null}>
-                    <input id={`${id}-${field}`} value={value} spellCheck={false} autoComplete="off" aria-invalid={Boolean(fieldError("runtime"))} aria-describedby={fieldError("runtime") ? `${id}-runtime-error` : undefined} onChange={(event) => { setRuntime({ ...release, [field]: event.target.value.trim() }); setFieldRejection(null); }} />
+                  <Field key={field} id={`${id}-${field}`} label={releaseLabels[field] ? t(releaseLabels[field]) : field} error={value && !isRuntimeReleaseField(provider!, field, value) ? t("Check this value") : null}>
+                    <input id={`${id}-${field}`} value={value} spellCheck={false} autoComplete="off" aria-invalid={Boolean(fieldError("runtime"))} aria-describedby={fieldError("runtime") ? `${id}-runtime-error` : undefined} onChange={(event) => { setRuntime(field === "source_commit" ? { ...release, source_commit: event.target.value.trim() } : { ...release, artifacts: { ...release.artifacts, [field]: event.target.value.trim() } }); setFieldRejection(null); }} />
                   </Field>
                 );
               })}
@@ -542,7 +542,7 @@ function NumberField({ id, label, value, onChange, error }: { error?: string | n
   );
 }
 
-function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?: () => void; nextDisabled?: boolean; t: (key: MessageKey) => string }) {
+function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?: () => void; nextDisabled?: boolean; t: (key: ParseKeys<"sandbox">) => string }) {
   return (
     <div className="wizard-nav">
       <button className="button ghost" type="button" onClick={onBack}><ArrowLeft size={14} aria-hidden="true" />{t("Back")}</button>

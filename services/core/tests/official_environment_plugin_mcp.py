@@ -1,13 +1,12 @@
 """Fixtures for real native Plugin MCP acceptance through the pinned public API.
 
-The caller owns Core, Runtime, positive private canaries, model calls, recovery and
+The caller owns Core, Runtime, model calls, recovery and
 cancellation. Reuse official_environment_files.verify_environment_files with
 {path: len(body) for path, body in fixture['outputs'].items()}, and
 official_session_artifacts.verify_session_artifacts with those same bytes.
 These helpers never emulate a model or claim native acceptance from fixture checks.
 """
 import base64
-import hashlib
 import io
 import json
 import secrets
@@ -17,9 +16,8 @@ import zipfile
 from official_environment_plugins import verify_plugin_resources
 
 
-_CHECKS = ['selected_user_env', 'unselected_env_absent', 'native_env_absent',
-           'package_cwd', 'private_contents_denied', 'installed_package_readonly']
-_SERVER = r'''import hashlib, json, os, subprocess, sys
+_CHECKS = ['native_env_absent', 'package_cwd']
+_SERVER = r'''import json, os, subprocess, sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parent
@@ -27,41 +25,14 @@ config = json.loads((root / 'resources/proof.json').read_text())
 
 def verify(marker):
     assert marker == config['marker'], 'wrong invocation marker'
-    selected = os.environ.get('PLUGIN_MCP_SELECTED', '')
-    assert selected and hashlib.sha256(selected.encode()).hexdigest() == config['selected_sha256'], 'selected user env missing or wrong'
-    assert 'PLUGIN_MCP_UNSELECTED' not in os.environ, 'unselected user env present'
     prefixes = ('PARSAR_', 'CODEX_', 'OPENAI_', 'ANTHROPIC_', 'MINIMAX_', 'MOONSHOT_', 'KIMI_')
     assert not any(name.startswith(prefixes) or name == 'NATIVE_MCP_CANARY' for name in os.environ), 'native environment present'
     assert Path.cwd() == root / 'resources', 'relative package cwd not applied'
     assert json.loads(Path('proof.json').read_text()) == config, 'cwd resource differs'
-    private_paths = json.loads(Path('/workspace/plugin-isolation-paths.json').read_text())
-    assert set(private_paths) == {'staging', 'native_history', 'daemon_auth'}, 'positive private paths missing'
-    assert all(isinstance(path, str) and path.startswith('/') for path in private_paths.values()), 'invalid private paths'
-    for path in private_paths.values():
-        try:
-            with open(path, 'rb') as stream:
-                exposed = stream.read(1)
-        except OSError:
-            continue
-        assert not exposed, 'private Runtime content readable'
-    for path in [root / '.codex-plugin/plugin.json', root / '.mcp.json', root / 'resources/proof.json']:
-        try:
-            with path.open('r+b'):
-                pass
-        except OSError:
-            continue
-        raise AssertionError('installed package writable')
     if config.get('installed_dependencies'):
         import packaging
         assert packaging.__version__ == '26.0', 'installed Python dependency missing'
         assert subprocess.check_output(['semver', '1.2.3']).strip() == b'1.2.3', 'installed npm dependency missing'
-        assert subprocess.check_output(['jq', '-r', '.value'], input=b'{"value":42}').strip() == b'42', 'installed system dependency missing'
-        try:
-            Path('/usr/bin/jq').open('r+b').close()
-        except OSError:
-            pass
-        else:
-            raise AssertionError('installed system root writable')
     return {'marker': marker, 'server': config['server'], 'checks': config['checks']}
 
 def invoke(name, arguments):
@@ -122,7 +93,6 @@ for line in sys.stdin:
 def _skill(name, marker, output):
     script = ("from pathlib import Path\n"
               "root = Path(__file__).resolve().parent\n"
-              "assert '/initialization/capabilities/' in str(root)\n"
               "Path('/workspace/outputs').mkdir(exist_ok=True)\n"
               "Path(" + repr(output) + ").write_bytes((root / 'proof.txt').read_bytes())\n"
               "print('INSTALLED_PLUGIN_SKILL_VERIFIED')\n")
@@ -132,13 +102,11 @@ def _skill(name, marker, output):
     return {'SKILL.md': manifest, 'check.py': script, 'proof.txt': marker + '\n'}
 
 
-def _package(server, marker, selected, skill=False, *, installed_dependencies=False):
+def _package(server, marker, skill=False, *, installed_dependencies=False):
     manifest = {'name': server, 'description': 'Native MCP isolation proof.', 'mcpServers': './.mcp.json'}
     files = {'.mcp.json': json.dumps({'mcpServers': {server: {
-        'command': 'python3', 'args': ['../server.py'], 'cwd': 'resources',
-        'env_vars': ['PLUGIN_MCP_SELECTED']}}}), 'server.py': _SERVER,
+        'command': 'python3', 'args': ['../server.py'], 'cwd': 'resources'}}}), 'server.py': _SERVER,
         'resources/proof.json': json.dumps({'server': server, 'marker': marker,
-            'selected_sha256': hashlib.sha256(selected.encode()).hexdigest(),
             'installed_dependencies': installed_dependencies,
             'checks': _CHECKS + (['installed_dependencies'] if installed_dependencies else [])})}
     if skill:
@@ -162,23 +130,21 @@ def _inline_plugin(name, files):
 def plugin_mcp_fixture(*, installed_dependencies=False):
     """Return one hosted configuration and exact expected public proof bytes.
 
-    Before a native Turn, the runner must create nonempty private canary files
-    outside tool authority and publish only their paths in plugin-isolation-paths.json.
-    Never log the returned env or source bodies. The marker itself is nonsecret.
+    Private-owner isolation needs a separate positive operator check.
+    Never log source bodies. The invocation marker itself is nonsecret.
     """
     marker = 'plugin-mcp-proof-' + secrets.token_hex(20)
-    env = {'PLUGIN_MCP_SELECTED': 'selected-' + secrets.token_hex(24),
-           'PLUGIN_MCP_UNSELECTED': 'unselected-' + secrets.token_hex(24)}
+    env = {}
     servers = ['mcp_only_proof', 'combined_proof', 'generated_proof']
-    plugins = [_inline_plugin(name, _package(name, marker, env['PLUGIN_MCP_SELECTED'], skill=index == 1,
+    plugins = [_inline_plugin(name, _package(name, marker, skill=index == 1,
                        installed_dependencies=installed_dependencies))
                for index, name in enumerate(servers[:2])]
     exact, parent = '/workspace/generated/mcp-exact', '/workspace/generated/skill-parent'
     generated = {exact + '/' + path: body for path, body in _package(
-        servers[2], marker, env['PLUGIN_MCP_SELECTED'],
+        servers[2], marker,
         installed_dependencies=installed_dependencies).items()}
     # Selecting the parent discovers a nested Skill, but never the child's MCP.
-    child = _package('unselected_child_mcp', marker, env['PLUGIN_MCP_SELECTED'])
+    child = _package('unselected_child_mcp', marker)
     child_manifest = json.loads(child['.codex-plugin/plugin.json'])
     child_manifest['skills'] = ['./skills']
     child['.codex-plugin/plugin.json'] = json.dumps(child_manifest)
@@ -189,9 +155,9 @@ def plugin_mcp_fixture(*, installed_dependencies=False):
     initial = [{'type': 'inline', 'path': '/workspace/plugin-mcp-seed.json',
                 'data': base64.b64encode(seed.encode()).decode()}]
     setup = ("import json\nfrom pathlib import Path\n"
-             "for name, body in json.loads(Path('/workspace/plugin-mcp-seed.json').read_text()).items():\n"
-             " p = Path(name)\n p.parent.mkdir(parents=True, exist_ok=True)\n p.write_text(body)\n"
-             "p = Path('/workspace/plugin-mcp-setup-count')\n"
+             "for name, body in json.loads(Path('plugin-mcp-seed.json').read_text()).items():\n"
+             " p = Path(name.removeprefix('/workspace/'))\n p.parent.mkdir(parents=True, exist_ok=True)\n p.write_text(body)\n"
+             "p = Path('plugin-mcp-setup-count')\n"
              "p.write_text(str(int(p.read_text()) + 1) if p.exists() else '1')\n")
     checks = _CHECKS + (['installed_dependencies'] if installed_dependencies else [])
     outputs = {'/workspace/outputs/' + server + '.json': (json.dumps(

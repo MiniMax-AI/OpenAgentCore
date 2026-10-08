@@ -10,7 +10,7 @@ import (
 )
 
 func TestNodeRejectsCoreConfigurationAndUnknownProvider(t *testing.T) {
-	for _, field := range []string{`"nodes":{"local":false}`, `"maintenance":true`, `"docker":{}`} {
+	for _, field := range []string{`"nodes":{"local":false}`, `"maintenance":true`, `"docker":{}`, `"specification":{"runtime":{"source_commit":"old","image_id":"old"}}`} {
 		path := filepath.Join(t.TempDir(), "config.json")
 		if err := os.WriteFile(path, []byte(`{"provider":"docker",`+field+`}`), 0600); err != nil {
 			t.Fatal(err)

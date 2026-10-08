@@ -51,23 +51,23 @@ func modelProviderRequired(engine string) error {
 // resolveSessionExecution applies provider precedence: the Session bundle, the
 // saved Agent bundle, then the deployment default. Every Environment type
 // accepts every source, and every Session needs one. Bundles are never merged.
-func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, string, uuid.UUID, error) {
+func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, v1.ExecutionSource, uuid.UUID, error) {
 	engine, err := h.sessionHarness(raw)
 	if err != nil {
 		return "", nil, "", uuid.Nil, err
 	}
 	var revision uuid.UUID
-	provider, source := inherited, v1.ModelProviderSourceAgent
+	provider, source := inherited, v1.ExecutionSourceAgent
 	if extension := input.XAgentsCore; extension != nil {
 		if extension.ModelProvider == nil && !input.modelProviderNull && len(extension.HarnessConfig) == 0 && len(extension.Environment) == 0 {
 			return "", nil, "", uuid.Nil, errors.New("x_agents_core requires an execution option")
 		}
 		if extension.ModelProvider != nil {
-			provider, source = extension.ModelProvider, v1.ModelProviderSourceSession
+			provider, source = extension.ModelProvider, v1.ExecutionSourceSession
 		}
 	}
 	if provider == nil && input.deploymentDefaults != nil {
-		provider, source, revision = input.deploymentDefaults.Provider, v1.ModelProviderSourceDeployment, input.deploymentDefaults.Revision
+		provider, source, revision = input.deploymentDefaults.Provider, v1.ExecutionSourceDeployment, input.deploymentDefaults.Revision
 	}
 	if provider == nil {
 		return "", nil, "", uuid.Nil, modelProviderRequired(engine)
