@@ -22,7 +22,7 @@ func (r *runtimeLifecycle) recordObservation(ctx context.Context, owner deployme
 			if owner.CreateSettled {
 				diagnostic = "resource_missing"
 			}
-		case errors.Is(observed, sandbox.ErrComputeUnconfirmed), errors.Is(observed, sandbox.ErrCommandUnconfirmed):
+		case errors.Is(observed, sandbox.ErrComputeUnconfirmed):
 			diagnostic = "compute_unconfirmed"
 		default:
 			diagnostic = "provider_unavailable"

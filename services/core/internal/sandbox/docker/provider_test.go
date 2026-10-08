@@ -3,21 +3,20 @@ package docker
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
 )
 
@@ -37,9 +36,10 @@ func TestProviderRejectsUnsafeOperatorConfiguration(t *testing.T) {
 	}
 }
 
-// This optional Docker mechanism test uses a pinned fixture image whose
-// oac-daemon only sleeps. It is not native/model acceptance; the real Runtime
-// has separate checks.
+// This optional Docker mechanism test runs AGENTS_RUNTIME_DOCKER_TEST_IMAGE,
+// an image with oac-sandbox-io, such as the sandbox image. Its Link is
+// unreachable, so the service keeps retrying and the container keeps running.
+// It is not native or model acceptance.
 func TestDockerProviderLifecycle(t *testing.T) {
 	image := os.Getenv("AGENTS_RUNTIME_DOCKER_TEST_IMAGE")
 	if image == "" {
@@ -63,11 +63,10 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	defer cancel()
 	bootstrap := func() sandbox.Bootstrap {
 		b := contracttest.Bootstrap(sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()})
-		b.Credential, b.SandboxIO.Credential = "synthetic-test-credential", "synthetic-serve-credential"
+		b.SandboxIO.Credential = "synthetic-serve-credential"
 		return b
 	}
 	b := bootstrap()
-	b.NetworkAccess, b.AllowedDomains = "restricted", []string{"Example.com", "api.example.com"}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
@@ -75,31 +74,11 @@ func TestDockerProviderLifecycle(t *testing.T) {
 			t.Error(e)
 		}
 	})
-	t.Run("stdin concurrent output and EOF", func(t *testing.T) {
-		inputOwner := bootstrap()
-		if _, err := p.Create(ctx, inputOwner); err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			cleanup, stop := context.WithTimeout(context.Background(), 20*time.Second)
-			defer stop()
-			if err := p.Kill(cleanup, inputOwner.Reference); err != nil {
-				t.Error(err)
-			}
-		}()
-		for _, data := range [][]byte{{}, bytes.Repeat([]byte{0, 255, 10, 1, 42}, 900000)} {
-			result, err := p.RunCommand(ctx, inputOwner.Reference, sandbox.Command{Args: []string{"/bin/sh", "-c", "head -c 131072 /dev/zero; sha256sum"}, Stdin: data})
-			digest := sha256.Sum256(data)
-			if err != nil || result.ExitCode != 0 || !strings.HasSuffix(result.Stdout, hex.EncodeToString(digest[:])+"  -\n") || len(result.Stdout) != 131072+68 {
-				t.Fatalf("stdin/EOF failure: input=%d stdout=%d exit=%d error=%v", len(data), len(result.Stdout), result.ExitCode, err)
-			}
-		}
-	})
 	info, e := p.Create(ctx, b)
 	contracttest.AssertObservation(t, info, e, b.Reference, "", "running")
 	resources, e := p.Observe(ctx, runtimeobs.Target{
-		TenantID: b.TenantID, SessionID: b.SessionID, EnvironmentID: b.EnvironmentID, Mode: runtimeobs.ModeManaged,
-		Instance: runtimeobs.Instance{AllocationID: b.AllocationID, ProviderKey: installationID, DeviceID: b.DeviceID},
+		TenantID: b.TenantID, EnvironmentID: b.EnvironmentID, Mode: runtimeobs.ModeManaged,
+		Instance: runtimeobs.Instance{AllocationID: b.AllocationID, ProviderKey: installationID},
 	})
 	if e != nil || resources.StartedAt == nil || resources.CPUUsageSecondsTotal == nil || resources.MemoryUsageBytes == nil || resources.CPUCapacityCores == nil || resources.MemoryLimitBytes == nil {
 		t.Fatalf("bad resource observation: %+v %v", resources, e)
@@ -108,42 +87,27 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if strings.Contains(string(inspected.Raw), b.Credential) || strings.Contains(string(inspected.Raw), b.SandboxIO.Credential) || inspected.Container.Config.User != "1000:1000" || !inspected.Container.HostConfig.ReadonlyRootfs || inspected.Container.HostConfig.Privileged {
+	if strings.Contains(string(inspected.Raw), b.SandboxIO.Credential) || inspected.Container.Config.User != "1000:1000" || !inspected.Container.HostConfig.ReadonlyRootfs || inspected.Container.HostConfig.Privileged {
 		t.Fatal("unsafe Docker configuration")
 	}
-	for _, value := range []string{"OAC_RUNTIME_NETWORK_ACCESS=restricted", `OAC_RUNTIME_ALLOWED_DOMAINS=["api.example.com","example.com"]`} {
-		found := false
-		for _, entry := range inspected.Container.Config.Env {
-			found = found || entry == value
-		}
-		if !found {
-			t.Fatalf("bootstrap lost network policy: %s", value)
-		}
+	if got := strings.Join(inspected.Container.Config.Entrypoint, " ") + "|" + strings.Join(inspected.Container.Config.Cmd, " "); got != "/usr/local/bin/oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json|" {
+		t.Fatalf("container command %q", got)
 	}
 	changed := b
-	changed.Credential = "must-not-replace-existing"
+	changed.SandboxIO.Credential = "must-not-replace-existing"
 	if _, e = p.Create(ctx, changed); !errors.Is(e, sandbox.ErrExists) {
 		t.Fatalf("duplicate not rejected: %v", e)
 	}
-	r, e := p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/runtime-bootstrap.json"}})
-	if e != nil {
-		t.Fatal(e)
+	run := func(script string) (string, int) {
+		t.Helper()
+		return execInContainer(t, ctx, c, info.ProviderID, script)
 	}
-	auth, decodeErr := runtimebootstrap.Decode([]byte(r.Stdout))
-	if decodeErr != nil || auth.Credential != b.Credential || auth.DeviceID != b.DeviceID {
-		t.Fatal("bootstrap changed or malformed")
+	out, code := run("cat /home/runtime/sandbox-io-bootstrap.json")
+	if serve, err := sandboxbootstrap.Decode([]byte(out)); code != 0 || err != nil || serve != b.SandboxIO {
+		t.Fatal("Sandbox I/O bootstrap changed or malformed")
 	}
-	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/home/runtime/sandbox-io-bootstrap.json"}})
-	if serve, decodeErr := sandboxbootstrap.Decode([]byte(r.Stdout)); e != nil || decodeErr != nil || serve != b.SandboxIO {
-		t.Fatal("Sandbox I/O bootstrap changed or malformed", e)
-	}
-	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"sh", "-c", "printf retained > /environment/workspace/history; printf failed >&2; exit 7"}})
-	if e != nil || r.ExitCode != 7 || r.Stderr != "failed" {
-		t.Fatalf("lost command status: %+v %v", r, e)
-	}
-	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"sh", "-c", "set -eu; test \"$(cat /workspace/history)\" = retained; printf replaced > /environment/staging/replacement; mv /environment/staging/replacement /environment/workspace/history; cat /workspace/history"}})
-	if e != nil || r.ExitCode != 0 || r.Stdout != "replaced" {
-		t.Fatal("public workspace view or atomic staging failed", e)
+	if out, code = run("ls -A /home/runtime; printf retained > /environment/workspace/history; cat /workspace/history"); code != 0 || out != "sandbox-io-bootstrap.json\nretained" {
+		t.Fatalf("home or public workspace view: %q %d", out, code)
 	}
 	wrong := b.Reference
 	wrong.TenantID = uuid.NewString()
@@ -160,12 +124,10 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if _, e = c.ContainerRestart(ctx, info.ProviderID, client.ContainerRestartOptions{Timeout: &timeout}); e != nil {
 		t.Fatal(e)
 	}
-	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"cat", "/environment/workspace/history"}})
-	if e != nil || r.Stdout != "replaced" {
+	if out, code = run("cat /environment/workspace/history"); code != 0 || out != "retained" {
 		t.Fatal("restart lost workspace")
 	}
-	r, e = p.RunCommand(ctx, b.Reference, sandbox.Command{Args: []string{"sh", "-c", "touch /cannot-write-root"}})
-	if e != nil || r.ExitCode == 0 {
+	if _, code = run("touch /cannot-write-root"); code == 0 {
 		t.Fatal("root filesystem writable")
 	}
 	// Container loss must not trigger credential overwrite or state replacement.
@@ -202,20 +164,28 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if _, e = p.Create(ctx, foreign); !errors.Is(e, sandbox.ErrOwnership) {
 		t.Fatal("foreign volume bootstrap accepted")
 	}
-	// Closing initialization output is not process termination. Require explicit
-	// reclamation, without returning partial output as a successful command.
-	next := bootstrap()
-	defer p.Kill(context.Background(), next.Reference)
-	if _, e = p.Create(ctx, next); e != nil {
-		t.Fatal(e)
+}
+
+// execInContainer runs a shell script in the container as its user and
+// returns its standard output and exit code.
+func execInContainer(t *testing.T, ctx context.Context, c *client.Client, id, script string) (string, int) {
+	t.Helper()
+	created, err := c.ExecCreate(ctx, id, client.ExecCreateOptions{Cmd: []string{"/bin/sh", "-c", script}, AttachStdout: true, AttachStderr: true})
+	if err != nil {
+		t.Fatal(err)
 	}
-	short, stop := context.WithTimeout(ctx, 100*time.Millisecond)
-	_, e = p.RunCommand(short, next.Reference, sandbox.Command{Args: []string{"sleep", "30"}})
-	stop()
-	if !errors.Is(e, sandbox.ErrCommandUnconfirmed) {
-		t.Fatalf("timeout classified as certain: %v", e)
+	attached, err := c.ExecAttach(ctx, created.ID, client.ExecAttachOptions{})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if e = p.Kill(ctx, next.Reference); e != nil {
-		t.Fatal(e)
+	defer attached.Close()
+	var stdout bytes.Buffer
+	if _, err = stdcopy.StdCopy(&stdout, io.Discard, attached.Reader); err != nil {
+		t.Fatal(err)
 	}
+	status, err := c.ExecInspect(ctx, created.ID, client.ExecInspectOptions{})
+	if err != nil || status.Running {
+		t.Fatal("exec status unknown", err)
+	}
+	return stdout.String(), status.ExitCode
 }

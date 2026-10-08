@@ -285,7 +285,7 @@ def provider_config(root, args, runtime_image):
     if args.provider == "docker":
         result["native"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
                             "network": "oac-node-" + args.installation_id,
-                            "seccomp_file": str(root / "runtime/seccomp.json"), "nested_sandbox": True}
+                            "seccomp_file": str(root / "runtime/seccomp.json")}
     else:
         endpoint = urlsplit(args.core_url)
         port = endpoint.port or (443 if endpoint.scheme == "https" else 80)

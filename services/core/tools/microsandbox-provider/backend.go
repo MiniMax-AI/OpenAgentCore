@@ -30,20 +30,6 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 	case "resume_compute":
 		s, e := b.resumeCompute(ctx, b.q.Compute)
 		return wire.Response{State: &s}, e
-	case "command":
-		h, _, e := b.inspect(ctx, b.q.Compute)
-		if e != nil {
-			return wire.Response{}, e
-		}
-		live, e := h.Connect(ctx)
-		if e != nil {
-			return wire.Response{}, e
-		}
-		defer live.Detach(context.Background())
-		commandCtx, cancel := context.WithDeadline(ctx, b.q.Deadline)
-		defer cancel()
-		result, e := runCommand(commandCtx, live, *b.q.Command, "1000:1000")
-		return wire.Response{Command: &result}, e
 	case "suspend":
 		s, e := b.suspend(ctx, *b.q.Suspend)
 		return wire.Response{State: &s}, e

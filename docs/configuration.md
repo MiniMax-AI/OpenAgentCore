@@ -130,7 +130,6 @@ The node installer writes Docker’s host settings into the `native` object of t
 | `image` | The Runtime image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
 | `network` | `oac-node-<installation-id>` | Runtime container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
-| `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
 
 The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.
 

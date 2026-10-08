@@ -2,8 +2,8 @@
 
 run_acceptance must run on the main thread of the Linux operator process.
 The supplied Session is unused and its /workspace/outputs directory is empty.
-The operator creates nonempty .user-runtime-isolation-canary files under
-/home/runtime/.oac/daemon and /environment/staging before calling.
+The operator creates a nonempty .user-runtime-isolation-canary file under
+/home/runtime/.oac/daemon before calling.
 The actual executor-key.json must remain under that protected daemon root.
 runtime.read(path) returns bytes within a bounded timeout, raising FileNotFoundError only for absence.
 runtime.restart() preserves workspace and native state and waits for reconnect.
@@ -74,8 +74,7 @@ def run_acceptance(client, foreign, http, session, runtime, evidence_path, secre
                "/workspace/outputs/b.txt": ("native-user-runtime-" + nonce + "\n").encode()}
     artifacts = {}
     private_paths = [protected_credential_path,
-                     "/home/runtime/.oac/daemon/.user-runtime-isolation-canary",
-                     "/environment/staging/.user-runtime-isolation-canary"]
+                     "/home/runtime/.oac/daemon/.user-runtime-isolation-canary"]
 
     def private_hashes():
         values = {}

@@ -64,7 +64,7 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
         for entry in tree.iterdir():
             archive.add(entry, arcname=entry.name)
     (context / 'runtime-env.json').write_text(json.dumps(environment))
-    for name in ['init.py', 'managed_init.py', 'helper_contract_generated.py']:
+    for name in ['managed_init.py', 'helper_contract_generated.py']:
         (context / name).write_bytes(Path(__file__).with_name(name).read_bytes())
     template = (Template(file_context_path=context).from_image(BASE)
                 .run_cmd('apt-get update && apt-get install -y --no-install-recommends '
@@ -72,7 +72,6 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
                          '&& rm -rf /var/lib/apt/lists/*', user='root')
                 .copy('runtime.tar.gz', '/root/runtime.tar.gz', user='root')
                 .copy('runtime-env.json', '/etc/oac-runtime-env.json', user='root')
-                .copy('init.py', '/opt/oac-e2b/init.py', user='root')
                 .copy('managed_init.py', '/opt/oac-e2b/managed_init.py', user='root')
                 .copy('helper_contract_generated.py', '/opt/oac-e2b/helper_contract_generated.py', user='root')
                 .run_cmd('tar --no-same-owner -xzf /root/runtime.tar.gz -C / && rm /root/runtime.tar.gz '
@@ -81,7 +80,7 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
                          '&& chown -R 1000:1000 /home/runtime /environment '
                          '&& chmod 0700 /home/runtime/.oac /environment/staging '
                          '&& chmod 0444 /etc/oac-runtime-env.json '
-                         '&& chmod 0555 /opt/oac-e2b /opt/oac-e2b/init.py /opt/oac-e2b/managed_init.py /opt/oac-e2b/helper_contract_generated.py', user='root')
+                         '&& chmod 0555 /opt/oac-e2b /opt/oac-e2b/managed_init.py /opt/oac-e2b/helper_contract_generated.py', user='root')
                 .set_user('runtime').set_workdir('/environment/workspace'))
     result = Template.build(template, name=args.name, cpu_count=2, memory_mb=2048,
                             on_build_logs=lambda entry: print(entry.message, flush=True),

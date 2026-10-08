@@ -11,8 +11,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -56,7 +54,7 @@ func Discover(ctx context.Context, caller Caller, binary, apiKey, apiURL, domain
 	if out.ErrorCode == "invalid" {
 		return Response{}, sandbox.ErrInvalid
 	}
-	if out.ErrorCode != "" || out.Info != nil || out.Command != nil || out.TemplateBuild != nil || out.Observation != nil {
+	if out.ErrorCode != "" || out.Info != nil || out.TemplateBuild != nil || out.Observation != nil {
 		return Response{}, sandbox.ErrComputeUnconfirmed
 	}
 	if operation == "list_templates" {
@@ -178,7 +176,7 @@ func newDirect(c sandbox.DirectConfig) (*Provider, error) {
 	}
 	return provider, nil
 }
-func (p *Provider) call(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap, command *sandbox.Command) (Response, error) {
+func (p *Provider) call(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap) (Response, error) {
 	deadline, ok := ctx.Deadline()
 	if !ok || (operation != "validate_deployment" && !validReference(r)) {
 		return unstarted(operation, r), sandbox.ErrInvalid
@@ -186,19 +184,11 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	if err := ctx.Err(); err != nil {
 		return unstarted(operation, r), err
 	}
-	var connection *runtimebootstrap.Connection
-	if b != nil {
-		value := b.RuntimeConnection()
-		connection = &value
-	}
-	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
+	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, Deadline: deadline})
 	if errors.Is(err, errHelperNotStarted) {
 		return unstarted(operation, r), sandbox.ErrComputeUnconfirmed
 	}
 	if err != nil || out.Version != ProtocolVersion {
-		if operation == "command" {
-			return Response{}, sandbox.ErrCommandUnconfirmed
-		}
 		return Response{}, sandbox.ErrComputeUnconfirmed
 	}
 	if out.Info != nil && (out.Info.Reference != r || len(out.Info.ProviderID) > 256 || len(out.Info.State) > 64 || out.Info.BootstrapComplete && !out.Info.CreateSettled) {
@@ -208,7 +198,7 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	case "":
 		return out, nil
 	case "template_invalid":
-		return out, fmt.Errorf("%w: This E2B template lacks the current Runtime startup entry point. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
+		return out, fmt.Errorf("%w: This E2B template lacks the current sandbox startup entry point. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
 	case "team_mismatch":
 		return out, sandbox.ErrCredentialOwnership
 	case "unauthorized":
@@ -221,8 +211,6 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 		return out, sandbox.ErrExists
 	case "not_found":
 		return out, sandbox.ErrNotFound
-	case "command_unconfirmed":
-		return out, sandbox.ErrCommandUnconfirmed
 	default:
 		return out, sandbox.ErrComputeUnconfirmed
 	}
@@ -235,12 +223,12 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 func (p *Provider) ValidateDeployment(ctx context.Context) (TemplateBuild, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	out, err := p.call(ctx, "validate_deployment", sandbox.Reference{}, nil, nil)
+	out, err := p.call(ctx, "validate_deployment", sandbox.Reference{}, nil)
 	if err != nil {
 		return TemplateBuild{}, err
 	}
 	build := out.TemplateBuild
-	if !out.DeploymentValid || out.Info != nil || out.Command != nil || out.Observation != nil || build == nil || build.Status != "ready" ||
+	if !out.DeploymentValid || out.Info != nil || out.Observation != nil || build == nil || build.Status != "ready" ||
 		build.CPUs == 0 || build.MemoryMiB == 0 || build.RootDiskMiB != nil && *build.RootDiskMiB == 0 ||
 		p.config.Resources != nil && (build.CPUs != p.config.Resources.CPUs || build.MemoryMiB != p.config.Resources.MemoryMiB) {
 		return TemplateBuild{}, sandbox.ErrComputeUnconfirmed
@@ -248,7 +236,7 @@ func (p *Provider) ValidateDeployment(ctx context.Context) (TemplateBuild, error
 	return *build, nil
 }
 func (p *Provider) info(ctx context.Context, operation string, r sandbox.Reference, b *sandbox.Bootstrap) (sandbox.Info, error) {
-	out, err := p.call(ctx, operation, r, b, nil)
+	out, err := p.call(ctx, operation, r, b)
 	if out.Info != nil {
 		return *out.Info, err
 	}
@@ -258,7 +246,6 @@ func (p *Provider) info(ctx context.Context, operation string, r sandbox.Referen
 	return sandbox.Info{Reference: r}, err
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	b.AllowedDomains = agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}.Hosts()
 	return p.info(ctx, "create", b.Reference, &b)
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
@@ -268,29 +255,11 @@ func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info
 	return p.info(ctx, "renew", r, nil)
 }
 func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
-	out, err := p.call(ctx, "kill", r, nil, nil)
+	out, err := p.call(ctx, "kill", r, nil)
 	if err == nil && (out.Info == nil || !out.Info.CreateSettled || out.Info.State != "absent") {
 		return sandbox.ErrComputeUnconfirmed
 	}
 	return err
-}
-func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	if len(c.Args) == 0 || len(c.Stdin) > sandbox.MaxCommandInputBytes || c.Directory != "" && !filepath.IsAbs(c.Directory) {
-		return sandbox.CommandResult{}, sandbox.ErrInvalid
-	}
-	for _, arg := range c.Args {
-		if strings.ContainsRune(arg, 0) {
-			return sandbox.CommandResult{}, sandbox.ErrInvalid
-		}
-	}
-	out, err := p.call(ctx, "command", r, nil, &c)
-	if err != nil {
-		return sandbox.CommandResult{}, err
-	}
-	if out.Command == nil || len(out.Command.Stdout) > MaxOutputBytes || len(out.Command.Stderr) > MaxOutputBytes {
-		return sandbox.CommandResult{}, sandbox.ErrCommandUnconfirmed
-	}
-	return *out.Command, nil
 }
 
 // A fresh allocation Create rejected before process startup has no cloud effects.

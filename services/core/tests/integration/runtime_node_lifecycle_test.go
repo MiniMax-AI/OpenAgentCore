@@ -124,9 +124,6 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			f.provider.mu.Lock()
 			restores := f.provider.restores
 			f.provider.mu.Unlock()
-			if f.provider.preparation.commandCalls.Load() != 0 {
-				t.Fatal("initialization invoked Provider.RunCommand")
-			}
 			if restores != 1 || f.provider.promptFrames.Load() != 0 {
 				t.Fatal("restore replayed or lifecycle sent model work")
 			}

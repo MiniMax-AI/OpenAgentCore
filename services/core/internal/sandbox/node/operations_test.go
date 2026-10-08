@@ -49,7 +49,7 @@ func TestUnsupportedProxyRejectsBeforeNodeResolution(t *testing.T) {
 	}
 }
 func TestNodeOperationMappingCoversForwardedMethods(t *testing.T) {
-	for _, method := range []string{"Create", "GetInfo", "Renew", "Kill", "RunCommand", "Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute", "Observe"} {
+	for _, method := range []string{"Create", "GetInfo", "Renew", "Kill", "Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "ResumeCompute", "Observe"} {
 		if wire := operationWire(method); wire == "" || operationMethod(wire) != method {
 			t.Fatal(method)
 		}

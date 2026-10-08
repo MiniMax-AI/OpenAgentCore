@@ -4,46 +4,38 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
+	"io"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-// Runtime and the Sandbox I/O service read their launch inputs; Runtime's
-// private auth storage stays opaque. All credential bytes enter the guest on
-// stdin before any native work is admitted.
+// The bootstrap script writes the Sandbox I/O service's input, read from
+// stdin so the credential never appears in arguments, and starts the service
+// as the sandbox user.
 const bootstrapScript = `
-import ctypes,json,os,stat,subprocess,sys
-b=json.load(sys.stdin)
-for p in ['/home/runtime','/home/runtime/.oac','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages','/run/oac']:
+import ctypes,os,stat,subprocess,sys
+data=sys.stdin.buffer.read()
+for p in ['/home/runtime','/environment','/environment/workspace','/environment/initialization','/environment/packages']:
     os.makedirs(p,mode=0o700,exist_ok=True)
     if not stat.S_ISDIR(os.lstat(p).st_mode): raise RuntimeError('invalid bootstrap directory')
     os.chmod(p,0o700);os.chown(p,1000,1000)
-def private(p,v):
-    fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-    with os.fdopen(fd,'w') as f:
-        json.dump(v,f)
-        f.flush();os.fsync(f.fileno());os.fchown(f.fileno(),1000,1000)
-p='/home/runtime/runtime-bootstrap.json'
-private(p,b['Runtime'])
 s='/home/runtime/sandbox-io-bootstrap.json'
-private(s,b['SandboxIO'])
+fd=os.open(s,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'wb') as f:
+    f.write(data);f.flush();os.fsync(f.fileno());os.fchown(f.fileno(),1000,1000)
 if not stat.S_ISDIR(os.lstat('/workspace').st_mode): raise RuntimeError('invalid workspace alias')
 libc=ctypes.CDLL(None,use_errno=True)
 if libc.mount(b'/environment/workspace',b'/workspace',None,4096,None)!=0:
     raise OSError(ctypes.get_errno(),'workspace bind mount failed')
-def runtime_user():
+def sandbox_user():
     os.setgroups([]);os.setgid(1000);os.setuid(1000)
-subprocess.run(['/usr/local/bin/oac-daemon','connect','--profile','default','--bootstrap-file',p,'-b'],
-               stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-               cwd='/environment/workspace',preexec_fn=runtime_user,check=True)
 subprocess.Popen(['/usr/local/bin/oac-sandbox-io','--bootstrap-file',s],env={},start_new_session=True,
                  stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-                 cwd='/environment/workspace',preexec_fn=runtime_user)
+                 cwd='/environment/workspace',preexec_fn=sandbox_user)
 `
 
 func (b backend) create(ctx context.Context) (wire.Response, error) {
@@ -53,27 +45,22 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	} else if !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
 		return wire.Response{}, e
 	}
-	bootstrap := *b.q.Bootstrap
-	policy := agentnetwork.Policy{Access: bootstrap.NetworkAccess, AllowedDomains: bootstrap.AllowedDomains}
-	domains, _ := json.Marshal(policy.Hosts())
+	input, e := b.q.Bootstrap.SandboxIO.Marshal()
+	if e != nil {
+		return wire.Response{}, sandbox.ErrInvalid
+	}
 	labels := wire.Labels(b.q.Config, b.q.Reference)
 	labels[bootstrapLabel] = "pending"
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		sdk.WithImage(b.q.Config.Image), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
 		sdk.WithMaxMemory(b.q.Config.MemoryMiB), sdk.WithMaxCPUs(b.q.Config.CPUs),
 		sdk.WithRootDisk(sdk.RootDisk.Managed(b.q.Config.RootDiskMiB)), sdk.WithUser("1000:1000"),
-		// A native owned disk keeps workspace and staging on one filesystem.
-		// Bootstrap creates their directories before starting the daemon.
+		// The Environment lives on a native owned disk; bootstrap creates its
+		// directories before starting Sandbox I/O.
 		sdk.WithWorkdir("/"), sdk.WithMounts(map[string]sdk.MountConfig{
 			"/environment": sdk.Mount.Owned(sdk.OwnedVolumeOptions{Kind: sdk.VolumeKindDisk, SizeMiB: b.q.Config.EnvironmentDiskMiB}),
 		}),
-		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
-		sdk.WithEnv(map[string]string{
-			"HOME": "/home/runtime", "OAC_RUNTIME_HOME": "/home/runtime/.oac",
-			"OAC_RUNTIME_ENVIRONMENT_ID": bootstrap.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bootstrap.SessionID,
-			"OAC_RUNTIME_NETWORK_ACCESS": policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS": string(domains),
-			"OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE": "/run/oac/daemon-suspend.json",
-		}))
+		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()))
 	if e != nil {
 		return wire.Response{}, e
 	}
@@ -87,18 +74,10 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	if e != nil {
 		return qualified, e
 	}
-	data, e := launchInputs(bootstrap)
-	if e != nil {
-		return wire.Response{}, e
-	}
 	initialization, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	result, e := runCommand(initialization, live, sandbox.Command{Args: []string{"/usr/bin/python3", "-I", "-S", "-c", bootstrapScript}, Stdin: data}, "0:0")
-	if e != nil {
+	if e = runBootstrap(initialization, live, input); e != nil {
 		return wire.Response{}, e
-	}
-	if result.ExitCode != 0 {
-		return wire.Response{}, sandbox.ErrCommandUnconfirmed
 	}
 	// Persist the final bootstrap receipt without restarting the live guest.
 	// v0.7.2 cannot update active labels; ownership reads persisted config.
@@ -108,23 +87,77 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	}
 	_, state, e := b.inspect(ctx, c)
 	if e == nil && !state.BootstrapComplete {
-		return wire.Response{}, sandbox.ErrCommandUnconfirmed
+		return wire.Response{}, sandbox.ErrComputeUnconfirmed
 	}
 	return wire.Response{State: &state}, e
 }
 
-// launchInputs is the bootstrap script's stdin: the daemon's connection and
-// the Sandbox I/O service's input.
-func launchInputs(b sandbox.Bootstrap) ([]byte, error) {
-	connection, err := b.RuntimeConnection().Marshal()
-	if err != nil {
-		return nil, err
+// runBootstrap runs the bootstrap script as root with input on its stdin.
+// Only a confirmed zero exit after the whole input was written settles it.
+func runBootstrap(ctx context.Context, live *sdk.Sandbox, input []byte) error {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return sandbox.ErrInvalid
 	}
-	serve, err := b.SandboxIO.Marshal()
-	if err != nil {
-		return nil, err
+	timeout := time.Until(deadline)
+	if timeout <= 0 {
+		return sandbox.ErrComputeUnconfirmed
 	}
-	return json.Marshal(struct{ Runtime, SandboxIO json.RawMessage }{connection, serve})
+	handle, e := live.ExecStream(ctx, "/usr/bin/python3", []string{"-I", "-S", "-c", bootstrapScript},
+		sdk.WithExecUser("0:0"), sdk.WithExecTimeout(timeout), sdk.WithExecStdinPipe())
+	if e != nil {
+		return errors.Join(sandbox.ErrComputeUnconfirmed, e)
+	}
+	defer handle.Close()
+	sink := handle.TakeStdin()
+	if sink == nil {
+		return sandbox.ErrComputeUnconfirmed
+	}
+	// Write and receive concurrently to avoid full-pipe deadlocks.
+	written := make(chan error, 1)
+	go func() {
+		n, err := sink.WriteCtx(ctx, input)
+		if err == nil && n != len(input) {
+			err = io.ErrShortWrite
+		}
+		if err == nil {
+			err = sink.Close()
+		}
+		written <- err
+	}()
+	return awaitBootstrap(ctx, handle.Recv, written)
+}
+
+func awaitBootstrap(ctx context.Context, receive func(context.Context) (*sdk.ExecEvent, error), written <-chan error) error {
+	exited, code := false, 0
+	for {
+		event, err := receive(ctx)
+		if err != nil {
+			return errors.Join(sandbox.ErrComputeUnconfirmed, err)
+		}
+		switch event.Kind {
+		case sdk.ExecEventExited:
+			if exited {
+				return sandbox.ErrComputeUnconfirmed
+			}
+			exited, code = true, event.ExitCode
+		case sdk.ExecEventStdinError, sdk.ExecEventFailed:
+			return sandbox.ErrComputeUnconfirmed
+		case sdk.ExecEventDone:
+			if !exited || code != 0 {
+				return sandbox.ErrComputeUnconfirmed
+			}
+			select {
+			case err := <-written:
+				if err != nil {
+					return sandbox.ErrComputeUnconfirmed
+				}
+				return nil
+			case <-ctx.Done():
+				return sandbox.ErrComputeUnconfirmed
+			}
+		}
+	}
 }
 
 // Only the initial post-Create inspection uses this proof. Native creation has

@@ -56,9 +56,6 @@ func (p *nodeIsolationProvider) GetCompute(ctx context.Context, r sandbox.Refere
 	}
 	return p.fakeCheckpointProvider.GetCompute(ctx, r, c)
 }
-func (p *nodeIsolationProvider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	return p.preparation.RunCommand(ctx, r, c)
-}
 
 type nodeIsolationFixture struct {
 	t                    *testing.T

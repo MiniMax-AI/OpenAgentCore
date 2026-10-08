@@ -19,7 +19,7 @@ import (
 
 const ProtocolVersion = 5
 const MaxControlFrameBytes = 32 * 1024
-const MaxFrameBytes = 72 * 1024 * 1024
+const MaxFrameBytes = 1024 * 1024
 const maxPending = 32
 const maxRequestTimeoutMillis int64 = 120000
 
@@ -89,7 +89,6 @@ type request struct {
 	Bootstrap   *sandbox.Bootstrap        `json:"bootstrap,omitempty"`
 	Compute     *sandbox.Compute          `json:"compute,omitempty"`
 	Generation  uint64                    `json:"generation,omitempty"`
-	Command     *sandbox.Command          `json:"command,omitempty"`
 	Suspend     *sandbox.SuspendRequest   `json:"suspend,omitempty"`
 	Resume      *sandbox.ResumeRequest    `json:"resume,omitempty"`
 	Snapshot    *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
@@ -104,7 +103,6 @@ type response struct {
 	Info         *sandbox.Info                      `json:"info,omitempty"`
 	Compute      *sandbox.Compute                   `json:"compute,omitempty"`
 	State        *sandbox.ComputeState              `json:"state,omitempty"`
-	Command      *sandbox.CommandResult             `json:"command,omitempty"`
 	Sample       *runtimeobs.Sample                 `json:"sample,omitempty"`
 }
 
@@ -187,8 +185,6 @@ func errorCode(err error) string {
 		return "exists"
 	case errors.Is(err, sandbox.ErrNotFound):
 		return "not_found"
-	case errors.Is(err, sandbox.ErrCommandUnconfirmed):
-		return "command_unconfirmed"
 	default:
 		return "unconfirmed"
 	}
@@ -221,16 +217,11 @@ func responseError(out response) error {
 		return sandbox.ErrExists
 	case "not_found":
 		return sandbox.ErrNotFound
-	case "command_unconfirmed":
-		return sandbox.ErrCommandUnconfirmed
 	default:
 		return sandbox.ErrComputeUnconfirmed
 	}
 }
-func uncertain(operation string, err error) error {
-	if operation == "command" || operation == "command_compute" {
-		return errors.Join(sandbox.ErrCommandUnconfirmed, err)
-	}
+func uncertain(err error) error {
 	return errors.Join(sandbox.ErrComputeUnconfirmed, err)
 }
 func (q request) validate() error {
@@ -238,7 +229,7 @@ func (q request) validate() error {
 		return sandbox.ErrInvalid
 	}
 	count := 0
-	for _, ok := range []bool{q.Bootstrap != nil, q.Compute != nil, q.Command != nil, q.Suspend != nil, q.Resume != nil, q.Snapshot != nil, q.Observation != nil} {
+	for _, ok := range []bool{q.Bootstrap != nil, q.Compute != nil, q.Suspend != nil, q.Resume != nil, q.Snapshot != nil, q.Observation != nil} {
 		if ok {
 			count++
 		}
@@ -262,14 +253,6 @@ func (q request) validate() error {
 		}
 	case "compute", "kill_compute", "resume_compute":
 		if count == 1 && q.Compute != nil {
-			return nil
-		}
-	case "command":
-		if count == 1 && q.Command != nil && len(q.Command.Stdin) <= sandbox.MaxCommandInputBytes {
-			return nil
-		}
-	case "command_compute":
-		if count == 2 && q.Command != nil && q.Compute != nil && len(q.Command.Stdin) <= sandbox.MaxCommandInputBytes {
 			return nil
 		}
 	case "suspend":
@@ -303,7 +286,6 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		return out
 	}
 	var info sandbox.Info
-	var command sandbox.CommandResult
 	switch q.Operation {
 	case "observe":
 		var sample runtimeobs.Sample
@@ -320,9 +302,6 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		out.Info = &info
 	case "kill":
 		err = p.Kill(ctx, q.Reference)
-	case "command":
-		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
-		out.Command = &command
 	default:
 		var state sandbox.ComputeState
 		var compute sandbox.Compute
@@ -349,9 +328,6 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		case "resume_compute":
 			state, err = p.ResumeCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
-		case "command_compute":
-			command, err = p.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)
-			out.Command = &command
 		default:
 			err = sandbox.ErrInvalid
 		}
@@ -367,7 +343,6 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 			out.Info = nil
 		}
 		out.State = nil
-		out.Command = nil
 		out.Compute = nil
 	}
 	return out

@@ -59,9 +59,6 @@ func (o PublicOrigin) String() string { return o.origin }
 // API is the base URL of the Agents API.
 func (o PublicOrigin) API() string { return o.origin + "/v1" }
 
-// RuntimeAPI is the base URL sandboxes and nodes call.
-func (o PublicOrigin) RuntimeAPI() string { return o.origin + "/api/v1" }
-
 // DaemonWebSocket is the daemon transport: ws on an http origin, wss on https.
 func (o PublicOrigin) DaemonWebSocket() string {
 	return "ws" + strings.TrimPrefix(o.origin, "http") + "/api/v1/agent-daemon/ws"

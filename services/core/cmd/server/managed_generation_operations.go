@@ -83,17 +83,6 @@ func (p *generationRouter) DeleteSnapshot(ctx context.Context, r sandbox.Referen
 	defer done()
 	return v.DeleteSnapshot(ctx, r, snapshot)
 }
-func (p *generationRouter) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, command sandbox.Command) (sandbox.CommandResult, error) {
-	if err := providercontract.Require(p, "RunCommandCompute"); err != nil {
-		return sandbox.CommandResult{}, err
-	}
-	v, done, err := p.route(ctx, r)
-	if err != nil {
-		return sandbox.CommandResult{}, err
-	}
-	defer done()
-	return v.RunCommandCompute(ctx, r, c, command)
-}
 func (p *generationRouter) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	if err := providercontract.Require(p, "ResumeCompute"); err != nil {
 		return sandbox.ComputeState{}, err

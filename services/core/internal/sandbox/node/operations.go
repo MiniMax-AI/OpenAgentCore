@@ -6,7 +6,6 @@ var operationMethods = map[string]string{
 	"info":            "GetInfo",
 	"renew":           "Renew",
 	"kill":            "Kill",
-	"command":         "RunCommand",
 	"initial":         "Initial",
 	"new_compute":     "NewCompute",
 	"compute":         "GetCompute",
@@ -14,7 +13,6 @@ var operationMethods = map[string]string{
 	"resume":          "Resume",
 	"kill_compute":    "KillCompute",
 	"delete_snapshot": "DeleteSnapshot",
-	"command_compute": "RunCommandCompute",
 	"resume_compute":  "ResumeCompute",
 	"observe":         "Observe",
 }

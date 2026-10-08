@@ -80,8 +80,6 @@ func code(err error) string {
 		return "exists"
 	case errors.Is(err, sandbox.ErrNotFound), sdk.IsKind(err, sdk.ErrSandboxNotFound):
 		return "not_found"
-	case errors.Is(err, sandbox.ErrCommandUnconfirmed):
-		return "command_unconfirmed"
 	case errors.Is(err, runtimeobs.ErrUnavailable), sdk.IsKind(err, sdk.ErrMetricsDisabled), sdk.IsKind(err, sdk.ErrMetricsUnavailable):
 		return "metrics_unavailable"
 	default:

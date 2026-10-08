@@ -1,5 +1,4 @@
 """The version-pinned SDK boundary. No handwritten provider HTTP or envd RPC."""
-import base64
 import shlex
 
 from e2b import Sandbox
@@ -18,7 +17,7 @@ from e2b.api.client.types import UNSET
 
 from state import Failure
 
-from helper_contract_generated import SDK_VERSION, MAX_OUTPUT, MAX_COMMAND_INPUT
+from helper_contract_generated import SDK_VERSION, MAX_OUTPUT
 
 
 def list_templates(config, remaining):
@@ -155,44 +154,29 @@ def definitely_rejected(error):
             isinstance(error, SandboxException) and error.status_code in (400, 401, 403, 404, 422, 429))
 
 
-def run(sandbox, command, remaining, user='runtime'):
-    raw = command.get('Stdin')
-    data = base64.b64decode(raw, validate=True) if raw is not None else None
-    if data is not None and len(data) > MAX_COMMAND_INPUT:
-        raise Failure('invalid')
-    args = command.get('Args')
-    if not isinstance(args, list) or not args or any(not isinstance(arg, str) or '\0' in arg for arg in args):
-        raise Failure('invalid')
-    directory = command.get('Directory') or None
-    if directory is not None and not directory.startswith('/'):
-        raise Failure('invalid')
+def run(sandbox, args, remaining):
+    """Run one startup step as root and return its exit code. Output is never
+    returned; output beyond the bound or a missing exit status is unconfirmed."""
     counts = [0, 0]
 
     def bounded(index, text):
         counts[index] += len(text.encode())
         if counts[index] > MAX_OUTPUT:
-            raise Failure('command_unconfirmed')
+            raise Failure('unconfirmed')
 
     try:
-        process = sandbox.commands.run(shlex.join(args), user=user, cwd=directory,
-                                       background=True, stdin=data is not None,
+        process = sandbox.commands.run(shlex.join(args), user='root', background=True,
                                        timeout=remaining(), request_timeout=remaining())
-        if data is not None:
-            # Avoid an oversized unary SDK message; every chunk is submitted once.
-            for offset in range(0, len(data), 64 * 1024):
-                sandbox.commands.send_stdin(process.pid, data[offset:offset + 64 * 1024],
-                                            request_timeout=remaining())
-            sandbox.commands.close_stdin(process.pid, request_timeout=remaining())
         try:
             result = process.wait(on_stdout=lambda text: bounded(0, text),
                                   on_stderr=lambda text: bounded(1, text))
         except CommandExitException as error:
             result = error
-        return {'Stdout': result.stdout, 'Stderr': result.stderr, 'ExitCode': result.exit_code}
+        return result.exit_code
     except Failure:
         raise
     except Exception:
-        raise Failure('command_unconfirmed') from None
+        raise Failure('unconfirmed') from None
 
 
 def verify_team_template(config, remaining):

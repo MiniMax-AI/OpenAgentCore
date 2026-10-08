@@ -75,8 +75,6 @@ The application owns the machine. It creates the Session with a clean absolute `
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
 - The workspace must survive a daemon restart. Losing it never authorizes silent replacement or replay.
 
-**Application-managed E2B.** An application can run the Runtime in an E2B sandbox it creates, renews and destroys with the E2B SDK, then enroll that Runtime as a `self_hosted` Environment ([E2B Runtime guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)). Core keeps no E2B allocation for it and never renews or kills it.
-
 ### Ownership rules
 
 - Keep Environment identity, ownership, configuration and lifecycle in Core, separate from Provider compute, device identity, daemon sockets and native sessions. Keep mutable connection state out of immutable configuration; a replacement owner fences stale observations.

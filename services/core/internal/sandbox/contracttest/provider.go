@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -42,7 +40,7 @@ type Fixture struct {
 
 // Bootstrap returns a valid Create input for r.
 func Bootstrap(r sandbox.Reference) sandbox.Bootstrap {
-	return sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled",
+	return sandbox.Bootstrap{Reference: r,
 		SandboxIO: sandboxbootstrap.Input{Version: sandboxbootstrap.Version, LinkURL: "wss://core.example/api/v1/sandbox-link", Credential: "synthetic-serve",
 			Resource: sandboxbootstrap.Resource{TenantID: r.TenantID, EnvironmentID: r.EnvironmentID, Kind: "allocation", ID: r.AllocationID, Generation: 1}}}
 }

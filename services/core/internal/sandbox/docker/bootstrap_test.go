@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
@@ -16,9 +15,9 @@ import (
 	"github.com/moby/moby/client"
 )
 
-func TestBootstrapDeliversOnlyPublicLaunchInputs(t *testing.T) {
+func TestBootstrapDeliversOnlySandboxIOInput(t *testing.T) {
 	b := contracttest.Bootstrap(sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()})
-	found := map[string]bool{}
+	var files []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "PUT" || !strings.HasSuffix(r.URL.Path, "/containers/test/archive") {
 			t.Errorf("unexpected Docker operation %s", r.URL.Path)
@@ -33,13 +32,10 @@ func TestBootstrapDeliversOnlyPublicLaunchInputs(t *testing.T) {
 				t.Error(err)
 				break
 			}
-			if strings.Contains(h.Name, "auth.json") {
-				t.Error("provider wrote Runtime private storage")
-			}
-			if h.Name != "runtime/runtime-bootstrap.json" && h.Name != "runtime/sandbox-io-bootstrap.json" {
+			if h.Typeflag != tar.TypeReg {
 				continue
 			}
-			found[h.Name] = true
+			files = append(files, h.Name)
 			raw, err := io.ReadAll(tr)
 			if err != nil {
 				t.Error(err)
@@ -47,11 +43,7 @@ func TestBootstrapDeliversOnlyPublicLaunchInputs(t *testing.T) {
 			if h.Mode != 0600 || h.Uid != 1000 || h.Gid != 1000 {
 				t.Error("launch input permissions", h.Name)
 			}
-			if h.Name == "runtime/runtime-bootstrap.json" {
-				if c, err := runtimebootstrap.Decode(raw); err != nil || c != b.RuntimeConnection() {
-					t.Error("invalid Runtime launch input")
-				}
-			} else if in, err := sandboxbootstrap.Decode(raw); err != nil || in != b.SandboxIO {
+			if in, err := sandboxbootstrap.Decode(raw); err != nil || in != b.SandboxIO {
 				t.Error("invalid Sandbox I/O launch input")
 			}
 		}
@@ -66,7 +58,7 @@ func TestBootstrapDeliversOnlyPublicLaunchInputs(t *testing.T) {
 	if err := (&Provider{client: c}).bootstrap(t.Context(), "test", b); err != nil {
 		t.Fatal(err)
 	}
-	if len(found) != 2 {
-		t.Fatal("missing launch input", found)
+	if len(files) != 1 || files[0] != "runtime/sandbox-io-bootstrap.json" {
+		t.Fatal("bootstrap files", files)
 	}
 }

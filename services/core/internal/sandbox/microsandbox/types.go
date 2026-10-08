@@ -12,7 +12,7 @@ import (
 const ProtocolVersion = 2
 const SDKVersion = "v0.7.2"
 const MaxOutputBytes = 1024 * 1024
-const MaxRequestBytes = 72 * 1024 * 1024
+const MaxRequestBytes = 1024 * 1024
 const MaxResponseBytes = 16 * 1024 * 1024
 
 // Config is trusted deployment configuration. Paths and hashes refer to one
@@ -47,8 +47,8 @@ type State = sandbox.ComputeState
 type SuspendRequest = sandbox.SuspendRequest
 type ResumeRequest = sandbox.ResumeRequest
 
-// Request and Response are the finite, private helper boundary. Confidential
-// Bootstrap and Command bytes travel only through stdin and are never logged.
+// Request and Response are the finite, private helper boundary. The
+// confidential Bootstrap travels only through stdin and is never logged.
 type Request struct {
 	Version   int
 	Operation string
@@ -56,7 +56,6 @@ type Request struct {
 	Reference sandbox.Reference
 	Compute   Compute
 	Bootstrap *sandbox.Bootstrap
-	Command   *sandbox.Command
 	Suspend   *SuspendRequest
 	Resume    *ResumeRequest
 	Snapshot  *SnapshotIdentity
@@ -68,7 +67,6 @@ type Response struct {
 	CreateSettled bool `json:",omitempty"`
 	Version       int
 	State         *State
-	Command       *sandbox.CommandResult
 	Metrics       *Metrics
 	ErrorCode     string
 }

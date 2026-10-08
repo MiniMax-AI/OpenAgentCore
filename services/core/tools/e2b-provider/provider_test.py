@@ -26,25 +26,18 @@ class ProviderTest(unittest.TestCase):
                        'APIKey': 'private-account-secret', 'Template': 'test:' + str(uuid4()), 'TimeoutSeconds': 120}
         self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
-                        'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
-                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret',
-                                          NetworkAccess='enabled', AllowedDomains=[],
+                        'Bootstrap': dict(self.reference,
                                           SandboxIO={'version': 1, 'link_url': 'wss://core.example/api/v1/sandbox-link',
                                                      'credential': 'private-serve-secret',
                                                      'resource': {'tenant_id': self.reference['TenantID'],
                                                                   'environment_id': self.reference['EnvironmentID'], 'kind': 'allocation',
                                                                   'id': self.reference['AllocationID'], 'generation': 1}})}
-        self.request['RuntimeBootstrap'] = {
-            'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
-            'device_id': self.request['Bootstrap']['DeviceID'],
-            'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',
                           _envd_access_token='private-envd-secret', traffic_access_token=None, state='running')
         self.cloud.metadata = Provider(self.request).metadata
         self.cloud.template_id = self.config['Template']
-        self.identity = dict(self.reference, InstallationID=self.config['InstallationID'],
-                             SessionID=self.request['Bootstrap']['SessionID'], DeviceID=self.request['Bootstrap']['DeviceID'])
-        self.ready = json.dumps({'identity': self.identity, 'status': 'daemon_started', 'daemon_pid': 123})
+        self.identity = dict(self.reference, InstallationID=self.config['InstallationID'])
+        self.ready = json.dumps({'identity': self.identity, 'status': 'sandbox_io_started', 'sandbox_io_pid': 123})
         self.cloud.files.read.return_value = self.ready
         self.api = Mock()
         self.api.create.return_value = self.cloud
@@ -56,7 +49,7 @@ class ProviderTest(unittest.TestCase):
         self.runtime = patch('provider.restore', return_value=self.cloud)
         self.runtime.start()
         self.addCleanup(self.runtime.stop)
-        self.command = patch('provider.run', return_value={'Stdout': '', 'Stderr': '', 'ExitCode': 0})
+        self.command = patch('provider.run', return_value=0)
         self.command.start()
         self.addCleanup(self.command.stop)
 
@@ -72,10 +65,7 @@ class ProviderTest(unittest.TestCase):
         self.assertTrue(result['Info']['BootstrapComplete'])
         self.assertTrue(result['Info']['CreateSettled'])
         startup = json.loads(self.cloud.files.write.call_args.args[1])
-        self.assertEqual(startup['RuntimeBootstrap'], self.request['RuntimeBootstrap'])
-        self.assertEqual(startup['SandboxIO'], self.request['Bootstrap']['SandboxIO'])
-        self.assertNotIn('CoreURL', startup)
-        self.assertNotIn('Credential', startup)
+        self.assertEqual(startup, dict(self.request['Bootstrap'], InstallationID=self.config['InstallationID']))
         self.assertEqual(self.call('create')['ErrorCode'], 'exists')
         self.assertTrue(self.call('inspect')['Info']['BootstrapComplete'])
         self.api.create.assert_called_once()
@@ -85,7 +75,6 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(kwargs['metadata'], self.cloud.metadata)
         serialized = json.dumps(self.record())
         self.assertNotIn(self.config['APIKey'], serialized)
-        self.assertNotIn(self.request['Bootstrap']['Credential'], serialized)
         self.assertNotIn(self.request['Bootstrap']['SandboxIO']['credential'], serialized)
         self.assertEqual(self.record()['connection']['envd_access_token'], 'private-envd-secret')
         self.api.connect.assert_not_called()
@@ -152,7 +141,7 @@ class ProviderTest(unittest.TestCase):
         self.cloud.commands.run.assert_not_called()
 
     def test_template_invalid_refuses_before_credentials_and_retains_owned_cleanup(self):
-        with patch('provider.run', return_value={'ExitCode': 78, 'Stdout': '', 'Stderr': ''}):
+        with patch('provider.run', return_value=78):
             result = self.call('create')
         self.assertEqual(result['ErrorCode'], 'template_invalid')
         self.assertTrue(result['Info']['CreateSettled'])
@@ -234,14 +223,14 @@ class ProviderTest(unittest.TestCase):
         self.api.kill.assert_called_once_with('owned-id', **self.api.kill.call_args.kwargs)
 
     def test_bootstrap_failure_is_settled_but_not_ready(self):
-        with patch('provider.run', return_value={'ExitCode': 1}):
+        with patch('provider.run', return_value=1):
             result = self.call('create')
         self.assertTrue(result['Info']['CreateSettled'])
         self.assertFalse(result['Info']['BootstrapComplete'])
         self.assertEqual(self.call('inspect')['Info']['State'], 'running')
 
     def test_mismatched_receipt_cannot_prove_bootstrap_complete(self):
-        self.cloud.files.read.return_value = json.dumps({'identity': {}, 'status': 'daemon_started', 'daemon_pid': 2})
+        self.cloud.files.read.return_value = json.dumps({'identity': {}, 'status': 'sandbox_io_started', 'sandbox_io_pid': 2})
         self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
         self.assertTrue(self.record()['settled'])
         self.assertFalse(self.record()['bootstrap_complete'])
@@ -309,24 +298,19 @@ class SDKTest(unittest.TestCase):
         self.assertEqual(client.connection_config.sandbox_headers['X-Access-Token'], material['envd_access_token'])
         self.assertEqual(client.connection_config.retries, 0)
 
-    def test_stdin_is_separate_from_quoted_command_and_receives_eof(self):
-        import base64
+    def test_startup_step_is_quoted_and_returns_only_its_exit_code(self):
         client = Mock()
-        client.commands.run.return_value.pid = 23
         client.commands.run.return_value.wait.return_value = SimpleNamespace(stdout='ok', stderr='', exit_code=7)
-        result = run(client, {'Args': ['cat', 'a;touch /unwanted'], 'Directory': '/workspace',
-                              'Stdin': base64.b64encode(b'private-input').decode()}, lambda: 3)
-        self.assertEqual(result['ExitCode'], 7)
+        self.assertEqual(run(client, ['cat', 'a;touch /unwanted'], lambda: 3), 7)
         self.assertEqual(client.commands.run.call_args.args, ("cat 'a;touch /unwanted'",))
-        client.commands.send_stdin.assert_called_once_with(23, b'private-input', request_timeout=3)
-        client.commands.close_stdin.assert_called_once_with(23, request_timeout=3)
+        self.assertEqual(client.commands.run.call_args.kwargs['user'], 'root')
 
-    def test_unknown_command_does_not_replay(self):
+    def test_unknown_startup_step_does_not_replay(self):
         client = Mock()
         client.commands.run.side_effect = TimeoutError('private command')
         with self.assertRaises(Failure) as result:
-            run(client, {'Args': ['true']}, lambda: 3)
-        self.assertEqual(result.exception.code, 'command_unconfirmed')
+            run(client, ['true'], lambda: 3)
+        self.assertEqual(result.exception.code, 'unconfirmed')
         client.commands.run.assert_called_once()
 
 

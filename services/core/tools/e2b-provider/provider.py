@@ -1,4 +1,4 @@
-"""Five bounded SDK operations for an already authorized Core allocation, plus
+"""Four bounded SDK operations for an already authorized Core allocation, plus
 read-only deployment validation and observation."""
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -194,8 +194,8 @@ class Provider:
                 receipt = None
             if receipt is not None:
                 expected = record.get('bootstrap_identity')
-                if (receipt.get('identity') != expected or receipt.get('status') != 'daemon_started' or
-                        type(receipt.get('daemon_pid')) is not int or receipt['daemon_pid'] <= 0):
+                if (receipt.get('identity') != expected or receipt.get('status') != 'sandbox_io_started' or
+                        type(receipt.get('sandbox_io_pid')) is not int or receipt['sandbox_io_pid'] <= 0):
                     raise Failure('ownership')
                 self.receipt.save(settled=True, bootstrap_complete=True)
         return cloud
@@ -206,8 +206,7 @@ class Provider:
         bootstrap = self.q['Bootstrap']
         if any(bootstrap.get(field) != value for field, value in self.reference.items()):
             raise Failure('invalid')
-        identity = dict(self.reference, InstallationID=self.config['InstallationID'],
-                        SessionID=bootstrap['SessionID'], DeviceID=bootstrap['DeviceID'])
+        identity = dict(self.reference, InstallationID=self.config['InstallationID'])
         self.receipt.save(status='create_pending', bootstrap_identity=identity)
         try:
             cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
@@ -230,23 +229,19 @@ class Provider:
             self.receipt.save(status='configuration_rejected', settled=True)
             raise
         # Validate the current template entry point before writing any credential.
-        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c',
-                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') or not os.access('/opt/oac-e2b/managed_init.py', os.R_OK) else 0)"]},
-                    self.remaining, user='root')
-        if check['ExitCode'] != 0:
+        check = run(cloud, ['/usr/bin/python3', '-I', '-c',
+                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') or not os.access('/opt/oac-e2b/managed_init.py', os.R_OK) else 0)"],
+                    self.remaining)
+        if check != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
-            raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
-        payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
-                       RuntimeBootstrap=self.q['RuntimeBootstrap'])
-        del payload['CoreURL'], payload['Credential']
+            raise Failure('template_invalid' if check == 78 else 'unconfirmed')
+        payload = dict(bootstrap, InstallationID=self.config['InstallationID'])
         if set(payload) != set(MANAGED_BOOTSTRAP_FIELDS):
             raise Failure('invalid')
         cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())
         self.receipt.save(status='bootstrap_pending')
-        result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '/opt/oac-e2b/managed_init.py']},
-                     self.remaining, user='root')
-        if result['ExitCode'] != 0:
+        if run(cloud, ['/usr/bin/python3', '-I', '/opt/oac-e2b/managed_init.py'], self.remaining) != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
             raise Failure('unconfirmed')
         self.receipt.save(status='bootstrap_exited', settled=True)
@@ -381,12 +376,6 @@ class Provider:
                 if operation == 'kill':
                     self.kill()
                     return {'Version': PROTOCOL_VERSION, 'Info': self.info(absent=True), 'ErrorCode': ''}
-                if operation == 'command':
-                    cloud = self.inspect()
-                    if cloud.state != 'running' or not self.receipt.data.get('bootstrap_complete'):
-                        raise Failure('unconfirmed')
-                    result = run(self.client(cloud), self.q['Command'], self.remaining)
-                    return {'Version': PROTOCOL_VERSION, 'Command': result, 'ErrorCode': ''}
                 cloud = {'create': self.create, 'inspect': self.inspect, 'renew': self.renew}[operation]()
                 return {'Version': PROTOCOL_VERSION, 'Info': self.info(cloud, absent=cloud is None), 'ErrorCode': ''}
             except Failure as error:

@@ -100,9 +100,9 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, BackendFingerprint: setup.BackendFingerprint, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", Provider: provider}, nil
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, BackendFingerprint: setup.BackendFingerprint, SandboxLink: "wss://core.example/api/v1/sandbox-link", Provider: provider}, nil
 	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
+		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
 	worker := startWorker(t, ctx, s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
 	var stop sync.Once

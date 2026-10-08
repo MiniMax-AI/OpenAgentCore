@@ -31,7 +31,7 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 	}
 	m := configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{InstallationID: uuid.NewString(), PublicOrigin: origin}, func(context.Context) error { return nil })
 	defer m.hub.Close()
-	if m.setup == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil || m.setup.runtimeAPI != "https://core.example/api/v1" {
+	if m.setup == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil || m.setup.sandboxLink != "wss://core.example/api/v1/sandbox-link" {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
 }
@@ -167,14 +167,14 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	id := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, runtimeAPI: "https://core.example/api/v1"}
+	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, sandboxLink: "wss://core.example/api/v1/sandbox-link"}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.selected.Load().Config != previous || candidate.Config.ProviderKind != "microsandbox" || candidate.Config.Suspension == nil || candidate.Config.CoreURL != "https://core.example/api/v1" {
+	if s.selected.Load().Config != previous || candidate.Config.ProviderKind != "microsandbox" || candidate.Config.Suspension == nil || candidate.Config.SandboxLink != "wss://core.example/api/v1/sandbox-link" {
 		t.Fatal("preparation published or lost candidate configuration")
 	}
 	committed := *candidate.Config

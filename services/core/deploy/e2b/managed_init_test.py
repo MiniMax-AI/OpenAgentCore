@@ -1,5 +1,4 @@
-"""Managed bootstrap reuses image protection without changing self-hosted enrollment."""
-import copy
+"""Managed startup starts only Sandbox I/O, once, with its input in a private file."""
 import json
 from pathlib import Path
 import tempfile
@@ -14,20 +13,16 @@ import managed_init
 
 
 def payload():
-    value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID',
-                                          'AllocationID', 'SessionID', 'DeviceID']}
-    return dict(value, RuntimeBootstrap={'version': 1, 'core_url': 'https://core.example/api/v1',
-                'device_id': value['DeviceID'], 'credential': 'private-managed-token'},
-                SandboxIO={'version': 1, 'link_url': 'wss://core.example/api/v1/sandbox-link', 'credential': 'private-serve-token',
-                           'resource': {'tenant_id': value['TenantID'], 'environment_id': value['EnvironmentID'],
-                                        'kind': 'allocation', 'id': value['AllocationID'], 'generation': 1}},
-                NetworkAccess='restricted', AllowedDomains=['example.com'])
+    value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID', 'AllocationID']}
+    return dict(value, SandboxIO={'version': 1, 'link_url': 'wss://core.example/api/v1/sandbox-link', 'credential': 'private-serve-token',
+                                  'resource': {'tenant_id': value['TenantID'], 'environment_id': value['EnvironmentID'],
+                                               'kind': 'allocation', 'id': value['AllocationID'], 'generation': 1}})
 
 
 class ManagedStartupTest(unittest.TestCase):
     def test_isolated_packaged_import(self):
         with tempfile.TemporaryDirectory() as temporary:
-            for name in ('init.py', 'managed_init.py', 'helper_contract_generated.py'):
+            for name in ('managed_init.py', 'helper_contract_generated.py'):
                 shutil.copy2(Path(__file__).with_name(name), Path(temporary, name))
             subprocess.run([sys.executable, '-I', '-c',
                             "import runpy,sys; runpy.run_path(sys.argv[1], run_name='fixture')",
@@ -47,28 +42,20 @@ class ManagedStartupTest(unittest.TestCase):
                     valid = False
                 self.assertEqual(valid, case['valid'])
 
-    def test_invalid_binding_rejected(self):
-        source = payload()
-        for key, value in [('DeviceID', 'other'), ('NetworkAccess', 'unknown')]:
-            with self.subTest(key=key), self.assertRaises(ValueError):
-                managed_init.identity(dict(source, **{key: value}))
-
     def exercise(self, failed=False):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'receipt'
             root.mkdir()
-            profile = Path(temporary) / 'profile'
-            profile.mkdir()
+            home = Path(temporary) / 'home'
+            home.mkdir()
             source = root / 'managed-bootstrap.json'
             data = payload()
             source.write_text(json.dumps(data))
             process = Mock(return_value=Mock(pid=456))
             if failed:
                 process.side_effect = RuntimeError('private process diagnostic')
-            image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'OAC_RUNTIME_HOME': str(Path(temporary) / '.oac'),
-                         'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}
-            with patch.object(managed_init.shared, 'ROOT', root), patch.object(managed_init.shared, 'PROFILE', profile), \
-                    patch.object(managed_init.shared, 'prepare_runtime', return_value=image_env), \
+            with patch.object(managed_init, 'ROOT', root), patch.object(managed_init, 'HOME', home), \
+                    patch.object(managed_init, 'prepare_sandbox'), \
                     patch.object(managed_init.os, 'fchown'), patch.object(managed_init.subprocess, 'Popen', process):
                 if failed:
                     with self.assertRaises(RuntimeError):
@@ -76,50 +63,32 @@ class ManagedStartupTest(unittest.TestCase):
                 else:
                     managed_init.initialize()
                 self.assertTrue((root / 'managed-launch.json').exists())
-                connection_file = Path(temporary) / 'runtime-bootstrap.json'
-                self.assertEqual(json.loads(connection_file.read_text()), data['RuntimeBootstrap'])
-                self.assertEqual(connection_file.stat().st_mode & 0o777, 0o600)
-                serve_file = Path(temporary) / 'sandbox-io-bootstrap.json'
+                serve_file = home / 'sandbox-io-bootstrap.json'
                 self.assertEqual(json.loads(serve_file.read_text()), data['SandboxIO'])
                 self.assertEqual(serve_file.stat().st_mode & 0o777, 0o600)
-                self.assertFalse((profile / 'auth.json').exists())
+                self.assertEqual(sorted(p.name for p in home.iterdir()), ['sandbox-io-bootstrap.json', 'sandbox-io.log'])
                 self.assertFalse(source.exists())
-                daemon = process.call_args_list[0]
-                self.assertEqual(daemon.args[0][-2:], ['--bootstrap-file', str(connection_file)])
-                self.assertEqual(daemon.kwargs['env']['OAC_RUNTIME_ENVIRONMENT_ID'], data['EnvironmentID'])
-                if not failed:
-                    serve = process.call_args_list[1]
-                    self.assertEqual(serve.args[0], ['/usr/local/bin/oac-sandbox-io', '--bootstrap-file', str(serve_file)])
-                    self.assertEqual(serve.kwargs['env'], {})
-                for call in process.call_args_list:
-                    self.assertEqual(call.kwargs['user'], 1000)
-                    for credential in (data['RuntimeBootstrap']['credential'], data['SandboxIO']['credential']):
-                        self.assertNotIn(credential, json.dumps(call.args))
-                        self.assertNotIn(credential, json.dumps(call.kwargs['env']))
+                self.assertEqual(process.call_count, 1)
+                serve = process.call_args
+                self.assertEqual(serve.args[0], ['/usr/local/bin/oac-sandbox-io', '--bootstrap-file', str(serve_file)])
+                self.assertEqual((serve.kwargs['env'], serve.kwargs['user'], serve.kwargs['group']), ({}, 1000, 1000))
+                self.assertNotIn(data['SandboxIO']['credential'], json.dumps(serve.args))
                 if failed:
                     self.assertFalse((root / 'managed-ready.json').exists())
                 else:
                     receipt = json.loads((root / 'managed-ready.json').read_text())
-                    self.assertEqual(receipt['identity'], managed_init.identity(data))
-                    self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(receipt))
-                    self.assertEqual(receipt['daemon_pid'], 456)
-                calls = process.call_count
+                    self.assertEqual(receipt, {'identity': managed_init.identity(data), 'status': 'sandbox_io_started',
+                                               'sandbox_io_pid': 456})
                 source.write_text(json.dumps(data))
                 with self.assertRaises(RuntimeError):
                     managed_init.initialize()
-                self.assertEqual(process.call_count, calls)
+                self.assertEqual(process.call_count, 1)
 
-    def test_managed_credentials_and_environment(self):
+    def test_starts_only_sandbox_io(self):
         self.exercise()
 
     def test_unknown_start_preserves_claim_and_never_replays(self):
         self.exercise(failed=True)
-
-    def test_existing_self_hosted_claim_prevents_managed_start(self):
-        with tempfile.TemporaryDirectory() as temporary, patch.object(managed_init.shared, 'ROOT', Path(temporary)):
-            Path(temporary, 'launch.json').write_text('{}')
-            with self.assertRaises(RuntimeError):
-                managed_init.initialize()
 
 
 if __name__ == '__main__':

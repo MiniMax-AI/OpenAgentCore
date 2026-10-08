@@ -33,7 +33,6 @@ The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only th
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
 | Executor credential | The installation claim, or the Core-key [executor credential routes](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the Serve credential of the Environment's enrollment on `sandbox-link` |
-| Daemon credential of a hosted sandbox | Core, for each managed allocation, delivered in the [bootstrap file](../../docs/runtime-bootstrap.md) | `agent-daemon/bootstrap`, `device-status` and `ws` |
 | Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap`, `device-status` and `ws` |
 
 Core keeps only a SHA-256 digest of each token and credential it stores; installation grants are signed and not stored. Credentials are not interchangeable: each works only on its own routes.

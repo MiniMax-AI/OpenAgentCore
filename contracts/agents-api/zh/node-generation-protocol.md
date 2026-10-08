@@ -1,14 +1,14 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: e349ba887f9788e8f39990d33638182afcda553593e934788746fa0423cb4ee7
+source_hash: 4c74de8583bc8f0b85b91a338357899a1bcc03d8b2bd7063e6c71dd0430e717b
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
 
 ## 帧与版本 {#frames-and-version}
 
-每个帧都是一个 JSON 文本消息，其 `version` 等于 `node.ProtocolVersion`；两端都会拒绝任何其他版本，并且没有回退解码器。成员名必须精确且唯一：未知成员、大小写别名、重复项和意外的空值都会被拒绝。控制帧（`hello`、`welcome`、`heartbeat`、`heartbeat_ack`、`retention`、`retention_ack`）最多为 32 KiB；`request` 和 `response` 帧最多为 72 MiB。无效帧会关闭连接。
+每个帧都是一个 JSON 文本消息，其 `version` 等于 `node.ProtocolVersion`；两端都会拒绝任何其他版本，并且没有回退解码器。成员名必须精确且唯一：未知成员、大小写别名、重复项和意外的空值都会被拒绝。控制帧（`hello`、`welcome`、`heartbeat`、`heartbeat_ack`、`retention`、`retention_ack`）最多为 32 KiB；`request` 和 `response` 帧最多为 1 MiB。无效帧会关闭连接。
 
 ## 连接 {#connection}
 
@@ -43,19 +43,17 @@ Core 发送包含以下内容的 `request` 帧：
 | `info` | `GetInfo` | 无 | `info` |
 | `renew` | `Renew` | 无 | `info` |
 | `kill` | `Kill` | 无 | 无 |
-| `command` | `RunCommand` | `command` | `command` |
 | `observe` | `Observe` | `observation` | `sample` |
 | `initial` | `Initial` | 无 | `compute` |
 | `new_compute` | `NewCompute` | 大于零的计算 `generation` 和可选的 `snapshot` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | 无 |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
-| `command_compute` | `RunCommandCompute` | `compute` 和 `command` | `command` |
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | 无 |
 
-`bootstrap` 是 Provider 的 `sandbox.Bootstrap`，其 `SandboxIO` 包含[沙箱引导](../../../docs/zh/sandbox-bootstrap.md)输入；Core 在发送 `create` 前完成校验。
+`bootstrap` 是 Provider 的 `sandbox.Bootstrap`：reference 以及 `SandboxIO` 中的[沙箱引导](../../../docs/zh/sandbox-bootstrap.md)输入；Core 在发送 `create` 前完成校验。
 
 只要 `connection_id`、`owner_epoch` 或 `sequence` 中任一值不匹配，请求就会关闭连接。格式错误的请求会得到 `invalid` 响应。未启用代次管理的节点仅接受其登记的 `deployment_generation`；支持代次管理的节点在对应代次的 Provider 上运行请求，无法运行时回复 `unconfirmed`。Core 仅向节点上已就绪的代次发送 `create` 和非 observe-only 的 `resume`，并且每条连接最多保留 32 个待处理请求。
 
@@ -66,14 +64,13 @@ Core 发送包含以下内容的 `request` 帧：
 | `error_code` | 含义 |
 | --- | --- |
 | `invalid`、`ownership`、`exists`、`not_found` | `ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound` |
-| `command_unconfirmed` | `ErrCommandUnconfirmed` |
 | `observation_unavailable`、`runtime_not_running` | 对应的观察结果 |
 | `unsupported` | 该操作被声明为不支持；见下文 |
 | `unconfirmed` 或任何其他值 | 结果未知 |
 
 失败响应不携带结果，唯一的例外是作为精确引用 `CreateSettled` 回执的 `info` 结果：即便已确认的原生 Create 在后续检查中失败，仍可证明该尝试已有确定结果。超时、响应丢失或断连属于不可用或不确定情况，绝不能证明资源不存在；发生这些情况后，Core 绝不重放变更操作，而是改为观察原始操作。[Sandbox Provider 指南](../../../docs/zh/sandbox-provider.md#operation-outcomes-and-retries) 定义了每种结果。
 
-节点启动和代次加载会在接受工作前验证完整的 Provider 操作声明，Core 代理使用同一份已注册声明，因此不支持的操作会在节点解析或原生 I/O 之前被拒绝。操作清单由[操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)维护。`unsupported` 响应包含一个 `unsupported` 对象，其中有精确的方法 `operation` 和经作者编写且安全的 `reason`；代理会将两者与请求进行核对。证据缺失、格式错误或不匹配会得到 `unconfirmed` 结果，而绝不会证明变更操作被拒绝。`unsupported` 始终不同于观察不可用，也不同于计算或命令结果未知；它既不确定资源所有权，也不授权重放。
+节点启动和代次加载会在接受工作前验证完整的 Provider 操作声明，Core 代理使用同一份已注册声明，因此不支持的操作会在节点解析或原生 I/O 之前被拒绝。操作清单由[操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)维护。`unsupported` 响应包含一个 `unsupported` 对象，其中有精确的方法 `operation` 和经作者编写且安全的 `reason`；代理会将两者与请求进行核对。证据缺失、格式错误或不匹配会得到 `unconfirmed` 结果，而绝不会证明变更操作被拒绝。`unsupported` 始终不同于观察不可用，也不同于计算结果未知；它既不确定资源所有权，也不授权重放。
 
 ## 代次控制 {#generation-control}
 

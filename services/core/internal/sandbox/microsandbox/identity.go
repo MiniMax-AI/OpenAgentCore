@@ -74,17 +74,6 @@ func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
 	}
 	return nil
 }
-func ValidateCommand(c sandbox.Command) error {
-	if len(c.Args) == 0 || c.Args[0] == "" || len(c.Stdin) > sandbox.MaxCommandInputBytes || (c.Directory != "" && !filepath.IsAbs(c.Directory)) {
-		return sandbox.ErrInvalid
-	}
-	for _, a := range c.Args {
-		if strings.IndexByte(a, 0) >= 0 {
-			return sandbox.ErrInvalid
-		}
-	}
-	return nil
-}
 func ValidateRequest(q Request) error {
 	if q.Version != ProtocolVersion || q.Config.Validate() != nil || !ValidReference(q.Reference) || q.Deadline.IsZero() {
 		return sandbox.ErrInvalid
@@ -96,11 +85,6 @@ func ValidateRequest(q Request) error {
 		}
 	case "inspect", "kill", "resume_compute", "metrics":
 		if q.Operation == "resume_compute" && q.Compute.ID == "" {
-			return sandbox.ErrInvalid
-		}
-		return ValidateCompute(q.Config, q.Reference, q.Compute)
-	case "command":
-		if q.Command == nil || ValidateCommand(*q.Command) != nil {
 			return sandbox.ErrInvalid
 		}
 		return ValidateCompute(q.Config, q.Reference, q.Compute)

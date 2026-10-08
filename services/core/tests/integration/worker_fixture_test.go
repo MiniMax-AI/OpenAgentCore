@@ -193,7 +193,7 @@ func webRuntimes(t testing.TB, s *Store, installation string, p sandbox.SandboxP
 			return nil, err
 		}
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation,
-			CoreURL: "http://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p, Suspension: suspension}, nil
+			SandboxLink: "wss://core.invalid/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p, Suspension: suspension}, nil
 	}, unusedPreparation(t))
 }
 

@@ -82,19 +82,6 @@ func (p *provider) Kill(ctx context.Context, r sandbox.Reference) error {
 	_, e := p.call(ctx, request{Operation: "kill", Reference: r})
 	return e
 }
-func (p *provider) command(ctx context.Context, q request) (sandbox.CommandResult, error) {
-	r, e := p.call(ctx, q)
-	if e != nil {
-		return sandbox.CommandResult{}, e
-	}
-	if r.Command == nil || len(r.Command.Stdout) > 1024*1024 || len(r.Command.Stderr) > 1024*1024 {
-		return sandbox.CommandResult{}, sandbox.ErrCommandUnconfirmed
-	}
-	return *r.Command, nil
-}
-func (p *provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	return p.command(ctx, request{Operation: "command", Reference: r, Command: &c})
-}
 func (p *provider) Initial(ctx context.Context, r sandbox.Reference) (sandbox.Compute, error) {
 	out, e := p.call(ctx, request{Operation: "initial", Reference: r})
 	if e != nil {
@@ -141,9 +128,6 @@ func (p *provider) KillCompute(ctx context.Context, r sandbox.Reference, c sandb
 func (p *provider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s sandbox.SnapshotIdentity) error {
 	_, e := p.call(ctx, request{Operation: "delete_snapshot", Reference: r, Snapshot: &s})
 	return e
-}
-func (p *provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, v sandbox.Command) (sandbox.CommandResult, error) {
-	return p.command(ctx, request{Operation: "command_compute", Reference: r, Compute: &c, Command: &v})
 }
 func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "resume_compute", Reference: r, Compute: &c})

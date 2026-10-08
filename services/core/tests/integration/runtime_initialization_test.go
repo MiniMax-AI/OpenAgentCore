@@ -35,9 +35,6 @@ func (p *initializingProvider) Create(ctx context.Context, b sandbox.Bootstrap) 
 	}
 	return info, err
 }
-func (p *initializingProvider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	return p.initializationPeer.RunCommand(ctx, r, c)
-}
 
 func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 	for _, mode := range []string{"complete", "restart", "uncertain", "unavailable", "setup-complete", "setup-restart", "setup-uncertain"} {
@@ -131,8 +128,8 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			p.mu.Lock()
 			kills := p.kills
 			p.mu.Unlock()
-			if kills != 0 || p.commandCalls.Load() != 0 {
-				t.Fatal("preparation changed compute lifecycle", kills, p.commandCalls.Load())
+			if kills != 0 {
+				t.Fatal("preparation changed compute lifecycle", kills)
 			}
 		})
 	}
@@ -187,8 +184,8 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	actionsMu.Lock()
 	defer actionsMu.Unlock()
 	expected := []string{"file", "configure", "skill", "plugin", "npm", "python", "setup", "finalize"}
-	if !reflect.DeepEqual(actions, expected) || provider.commandCalls.Load() != 0 {
-		t.Fatal("typed ordering or provider isolation", actions, provider.commandCalls.Load())
+	if !reflect.DeepEqual(actions, expected) {
+		t.Fatal("typed ordering", actions)
 	}
 	allocation, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || initializationState(t, s, allocation.TenantID, allocation.EnvironmentID) != "complete" {

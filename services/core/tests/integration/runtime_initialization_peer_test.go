@@ -24,21 +24,20 @@ import (
 // initialization runs, and has a fake sandbox Serve each bootstrap's Link
 // resource at link.
 type initializationPeer struct {
-	t            *testing.T
-	endpoint     string
-	registry     *runtimegateway.Registry
-	link         *sandboxlinktest.Server
-	host         agentHost
-	tenant       string                // scopes the agent host setRuntimeGateway registers; see registerAgentHost
-	serving      map[string]*linkServe // by Link resource ID
-	apply        func(proto.RuntimePreparePayload, []byte) proto.RuntimePrepareResultPayload
-	writes       atomic.Int32
-	commandCalls atomic.Int32
-	deferred     bool
-	unavailable  bool
-	bootstrap    sandbox.Bootstrap
-	binds        chan proto.AssignmentBindPayload // when not nil, receives each bind's payload
-	closeOnBind  bool                             // close the socket at a bind instead of replying
+	t           *testing.T
+	endpoint    string
+	registry    *runtimegateway.Registry
+	link        *sandboxlinktest.Server
+	host        agentHost
+	tenant      string                // scopes the agent host setRuntimeGateway registers; see registerAgentHost
+	serving     map[string]*linkServe // by Link resource ID
+	apply       func(proto.RuntimePreparePayload, []byte) proto.RuntimePrepareResultPayload
+	writes      atomic.Int32
+	deferred    bool
+	unavailable bool
+	bootstrap   sandbox.Bootstrap
+	binds       chan proto.AssignmentBindPayload // when not nil, receives each bind's payload
+	closeOnBind bool                             // close the socket at a bind instead of replying
 }
 
 // setRuntimeGateway points the peer at the gateway and the relay, and
@@ -117,10 +116,6 @@ func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 		time.Sleep(time.Millisecond)
 	}
 	return context.DeadlineExceeded
-}
-func (p *initializationPeer) RunCommand(context.Context, sandbox.Reference, sandbox.Command) (sandbox.CommandResult, error) {
-	p.commandCalls.Add(1)
-	return sandbox.CommandResult{}, sandbox.ErrInvalid
 }
 func completedInitialization(proto.RuntimePreparePayload, []byte) proto.RuntimePrepareResultPayload {
 	return proto.RuntimePrepareResultPayload{Outcome: "completed"}
