@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 45f460051d8c8f87045d0146f44f86fa9d3379974000870856eac7705f33347c
+source_hash: c4fb716676c4761bc78181946336e21b184c6f813633a311099e744f7b88e095
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -209,6 +209,34 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 | MiniMax 取消退役、Start 失败和清理重试 | `mcode/executor_test.go`、`executor_backpressure_test.go` |
 | MiniMax 原生历史绑定 | `mcode/session_test.go` |
 | 无原生副作用或伪造结果的明确拒绝 | `mcode/unsupported_test.go` |
+
+## 验证公共调用路径 {#qualify-the-public-path}
+
+`services/core/tests/qualify_public_native.py` 使用锁定的官方 SDK 和原始 HTTP 断言，访问已经安装、隔离且运行真实 agent host 的 Core 部署。它创建并删除自己的 Session，使用所选真实模型；不负责部署，也不替代执行器。将 `OPENAI_BASE_URL` 设置为部署的 `/v1` 端点，将 `OPENAI_API_KEY` 设置为其 Project 密钥。另一个 Project 的密钥通过私有文件提供。[安装](../../../docs/zh/getting-started/install.md) 负责部署设置；[Projects and keys](./admin-api.md#projects-and-keys) 负责凭据签发。
+
+私有设置 JSON 恰好包含 `agent`、`model_provider` 和 `environment`。`agent` 包含 `model` 和显式的 `x_agents_core.harness`，可在该扩展内提供 `harness_config`。`model_provider` 是完整的 [Provider 配置包](./model-execution.md#session-override)；`environment` 是公共 Session Environment 输入。设置文件和外部 Project 密钥文件必须使用绝对路径、权限 0600，并保存在仓库之外。证据必须使用 `~/.oac` 下新的绝对路径；其中保存公共响应和检查名称，不保存设置。运行器拒绝写入含有三个已提供凭据中任意一个的证据。
+
+```bash
+python services/core/tests/qualify_public_native.py \
+  --settings "$HOME/.oac/qualification/codex-none.json" \
+  --foreign-key-file "$HOME/.oac/qualification/foreign-project.key" \
+  --suite none \
+  --evidence "$HOME/.oac/qualification/codex-none-result.json"
+```
+
+| 套件 | 操作 | 放置方式 |
+| --- | --- | --- |
+| `none` | 创建重试、外部历史拒绝、两个原生文本 Turn、历史回忆、SSE 顺序，以及 SDK/原始 Item 和 Turn 一致性 | `none` |
+| `pending-actions` | 查询和重连待处理调用、成功/错误结果、取消、精确目标拒绝、重试和持久化 Item | 声明支持函数工具的任意放置方式 |
+| `functions` | SDK handler、成功/错误、原生文件和 Artifact 字节、继续执行、待处理调用取消和租户隔离 | 工作区 |
+| `images` | 初始和活动图像、图像结果、重试/原子拒绝、原生文件/Artifact、隔离和继续执行 | 声明支持图像和函数的工作区 |
+| `structured` | 保存和内联 schema、函数辅助原生文件、精确 JSON/SSE、取消和文本覆盖 | 声明支持结构化输出和函数的工作区 |
+
+对于 `self_hosted`，选择自定义绝对 `workspace_directory`。运行器打印每个新 Session ID 后，使用该 Session 的公共安装命令连接独立的隔离机器或容器；运行器最多等待五分钟。多个 Session 不得共享工作区。使用现有 Environment setup、包和能力断言单独验证准备语义。独立的 `official_environment_files_native.py` 检查接受两个已连接的 self-hosted Session，通过 Environment owner 验证 Files.list 排序、分页和隔离。
+
+默认验证热继续执行，并将冷恢复记录为 `unverified`。验证冷继续执行时，额外传入指向所拥有安装的绝对目录的 `--compose-directory`，以及指定其精确项目名称的 `--compose-project`。运行器仅重启该项目的 `agent-host`，确认容器启动时间已改变，然后执行相同的历史断言。这不能证明 Core 重启或 sandbox 检查点恢复。`pending-actions` 套件重连的是公共客户端，而非 agent-host 进程，因此拒绝这些重启选项。仅在[声明和覆盖台账](./index.md#known-gaps) 支持时选择冷恢复；不支持的恢复仍是缺口，不能把跳过的检查记为成功。API 拒绝会使所选套件失败。
+
+使用锁定的 SDK 运行 `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py`，可在不调用模型的情况下检查凭据处理和所拥有的重启边界。现有确定性 Core 集成测试仍负责 schema 验证、原子准入、持久化回执和拒绝语义。真实模型结果仅证明所选套件、协议、Harness 和放置方式。Provider 生命周期、原生身份、凭据隔离、延迟发现和未选择的套件需要独立证据；仅通过 view 测试不能证明公共调用路径。
 
 ## 原生安装器参与 {#native-installer-participation}
 

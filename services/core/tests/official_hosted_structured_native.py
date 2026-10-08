@@ -1,4 +1,4 @@
-"""Structured final answers after real native Docker workspace/tool execution."""
+"""Structured final answers after real native workspace/tool execution."""
 import importlib.metadata
 import json
 from pathlib import Path
@@ -8,16 +8,17 @@ import uuid
 from session_cleanup import delete_session
 
 
-def verify_hosted_structured(client, foreign, http, model, kind, restart, evidence):
+def verify_hosted_structured(client, foreign, http, agent_options, session_options, ready, restart, record):
     pin = json.loads((Path(__file__).resolve().parents[3] / "contracts/agents-api/upstream.json").read_text())
     dist = importlib.metadata.distribution("openai")
     assert dist.version == pin["sdk_version"]
     assert json.loads(dist.read_text("direct_url.json"))["vcs_info"]["commit_id"] == pin["commit"]
     sessions = client.beta.agents.sessions
+    workspace = session_options["environment"].get("workspace_directory", "/workspace").rstrip("/")
     root = str(client.base_url).rstrip("/") + "/agents"
     headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
     other_headers = {**headers, "Authorization": "Bearer " + foreign.api_key}
-    proof = {"engine": kind, "checks": [], "runs": [], "calls": []}
+    proof = {"engine": agent_options["x_agents_core"]["harness"], "checks": [], "runs": [], "calls": []}
     owned = []
     saved = None
     schema = {"type": "object", "properties": {name: {"type": "string"} for name in ("memory", "path", "marker")},
@@ -27,7 +28,7 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}
 
     def save():
-        Path(evidence).write_text(json.dumps(proof, indent=2))
+        record(proof)
 
     def check(name):
         proof["checks"].append(name)
@@ -98,7 +99,7 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
         assert len(artifacts) == 1
         with sessions.artifacts.with_streaming_response.content(artifacts[0].id, session_id=sid) as response:
             assert response.read() == expected["memory"].encode()
-        assert any(f.path == expected["path"] for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
+        assert any(f.path == expected["path"] for f in client.beta.agents.environments.files.list(eid, path=f"{workspace}/outputs"))
         assert http.get(root + "/sessions/" + sid + "/artifacts/" + artifacts[0].id + "/content", headers=other_headers).status_code == 404
         proof.setdefault("answers", []).append(answer)
 
@@ -131,12 +132,14 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
         return events
 
     try:
-        saved = client.beta.agents.create(model=model, text={"format": output_format}, tools=[tool])
+        saved = client.beta.agents.create(**{k: v for k, v in agent_options.items() if k != "x_agents_core"},
+            extra_body={"x_agents_core": agent_options["x_agents_core"]}, text={"format": output_format}, tools=[tool])
         first_memory = uuid.uuid4().hex
-        path = "/workspace/outputs/initial.txt"
-        session = sessions.create(agent_id=saved.id, environment={"type": "openai_hosted"}, input=prompt(path, "initial"))
+        path = f"{workspace}/outputs/initial.txt"
+        session = sessions.create(agent_id=saved.id, **session_options, input=prompt(path, "initial"))
         sid, eid = session.id, session.environment.id
         owned.append(sid)
+        ready(session)
         proof.update(session=sid, environment=eid, agent=saved.id, format=output_format)
         assert session.agent.text.format.to_dict() == output_format
         def pending():
@@ -150,7 +153,7 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
         check("saved_schema_initial_function_native_file_and_final_json")
 
         memory = uuid.uuid4().hex
-        path = "/workspace/outputs/active.txt"
+        path = f"{workspace}/outputs/active.txt"
         def active(action):
             incoming = [message("Use marker 'active' for the final result, replacing the earlier marker. Keep the requested file path and memory task.")]
             sessions.events.create(sid, events=incoming, idempotency_key="active-marker")
@@ -168,27 +171,29 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
         assert http.get(root + "/environments/" + eid + "/files", headers=other_headers).status_code == 404
         assert http.post(root + "/sessions", headers=other_headers, json={"agent_id": saved.id, "environment": {"type": "openai_hosted"}}).status_code == 404
         before = items(sid)
-        restart(sid, eid)
+        if restart is not None:
+            restart()
         assert items(sid) == before and sessions.retrieve(sid).agent.text.format.to_dict() == output_format
-        path = "/workspace/outputs/resumed.txt"
+        path = f"{workspace}/outputs/resumed.txt"
         events = run(sid, prompt(path, "resumed", recall=True))
         third = terminal(sid, 3)
         final(sid, eid, third, {"memory": memory, "path": path, "marker": "resumed"}, events)
         assert len([i for i in items(sid) if i["type"] == "function_call"]) == 2
-        check("cold_core_runtime_continuation_without_replay_and_tenant_isolation")
+        check(("cold_agent_host" if restart is not None else "warm") + "_continuation_without_replay_and_tenant_isolation")
 
         def cancel(action):
             for _ in range(2):
                 sessions.events.create(sid, events=[{"type": "agent.session.input.cancel"}], idempotency_key="cancel-pending")
-        run(sid, prompt("/workspace/outputs/cancelled.txt", "cancelled"), cancel)
+        run(sid, prompt(f"{workspace}/outputs/cancelled.txt", "cancelled"), cancel)
         cancelled = terminal(sid, 4, "cancelled")
         assert not any(i.get("turn_id") == cancelled.id and i["type"] == "message" and i.get("phase") == "final_answer" for i in items(sid))
         assert not sessions.retrieve(sid).required_actions
         check("pending_cancellation_has_no_structured_final")
 
-        plain = sessions.create(agent_id=saved.id, agent={"text": {"format": {"type": "text"}}}, environment={"type": "openai_hosted"})
+        plain = sessions.create(agent_id=saved.id, agent={"text": {"format": {"type": "text"}}}, **session_options)
         owned.append(plain.id)
-        run(plain.id, "Do not call remember. Use native tools to write exactly PLAIN_OK to /workspace/plain.txt with no newline, then reply only PLAIN_OK.")
+        ready(plain)
+        run(plain.id, f"Do not call remember. Use native tools to write exactly PLAIN_OK to {workspace}/plain.txt with no newline, then reply only PLAIN_OK.")
         assert any(i["type"] == "message" and i.get("role") == "assistant" and "PLAIN_OK" in i["content"][0].get("text", "") for i in items(plain.id))
         foreign_result = proof["calls"][0]
         assert http.post(root + "/sessions/" + plain.id + "/events", headers=headers, json={"events": [foreign_result]}).status_code in {400, 404, 409}
@@ -196,10 +201,11 @@ def verify_hosted_structured(client, foreign, http, model, kind, restart, eviden
         assert http.get(root + "/sessions/" + plain.id + "/artifacts/" + artifact.id + "/content", headers=headers).status_code == 404
         check("text_override_and_same_tenant_session_isolation")
 
-        inline = sessions.create(agent={"model": model, "text": {"format": output_format}}, environment={"type": "openai_hosted"})
+        inline = sessions.create(agent={**agent_options, "text": {"format": output_format}}, **session_options)
         owned.append(inline.id)
+        ready(inline)
         inline_memory = uuid.uuid4().hex
-        path = "/workspace/outputs/inline.txt"
+        path = f"{workspace}/outputs/inline.txt"
         events = run(inline.id, "Use native tools to create the parent directory and write exactly " + inline_memory + " with no newline to " + path + ". Return that memory, path, and marker 'inline' using the requested output format.")
         final(inline.id, inline.environment.id, terminal(inline.id, 1), {"memory": inline_memory, "path": path, "marker": "inline"}, events)
         assert inline.agent.text.format.to_dict() == output_format
