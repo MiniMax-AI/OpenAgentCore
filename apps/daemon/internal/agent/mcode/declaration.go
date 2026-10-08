@@ -26,7 +26,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	defer cancel()
 	version, err := check(ctx, "")
 	if err != nil {
-		fmt.Fprintf(options.Stderr, "oac-daemon: mcode unavailable: %v\n  Install: npm install -g @minimax-ai/code@0.4.12\n", err)
+		fmt.Fprintf(options.Stderr, "oac-daemon: mcode unavailable: %v\n  Install: npm install -g @minimax-ai/code@%s\n", err, SupportedVersion)
 		return runtime
 	}
 	runtime.Info.Available, runtime.Info.Version = true, version

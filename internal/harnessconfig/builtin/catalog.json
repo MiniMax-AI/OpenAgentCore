@@ -1,5 +1,5 @@
 [
-  {"kind": "claude_sdk", "label": "Claude Code", "configuration": "claudesdk"},
-  {"kind": "codex", "label": "Codex", "configuration": "codex"},
-  {"kind": "mcode", "label": "MiniMax Code", "configuration": "mcode"}
+  {"kind": "claude_sdk", "label": "Claude Code", "configuration": "claudesdk", "version": "0.3.269"},
+  {"kind": "codex", "label": "Codex", "configuration": "codex", "version": "0.153.4"},
+  {"kind": "mcode", "label": "MiniMax Code", "configuration": "mcode", "version": "0.4.12"}
 ]

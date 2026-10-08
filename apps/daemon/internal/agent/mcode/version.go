@@ -7,11 +7,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/versionprobe"
+	configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 var ErrCLINotFound = errors.New("mcode CLI not found")
 
-const SupportedVersion = "0.4.12"
+const SupportedVersion = configuration.NativeVersion
 
 func defaultBinary() string { return binpath.MCode() }
 
