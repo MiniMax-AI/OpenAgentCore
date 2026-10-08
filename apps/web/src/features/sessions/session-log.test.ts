@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AgentSession, ListPage } from "@oac/agents-client";
+import type { AdminProject, AgentSession, ListPage } from "@oac/agents-client";
 
 import type { Owned } from "../../lib/projects";
-import { type Project } from "../../lib/admin-view";
 import {
   agentOptions,
   environmentKind,
@@ -16,8 +15,8 @@ import {
   type SessionLogFilters,
 } from "./session-log";
 
-function project(id: string, name: string): Project {
-  return { id, name, status: "active", created_at: 1, archived_at: null, active_key_count: 1 };
+function project(id: string, name: string): AdminProject {
+  return { id, name, created_at: "1970-01-01T00:00:01Z", archived_at: null, active_key_count: 1 };
 }
 
 const production = project("proj_prod", "Production");
@@ -52,7 +51,7 @@ function session(id: string, overrides: Partial<AgentSession> & { agentId?: stri
   };
 }
 
-function row(owner: Project, value: AgentSession): Owned<AgentSession> {
+function row(owner: AdminProject, value: AgentSession): Owned<AgentSession> {
   return { project: owner, value };
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: c3180e51ce893b3752370abbdf3a58255ebe11fdfd7ec1e1620ad85f7ce1b30d
+source_hash: b2281fe0f7ab7c4f810b029aca847a11a3a292d367dcacd1ac3f716f511e2814
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -16,7 +16,7 @@ Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[publi
 | [openapi.yaml](../openapi.yaml) | 官方公共契约，并在 Agent 和 Session 请求及响应对象上加入 Core 的 `x_agents_core` 扩展 |
 | [go-bindings.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/go-bindings.json) | Go 名称、字段表示、编码顺序和存储投影；不定义官方字段集合、枚举或约束 |
 
-运行 `make openapi` 重新生成公共 Go 类型、Agent 请求结构、路由清单和三个 OpenAPI 文档。`scripts/generate-public-api.py` 读取仓库内经过校验和验证的官方源文件，无需网络。它选择 Agents、Vaults、Files 和 Skills，并跟随 schema 引用，保留联合类型、可空性、必填字段和约束。`services/core/internal/api/official_shapes.gen.go` 中的请求结构投影 `CreateAgentParams`、`UpdateAgentParams` 和 `SessionAgentConfigParam`；Core 在读取 Agent 配置前先按它们检查请求体。Core 在 `v1/` 中的扩展类型继续由 Go 定义，在生成时加入公共 schema。TypeScript 客户端在 `packages/agents-client/src/generated/public-api.ts` 中的类型、枚举值和字段名由生成后的公共 schema 生成。内部 `/core/v1` 和 `/api/v1` 文档由处理函数注解生成。`make check-openapi` 检查生成结果是否最新并测试生成器；`make check-go` 也会运行此检查。
+运行 `make openapi` 重新生成公共 Go 类型、Agent 请求结构、路由清单和三个 OpenAPI 文档。`scripts/generate-public-api.py` 读取仓库内经过校验和验证的官方源文件，无需网络。它选择 Agents、Vaults、Files 和 Skills，并跟随 schema 引用，保留联合类型、可空性、必填字段和约束。`services/core/internal/api/official_shapes.gen.go` 中的请求结构投影 `CreateAgentParams`、`UpdateAgentParams` 和 `SessionAgentConfigParam`；Core 在读取 Agent 配置前先按它们检查请求体。Core 在 `v1/` 中的扩展类型继续由 Go 定义，在生成时加入公共 schema。TypeScript 客户端在 `packages/agents-client/src/generated/public-api.ts` 中的类型、枚举值和字段名由生成后的公共 schema 生成。内部 `/core/v1` 和 `/api/v1` 文档由处理函数注解生成；同一生成器把 `/core/v1` 文档投影为 `packages/agents-client/src/generated/core-api.ts`，其中引用的公共类型从 `public-api.ts` 导入。`make check-openapi` 检查生成结果是否最新并测试生成器；`make check-go` 也会运行此检查。
 
 公共契约是官方 API 加上 Core 扩展。标准字段生成到 `v1/official.gen.go`；`go-bindings.json` 只列出 Core 使用的类型，仅在已有存储或自定义 JSON 编码需要时覆盖 Go 表示或字段顺序。未覆盖的字段遵循官方 schema，相同结构复用同一个 Go 类型。部分带判别字段的联合类型也从 schema 生成 JSON 序列化代码，保留每个分支必需的可空字段。其他联合类型序列化、Core 的本地限制、执行准入和状态转换仍由实现代码负责。契约测试验证公共 schema 保留官方定义、扩展位于 `x_agents_core` 中，且所有文档与注册路由一致。官方客户端和原始 HTTP 测试验证行为。生成 schema 不代表某个尚未实现的功能已经得到验证；下方缺口仍然适用。升级上游时，在比对和兼容性测试后一起更新 OpenAPI 和 SDK 固定版本。
 

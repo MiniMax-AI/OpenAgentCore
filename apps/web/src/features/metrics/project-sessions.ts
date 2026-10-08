@@ -1,7 +1,6 @@
-import type { AgentSession } from "@oac/agents-client";
+import type { AdminProject, AgentSession } from "@oac/agents-client";
 
 import type { Owned, ProjectClient } from "../../lib/projects";
-import { type Project } from "../../lib/admin-view";
 
 /**
  * Bounded reads of each project's Session list through its admin scope. The
@@ -45,19 +44,19 @@ export async function readSessions(client: SessionLister, options: SessionReadOp
 }
 
 export interface ProjectSessionRead extends SessionRead {
-  project: Project;
+  project: AdminProject;
 }
 
 export interface ProjectReadFailure {
-  project: Project;
+  project: AdminProject;
   message: string;
 }
 
 /** Reads several projects in parallel; a failing project is reported by name and the others still count. */
 export async function readProjectsSessions(
-  projects: readonly Project[],
-  clientFor: (project: Project) => SessionLister,
-  options: (project: Project) => SessionReadOptions,
+  projects: readonly AdminProject[],
+  clientFor: (project: AdminProject) => SessionLister,
+  options: (project: AdminProject) => SessionReadOptions,
 ): Promise<{ reads: ProjectSessionRead[]; failures: ProjectReadFailure[] }> {
   const results = await Promise.allSettled(projects.map(async (project) => ({ project, ...(await readSessions(clientFor(project), options(project))) })));
   const reads: ProjectSessionRead[] = [];

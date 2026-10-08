@@ -127,19 +127,19 @@ type LifecyclePlacement struct {
 
 // NodeAllocation is an unreleased allocation a node serves.
 type NodeAllocation struct {
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	Diagnostic           string `json:"diagnostic"`
-	ID                   string `json:"id"`
-	NodeID               string `json:"node_id"`
-	TenantID             string `json:"tenant_id"`
-	SessionID            string `json:"session_id"`
-	EnvironmentID        string `json:"environment_id"`
-	State                string `json:"state"`
-	ComputePhase         string `json:"compute_phase"`
+	DeploymentGeneration uint64 `json:"deployment_generation" binding:"required"`
+	Diagnostic           string `json:"diagnostic" enums:",node_unavailable,resource_missing,compute_unconfirmed,ownership_mismatch,provider_unavailable" binding:"required"`
+	ID                   string `json:"id" binding:"required"`
+	NodeID               string `json:"node_id" binding:"required"`
+	TenantID             string `json:"tenant_id" binding:"required"`
+	SessionID            string `json:"session_id" binding:"required"`
+	EnvironmentID        string `json:"environment_id" binding:"required"`
+	State                string `json:"state" binding:"required"`
+	ComputePhase         string `json:"compute_phase" binding:"required"`
 	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
-	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable"`
-	Initialization        string     `json:"initialization"`
-	CreatedAt             time.Time  `json:"created_at"`
+	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable" binding:"required"`
+	Initialization        string     `json:"initialization" binding:"required"`
+	CreatedAt             time.Time  `json:"created_at" binding:"required"`
 }
 
 // observationDiagnostics are the diagnostics an observation records; empty

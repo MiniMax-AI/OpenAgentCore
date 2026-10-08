@@ -112,6 +112,28 @@ class PublicAPITests(unittest.TestCase):
         ):
             self.assertIn(line, generated)
 
+    def test_core_types_import_public_names_and_hoist_inline_enums(self):
+        ref = '#/definitions/'
+        document = {'paths': {'/things': {'get': {'responses': {'200': {'schema': {'$ref': ref + 'api.Thing'}}}}}}, 'definitions': {
+            'api.Thing': {'type': 'object', 'required': ['color'], 'properties': {
+                'color': {'type': 'string', 'enum': ['red', 'blue']}, 'tags': {'type': 'array', 'items': {'type': 'string', 'enum': ['a', 'b']}},
+                'shared': {'$ref': ref + 'v1.Shared'}, 'first': {'$ref': ref + 'one.Page'}, 'second': {'$ref': ref + 'two.Page'},
+            }},
+            'one.Page': {'type': 'object', 'properties': {'id': {'type': 'string'}}},
+            'two.Page': {'type': 'object', 'properties': {'id': {'type': 'string'}}},
+            'v1.Shared': {'type': 'object'},
+            'api.Unused': {'type': 'object'},
+        }}
+        bindings = {'Shared': {'sources': ['#/components/schemas/SharedResource']}}
+        generated = generator.core_module(document, {'SharedResource': {}}, bindings).decode()
+        for line in (
+            'import type { SharedResource } from "./public-api";', '  color: ThingColor;', '  tags?: ThingTags[];',
+            'export const thingColorValues = ["red", "blue"] as const;', '  shared?: SharedResource;',
+            '  first?: OnePage;', '  second?: TwoPage;',
+        ):
+            self.assertIn(line, generated)
+        self.assertNotIn('Unused', generated)
+
     def test_every_public_reference_resolves_and_no_other_apis_leak(self):
         self.assertEqual({p.split('/')[1] for p in self.public['paths']}, {'agents', 'vaults', 'files', 'skills'})
         generator.prune_components(copy.deepcopy(self.public))

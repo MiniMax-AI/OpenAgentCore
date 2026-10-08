@@ -10,8 +10,8 @@ import (
 )
 
 type AdminRuntimeObservation struct {
-	ProjectID   string                        `json:"project_id"`
-	Observation AdminRuntimeObservationDetail `json:"observation"`
+	ProjectID   string                        `json:"project_id" binding:"required"`
+	Observation AdminRuntimeObservationDetail `json:"observation" binding:"required"`
 }
 
 // AdminRuntimeObservationDetail adds administrator-only measurements to the
@@ -29,11 +29,11 @@ type RuntimeDiskObservation struct {
 	LimitBytes *uint64 `json:"limit_bytes" extensions:"x-nullable" binding:"required" minimum:"1"`
 }
 type AdminRuntimeObservationList struct {
-	Object  string                    `json:"object"`
-	Data    []AdminRuntimeObservation `json:"data"`
-	HasMore bool                      `json:"has_more"`
-	FirstID *string                   `json:"first_id"`
-	LastID  *string                   `json:"last_id"`
+	Object  string                    `json:"object" enums:"list" binding:"required"`
+	Data    []AdminRuntimeObservation `json:"data" binding:"required"`
+	HasMore bool                      `json:"has_more" binding:"required"`
+	FirstID *string                   `json:"first_id" extensions:"x-nullable" binding:"required"`
+	LastID  *string                   `json:"last_id" extensions:"x-nullable" binding:"required"`
 }
 
 // @Summary List Runtime observations across managed Projects

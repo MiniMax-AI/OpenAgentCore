@@ -1,8 +1,8 @@
-import type { AgentSession } from "@oac/agents-client";
+import type { AdminProject, AgentSession } from "@oac/agents-client";
 
 import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "../metrics/project-sessions";
 import { activityStart, attentionCount, overviewReadDone, projectRows } from "./overview-model";
-import { type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
 
 /** Most Sessions read per project for the 24-hour activity and the attention list. */
 export const OVERVIEW_SESSION_CAP = 1_000;
@@ -10,10 +10,10 @@ export const OVERVIEW_SESSION_CAP = 1_000;
 export interface OverviewSessions {
   sessions: InProject<AgentSession>[];
   /** Projects whose read stopped at the cap before covering the window or every Session needing attention. */
-  truncated: Project[];
+  truncated: AdminProject[];
   failures: ProjectReadFailure[];
   /** Failed projects whose previously read Sessions are retained. */
-  stale: Project[];
+  stale: AdminProject[];
 }
 
 export type OverviewSummary =
@@ -31,7 +31,7 @@ export interface OverviewData {
 
 export interface OverviewSource {
   summary: (signal: AbortSignal) => Promise<ProjectSummary[]>;
-  sessions: (project: Project) => SessionLister;
+  sessions: (project: AdminProject) => SessionLister;
 }
 
 /**
@@ -48,7 +48,7 @@ export function needsSessionRead(row: ProjectSummary | undefined, since: number)
 }
 
 export async function loadOverview(
-  projects: readonly Project[],
+  projects: readonly AdminProject[],
   source: OverviewSource,
   nowSeconds: number,
   signal: AbortSignal,

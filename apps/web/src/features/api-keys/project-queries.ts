@@ -1,6 +1,7 @@
+import type { AdminResourceType } from "@oac/agents-client";
 import { infiniteQueryOptions, queryOptions, type QueryClient } from "@tanstack/react-query";
 
-import { listKeys, listWriteOperations, loadSummary, type OwnerResourceType, type ProjectSummary } from "../../lib/admin-view";
+import { listKeys, listWriteOperations, loadSummary, type ProjectSummary } from "../../lib/admin-view";
 import { projectsQuery } from "../../lib/queries";
 import { sortKeys } from "./key-flows";
 
@@ -26,7 +27,7 @@ export const projectScope = (projectId: string) => ["project", projectId] as con
 /** Last activity per project for the list: the per-project summary rows. */
 export const projectActivityQuery = queryOptions({
   queryKey: ["project-activity"],
-  queryFn: async ({ signal }) => (await loadSummary({ signal })).filter((row) => row.agent_id === null && row.key === null),
+  queryFn: async ({ signal }) => (await loadSummary({ signal })).filter((row) => row.agent_id === null && row.key_id === null),
   select: (rows: ProjectSummary[]): ReadonlyMap<string, ProjectSummary> => new Map(rows.map((row) => [row.project_id, row])),
 });
 
@@ -53,11 +54,11 @@ export function projectSummaryQuery(projectId: string) {
         loadSummary({ project_id: projectId, signal }),
         loadSummary({ project_id: projectId, group_by: "key", signal }).catch(() => null),
       ]);
-      const project = projectRows.find((row) => row.project_id === projectId && row.agent_id === null && row.key === null) ?? null;
+      const project = projectRows.find((row) => row.project_id === projectId && row.agent_id === null && row.key_id === null) ?? null;
       let byKey: ProjectSummaries["byKey"] = null;
       if (keyRows) {
         byKey = new Map();
-        for (const row of keyRows) if (row.project_id === projectId) byKey.set(row.key?.id ?? null, row);
+        for (const row of keyRows) if (row.project_id === projectId) byKey.set(row.key_id, row);
       }
       return { project, byKey };
     },
@@ -68,7 +69,7 @@ export const WRITE_OPERATIONS_PAGE_SIZE = 50;
 
 export interface WriteOperationFilter {
   keyId: string;
-  type: OwnerResourceType | "";
+  type: AdminResourceType | "";
 }
 
 /** One project's write operations for one filter, newest first, paged by `next_cursor`. */

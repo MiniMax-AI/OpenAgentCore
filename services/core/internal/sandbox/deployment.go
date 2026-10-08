@@ -24,8 +24,8 @@ func validationBound(value uint32) *uint32 { return &value }
 // Resources describes one managed sandbox, independently of node concurrency.
 // Disk bounds are available only where the native provider enforces them.
 type Resources struct {
-	CPUs               uint32 `json:"cpus"`
-	MemoryMiB          uint32 `json:"memory_mib"`
+	CPUs               uint32 `json:"cpus" binding:"required"`
+	MemoryMiB          uint32 `json:"memory_mib" binding:"required"`
 	RootDiskMiB        uint32 `json:"root_disk_mib,omitempty"`
 	EnvironmentDiskMiB uint32 `json:"environment_disk_mib,omitempty"`
 }
@@ -59,12 +59,12 @@ func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error
 // may address the same archive by config ID or OCI manifest digest; microsandbox
 // has its own imported OCI identity. These are not interchangeable hashes.
 type RuntimeRelease struct {
-	SourceCommit        string `json:"source_commit"`
-	ImageID             string `json:"image_id"`
-	ImageManifestDigest string `json:"image_manifest_digest"`
-	MicrosandboxRef     string `json:"microsandbox_ref"`
-	RuntimeSHA256       string `json:"runtime_sha256"`
-	FirmwareSHA256      string `json:"firmware_sha256"`
+	SourceCommit        string `json:"source_commit" binding:"required"`
+	ImageID             string `json:"image_id" binding:"required"`
+	ImageManifestDigest string `json:"image_manifest_digest" binding:"required"`
+	MicrosandboxRef     string `json:"microsandbox_ref" binding:"required"`
+	RuntimeSHA256       string `json:"runtime_sha256" binding:"required"`
+	FirmwareSHA256      string `json:"firmware_sha256" binding:"required"`
 }
 
 func (r RuntimeRelease) Validate() error {
@@ -78,7 +78,7 @@ func (r RuntimeRelease) Validate() error {
 }
 
 type DeploymentSpec struct {
-	Resources Resources       `json:"resources"`
+	Resources Resources       `json:"resources" binding:"required"`
 	Runtime   *RuntimeRelease `json:"runtime,omitempty"`
 }
 

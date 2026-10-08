@@ -11,7 +11,7 @@ import type {
   PersistedAgentToolConfigParamToolSearch, PersistedAgentToolConfigParamWebSearch, ReasoningEffortResource,
   ReasoningParam, ReasoningResource, ReasoningSummaryResource, RotateVaultCredentialAuthParamStaticBearer,
   RotateVaultCredentialParams, ServiceTierResource, SessionEnvironmentStateResource, SessionEnvironmentStatusResource,
-  SessionErrorResource, SessionInputParam, SessionInputParamAgentSessionInputCancel,
+  SessionArtifactResource, SessionErrorResource, SessionInputParam, SessionInputParamAgentSessionInputCancel,
   SessionInputParamAgentSessionInputMessage, SessionInputParamAgentSessionInputToolResult,
   SessionRequiredActionResource, SessionRequiredActionResourceEnvironmentConnection,
   SessionRequiredActionResourceFunctionCall, SessionStatusResource, SkillResource, SkillVersionResource,
@@ -19,6 +19,10 @@ import type {
   VaultCredentialAuthResourceMcpOauth, VaultCredentialAuthResourceStaticBearer, VaultCredentialResource,
   VaultResource, VaultStatusParam, WebSearchLocationParam,
 } from "./generated/public-api";
+import type {
+  CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource, RuntimeCPUObservation,
+  RuntimeMemoryObservation, RuntimeObservationLifecycleState, RuntimeObservationReason,
+} from "./generated/core-api";
 
 // Generated types keep their schema names in ./generated/public-api; these are the client's names for them.
 export type PageOrder = ListOrderParam;
@@ -468,6 +472,8 @@ export type SkillDeleted = DeletedSkillResource;
 /** Deleting the only remaining version also deletes its Skill. */
 export type SkillVersionDeleted = DeletedSkillVersionResource;
 
+export type SessionArtifact = SessionArtifactResource;
+
 /** Skill lists accept 0 through 100 entries; `after` is a Skill ID, or a version resource ID for version lists. */
 export type SkillListOptions = PageOptions;
 
@@ -776,29 +782,14 @@ export interface CreateSessionStreamOptions extends StreamOptions {
   onSession: (session: AgentSession) => void;
 }
 
-export type RuntimeObservationStatus = "observed" | "unsupported" | "unavailable";
-export type RuntimeLifecycleState = "active" | "sleeping" | "transitioning" | "pending" | "stopped";
-export type RuntimeObservationReason =
-  | "runtime_mode_not_observable"
-  | "allocation_pending"
-  | "runtime_not_running"
-  | "sample_timeout"
-  | "sample_unavailable";
+// Generated /core/v1 types keep their schema names in ./generated/core-api.
+export type {
+  HarnessModelConfiguration, RuntimeCPUObservation, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
+} from "./generated/core-api";
 
 export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
 
-export interface RuntimeCPUObservation {
-  usage_seconds_total: number | null;
-  capacity_cores: number | null;
-  usage_cores: number | null;
-  utilization_ratio: number | null;
-}
-
-export interface RuntimeMemoryObservation {
-  usage_bytes: number | null;
-  limit_bytes: number | null;
-}
-
+// The schema's flat observation cannot state each mode's null rules; this union does, and the client validates them.
 interface RuntimeObservationBase {
   id: string;
   object: "agent.runtime_observation";
@@ -816,7 +807,7 @@ export interface RuntimeObservedObservation extends RuntimeObservationBase {
     device_id: string | null;
     connection_generation: null;
   };
-  lifecycle_state: RuntimeLifecycleState;
+  lifecycle_state: RuntimeObservationLifecycleState;
   status: "observed";
   reason: null;
   allocation_created_at: number | null;
@@ -836,7 +827,7 @@ export interface RuntimeUnavailableObservation extends RuntimeObservationBase {
     device_id: string | null;
     connection_generation: null;
   };
-  lifecycle_state: RuntimeLifecycleState;
+  lifecycle_state: RuntimeObservationLifecycleState;
   status: "unavailable";
   reason: RuntimeUnavailableReason;
   allocation_created_at: number | null;
@@ -896,83 +887,9 @@ export interface RuntimeHistoryQuery extends ReadOptions {
   maxPoints?: number;
 }
 
-export interface RuntimeHistoryRange {
-  start: number;
-  end: number;
-}
-
-export interface RuntimeHistoryCoveragePoint {
-  start: number;
-  end: number;
-  first_observed_at: number | null;
-  last_observed_at: number | null;
-  observation_count: number;
-  observed_count: number;
-  unavailable_count: number;
-}
-
-export interface RuntimeHistoryCPU {
-  contributor_count: number;
-  utilization_ratio: number | null;
-  capacity_cores: number | null;
-}
-
-export interface RuntimeHistoryMemory {
-  contributor_count: number;
-  usage_bytes: number | null;
-  limit_bytes: number | null;
-}
-
-export interface RuntimeHistoryPoint extends RuntimeHistoryCoveragePoint {
-  cpu: RuntimeHistoryCPU | null;
-  memory: RuntimeHistoryMemory | null;
-}
-
-export interface RuntimeHistorySeries {
-  environment_id: string;
-  allocation_id: string;
-  /** Earliest retained provider start estimate for compatible uptime display. */
-  started_at: RuntimeHistoryTime;
-  provider_type: string;
-  points: RuntimeHistoryPoint[];
-}
-
-export interface RuntimeHistoryTime {
-  seconds: number;
-  nanoseconds: number;
-}
-
-export interface RuntimeHistoryCoverage {
-  retained_start: number;
-  first_sample_at: number | null;
-  last_sample_at: number | null;
-  sample_count: number;
-  expected_sample_count: number;
-  buckets: RuntimeHistoryCoveragePoint[];
-}
-
-export interface RuntimeHistoryTokenUsagePoint {
-  start: number;
-  end: number;
-  sampled_at: number;
-  input_tokens: number;
-  output_tokens: number;
-}
-
-export interface RuntimeHistory {
-  object: "agent.runtime_history";
-  source: "durable";
-  session_id: string;
-  requested_range: RuntimeHistoryRange;
-  resolution_seconds: number;
-  generated_at: number;
-  coverage: RuntimeHistoryCoverage;
-  series: RuntimeHistorySeries[];
-  token_usage: RuntimeHistoryTokenUsagePoint[];
-}
-
 export type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 
+// The model provider shapes keep `never` guards so an input and a view can never be mistaken for each other.
 /** A complete replacement bundle. API keys are write-only. */
 export interface ModelProviderInput {
   protocol: ModelProviderProtocol;
@@ -992,9 +909,6 @@ export interface ModelProviderView {
   api_key?: never;
 }
 
-/** A harness's deployment default model provider in Core. The key is never returned. */
-export type ProviderObservationErrorCode = "authentication_error" | "connection_failed" | "rate_limit_exceeded" | "usage_limit_exceeded" | "server_overloaded" | "server_error" | "resource_not_found" | "request_timeout" | "invalid_request";
-
 /** Native model parameters validated by the selected harness. An empty object clears them. */
 export type HarnessConfig = Record<string, unknown>;
 
@@ -1010,35 +924,15 @@ export interface ModelConfigurationView {
   harness_config: HarnessConfig;
 }
 
-export interface HarnessModelConfiguration extends ModelConfigurationView {
-  last_used_at: string | null;
-  last_error_code: ProviderObservationErrorCode | null;
-  last_error_at: string | null;
-  object: "core.model_configuration";
-  harness: CoreHarnessKind;
-  updated_at: string;
-}
-
-/** Adapter build support, independent of runtime readiness or model availability. */
-export interface ModelConfigurationSupport {
-  /** Ordered supported native protocols; the first is the default. */
-  protocols: ModelProviderInput["protocol"][];
-  accepts_harness_config: boolean;
-  token_limits_required: boolean;
-}
+// The schema declares protocols as plain strings; the harness catalog names them.
+/** Adapter build support, independent of runtime readiness or model availability. Ordered protocols; the first is the default. */
+export type ModelConfigurationSupport = Omit<ModelConfigurationSupportResource, "protocols"> & { protocols: ModelProviderProtocol[] };
 
 /**
  * A harness this Core build supports. `enabled` and `default` are read-only views of
  * the process configuration; `model_configuration` is the deployment default, or null.
  */
-export interface CoreHarness {
-  object: "core.harness";
-  id: CoreHarnessKind;
-  enabled: boolean;
-  default: boolean;
-  model_configuration: HarnessModelConfiguration | null;
-  model_configuration_support: ModelConfigurationSupport;
-}
+export type CoreHarness = Omit<CoreHarnessResource, "model_configuration_support"> & { model_configuration_support: ModelConfigurationSupport };
 
 /** Native parameter inheritance follows the extension contract; null provider clears it. */
 export interface SavedAgentCoreInput {
@@ -1054,23 +948,6 @@ export interface SavedAgentCore {
 }
 
 export type AgentsCoreSelection = AgentsCore;
-
-export type ExecutionConfigurationSource = "session" | "agent" | "deployment" | "unknown";
-
-/** Immutable committed selections, not live execution health. */
-export interface SessionExecutionConfiguration {
-  object: "agent.session.execution_configuration";
-  schema_version: 1;
-  session_id: string;
-  model: { value: string | null; source: ExecutionConfigurationSource };
-  harness: { value: string | null; source: ExecutionConfigurationSource };
-  harness_config: { value: HarnessConfig; source: ExecutionConfigurationSource };
-  model_provider: {
-    source: ExecutionConfigurationSource;
-    status: "available" | "redacted" | "unavailable";
-    configuration: ModelProviderView | null;
-  };
-}
 
 export interface AgentCore {
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
