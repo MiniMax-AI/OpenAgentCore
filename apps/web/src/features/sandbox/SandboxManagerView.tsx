@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { type SandboxNode } from "@oac/agents-client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -11,8 +11,7 @@ import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-naviga
 import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
-import type { SandboxConsoleConfig } from "./console-config";
-import { sandboxAdmin, sandboxConsoleConfigQuery } from "./sandbox-queries";
+import { sandboxAdmin } from "./sandbox-queries";
 import { useSandboxPageState } from "./use-sandbox-page-state";
 import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeList, onOldAddress } from "./NodeList";
@@ -24,16 +23,10 @@ import "./SandboxManagerView.css";
 
 /** Nodes owns node enrollment, the list and individual node management. */
 export function SandboxManagerView() {
-  const { t, i18n } = useTranslation("sandbox");
+  const { i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
-  const { data: config, isError, isFetching, refetch } = useQuery(sandboxConsoleConfigQuery);
   return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={locale}>
-    {config ? <SandboxManager consoleConfig={config} /> : <>
-      <NodesPageHeader />
-      <div className="console-page-body">{isError
-        ? <><p role="alert">{t("The console configuration could not be read. Refresh to try again.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></>
-        : <p role="status">{t("Connecting to this console's Core…")}</p>}</div>
-    </>}
+    <SandboxManager />
   </section>;
 }
 
@@ -51,7 +44,7 @@ function NodesPageHeader({ title, count, back, actions, headingRef }: { title?: 
   </header>;
 }
 
-function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig }) {
+function SandboxManager() {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { params, navigate, back: goBack } = useConsoleNavigation();
@@ -107,10 +100,10 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         if (params.id === target.id) navigate("nodes");
         refresh();
         // The host still runs the node's service until it is uninstalled there; the dialog reads the installation for the command.
-        if (consoleConfig.node_installer && snapshot) {
+        if (snapshot) {
           const { deployment } = snapshot;
           setCleanup({ node: {
-            name: target.name || target.id, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256,
+            name: target.name || target.id, installationId: deployment.installation_id,
             oldAddress: onOldAddress(target, deployment.core_url) ? target.core_url : null,
           }, open: true });
         }
@@ -171,7 +164,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     window.requestAnimationFrame(() => heading.current?.focus());
   }} />;
   // Rendered first in both the list and a node's page, so an open command outlives the navigation.
-  const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={nodesConfirmed && !snapshot.deployment.reset} onClose={() => setAdding(false)} onRefresh={refreshNodes} /> : null;
+  const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={nodesConfirmed && !snapshot.deployment.reset} onClose={() => setAdding(false)} onRefresh={refreshNodes} /> : null;
 
   if (params.id && hostedNodes) {
     const back = () => goBack("nodes");

@@ -39,7 +39,7 @@ func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T)
 	fakes.sessionCreation.findSessionCreation, fakes.sessionCreation.createSession = f.FindSessionCreation, f.CreateSession
 	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	fakes.environments.authorizeEnvironmentInstallation, fakes.environments.validateEnvironmentInstallation = f.AuthorizeEnvironmentInstallation, f.ValidateEnvironmentInstallation
-	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build"}}
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build", Artifacts: map[string]nativeinstaller.Artifact{"linux-amd64": {}}}}
 	handler := newTestHandler(t, deps)
 	body := `{"agent":{"model":"model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://model.example/v1","api_key":"fixture-model"}}}`
 	r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))

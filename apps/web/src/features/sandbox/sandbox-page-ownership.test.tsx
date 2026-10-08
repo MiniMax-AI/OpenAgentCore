@@ -3,11 +3,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { SandboxDeployment } from "@oac/agents-client";
 import { describe, expect, it, vi } from "vitest";
-import type { SandboxConsoleConfig } from "./console-config";
+import { installationQuery } from "../../lib/installation";
 import { SandboxManagerView } from "./SandboxManagerView";
 import { SandboxDeploymentPage } from "./SandboxDeploymentPage";
 import { SystemPage } from "../system/SystemPage";
-import { sandboxConsoleConfigQuery, sandboxDeploymentQuery, sandboxSnapshotQuery } from "./sandbox-queries";
+import { sandboxDeploymentQuery, sandboxSnapshotQuery } from "./sandbox-queries";
 import { beginSandboxWrite, settleSandboxWrite } from "./sandbox-write-ownership";
 
 // Portaled interactive flows are covered by browser acceptance; identify their page owner here.
@@ -21,8 +21,7 @@ function cache(provider: SandboxDeployment["provider"]) {
     mode: provider === "" ? "" : provider === "e2b" ? "direct" : "nodes", reset: null, resources: { allocations: 0, pending: 0 }, suspension: null,
     rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null },
   };
-  const config: SandboxConsoleConfig = { node_installer: false, node_installer_sha256: "", node_artifacts: [] };
-  client.setQueryData(sandboxConsoleConfigQuery.queryKey, () => config);
+  client.setQueryData(installationQuery.queryKey, { object: "core.installation", installation_id: "install", public_url: "https://core.example", api_base_url: "https://core.example/v1", local_only: false, source_commit: null, node_installation: null, configuration: { settings: [] }, address_bindings: { nodes: 0, nodes_on_other_address: 0, hosted_sandboxes: 0, self_hosted_executors: 0 } });
   client.setQueryData(sandboxDeploymentQuery.queryKey, deployment);
   client.setQueryData(sandboxSnapshotQuery.queryKey, { deployment, nodes: [], allocations: [], nodesError: null, readAt: 0 });
   return client;

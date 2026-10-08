@@ -307,11 +307,12 @@ export interface Installation {
   configuration: InstallationConfiguration;
   installation_id: string;
   local_only: boolean;
+  node_installation: NodeInstallation | null;
   object: "core.installation";
   public_url: string;
   source_commit: string | null;
 }
-export const installationFields = ["address_bindings", "api_base_url", "configuration", "installation_id", "local_only", "object", "public_url", "source_commit"] as const;
+export const installationFields = ["address_bindings", "api_base_url", "configuration", "installation_id", "local_only", "node_installation", "object", "public_url", "source_commit"] as const;
 export interface InstallationConfiguration {
   settings: InstallationSetting[];
 }
@@ -474,6 +475,11 @@ export interface NodeHost {
   total_memory_bytes: number | null;
 }
 export const nodeHostFields = ["available_disk_bytes", "available_memory_bytes", "cpu_utilization", "effective_cpu_cores", "observed_at", "total_memory_bytes"] as const;
+export interface NodeInstallation {
+  installer_sha256: string;
+  runtime_releases: Record<string, RuntimeRelease>;
+}
+export const nodeInstallationFields = ["installer_sha256", "runtime_releases"] as const;
 export interface NodeRollout {
   diagnostic?: NodeDiagnosticCode;
   ready_generation: number | null;
@@ -754,9 +760,8 @@ export interface SandboxDeploymentChangeInput {
   expected_generation: number;
   provider?: string;
   resources?: SandboxResources;
-  runtime?: RuntimeRelease;
 }
-export const sandboxDeploymentChangeInputFields = ["configuration", "credential", "expected_generation", "provider", "resources", "runtime"] as const;
+export const sandboxDeploymentChangeInputFields = ["configuration", "credential", "expected_generation", "provider", "resources"] as const;
 export const sandboxDeploymentChangeInputRequired = ["expected_generation"] as const;
 export interface SandboxDeploymentInput {
   configuration?: Record<string, unknown>;
@@ -764,9 +769,8 @@ export interface SandboxDeploymentInput {
   expected_generation: number;
   provider?: string;
   resources?: SandboxResources;
-  runtime?: RuntimeRelease;
 }
-export const sandboxDeploymentInputFields = ["configuration", "credential", "expected_generation", "provider", "resources", "runtime"] as const;
+export const sandboxDeploymentInputFields = ["configuration", "credential", "expected_generation", "provider", "resources"] as const;
 export const sandboxDeploymentInputRequired = ["expected_generation"] as const;
 export interface SandboxEnrollmentToken {
   enrollment_id: string;

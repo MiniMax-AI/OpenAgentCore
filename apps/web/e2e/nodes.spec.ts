@@ -36,7 +36,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(field).toHaveValue(/^ \(umask 077\n/);
   await expect(field).toHaveValue(/\| \$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --enrollment-token-stdin /);
   // It downloads from, and names as its source, the public URL, not the loopback address this browser uses.
-  await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
+  await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/api\/v1\/sandbox-node\/install\/releases\/c0ffee0{34}\/node-install\.pyz' /);
   await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
   await expect(add.getByText("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
@@ -134,10 +134,10 @@ test("issues no command before the installation is read, for a loopback public U
   await openConsole(page, request, "nodes", { nodeArtifacts: [] });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   await page.getByRole("button", { name: "Add node" }).click();
-  await expect(add.getByRole("status")).toHaveText("This console has no node files for Docker. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
+  await expect(add.getByRole("status")).toHaveText("This Core has no node files for Docker. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   expect(await writes(request)).toEqual([]);
-  // Rerunning ./install.sh adds them: reopening reads the console again, without a reload.
+  // Rerunning ./install.sh adds them: reopening reads Core's installation again, without a reload.
   await add.getByRole("button", { name: "Close dialog" }).click();
   await resetFixture(request);
   await page.getByRole("button", { name: "Add node" }).click();
@@ -153,7 +153,7 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
   // Removing the Core record leaves the system service for root/sudo to uninstall on its host.
   const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nexport http_proxy=[^\n]+\nexport HTTP_PROXY=[^\n]+\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nexport http_proxy=[^\n]+\nexport HTTP_PROXY=[^\n]+\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/api\/v1\/sandbox-node\/install\/releases\/c0ffee0{34}\/node-install\.pyz' [^]*\n\$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   await expect(cleanup.getByText("Installed without sudo?")).toHaveCount(0);
   await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveCount(0);
   // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.
@@ -182,7 +182,7 @@ test("gives the host's uninstall command even when the installation must be read
   await expect(cleanup.getByRole("alert")).toContainText("The installation couldn't be read, so no command can be issued.");
   await page.unroute("**/core/v1/installation");
   await cleanup.getByRole("button", { name: "Try again" }).click();
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/'https:\/\/core\.example\.com\/node-install\/node-install\.pyz'/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/'https:\/\/core\.example\.com\/api\/v1\/sandbox-node\/install\/releases\/c0ffee0{34}\/node-install\.pyz'/);
 });
 
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
@@ -205,7 +205,7 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await add.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "System", exact: true }).click();
   await page.getByRole("button", { name: "Manage sandbox configuration", exact: true }).click();
-  // The saved specification carries the Runtime read from the console's manifest.
+  // The saved specification carries the Runtime selected by Core.
   await page.getByRole("button", { name: "Configuration details", exact: true }).click();
   await expect(page.locator(".help-tip-popover").getByText("c0ffee000000", { exact: true })).toBeVisible();
 });
@@ -238,8 +238,8 @@ test("preselects microsandbox and asks once before switching to Docker", async (
   await expect(confirm).toHaveCount(0);
   await page.getByRole("button", { name: /^Standard/ }).click();
   await page.getByRole("button", { name: "Advanced settings", exact: true }).click();
-  await expect(page.getByLabel("Image ID", { exact: true })).toHaveValue(`sha256:${"1".repeat(64)}`);
-  await expect(page.getByLabel("Image manifest digest", { exact: true })).toHaveValue(`sha256:${"2".repeat(64)}`);
+  await expect(page.getByLabel("Image ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Image manifest digest", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Firmware SHA-256", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("microsandbox reference", { exact: true })).toHaveCount(0);
 });
@@ -249,7 +249,7 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   page.on("request", (sent) => {
     if (sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/deployment")) submitted = sent.postDataJSON() as Record<string, unknown>;
   });
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "system?id=sandbox", { sandbox: "none", installers: "none" });
   await page.getByRole("button", { name: "E2B cloud" }).click();
   await expect(page.getByLabel("E2B provider")).toHaveValue("sandbase");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://sandbox.sandbase.ai");
@@ -305,7 +305,7 @@ test("shows the retained E2B build while a replacement key is checked", async ({
   await expect(edit.getByRole("button", { name: "Next" })).toBeEnabled();
 });
 
-test("edits only the saved backend, preserving a custom size and Runtime", async ({ page, request }) => {
+test("edits only the saved backend, preserving a custom size and using Core’s Runtime", async ({ page, request }) => {
   const runtime = { source_commit: "0".repeat(40), artifacts: { image_id: `sha256:${"a".repeat(64)}`, image_manifest_digest: `sha256:${"b".repeat(64)}` } };
   const current = { resources: { cpus: 7, memory_mib: 8192 }, runtime };
   let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, update_required: 0, unknown: 0 } },
@@ -326,7 +326,8 @@ test("edits only the saved backend, preserving a custom size and Runtime", async
   await expect(page.getByRole("button", { name: "E2B cloud" })).toHaveCount(0);
   await page.getByRole("button", { name: /^Current/ }).click();
   await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect.poll(() => submitted).toMatchObject({ provider: "docker", expected_generation: 1, resources: current.resources, runtime });
+  await expect.poll(() => submitted).toMatchObject({ provider: "docker", expected_generation: 1, resources: current.resources });
+  expect(submitted).not.toHaveProperty("runtime");
   expect(submitted).not.toHaveProperty("core_url");
 });
 
@@ -371,4 +372,37 @@ test("renames a node and sets how many sandboxes run on it at once", async ({ pa
   await expect(edit).toBeHidden();
   await expect(page.getByRole("heading", { name: "core-01-large", level: 1 })).toBeVisible();
   await expect(capacity).toContainText("5 / 6");
+});
+
+
+test("keeps node setup unavailable until Core has a matching distribution and refreshes without a manual release", async ({ page, request }) => {
+  await openConsole(page, request, "system?id=sandbox", { sandbox: "none", installers: "none" });
+  await page.getByRole("button", { name: "Own machines" }).click();
+  await page.getByRole("button", { name: "microsandbox Recommended" }).click();
+  await page.getByRole("button", { name: /^Standard/ }).click();
+  await expect(page.getByRole("button", { name: "Save configuration" })).toBeDisabled();
+  await expect(page.locator(".wizard-missing")).toContainText("Runtime release needed");
+  await resetFixture(request, "authenticated", { sandbox: "none" });
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save configuration" })).toBeEnabled();
+  await expect(page.getByText("c0ffee000000", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Advanced settings", exact: true }).click();
+  await expect(page.getByLabel("Source commit", { exact: true })).toHaveCount(0);
+});
+
+
+test("refreshes Core distribution after a rejected save and keeps the refusal visible", async ({ page, request }) => {
+  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await page.getByRole("button", { name: "Own machines" }).click();
+  await page.getByRole("button", { name: "microsandbox Recommended" }).click();
+  await page.getByRole("button", { name: /^Standard/ }).click();
+  const save = page.getByRole("button", { name: "Save configuration" });
+  await expect(save).toBeEnabled();
+  await resetFixture(request, "authenticated", { sandbox: "none", installers: "none" });
+  await save.click();
+  await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
+  await expect(page.getByText("This Core has no matching installation distribution for the selected provider.", { exact: true }).first()).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(page.locator(".wizard-missing")).toContainText("Runtime release needed");
+  expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
 });

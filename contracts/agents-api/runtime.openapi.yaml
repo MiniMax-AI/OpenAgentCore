@@ -789,6 +789,107 @@ paths:
       summary: Recover an enrolled sandbox node identity and observe its readiness
       tags:
         - Sandbox Node
+  /api/v1/sandbox-node/install/{path}:
+    get:
+      description: Public matched Linux amd64 installer, metadata or declared artifact. Versioned releases remain addressable; artifacts may redirect to pinned HTTPS release URLs. Local downloads support conditional and range requests.
+      parameters:
+        - description: Metadata filename, artifacts/{filename}, or releases/{source_commit}/{filename}
+          in: path
+          name: path
+          required: true
+          type: string
+      produces:
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "206":
+          description: Partial Content
+          schema:
+            type: file
+        "304":
+          description: Not Modified
+        "307":
+          description: Temporary Redirect
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "416":
+          description: Requested Range Not Satisfiable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Download sandbox node installation content
+      tags:
+        - Sandbox Nodes
+    head:
+      description: Public matched Linux amd64 installer, metadata or declared artifact. Versioned releases remain addressable; artifacts may redirect to pinned HTTPS release URLs. Local downloads support conditional and range requests.
+      parameters:
+        - description: Metadata filename, artifacts/{filename}, or releases/{source_commit}/{filename}
+          in: path
+          name: path
+          required: true
+          type: string
+      produces:
+        - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "206":
+          description: Partial Content
+          schema:
+            type: file
+        "304":
+          description: Not Modified
+        "307":
+          description: Temporary Redirect
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "405":
+          description: Method Not Allowed
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "416":
+          description: Requested Range Not Satisfiable
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/v1.ErrorResponse'
+      summary: Download sandbox node installation content
+      tags:
+        - Sandbox Nodes
 schemes:
   - http
   - https

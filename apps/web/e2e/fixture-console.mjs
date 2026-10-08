@@ -50,6 +50,7 @@ function installation() {
     // As Core: api_base_url is always public_url followed by /v1; local_only marks a loopback public_url.
     object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
     local_only: local, source_commit: release.source_commit,
+    node_installation: state.installers ? { installer_sha256: "a".repeat(64), runtime_releases: Object.fromEntries(state.nodeArtifacts.map((provider) => [provider, provider === "docker" ? release : { source_commit: release.source_commit, artifacts: { microsandbox_ref: manifest.runtime_ref, runtime_sha256: manifest.microsandbox.runtime_sha256, firmware_sha256: manifest.microsandbox.firmware_sha256 } }])) } : null,
     configuration: {
       settings: [
         setting("public_url", publicUrl(), LOCAL_URL, ["core", "web"]),
@@ -123,7 +124,7 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     deployment: null,
     // Whether the console has its node installation payload, and so serves both installers.
     installers,
-    // The providers whose node files the console serves (/console/config node_artifacts).
+    // The providers whose releases Core can serve from its installation distribution.
     nodeArtifacts: artifacts.split(",").filter(Boolean),
   };
   state.deployment = sandbox === "none" ? unconfiguredDeployment() : sandbox === "e2b" ? e2bDeployment() : configuredDeployment();
@@ -138,11 +139,11 @@ function send(response, status, body, headers = {}) {
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
   response.end(JSON.stringify(body));
 }
-function error(response, status, message, code = null) {
+function error(response, status, message, code = null, param = null) {
   // Derive `type` as Core's writeError does (services/core/internal/api/errors.go).
   const type = status >= 500 ? "server_error" : status === 409 ? "conflict_error"
     : code === "not_found_error" || code === "invalid_beta" ? code : "invalid_request_error";
-  send(response, status, { error: { message, type, code, param: null } });
+  send(response, status, { error: { message, type, code, param } });
 }
 async function body(request) {
   const chunks = [];
@@ -201,14 +202,6 @@ async function consoleRoute(request, response, url) {
   if (url.pathname === "/console/installation/domain") {
     if (auth.mode !== "authenticated" || !request.headers.cookie?.includes(SESSION_COOKIE)) return error(response, 401, "Sign in to the console.");
     return domainRoute(request, response, state, { send, error, body });
-  }
-  if (url.pathname === "/console/config") {
-    // Console assets cover node enrollment only; native self-hosted installation is independent.
-    const served = state.installers;
-    return send(response, 200, {
-      node_installer: served, node_installer_sha256: served ? "a".repeat(64) : "",
-      node_artifacts: served ? state.nodeArtifacts : [],
-    });
   }
   return error(response, 404, "Not found.");
 }
@@ -376,6 +369,7 @@ async function sandboxRoute(request, response, path, url) {
     const input = await body(request);
     const initialize = request.method === "POST";
     // As Core, before any state check: the address is config.json's public_url and read-only.
+    if ("runtime" in input) return error(response, 400, "runtime cannot be set here.", "invalid_request_error", "runtime");
     if ("core_url" in input) return error(response, 400, "core_url is derived from the installation public URL (public_url in config.json, OAC_PUBLIC_URL for Core) and cannot be set here. Remove it.", "invalid_request_error", "core_url");
     if (!Number.isInteger(input.expected_generation) || input.expected_generation < 0) return error(response, 400, "expected_generation is required.", "invalid_request_error");
     if (input.expected_generation !== state.deployment.generation) return error(response, 409, "The sandbox configuration changed. Refresh before submitting again.", "sandbox_generation_stale");
@@ -384,7 +378,9 @@ async function sandboxRoute(request, response, path, url) {
     if (initialize && state.deployment.provider) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
     if (!initialize && !state.deployment.provider) return error(response, 409, "The sandbox deployment is not configured.", "sandbox_deployment_conflict");
     const e2b = input.provider === "e2b";
-    if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
+    const runtime = installation().node_installation?.runtime_releases[input.provider];
+    if (!e2b && !runtime) return error(response, 400, "This Core has no matching installation distribution for the selected provider.", "invalid_sandbox_configuration", "runtime");
+    if (!e2b && !input.resources) return error(response, 400, "resources are required.", "invalid_sandbox_configuration");
     // As Core (ErrPublicURLUnreachable): sandboxes reach Core from outside its host, which a loopback public_url cannot serve.
     if (state.installation === "local") return error(response, 409, "Sandboxes reach Core from outside its host. Set an HTTPS public URL that is not loopback (public_url in config.json, OAC_PUBLIC_URL for Core).", "sandbox_configuration_error");
     // Synthetic classifier outcomes only; never persist or echo submitted keys.
@@ -396,7 +392,7 @@ async function sandboxRoute(request, response, path, url) {
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     const previous = state.deployment;
-    const specification = { resources, ...(input.runtime ? { runtime: input.runtime } : {}) };
+    const specification = { resources, ...(runtime ? { runtime } : {}) };
     const explicitKey = e2b && Object.hasOwn(input, "credential");
     const sameSelection = !initialize && JSON.stringify(specification) === JSON.stringify(previous.specification) && (!e2b || input.configuration.template === previous.configuration?.template);
     // Omission can be a no-op; every explicit key, including identical bytes,
@@ -637,7 +633,6 @@ http.createServer(async (request, response) => {
   try {
     if (url.pathname.startsWith("/__fixture/")) return await fixtureRoute(request, response, url);
     // The console service serves its distribution manifest to anyone, as nodes download it.
-    if (url.pathname === "/node-install/manifest.json") return send(response, 200, manifest);
     if (request.headers.authorization) state.violations.push(`Authorization header on ${request.method} ${url.pathname}`);
     if (url.pathname.startsWith("/console/")) return await consoleRoute(request, response, url);
     const signedIn = state.auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE);

@@ -64,7 +64,7 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(volume['type'], 'volume')
                 self.assertEqual(volume['source'], 'data')
             self.assertNotIn('platform', service)
-        self.assertEqual({v['target'] for v in services['web']['volumes']}, {'/run/oac', '/node-payload'})
+        self.assertEqual({v['target'] for v in services['web']['volumes']}, {'/run/oac'})
         agent_host = services['agent-host']
         self.assertEqual(agent_host['network_mode'], 'service:core')
         self.assertEqual((agent_host['cgroup'], sorted(agent_host['cap_add']), agent_host['security_opt']),
@@ -76,6 +76,7 @@ class ComposeTests(unittest.TestCase):
             return [(v['target'], v['volume']['subpath'], v.get('read_only', False)) for v in services[name]['volumes']]
         identity = ('/run/agent-host', 'secrets/agent-host', True)
         self.assertIn(identity, mounts('core'))
+        self.assertIn(('/opt/oac/node-payload', 'node-payload', True), mounts('core'))
         self.assertEqual(mounts('agent-host'), [identity, ('/var/lib/oac/agent-host', 'agent-host', False)])
         self.assertEqual(services['core']['environment']['OAC_AGENT_HOST_IDENTITY_FILE'], '/run/agent-host/identity.json')
         self.assertIsNone(services['core']['command'])

@@ -46,7 +46,7 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
 		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
 		{resourceErr, "invalid_sandbox_configuration", "resources.cpus", map[string]any{"min": float64(1), "max": float64(255)}, "invalid sandbox configuration: cpus must be 1..255 and memory_mib must be 512..1048576", "invalid_sandbox_configuration", writeDeploymentError},
-		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: managed nodes require a pinned Runtime release", "invalid_sandbox_configuration", writeDeploymentError},
+		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: this Core has no matching installation distribution for the selected provider", "invalid_sandbox_configuration", writeDeploymentError},
 	} {
 		if tc.err == nil {
 			t.Fatal("missing validator error")

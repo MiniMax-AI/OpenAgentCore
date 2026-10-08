@@ -2,7 +2,6 @@ import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, typ
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { confirmSandboxRead, startSandboxRead } from "./sandbox-write-ownership";
-import { sandboxConsoleConfig } from "./console-config";
 
 /**
  * Cache entries for the sandbox deployment (`/core/v1/sandbox`). Every read
@@ -12,17 +11,6 @@ import { sandboxConsoleConfig } from "./console-config";
 export const sandboxAdmin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox" });
 
 export const sandboxScope = ["sandbox"] as const;
-
-/** This console's node installer and node files. */
-export const sandboxConsoleConfigQuery = queryOptions({
-  queryKey: ["console-config"],
-  queryFn: async ({ signal }) => {
-    const config = await sandboxConsoleConfig(signal);
-    // Never cache a result read after cancellation.
-    signal.throwIfAborted();
-    return config;
-  },
-});
 
 /** The deployment alone, for pages that only describe it. */
 export const sandboxDeploymentQuery = queryOptions<SandboxDeployment>({

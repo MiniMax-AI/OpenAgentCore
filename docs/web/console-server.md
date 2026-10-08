@@ -32,17 +32,15 @@ The deployment's reverse proxy sends every path to the console. The console forw
 | `/healthz` | No | `GET` or `HEAD` answers `200 ok` |
 | `/v1`, `/api/v1` and below | — | Forwarded to Core unchanged, with the caller's credential, streaming and WebSocket upgrades |
 | `/docs`, `/docs/*` | No | The API reference and its OpenAPI documents, forwarded to Core unchanged |
-| `/node-install/*` | No | The node installation payload (see [Node installation payload](#node-installation-payload)) |
 | `/console/auth`, `/console/auth/login`, `/console/auth/logout` | No | [Sign-in](#sign-in) |
 | `/`, `/index.html`, `/favicon.svg`, `/oac-mark.svg`, `/assets/*` | No | Static console assets |
-| `/console/config` | Yes | [Console configuration](#console-configuration) |
 | `/core/v1/*` | Yes | [Forwarded to Core](#forwarding-to-core) |
 | `/core` and other paths under `/core/` | Yes | 404 |
 | Any other path | Yes | Static assets; a path without a file extension falls back to `index.html` |
 
 Every request except `/healthz`, `/v1`, `/api/v1` and `/docs` must pass these checks first:
 
-1. **Host and origin.** The `Host` header must equal the host of `OAC_PUBLIC_URL`. An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site` must be `same-origin` or `none`. A write that carries neither `Origin` nor `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the console answers 403. `/node-install/*` checks only the host and the path.
+1. **Host and origin.** The `Host` header must equal the host of `OAC_PUBLIC_URL`. An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site` must be `same-origin` or `none`. A write that carries neither `Origin` nor `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the console answers 403.
 2. **Safe request.** The path must start with `/` and contain no `%`, backslash, NUL, dot segment or empty segment. Absolute-form request targets, `CONNECT` and `TRACE` get 400. An `Upgrade` header gets 400 except on `/v1`, `/api/v1` and `/docs`, which are forwarded before these checks. A `/core/v1` request can therefore never leave that prefix.
 3. **Sign-in.** Paths that need sign-in answer 401 without a valid session cookie.
 
@@ -64,6 +62,8 @@ On the way back, it removes `Set-Cookie`, `WWW-Authenticate`, `Location`, `Refre
 
 The console never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md); [console API usage](./console-api-usage.md) lists what each page reads and writes.
 
+Node installation facts come from [Core installation facts](../../contracts/agents-api/admin-api.md#installation-facts). Core serves [node installation downloads](../../contracts/agents-api/machine-api.md#node-installation-downloads) through the same unchanged `/api/v1` proxy. The console has no installation payload directory or distribution catalog.
+
 ## Sign-in
 
 | Method and route | Request | Result |
@@ -81,20 +81,6 @@ The administrator signs in with the deployment's [Core key](../getting-started/o
 - Failed attempts share a budget of 10 per minute; beyond it, a wrong key gets 429 with `Retry-After: 60`. The correct key always signs in, which is why the console refuses to start with a Core key shorter than 32 characters.
 
 Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a method other than `POST`, 415 for a body that is not JSON, 429 as above, and 503 when the console cannot create a session.
-
-## Console configuration
-
-`GET /console/config` returns what the signed-in browser needs to add nodes:
-
-| Field | Meaning |
-| --- | --- |
-| `node_installer` | Whether the console serves a node installation payload |
-| `node_installer_sha256` | SHA-256 of that payload's `node-install.pyz`; Add node commands verify it before running the installer |
-| `node_artifacts` | The providers (`docker`, `microsandbox`) whose node artifacts the payload holds, locally or as a pinned release download. Read on every request, so artifacts added by rerunning the installer appear without a restart |
-
-## Node installation payload
-
-With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's node payload at `/node-install/` without sign-in: `node-install.pyz`, `manifest.json`, `SHA256SUMS`, `runtime/seccomp.json`, and the node artifacts the manifest declares under `artifacts/`. An artifact missing locally redirects (307) to its pinned release download. Node install and uninstall commands download from `<public_url>/node-install/`, so the reverse proxy must send that path to the console. Nodes verify every checksum themselves.
 
 ## Public address
 

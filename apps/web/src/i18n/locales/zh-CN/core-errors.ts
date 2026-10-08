@@ -51,5 +51,5 @@ export const coreErrorDetails = {
   "keyLimit": "请输入有效的 API Key，长度最多 {{max}} 个字符。",
   "resourceRange": "请输入 {{min}} 到 {{max}} 的整数。",
   "resourceMin": "请输入不小于 {{min}} 的整数。",
-  "runtime": "请使用适用于此后端的有效不可变 Runtime 版本。"
+  "runtime": "此 Core 没有适用于所选提供方的配套安装发行文件。"
 } as const;

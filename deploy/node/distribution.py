@@ -287,7 +287,7 @@ def load_manifest(source_url=None, offline_root=None):
         else:
             if not source_url:
                 raise DistributionError('A Core source URL or offline bundle is required')
-            url = safe_url(source_url.rstrip('/') + '/node-install/' + name)
+            url = safe_url(source_url.rstrip('/') + '/api/v1/sandbox-node/install/' + name)
             for attempt in range(3):
                 try:
                     with urllib.request.build_opener(NoRedirect()).open(url, timeout=30) as stream:
@@ -317,8 +317,8 @@ def load_manifest(source_url=None, offline_root=None):
         if (manifest.get('platform') != 'linux/amd64'
                 or not re.fullmatch(r'[0-9a-f]{40}', manifest.get('source_commit', ''))):
             raise DistributionError('Unsupported distribution platform or revision')
-        # Resolve artifacts through the console, which selects local bytes or a pinned HTTPS release.
-        manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts' if source_url and offline_root is None else ''
+        # Resolve artifacts through Core, which selects local bytes or a pinned HTTPS release.
+        manifest['artifact_base_url'] = source_url.rstrip('/') + '/api/v1/sandbox-node/install/releases/' + manifest['source_commit'] + '/artifacts' if source_url and offline_root is None else ''
         return manifest
     except (ValueError, TypeError, AttributeError):
         raise DistributionError('Invalid distribution metadata') from None

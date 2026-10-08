@@ -22,10 +22,10 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
-        // The console service's own routes (sign-in, capability flags) and the
+        // The console service's own routes (sign-in and domain settings) and the
         // management surfaces it forwards, as in production.
         "/console": { target, changeOrigin: true },
-        "/node-install": { target, changeOrigin: true },
+        "/api/v1": { target, changeOrigin: true },
         "/core/v1": { target, changeOrigin: true },
       },
     },

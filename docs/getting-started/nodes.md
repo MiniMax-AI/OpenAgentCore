@@ -8,9 +8,9 @@ You add a node by generating a command in Web and running it on the host. The [s
 
 ## Before you add a node
 
-- **Core has a public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Set a public address other machines can reach before adding nodes*; see [Configure the public address](./install.md#configure-the-domain-and-https).
+- **Core has a public URL** that the host and its sandboxes can reach. Nodes download from and connect to Core at `public_url`. Until it is set, Add node says *Set a public address other machines can reach before adding nodes*; see [Configure the public address](./install.md#configure-the-domain-and-https).
 - **The sandbox configuration is saved.** Open **System** → **Manage sandbox configuration**, choose **Own machines**, the backend and a sandbox size, and **Save configuration**. To change a saved configuration, choose **Reset deployment** first. Every node of an installation uses that backend.
-- **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This console has no node files for …*.
+- **Core can serve the node files.** Nodes download their Runtime and provider files from Core, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This Core has no node files for …*.
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
 
@@ -21,7 +21,7 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within 10 minutes; Web counts down and offers **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
-The command downloads the node installer from your console, checks its SHA-256 and runs it with a one-time enrollment token. The installer downloads the node files and checks each against the release manifest, imports the Runtime image, registers the node, starts its service and waits until Core reports the node connected and ready. It never installs software, and it stops with a one-line hint before changing anything when a prerequisite is missing.
+The command downloads the node installer from Core, checks its SHA-256 and runs it with a one-time enrollment token. The installer downloads the node files and checks each against the release manifest, imports the Runtime image, registers the node, starts its service and waits until Core reports the node connected and ready. It never installs software, and it stops with a one-line hint before changing anything when a prerequisite is missing.
 
 Node installation and removal require root. Web's command uses `sudo` unless the shell is already root. The installer creates an `oac-node` service user and a system service; the node runs as that user, not as root. Running the installer as an ordinary user fails before it reads the enrollment token or changes the host.
 
@@ -106,13 +106,13 @@ The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation
    ```sh
     (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
    printf '\n==> Downloading node installer...\n' &&
-   curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+   curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/api/v1/sandbox-node/install/releases/<source-commit>/node-install.pyz' -o "$d/node-install.pyz" &&
    printf '==> Verifying node installer...\n' &&
    printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
    $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
-Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. Without the dialog, take the installer's SHA-256 from the `node-install.pyz` line of `https://core.example/node-install/SHA256SUMS`. Uninstall stops and removes the service, the node state, the records and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added.
+Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. Without the dialog, use `source_commit` from [installation facts](../../contracts/agents-api/admin-api.md#installation-facts) for `<source-commit>` and take the installer's SHA-256 from the `node-install.pyz` line of `https://core.example/api/v1/sandbox-node/install/releases/<source-commit>/SHA256SUMS`. Uninstall stops and removes the service, the node state, the records and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added.
 
 It never deletes sandboxes, volumes or images. It keeps the Runtime image and prints the `docker image rm` command. For microsandbox it keeps the store under `/var/lib/oac-node/.oac/m/`, prints how to delete it (`sudo -u oac-node rm -rf <store>`), and keeps a created account until the store is gone; rerun uninstall afterwards. With `--force`, microVMs may still use the store, so check `pgrep -u oac-node` first. Uninstall can be rerun until it completes.
 
@@ -168,7 +168,7 @@ A node reports only its first failed check, in this order: the Docker daemon or 
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
 | `runtime_image_unavailable` | Runtime image missing | The provider does not have the pinned Runtime image | A node added with Web's command downloads it again by itself; otherwise load the image from the matching release |
 | `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | A node added with Web's command downloads the missing files by itself; otherwise restore them from the matching release |
-| `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to the console and the release. The node retries with growing delays, up to 30 minutes apart |
+| `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to Core and the release. The node retries with growing delays, up to 30 minutes apart |
 
 A new group membership applies only to a new process. Restart the node service: `sudo systemctl restart oac-node-<installation-id>.service`. A node that is registered but never connects usually can't reach Core at the public URL, or its `/api/v1` WebSocket doesn't pass the reverse proxy.
 

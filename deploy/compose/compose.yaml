@@ -87,6 +87,11 @@ services:
         read_only: true
       - type: volume
         source: data
+        target: /opt/oac/node-payload
+        volume: {nocopy: true, subpath: node-payload}
+        read_only: true
+      - type: volume
+        source: data
         target: /state
         volume: {nocopy: true, subpath: state}
 
@@ -125,7 +130,6 @@ services:
     environment:
       OAC_PUBLIC_URL: *public-url
       OAC_WEB_CORE_KEY_FILE: /run/oac/core.key
-      OAC_WEB_NODE_PAYLOAD_DIR: /node-payload
       OAC_LOG_LEVEL: ${OAC_LOG_LEVEL:-}
       OAC_LOG_FORMAT: ${OAC_LOG_FORMAT:-}
       OAC_LOG_ADD_SOURCE: ${OAC_LOG_ADD_SOURCE:-}
@@ -134,11 +138,6 @@ services:
         source: data
         target: /run/oac
         volume: {nocopy: true, subpath: secrets/web}
-        read_only: true
-      - type: volume
-        source: data
-        target: /node-payload
-        volume: {nocopy: true, subpath: node-payload}
         read_only: true
     healthcheck:
       test: [CMD, /usr/local/bin/oac-web, healthcheck]

@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 6d82188e3b303276e2a3bc5ddf65e158794f8749b3ed0f210e61dd62a94a3039
+source_hash: 0d0e2493b3bc3078ca6070c676fabd80a1e4a8da043f98eded8f998ef82d9585
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -140,7 +140,7 @@ backend fingerprint 标识原生资源命名空间，不表示容量。Core 保�
 
 ### 发行产物与进程路径 {#distribution-artifacts-and-process-paths}
 
-每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime`、`policy` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加 provider payload 不在这些消费者中增加 provider-name 分支。
+每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime`、`policy` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 artifact catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包和 node 安装读取此投影；Core 根据已注册的声明检查可用性。添加 provider payload 不在这些消费者中增加 provider-name 分支。
 
 launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`。Core 读取这些路径一次，并传给 direct construction 和 setup 操作。它们是固定发行属性，不是部署设置或用户可选 helper 路径。每个 adapter 解析自己的相对 helper 和 state 位置；E2B 使用 `e2b/oac-e2b-provider` 和 `e2b/`。root 缺失或不是绝对路径时，在执行 helper 前失败。Provider 构造与发现不读取进程环境变量。
 

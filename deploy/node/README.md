@@ -1,6 +1,6 @@
 # Node installer
 
-These modules are packaged as `node-install.pyz`, which Web serves at `/node-install/`. They install a sandbox node on a Linux host that runs sandboxes for one Core; they never install Core. The bootstrap is one file that runs with the host's `python3`.
+These modules are packaged as `node-install.pyz`, which Core serves through [node installation downloads](../../contracts/agents-api/machine-api.md#node-installation-downloads). They install a sandbox node on a Linux amd64 host that runs sandboxes for one Core; they never install Core. The bootstrap is one file that runs with the host's `python3`.
 
 | Module | Role |
 | --- | --- |
@@ -34,8 +34,8 @@ Configuration files are published only after their complete contents are written
 The distribution manifest is the one download contract for nodes: flat versioned file names, and the compressed and unpacked size and SHA-256 of the Runtime.
 
 - A Compose installation keeps only the node metadata from its release archive; Core's image never acquires execution-only payloads.
-- A node obtains bootstrap metadata from the console that generated its command. Web serves artifacts it has locally and redirects missing declared execution artifacts to the versioned HTTPS release base in the verified manifest. Web never downloads or caches those bytes.
-- Only artifact requests may follow HTTPS redirects, and only without credentials or cookies. Metadata and enrollment requests stay on the configured console. The console publishes only fixed non-secret files and declared artifact names.
+- A node obtains bootstrap metadata from Core at the public origin in its command. The command pins the installer to the source revision and digest from one [installation response](../../contracts/agents-api/admin-api.md#installation-facts). `--source-url` remains that origin; the installer derives the machine download prefix and reads a retained generation's saved release when needed.
+- Only artifact requests may follow HTTPS redirects, and only without credentials or cookies. Metadata and enrollment requests stay on the configured Core origin. Core serves only the [machine download allowlist](../../contracts/agents-api/machine-api.md#node-installation-downloads).
 - Download into private temporary files, verify size and SHA-256 before an atomic rename, clear leftover temporary downloads and extracted files before retrying, and reuse only verified cache entries or exact image identities. Never select a release other than the pinned one.
 - Release downloads are anonymous. Never add repository credentials to installed node or Runtime configuration.
 - Manual builds use the `build-<full SHA>` release tag and tag builds the `v*` tag. The manifest's download base must match the release tag; artifact file names and source provenance keep the full source SHA.

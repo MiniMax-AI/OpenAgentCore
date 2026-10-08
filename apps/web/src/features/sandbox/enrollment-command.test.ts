@@ -30,6 +30,7 @@ describe("sandbox connection and enrollment", () => {
 if(process.env.SCENARIO==='download failure') process.exit(22);
 const args=process.argv.slice(2);
 if(args.includes('-L')||args.includes('--location')||args.includes('--insecure')) process.exit(90);
+if(!args.includes('http://localhost:8080/api/v1/sandbox-node/install/releases/'+'a'.repeat(40)+'/node-install.pyz')) process.exit(91);
 fs.writeFileSync(args[args.indexOf('-o')+1],fs.readFileSync(process.env.FIXTURE));
 if(process.env.SCENARIO==='killed download') process.kill(process.ppid,'SIGKILL');`);
     executable("sha256sum", `const fs=require('node:fs'), crypto=require('node:crypto');
@@ -56,7 +57,7 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
     const digest = scenario === "checksum mismatch" ? "0".repeat(64) : createHash("sha256").update(payload).digest("hex");
     const token = "fixture'one-time";
     try {
-      const command = scenario === "uninstall" ? nodeUninstallCommand({ sourceUrl: "http://localhost:8080", installationId: "fixture-installation", scriptDigest: digest }) : nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "docker", installationId: "fixture-installation", scriptDigest: digest });
+      const command = scenario === "uninstall" ? nodeUninstallCommand({ sourceUrl: "http://localhost:8080", installationId: "fixture-installation", scriptDigest: digest, sourceCommit: "a".repeat(40) }) : nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "docker", installationId: "fixture-installation", scriptDigest: digest, sourceCommit: "a".repeat(40) });
       const proxy = "http://fixture:private%20password@proxy.example:3128";
       const proxyEnv: Record<string, string | undefined> = { http_proxy: undefined, https_proxy: undefined, no_proxy: undefined, HTTP_PROXY: undefined, HTTPS_PROXY: undefined, NO_PROXY: undefined, ALL_PROXY: undefined };
       if (["uppercase proxy", "root proxy", "empty proxy"].includes(scenario)) Object.assign(proxyEnv, { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, NO_PROXY: "core.example,localhost" });

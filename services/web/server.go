@@ -15,13 +15,11 @@ import (
 
 type console struct {
 	config
-	root                *os.Root
-	nodePayload         *os.Root
-	nodeInstallerDigest string
-	proxy, direct       *httputil.ReverseProxy
-	transport           *http.Transport
-	host                string
-	auth                *consoleAuth
+	root          *os.Root
+	proxy, direct *httputil.ReverseProxy
+	transport     *http.Transport
+	host          string
+	auth          *consoleAuth
 }
 
 type consoleActorContextKey struct{}
@@ -41,19 +39,6 @@ func newConsole(c config) (*console, error) {
 	}
 	origin, _ := url.Parse(c.origin)
 	h := &console{config: c, root: root, host: origin.Host, auth: newConsoleAuth(c)}
-	if c.nodePayloadDir != "" {
-		h.nodePayload, err = os.OpenRoot(c.nodePayloadDir)
-		if err != nil {
-			root.Close()
-			return nil, errors.New("cannot open node installation payload")
-		}
-		h.nodeInstallerDigest, err = installerDigest(h.nodePayload, "node-install.pyz")
-		if err != nil {
-			h.nodePayload.Close()
-			root.Close()
-			return nil, err
-		}
-	}
 	h.transport = http.DefaultTransport.(*http.Transport).Clone()
 	// Credentials go only to the configured Core, never an ambient HTTP proxy.
 	h.transport.Proxy = nil
@@ -112,9 +97,6 @@ func newConsole(c config) (*console, error) {
 func (h *console) Close() {
 	h.transport.CloseIdleConnections()
 	_ = h.root.Close()
-	if h.nodePayload != nil {
-		_ = h.nodePayload.Close()
-	}
 }
 
 func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -138,14 +120,6 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.direct.ServeHTTP(w, r)
-		return
-	}
-	if h.nodePayload != nil && strings.HasPrefix(r.URL.Path, "/node-install/") {
-		if h.requestOrigin(r) == "" || !safePath(r.URL.Path) || r.URL.IsAbs() {
-			http.NotFound(w, r)
-			return
-		}
-		h.serveNodePayload(w, r)
 		return
 	}
 	if !h.sameOrigin(r) {
@@ -178,10 +152,6 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			authError(w, http.StatusUnauthorized, "Sign in to the console")
 		}
-		return
-	}
-	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {
-		h.serveConsoleConfiguration(w, r)
 		return
 	}
 	if r.URL.Path == "/core" || strings.HasPrefix(r.URL.Path, "/core/") {

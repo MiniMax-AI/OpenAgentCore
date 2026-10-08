@@ -137,8 +137,13 @@ Core writes this record in the same transaction that creates the Session. Later 
 | `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
 | `source_commit` | The full source commit Core was built from; null for development builds |
+| `node_installation` | Node installation distribution, below; null when unavailable |
 | `configuration` | The process settings Core loaded from its environment, under `settings` |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |
+
+`node_installation`, when non-null, contains `installer_sha256` and `runtime_releases`. The former is the SHA-256 of the node installer matched to Core's source revision; the latter maps provider identifiers to [Runtime releases](./sandbox-deployment.md#runtime-release). An empty map means the installer is available but no provider has complete artifacts; uninstall commands can still use the installer. An absent node distribution or a development build without a source revision makes this field null; a non-null value requires `source_commit`.
+
+Core validates pinned release metadata at startup and rechecks artifact availability on each installation read and deployment selection: local regular files and their sizes, or a verified pinned HTTPS download. Completing offline artifacts for the same release makes them available without a restart. Node commands use `public_url`, `source_commit` and `installer_sha256` from one response to construct the pinned release URL defined by [node installation downloads](./machine-api.md#node-installation-downloads).
 
 `configuration.settings` has one entry per setting Core loaded, with its dotted `key`, effective `value`, `default`, whether it is `changeable`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).
 

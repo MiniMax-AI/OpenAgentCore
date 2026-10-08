@@ -5,7 +5,7 @@ import { InstallationNotice } from "./InstallationNotice";
 
 const installation: CoreInstallation = {
   object: "core.installation", installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", public_url: "http://127.0.0.1:8091", api_base_url: "http://127.0.0.1:8091/v1",
-  source_commit: null, local_only: true, configuration: { settings: [] },
+  source_commit: null, node_installation: null, local_only: true, configuration: { settings: [] },
   address_bindings: { nodes: 0, nodes_on_other_address: 0, hosted_sandboxes: 0, self_hosted_executors: 0 },
 };
 

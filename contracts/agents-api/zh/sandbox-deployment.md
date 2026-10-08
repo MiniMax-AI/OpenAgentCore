@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: e5a3c062ddffa395cb5832df3cbd2b30b30f04dfa0917911b375331cff070b76
+source_hash: 582645b77dace09a31713aaf7cb5a7ad2d31b0ce597dc2b325080550bd2491c6
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -15,7 +15,7 @@ source_hash: e5a3c062ddffa395cb5832df3cbd2b30b30f04dfa0917911b375331cff070b76
 | 路由 | 效果 |
 | --- | --- |
 | `GET /core/v1/sandbox/deployment` | 读取安全的当前配置、推出、重置和资源计数 |
-| `POST /core/v1/sandbox/deployment` | 选择初始提供商、资源和 Runtime |
+| `POST /core/v1/sandbox/deployment` | 选择初始提供商、资源及 Core 匹配的 Runtime |
 | `PUT /core/v1/sandbox/deployment` | 在线更改同一提供商的目标 |
 | `POST /core/v1/sandbox/deployment/reset` | 启动托管资源的持久清除或将其升级为持久清除 |
 | `DELETE /core/v1/sandbox/deployment/reset?expected_generation=N` | 取消剩余清除 |
@@ -37,11 +37,12 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `expected_generation` | 必填的非负整数，来自 GET；绝不会自动刷新并重放 |
 | `provider` | 必须是 `docker`、`microsandbox`、`e2b` 中恰好一个 |
 | `resources` | 每个沙箱的限制，见下文；Docker 和 microsandbox 必填，E2B 可选 |
-| `runtime` | 不可变的 [Runtime 发行版](#runtime-release)；Docker 和 microsandbox 必填，E2B 必须省略 |
 | `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。Docker 和 microsandbox 仅接受 `{}` 或省略 |
 | `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。Docker 和 microsandbox 拒绝该字段 |
 
 请求中没有 Core 地址。Core 根据安装公开 URL（`config.json` 中的 `public_url`，Core 对应 `OAC_PUBLIC_URL`）派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。每个托管沙箱都运行在 Core 的网络命名空间之外，并连接[沙箱 Link](../../../docs/zh/configuration.md#changing-the-public-url)，因此在公开 URL 改为非回环主机上的 https 地址之前，任何选择都会被拒绝，并返回 409 `sandbox_configuration_error`：回环主机指向沙箱自身的命名空间，而其他主机上的 http 源地址没有 Link。更改公开 URL 属于安装变更：使用旧地址注册的节点不会收到新沙箱，必须移除后重新添加。
+
+Core 从自身匹配分发中选择提供商的[Runtime 发行版](#runtime-release)，并将其保存在 `specification.runtime`。POST 和 PUT 不接受 `runtime`；显式提交该字段返回 400 `invalid_request`。需要节点构件的提供商缺少匹配分发时，Core 在代次检查后返回 400 `invalid_sandbox_configuration`。可用性见[安装信息](admin-api.md#installation-facts)。E2B 使用模板构建，不依赖节点载荷。
 
 ### 资源 {#resources}
 
@@ -60,7 +61,7 @@ microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environme
 
 ### Runtime 发行版 {#runtime-release}
 
-`runtime` 恰好包含 `source_commit` 和 `artifacts`。`source_commit` 是标识发行包的 40 字符小写提交 SHA。`artifacts` 是字符串映射，恰好包含所选适配器声明的标识；缺失、多余、空字符串、null 或格式错误的条目均被拒绝。E2B 省略 `runtime`，通过 `configuration.template` 选择其不可变构建。
+保存的 `specification.runtime` 恰好包含 `source_commit` 和 `artifacts`。`source_commit` 是标识发行包的 40 字符小写提交 SHA。`artifacts` 是字符串映射，恰好包含所选适配器声明的标识；缺失、多余、空字符串、null 或格式错误的条目均被拒绝。E2B 省略 `runtime`，通过 `configuration.template` 选择其不可变构建。
 
 | 适配器 | 制品键 | 标识 |
 | --- | --- | --- |
@@ -70,7 +71,7 @@ microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environme
 | microsandbox | `runtime_sha256` | 原生 microsandbox Runtime 二进制文件的 SHA-256，表示为 64 个小写十六进制字符 |
 | microsandbox | `firmware_sha256` | 匹配固件的 SHA-256，表示为 64 个小写十六进制字符 |
 
-适配器的部署策略声明每个键、其验证模式及其在发行清单中的选择路径。生成的安装器和客户端契约通过该声明从匹配的发行包复制并验证标识。镜像配置 ID 和 OCI 清单摘要标识不同的对象，绝不能相互替代。节点安装程序会在注册前根据载荷验证已保存的发行版，并保留其导入的精确本地镜像标识。
+适配器的部署策略声明每个键、其验证模式及其在发行清单中的选择路径。Core 使用这些选择路径从匹配的发行包构建保存的 Runtime release。生成的安装器和客户端契约使用同一声明验证这些标识。镜像配置 ID 和 OCI 清单摘要标识不同的对象，绝不能相互替代。节点安装程序会在注册前根据载荷验证已保存的发行版，并保留其导入的精确本地镜像标识。
 
 规范摘要是规范 JSON 的 SHA-256：依次为 `provider`、`resources` 和存在时的 `runtime`；Runtime 字段依次为 `source_commit`、`artifacts`，其中制品键按字典顺序排序。制品映射的插入顺序不会改变摘要。
 

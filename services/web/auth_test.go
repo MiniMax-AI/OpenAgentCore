@@ -100,7 +100,7 @@ func TestCoreKeySignInSessionAndLogout(t *testing.T) {
 	if w := authRequest(h, "GET", "/console/auth", "", nil); w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"mode":"login"}` {
 		t.Fatalf("initial mode: %d %s", w.Code, w.Body)
 	}
-	for _, path := range []string{"/core/v1/projects", "/console/config", "/core/v1/sandbox/nodes", "/private.txt", "/oac-mark-other.png"} {
+	for _, path := range []string{"/core/v1/projects", "/core/v1/installation", "/core/v1/sandbox/nodes", "/private.txt", "/oac-mark-other.png"} {
 		if w := authRequest(h, "GET", path, "", nil); w.Code != 401 {
 			t.Errorf("private path %s returned %d", path, w.Code)
 		}
@@ -132,13 +132,13 @@ func TestCoreKeySignInSessionAndLogout(t *testing.T) {
 	if w := authRequest(h, "GET", "/console/auth", "", cookie); strings.TrimSpace(w.Body.String()) != `{"mode":"authenticated"}` {
 		t.Fatalf("signed-in mode: %s", w.Body)
 	}
-	for _, path := range []string{"/core/v1/projects", "/core/v1/sandbox/nodes", "/console/config"} {
+	for _, path := range []string{"/core/v1/projects", "/core/v1/sandbox/nodes", "/core/v1/installation"} {
 		w := authRequest(h, "GET", path, "", cookie)
 		if w.Code != 200 || strings.Contains(w.Body.String(), testCoreKey) {
 			t.Errorf("authenticated path %s failed or leaked the Core key: %d", path, w.Code)
 		}
 	}
-	if calls.Load() != 2 {
+	if calls.Load() != 3 {
 		t.Fatal("authenticated management requests did not reach Core")
 	}
 	if w := authRequest(startConsole(t, c), "GET", "/console/auth", "", cookie); !strings.Contains(w.Body.String(), `"login"`) {

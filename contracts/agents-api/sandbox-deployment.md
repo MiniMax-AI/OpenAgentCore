@@ -13,7 +13,7 @@ Every route requires the Core key. [Web's console server](../../docs/web/console
 | Route | Effect |
 | --- | --- |
 | `GET /core/v1/sandbox/deployment` | Read the safe active configuration, rollout, reset and resource counts |
-| `POST /core/v1/sandbox/deployment` | Select the initial provider, resources and Runtime |
+| `POST /core/v1/sandbox/deployment` | Select the initial provider and resources with Core's matched Runtime |
 | `PUT /core/v1/sandbox/deployment` | Change the same provider's target online |
 | `POST /core/v1/sandbox/deployment/reset` | Start or escalate a durable clear of hosted resources |
 | `DELETE /core/v1/sandbox/deployment/reset?expected_generation=N` | Cancel the remaining clear |
@@ -35,11 +35,12 @@ POST and PUT take the same complete selection and require `expected_generation` 
 | `expected_generation` | Required nonnegative integer from GET; never refresh and replay it automatically |
 | `provider` | Exactly one of `docker`, `microsandbox`, `e2b` |
 | `resources` | Per-sandbox limits, below; required for Docker and microsandbox, optional for E2B |
-| `runtime` | The immutable [Runtime release](#runtime-release); required for Docker and microsandbox, absent for E2B |
 | `configuration` | The provider's public selectors. E2B: the immutable `template` build and the optional paired `api_url` and `domain`. Docker and microsandbox accept only `{}` or omission |
 | `credential` | The provider's write-only credential. E2B: `{api_key}`, required at first setup and omitted on PUT to keep the current key; a null or empty key is invalid. Docker and microsandbox reject it |
 
 The request has no Core address. Core derives the deployment's `core_url` from the installation public URL (`public_url` in `config.json`, `OAC_PUBLIC_URL` for Core): the origin nodes and sandbox guests use to reach Core. A request that contains `core_url` is rejected with 400 `invalid_request` like any other unknown member. Every hosted sandbox runs outside Core's network namespace and dials the [sandbox Link](../../docs/configuration.md#changing-the-public-url), so every selection is rejected with 409 `sandbox_configuration_error` until the public URL is https on a host that is not loopback: a loopback host names the sandbox's own namespace, and an http origin elsewhere has no Link. Changing the public URL is an installation change: nodes enrolled with the old address receive no new sandboxes and must be removed and added again.
+
+Core chooses the provider's [Runtime release](#runtime-release) from its own matched distribution and saves it in `specification.runtime`. POST and PUT do not accept `runtime`; an explicit field returns 400 `invalid_request`. A provider requiring node artifacts without a matching distribution receives 400 `invalid_sandbox_configuration` after the generation check. [Installation facts](./admin-api.md#installation-facts) reports availability. E2B uses its template build and does not depend on node payloads.
 
 ### Resources
 
@@ -58,7 +59,7 @@ microsandbox configures the CPUs, memory, a managed root disk and a separate own
 
 ### Runtime release
 
-`runtime` contains exactly `source_commit` and `artifacts`. `source_commit` is a lowercase 40-character commit SHA identifying the distribution. `artifacts` is a string map containing exactly the identities declared by the selected adapter; missing, extra, empty, null or malformed entries are rejected. E2B omits `runtime` and selects its immutable build through `configuration.template`.
+Saved `specification.runtime` contains exactly `source_commit` and `artifacts`. `source_commit` is a lowercase 40-character commit SHA identifying the distribution. `artifacts` is a string map containing exactly the identities declared by the selected adapter; missing, extra, empty, null or malformed entries are rejected. E2B omits `runtime` and selects its immutable build through `configuration.template`.
 
 | Adapter | Artifact key | Identity |
 | --- | --- | --- |
@@ -68,7 +69,7 @@ microsandbox configures the CPUs, memory, a managed root disk and a separate own
 | microsandbox | `runtime_sha256` | SHA-256 of the native microsandbox runtime binary, as 64 lowercase hex characters |
 | microsandbox | `firmware_sha256` | SHA-256 of the matching firmware, as 64 lowercase hex characters |
 
-The adapter's deployment policy declares each key, its validation pattern and its selector in the distribution manifest. The generated installer and client contracts use that declaration to copy and validate the identities from the matching distribution. An image configuration ID and an OCI manifest digest identify different objects and never substitute for each other. The node installer verifies the saved release against its payload before registration and keeps the exact local image identity it imports.
+The adapter's deployment policy declares each key, its validation pattern and its selector in the distribution manifest. Core uses those selectors to build the saved Runtime release from its matching distribution. The generated installer and client contracts use the same declaration to verify these identities. An image configuration ID and an OCI manifest digest identify different objects and never substitute for each other. The node installer verifies the saved release against its payload before registration and keeps the exact local image identity it imports.
 
 The specification digest is SHA-256 over canonical JSON: `provider`, then `resources`, then `runtime` when present; the Runtime fields are `source_commit`, then `artifacts`, whose keys are sorted lexicographically. An artifact map's insertion order does not change the digest.
 

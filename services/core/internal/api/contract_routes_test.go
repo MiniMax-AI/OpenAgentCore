@@ -69,7 +69,8 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) {
 	// The native installer gates its routes, as a release build enables them.
 	deps, _ := testDependencies(t)
-	deps.Execution.NativeInstaller = &NativeInstaller{Version: "contract-test", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{}}
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "contract-test", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Artifacts: map[string]nativeinstaller.Artifact{"linux-amd64": {}}}}
+	deps.Distribution = &nativeinstaller.Catalog{}
 	h := &Handler{Dependencies: deps}
 	contracts := map[string]string{"/v1": "openapi.yaml", "/core/v1": "core.openapi.yaml", "/api/v1": "runtime.openapi.yaml"}
 	published := map[string]map[string]bool{}

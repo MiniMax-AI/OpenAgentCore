@@ -71,10 +71,8 @@ type Config struct {
 	// ProviderPaths locate adapter helpers under OAC_PROVIDER_ROOT and their
 	// private state under the Compose state mount.
 	ProviderPaths sandbox.ProcessPaths
-	// NativeInstallers is the native installer catalog directory under
-	// OAC_PROVIDER_ROOT; empty when the root is unset.
-	NativeInstallers string
-	Log              log.Config
+
+	Log log.Config
 }
 
 // RuntimeHistory is the file named by OAC_HISTORY_SETTINGS_FILE, with its
@@ -157,9 +155,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	c.ProviderPaths = sandbox.ProcessPaths{ArtifactRoot: os.Getenv("OAC_PROVIDER_ROOT"), StateRoot: providerStateRoot}
-	if c.ProviderPaths.ArtifactRoot != "" {
-		c.NativeInstallers = c.ProviderPaths.ArtifactRoot + "/native-installers"
-	}
 	return c, nil
 }
 

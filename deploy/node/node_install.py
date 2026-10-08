@@ -157,7 +157,7 @@ def transient(error):
 def fetch(source, name):
     for attempt in range(3):
         try:
-            with open_request(source + "/node-install/" + name) as response:
+            with open_request(source + "/api/v1/sandbox-node/install/" + name) as response:
                 raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
                 raise RuntimeDownloadError("Node bootstrap metadata is too large: " + name)
@@ -165,7 +165,7 @@ def fetch(source, name):
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
             if not transient(error) or attempt == 2:
                 status = " (HTTP " + str(error.code) + ")" if isinstance(error, urllib.error.HTTPError) else ""
-                raise RuntimeDownloadError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
+                raise RuntimeDownloadError("Cannot download node metadata " + name + status + "; check the Core source URL, TLS and network, then rerun") from None
             time.sleep(attempt + 1)
 
 
@@ -205,8 +205,8 @@ def metadata(source, bundle=None, prefix=""):
     distribution.image_identities(manifest, "runtime")
     for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
         distribution.artifact(manifest, name)
-    # Metadata stays on the console; artifact requests may redirect to its pinned release.
-    manifest["artifact_base_url"] = source + "/node-install/releases/" + manifest["source_commit"] + "/artifacts" if source else ""
+    # Metadata stays on Core; artifact requests may redirect to its pinned release.
+    manifest["artifact_base_url"] = source + "/api/v1/sandbox-node/install/releases/" + manifest["source_commit"] + "/artifacts" if source else ""
     return manifest, sums
 
 

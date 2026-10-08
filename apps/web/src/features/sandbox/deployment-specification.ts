@@ -1,4 +1,4 @@
-import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
+import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxSpecification } from "@oac/agents-client";
 
 /** The size the Provider declares for setup to propose; null when its configuration selects the size. */
 export function defaultSandboxResources(provider: SandboxProvider): SandboxResources | null {
@@ -13,25 +13,6 @@ export function validSandboxResources(provider: SandboxProvider, resources: Sand
     const value = resources[rule.name] ?? 0;
     return Number.isInteger(value) && value >= min && value <= max;
   });
-}
-
-export function runtimeReleaseFields(provider: SandboxProvider): string[] {
-  return ["source_commit", ...Object.keys(deploymentContract.providers[provider].artifacts)];
-}
-
-export function isRuntimeReleaseField(provider: SandboxProvider, field: string, value: string): boolean {
-  const rules: Record<string, { pattern: string }> = deploymentContract.providers[provider].artifacts;
-  const pattern = field === "source_commit" ? deploymentContract.source_commit_pattern : rules[field]?.pattern;
-  return pattern !== undefined && new RegExp(`^(?:${pattern})(?![\\s\\S])`).test(value);
-}
-
-export function isRuntimeRelease(provider: SandboxProvider, value: Partial<SandboxRuntimeRelease>): value is SandboxRuntimeRelease {
-  const fields = Object.keys(deploymentContract.providers[provider].artifacts);
-  return fields.length > 0 && typeof value.source_commit === "string" && isRuntimeReleaseField(provider, "source_commit", value.source_commit)
-    && value.artifacts !== null && typeof value.artifacts === "object" && !Array.isArray(value.artifacts)
-    && Object.keys(value).every((key) => key === "source_commit" || key === "artifacts")
-    && Object.keys(value.artifacts).length === fields.length
-    && fields.every((field) => typeof value.artifacts?.[field] === "string" && isRuntimeReleaseField(provider, field, value.artifacts[field]));
 }
 
 export function savedSpecification(provider: SandboxProvider, savedProvider?: SandboxProvider | "", specification?: SandboxSpecification): SandboxSpecification | null {
@@ -63,17 +44,4 @@ export function sandboxSize(deployment: SandboxDeployment): SandboxResources | n
 export function sandboxesThatFit(host: { cpus: number | null; memoryBytes: number | null }, size: Pick<SandboxResources, "cpus" | "memory_mib"> | null): number | null {
   if (!size || host.cpus === null || host.memoryBytes === null || size.cpus <= 0 || size.memory_mib <= 0) return null;
   return Math.min(Math.floor(host.cpus / size.cpus), Math.floor(host.memoryBytes / (size.memory_mib * 2 ** 20)));
-}
-
-/** The paired console serves one matched distribution; Core persists approval. */
-export async function distributionRuntime(provider: SandboxProvider, signal: AbortSignal): Promise<SandboxRuntimeRelease> {
-  const response = await fetch("/node-install/manifest.json", { signal, credentials: "include", redirect: "error" });
-  if (!response.ok) throw new Error("distribution unavailable");
-  const manifest: unknown = await response.json();
-  const at = (path: readonly string[]): unknown => path.reduce<unknown>((value, key) =>
-    value !== null && typeof value === "object" && !Array.isArray(value) && Object.hasOwn(value, key) ? (value as Record<string, unknown>)[key] : undefined, manifest);
-  const artifacts = Object.fromEntries(Object.entries(deploymentContract.providers[provider].artifacts).map(([name, rule]) => [name, at(rule.manifest_path)]));
-  const release = { source_commit: at(["source_commit"]), artifacts };
-  if (at(["platform"]) !== "linux/amd64" || !isRuntimeRelease(provider, release as Partial<SandboxRuntimeRelease>)) throw new Error("invalid distribution");
-  return release as SandboxRuntimeRelease;
 }
