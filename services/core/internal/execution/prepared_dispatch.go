@@ -88,6 +88,8 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
+	// Recheck before claiming without replacing the declaration that admitted
+	// preparation; later heartbeats cannot expand this Turn's operations.
 	if _, err := admitSession(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
@@ -108,7 +110,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	}
 	turnID := run.Reservation.Receipts[0].TurnID
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
-	result, status := d.deliver(owner, tenantID, sessionID, peer, req, turnID, messages, through, prepared)
+	result, status := d.deliver(owner, tenantID, sessionID, peer, req, declaration, turnID, messages, through, prepared)
 	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, turnID, result, status)
 	run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
 	return run, err
