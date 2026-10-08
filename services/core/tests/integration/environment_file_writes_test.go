@@ -27,7 +27,7 @@ func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	lease := executionWriter(t, s).lease
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	assignSession(t, s, session.ID, host.ID)
 	return fileWriteFixture{s: s, lease: lease, writer: sessionExecution(t, lease), tenant: tenant, session: session, env: env,
 		key: sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: host.ID, RequestSHA256: strings.Repeat("a", 64)}}

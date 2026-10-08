@@ -112,7 +112,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	tenant, active := newTurnSession(t, s)
 	input := submitMessage(t, s, tenant, active.ID, "active")
 	transition(t, writer, tenant, active.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	err := sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, active.ID, host.ID)
 	if err != nil {
 		t.Fatal(err)

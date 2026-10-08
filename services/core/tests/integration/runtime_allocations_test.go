@@ -159,7 +159,7 @@ func TestRuntimeAllocationCleanupReleasesAssignmentAndKeepsIdentity(t *testing.T
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	assignSession(t, s, session.ID, host.ID)
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {

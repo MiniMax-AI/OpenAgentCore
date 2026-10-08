@@ -187,7 +187,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if _, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token)); err != nil {
 			t.Fatal(err)
 		}
-		host := registerAgentHost(t, s, principal.TenantID)
+		host := registerAgentHost(t, s)
 		if err := owned.BindSessionDevice(t.Context(), principal.TenantID, session.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}

@@ -242,7 +242,7 @@ func TestManagedSessionArchivePreservesFailuresAndRejectsSelfHosted(t *testing.T
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	assignSession(t, s, session.ID, host.ID)
 	if _, err := s.pool.Exec(t.Context(), "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID); err != nil {
 		t.Fatal(err)

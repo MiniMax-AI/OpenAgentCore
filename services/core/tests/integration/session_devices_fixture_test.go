@@ -19,7 +19,7 @@ import (
 type agentHost struct{ ID, Credential string }
 
 // registerAgentHost registers a deployment-wide agent host.
-func registerAgentHost(t testing.TB, s *Store, _ string) agentHost {
+func registerAgentHost(t testing.TB, s *Store) agentHost {
 	t.Helper()
 	host := agentHost{ID: uuid.NewString(), Credential: uuid.NewString()}
 	if err := sessionAdapter(s).RegisterAgentHost(t.Context(), host.ID, runtimedevice.HashCredential(host.Credential)); err != nil {

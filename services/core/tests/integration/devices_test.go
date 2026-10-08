@@ -27,7 +27,7 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	ctx := context.Background()
 	tenant, session := newTurnSession(t, s)
 	otherTenant, otherSession := newTurnSession(t, s)
-	a, b := registerAgentHost(t, s, tenant), registerAgentHost(t, s, tenant)
+	a, b := registerAgentHost(t, s), registerAgentHost(t, s)
 	// The binds run on an execution lease of their own, which closes before
 	// the pool does.
 	lease, err := pgunit.AcquireLease(ctx, pool)
@@ -104,10 +104,9 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
-	tenant, _ := newTurnSession(t, s)
-	a := registerAgentHost(t, s, tenant)
+	a := registerAgentHost(t, s)
 	secret := a.Credential
-	foreignSecret := registerAgentHost(t, s, "").Credential
+	foreignSecret := registerAgentHost(t, s).Credential
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
 	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)

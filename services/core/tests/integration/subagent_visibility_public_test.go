@@ -121,7 +121,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		t.Fatal(page, err)
 	}
 	root := page.Turns[0].ID
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	if err = leased.Sessions.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}

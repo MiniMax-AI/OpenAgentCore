@@ -83,10 +83,10 @@ func TestSandboxResetAutoUsesStartedWorkAndLockedRecheck(t *testing.T) {
 				parent, child := uuid.NewString(), uuid.NewString()
 				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp())`, parent, session.ID)
 				runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, session.ID, parent)
-				runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, session.ID, registerAgentHost(t, s, tenant).ID, parent)
+				runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, session.ID, registerAgentHost(t, s).ID, parent)
 				runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn',$4,clock_timestamp())`, uuid.NewString(), session.ID, child, strings.TrimPrefix(kind, "subagent_"))
 			case "file_write":
-				runtimeSuspensionSQL(t, s.pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), session.Environment.ID, registerAgentHost(t, s, tenant).ID, strings.Repeat("a", 64))
+				runtimeSuspensionSQL(t, s.pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), session.Environment.ID, registerAgentHost(t, s).ID, strings.Repeat("a", 64))
 			case "suspended":
 				runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_allocations SET compute_phase='suspended', compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID)
 			}

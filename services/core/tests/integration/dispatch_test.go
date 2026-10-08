@@ -80,7 +80,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := registerAgentHost(t, s, h.tenant)
+	host := registerAgentHost(t, s)
 	h.device, h.credential = sessions.ExecutionDevice{ID: host.ID, Name: "agent host"}, host.Credential
 	secret := h.credential
 	h.link = sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))

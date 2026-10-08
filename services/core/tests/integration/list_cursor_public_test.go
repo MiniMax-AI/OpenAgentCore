@@ -94,7 +94,7 @@ func seedCursorFixture(t *testing.T, s *Store, leased execution.Owner, skillServ
 		if err != nil {
 			t.Fatal(err)
 		}
-		host := registerAgentHost(t, s, tenant)
+		host := registerAgentHost(t, s)
 		if err = leased.Sessions.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}

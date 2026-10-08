@@ -531,7 +531,7 @@ func TestInitializationBindsAgentHost(t *testing.T) {
 		t.Run(environment, func(t *testing.T) {
 			// Hosted work is admitted only on a configured deployment.
 			s, _ := configuredStore(t)
-			tenant, host := uuid.NewString(), registerAgentHost(t, s, "")
+			tenant, host := uuid.NewString(), registerAgentHost(t, s)
 			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 				Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":` + environment + `}`),
 				InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}}}))

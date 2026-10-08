@@ -53,7 +53,7 @@ type fakeCheckpointProvider struct {
 func newFakeCheckpointProvider(t *testing.T, s *Store) *fakeCheckpointProvider {
 	t.Helper()
 	p := &fakeCheckpointProvider{t: t, lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, serving: map[string]*linkServe{},
-		host: registerAgentHost(t, s, ""), registry: runtimegateway.NewRegistry(), link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))}
+		host: registerAgentHost(t, s), registry: runtimegateway.NewRegistry(), link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))}
 	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: p.registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")

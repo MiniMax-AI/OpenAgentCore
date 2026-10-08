@@ -52,7 +52,7 @@ func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session sessions.Se
 	// The Runtime shares the harness's Core, not its connection or write lock.
 	other := &dispatchHarness{t: h.t, s: h.s, lease: h.lease, owned: h.owned, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,
 		admissions: h.admissions, environments: h.environments, link: h.link}
-	host := registerAgentHost(t, h.s, h.tenant)
+	host := registerAgentHost(t, h.s)
 	other.device, other.credential = sessions.ExecutionDevice{ID: host.ID, Name: "agent host"}, host.Credential
 	other.resource, other.serve = fixtureLinkResource(t, h.s, h.tenant, session)
 	// The placement precedes Serve, so a running Worker cannot place the

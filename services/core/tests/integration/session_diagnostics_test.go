@@ -222,7 +222,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	})
 	failure := sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 2, ExitCode: 7}
 	runtimeSuspensionSQL(t, pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
-	host := registerAgentHost(t, s, owner.TenantID)
+	host := registerAgentHost(t, s)
 	assignSession(t, s, owner.SessionID, host.ID)
 	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: host.ID}
 	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
@@ -319,7 +319,7 @@ func TestDiagnosticRootReadRejectsActualChildTurn(t *testing.T) {
 	root := runtimeSuspensionCompleted(t, s.pool, owner)
 	child, turn := uuid.NewString(), uuid.NewString()
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, root)
-	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, registerAgentHost(t, s, owner.TenantID).ID, root)
+	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, registerAgentHost(t, s).ID, root)
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn','in_progress',clock_timestamp())`, turn, owner.SessionID, child)
 	if _, err := sessionAdapter(w).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn became root diagnostics", err)

@@ -118,7 +118,7 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 			root := runtimeSuspensionCompleted(t, s.pool, owner)
 			child := uuid.NewString()
 			runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, root)
-			runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal,public_visible) VALUES($1,$2,$3,'codex','child','root',1,$4,1,true)`, child, owner.SessionID, registerAgentHost(t, s, owner.TenantID).ID, root)
+			runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal,public_visible) VALUES($1,$2,$3,'codex','child','root',1,$4,1,true)`, child, owner.SessionID, registerAgentHost(t, s).ID, root)
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			created := source - 1000
 			payload, _ := json.Marshal(proto.SubagentTurnPayload{NativeID: "child", TurnID: "remote-turn", Status: sessions.TurnCompleted, CreatedAtMS: created, StartedAtMS: &created, CompletedAtMS: &source})

@@ -135,7 +135,7 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			case "input":
 				_, err = tx.Exec(ctx, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
 			case "file_write":
-				_, err = tx.Exec(ctx, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, registerAgentHost(t, s, owner.TenantID).ID, strings.Repeat("a", 64))
+				_, err = tx.Exec(ctx, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, registerAgentHost(t, s).ID, strings.Repeat("a", 64))
 			case "wake":
 				_, err = tx.Exec(ctx, `UPDATE runtime_allocations SET compute_wake_requested=true,compute_activity_at=clock_timestamp() WHERE id=$1`, owner.ID)
 			}
