@@ -224,7 +224,7 @@ python services/core/tests/qualify_public_native.py \
 
 | Suite | Operations | Placement |
 | --- | --- | --- |
-| `none` | Creation retry, foreign history rejection, two native text Turns, history recall, SSE ordering and SDK/raw Item and Turn parity | `none` |
+| `none` | Initial-input creation/retry/conflict with one Turn, foreign history rejection, two native text Turns, history recall, SSE ordering, SDK/raw schema parity and nullable usage accounting | `none` |
 | `pending-actions` | Query/reconnect pending calls, success/error results, cancellation, exact target rejection, retries and durable Items | Any declared placement with function tools |
 | `functions` | SDK handlers, success/error, native file and Artifact bytes, continuation, pending cancellation and tenant isolation | Workspace |
 | `tool-search` | Deferred function execution, saved configuration freeze and the function suite | Workspace with declared deferred discovery |
@@ -243,6 +243,8 @@ The `tool-search` suite proves deferred callbacks through Core; the pinned publi
 For `self_hosted`, choose a custom absolute `workspace_directory`. When the runner prints each new Session ID, connect a separate isolated machine or container using that Session's public installation command; the runner waits up to five minutes. Multiple Sessions must not share a workspace. The separate `official_environment_files_native.py` check accepts two already connected self-hosted Sessions and checks Files.list sorting, pagination and isolation through the Environment owner.
 
 Warm continuation is the default and records cold recovery as `unverified`. To qualify cold continuation, additionally pass `--compose-directory` with the owned installation's absolute directory and `--compose-project` with its exact project name. The runner restarts only that project's `agent-host`, confirms its container start time changed, and then runs the unchanged history assertions. This does not qualify a Core restart or a sandbox checkpoint restore. The `pending-actions`, `policies` and `steering` suites do not qualify process restart and reject those options. Select cold recovery only where the [declaration and coverage ledger](./index.md#known-gaps) support it; unsupported recovery remains a gap, never a successful skipped check. An API rejection fails the selected suite.
+
+The `none` suite validates required and nullable Session, Turn, Item and event fields against the pinned schema. When native Turns supply measured usage, it checks the terminal event against the stored Turn and sums the measurements into Session totals. Unknown usage remains `null` and each affected Turn is listed in the evidence’s `proof.unverified`; a passing suite does not claim native measurement support for those Turns.
 
 Run `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py` with the pinned SDK to check credential handling and the owned restart boundary without a model. Existing deterministic Core integration tests remain the authority for schema validation, atomic admission, durable receipts and rejection semantics. Real-model results qualify only the selected suite, protocol, Harness and placement. Provider lifecycle, native identity, credential isolation and unselected suites need separate evidence; view-only results do not qualify the public path.
 

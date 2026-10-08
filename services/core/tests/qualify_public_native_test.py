@@ -1,6 +1,7 @@
 """Check qualification's secret handling and owned restart boundary without a model."""
 
 import contextlib
+import copy
 import base64
 import io
 import json
@@ -14,6 +15,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx2
+from jsonschema import ValidationError
 from openai import BadRequestError, NotFoundError, OpenAI
 
 from official_environment_files_native import generate_files
@@ -126,7 +128,7 @@ class QualificationTests(unittest.TestCase):
             client = OpenAI(base_url="https://core.example/v1", api_key="project-secret", http_client=http, max_retries=0)
             options = {"environment": {"type": "self_hosted", "workspace_directory": "/custom/work"},
                        "extra_body": {"x_agents_core": {"model_provider": self.settings["model_provider"]}}}
-            for verify in (qualification.verify_hosted_functions, qualification.verify_workspace_images, qualification.verify_pending_actions):
+            for verify in (qualification.verify_none, qualification.verify_hosted_functions, qualification.verify_workspace_images, qualification.verify_pending_actions):
                 kwargs = {"ready": lambda session: None, "record": lambda proof: None}
                 if verify is not qualification.verify_pending_actions:
                     kwargs["restart"] = None
@@ -306,6 +308,143 @@ class QualificationTests(unittest.TestCase):
                     self.assertIn('native_mcp_cancel_retry_stops_descendant_effects', checks)
                     sessions.turns.retrieve.assert_called_once_with('hold-turn', session_id='session')
                     self.assertEqual(sessions.events.create.call_count, 3)
+
+
+class NoneSessionTests(unittest.TestCase):
+    def run_none(self, measured=True, fault=None):
+        client, foreign, http = MagicMock(), SimpleNamespace(api_key="foreign"), MagicMock()
+        client.base_url, client.api_key = "https://core.example/v1", "caller"
+        sessions = client.beta.agents.sessions
+        usage = {"input_tokens": 7, "input_tokens_details": {"cached_tokens": 2}, "output_tokens": 3,
+                 "output_tokens_details": {"reasoning_tokens": 1}, "total_tokens": 10} if measured else None
+        current = {"id": "session", "object": "agent.session", "metadata": {}, "created_at": 1, "last_active_at": 1,
+                   "status": "idle", "required_actions": [], "error": None, "environment": {"type": "none"},
+                   "vault_ids": [], "usage": None, "agent": {"id": "agent", "name": None, "model": "fixture",
+                   "reasoning": {"effort": None, "summary": None}, "text": {"format": {"type": "text"}, "verbosity": "medium"},
+                   "service_tier": "auto", "instructions": None, "tools": [],
+                   "multi_agent": {"enabled": False, "max_concurrent_subagents": None}}}
+        turns, items, prompts, proofs = [], [], [], []
+
+        def sdk(value):
+            return SimpleNamespace(**value, to_dict=lambda: copy.deepcopy(value))
+
+        def page(values):
+            return {"object": "list", "data": copy.deepcopy(values), "has_more": False,
+                    "first_id": values[0]["id"] if values else None, "last_id": values[-1]["id"] if values else None}
+
+        def listing(values):
+            result = MagicMock()
+            result.to_dict.side_effect = lambda: page(values)
+            result.__iter__.side_effect = lambda: iter([sdk(value) for value in values])
+            return result
+
+        sessions.items.list.side_effect = lambda *a, **k: listing(items)
+        sessions.turns.list.side_effect = lambda *a, **k: listing(turns)
+        sessions.retrieve.side_effect = lambda *a, **k: sdk(current)
+
+        def events(initial):
+            number = len(turns) + 1
+            turn = {"id": "turn-" + str(number), "object": "agent.session.turn", "session_id": "session", "agent_id": "agent",
+                    "subagent_id": None, "status": "in_progress", "created_at": number, "started_at": number,
+                    "completed_at": None, "error": None, "usage": None}
+            turns.append(turn)
+            current.update(status="in_progress", usage=None)
+            if initial:
+                created = {"type": "agent.session.created", "event_id": "created", "session": copy.deepcopy(current)}
+                yield SimpleNamespace(type=created["type"], session=sdk(current), to_dict=lambda: created)
+            yield sdk({"type": "agent.session.turn.created", "event_id": str(number) + "-created", "session_id": "session",
+                       "turn_id": turn["id"], "turn": copy.deepcopy(turn)})
+            turn.update(status="completed", completed_at=number, usage=copy.deepcopy(usage))
+            marker = prompts[0].split("Remember ", 1)[1].split(".", 1)[0]
+            items.append({"id": "answer-" + str(number), "turn_id": turn["id"], "phase": None, "type": "message", "role": "assistant", "status": "completed",
+                          "content": [{"type": "output_text", "text": marker}]})
+            if measured:
+                current["usage"] = {"input_tokens": 7 * number, "input_tokens_details": {"cached_tokens": 2 * number},
+                    "output_tokens": 3 * number, "output_tokens_details": {"reasoning_tokens": number}, "total_tokens": 10 * number}
+                if fault == "totals":
+                    current["usage"]["total_tokens"] += 1
+            current["status"] = "idle"
+            terminal_usage = copy.deepcopy(usage)
+            if fault == "terminal_usage":
+                terminal_usage["total_tokens"] += 1
+            yield sdk({"type": "agent.session.turn.completed", "event_id": str(number) + "-completed", "session_id": "session",
+                       "turn_id": turn["id"], "turn": copy.deepcopy(turn), "usage": terminal_usage})
+            yield sdk({"type": "agent.session.idle", "event_id": str(number) + "-idle", "session": copy.deepcopy(current)})
+
+        def create(**options):
+            if not options.get("stream"):
+                return sdk(current)
+            prompts.append(options["input"])
+            stream = MagicMock()
+            stream.__iter__.side_effect = lambda: events(True)
+            return stream
+
+        def continuation(*args, **options):
+            stream = MagicMock()
+            stream.__iter__.side_effect = lambda: events(False)
+            return stream
+
+        sessions.create.side_effect, sessions.stream.side_effect = create, continuation
+
+        def response(method, url, status, body):
+            return httpx2.Response(status, json=body, request=httpx2.Request(method, url))
+
+        def post(url, headers, json):
+            if json["input"].startswith("Changed "):
+                return response("POST", url, 409, {"error": {"message": "Conflict", "type": "conflict_error", "code": "conflict_error", "param": None}})
+            if fault == "duplicate":
+                turns.append({**turns[0], "id": "duplicate"})
+            return response("POST", url, 201, current)
+
+        def get(url, headers, **kwargs):
+            if headers["Authorization"] == "Bearer foreign":
+                return response("GET", url, 404, {"error": {"message": "Missing", "type": "not_found_error", "code": "not_found", "param": None}})
+            if url.endswith("/items"):
+                body = page(items)
+            elif url.endswith("/turns"):
+                body = page(turns)
+            else:
+                body = copy.deepcopy(current)
+                if fault == "missing_usage":
+                    del body["usage"]
+            return response("GET", url, 200, body)
+
+        http.get.side_effect, http.post.side_effect = get, post
+        restart = MagicMock()
+        with patch.object(qualification, "delete_session") as delete:
+            checks = qualification.verify_none(client, foreign, http, {"model": "fixture"}, {"environment": {"type": "none"}},
+                ready=lambda session: None, restart=restart, record=lambda proof: proofs.append(copy.deepcopy(proof)))
+            delete.assert_called_once_with(sessions, "session")
+        restart.assert_called_once_with()
+        self.assertEqual(len(turns), 2)
+        return checks, proofs[-1]
+
+    def test_measured_turns_and_session_totals_survive_continuation(self):
+        checks, proof = self.run_none()
+        self.assertEqual(proof["unverified"], [])
+        self.assertEqual(proof["snapshots"][-1]["session"]["usage"]["total_tokens"], 20)
+        self.assertIn("initial_input_create_retry_conflict_one_native_turn_and_foreign_history_rejection", checks)
+
+    def test_unknown_usage_is_explicit_not_a_measurement_claim(self):
+        _, proof = self.run_none(measured=False)
+        self.assertEqual(len(proof["unverified"]), 2)
+        self.assertIsNone(proof["snapshots"][-1]["session"]["usage"])
+
+    def test_missing_required_usage_is_not_nullable_usage(self):
+        with self.assertRaises(ValidationError):
+            self.run_none(fault="missing_usage")
+
+    def test_rejects_incorrect_session_sum(self):
+        with self.assertRaises(AssertionError):
+            self.run_none(fault="totals")
+
+    def test_terminal_usage_must_match_the_stored_turn(self):
+        with self.assertRaises(AssertionError):
+            self.run_none(fault="terminal_usage")
+
+    def test_creation_retry_cannot_append_a_turn(self):
+        with self.assertRaises(AssertionError):
+            self.run_none(fault="duplicate")
 
 
 if __name__ == "__main__":
