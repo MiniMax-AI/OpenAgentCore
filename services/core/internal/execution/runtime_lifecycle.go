@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"net/url"
 	"sync"
 	"time"
 
@@ -31,7 +30,6 @@ type RuntimeProvider struct {
 	loadDeployment      func(context.Context) (*RuntimeProvider, error)
 	prepareDeployment   RuntimeDeploymentPreparer
 	ProviderKind        string
-	CoreURL             string
 	SandboxLink         string
 	InstallationID      string
 	BackendFingerprint  string
@@ -76,8 +74,7 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentR
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
-	u, err := url.Parse(config.CoreURL)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || config.Provider == nil || registry == nil {
+	if config.Provider == nil || registry == nil {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	id, err := uuid.Parse(config.InstallationID)
@@ -194,9 +191,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
-	bootstrap := sandbox.Bootstrap{
-		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
-		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
+	bootstrap := sandbox.Bootstrap{Reference: runtimeReference(owner),
 		SandboxIO: sandboxbootstrap.Input{Version: sandboxbootstrap.Version, LinkURL: r.config.SandboxLink, Credential: serve, Resource: serveResource(owner)},
 	}
 	// An invalid input creates nothing: release the allocation as settled absent.

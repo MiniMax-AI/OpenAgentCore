@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
 type captureCaller func(wire.Request)
@@ -23,9 +24,8 @@ func (f captureCaller) Call(_ context.Context, q wire.Request) (wire.Response, e
 	return wire.Response{}, errors.New("captured")
 }
 
-// Core's adapter sends SandboxIO to the helper, and the helper hands the
-// guest both launch inputs on stdin.
-func TestCreateDeliversBothLaunchInputs(t *testing.T) {
+// Core's adapter sends the Sandbox I/O input to the helper unchanged.
+func TestCreateSendsTheSandboxIOInput(t *testing.T) {
 	config := wire.Config{
 		InstallationID: "11111111-1111-4111-8111-111111111111", HelperPath: "/helper", RuntimeHome: "/private/msb", RuntimePath: "/private/bin/msb", FirmwarePath: "/private/lib/libkrunfw.so",
 		RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), Image: "registry/runtime@sha256:" + strings.Repeat("c", 64),
@@ -44,20 +44,42 @@ func TestCreateDeliversBothLaunchInputs(t *testing.T) {
 	decoder := json.NewDecoder(bytes.NewReader(sent))
 	decoder.DisallowUnknownFields()
 	var q wire.Request
-	if err := decoder.Decode(&q); err != nil || wire.ValidateRequest(q) != nil || q.Bootstrap == nil || q.Bootstrap.SandboxIO != b.SandboxIO {
+	if err := decoder.Decode(&q); err != nil || wire.ValidateRequest(q) != nil || q.Bootstrap == nil || *q.Bootstrap != b {
 		t.Fatal("the helper request lost the Sandbox I/O input", err)
 	}
-	payload, err := launchInputs(*q.Bootstrap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtime, _ := b.RuntimeConnection().Marshal()
-	serveInput, _ := b.SandboxIO.Marshal()
-	var got map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &got); err != nil || len(got) != 2 || !bytes.Equal(got["Runtime"], runtime) || !bytes.Equal(got["SandboxIO"], serveInput) {
-		t.Fatalf("stdin payload has %v", err)
-	}
-	if !strings.Contains(bootstrapScript, "b['Runtime']") || !strings.Contains(bootstrapScript, "b['SandboxIO']") {
-		t.Fatal("the bootstrap script does not read both launch inputs")
+}
+
+func TestBootstrapRequiresZeroExitAndWholeInput(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		events     []sdk.ExecEvent
+		inputError error
+		confirmed  bool
+	}{
+		{"confirmed", []sdk.ExecEvent{{Kind: sdk.ExecEventStderr, Data: []byte("noise")}, {Kind: sdk.ExecEventExited}, {Kind: sdk.ExecEventDone}}, nil, true},
+		{"nonzero_exit", []sdk.ExecEvent{{Kind: sdk.ExecEventExited, ExitCode: 1}, {Kind: sdk.ExecEventDone}}, nil, false},
+		{"missing_exit", []sdk.ExecEvent{{Kind: sdk.ExecEventDone}}, nil, false},
+		{"failed_stdin", []sdk.ExecEvent{{Kind: sdk.ExecEventExited}, {Kind: sdk.ExecEventDone}}, errors.New("lost stdin"), false},
+		{"duplicate_exit", []sdk.ExecEvent{{Kind: sdk.ExecEventExited}, {Kind: sdk.ExecEventExited}, {Kind: sdk.ExecEventDone}}, nil, false},
+		{"stdin_event", []sdk.ExecEvent{{Kind: sdk.ExecEventStdinError}, {Kind: sdk.ExecEventExited}, {Kind: sdk.ExecEventDone}}, nil, false},
+		{"stream_lost", []sdk.ExecEvent{{Kind: sdk.ExecEventExited}}, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			index := 0
+			recv := func(context.Context) (*sdk.ExecEvent, error) {
+				if index >= len(tc.events) {
+					return nil, errors.New("stream lost")
+				}
+				event := tc.events[index]
+				index++
+				return &event, nil
+			}
+			input := make(chan error, 1)
+			input <- tc.inputError
+			err := awaitBootstrap(context.Background(), recv, input)
+			if tc.confirmed != (err == nil) || err != nil && !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+				t.Fatalf("bootstrap outcome %v", err)
+			}
+		})
 	}
 }

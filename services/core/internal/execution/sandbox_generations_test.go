@@ -39,9 +39,9 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 		if err != nil {
 			return nil, err
 		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: setup.Generation, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}, nil
+		return &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: setup.Generation, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}, nil
 	}, func(ctx context.Context, setup deployment.Setup) (PreparedRuntimeDeployment, error) {
-		return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider},
+		return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider},
 			VerifyCredential: func(context.Context) error {
 				verifyCalls++
 				if verifyCalls == rejectAt {

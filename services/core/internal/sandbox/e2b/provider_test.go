@@ -102,7 +102,7 @@ func TestKillRequiresTerminalProof(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestCreateAndCommandUseOnlyPrivateRequest(t *testing.T) {
+func TestCreateUsesOnlyPrivateRequest(t *testing.T) {
 	p, f, r := fixture(t)
 	b := contracttest.Bootstrap(r)
 	f.response.Info = &sandbox.Info{Reference: r, State: "running", ProviderID: "native-id", CreateSettled: true, BootstrapComplete: true}
@@ -110,32 +110,14 @@ func TestCreateAndCommandUseOnlyPrivateRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	q := f.requests[0]
-	if q.Operation != "create" || q.Bootstrap == nil || q.Bootstrap.Credential != b.Credential || q.Bootstrap.SandboxIO != b.SandboxIO || q.Config.APIKey != p.config.APIKey {
+	if q.Operation != "create" || q.Bootstrap == nil || *q.Bootstrap != b || q.Config.APIKey != p.config.APIKey {
 		t.Fatal("private request lost")
 	}
-	f.response.Info = nil
-	f.response.Command = &sandbox.CommandResult{ExitCode: 7, Stdout: "output"}
-	got, err := p.RunCommand(bounded(t), r, sandbox.Command{Args: []string{"cat"}, Stdin: []byte("private input")})
-	if err != nil || got.ExitCode != 7 {
-		t.Fatal(got, err)
-	}
-	f.err = context.DeadlineExceeded
-	if _, err = p.RunCommand(bounded(t), r, sandbox.Command{Args: []string{"true"}}); !errors.Is(err, sandbox.ErrCommandUnconfirmed) {
-		t.Fatal(err)
-	}
-	if len(f.requests) != 3 {
-		t.Fatal("operation was replayed")
-	}
 }
-func TestDeadlineAndCommandAdmission(t *testing.T) {
+func TestDeadlineAdmission(t *testing.T) {
 	p, f, r := fixture(t)
 	if _, err := p.GetInfo(context.Background(), r); !errors.Is(err, sandbox.ErrInvalid) {
 		t.Fatal(err)
-	}
-	for _, cmd := range []sandbox.Command{{}, {Args: []string{"x\x00"}}, {Args: []string{"cat"}, Directory: "relative"}} {
-		if _, err := p.RunCommand(bounded(t), r, cmd); !errors.Is(err, sandbox.ErrInvalid) {
-			t.Fatal(err)
-		}
 	}
 	if len(f.requests) != 0 {
 		t.Fatal("invalid operation reached helper")

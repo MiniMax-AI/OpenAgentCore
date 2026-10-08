@@ -248,9 +248,6 @@ func (p *fakeCheckpointProvider) ResumeCompute(ctx context.Context, r sandbox.Re
 	p.serve(r.AllocationID)
 	return state, nil
 }
-func (p *fakeCheckpointProvider) RunCommandCompute(context.Context, sandbox.Reference, sandbox.Compute, sandbox.Command) (sandbox.CommandResult, error) {
-	return sandbox.CommandResult{}, errors.New("unexpected compute command")
-}
 
 // connectHost connects the agent host unless it is connected; restart drops
 // its connection first, as a restarted agent host does.

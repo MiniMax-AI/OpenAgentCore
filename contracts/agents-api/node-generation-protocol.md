@@ -6,7 +6,7 @@ A sandbox node runs the Docker or microsandbox Provider on its host and connects
 
 ## Frames and version
 
-Every frame is one JSON text message whose `version` equals `node.ProtocolVersion`; both peers reject any other version, and there is no fallback decoder. Member names are exact and unique: unknown members, case aliases, duplicates and unexpected nulls are rejected. Control frames (`hello`, `welcome`, `heartbeat`, `heartbeat_ack`, `retention`, `retention_ack`) are at most 32 KiB; `request` and `response` frames at most 72 MiB. An invalid frame closes the connection.
+Every frame is one JSON text message whose `version` equals `node.ProtocolVersion`; both peers reject any other version, and there is no fallback decoder. Member names are exact and unique: unknown members, case aliases, duplicates and unexpected nulls are rejected. Control frames (`hello`, `welcome`, `heartbeat`, `heartbeat_ack`, `retention`, `retention_ack`) are at most 32 KiB; `request` and `response` frames at most 1 MiB. An invalid frame closes the connection.
 
 ## Connection
 
@@ -41,19 +41,17 @@ Each operation carries its own arguments and returns the following result on suc
 | `info` | `GetInfo` | None | `info` |
 | `renew` | `Renew` | None | `info` |
 | `kill` | `Kill` | None | None |
-| `command` | `RunCommand` | `command` | `command` |
 | `observe` | `Observe` | `observation` | `sample` |
 | `initial` | `Initial` | None | `compute` |
 | `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | None |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
-| `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
 
-`bootstrap` is the Provider's `sandbox.Bootstrap`, including the [Sandbox bootstrap](../../docs/sandbox-bootstrap.md) input in `SandboxIO`; Core validates it before it sends `create`.
+`bootstrap` is the Provider's `sandbox.Bootstrap`: the reference and the [Sandbox bootstrap](../../docs/sandbox-bootstrap.md) input in `SandboxIO`; Core validates it before it sends `create`.
 
 A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
@@ -64,14 +62,13 @@ The `response` frame carries `id` and `connection_id`. A successful response car
 | `error_code` | Meaning |
 | --- | --- |
 | `invalid`, `ownership`, `exists`, `not_found` | `ErrInvalid`, `ErrOwnership`, `ErrExists`, `ErrNotFound` |
-| `command_unconfirmed` | `ErrCommandUnconfirmed` |
 | `observation_unavailable`, `runtime_not_running` | The observation outcomes |
 | `unsupported` | The operation is declared unsupported; see below |
 | `unconfirmed`, or any other value | The outcome is unknown |
 
 A failed response carries no result, except an `info` that is an exact-reference `CreateSettled` receipt: a confirmed native Create that failed a later check can still prove that the attempt settled. A timeout, a lost response or a disconnect is unavailable or uncertain, never evidence of absence, and Core never replays a mutation after one; it observes the original operation instead. The [Sandbox Provider guide](../../docs/sandbox-provider.md#operation-outcomes-and-retries) defines each outcome.
 
-Node startup and generation loading validate complete Provider operation declarations before accepting work, and the Core proxy uses the same registered declaration, so an unsupported operation rejects before node resolution or native I/O. The [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts) owns the inventory. An `unsupported` response carries an `unsupported` object with the exact method `operation` and an authored safe `reason`; the proxy checks both against the request. Missing, malformed or mismatched evidence is an unconfirmed result, never proof that a mutation was rejected. Unsupported stays distinct from observation unavailability and unknown compute or command results, and it neither settles resource ownership nor authorizes a replay.
+Node startup and generation loading validate complete Provider operation declarations before accepting work, and the Core proxy uses the same registered declaration, so an unsupported operation rejects before node resolution or native I/O. The [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts) owns the inventory. An `unsupported` response carries an `unsupported` object with the exact method `operation` and an authored safe `reason`; the proxy checks both against the request. Missing, malformed or mismatched evidence is an unconfirmed result, never proof that a mutation was rejected. Unsupported stays distinct from observation unavailability and unknown compute results, and it neither settles resource ownership nor authorizes a replay.
 
 ## Generation control
 

@@ -1,19 +1,19 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 04791a64fc66e846e420383221b7e87aed47c06fe9b46dae5e990547ce9a4f1a
+source_hash: 2dd362d329e39d15c3b6ddfa727429ab282c037015dabcece938d6daaeffaa99
 ---
 
-**Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
+**Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
 
 | 术语 | 含义 |
 | --- | --- |
 | Environment | Core 拥有的持久执行场所；参见 [Environment](../../contracts/agents-api/zh/environments.md) |
 | Allocation | Core 为 Environment 拥有的一份计算资源租约，由 `Reference` 标识 |
-| Runtime | Environment 内的 daemon；准备能力并执行 Turn |
+| Runtime | [agent host](configuration.md#agent-host-container) 上的 daemon；准备能力并执行 Turn |
 | Deployment | 整个部署唯一的 provider 选择；参见[沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md) |
 
-Core 拥有持久 Environment、allocation、placement 和 cleanup 状态；Provider 仅负责计算资源与引导。Runtime 通过 [Core–Runtime 协议](runtime-protocol.md)准备能力并运行 Turn，provider 通过 [Runtime 引导](runtime-bootstrap.md)文件交付身份。provider 不运行 Environment 初始化、Skill、Plugin、MCP 设置、初始文件、execution 或 Files；这些操作使用 Runtime。隔离属于 provider 基础设施，不属于 daemon；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。使用薄 adapter 封装厂商维护的 SDK。
+Core 拥有持久 Environment、allocation、placement 和 cleanup 状态；Provider 仅负责计算资源与引导。Runtime 通过 [Core–Runtime 协议](runtime-protocol.md)准备能力并运行 Turn，并且只通过 sandbox 中 Sandbox I/O 服务 Serve 的[沙箱 Link](sandbox-link-protocol.md) 访问 sandbox 的文件、进程和网络。provider 不运行 Environment 初始化、Skill、Plugin、MCP 设置、初始文件、execution 或 Files；这些操作使用 Runtime。隔离属于 provider 基础设施，不属于 daemon 或 Sandbox I/O；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。使用薄 adapter 封装厂商维护的 SDK。
 
 ## 步骤 {#steps}
 
@@ -27,17 +27,16 @@ Core 拥有持久 Environment、allocation、placement 和 cleanup 状态；Prov
 
 ## 实现接口 {#implement-the-interface}
 
-`sandbox_provider.go` 包含 Core–Sandbox Provider 协议：负责 allocation、checkpoint 和观测的 `SandboxProvider` 接口及其请求与结果类型，以及 setup 阶段的 `ConfigurationAdapter` 及其类型化错误。Core 在此边界之外也使用的值类型，例如 `DeploymentSpec` 和 `CallFence`，位于同一 package 的独立文件中。每个方法在编译期都必须实现，`ProviderOperations()` 声明 Provider 支持哪些方法。以下五项操作始终支持：
+`sandbox_provider.go` 包含 Core–Sandbox Provider 协议：负责 allocation、checkpoint 和观测的 `SandboxProvider` 接口及其请求与结果类型，以及 setup 阶段的 `ConfigurationAdapter` 及其类型化错误。Core 在此边界之外也使用的值类型，例如 `DeploymentSpec` 和 `CallFence`，位于同一 package 的独立文件中。每个方法在编译期都必须实现，`ProviderOperations()` 声明 Provider 支持哪些方法。以下四项操作始终支持：
 
 | 操作 | 用途 |
 | --- | --- |
-| `Create` | 为 `Reference` 创建计算资源，并运行有界 daemon 引导 |
+| `Create` | 为 `Reference` 创建计算资源，并运行启动 Sandbox I/O 的有界引导 |
 | `GetInfo` | 观察当前计算资源，不修改它 |
 | `Renew` | 延长原生租约；backend 没有租约时仅观察 |
 | `Kill` | 回收 allocation 的计算资源与保留资源 |
-| `RunCommand` | 在 allocation 的计算资源中运行有界命令 |
 
-Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。每个 adapter 都实现 `RunCommand`，测试也执行它，但 Core 编排不调用它；只有 node transport 转发。机密命令输入通过 `Command.Stdin` 传输，不放在参数或日志中；结果保留字节顺序、有界输出和实际退出状态。
+Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。
 
 ### 明确的操作契约 {#explicit-operation-contracts}
 
@@ -45,15 +44,15 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 
 | 操作 | 要求 | 职责 |
 | --- | --- | --- |
-| `Create`、`GetInfo`、`Renew`、`Kill`、`RunCommand` | 支持 | Allocation 生命周期与有界命令 |
+| `Create`、`GetInfo`、`Renew`、`Kill` | 支持 | Allocation 生命周期 |
 | `Observe` | 明确决定 | 检查所有权、只读地观测一个 allocation |
-| `Initial`、`NewCompute`、`GetCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot`、`RunCommandCompute` | 所有 checkpoint 方法决定一致；仅 `nodes` 注册可以支持 | 精确计算实例、捕获与恢复、保留源恢复和清理 |
+| `Initial`、`NewCompute`、`GetCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot` | 所有 checkpoint 方法决定一致；仅 `nodes` 注册可以支持 | 精确计算实例、捕获与恢复、保留源恢复和清理 |
 
-`Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例；`RunCommandCompute` 在一个精确 compute incarnation 中运行有界命令。Core 使用 `RunCommandCompute` 在恢复后唤醒 parked daemon（[`runtime_compute_wake.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute_wake.go)）。
+`Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例。
 
 每个声明项为不带 reason 的 `state: supported`，或带 authored reason code 的 `state: unsupported`。缺失、零值、未知或不安全项都会验证失败。给 `SandboxProvider` 添加方法时，必须在每个 adapter 中明确决定并实现；不提供 base type，也不生成笼统的不支持实现。
 
-不支持的方法在任何原生 I/O 前返回 `providercontract.UnsupportedError`。错误指明精确操作和安全 code，不包含原生消息、资源身份、endpoint 或凭据。空结果、nil error、`Unavailable` 或未知 mutation 结果都不能代替 unsupported，五项必需方法不能返回 unsupported。
+不支持的方法在任何原生 I/O 前返回 `providercontract.UnsupportedError`。错误指明精确操作和安全 code，不包含原生消息、资源身份、endpoint 或凭据。空结果、nil error、`Unavailable` 或未知 mutation 结果都不能代替 unsupported，四项必需方法不能返回 unsupported。
 
 每个 adapter 拥有一个 `Operations()` 函数，由实例和注册共享。`providers.ValidateBinding` 根据接口并相互对照检查两者，Runtime admission 与 node generation 加载也拒绝不完整 provider。调用方在调用操作前用 `providercontract.Require` 检查声明，从不使用 type assertion。
 
@@ -77,7 +76,7 @@ Core 串行化生命周期操作，并在任何不确定 mutation 后保留 allo
 
 ### 操作结果与重试 {#operation-outcomes-and-retries}
 
-每次调用接收有界 context。到期或取消结束调用方等待，不证明回滚、停止、清理或不存在。adapter 或 transport 不得脱离跟踪执行 mutation，也不重放超时命令。
+每次调用接收有界 context。到期或取消结束调用方等待，不证明回滚、停止、清理或不存在。adapter 或 transport 不得脱离跟踪执行 mutation，也不重放超时 mutation。
 
 | 操作 | 已确认结果 | 失败或未知结果 | 恢复 |
 | --- | --- | --- | --- |
@@ -85,9 +84,8 @@ Core 串行化生命周期操作，并在任何不确定 mutation 后保留 allo
 | `GetInfo` | 不修改的当前计算资源观测 | `ErrNotFound` 仅表示缺少观测；error 不是不存在的证明 | 重复有界读取；不将其变成 create、start 或 renew |
 | `Renew` | 原生租约已延长，或无租约 provider 的观测 | 超时可能隐藏延期；停止或缺失计算资源仍保持原样 | 先观察，再由 reconciler 续期同一 allocation。不复活计算资源或虚构 lease expiry |
 | `Kill` | 所属计算资源与保留存储已移除；重复已确认不存在时成功 | error 保留所有权与清理意图；所有权不匹配不删除外来资源 | 未决创建或 mutation 已隔离后重试同一 `Reference` 的清理；不提前释放 owner |
-| `RunCommand`, `RunCommandCompute` | 收集到输出和实际 exit code；非零退出是已结算命令失败 | 缺失原生完成为 `ErrCommandUnconfirmed`；部分输出不是成功 | 不重放。无法证明完成时保留 owner，并在复用前回收 |
 
-`ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed` 和 `ErrCommandUnconfirmed` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将 provider diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
+`ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound` 和 `ErrComputeUnconfirmed` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将 provider diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
 
 Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与 provider snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
 
@@ -154,7 +152,7 @@ launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`�
 
 启动时 Core 在选择 provider 前领取稳定 installation identity 和新的 owner epoch。runtime manager 保留了解 generation 的 provider facade。初始 setup 与 replacement 在任何数据库写入前准备并验证 candidate；candidate 被拒绝时不改变活动配置或 worker。backend replacement 使用 deployment mutation gate：暂停 manager admission，排空旧调用与循环，再在 commit transaction 中重复 resource 与 generation guard；新选择、其 generation、旧 node 和未使用 enrollment token 的退役一起提交。提交后，Core 在 manager mutex 下发布预验证配置和共享 observation、bootstrap cache，没有进一步外部工作或可失败步骤，因此提交后取消的请求不能丢弃配置。中断的 drain 保留为重试 barrier。Provider I/O 和 drain 不持有数据库事务或 manager map mutex。
 
-本地 provider 依赖不可用时，现有 scan 等待修复，hosted admission 保持关闭；管理员恢复仍可使用，重启后也如此。数据库和所有权错误仍是失败。未配置的部署以 503 `execution_unavailable` 拒绝 hosted admission，且不创建 Session 状态。Core 从 installation public URL 派生 Runtime bootstrap 和 daemon WebSocket 地址，不使用请求 header；从数据库读取当前选择，不使用 startup file。
+本地 provider 依赖不可用时，现有 scan 等待修复，hosted admission 保持关闭；管理员恢复仍可使用，重启后也如此。数据库和所有权错误仍是失败。未配置的部署以 503 `execution_unavailable` 拒绝 hosted admission，且不创建 Session 状态。Core 从 installation public URL 派生沙箱 Link 地址，不使用请求 header；从数据库读取当前选择，不使用 startup file。
 
 Node readiness 绑定到精确 generation、当前连接和 owner epoch。持久 serving pin 仅在部署串行化下为当时目标的 readiness 提升，因此已被替代目标的延迟报告不获得 pin。
 
@@ -170,7 +168,7 @@ Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 
 
 ### `oac-sandbox-io` {#oac-sandbox-io}
 
-每个托管 sandbox 还会运行 `oac-sandbox-io`，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap.SandboxIO` 是它的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 daemon 的账户在 daemon 旁边启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。`BootstrapComplete` 意味着两个进程都已启动。该输入从不通过命令参数或环境变量传递。每个 Runtime 镜像都包含 `/usr/local/bin/oac-sandbox-io`。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
+`oac-sandbox-io` 是 Provider 在托管 sandbox 中启动的唯一进程，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap` 是 allocation 的 `Reference` 和 `SandboxIO`，后者是该服务的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，同时检查 `SandboxIO` Serve 的正是该 `Reference`；adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 UID 1000 启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。`BootstrapComplete` 意味着它已启动。该输入从不通过命令参数或环境变量传递。每个 Runtime 镜像都包含 `/usr/local/bin/oac-sandbox-io`。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
 
 ### 每节点生命周期 worker {#per-node-lifecycle-workers}
 
@@ -192,7 +190,7 @@ Core 用同一个固定 policy 暂停每个声明 checkpoint 支持的 provider 
 
 Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspension。新 Turn claim、file-write intent 和 capture admission 在 Session lock 下串行化，共享一个 compute-phase 检查；新 pending work 取消 capture 并唤醒同一 source。正常 preparation 在经过认证的 resume handshake 后等待 compute phase 为 running；pending input 的 promotion 与 lifecycle transition 冲突时保持 pending。compute phase 和 revision-checked receipt 位于 allocation。Core 在 effect 前持久化 quiesce、capture 和 restore intent，仅新 receipt 执行 capture 或 restore，恢复观察精确 attempt，不重试未知 creation、capture 或 restore。已消费 snapshot 不让 running generation 回滚。删除、撤销和 retention expiry 优先于 wake，一直持续到最终数据库 compare-and-swap；未知 cleanup identity 保留，直到确认所属资源不存在。已消费 artifact 和旧 compute 被删除，因此暂停循环不累积可写磁盘链。
 
-排队工作和实时 Environment file access 唤醒 suspended Environment；history 和已发布 Artifact read 不唤醒。计划暂停在 daemon 连接上使用 Environment 和 suspension token。受 PID 与 start-time fencing 的本地 control signal（`RunCommandCompute`）唤醒 parked daemon，daemon 在准入工作前重新认证。确认前临时断连通过有界 attempt 和 backoff 重试同一已 armed suspension；永久认证或协议拒绝则关闭。Core 负责 snapshot retention deadline，daemon 没有相应 timer。quiesce 确认丢失时可以通过明确 rollback 解冻同一 source，但不授权 capture。
+排队工作和实时 Environment file access 唤醒 suspended Environment；history 和已发布 Artifact read 不唤醒。计划暂停在 daemon 连接上使用 Environment 和 suspension token。恢复后，Core 等待 sandbox 的 Sandbox I/O 重新 Serve，然后在 daemon 连接上用同一 suspension token 恢复该 Environment（[`runtime_compute_wake.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute_wake.go)）。确认前临时断连通过有界 attempt 和 backoff 重试同一已 armed suspension；永久认证或协议拒绝则关闭。Core 负责 snapshot retention deadline，daemon 没有相应 timer。quiesce 确认丢失时可以通过明确 rollback 解冻同一 source，但不授权 capture。
 
 ### 重置与归档 {#reset-and-archive}
 
@@ -210,7 +208,7 @@ installer 与 Go adapter 的 E2B template 和 endpoint validator 消费共享 [s
 
 node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 丢失后的 cleanup。helper protocol 和 [sandbox node 协议](../../contracts/agents-api/zh/node-generation-protocol.md)要求精确版本匹配；直接进程内接口没有独立 wire version。
 
-原生验收证明 fixture 无法证明的事实：creation、lease 行为、所属 partial cleanup、声明的 isolation 与 limit，以及支持时的 snapshot。显式启用的 Docker lifecycle、recovery、Serve 和 node transport 测试使用 `AGENTS_RUNTIME_DOCKER_TEST_IMAGE`，即一个包含 `/bin/sh` 和持续运行的 `/usr/local/bin/oac-daemon` 的镜像 digest；Serve 测试会把本源码树的 `oac-sandbox-io` 加入它派生的镜像；SDK helper 使用 `make check-e2b-provider` 和 `make check-microsandbox-provider`。mock compute 不能证明 reclamation 或 isolation。
+原生验收证明 fixture 无法证明的事实：creation、lease 行为、所属 partial cleanup、声明的 isolation 与 limit，以及支持时的 snapshot。显式启用的 Docker lifecycle、recovery、Serve 和 node transport 测试使用 `AGENTS_RUNTIME_DOCKER_TEST_IMAGE`，即一个包含 `/bin/sh` 和 `/usr/local/bin/oac-sandbox-io` 的镜像 digest，例如 `scripts/build-agent-host-images.sh` 构建的 `sandbox` 镜像；Serve 测试会把本源码树的 `oac-sandbox-io` 加入它派生的镜像；SDK helper 使用 `make check-e2b-provider` 和 `make check-microsandbox-provider`。mock compute 不能证明 reclamation 或 isolation。
 
 ## 参考 adapter {#reference-adapters}
 
@@ -218,19 +216,18 @@ node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 
 | --- | --- | --- | --- |
 | Docker (node) | [`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker) | [`sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node) 中的 node proxy | [Docker adapter](#docker-adapter) |
 | microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) | [Node](getting-started/nodes.md) |
-| E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) | [沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md#e2b-configuration)；应用管理的模板见 [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md) |
+| E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) | [沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md#e2b-configuration)；模板见 [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md) |
 
 ## Docker adapter {#docker-adapter}
 
-Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)）对所有 Runtime image 使用相同 container setting，无论服务哪个 Harness（[`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)）：
+Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)）将每个 allocation 的 sandbox 作为唯一进程为 [`oac-sandbox-io`](#oac-sandbox-io) 的 container 运行，并使用相同 container setting（[`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)）：
 
 - user 1000:1000、只读 root filesystem、移除全部 capability、`no-new-privileges`、[seccomp profile](#seccomp-profile) 和 AppArmor `unconfined`；
 - node 配置的 network 和 extra host（[node 配置](configuration.md#docker-node-configuration)）；
 - deployment specification 中的 CPU 和 memory，128-process limit 和 128 MiB `/tmp` tmpfs；
-- 两个 named volume，label 包含 installation、tenant、Environment 和 allocation：`<name>-home` 挂载到 `/home`，`<name>-environment` 挂载到 `/environment`，后者的 `workspace` 子目录也挂载到 `/workspace`。Docker Engine 必须支持 volume subpath mount；
-- 配置 `nested_sandbox` option 时，解除 Docker `/proc` mask（`/sys/firmware` 和 `/sys/devices/virtual/powercap` 保持 mask），container 运行 init process。
+- 两个 named volume，label 包含 installation、tenant、Environment 和 allocation：`<name>-home` 挂载到 `/home`，`<name>-environment` 挂载到 `/environment`，后者的 `workspace` 子目录也挂载到 `/workspace`。Docker Engine 必须支持 volume subpath mount。
 
-Create 拒绝复用没有 container 的保留 volume。它将 [Runtime 引导](runtime-bootstrap.md)文件复制到 `/home/runtime/runtime-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、staging、initialization 和 package directory 放入 container，然后启动 `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json` 和 [`oac-sandbox-io`](#oac-sandbox-io)。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
+Create 拒绝复用没有 container 的保留 volume。它将沙箱引导文件复制到 `/home/runtime/sandbox-io-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、initialization 和 package directory 放入 container；container 以 `oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json` 作为 entry point 运行。该服务是 container 的第一个进程，并回收其孤儿后代进程，因此 container 不需要 init process。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
 
 node 使用 [provider 配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进 Runtime。
 

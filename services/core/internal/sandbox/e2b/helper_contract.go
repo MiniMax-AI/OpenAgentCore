@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -13,19 +12,18 @@ import (
 // This adapter-private boundary is documented in tools/e2b-provider/README.md.
 const ProtocolVersion = 1
 const MaxOutputBytes = 1024 * 1024
-const MaxRequestBytes = 72 * 1024 * 1024
+const MaxRequestBytes = 1024 * 1024
 const MaxResponseBytes = 16 * 1024 * 1024
 const MaxCredentialReferences = 32
-const MaxCommandInputBytes = sandbox.MaxCommandInputBytes
 
 // HelperOperations declares the complete set of one-shot helper operations.
 func HelperOperations() []string {
-	return []string{"create", "inspect", "renew", "kill", "command", "validate_deployment", "observe", "list_templates", "list_builds", "verify_credential"}
+	return []string{"create", "inspect", "renew", "kill", "validate_deployment", "observe", "list_templates", "list_builds", "verify_credential"}
 }
 
 // HelperErrors are sanitized wire outcomes; an empty code denotes success.
 func HelperErrors() []string {
-	return []string{"", "invalid", "ownership", "exists", "not_found", "command_unconfirmed", "unconfirmed", "template_invalid", "team_mismatch", "unauthorized"}
+	return []string{"", "invalid", "ownership", "exists", "not_found", "unconfirmed", "template_invalid", "team_mismatch", "unauthorized"}
 }
 
 // Validate checks the operation envelope before the helper can start. Native
@@ -62,16 +60,13 @@ type Request struct {
 	Config    Config
 	Reference sandbox.Reference
 	// References lists the allocations of one verify_credential request.
-	References       []sandbox.Reference          `json:",omitempty"`
-	Bootstrap        *sandbox.Bootstrap           `json:",omitempty"`
-	RuntimeBootstrap *runtimebootstrap.Connection `json:",omitempty"`
-	Command          *sandbox.Command             `json:",omitempty"`
-	Deadline         time.Time
+	References []sandbox.Reference `json:",omitempty"`
+	Bootstrap  *sandbox.Bootstrap  `json:",omitempty"`
+	Deadline   time.Time
 }
 type Response struct {
 	Version         int
-	Info            *sandbox.Info          `json:",omitempty"`
-	Command         *sandbox.CommandResult `json:",omitempty"`
+	Info            *sandbox.Info `json:",omitempty"`
 	ErrorCode       string
 	DeploymentValid bool              `json:",omitempty"`
 	TemplateBuild   *TemplateBuild    `json:",omitempty"`

@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 91a4b01924b65e48003f3a66a76a840272b5f672d0e0b667e6afd3626b8e4564
+source_hash: 2862ddcde357d25ab32c400dca1d7fa3812ea8967c2b40092941075034eb726d
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -76,8 +76,6 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
 - 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问，但不会停止原生进程；机器所有者负责停止和清理。
 - 工作区必须能在 daemon 重启后继续存在。丢失它绝不授权进行静默替换或重播。
-
-**应用管理的 E2B。** 应用程序可以在由其使用 E2B SDK 创建、续期和销毁的 E2B sandbox 中运行 Runtime，然后将该 Runtime 注册为 `self_hosted` Environment（[E2B Runtime guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)）。Core 不为其保留 E2B 分配，也绝不续期或终止它。
 
 ### 所有权规则 {#ownership-rules}
 

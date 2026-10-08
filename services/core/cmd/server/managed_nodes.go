@@ -72,7 +72,7 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 	})
 	// An origin without a sandbox Link admits no hosted sandbox.
 	link, _ := config.PublicOrigin.SandboxLink()
-	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI(), sandboxLink: link}
+	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, sandboxLink: link}
 	result.runtime = execution.NewDeferredRuntimeProvider(config.InstallationID, result.setup.load, result.setup.prepare)
 	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
 	return result

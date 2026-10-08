@@ -22,7 +22,7 @@ func TestPublicOrigin(t *testing.T) {
 	}
 	for value, socket := range map[string]string{"https://core.example": "wss://core.example/api/v1/agent-daemon/ws", "http://[::1]:8091": "ws://[::1]:8091/api/v1/agent-daemon/ws"} {
 		origin, err := NewPublicOrigin(value)
-		if err != nil || origin.DaemonWebSocket() != socket || origin.API() != value+"/v1" || origin.RuntimeAPI() != value+"/api/v1" || origin.InstallerBase() != value+"/api/v1/agent-daemon/install/" {
+		if err != nil || origin.DaemonWebSocket() != socket || origin.API() != value+"/v1" || origin.InstallerBase() != value+"/api/v1/agent-daemon/install/" {
 			t.Errorf("addresses derived from %q: %+v %v", value, origin, err)
 		}
 	}

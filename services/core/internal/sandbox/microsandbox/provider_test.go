@@ -88,25 +88,6 @@ func TestObserveOnlyPreservesCapturedButResidentState(t *testing.T) {
 		t.Fatalf("state=%+v error=%v", got, e)
 	}
 }
-func TestCommandUncertaintyAndResultLimits(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		response Response
-		failure  error
-	}{
-		{"transport", Response{}, errors.New("lost result")},
-		{"missing", Response{Version: ProtocolVersion}, nil},
-		{"too_large", Response{Version: ProtocolVersion, Command: &sandbox.CommandResult{Stdout: strings.Repeat("x", MaxOutputBytes+1)}}, nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			p, _ := NewWithCaller(testConfig(), callerFunc(func(context.Context, Request) (Response, error) { return tc.response, tc.failure }))
-			_, e := p.RunCommand(deadline(t), testRef(), sandbox.Command{Args: []string{"/bin/true"}})
-			if !errors.Is(e, sandbox.ErrCommandUnconfirmed) {
-				t.Fatalf("uncertainty lost: %v", e)
-			}
-		})
-	}
-}
 func TestNoDeadlineOrForeignAllocationNeverCallsHelper(t *testing.T) {
 	calls := 0
 	p, _ := NewWithCaller(testConfig(), callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))

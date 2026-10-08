@@ -16,7 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -28,8 +27,6 @@ type lifecycleProvider struct {
 	resources                       map[string]sandbox.Info
 	creates, kills, gets            int
 	loseCreate, absent, unavailable bool
-	credentialHash                  string
-	credential                      string
 	serve                           sandboxbootstrap.Input
 }
 
@@ -37,8 +34,6 @@ func (p *lifecycleProvider) Create(_ context.Context, b sandbox.Bootstrap) (sand
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.creates++
-	p.credentialHash = runtimedevice.HashCredential(b.Credential)
-	p.credential = b.Credential
 	p.serve = b.SandboxIO
 	i := sandbox.Info{Reference: b.Reference, ProviderID: b.AllocationID, State: "running", BootstrapComplete: true}
 	if !p.absent {
@@ -71,9 +66,6 @@ func (p *lifecycleProvider) Kill(_ context.Context, r sandbox.Reference) error {
 	p.kills++
 	delete(p.resources, r.AllocationID)
 	return nil
-}
-func (p *lifecycleProvider) RunCommand(context.Context, sandbox.Reference, sandbox.Command) (sandbox.CommandResult, error) {
-	return sandbox.CommandResult{}, errors.New("not used")
 }
 
 // managedWorker starts a Worker that runs the Web setup webDeployment
@@ -164,10 +156,6 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err == nil || owner.ID == "" {
 		t.Fatal("fault did not retain allocation")
-	}
-	credential, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID)
-	if err != nil || !ok || credential.CredentialHash != p.credentialHash {
-		t.Fatal("provider received unbound credential")
 	}
 	stop()
 	next, _ := managedWorker(t, s, key, p)

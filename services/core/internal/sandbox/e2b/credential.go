@@ -35,7 +35,7 @@ func (ConfigurationAdapter) VerifyCredential(ctx context.Context, c sandbox.Dire
 	case "team_mismatch", "invalid":
 		return sandbox.ErrCredentialOwnership
 	case "":
-		if out.DeploymentValid && out.Info == nil && out.Command == nil && out.Observation == nil && out.TemplateBuild == nil {
+		if out.DeploymentValid && out.Info == nil && out.Observation == nil && out.TemplateBuild == nil {
 			return nil
 		}
 	}

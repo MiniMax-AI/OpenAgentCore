@@ -44,9 +44,6 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 	}
 	out, err := p.caller.Call(ctx, q)
 	if err != nil {
-		if q.Operation == "command" {
-			return out, errors.Join(sandbox.ErrCommandUnconfirmed, err)
-		}
 		return out, errors.Join(ErrUnconfirmed, err)
 	}
 	if out.Version != ProtocolVersion {
@@ -63,8 +60,6 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 		return out, sandbox.ErrExists
 	case "not_found":
 		return out, sandbox.ErrNotFound
-	case "command_unconfirmed":
-		return out, sandbox.ErrCommandUnconfirmed
 	case "metrics_unavailable":
 		return out, runtimeobs.ErrUnavailable
 	default:
@@ -157,13 +152,6 @@ func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
 	}
 	return p.KillCompute(ctx, r, c)
 }
-func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	compute, e := p.Initial(ctx, r)
-	if e != nil {
-		return sandbox.CommandResult{}, e
-	}
-	return p.RunCommandCompute(ctx, r, compute, c)
-}
 func (p *Provider) GetCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
 	return p.state(ctx, Request{Operation: "inspect", Reference: r, Compute: c})
 }
@@ -180,16 +168,6 @@ func (p *Provider) Suspend(ctx context.Context, q SuspendRequest) (State, error)
 }
 func (p *Provider) Resume(ctx context.Context, q ResumeRequest) (State, error) {
 	return p.state(ctx, Request{Operation: "resume", Reference: q.Reference, Resume: &q})
-}
-func (p *Provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c Compute, command sandbox.Command) (sandbox.CommandResult, error) {
-	out, e := p.call(ctx, Request{Operation: "command", Reference: r, Compute: c, Command: &command})
-	if e != nil {
-		return sandbox.CommandResult{}, e
-	}
-	if out.Command == nil || len(out.Command.Stdout) > MaxOutputBytes || len(out.Command.Stderr) > MaxOutputBytes {
-		return sandbox.CommandResult{}, sandbox.ErrCommandUnconfirmed
-	}
-	return *out.Command, nil
 }
 
 // ResumeCompute thaws the exact resident source after an aborted suspension.

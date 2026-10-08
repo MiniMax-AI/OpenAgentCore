@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 054bd156ff66980a8bf82c9beb9aad77c2f724f3c314a2ad0a851704fcb23902
+source_hash: 9356569940dd30051693b6f16e0a80a843451f80185b8c618660c656163fcf87
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -134,7 +134,6 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `image` | 加载后 Runtime 镜像的本地 ID | 发行版本的 `image_id` 或 `image_manifest_digest`。主机的镜像存储决定由哪个 digest 指代已加载的镜像，因此该值属于节点本地；适配器只接受这两个值 |
 | `network` | `oac-node-<installation-id>` | Runtime 容器网络 |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | 所匹配发行版的 seccomp 配置文件 |
-| `nested_sandbox` | `true` | 启用 Docker 适配器的 init 进程和 proc-mask 配置 |
 
 [Docker 适配器](sandbox-provider.md#docker-adapter)负责容器隔离、卷布局和生命周期行为。
 

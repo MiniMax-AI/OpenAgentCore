@@ -18,7 +18,7 @@ func TestSandboxProviderRegistrationDoesNotRequireAnExecutionVendorBranch(t *tes
 		t.Run(mode, func(t *testing.T) {
 			id := uuid.NewString()
 			config := &RuntimeProvider{InstallationID: id, ProviderKind: "contract-fixture", Mode: mode,
-				CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: &lifecycleOnlySandbox{}}
+				SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: &lifecycleOnlySandbox{}}
 			m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }, unusedPreparation(t)))
 			if err != nil {
 				t.Fatal(err)
@@ -49,7 +49,4 @@ func (*lifecycleOnlySandbox) Renew(context.Context, sandbox.Reference) (sandbox.
 }
 func (*lifecycleOnlySandbox) Kill(context.Context, sandbox.Reference) error {
 	panic("registration killed compute")
-}
-func (*lifecycleOnlySandbox) RunCommand(context.Context, sandbox.Reference, sandbox.Command) (sandbox.CommandResult, error) {
-	panic("registration executed command")
 }

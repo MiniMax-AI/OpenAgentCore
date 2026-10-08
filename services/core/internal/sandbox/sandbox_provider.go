@@ -29,20 +29,16 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/google/uuid"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
 
 var (
-	ErrInvalid            = errors.New("invalid sandbox configuration")
-	ErrOwnership          = errors.New("sandbox ownership mismatch")
-	ErrExists             = errors.New("sandbox allocation already exists")
-	ErrNotFound           = errors.New("sandbox allocation not found")
-	ErrCommandUnconfirmed = errors.New("initialization command outcome unconfirmed; reclaim allocation before reuse")
+	ErrInvalid   = errors.New("invalid sandbox configuration")
+	ErrOwnership = errors.New("sandbox ownership mismatch")
+	ErrExists    = errors.New("sandbox allocation already exists")
+	ErrNotFound  = errors.New("sandbox allocation not found")
 	// ErrComputeUnconfirmed requires observation of the retained operation identity;
 	// it does not authorize another Create, capture, restore, or cold start.
 	ErrComputeUnconfirmed = errors.New("sandbox lifecycle outcome unconfirmed")
@@ -53,63 +49,43 @@ var (
 // an allocation; a lost Create response is resolved with GetInfo, never by replay.
 type Reference struct{ TenantID, EnvironmentID, AllocationID string }
 
+// Bootstrap is Create's input. The Provider starts one process in the
+// sandbox, the Sandbox I/O service, and SandboxIO is its launch input, which
+// the Provider delivers as a private file (docs/sandbox-bootstrap.md).
 type Bootstrap struct {
 	Reference
-	SessionID, DeviceID, CoreURL, Credential string
-	NetworkAccess                            string
-	AllowedDomains                           []string
-	// SandboxIO is the Sandbox I/O service's launch input, which the Provider
-	// delivers as a private file (docs/sandbox-bootstrap.md).
 	SandboxIO sandboxbootstrap.Input
 }
 
 // Validate checks a Create input once, before Create: Providers deliver it
-// as given. SandboxIO serves the Reference's allocation.
+// as given. SandboxIO is valid and serves the Reference's allocation, so the
+// Reference is valid too.
 func (b Bootstrap) Validate() error {
-	for _, id := range []string{b.TenantID, b.EnvironmentID, b.AllocationID, b.SessionID, b.DeviceID} {
-		if u, err := uuid.Parse(id); err != nil || u == uuid.Nil || u.String() != id {
-			return ErrInvalid
-		}
-	}
 	resource := sandboxbootstrap.Resource{TenantID: b.TenantID, EnvironmentID: b.EnvironmentID, Kind: "allocation", ID: b.AllocationID, Generation: b.SandboxIO.Resource.Generation}
-	if b.RuntimeConnection().Validate() != nil || (agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}).Validate() != nil ||
-		b.SandboxIO.Validate() != nil || b.SandboxIO.Resource != resource {
+	if b.SandboxIO.Validate() != nil || b.SandboxIO.Resource != resource {
 		return ErrInvalid
 	}
 	return nil
 }
 
-// Info describes compute only. Running does not establish daemon authentication,
-// native preparation, Environment readiness or a renewable provider lease.
+// Info describes compute only. Running does not establish a Serving Link
+// resource, Environment readiness or a renewable provider lease.
 type Info struct {
 	Reference
 	ProviderID, State string
-	// BootstrapComplete is provider evidence that initialization has reached its
-	// last mutating step. It does not establish daemon or native readiness.
+	// BootstrapComplete is provider evidence that the bootstrap has reached its
+	// last mutating step, starting Sandbox I/O. It does not establish Serving.
 	BootstrapComplete bool
 	// CreateSettled proves that the original create and initialization attempt can
 	// no longer mutate resources. An absent observation needs this explicit proof;
 	// an ordinary missing resource or empty provider listing is not sufficient.
 	CreateSettled bool
 }
-type Command struct {
-	Args      []string
-	Directory string
-	// Stdin carries confidential initialization bytes without exposing them in argv.
-	Stdin []byte
-}
-
-const MaxCommandInputBytes = 50*1024*1024 + 32
-
-type CommandResult struct {
-	Stdout, Stderr string
-	ExitCode       int
-}
 
 // SandboxProvider manages one persisted Reference at a time. Every call has a
 // bounded context; cancellation ends the caller's wait, not proof of native stop.
 // Non-nil errors retain ownership, including partial results. Do not retry Create
-// or RunCommand after unknown delivery; observe/reclaim the original Reference.
+// after unknown delivery; observe/reclaim the original Reference.
 // Implementations verify installation plus Reference ownership before mutation.
 // See docs/sandbox-provider.md for settlement, cleanup and retry requirements.
 type SandboxProvider interface {
@@ -124,7 +100,6 @@ type SandboxProvider interface {
 	// Kill confirms removal of owned compute and retained resources. Absence is
 	// idempotent, but nil alone cannot settle an outstanding Create.
 	Kill(context.Context, Reference) error
-	RunCommand(context.Context, Reference, Command) (CommandResult, error)
 
 	// The checkpoint lifecycle supplies exact-incarnation operations; Worker and
 	// Store remain the lifecycle owner. Its operations share one declaration.
@@ -135,7 +110,6 @@ type SandboxProvider interface {
 	Resume(context.Context, ResumeRequest) (ComputeState, error)
 	KillCompute(context.Context, Reference, Compute) error
 	DeleteSnapshot(context.Context, Reference, SnapshotIdentity) error
-	RunCommandCompute(context.Context, Reference, Compute, Command) (CommandResult, error)
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
 
@@ -145,11 +119,11 @@ type SandboxProvider interface {
 }
 
 // requiredOperations are supported by every Provider.
-var requiredOperations = []string{"Create", "GetInfo", "Renew", "Kill", "RunCommand"}
+var requiredOperations = []string{"Create", "GetInfo", "Renew", "Kill"}
 
 // checkpointOperations are all supported or all unsupported: partial cleanup or
 // restore support cannot safely own a compute incarnation.
-var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute"}
+var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "ResumeCompute"}
 
 // Compute identifies one incarnation of an allocation. Name is provider-derived.
 // ID is empty only until the original create or restore result is observed.

@@ -55,9 +55,6 @@ func (p *fakeProvider) Kill(context.Context, sandbox.Reference) error {
 	p.mu.Unlock()
 	return nil
 }
-func (p *fakeProvider) RunCommand(context.Context, sandbox.Reference, sandbox.Command) (sandbox.CommandResult, error) {
-	return sandbox.CommandResult{}, nil
-}
 func reference() sandbox.Reference {
 	return sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
 }

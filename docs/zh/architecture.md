@@ -1,7 +1,7 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: 84e503ee46a293d0fa283aaa674dd3f307eb29560ea1b791fee263f2d0f26efc
+source_hash: bceec7f192812cd3d1895bb1b89c361c771dbb008ef50a44f2a153f8c555c925
 ---
 
 OpenAgentCore 将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。Sandbox Provider 管理计算资源。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
@@ -33,7 +33,7 @@ flowchart TB
 | 组件 | 职责 | 参考 |
 | --- | --- | --- |
 | Core | 认证调用方，解析并冻结配置，调度 Turn，处理取消和待处理交互，将资源与执行事实持久化到 PostgreSQL | [Core 服务](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md) |
-| Sandbox Provider | 创建、观察、续期和回收计算资源；提供 Runtime 启动输入 | [Sandbox Provider](sandbox-provider.md)、[Runtime 引导](runtime-bootstrap.md) |
+| Sandbox Provider | 创建、观察、续期和回收计算资源；在其中启动 Sandbox I/O 服务 | [Sandbox Provider](sandbox-provider.md)、[沙箱引导](sandbox-bootstrap.md) |
 | Sandbox node | 运行 Docker 或 microsandbox 主机，协调分配给它的 generation 与 allocation | [Sandbox node 协议](../../contracts/agents-api/zh/node-generation-protocol.md) |
 | Runtime | 准备工作区和能力，管理 Session Executor，执行 Turn 并报告事件与回执 | [Core–Runtime 协议](runtime-protocol.md) |
 | Harness adapter | 验证原生配置，调用上游 SDK 或协议，转换事件并确认原生清理完成 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |

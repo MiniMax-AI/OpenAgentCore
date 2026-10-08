@@ -313,11 +313,11 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	ctx, cancel := h.lifetime(ctx)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
-		return response{}, uncertain(q.Operation, err)
+		return response{}, uncertain(err)
 	}
 	epoch, err := callbackValue(ctx, h.options.OwnerEpoch)
 	if err != nil {
-		return response{}, uncertain(q.Operation, err)
+		return response{}, uncertain(err)
 	}
 	h.mu.Lock()
 	p := h.peers[id]
@@ -326,7 +326,7 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	}
 	h.mu.Unlock()
 	if p == nil || p.epoch != epoch {
-		return response{}, uncertain(q.Operation, ErrUnavailable)
+		return response{}, uncertain(ErrUnavailable)
 	}
 	p.mu.Lock()
 	ready := p.ready
@@ -335,11 +335,11 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 		ready = ok && status.State == "ready"
 	} else if q.DeploymentGeneration != p.identity.DeploymentGeneration {
 		p.mu.Unlock()
-		return response{}, uncertain(q.Operation, ErrUnavailable)
+		return response{}, uncertain(ErrUnavailable)
 	}
 	p.mu.Unlock()
 	if requiresReady(q) && !ready {
-		return response{}, uncertain(q.Operation, ErrUnavailable)
+		return response{}, uncertain(ErrUnavailable)
 	}
 
 	deadline, _ := ctx.Deadline()
@@ -351,13 +351,13 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	p.mu.Lock()
 	if len(p.pending) >= maxPending {
 		p.mu.Unlock()
-		return response{}, uncertain(q.Operation, ErrUnavailable)
+		return response{}, uncertain(ErrUnavailable)
 	}
 	p.pending[q.ID] = ch
 	p.mu.Unlock()
 	defer func() { p.mu.Lock(); delete(p.pending, q.ID); p.mu.Unlock() }()
 	if err = p.lockSend(ctx); err != nil {
-		return response{}, uncertain(q.Operation, err)
+		return response{}, uncertain(err)
 	}
 	select {
 	case <-p.done:
@@ -374,7 +374,7 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	p.unlockSend()
 	if err != nil {
 		p.close()
-		return response{}, uncertain(q.Operation, err)
+		return response{}, uncertain(err)
 	}
 	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
@@ -382,11 +382,11 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 	case result := <-ch:
 		return result, responseError(result)
 	case <-p.done:
-		return response{}, uncertain(q.Operation, ErrUnavailable)
+		return response{}, uncertain(ErrUnavailable)
 	case <-ctx.Done():
-		return response{}, uncertain(q.Operation, ctx.Err())
+		return response{}, uncertain(ctx.Err())
 	case <-timer.C:
-		return response{}, uncertain(q.Operation, context.DeadlineExceeded)
+		return response{}, uncertain(context.DeadlineExceeded)
 	}
 }
 

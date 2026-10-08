@@ -49,7 +49,7 @@ func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return runtimeobs.Sample{}, ctxErr
 	}
-	if err != nil || out.Version != ProtocolVersion || out.Info != nil || out.Command != nil || out.DeploymentValid || out.TemplateBuild != nil {
+	if err != nil || out.Version != ProtocolVersion || out.Info != nil || out.DeploymentValid || out.TemplateBuild != nil {
 		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
 	}
 	switch out.ErrorCode {

@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -56,7 +55,7 @@ func TestSharedHelperExchanges(t *testing.T) {
 }
 
 // Reconstruct the Go bootstrap input and check the Python-managed projection
-// against its owning types. Credentials travel only in RuntimeBootstrap.
+// against its owning types: the Bootstrap with the installation.
 func validManagedExchange(data []byte) bool {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(data, &fields) != nil {
@@ -65,10 +64,7 @@ func validManagedExchange(data []byte) bool {
 	bootstrapBytes, _ := json.Marshal(sandbox.Bootstrap{})
 	var expected map[string]json.RawMessage
 	_ = json.Unmarshal(bootstrapBytes, &expected)
-	delete(expected, "CoreURL")
-	delete(expected, "Credential")
 	expected["InstallationID"] = nil
-	expected["RuntimeBootstrap"] = nil
 	if len(fields) != len(expected) {
 		return false
 	}
@@ -82,11 +78,7 @@ func validManagedExchange(data []byte) bool {
 		return false
 	}
 	delete(fields, "InstallationID")
-	delete(fields, "RuntimeBootstrap")
 	data, _ = json.Marshal(fields)
 	var bootstrap sandbox.Bootstrap
-	if json.Unmarshal(data, &bootstrap) != nil || !validReference(bootstrap.Reference) || !validID(bootstrap.DeviceID) || !validID(bootstrap.SessionID) {
-		return false
-	}
-	return (agentnetwork.Policy{Access: bootstrap.NetworkAccess, AllowedDomains: bootstrap.AllowedDomains}).Validate() == nil
+	return json.Unmarshal(data, &bootstrap) == nil && bootstrap.Validate() == nil
 }

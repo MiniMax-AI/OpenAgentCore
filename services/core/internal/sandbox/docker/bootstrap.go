@@ -17,24 +17,17 @@ type entry struct {
 }
 
 func (p *Provider) bootstrap(ctx context.Context, id string, b sandbox.Bootstrap) error {
-	// Deliver the daemon's and the Sandbox I/O service's launch inputs before
-	// native work can start.
-	auth, e := b.RuntimeConnection().Marshal()
-	if e != nil {
-		return e
-	}
+	// Deliver the Sandbox I/O service's launch input before it can start.
 	serve, e := b.SandboxIO.Marshal()
 	if e != nil {
 		return e
 	}
 	if e = copyRuntimeFiles(ctx, p.client, id, "/home", []entry{
-		{name: "runtime", directory: true}, {name: "runtime/.oac", directory: true},
-		{name: "runtime/runtime-bootstrap.json", content: auth},
-		{name: "runtime/sandbox-io-bootstrap.json", content: serve},
+		{name: "runtime", directory: true}, {name: "runtime/sandbox-io-bootstrap.json", content: serve},
 	}); e != nil {
 		return e
 	}
-	return copyRuntimeFiles(ctx, p.client, id, "/environment", []entry{{name: "workspace", directory: true}, {name: "staging", directory: true}, {name: "initialization", directory: true}, {name: "packages", directory: true}})
+	return copyRuntimeFiles(ctx, p.client, id, "/environment", []entry{{name: "workspace", directory: true}, {name: "initialization", directory: true}, {name: "packages", directory: true}})
 }
 func copyRuntimeFiles(ctx context.Context, c *client.Client, id, path string, entries []entry) error {
 	var content bytes.Buffer

@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 1540a3b84eb1cfa977654b46d407e1a4de7f502bab9c5264e21a8cc57e96d238
+source_hash: 873d25773a865039ae1f1f8983d7b26e3bc772fad7301b36fc03a3ffd7084186
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon、Sandbox I/O 服务和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
@@ -35,7 +35,6 @@ source_hash: 1540a3b84eb1cfa977654b46d407e1a4de7f502bab9c5264e21a8cc57e96d238
 | 节点凭据 | 节点自身：生成 32 至 256 个无空白字符的密钥，在登记时注册 | 带 `X-OAC-Node-ID` 的 `sandbox-node/configuration`、`sandbox-node/identity`、`sandbox-node/connect` |
 | 安装授权 | `self_hosted` Session 的 `x_agents_core.installation` 命令；短期有效 | `agent-daemon/installation` 及其 `claim` |
 | 执行器凭据 | 安装领取，或 Core 密钥[执行器凭据路由](environment-executor-credentials.md) | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为该 Environment 的 enrollment 在 `sandbox-link` 上的 Serve 凭据 |
-| 托管沙箱 daemon 凭据 | Core 为每个受管分配签发，通过[引导文件](../../../docs/zh/runtime-bootstrap.md)交付 | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
 | 操作者设备配置 | 具有数据库访问权限的操作者运行 `oac-core-device` | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
 
 Core 对存储的每个 token 和凭据仅保留 SHA-256 摘要；安装授权经签名但不存储。凭据不可互换：各自仅适用于自身路由。

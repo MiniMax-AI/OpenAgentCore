@@ -1,16 +1,15 @@
-// Package docker is a thin SDK adapter for the dedicated, colocated Runtime.
+// Package docker is a thin SDK adapter that runs each allocation's sandbox as
+// a Docker container whose only process is the Sandbox I/O service.
 package docker
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
@@ -20,12 +19,11 @@ import (
 const labelPrefix = "io.oac."
 
 // Config is trusted operator configuration, never public Session input. The
-// immutable image contains the qualified native profile and all Runtime binaries.
-// Seccomp is JSON content, not a path on the Docker host. Network must provide
-// trusted daemon/model connectivity; native tool network policy is in the image.
+// immutable image contains oac-sandbox-io and the tools sandbox processes run.
+// Seccomp is JSON content, not a path on the Docker host. Network must reach
+// Core's Sandbox link.
 type Config struct {
 	InstallationID, Image, Network, Seccomp string
-	NestedSandbox                           bool
 	Resources                               *sandbox.Resources
 }
 type Provider struct {
@@ -111,15 +109,10 @@ func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info
 
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	info := sandbox.Info{Reference: b.Reference}
-	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
 	if existing, e := p.GetInfo(ctx, b.Reference); e == nil {
 		return existing, sandbox.ErrExists
 	} else if !errors.Is(e, sandbox.ErrNotFound) {
 		return info, e
-	}
-	domains, err := json.Marshal(policy.Hosts())
-	if err != nil {
-		return info, sandbox.ErrInvalid
 	}
 	name := p.name(b.Reference)
 	// Retained volumes without a container are partial or lost state, not an
@@ -145,12 +138,10 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 			return info, sandbox.ErrOwnership
 		}
 	}
-	options := runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"OAC_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "OAC_RUNTIME_SESSION_ID=" + b.SessionID, "OAC_RUNTIME_NETWORK_ACCESS=" + policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS=" + string(domains)})
-	// The container's own command starts both processes from the files
+	// The container's command is the Sandbox I/O service, reading the file
 	// bootstrap writes before start, so ContainerStart is the last mutating
-	// step and a running container has started the Sandbox I/O service.
-	options.Config.Entrypoint = []string{"/bin/sh", "-c", launch}
-	v, e := p.client.ContainerCreate(ctx, options)
+	// step and a running container has started the service.
+	v, e := p.client.ContainerCreate(ctx, runtimeContainerOptions(p.config, name, p.labels(b.Reference)))
 	if errdefs.IsConflict(e) {
 		return info, sandbox.ErrExists
 	}
@@ -174,18 +165,13 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	// Any failure returns the retained allocation reference. The caller must Kill
 	// it, including on a lost acknowledgement. Never erase uncertain owner state.
 	if e = p.bootstrap(ctx, v.ID, b); e != nil {
-		return info, fmt.Errorf("runtime bootstrap: %w", e)
+		return info, fmt.Errorf("sandbox bootstrap: %w", e)
 	}
 	if _, e = p.client.ContainerStart(ctx, v.ID, client.ContainerStartOptions{}); e != nil {
 		return info, e
 	}
 	return p.GetInfo(ctx, b.Reference)
 }
-
-// launch starts the Sandbox I/O service in the background, then replaces the
-// shell with the daemon, which stays the container's main process.
-const launch = "/usr/local/bin/oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json & " +
-	"exec /usr/local/bin/oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json"
 
 // Kill is idempotent only for absence, not for errors or foreign ownership. It
 // checks all resources before removing any and confirms removal of named volumes.

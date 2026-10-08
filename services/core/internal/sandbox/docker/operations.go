@@ -9,21 +9,19 @@ import (
 // Operations is this adapter's complete authored resource contract.
 func Operations() providercontract.Operations {
 	return providercontract.Operations{
-		"Create":            {State: providercontract.Supported},
-		"GetInfo":           {State: providercontract.Supported},
-		"Renew":             {State: providercontract.Supported},
-		"Kill":              {State: providercontract.Supported},
-		"RunCommand":        {State: providercontract.Supported},
-		"Initial":           {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"NewCompute":        {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"GetCompute":        {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"Suspend":           {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"Resume":            {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"KillCompute":       {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"DeleteSnapshot":    {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"RunCommandCompute": {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"ResumeCompute":     {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
-		"Observe":           {State: providercontract.Supported},
+		"Create":         {State: providercontract.Supported},
+		"GetInfo":        {State: providercontract.Supported},
+		"Renew":          {State: providercontract.Supported},
+		"Kill":           {State: providercontract.Supported},
+		"Initial":        {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"NewCompute":     {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"GetCompute":     {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"Suspend":        {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"Resume":         {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"KillCompute":    {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"DeleteSnapshot": {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"ResumeCompute":  {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"Observe":        {State: providercontract.Supported},
 	}
 }
 func (*Provider) ProviderOperations() providercontract.Operations { return Operations() }
@@ -47,9 +45,6 @@ func (p *Provider) KillCompute(context.Context, sandbox.Reference, sandbox.Compu
 }
 func (p *Provider) DeleteSnapshot(context.Context, sandbox.Reference, sandbox.SnapshotIdentity) error {
 	return &providercontract.UnsupportedError{Operation: "DeleteSnapshot", Reason: Operations()["DeleteSnapshot"].Reason}
-}
-func (p *Provider) RunCommandCompute(context.Context, sandbox.Reference, sandbox.Compute, sandbox.Command) (sandbox.CommandResult, error) {
-	return sandbox.CommandResult{}, &providercontract.UnsupportedError{Operation: "RunCommandCompute", Reason: Operations()["RunCommandCompute"].Reason}
 }
 func (p *Provider) ResumeCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
 	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "ResumeCompute", Reason: Operations()["ResumeCompute"].Reason}

@@ -48,7 +48,7 @@ class SharedContractTest(unittest.TestCase):
             output = io.StringIO()
             source = io.BytesIO(b' ' * (contract.MAX_REQUEST + 1) if oversized_request else b'{}')
             result = {'Version': contract.PROTOCOL_VERSION, 'ErrorCode': '',
-                      'Command': {'Stdout': 'x' * contract.MAX_RESPONSE}}
+                      'Templates': [{'Name': 'x' * contract.MAX_RESPONSE}]}
             provider = Mock(return_value=Mock(execute=Mock(return_value=result)))
             with self.subTest(request=oversized_request), patch.object(main.sys, 'argv', ['helper']), \
                     patch.object(main.sys, 'stdin', SimpleNamespace(buffer=source)), \
@@ -61,13 +61,8 @@ class SharedContractTest(unittest.TestCase):
             if oversized_request:
                 provider.assert_not_called()
 
-    def test_command_limits_count_bytes(self):
+    def test_startup_output_limit_counts_bytes(self):
         client = Mock()
-        with patch.object(sdk.base64, 'b64decode', return_value=b'x' * (contract.MAX_COMMAND_INPUT + 1)):
-            with self.assertRaises(Failure) as raised:
-                sdk.run(client, {'Args': ['true'], 'Stdin': 'encoded'}, lambda: 3)
-        self.assertEqual(raised.exception.code, 'invalid')
-        client.commands.run.assert_not_called()
         for extra in ('', 'é'):
             text = 'x' * contract.MAX_OUTPUT + extra
             def wait(**callbacks):
@@ -76,10 +71,10 @@ class SharedContractTest(unittest.TestCase):
             client.commands.run.return_value.wait.side_effect = wait
             if extra:
                 with self.assertRaises(Failure) as raised:
-                    sdk.run(client, {'Args': ['true']}, lambda: 3)
-                self.assertEqual(raised.exception.code, 'command_unconfirmed')
+                    sdk.run(client, ['true'], lambda: 3)
+                self.assertEqual(raised.exception.code, 'unconfirmed')
             else:
-                self.assertEqual(sdk.run(client, {'Args': ['true']}, lambda: 3)['Stdout'], text)
+                self.assertEqual(sdk.run(client, ['true'], lambda: 3), 0)
 
 
 if __name__ == '__main__':

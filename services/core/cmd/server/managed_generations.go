@@ -71,14 +71,6 @@ func (p *generationRouter) Kill(ctx context.Context, r sandbox.Reference) error 
 	defer done()
 	return v.Kill(ctx, r)
 }
-func (p *generationRouter) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	v, done, err := p.route(ctx, r)
-	if err != nil {
-		return sandbox.CommandResult{}, err
-	}
-	defer done()
-	return v.RunCommand(ctx, r, c)
-}
 
 func (p *generationRouter) ProviderOperations() providercontract.Operations {
 	return maps.Clone(p.operations)

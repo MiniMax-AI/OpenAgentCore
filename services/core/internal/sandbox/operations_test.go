@@ -101,11 +101,6 @@ func TestBootstrapValidateRejections(t *testing.T) {
 	}
 	for name, change := range map[string]func(*sandbox.Bootstrap){
 		"noncanonical tenant":        func(b *sandbox.Bootstrap) { b.TenantID = strings.ToUpper(b.TenantID) },
-		"nil session":                func(b *sandbox.Bootstrap) { b.SessionID = uuid.Nil.String() },
-		"missing device":             func(b *sandbox.Bootstrap) { b.DeviceID = "" },
-		"Core URL off the API base":  func(b *sandbox.Bootstrap) { b.CoreURL = "https://core.example" },
-		"empty Runtime credential":   func(b *sandbox.Bootstrap) { b.Credential = "" },
-		"unknown network access":     func(b *sandbox.Bootstrap) { b.NetworkAccess = "sometimes" },
 		"plain ws Link off loopback": func(b *sandbox.Bootstrap) { b.SandboxIO.LinkURL = "ws://core.example/api/v1/sandbox-link" },
 		"empty Serve credential":     func(b *sandbox.Bootstrap) { b.SandboxIO.Credential = "" },
 		"zero generation":            func(b *sandbox.Bootstrap) { b.SandboxIO.Resource.Generation = 0 },

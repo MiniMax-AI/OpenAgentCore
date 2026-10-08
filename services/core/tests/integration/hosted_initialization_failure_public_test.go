@@ -57,11 +57,11 @@ func hostedFailureSkill(t *testing.T) environmentconfig.Skill {
 type hostedFailureProvider struct {
 	lifecycleProvider
 	initializationPeer
-	fail   string // runtime-initialize action, or "file" for the initial file writer
-	skip   int    // matching steps that succeed before the failure
-	result proto.RuntimePrepareResultPayload
-	err    error
-	steps  []string
+	fail    string // runtime-initialize action, or "file" for the initial file writer
+	skip    int    // matching steps that succeed before the failure
+	result  proto.RuntimePrepareResultPayload
+	unknown bool // the step's outcome is unconfirmed
+	steps   []string
 }
 
 func (p *hostedFailureProvider) setRuntimeGateway(t *testing.T, s *Store, endpoint string, registry *runtimegateway.Registry, link *sandboxlinktest.Server) {
@@ -75,9 +75,6 @@ func (p *hostedFailureProvider) Create(ctx context.Context, b sandbox.Bootstrap)
 	}
 	return info, err
 }
-func (p *hostedFailureProvider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	return p.initializationPeer.RunCommand(ctx, r, c)
-}
 func (p *hostedFailureProvider) prepare(request proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
 	action := request.Action
 	if request.Initialization != nil {
@@ -88,7 +85,7 @@ func (p *hostedFailureProvider) prepare(request proto.RuntimePreparePayload, _ [
 	p.steps = append(p.steps, action)
 	if action == p.fail {
 		if p.skip == 0 {
-			if p.err != nil {
+			if p.unknown {
 				return proto.RuntimePrepareResultPayload{Outcome: "unknown", ErrorCode: "runtime_preparation_unconfirmed"}
 			}
 			return p.result
@@ -131,10 +128,10 @@ func failHostedInitialization(t *testing.T, s *Store, key, tenant string, enviro
 func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 	commands := []environmentconfig.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 0"}, {Command: "echo " + hostedFailureCanary + "; exit 3"}, {Command: "touch never"}}
 	type failure struct {
-		fail   string
-		skip   int
-		result proto.RuntimePrepareResultPayload
-		err    error
+		fail    string
+		skip    int
+		result  proto.RuntimePrepareResultPayload
+		unknown bool
 	}
 	for _, test := range []struct {
 		name   string
@@ -156,7 +153,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			failure{fail: "setup", result: failedInitialization(0)},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
 		{"unknown effect", sessions.CreateSession{Initialization: environmentconfig.Setup{Commands: commands[1:]}},
-			failure{fail: "setup", err: sandbox.ErrCommandUnconfirmed},
+			failure{fail: "setup", unknown: true},
 			"Failed to provision environment: initialization did not complete", []string{"configure", "setup"}},
 		{"invalid failure code", sessions.CreateSession{Initialization: environmentconfig.Setup{Commands: commands[1:]}},
 			failure{fail: "setup", result: proto.RuntimePrepareResultPayload{Outcome: "failed", ErrorCode: hostedFailureCanary}},
@@ -173,9 +170,9 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			tenant := uuid.NewString()
 			session, environment := hostedFailureSession(t, s, tenant, test.input)
 			p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}},
-				fail: test.p.fail, skip: test.p.skip, result: test.p.result, err: test.p.err}
+				fail: test.p.fail, skip: test.p.skip, result: test.p.result, unknown: test.p.unknown}
 			failHostedInitialization(t, s, key, tenant, environment, p)
-			if !reflect.DeepEqual(p.steps, test.steps) || p.kills != 0 || p.commandCalls.Load() != 0 {
+			if !reflect.DeepEqual(p.steps, test.steps) || p.kills != 0 {
 				t.Fatal("failed initialization continued or reclaimed compute", p.steps, p.kills)
 			}
 
