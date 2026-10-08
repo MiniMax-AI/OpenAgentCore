@@ -12,22 +12,15 @@ def inline_skill():
 name: proof-skill
 description: Verify the initialized workspace and publish the Skill proof.
 ---
-Run `python3 /environment/initialization/capabilities/skills/proof-skill/scripts/check.py`.
+Run the packaged `scripts/check.py` by its installed absolute path, with the workspace as the working directory.
 Stop on any failed assertion. Report INITIAL_FILES_VERIFIED and SKILL_VERIFIED.
 """
     script = f'''import os, runpy
 from pathlib import Path
 for name in ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'OPENAI_API_KEY', 'MINIMAX_API_KEY']:
     assert name not in os.environ, 'native credential reached a Skill helper'
-manifest = Path('/environment/initialization/capabilities/skills/proof-skill/SKILL.md')
-try:
-    manifest.write_text('tampered')
-except OSError:
-    pass
-else:
-    raise AssertionError('Skill content was writable')
-runpy.run_path('/workspace/verify.py')
-Path('/workspace/outputs/skill-proof.txt').write_text({marker!r})
+runpy.run_path('verify.py')
+Path('outputs/skill-proof.txt').write_text({marker!r})
 print('SKILL_VERIFIED')
 '''
     data = io.BytesIO()

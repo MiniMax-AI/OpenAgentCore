@@ -1,6 +1,7 @@
 """Check qualification's secret handling and owned restart boundary without a model."""
 
 import contextlib
+import base64
 import io
 import json
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +17,8 @@ import httpx2
 from openai import BadRequestError, OpenAI
 
 from official_environment_files_native import generate_files
+from official_environment_composition import composition_fixture
+from official_environment_initial_files import assert_initial_bytes_script
 
 import qualify_public_native as qualification
 
@@ -128,6 +132,89 @@ class QualificationTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "Exactly one"):
                 self.run_suite(suite)
         self.assertEqual(json.loads(self.evidence.read_text())["status"], "failed")
+
+    def test_composition_rejects_preselected_environment_before_creating_resources(self):
+        self.settings['environment'] = {'type': 'openai_hosted', 'environment_template_id': 'foreign-template'}
+        (self.root / 'settings.json').write_text(json.dumps(self.settings))
+        self.argv[self.argv.index('none')] = 'composition'
+        with patch('sys.argv', self.argv), patch.object(qualification, 'verify_composition') as suite:
+            with self.assertRaisesRegex(AssertionError, 'fresh hosted'):
+                qualification.main()
+            suite.assert_not_called()
+
+    def test_composition_partial_failure_cleans_sources_and_keeps_provider_selection(self):
+        client, http = MagicMock(), MagicMock()
+        client.base_url = 'https://core.example/v1'
+        client.api_key = 'project-secret'
+        client.files.create.return_value = SimpleNamespace(id='source-file')
+        client.skills.create.side_effect = RuntimeError('upload failed')
+        http.post.return_value = SimpleNamespace(status_code=404, text='not found')
+        with self.assertRaisesRegex(RuntimeError, 'upload failed'), contextlib.ExitStack() as cleanup:
+            composition_fixture(client, SimpleNamespace(api_key='foreign-secret'), http,
+                self.settings['agent'], self.settings['model_provider'], cleanup)
+        client.files.delete.assert_called_once_with('source-file')
+        self.assertEqual(http.post.call_args.kwargs['json']['x_agents_core']['model_provider'], self.settings['model_provider'])
+        self.assertEqual(http.post.call_args.kwargs['headers']['Authorization'], 'Bearer foreign-secret')
+
+    def test_composition_session_failure_cleans_template_and_all_sources(self):
+        client, http = MagicMock(), MagicMock()
+        client.base_url = 'https://core.example/v1'
+        client.api_key = 'project-secret'
+        client.files.create.return_value = SimpleNamespace(id='source-file')
+        client.skills.create.return_value = SimpleNamespace(id='source-skill', name='proof-skill', description='proof', default_version='1')
+        client.beta.agents.environments.templates.create.return_value = SimpleNamespace(id='template')
+        client.beta.agents.sessions.create.side_effect = RuntimeError('session failed')
+        http.post.return_value = SimpleNamespace(status_code=404, text='not found')
+        options = {'environment': {'type': 'openai_hosted'}, 'extra_body': {'x_agents_core': {'model_provider': self.settings['model_provider']}}}
+        with self.assertRaisesRegex(RuntimeError, 'session failed'):
+            qualification.verify_composition(client, SimpleNamespace(api_key='foreign-secret'), http,
+                self.settings['agent'], options, ready=MagicMock(), restart=None, record=MagicMock())
+        client.files.delete.assert_called_once_with('source-file')
+        client.skills.delete.assert_called_once_with('source-skill')
+        client.beta.agents.environments.templates.delete.assert_called_once_with('template')
+        self.assertEqual(client.beta.agents.sessions.create.call_args.kwargs['extra_body'], options['extra_body'])
+        configuration = client.beta.agents.environments.templates.create.call_args.kwargs
+        self.assertEqual(configuration['network'], {'access': 'enabled'})
+        self.assertEqual(set(configuration['packages']), {'npm', 'python'})
+        for plugin in configuration['plugins']:
+            with zipfile.ZipFile(io.BytesIO(base64.b64decode(plugin['source']['data']))) as archive:
+                mcp = json.loads(archive.read('proof/.mcp.json'))
+                for server in mcp['mcpServers'].values():
+                    self.assertNotIn('env_vars', server)
+        # Exercise the actual prepared proof script's byte and freshness checks;
+        # dependency installation and native execution remain live-only checks.
+        workspace = self.root / 'prepared'
+        workspace.mkdir()
+        for item in configuration['files']:
+            body = base64.b64decode(item['data']) if item['type'] == 'inline' else bytes(range(256))
+            (workspace / item['path'].removeprefix('/workspace/')).write_bytes(body)
+        (workspace / 'setup-sub').mkdir()
+        (workspace / 'setup-sub/order').write_text('second')
+        (workspace / 'setup-once').write_text('initialized')
+        (workspace / 'plugin-mcp-setup-count').write_text('1')
+        script = compile((workspace / 'verify.py').read_text(), 'prepared verify.py', 'exec')
+        with contextlib.chdir(workspace), patch.dict(os.environ, configuration['env']), \
+                patch.dict('sys.modules', {'packaging': SimpleNamespace(__version__='26.0')}), \
+                patch.object(subprocess, 'check_output', return_value=b'1.2.3\n'), patch.object(subprocess, 'run'):
+            for run in (1, 2):
+                exec(script, {})
+                self.assertEqual(json.loads((workspace / 'outputs/composition.json').read_text())['run'], run)
+            (workspace / 'initial-source.bin').write_bytes(b'changed')
+            with self.assertRaises(AssertionError):
+                exec(script, {})
+            self.assertEqual((workspace / 'composition-run-count').read_text(), '2')
+
+    def test_initial_byte_assertion_uses_declared_working_directory(self):
+        workspace = self.root / 'custom-workspace'
+        workspace.mkdir()
+        expected = b'\x00\xffbinary'
+        (workspace / 'initial.bin').write_bytes(expected)
+        script = assert_initial_bytes_script({'/workspace/initial.bin': expected})
+        with contextlib.chdir(workspace):
+            exec(compile(script, '<initial byte assertion>', 'exec'), {'Path': Path})
+            (workspace / 'initial.bin').write_bytes(b'changed')
+            with self.assertRaises(AssertionError):
+                exec(compile(script, '<initial byte assertion>', 'exec'), {'Path': Path})
 
 
 if __name__ == "__main__":
