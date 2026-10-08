@@ -66,6 +66,19 @@ class CollectionTests(unittest.TestCase):
                 if location != "provider":
                     path.unlink()
 
+    def test_preparation_rejects_direct_and_unknown_providers_without_mutation(self):
+        path = self.directory / "1.preparing"
+        for provider in ("e2b", "unknown"):
+            plan = dict(self.value, provider=provider)
+            journal = dict(node_generations.marker_identity(self.args), import_started=False, configuration=plan)
+            node_generations.atomic_json(path, journal)
+            before = path.read_bytes()
+            with self.subTest(provider=provider), self.assertRaisesRegex(installer.InstallError, "Invalid generation preparation plan"):
+                node_generations.generation_marker(self.root, 1, ".preparing", self.args.specification_digest,
+                                                  self.args.installation_id, installer)
+            self.assertEqual(path.read_bytes(), before)
+            installer.checked.assert_not_called()
+
     def test_busy_helper_refuses_all_mutations_then_same_inode_collects(self):
         lease = self.directory / "1.lease"
         descriptor = os.open(lease, os.O_CREAT | os.O_RDWR, 0o600)
