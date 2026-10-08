@@ -82,7 +82,6 @@ func TestExecutionDoesNotCompleteAfterEventPersistenceFailure(t *testing.T) {
 	result := h.run(ctx, input.TurnID)
 	h.read(testExecutionRequest)
 	pool := h.s.pool
-	defer pool.Close()
 	if _, err := pool.Exec(ctx, "UPDATE turns SET event_bytes=33554432 WHERE id=$1", input.TurnID); err != nil {
 		t.Fatal(err)
 	}
