@@ -53,7 +53,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 
 Each setting and each piece of data is written in one place and read from that place: no second copy, no environment-variable or file fallback and no alias. A new setting joins its category and lives beside its peers.
 
-The categories are [process settings](docs/configuration.md#process-settings), [derived files](docs/configuration.md#how-oac-apply-works), [secrets](docs/configuration.md#installation-directory), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration](docs/configuration.md) owns the installation layout and the settings themselves.
+The categories are [process settings](docs/configuration.md#process-settings), [secrets](docs/configuration.md#compose-installations), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration](docs/configuration.md) owns the installation layout and the settings themselves.
 
 ### Pre-release: no compatibility layers
 
