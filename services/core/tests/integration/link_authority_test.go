@@ -548,7 +548,7 @@ func TestInitializationBindsAgentHost(t *testing.T) {
 			resource, serve := fixtureLinkResource(t, s, tenant, session)
 			server := httptest.NewUnstartedServer(nil)
 			endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
+			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -19,11 +19,7 @@ func authorizedRuntimePeer(ctx context.Context, devices sessions.DeviceReader, r
 		return nil, err
 	}
 	if !found || !peer.AuthenticatedWith(credential.CredentialHash) {
-		// Reject new work even while this exact old delivery drains its receipt.
-		draining, drainErr := peer.DrainArchivedCancellation(ctx)
-		if drainErr != nil || !draining {
-			peer.Close("Runtime authorization changed")
-		}
+		peer.Close("Runtime authorization changed")
 		return nil, sessions.ErrNotFound
 	}
 	if peer.IsClosed() {

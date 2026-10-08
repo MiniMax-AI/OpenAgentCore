@@ -211,7 +211,7 @@ func run(config processconfig.Config) error {
 	}
 	executorURL := config.PublicOrigin.DaemonWebSocket()
 	links := runtimegateway.NewLinkAuthority(sessionStore)
-	daemonHandler, registry, err := runtime.NewGateway(sessionStore, sessionService, sessionStore, links, executorURL)
+	daemonHandler, registry, err := runtime.NewGateway(sessionStore, sessionService, links, executorURL)
 	if err != nil {
 		return err
 	}
