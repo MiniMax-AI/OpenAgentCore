@@ -8,7 +8,7 @@ This page lists the Core routes each console page reads and writes, and how the 
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config`, `/node-install/manifest.json` | The Core key at sign-in, then the console session cookie; `/node-install/manifest.json` needs no sign-in | Sign-in and sign-out; the node installer and node artifacts for Add node; the distribution's Runtime release for Docker and microsandbox setup. See [console server](./console-server.md) |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config`, `/console/orcarouter/*`, `/node-install/manifest.json` | The Core key at sign-in, then the console session cookie; `/node-install/manifest.json` needs no sign-in | Sign-in and sign-out; the node installer and node artifacts for Add node; the distribution's Runtime release for Docker and microsandbox setup; the OrcaRouter provider's origins, model catalog and PKCE code exchange, with the operator's OrcaRouter key. See [console server](./console-server.md) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | The Core key, added by the console server | Projects, keys, resource reads and deletion, diagnostics, executor credentials and installation commands, provenance, summaries, Core metrics, the installation, default models |
 | Sandbox administration | `/core/v1/sandbox/**` | The Core key, added by the console server | Sandbox configuration, Nodes, fleet and capacity figures on Overview and Sandbox metrics, Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. The console shows developers how to call it (see [Provenance and monitoring](#provenance-and-monitoring)) |
@@ -85,7 +85,10 @@ Summary figures are cumulative per Session and are not billing records. Sessions
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List harnesses | `GET /core/v1/harnesses` | System's Default model cards: each harness's read-only `enabled` and `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (a default model on the default harness, or on any enabled harness when none is default) |
+| List harnesses | `GET /core/v1/harnesses` | System's Default model cards: each harness's read-only `enabled` and `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (a default model on the default harness, or on any enabled harness when none is default). OrcaRouter's connection state comes from the model configuration dialog, not this list |
+| OrcaRouter origins | `GET /console/orcarouter/config` | The **Set**/**Replace** dialog's OrcaRouter provider: the authentication origin and the inference base it writes to Core, so neither is typed and neither public origin is hardcoded |
+| OrcaRouter catalog | `GET /console/orcarouter/catalog?capability=` | The dialog's model control when OrcaRouter is selected: the workspace's models, read with the entered key in the `X-OrcaRouter-Key` header and filtered to `chat` for a text harness. A rejected key (401) and an unreachable catalog both show a visible state and the verified fallback list instead of free text |
+| OrcaRouter exchange | `POST /console/orcarouter/exchange` | **Connect with OrcaRouter**: redeems the PKCE authorization code for an API key, which is written to Core as the provider key exactly like a pasted one |
 | Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form; then the list is read again |
 | Clear | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**, confirmed, then the list is read again |
 

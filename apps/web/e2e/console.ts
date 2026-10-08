@@ -49,8 +49,7 @@ export async function selectFixtureE2BBuild(page: Page) {
   await page.getByLabel("Template build").selectOption("template:94be54a1-138c-4f30-bc87-b13686272dbe");
 }
 
-/** Makes the next matching write fail once with the given status. */
-export async function failNext(request: APIRequestContext, failure: { method: string; path: string; status: number; code?: string; message?: string }) {
+/** Makes the next matching write fail once with the given status. */export async function failNext(request: APIRequestContext, failure: { method: string; path: string; status: number; code?: string; message?: string }) {
   await request.post(`${fixture}/__fixture/fail-next`, { data: failure });
 }
 
@@ -80,6 +79,17 @@ export async function issueKeys(request: APIRequestContext, projectId: string, n
 export async function writes(request: APIRequestContext): Promise<string[]> {
   return (await (await request.get(`${fixture}/__fixture/requests`)).json()).writes;
 }
+
+/** Whether the fixture's OrcaRouter catalog answers as an outage instead of a live list. */
+export async function setOrcarouterCatalog(request: APIRequestContext, catalogDown: boolean) {
+  await request.post(`${fixture}/__fixture/orcarouter`, { data: { catalog_down: catalogDown } });
+}
+
+/** What the browser asked the console's OrcaRouter routes for, and the fixture's own key. */
+export async function orcarouterReads(request: APIRequestContext): Promise<{ reads: string[]; key: string }> {
+  return (await request.get(`${fixture}/__fixture/orcarouter`)).json();
+}
+
 
 /** The console never calls /v1 and never sends its own Authorization header. */
 export async function expectManagementBoundary(request: APIRequestContext) {

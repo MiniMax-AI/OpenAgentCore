@@ -27,5 +27,6 @@
 @source "../components/primitives";
 @source "../components/ui";
 @source "../components/console-select.tsx";
+@source "../components/model-combobox.tsx";
 @source "../components/console-popover.tsx";
 @source "../components/magicui";
