@@ -225,8 +225,9 @@ def main():
             report["restart"] = {"container": ids[0], "before": before, "after": after}
 
     with httpx2.Client(trust_env=False, timeout=30) as http:
-        client = OpenAI(base_url=base, api_key=key, max_retries=0, _strict_response_validation=True, http_client=http)
-        foreign = OpenAI(base_url=base, api_key=foreign_key, max_retries=0, _strict_response_validation=True, http_client=http)
+        # Input admission can prepare a native executor before returning.
+        client = OpenAI(base_url=base, api_key=key, timeout=240, max_retries=0, _strict_response_validation=True, http_client=http)
+        foreign = OpenAI(base_url=base, api_key=foreign_key, timeout=240, max_retries=0, _strict_response_validation=True, http_client=http)
 
         def ready(session):
             if placement == "none":

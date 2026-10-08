@@ -71,6 +71,27 @@ class QualificationTests(unittest.TestCase):
             self.run_suite(suite)
         self.assertFalse(self.evidence.exists())
 
+    def test_native_admission_budget_does_not_extend_raw_http_checks(self):
+        requests = []
+
+        def reject(request):
+            requests.append(request)
+            return httpx2.Response(400, json={"error": {"type": "invalid_request_error", "message": "fixture"}})
+
+        def suite(client, foreign, http, *args, **kwargs):
+            for sdk in (client, foreign):
+                with self.assertRaises(BadRequestError):
+                    sdk.beta.agents.sessions.events.create("fixture-session", events=[{
+                        "type": "agent.session.input.message", "input": [{"role": "user", "content": [{"type": "input_text", "text": "fixture"}]}]}])
+                self.assertEqual(requests[-1].extensions["timeout"]["read"], 240)
+            http.get("https://core.example/v1/agents/sessions/fixture-session")
+            self.assertEqual(requests[-1].extensions["timeout"]["read"], 30)
+            return []
+
+        transport = SimpleNamespace(Client=lambda **kwargs: httpx2.Client(transport=httpx2.MockTransport(reject), **kwargs))
+        with patch.object(qualification, "OpenAI", OpenAI), patch.object(qualification, "httpx2", transport):
+            self.run_suite(suite)
+
     def test_active_policy_suites_cannot_claim_process_restart(self):
         for name in ("policies", "steering"):
             with self.subTest(suite=name):
