@@ -15,9 +15,9 @@ import (
 
 type nativeInstallOptions struct {
 	nativeInstallation
-	Directory, Bundle, Harness                 string
-	OnboardURL, Authorization, RequiredHarness string
-	Interactive, NonInteractive                bool
+	Directory, Bundle, Workspace string
+	OnboardURL, Authorization    string
+	Interactive, NonInteractive  bool
 }
 
 func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, error) {
@@ -27,13 +27,10 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 	flags.StringVar(&o.Authorization, "authorization", "", "short-lived installation authorization (never an executor credential)")
 	flags.StringVar(&o.Remote, "remote", "", "Environment remote_url from Core")
 	flags.StringVar(&o.Environment, "environment-id", "", "Environment ID from Core")
-	flags.StringVar(&o.Workspace, "workspace", "", "existing absolute workspace directory")
+	flags.StringVar(&o.Workspace, "workspace", "", "absolute workspace directory to prepare")
 	flags.StringVar(&o.Credential, "credential-file", "", "absolute executor credential JSON file (never the token)")
-	flags.StringVar(&o.CapabilityDirectory, "capability-directory", "", "capability snapshot destination")
-	flags.StringVar(&o.ToolEnvironmentFile, "tool-env-file", "", "optional tool environment JSON file")
 	flags.StringVar(&o.Directory, "install-dir", "", "installation directory (default OAC_RUNTIME_HOME or ~/.oac)")
 	flags.StringVar(&o.Bundle, "bundle-dir", "", "native distribution directory (defaults beside the executable)")
-	flags.StringVar(&o.Harness, "harness", "", "comma-separated codex,claude,minimax")
 	flags.BoolVar(&o.Interactive, "interactive", false, "ask for missing installation options")
 	flags.BoolVar(&o.NonInteractive, "non-interactive", false, "require command-line options; never prompt")
 	if err := flags.Parse(args); err != nil {
@@ -94,15 +91,12 @@ func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOpti
 		value    *string
 		optional bool
 	}{
-		{"Harnesses (comma-separated codex,claude,minimax)", &o.Harness, false},
 		{"Installation directory (Enter uses current default)", &o.Directory, true},
 		{"Distribution directory (Enter uses current default)", &o.Bundle, true},
 		{"Environment remote URL", &o.Remote, false},
 		{"Environment ID", &o.Environment, false},
-		{"Existing workspace directory", &o.Workspace, false},
+		{"Workspace directory", &o.Workspace, false},
 		{"Credential JSON file path (do not enter a token)", &o.Credential, false},
-		{"Capability snapshot directory (optional)", &o.CapabilityDirectory, true},
-		{"Tool environment JSON file path (optional)", &o.ToolEnvironmentFile, true},
 	} {
 		if *p.value != "" && !p.optional {
 			continue
@@ -124,19 +118,16 @@ func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOpti
 
 func promptOnboarding(r *bufio.Reader, output io.Writer, o *nativeInstallOptions) error {
 	fmt.Fprintf(output, "Environment: %s\nWorkspace: %s (set by this Session)\n", o.Environment, o.Workspace)
-	if o.Harness == "" {
-		o.Harness = o.RequiredHarness
-	}
 	for _, item := range []struct {
 		label string
 		value *string
 	}{
-		{"Harnesses, comma-separated", &o.Harness}, {"Installation directory", &o.Directory},
+		{"Installation directory", &o.Directory},
 	} {
 		fmt.Fprintf(output, "%s [%s]: ", item.label, *item.value)
 		line, err := r.ReadString('\n')
 		if err != nil {
-			return errors.New("install: interactive input ended; use --non-interactive with --harness and optional --install-dir")
+			return errors.New("install: interactive input ended; use --non-interactive with optional --install-dir")
 		}
 		if value := strings.TrimSpace(line); value != "" {
 			*item.value = value

@@ -109,14 +109,10 @@ jobs:
           bash scripts/prepare-release-runtimes.sh
       - uses: actions/download-artifact@v6
         with:
-          pattern: oac-native-installer-*
-          merge-multiple: true
+          name: oac-native-installer-Linux-X64
           path: ${{ runner.temp }}/native-artifacts
       - name: Assemble the native installation catalog
         run: node scripts/build-native-catalog.mjs "$RUNNER_TEMP/native-artifacts" "$RUNNER_TEMP/native-installers"
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
       - uses: ./.github/actions/e2b-provider
       - name: Build matched artifacts
         env:

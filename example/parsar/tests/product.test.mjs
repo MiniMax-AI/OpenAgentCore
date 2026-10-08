@@ -38,8 +38,6 @@ test("native runtimes keep host paths, freeze provider secrets, and create witho
   );
   for (const [platform, directory] of [
     ["linux", "/home/user/project"],
-    ["macos", "/Users/user/project"],
-    ["windows", "C:\\Users\\user\\project"],
   ]) {
     const runtime = await put("runtimes", {
       name: platform,
@@ -82,11 +80,15 @@ test("native runtimes keep host paths, freeze provider secrets, and create witho
   for (const [platform, directory] of [
     ["linux", "relative"], ["linux", "/tmp/work/"], ["linux", "/tmp//work"],
     ["linux", "/tmp/../work"], ["linux", "/tmp/a\tb"],
-    ["windows", "\\work"], ["windows", "C:\\work\\"], ["windows", "C:\\a?b"],
   ]) {
     await assert.rejects(put("runtimes", {
       name: "bad", environment: "self_hosted", platform, workspace_directory: directory,
     }), /绝对目录/);
+  }
+  for (const platform of ["macos", "windows", undefined]) {
+    await assert.rejects(put("runtimes", {
+      name: "Unsupported", environment: "self_hosted", platform, workspace_directory: "/workspace",
+    }), /Linux amd64/);
   }
   const runtime = await put("runtimes", {
     name: "Local", environment: "self_hosted", platform: "linux", workspace_directory: "/workspace",

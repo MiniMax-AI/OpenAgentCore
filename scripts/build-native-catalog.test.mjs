@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
-test('catalog accepts large native manifests and still rejects a foreign revision', async () => {
+test('catalog publishes Linux amd64 and rejects a foreign revision', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'oac-native-catalog-'));
   try {
     const input = join(directory, 'input');
@@ -14,15 +14,15 @@ test('catalog accepts large native manifests and still rejects a foreign revisio
     const bundle = join(directory, 'bundle');
     await Promise.all([mkdir(input), mkdir(bundle)]);
     const version = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    for (const [ci, os, arch] of [['Linux-X64', 'linux', 'amd64'], ['macOS-ARM64', 'darwin', 'arm64'], ['Windows-X64', 'windows', 'amd64']]) {
-      await writeFile(join(bundle, 'bundle.json'), JSON.stringify({ daemon_version: version, os, arch, files: { fixture: 'x'.repeat(2 * 1024 * 1024) } }));
+    for (const [ci, os, arch] of [['Linux-X64', 'linux', 'amd64']]) {
+      await writeFile(join(bundle, 'bundle.json'), JSON.stringify({ daemon_version: version, os, arch }));
       execFileSync('tar', ['-czf', join(input, `oac-native-installer-${ci}.tar.gz`), '-C', bundle, './bundle.json']);
     }
     const script = resolve('scripts/build-native-catalog.mjs');
     execFileSync(process.execPath, [script, input, output]);
     const catalog = JSON.parse(await readFile(join(output, 'catalog.json'), 'utf8'));
     assert.equal(catalog.version, version);
-    assert.equal(Object.keys(catalog.artifacts).length, 3);
+    assert.equal(Object.keys(catalog.artifacts).length, 1);
     const linux = await readFile(join(input, 'oac-native-installer-Linux-X64.tar.gz'));
     assert.deepEqual(await readFile(join(output, 'linux-amd64.tar.gz')), linux);
     assert.equal(catalog.artifacts['linux-amd64'].sha256, createHash('sha256').update(linux).digest('hex'));

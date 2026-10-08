@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -35,7 +36,7 @@ func TestCatalogRequiresMatchedImmutableArtifacts(t *testing.T) {
 		path string
 		code int
 	}{
-		{"build/linux-amd64.tar.gz", 200}, {"build/linux-amd64.sha256", 200}, {"other/linux-amd64.tar.gz", 404}, {"build/windows-arm64.tar.gz", 404}, {"build/catalog.json", 404}, {"build/../../catalog.json", 404},
+		{"build/linux-amd64.tar.gz", 200}, {"build/linux-amd64.sha256", 200}, {"other/linux-amd64.tar.gz", 404}, {"build/windows-arm64.tar.gz", 404}, {"build/bootstrap.ps1", 404}, {"build/bootstrap.sh", 200}, {"build/catalog.json", 404}, {"build/../../catalog.json", 404},
 	} {
 		w := httptest.NewRecorder()
 		catalog.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/agent-daemon/install/"+request.path, nil))
@@ -112,5 +113,21 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 func TestMissingCatalogServesNoInstallers(t *testing.T) {
 	if catalog, err := Load(t.TempDir(), "build"); catalog != nil || err != nil {
 		t.Fatal(catalog, err)
+	}
+}
+
+func TestCatalogRejectsUnsupportedPlatforms(t *testing.T) {
+	for _, platform := range []string{"linux-arm64", "darwin-arm64", "windows-amd64"} {
+		t.Run(platform, func(t *testing.T) {
+			dir := t.TempDir()
+			manifest := Catalog{Version: "build", ProtocolVersion: proto.Version, Artifacts: map[string]Artifact{platform: {SHA256: strings.Repeat("0", 64), URL: "https://downloads.example/v1/oac-native-build-" + platform + ".tar.gz"}}}
+			raw, _ := json.Marshal(manifest)
+			if err := os.WriteFile(filepath.Join(dir, "catalog.json"), raw, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(dir, "build"); err == nil {
+				t.Fatal("unsupported platform accepted")
+			}
+		})
 	}
 }

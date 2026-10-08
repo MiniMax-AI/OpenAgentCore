@@ -97,7 +97,6 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual(plan["image"], workflow == "api-acceptance")
 
     def test_cache_actions_select_their_consumers(self):
-        self.assertEqual(self.jobs(".github/actions/mcode-companion/action.yml"), {"hygiene", "native", "lint"})
         plan = ci.select([".github/actions/e2b-provider/action.yml"])
         self.assertEqual(set(plan["jobs"]), {"hygiene", "api", "lint"})
         self.assertTrue(plan["image"])
@@ -120,7 +119,7 @@ class SelectionTests(unittest.TestCase):
                 self.assertTrue(ci.select([path])["image"])
         for path in ("package.json", "pnpm-workspace.yaml", ".npmrc"):
             with self.subTest(path=path):
-                self.assertEqual(self.jobs(path), {"hygiene", "harness", "example", "web", "web-acceptance", "website", "native"})
+                self.assertEqual(self.jobs(path), {"hygiene", "harness", "example", "web", "web-acceptance", "website"})
                 self.assertFalse(ci.select([path])["image"])
         self.assertEqual(self.jobs("tsconfig.base.json"), {"hygiene", "example", "web", "web-acceptance"})
 

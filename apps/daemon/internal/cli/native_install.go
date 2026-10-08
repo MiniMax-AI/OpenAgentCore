@@ -11,8 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
+	"runtime"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
@@ -21,14 +20,51 @@ import (
 
 // Installation is local state, not an options-file input or an OS service.
 type nativeInstallation struct {
-	Version             string   `json:"version"`
-	Remote              string   `json:"remote_url"`
-	Environment         string   `json:"environment_id"`
-	Workspace           string   `json:"workspace_directory"`
-	Credential          string   `json:"credential_file"`
-	CapabilityDirectory string   `json:"capability_directory"`
-	ToolEnvironmentFile string   `json:"tool_environment_file,omitempty"`
-	Harnesses           []string `json:"harnesses"`
+	Version     string `json:"version"`
+	Remote      string `json:"remote_url"`
+	Environment string `json:"environment_id"`
+	Credential  string `json:"credential_file"`
+}
+
+// UnsupportedPlatformError identifies unsupported local installation and startup.
+type UnsupportedPlatformError struct{ OS, Arch string }
+
+func (e *UnsupportedPlatformError) Error() string {
+	return fmt.Sprintf("self-hosted installation requires Linux amd64; this platform is %s/%s", e.OS, e.Arch)
+}
+func requireNativePlatform() error {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		return &UnsupportedPlatformError{runtime.GOOS, runtime.GOARCH}
+	}
+	return nil
+}
+
+// Directory preparation belongs to installation, before credential issuance.
+var prepareNativeEnvironment = prepareNativeEnvironmentDirectories
+
+func prepareNativeEnvironmentDirectories(workspace string) error {
+	for _, directory := range []string{workspace, "/environment/workspace", "/environment/initialization", "/environment/packages", "/home/runtime"} {
+		if runtimefs.ValidateLocalPath(directory) != nil {
+			return errors.New("install: workspace must be a clean absolute directory")
+		}
+		if err := os.MkdirAll(directory, 0700); err != nil {
+			return fmt.Errorf("install: prepare %s for the current account with write and search permissions, then retry: %v", directory, err)
+		}
+		file, err := os.CreateTemp(directory, ".oac-install-check-")
+		if err != nil {
+			return fmt.Errorf("install: prepare %s for the current account with write and search permissions, then retry: %v", directory, err)
+		}
+		name := file.Name()
+		closeErr := file.Close()
+		removeErr := os.Remove(name)
+		if closeErr != nil {
+			return closeErr
+		}
+		if removeErr != nil {
+			return removeErr
+		}
+	}
+	return nil
 }
 
 func lockNativeInstallation(root string) (*os.Root, func(), error) {
@@ -58,28 +94,20 @@ func validateNativeInstallation(c nativeInstallation) error {
 	if !environmentUUID(c.Environment) {
 		return errors.New("install: --environment-id requires a canonical Environment ID")
 	}
-	for _, p := range []string{c.Workspace, c.Credential, c.CapabilityDirectory} {
-		if runtimefs.ValidateLocalPath(p) != nil {
-			return errors.New("install: --workspace, --credential-file and capability destination must be clean absolute paths")
-		}
+	if runtimefs.ValidateLocalPath(c.Credential) != nil {
+		return errors.New("install: --credential-file must be a clean absolute path")
 	}
-	info, err := os.Stat(c.Workspace)
-	if err != nil || !info.IsDir() {
-		return errors.New("install: --workspace requires an existing directory")
-	}
-	if _, _, err = executorCredential(c.Credential, c.Environment); err != nil {
+	if _, _, err := executorCredential(c.Credential, c.Environment); err != nil {
 		return err
 	}
-	if c.ToolEnvironmentFile != "" {
-		var values map[string]string
-		if runtimefs.ValidateLocalPath(c.ToolEnvironmentFile) != nil || readNativeJSON(c.ToolEnvironmentFile, &values) != nil {
-			return errors.New("install: --tool-env-file requires an absolute JSON file containing string values")
-		}
-	}
+
 	return nil
 }
 
 func runInstall(rc *runContext, args []string) error {
+	if err := requireNativePlatform(); err != nil {
+		return err
+	}
 	o, err := parseNativeInstall(rc, args)
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
@@ -102,19 +130,8 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	if runtimefs.ValidateLocalPath(o.Directory) != nil || runtimefs.ValidateLocalPath(o.Bundle) != nil {
 		return errors.New("install: --install-dir and --bundle-dir must be clean absolute directories")
 	}
-	selected, err := selectedNativeHarnesses(o.Harness)
-	if err != nil {
-		return err
-	}
-	if o.RequiredHarness != "" && !slices.Contains(selected, o.RequiredHarness) {
-		return errors.New("install: --harness must include the Session Harness")
-	}
 	o.Version = Version
-	if o.CapabilityDirectory == "" {
-		o.CapabilityDirectory = filepath.Join(o.Directory, "capabilities")
-	}
-	bundle, err := readNativeBundle(o.Bundle, selected)
-	if err != nil {
+	if _, err := readNativeBundle(o.Bundle); err != nil {
 		return err
 	}
 	held, unlock, err := lockNativeInstallation(o.Directory)
@@ -125,15 +142,12 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	if err = cleanNativeTemporaryFiles(o.Directory); err != nil {
 		return err
 	}
+	if err = prepareNativeEnvironment(o.Workspace); err != nil {
+		return err
+	}
 	if o.OnboardURL != "" {
-		if runtimefs.ValidateLocalPath(o.Workspace) != nil {
-			return errors.New("install: Session workspace is invalid on this platform")
-		}
 		if err = prepareOnboardingCredential(ctx, o, held); err != nil {
 			return err
-		}
-		if err = os.MkdirAll(o.Workspace, 0700); err != nil {
-			return errors.New("install: cannot create workspace with the current user's permissions; prepare it manually and retry")
 		}
 	}
 	if err = validateNativeInstallation(o.nativeInstallation); err != nil {
@@ -142,78 +156,32 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	var previous nativeInstallation
 	raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20)
 	if err == nil {
-		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || len(previous.Harnesses) == 0 {
+		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version {
 			return errors.New("install: existing installation is unsupported; preserve it and reinstall separately")
 		}
-		wanted := o.nativeInstallation
-		wanted.Harnesses = nil
-		comparison := previous
-		comparison.Harnesses = nil
-		before, _ := json.Marshal(comparison)
-		after, _ := json.Marshal(wanted)
+		before, _ := json.Marshal(previous)
+		after, _ := json.Marshal(o.nativeInstallation)
 		if !bytes.Equal(before, after) {
-			return errors.New("install: existing connection settings differ; additive installation cannot replace them")
+			return errors.New("install: existing connection settings differ; installation cannot replace them")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return errors.New("install: cannot read existing installation")
 	}
-	all := append([]string{}, previous.Harnesses...)
-	for _, name := range selected {
-		if !slices.Contains(all, name) {
-			all = append(all, name)
-		}
-	}
-	slices.Sort(all)
-	// Verify existing components before adding any new one; never repair or
-	// upgrade an installed dependency as a side effect of adding a Harness.
-	if len(previous.Harnesses) > 0 {
-		if err = nativeInstallPhase(rc.stdout, "Verifying installed components", func() error { return verifyNativeComponents(ctx, o.Directory, previous.Harnesses) }); err != nil {
-			return err
-		}
-	}
-	if err = nativeInstallPhase(rc.stdout, "Installing Runtime", func() error { return installNativeBinary(ctx, o.Bundle, o.Directory, len(previous.Harnesses) > 0) }); err != nil {
-		return err
-	}
-	for _, name := range append([]string{"node"}, selected...) {
-		if err = nativeInstallPhase(rc.stdout, "Installing "+name, func() error { return installNativeComponent(ctx, o.Bundle, o.Directory, name, bundle.Components[name]) }); err != nil {
-			return err
-		}
-	}
-	if err = nativeInstallPhase(rc.stdout, "Checking installed programs", func() error { return probeNativeInstallation(ctx, o.Directory, all) }); err != nil {
+	if err = nativeInstallPhase(rc.stdout, "Installing sandbox launcher", func() error { return installNativeBinary(ctx, o.Bundle, o.Directory, previous.Version != "") }); err != nil {
 		return err
 	}
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	o.Harnesses = all
 	raw, _ = json.MarshalIndent(o.nativeInstallation, "", "  ")
 	if err = runtimefs.WritePrivateAtomic(held, "installation.json", raw); err != nil {
 		return err
 	}
-	fmt.Fprintln(rc.stdout, "Installation: ready; verified Harnesses:", all)
+	fmt.Fprintln(rc.stdout, "Installation: ready.")
 	if o.OnboardURL == "" {
 		fmt.Fprintln(rc.stdout, "Host connection: not checked by install; run the installed oac-daemon start, then check Host connection in Core.")
 	}
 	fmt.Fprintln(rc.stdout, "Model configuration: not checked; configure the Session model provider in Core and send a Turn.")
-	return nil
-}
-
-func verifyNativeComponents(ctx context.Context, root string, selected []string) error {
-	for _, name := range append([]string{"node"}, selected...) {
-		if _, ok := nativePins[name]; !ok {
-			return errors.New("installation contains an unsupported Harness")
-		}
-		c, err := componentReceipt(nativeComponentRoot(root, name))
-		if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 {
-			return fmt.Errorf("installed %s is missing, modified or incompatible; reinstall separately (no automatic repair or upgrade)", name)
-		}
-		if err = checkComponentFiles(ctx, nativeComponentRoot(root, name), c); err != nil {
-			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("installed %s is missing or modified; reinstall separately", name)
-			}
-			return fmt.Errorf("install: cannot verify installed %s: %w", name, err)
-		}
-	}
 	return nil
 }
 
@@ -228,7 +196,7 @@ func installNativeBinary(ctx context.Context, bundle, root string, existing bool
 	if err = os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	if err = installNativeProgram(ctx, exe, dir, nativeExe("oac-daemon"), existing); err != nil {
+	if err = installNativeProgram(ctx, exe, dir, "oac-daemon", existing); err != nil {
 		return err
 	}
 	for _, name := range nativeBundlePrograms {
@@ -281,7 +249,7 @@ func installNativeProgram(ctx context.Context, source, dir, name string, existin
 	if err = requireNativeSpace(dir, uint64(info.Size())); err != nil {
 		return err
 	}
-	out, err := os.CreateTemp(dir, "."+strings.TrimSuffix(name, ".exe")+"-")
+	out, err := os.CreateTemp(dir, "."+name+"-")
 	if err != nil {
 		return err
 	}
@@ -304,6 +272,9 @@ func installNativeProgram(ctx context.Context, source, dir, name string, existin
 }
 
 func runStart(rc *runContext, args []string) error {
+	if err := requireNativePlatform(); err != nil {
+		return err
+	}
 	ctx, stop := daemonize.NotifyContext(context.Background())
 	defer stop()
 	flags := newFlagSet("start")

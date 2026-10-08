@@ -152,9 +152,9 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		return fmt.Errorf("start Docker and check this account's access: %w", err)
 	}
 	switch strings.TrimSpace(string(info)) {
-	case "linux/x86_64", "linux/amd64", "linux/aarch64", "linux/arm64":
+	case "linux/x86_64", "linux/amd64":
 	default:
-		return errors.New("Docker must run Linux amd64 or arm64 containers; on Windows select Linux containers in Docker Desktop")
+		return errors.New("installation requires a Linux amd64 Docker engine; arm64 installations are unsupported")
 	}
 	version, err := i.docker(ctx, "", "compose", "version", "--short")
 	if err != nil {

@@ -14,7 +14,7 @@ pnpm --dir packages/claude-sdk-adapter test
 make check-claude-sdk
 ```
 
-The package test compiles TypeScript before running its tests. The Make target also builds and checks the relocatable Runtime artifact. Changes to native execution require real-provider acceptance through Core and Runtime, including continuation and cancellation, followed by the repository's required `make check`. Use [the deployment guide](../../services/core/deploy/claude/README.md) for the qualified environment and Runtime build.
+The package test compiles TypeScript before running its tests. The Make target also builds and checks the relocatable Runtime artifact. Changes to native execution require real-provider acceptance through Core and Runtime, including continuation and cancellation, followed by the repository's required `make check`. Use [Harness qualification](../../contracts/agents-api/harness-onboarding.md#qualify-the-view) for the qualified environment and Runtime build.
 
 ## Bridge and native lifecycle
 

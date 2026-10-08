@@ -130,7 +130,7 @@ function ResourceList({
                   : row.environment === "none"
                     ? "纯文本环境"
                     : row.environment === "self_hosted"
-                      ? `用户机器 · ${row.platform === "macos" ? "macOS" : row.platform === "windows" ? "Windows" : "Linux"}`
+                      ? "用户机器 · Linux amd64"
                       : "Core 托管沙箱"}
               </p>
             </article>
@@ -257,9 +257,7 @@ function ResourceEditor({
                       }
                     >
                       <SelectOption value="">选择平台</SelectOption>
-                      <SelectOption value="linux">Linux</SelectOption>
-                      <SelectOption value="macos">macOS</SelectOption>
-                      <SelectOption value="windows">Windows</SelectOption>
+                      <SelectOption value="linux">Linux amd64</SelectOption>
                     </Select>
                   </Field>
                   <Field label="工作目录" id="runtime-workspace">
@@ -273,11 +271,7 @@ function ResourceEditor({
                           workspace_directory: e.target.value,
                         })
                       }
-                      placeholder={
-                        form.platform === "windows"
-                          ? "C:\\Users\\you\\project"
-                          : "/home/you/project"
-                      }
+                      placeholder="/home/you/project"
                     />
                   </Field>
                   <Field label="本地能力目录（选填）" id="runtime-capabilities">
@@ -299,8 +293,7 @@ function ResourceEditor({
                     机器访问权限
                     <Help>
                       daemon
-                      以启动用户的权限执行，可访问该用户有权访问的文件和网络。工作目录必须已存在。Windows
-                      当前支持 Codex 和 Claude Code。
+                      以启动用户的权限执行，可访问该用户有权访问的文件和网络。工作目录必须已存在。
                     </Help>
                   </div>
                 </>

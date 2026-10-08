@@ -10,9 +10,9 @@ The Session's Harness runs on the deployment's agent host and reads files and ru
 
 ## Platforms
 
-Self-hosted machines run Linux amd64. On macOS and Windows, `oac-daemon start` refuses to start.
+Self-hosted installations support Linux amd64 only. On other platforms, including macOS, Windows and Linux arm64, `oac-daemon install` and `oac-daemon start` return `UnsupportedPlatformError`; installation refuses before any credential claim.
 
-The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
+The installer contains the `oac-daemon` launcher, `oac-sandbox-io` and their version and platform metadata. Harnesses and their dependencies are packaged on the agent host; the self-hosted machine does not install them.
 
 The machine needs:
 
@@ -21,7 +21,7 @@ The machine needs:
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.
 
-No administrator privileges or Docker are needed. The download command also uses `curl`, `tar`, `gzip`, a SHA-256 tool and `flock`. The Runtime home must allow executable files to run. On a `noexec` mount, choose another absolute directory with `OAC_RUNTIME_HOME` before running the command.
+Docker is not required. The installer creates the Session workspace, `/environment/{workspace,initialization,packages}` and `/home/runtime` and verifies that its account can write them. If that account cannot create the required directories under `/environment` and `/home`, an administrator must prepare those directories with suitable ownership before installation; the installer does not elevate privileges. The download command also uses `curl`, `tar`, `gzip`, a SHA-256 tool and `flock`. The Runtime home must allow executable files to run. On a `noexec` mount, choose another absolute directory with `OAC_RUNTIME_HOME` before running the command.
 
 ## Connect a machine
 
@@ -50,7 +50,7 @@ No administrator privileges or Docker are needed. The download command also uses
    print(installation["commands"]["posix"])
    ```
 
-2. Run the command on the target machine with the account that should run the tools. It downloads the installer matched to this Core, verifies its checksum, asks which Harnesses to install and where, installs them, creates the workspace if needed, starts the daemon and checks its connection.
+2. Run the command on the target machine with the account that should run the tools. It downloads the installer matched to this Core, verifies its checksum, asks for the installation directory, installs the launcher and Sandbox I/O service, prepares the required directories, starts the launcher and checks its connection.
 3. Send a Turn. A connected machine proves only authentication; the first Turn checks the Harness and the model.
 
 In Web, open the Session and copy the command under **Connect a host**.
@@ -61,7 +61,7 @@ The installer reports three results:
 
 | Result | Meaning |
 | --- | --- |
-| **Installation** | The selected Harnesses passed their readiness checks |
+| **Installation** | The launcher and Sandbox I/O service are installed and their required directories are writable |
 | **Host connection** | Core confirmed that the machine serves this Environment over the [sandbox Link](../sandbox-link-protocol.md) |
 | **Model configuration** | Not checked; the first Turn uses the Session's model provider |
 
@@ -76,10 +76,7 @@ Append these to the command:
 | Option | Effect |
 | --- | --- |
 | `--non-interactive` | Never prompt; missing input fails |
-| `--harness codex,claude,minimax` | Harnesses to install, comma-separated. Must include the Session's Harness |
 | `--install-dir ABS` | Installation directory. Default: `environments/<environment-id>` under `~/.oac`, or under `OAC_RUNTIME_HOME` when set |
-| `--capability-directory ABS` | Where [capability snapshots](#local-capability-directories) are stored. Default: `capabilities` in the installation directory |
-| `--tool-env-file ABS` | A JSON file of string variables for tools and MCP servers; see [explicit local tool environment](../../contracts/agents-api/environments.md#explicit-local-tool-environment) |
 
 The workspace is fixed when the Session is created. For a different workspace, create another Session.
 
@@ -95,7 +92,7 @@ environment = {
 }
 ```
 
-Paths are absolute; the daemon checks them, not Core. Fill these directories before the daemon connects. They are ordinary paths visible to the daemon; naming one does not mount it or create a sandbox.
+Paths are absolute. Before the machine connects, fill these directories on the machine. The Environment owner on the agent host validates and reads them through the sandbox Link; naming a directory does not mount it or create a sandbox.
 
 Use `x_agents_core.environment` for the same Project-owned Skills, Plugin archives, files, packages, setup commands or Template used by a managed Session:
 
@@ -112,7 +109,7 @@ session = client.beta.agents.sessions.create(
 
 The same extension works with `environment={"type": "openai_hosted"}`. Do not repeat a field in both `environment` and the extension. Setup runs with the daemon's account permissions.
 
-Before the first Turn the daemon copies these sources into a snapshot. Reconnecting reuses the snapshot even after you edit the sources; a new Session takes a new snapshot. The [preparation contract](../../contracts/agents-api/environments.md#runtime-capability-preparation) lists fields, merge rules, snapshot behavior and failures.
+Before the first Turn the Environment owner prepares a capability snapshot through the sandbox Link. Reconnecting reuses the snapshot even after you edit the sources; a new Session takes a new snapshot. The [preparation contract](../../contracts/agents-api/environments.md#runtime-capability-preparation) lists fields, merge rules, snapshot behavior and failures.
 
 ## Operate the installation
 
@@ -121,15 +118,12 @@ The installation's `bin/oac-daemon` finds its own installation. Use it for:
 | Command | Effect |
 | --- | --- |
 | `oac-daemon start` | Enroll the machine and start the daemon in the background. The daemon runs the [Sandbox I/O service](../sandbox-bootstrap.md) and, when it exits, enrolls again and restarts it |
-| `oac-daemon status` | Show the local profile and process; not the connection |
 | `oac-daemon logs -n 100`, `oac-daemon logs -f` | Print or follow the daemon log |
 | `oac-daemon stop` | Stop the daemon |
 
 If you set `OAC_RUNTIME_HOME`, use the same value for every command. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
 
-To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed.
-
-Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it; install into a separate directory.
+Stopping the daemon, cancelling a Turn or deleting the Session does not remove the machine's workspace. Native Harness history belongs to the agent host. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it; install into a separate directory.
 
 ## Rotate or revoke
 
@@ -149,7 +143,7 @@ In an archived Project, credentials cannot be issued or rotated; revocation rema
 The same installer accepts an already extracted distribution and a credential file issued by an operator, without the install command:
 
 ```sh
-./oac-daemon install --non-interactive --harness codex \
+./oac-daemon install --non-interactive \
   --install-dir "$HOME/.oac/my-runtime" \
   --remote 'wss://core.example/api/v1/agent-daemon/ws' \
   --environment-id '11111111-2222-4333-8444-555555555555' \
@@ -158,4 +152,4 @@ The same installer accepts an already extracted distribution and a credential fi
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-Use the Session's `remote_url` and Environment ID. This mode needs an existing workspace and does not start the daemon until you run `start`.
+Use the Session's `remote_url`, Environment ID and workspace. `--workspace` prepares that directory during installation; the launcher does not persist a second workspace setting. This mode does not start the launcher until you run `start`.

@@ -19,7 +19,7 @@ export interface MCPProfile extends NamedResource {
 }
 export interface RuntimeProfile extends NamedResource {
   environment: "none" | "openai_hosted" | "self_hosted";
-  platform?: "linux" | "macos" | "windows";
+  platform?: "linux";
   workspace_directory?: string;
   capability_directories?: string[];
 }
@@ -38,7 +38,7 @@ export interface SessionRecord {
   created_at: number;
   core_session_id?: string;
   self_hosted?: {
-    platform: "linux" | "macos" | "windows";
+    platform: "linux";
     workspace_directory: string;
   };
 }

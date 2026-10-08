@@ -22,5 +22,4 @@ type NativeInstallationContext struct {
 	EnvironmentID   string `json:"environment_id"`
 	RemoteURL       string `json:"remote_url"`
 	Workspace       string `json:"workspace_directory"`
-	Harness         string `json:"harness"`
 }

@@ -11,18 +11,18 @@ for directory in "$runtime_root" "$output" "$native" "$companion"; do
 done
 test -f "$companion/provenance.json"
 test -f "$companion/native-patch.json"
+for file in launch.mjs bridge.mjs check.mjs tool-executor.mjs subagent-snapshot.mjs source.json; do
+  if ! cmp -s "$companion/$file" "$repo_root/packages/mcode-harness/$file"; then
+    printf 'MiniMax Code companion does not match the current source: %s\n' "$file" >&2
+    exit 1
+  fi
+done
 test "$(node "$native/cli.js" --version)" = 0.4.12
 mkdir -p "$runtime_root/cache/oac-runtime-builds"
 context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/mcode.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
 mkdir "$context/mcode-harness"
 cp -RL "$companion/." "$context/mcode-harness/"
-(
-  cd "$repo_root"
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
-)
-cp "$repo_root/services/core/deploy/mcode/Dockerfile" "$context/Dockerfile"
 mkdir -p "$output"
 cp -R "$context/." "$output/"
-printf 'MiniMax Code Runtime image context: %s\n' "$output"
+printf 'MiniMax Code Harness payload: %s\n' "$output"
