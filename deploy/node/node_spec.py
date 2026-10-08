@@ -158,14 +158,5 @@ def verify_provider(stored, configuration, runtime_image):
             or stored.get("generation") != configuration["generation"]
             or stored.get("core_url") != configuration["core_url"] + "/api/v1"):
         raise SpecificationError("Retained node configuration differs from Core; preserve its state")
-    if provider == "docker":
-        if stored.get("docker", {}).get("image") != runtime_image:
-            raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")
-    else:
-        micro = stored.get("microsandbox", {})
-        if any(key in micro for key in ("max_active", "max_retained", "idle_seconds", "retention_seconds")):
-            raise SpecificationError("Node capacity and lifecycle policy belong to Core; regenerate the stale provider file")
-        expected = dict(spec["resources"], image=spec["runtime"]["microsandbox_ref"],
-                        runtime_sha256=spec["runtime"]["runtime_sha256"], firmware_sha256=spec["runtime"]["firmware_sha256"])
-        if any(micro.get(key) != value for key, value in expected.items()):
-            raise SpecificationError("Retained microsandbox configuration differs from Core; preserve its state")
+    if provider == "docker" and stored.get("native", {}).get("image") != runtime_image:
+        raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")

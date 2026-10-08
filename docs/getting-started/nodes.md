@@ -123,9 +123,9 @@ Use manual registration when you manage the node's files and service yourself in
 1. Take `oac-node` from the same release as Core.
 2. Get an enrollment token: the token in a command from **Add node**, or `POST /core/v1/sandbox/enrollment-tokens` with the Core key. It is single-use and carries the node's approved capacity; the response's `expires_at` says when it expires. Save it in a `0600` file on the host.
 3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
-4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add one adapter object for the host:
-   - `docker`: `host` (an explicit Unix socket), `image` (the locally imported Runtime image of the approved release), `network`, `extra_hosts`, an absolute `seccomp_file` and `nested_sandbox`.
-   - `microsandbox`: absolute `helper_path`, `runtime_path` and `firmware_path` with their `runtime_sha256` and `firmware_sha256`, `image`, the sandbox `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib`, a `network` policy, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
+4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size, the Runtime image and artifact hashes from `specification`:
+   - Docker: the [Docker node configuration](../configuration.md#docker-node-configuration) fields, with `host` an explicit Unix socket, `image` the local ID of the imported Runtime image and `seccomp_file` absolute.
+   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, a `network` policy, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
 5. Register, then run the node under the host's service supervisor, with real absolute paths:
 
    ```sh

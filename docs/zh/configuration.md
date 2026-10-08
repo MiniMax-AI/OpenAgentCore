@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: d4c7fc0fddf79b32ee628cc641df148d873380ecf62c59bb6b6a323750d0a41b
+source_hash: e10fcef53a7baf4f77d914bbda7f4158fcf49fc07546596ea78222939d580a6c
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -122,11 +122,12 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ## Docker 节点配置 {#docker-node-configuration}
 
-节点安装程序会将 Docker 的提供商配置写入节点的配置文件。部署资源、Runtime 镜像和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
+节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源、Runtime 发行版本和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
 
 | 字段 | 安装程序设置的值 | 含义 |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | 显式 Docker Engine 套接字 |
+| `image` | 加载后 Runtime 镜像的本地 ID | 发行版本的 `image_id` 或 `image_manifest_digest`。主机的镜像存储决定由哪个 digest 指代已加载的镜像，因此该值属于节点本地；适配器只接受这两个值 |
 | `network` | `oac-node-<installation-id>` | Runtime 容器网络 |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | 所匹配发行版的 seccomp 配置文件 |
 | `nested_sandbox` | `true` | 启用 Docker 适配器的 init 进程和 proc-mask 配置 |
