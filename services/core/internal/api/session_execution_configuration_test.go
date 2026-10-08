@@ -40,7 +40,7 @@ func TestExecutionConfigurationSources(t *testing.T) {
 				t.Fatal(err)
 			}
 			p := sessionExecutionProjection(input, tc.saved, tc.inherited, tc.provider, "codex", json.RawMessage(`{"agent":{"model":"resolved"}}`))
-			if p.Model.Source != tc.modelSource || p.Harness.Source != tc.harnessSource || p.ModelProvider.Source != tc.providerSource || p.ModelProvider.Status != tc.status {
+			if string(p.Model.Source) != tc.modelSource || string(p.Harness.Source) != tc.harnessSource || string(p.ModelProvider.Source) != tc.providerSource || string(p.ModelProvider.Status) != tc.status {
 				t.Fatalf("wrong sources: %#v", p)
 			}
 			raw, _ := json.Marshal(p)

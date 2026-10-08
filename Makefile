@@ -43,7 +43,7 @@ openapi:
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
 	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --swag-roots "$$output/roots.go"; \
 	$(SWAG) init \
-	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,$$output" \
+	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,./internal/modelprovider,$$output" \
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \

@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -79,7 +80,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 		m.mu.Unlock()
 		return nil, errRuntimeTransition
 	}
-	if m.closed || m.config.Provider == nil || (id == "") != (m.config.Mode == "direct") {
+	if m.closed || m.config.Provider == nil || (id == "") != (m.config.Mode == string(sandbox.DeploymentDirect)) {
 		m.mu.Unlock()
 		return nil, ErrExecutionUnavailable
 	}

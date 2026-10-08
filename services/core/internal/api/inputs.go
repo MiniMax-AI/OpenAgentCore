@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -50,7 +51,7 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 			writeSessionsError(w, r, err)
 			return
 		}
-		if !h.auditSessionOperation(w, r, chi.URLParam(r, "session_id"), "send_events") {
+		if !h.auditSessionOperation(w, r, chi.URLParam(r, "session_id"), string(writeaudit.ActionSendEvents)) {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")

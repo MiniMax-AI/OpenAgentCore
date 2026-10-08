@@ -12,6 +12,22 @@ import (
 // resolution.
 var ErrInvalidRange = errors.New("invalid Core metrics range")
 
+type JobStatus string
+
+const (
+	JobOk      JobStatus = "ok"
+	JobFailing JobStatus = "failing"
+	JobStopped JobStatus = "stopped"
+	JobUnknown JobStatus = "unknown"
+)
+
+type ServiceStatus string
+
+const (
+	ServiceRunning  ServiceStatus = "running"
+	ServiceDegraded ServiceStatus = "degraded"
+)
+
 type Latency struct {
 	P50 *float64 `json:"p50" extensions:"x-nullable" binding:"required"`
 	P95 *float64 `json:"p95" extensions:"x-nullable" binding:"required"`
@@ -22,10 +38,10 @@ type Range struct {
 	ResolutionSeconds int64     `json:"resolution_seconds" binding:"required"`
 }
 type ServiceState struct {
-	Status         string     `json:"status" enums:"running,degraded" binding:"required"`
-	Revision       *string    `json:"revision" extensions:"x-nullable" binding:"required"`
-	StartedAt      *time.Time `json:"started_at" extensions:"x-nullable" binding:"required"`
-	ExecutionOwner *bool      `json:"execution_owner" extensions:"x-nullable" binding:"required"`
+	Status         ServiceStatus `json:"status" binding:"required"`
+	Revision       *string       `json:"revision" extensions:"x-nullable" binding:"required"`
+	StartedAt      *time.Time    `json:"started_at" extensions:"x-nullable" binding:"required"`
+	ExecutionOwner *bool         `json:"execution_owner" extensions:"x-nullable" binding:"required"`
 }
 type ExecutionBucket struct {
 	Start          time.Time `json:"start" binding:"required"`
@@ -64,7 +80,7 @@ type Database struct {
 }
 type Job struct {
 	ID        string     `json:"id" binding:"required"`
-	Status    string     `json:"status" enums:"ok,failing,stopped,unknown" binding:"required"`
+	Status    JobStatus  `json:"status" binding:"required"`
 	LastRunAt *time.Time `json:"last_run_at" extensions:"x-nullable" binding:"required"`
 	Processed *int64     `json:"processed" extensions:"x-nullable" binding:"required"`
 	Failed    *int64     `json:"failed" extensions:"x-nullable" binding:"required"`

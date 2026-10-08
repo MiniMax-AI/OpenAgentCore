@@ -132,9 +132,9 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		ExpectedGeneration *uint64 `json:"expected_generation"`
-		Clear              string  `json:"clear"`
-		DeadlineSeconds    *int32  `json:"deadline_seconds"`
+		ExpectedGeneration *uint64              `json:"expected_generation"`
+		Clear              deployment.ResetMode `json:"clear"`
+		DeadlineSeconds    *int32               `json:"deadline_seconds"`
 	}
 	if decodeInputObject(raw, &input, "expected_generation", "clear", "deadline_seconds") != nil || input.ExpectedGeneration == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "A current expected_generation is required.", "expected_generation")

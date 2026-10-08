@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -40,7 +39,7 @@ func WithFixtureModelProvider(input sessions.CreateSession) sessions.CreateSessi
 	if input.ModelProvider != nil || json.Unmarshal(input.Configuration, &configuration) != nil || !v1.ModelProviderRequired(configuration.Environment.Type) {
 		return input
 	}
-	input.ModelProvider, input.ModelProviderSource = FixtureModelProvider(input.Engine), v1.ModelProviderSourceSession
+	input.ModelProvider, input.ModelProviderSource = FixtureModelProvider(input.Engine), v1.ExecutionSourceSession
 	if input.ExecutionConfiguration != nil {
 		projection := *input.ExecutionConfiguration
 		projection.ModelProvider = v1.ExecutionProviderSelection{Source: "session", Status: "available", Configuration: input.ModelProvider.SafeView()}

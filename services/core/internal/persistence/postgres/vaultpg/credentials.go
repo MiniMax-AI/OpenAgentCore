@@ -5,16 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // CreateCredential admits the owning Vault in the insert itself, so a missing,
@@ -46,8 +45,8 @@ func (s *Store) CreateCredential(ctx context.Context, credential vaults.NewCrede
 		if created, err = credentialFromRow(row); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, credential.TenantID, "create", "credential", created.ID, created.VaultID,
-			writeaudit.Resource{Type: "credential", ID: created.ID, ParentID: created.VaultID})
+		return auditpg.RecordWriteAudit(ctx, q, credential.TenantID, writeaudit.ActionCreate, writeaudit.ResourceCredential, created.ID, created.VaultID,
+			writeaudit.Resource{Type: writeaudit.ResourceCredential, ID: created.ID, ParentID: created.VaultID})
 	})
 	if err != nil {
 		return vaults.Credential{}, err
@@ -180,7 +179,7 @@ func (s *Store) ReplaceStaticToken(ctx context.Context, replacement vaults.Stati
 		if err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, replacement.TenantID, "update", "credential", updated.ID, updated.VaultID)
+		return auditpg.RecordWriteAudit(ctx, q, replacement.TenantID, writeaudit.ActionUpdate, writeaudit.ResourceCredential, updated.ID, updated.VaultID)
 	})
 	if err != nil {
 		return vaults.Credential{}, err
@@ -198,7 +197,7 @@ func (s *Store) DeleteCredential(ctx context.Context, key vaults.CredentialKey) 
 			return err
 		}
 		deleted = uuid.UUID(id.Bytes).String()
-		return auditpg.RecordWriteAudit(ctx, q, key.TenantID, "delete", "credential", deleted, uuid.UUID(vault.Bytes).String())
+		return auditpg.RecordWriteAudit(ctx, q, key.TenantID, writeaudit.ActionDelete, writeaudit.ResourceCredential, deleted, uuid.UUID(vault.Bytes).String())
 	})
 	if err != nil {
 		return "", err

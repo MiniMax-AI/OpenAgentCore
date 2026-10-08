@@ -2,11 +2,12 @@ package providers
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/google/uuid"
-	"testing"
 )
 
 func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
@@ -22,7 +23,7 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			d, err := registry.Describe(tc.kind, installation)
-			if err != nil || d.Mode != tc.mode || d.BackendFingerprint != sandbox.BackendFingerprint(tc.kind, tc.namespace+":"+installation) {
+			if err != nil || string(d.Mode) != tc.mode || d.BackendFingerprint != sandbox.BackendFingerprint(tc.kind, tc.namespace+":"+installation) {
 				t.Fatalf("wrong mode or namespace: %+v %v", d, err)
 			}
 			a, err := registry.Lookup(tc.kind)

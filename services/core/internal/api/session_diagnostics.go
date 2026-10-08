@@ -10,6 +10,14 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type DiagnosticSource string
+
+const (
+	DiagnosticTurn             DiagnosticSource = "turn"
+	DiagnosticEnvironment      DiagnosticSource = "environment"
+	DiagnosticEnvironmentInput DiagnosticSource = "environment_input"
+)
+
 type DiagnosticFailure struct {
 	Code     string           `json:"code" binding:"required" enums:"harness_error,model_provider_required,runtime_unavailable,runtime_disconnected,runtime_preparation_failed,execution_interrupted,delivery_unconfirmed,input_rejected,executor_protocol_error,core_storage_failed,internal_error,environment_connection_timeout,environment_unavailable,environment_provisioning_failed,authentication_error,rate_limit_exceeded,usage_limit_exceeded,server_overloaded,server_error,invalid_request,resource_not_found,request_timeout,context_length_exceeded,cyber_policy,connection_failed"`
 	Params   CoreErrorDetails `json:"params" swaggertype:"object" binding:"required"`
@@ -18,8 +26,8 @@ type DiagnosticFailure struct {
 
 type SessionDiagnosticFailure struct {
 	DiagnosticFailure
-	Source string `json:"source" binding:"required" enums:"turn,environment,environment_input"`
-	TurnID string `json:"turn_id,omitempty"`
+	Source DiagnosticSource `json:"source" binding:"required"`
+	TurnID string           `json:"turn_id,omitempty"`
 }
 
 type SessionDiagnostics struct {
@@ -82,12 +90,12 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 		failure := SessionDiagnosticFailure{DiagnosticFailure: DiagnosticFailure{Code: "internal_error", Params: CoreErrorDetails{}}}
 		switch {
 		case session.EnvironmentFailure != nil:
-			failure.Source = "environment"
+			failure.Source = DiagnosticEnvironment
 			failure.Code = "environment_provisioning_failed"
 			failure.FailedAt = diagnosticTime(session.EnvironmentFailure.FailedAt)
 			failure.Params = provisioningFailureParams(session.EnvironmentFailure.Detail)
 		case session.EnvironmentInputActivity != nil:
-			failure.Source = "environment_input"
+			failure.Source = DiagnosticEnvironmentInput
 			failure.FailedAt = diagnosticTime(session.EnvironmentInputActivity.LastActiveAt)
 			switch session.EnvironmentInputActivity.Failure {
 			case "":
@@ -100,7 +108,7 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 				failure.Code = "model_provider_required"
 			}
 		case session.LastTurn != nil:
-			failure.Source, failure.TurnID = "turn", session.LastTurn.ID
+			failure.Source, failure.TurnID = DiagnosticTurn, session.LastTurn.ID
 			failure.DiagnosticFailure = *turnDiagnosticFailure(*session.LastTurn)
 		}
 		response.Failure = &failure

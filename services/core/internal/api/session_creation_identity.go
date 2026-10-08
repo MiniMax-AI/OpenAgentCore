@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 // sessionCreationRequest records caller intent before mutable sources resolve:
@@ -55,7 +55,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		return true
 	}
 	if stream {
-		if !h.auditSessionOperation(w, r, result.Session.ID, "create") {
+		if !h.auditSessionOperation(w, r, result.Session.ID, string(writeaudit.ActionCreate)) {
 			return true
 		}
 		// Recorded-intent lookup finds an existing creation, which sends no events.
@@ -64,7 +64,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), result.Session.ID)
 		if err != nil {
 			writeSessionsError(w, r, err)
-		} else if h.auditSessionOperation(w, r, session.ID, "create") {
+		} else if h.auditSessionOperation(w, r, session.ID, string(writeaudit.ActionCreate)) {
 			h.respondSessionStatus(w, r, session, http.StatusCreated)
 		}
 	}

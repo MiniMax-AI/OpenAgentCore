@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -22,6 +20,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
 )
 
 // CreationStorage persists Session creation and finds an earlier one.
@@ -204,7 +203,7 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 			return nil, err
 		}
 	}
-	created := []writeaudit.Resource{{Type: "session", ID: session.ID}}
+	created := []writeaudit.Resource{{Type: writeaudit.ResourceSession, ID: session.ID}}
 	creates, err := createsEnvironment(session.Configuration)
 	if err != nil {
 		return nil, err
@@ -214,7 +213,7 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 		if environment, err = tx.CreateEnvironment(ctx); err != nil {
 			return nil, err
 		}
-		created = append(created, writeaudit.Resource{Type: "environment", ID: environment, ParentID: session.ID})
+		created = append(created, writeaudit.Resource{Type: writeaudit.ResourceEnvironment, ID: environment, ParentID: session.ID})
 	}
 	if hosted {
 		nodes, err := tx.LoadNodes(ctx)
@@ -299,7 +298,7 @@ func freezeSkills(ctx context.Context, tx CreationTx, setup environmentconfig.Se
 // and its provider bundle and completes it as stored. It also returns the
 // deployment provider revision to record, uuid.Nil for none. The projection is
 // creation metadata, never retry identity.
-func freezeProjection(session Session, frozen v1.SessionExecutionConfiguration, provider *v1.ModelProviderInput, providerSource string, revision uuid.UUID) (v1.SessionExecutionConfiguration, uuid.UUID, error) {
+func freezeProjection(session Session, frozen v1.SessionExecutionConfiguration, provider *v1.ModelProviderInput, providerSource v1.ExecutionSource, revision uuid.UUID) (v1.SessionExecutionConfiguration, uuid.UUID, error) {
 	model, err := ExecutionModel(session.Configuration)
 	if err != nil {
 		return v1.SessionExecutionConfiguration{}, uuid.Nil, err
@@ -310,24 +309,24 @@ func freezeProjection(session Session, frozen v1.SessionExecutionConfiguration, 
 	}
 	recorded := uuid.Nil
 	switch frozen.ModelProvider.Source {
-	case "deployment":
+	case v1.ExecutionSourceDeployment:
 		if provider == nil {
 			return v1.SessionExecutionConfiguration{}, uuid.Nil, fmt.Errorf("%w: execution projection has no model provider", ErrInvalidInput)
 		}
 		// The deployment default is readable with the same Core key, so the
 		// safe view is recorded from the frozen bundle itself. Native options
 		// are never part of it.
-		frozen.ModelProvider.Status = "available"
+		frozen.ModelProvider.Status = v1.ExecutionProviderAvailable
 		frozen.ModelProvider.Configuration = provider.SafeView()
-		if providerSource == v1.ModelProviderSourceDeployment {
+		if providerSource == v1.ExecutionSourceDeployment {
 			recorded = revision
 		}
-	case "session", "agent":
-		if provider == nil || frozen.ModelProvider.Status != "available" || frozen.ModelProvider.Configuration == nil || *frozen.ModelProvider.Configuration != *provider.SafeView() {
+	case v1.ExecutionSourceSession, v1.ExecutionSourceAgent:
+		if provider == nil || frozen.ModelProvider.Status != v1.ExecutionProviderAvailable || frozen.ModelProvider.Configuration == nil || *frozen.ModelProvider.Configuration != *provider.SafeView() {
 			return v1.SessionExecutionConfiguration{}, uuid.Nil, fmt.Errorf("%w: execution projection does not match model provider", ErrInvalidInput)
 		}
-	case "unknown":
-		frozen.ModelProvider.Status = "unavailable"
+	case v1.ExecutionSourceUnknown:
+		frozen.ModelProvider.Status = v1.ExecutionProviderUnavailable
 		frozen.ModelProvider.Configuration = nil
 	default:
 		return v1.SessionExecutionConfiguration{}, uuid.Nil, fmt.Errorf("%w: invalid execution projection source", ErrInvalidInput)
@@ -340,9 +339,9 @@ func sameExecutionValue(a, b *string) bool {
 	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
-func validExecutionSource(source string) bool {
+func validExecutionSource(source v1.ExecutionSource) bool {
 	switch source {
-	case "session", "agent", "deployment", "unknown":
+	case v1.ExecutionSourceSession, v1.ExecutionSourceAgent, v1.ExecutionSourceDeployment, v1.ExecutionSourceUnknown:
 		return true
 	}
 	return false
@@ -411,7 +410,7 @@ func prepareCreation(input CreateSession, fingerprint func(string) (string, erro
 	// is set, replaced or removed.
 	var fingerprinted *v1.ModelProviderInput
 	hashed := configuration
-	if input.ModelProviderSource == v1.ModelProviderSourceDeployment {
+	if input.ModelProviderSource == v1.ExecutionSourceDeployment {
 		hashed = requested
 	} else if fingerprinted, err = fingerprintedProvider(input.ModelProvider, fingerprint); err != nil {
 		return NewSession{}, nil, nil, err

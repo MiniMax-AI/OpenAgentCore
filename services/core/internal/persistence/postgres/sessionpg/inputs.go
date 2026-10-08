@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -184,7 +184,7 @@ func (t *SessionTx) FailInputReservation(ctx context.Context, reservation, code 
 }
 
 func (t *SessionTx) RecordInputAudit(ctx context.Context) error {
-	return auditpg.RecordWriteAudit(ctx, t.q, optionalID(t.tenant), "send_events", "session", optionalID(t.session), "")
+	return auditpg.RecordWriteAudit(ctx, t.q, optionalID(t.tenant), writeaudit.ActionSendEvents, writeaudit.ResourceSession, optionalID(t.session), "")
 }
 
 func (s *Store) ListTurnInputs(ctx context.Context, tenant, session, turn string, after int64, limit int) ([]sessions.TurnInput, error) {
