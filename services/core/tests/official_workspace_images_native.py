@@ -81,17 +81,19 @@ def verify_workspace_images(client, foreign, http, agent_options, session_option
         return http.post(root + "/sessions/" + sid + "/events", headers=hdr, json={"events": events})
 
     def verify_file(path, expected, turn):
+        assert path.startswith(workspace + "/")
+        public_path = "/workspace" + path[len(workspace):]
         answers = [i for i in items() if i["type"] == "message" and i.get("role") == "assistant"]
         answer = " ".join(p["text"] for p in answers[-1]["content"] if p["type"] == "output_text").lower()
         positions = [answer.find(color) for color in expected]
         assert all(p >= 0 for p in positions) and positions == sorted(positions), answer
         artifacts = list(sessions.artifacts.list(sid, limit=100))
-        matches = [a for a in artifacts if a.path == path and a.turn_id == turn]
+        matches = [a for a in artifacts if a.path == public_path and a.turn_id == turn]
         assert len(matches) == 1, [a.to_dict() for a in artifacts]
         artifact = matches[0]
         with sessions.artifacts.with_streaming_response.content(artifact.id, session_id=sid) as response:
             assert response.read() == ",".join(expected).encode()
-        assert any(f.path == path for f in client.beta.agents.environments.files.list(eid, path=f"{workspace}/outputs"))
+        assert any(f.path == public_path for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
         for suffix in ("", "/content"):
             assert http.get(root + "/sessions/" + sid + "/artifacts/" + artifact.id + suffix, headers=foreign_headers).status_code == 404
 
@@ -221,7 +223,7 @@ def verify_workspace_images(client, foreign, http, agent_options, session_option
             assert response.status_code in {400, 404, 409}
             assert sessions.items.list(other.id).data == []
             until(lambda: client.beta.agents.environments.retrieve(other.environment.id).status == "connected")
-            response = http.get(root + "/environments/" + other.environment.id + "/files", headers=headers, params={"path": f"{workspace}/outputs"})
+            response = http.get(root + "/environments/" + other.environment.id + "/files", headers=headers, params={"path": "/workspace/outputs"})
             assert response.status_code in {200, 404}
             if response.status_code == 200:
                 assert response.json()["data"] == []

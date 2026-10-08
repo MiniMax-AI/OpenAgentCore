@@ -8,10 +8,13 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import httpx2
 from openai import BadRequestError, OpenAI
+
+from official_environment_files_native import generate_files
 
 import qualify_public_native as qualification
 
@@ -60,6 +63,23 @@ class QualificationTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "Credential"):
             self.run_suite(suite)
         self.assertFalse(self.evidence.exists())
+
+    def test_custom_workspace_uses_physical_tools_and_logical_public_file_paths(self):
+        client = MagicMock()
+        session = SimpleNamespace(status="idle", required_actions=[], environment=SimpleNamespace(
+            type="self_hosted", id="environment", workspace_directory="/custom/work"))
+        client.beta.agents.sessions.retrieve.return_value = session
+        client.beta.agents.environments.retrieve.return_value = SimpleNamespace(status="connected")
+        client.beta.agents.sessions.turns.list.side_effect = [[], [SimpleNamespace(id="turn", status="completed")]]
+        fixture = generate_files(client, "session", "custom")
+        prompt = client.beta.agents.sessions.events.create.call_args.kwargs["events"][0]["input"][0]["content"][0]["text"]
+        self.assertIn("/custom/work/files-list-custom-", prompt)
+        self.assertNotIn("/workspace/", prompt)
+        self.assertTrue(fixture["directory"].startswith("/workspace/files-list-custom-"))
+        self.assertTrue(fixture["sibling_directory"].startswith("/workspace/files-list-custom-"))
+        self.assertTrue(all(path.startswith(fixture["directory"] + "/") for path in fixture["expected"]))
+        self.assertTrue(all(path.startswith(fixture["sibling_directory"] + "/") for path in fixture["sibling_expected"]))
+        self.assertNotIn("/custom/work", json.dumps(fixture))
 
     def test_pinned_sdk_serializes_explicit_session_selection(self):
         bodies = []

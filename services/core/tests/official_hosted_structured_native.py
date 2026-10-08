@@ -95,11 +95,13 @@ def verify_hosted_structured(client, foreign, http, agent_options, session_optio
             assert events[added]["item"]["status"] == "in_progress" and events[added]["item"]["content"] == []
             deltas = [e["delta"] for e in events if e["type"] == "agent.session.turn.output_text.delta" and e["item_id"] == answer["id"]]
             assert deltas and "".join(deltas) == raw, deltas
-        artifacts = [a for a in sessions.artifacts.list(sid, limit=100) if a.path == expected["path"] and a.turn_id == turn.id]
+        assert expected["path"].startswith(workspace + "/")
+        public_path = "/workspace" + expected["path"][len(workspace):]
+        artifacts = [a for a in sessions.artifacts.list(sid, limit=100) if a.path == public_path and a.turn_id == turn.id]
         assert len(artifacts) == 1
         with sessions.artifacts.with_streaming_response.content(artifacts[0].id, session_id=sid) as response:
             assert response.read() == expected["memory"].encode()
-        assert any(f.path == expected["path"] for f in client.beta.agents.environments.files.list(eid, path=f"{workspace}/outputs"))
+        assert any(f.path == public_path for f in client.beta.agents.environments.files.list(eid, path="/workspace/outputs"))
         assert http.get(root + "/sessions/" + sid + "/artifacts/" + artifacts[0].id + "/content", headers=other_headers).status_code == 404
         proof.setdefault("answers", []).append(answer)
 

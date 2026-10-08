@@ -48,11 +48,13 @@ def generate_files(client, session_id, label):
     workspace = PurePosixPath(session.environment.workspace_directory)
     assert workspace.is_absolute(), "Absolute workspace required"
     assert client.beta.agents.environments.retrieve(environment_id).status == "connected", "Connect the Environment first"
-    directory = str(workspace / ("files-list-" + label + "-" + uuid.uuid4().hex))
+    name = "files-list-" + label + "-" + uuid.uuid4().hex
+    directory = str(workspace / name)
+    public_directory = "/workspace/" + name
     contents = {"A.txt": "A\n", "a-b.txt": "three\n", "a.txt": "fourteen-bytes\n", "z.txt": "last\n"}
-    expected = {directory + "/" + name: len(content.encode()) for name, content in contents.items()}
+    expected = {public_directory + "/" + name: len(content.encode()) for name, content in contents.items()}
     sibling = directory + "-sibling"
-    sibling_expected = {sibling + "/one.txt": 3, sibling + "/two.txt": 3}
+    sibling_expected = {public_directory + "-sibling/one.txt": 3, public_directory + "-sibling/two.txt": 3}
     command = "mkdir -- " + shlex.quote(directory) + " " + shlex.quote(sibling)
     for name, content in contents.items():
         command += " && printf %s " + shlex.quote(content) + " > " + shlex.quote(directory + "/" + name)
@@ -70,8 +72,8 @@ def generate_files(client, session_id, label):
             assert turns[0].status not in ("failed", "cancelled"), "File generation Turn failed"
             if turns[0].status == "completed" and sessions.retrieve(session_id).status == "idle":
                 return {"session_id": session_id, "environment_id": environment_id, "turn_id": turns[0].id,
-                        "directory": directory, "expected": expected,
-                        "sibling_directory": sibling, "sibling_expected": sibling_expected}
+                        "directory": public_directory, "expected": expected,
+                        "sibling_directory": public_directory + "-sibling", "sibling_expected": sibling_expected}
         time.sleep(0.2)
     raise AssertionError("File generation Turn did not complete")
 

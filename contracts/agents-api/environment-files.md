@@ -30,7 +30,6 @@ The response is `{"object": "page", "data": [...], "next": …, "has_more": …}
 - A `path` that does not exist, names a regular file, or passes through a symbolic link returns an empty page. Links are never followed.
 - Each page reads the directory again; there is no snapshot. If the directory's regular files (their names or sizes) or the request's parameters changed since the token was issued, the token is rejected. Unchanged names and sizes do not prove unchanged contents.
 - A directory with more than 1,024 entries of any kind returns 503 and no partial page. Permission errors, a missing workspace root and transport failures also return 503.
-- When the daemon has no local workspace binding, the Claude Code adapter answers the read instead: a missing path returns 404, and a regular file or symbolic link returns 503.
 
 Query errors, all with type and code `invalid_request_error` and a null `param` unless noted:
 
