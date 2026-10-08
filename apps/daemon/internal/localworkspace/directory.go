@@ -8,7 +8,7 @@ import (
 )
 
 func (b *Binding) ListWorkspaceDirectory(ctx context.Context, path string, limit int) (dispatch.WorkspaceDirectoryResult, error) {
-	if limit < 1 || limit > proto.WorkspaceDirectoryMaxEntries || path != "" && !ValidPath(path) {
+	if limit < 1 || limit > proto.WorkspaceDirectoryMaxEntries || path != "" && !proto.ValidWorkspacePath(path) {
 		return dispatch.WorkspaceDirectoryResult{}, dispatch.ErrWorkspaceReadInvalid
 	}
 	return b.listNativeDirectory(ctx, path, limit)

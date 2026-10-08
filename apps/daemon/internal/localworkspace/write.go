@@ -14,7 +14,7 @@ const WriteMaxBytes = proto.WorkspaceWriteMaxBytes
 // WriteWorkspaceFile starts only after the caller supplies the complete bounded
 // body. Core must persist mutation ownership before invoking this operation.
 func (b *Binding) WriteWorkspaceFile(ctx context.Context, path string, data []byte) (result dispatch.WorkspaceWriteResult, err error) {
-	if len(data) > WriteMaxBytes || !ValidPath(path) {
+	if len(data) > WriteMaxBytes || !proto.ValidWorkspacePath(path) {
 		return result, dispatch.ErrWorkspaceWriteInvalid
 	}
 	if ctx.Err() != nil {

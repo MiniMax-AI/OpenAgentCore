@@ -12,7 +12,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -116,7 +115,7 @@ func writeNativeConfig(req agent.PrepareRequest, data *os.Root, dataDir string, 
 			}
 			names := make([]string, 0, len(tools.skills))
 			for _, skill := range tools.skills {
-				link, target := filepath.Join("skills", skill.Metadata.Name), localworkspace.SkillPath(skill)
+				link, target := filepath.Join("skills", skill.Metadata.Name), skill.Root()
 				actual, err := data.Readlink(link)
 				switch {
 				case errors.Is(err, fs.ErrNotExist):

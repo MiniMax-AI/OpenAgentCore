@@ -42,7 +42,7 @@ func Load() (*Binding, error) {
 		return nil, nil
 	}
 	if capabilityDirectory == "" {
-		capabilityDirectory = CapabilityDirectory
+		capabilityDirectory = agentcapabilities.Directory
 	}
 	b, err := NewWithCapabilityDirectory(values[0], values[1], values[2], capabilityDirectory)
 	if err != nil {

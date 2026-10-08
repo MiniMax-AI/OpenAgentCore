@@ -37,10 +37,6 @@ func checkEnvironmentTarget(remote, environment string) error {
 	return nil
 }
 
-func readEnvironmentPrivateFile(path string) ([]byte, error) {
-	return runtimefs.ReadPrivatePath(path, 16*1024)
-}
-
 func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credentialFile string) error {
 	root, err := paths.Root()
 	if err != nil || !filepath.IsAbs(root) {
@@ -74,7 +70,7 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	}
 	capabilityDirectory := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
 	if capabilityDirectory == "" {
-		capabilityDirectory = localworkspace.CapabilityDirectory
+		capabilityDirectory = agentcapabilities.Directory
 	}
 	if _, err := localworkspace.NewWithCapabilityDirectory(bound.EnvironmentID, bound.SessionID, workspace, capabilityDirectory); err != nil {
 		return errors.New("connect: local Runtime layout unavailable")

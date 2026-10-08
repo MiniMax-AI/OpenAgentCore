@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"github.com/google/uuid"
 )
 
@@ -69,6 +70,10 @@ func executorCredential(path, environment string) (string, string, error) {
 		return "", "", errors.New("connect: invalid executor credential or Environment restriction")
 	}
 	return key.KeyID, key.Token, nil
+}
+
+func readEnvironmentPrivateFile(path string) ([]byte, error) {
+	return runtimefs.ReadPrivatePath(path, 16*1024)
 }
 
 func decodeEnvironmentJSON(raw []byte, value any) error {

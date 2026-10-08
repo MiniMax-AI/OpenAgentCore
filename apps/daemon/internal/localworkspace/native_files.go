@@ -16,20 +16,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// ValidPath reports whether p is a workspace path as the API addresses it:
-// slash-separated plain names below the workspace, without a backslash, NUL,
-// CR or LF.
-func ValidPath(p string) bool {
-	return p != "." && len(p) <= 4096 && fs.ValidPath(p) && !strings.ContainsAny(p, "\\\x00\r\n")
-}
-
 // Logical API paths stay slash-separated on every host. os.Root anchors API
 // file operations to the selected workspace; it does not constrain native tools.
 func nativeAPIPath(path string) (string, error) {
 	if path == "" {
 		return ".", nil
 	}
-	if !ValidPath(path) {
+	if !proto.ValidWorkspacePath(path) {
 		return "", fs.ErrInvalid
 	}
 	return filepath.Localize(path)
