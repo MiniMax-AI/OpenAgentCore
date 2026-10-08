@@ -174,6 +174,9 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 		}
 		e, err := dm.host.openExecutor(ctx, req)
 		if s, ok := e.(*session); ok {
+			if req.PreparationDeadline.IsZero() || s.plan.request.PreparationDeadline != req.PreparationDeadline {
+				t.Error("agent host changed the dispatch preparation deadline")
+			}
 			dm.mu.Lock()
 			dm.opened[req.Assignment.SessionID] = s
 			dm.mu.Unlock()

@@ -125,7 +125,9 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if(canUseTool) options.canUseTool=(...args)=>turns.track(()=>canUseTool(...args));
     }
     if (request.type === "prepare" || request.type === "executor_prepare") {
-      warm = await startup({ options });
+      const initializeTimeoutMs = request.type === "executor_prepare" ? request.preparation_deadline - Date.now() : undefined;
+      if (initializeTimeoutMs !== undefined && (!Number.isSafeInteger(initializeTimeoutMs) || initializeTimeoutMs <= 0)) throw new Error("preparation expired");
+      warm = await startup({ options, initializeTimeoutMs });
       stream = warm.query(turns ?? inputs);
       const initialized = await stream.initializationResult();
       const hooksRequested = Object.values(options.hooks ?? {}).some(matchers => matchers?.some(matcher => matcher.hooks.length > 0));
@@ -147,6 +149,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           if(value.type==="steer") for(const event of inputs.submit(value)) await emit(event);
           else functions.submit(JSON.stringify(value));
         });
+        if (request.type !== "executor_prepare" || Date.now() >= request.preparation_deadline) throw new Error("preparation expired");
         await ownerEmit({type:"executor_ready",protocol:3});
       } else await emit({ type: "prepared" });
     } else if (profile) {

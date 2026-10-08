@@ -347,3 +347,68 @@ func (*reusableTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload,
 func (*reusableTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
 	return agent.ErrUnknownFunctionCall
 }
+
+func TestExecutorPreparationDeadlineIsPreservedWithoutOwningWarmLifetime(t *testing.T) {
+	environment := newTestOwner(preparationEnvironmentID, preparationSessionID)
+	beforeEnvironment, afterEnvironment := make(chan agent.PrepareRequest, 1), make(chan agent.PrepareRequest, 1)
+	proceed := make(chan struct{})
+	environment.prepare = func(req agent.PrepareRequest) (agent.PrepareRequest, error) {
+		beforeEnvironment <- req
+		<-proceed
+		req.WorkspaceRoot = "/workspace"
+		return req, nil
+	}
+	owner := &reusableExecutor{starts: make(chan *reusableTurn, 2)}
+	ownerContext := make(chan context.Context, 1)
+	reg := agent.NewRegistry()
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}, prototest.ModelConfiguration())
+	reg.RegisterExecutor("prepared", func(ctx context.Context, req agent.PrepareRequest) (agent.Executor, error) {
+		ownerContext <- ctx
+		afterEnvironment <- req
+		return owner, nil
+	})
+	sender := &recSender{}
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: environment.Resolve, PreparationTimeout: time.Second, IdleTimeout: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := r.Shutdown(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	assign(t, r, preparationSessionID, preparationEnvironmentID)
+	req := preparationRequest()
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "deadline", req)); err != nil {
+		t.Fatal(err)
+	}
+	admitted := waitPreparationStatus(t, sender, "deadline", "preparing", "")
+	before := <-beforeEnvironment
+	close(proceed)
+	after := <-afterEnvironment
+	ctx := <-ownerContext
+	if before.PreparationDeadline.IsZero() || before.PreparationDeadline != after.PreparationDeadline || before.PreparationDeadline.UnixMilli() != admitted.ExpiresAt || after.WorkspaceRoot != "/workspace" || after.Prepared.Model == "" {
+		t.Fatalf("preparation handoff changed: before=%v after=%v admission=%d", before.PreparationDeadline, after.PreparationDeadline, admitted.ExpiresAt)
+	}
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		t.Fatal("preparation deadline attached to Executor context")
+	}
+	ready := waitPreparationStatus(t, sender, "deadline", "ready", "")
+	startExecutorTurn(t, r, sender, "deadline", "first", ready)
+	first := <-owner.starts
+	<-time.After(time.Until(before.PreparationDeadline))
+	if ctx.Err() != nil || owner.closes.Load() != 0 {
+		t.Fatal("adopted Executor ended at preparation deadline")
+	}
+	first.finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "first settled")
+	req.Configuration.AgentSessionID = "native-session"
+	next := executorAdmission(t, r, sender, "next", req)
+	if !next.Reused || next.ExecutorID != ready.ExecutorID {
+		t.Fatal("warm owner not reused after deadline")
+	}
+	startExecutorTurn(t, r, sender, "next", "second", next)
+	(<-owner.starts).finish()
+}
