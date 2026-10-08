@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/mcode-runtime}"
 companion="${MCODE_HARNESS_BUILD_DIR:?Set MCODE_HARNESS_BUILD_DIR to the built companion}"
@@ -10,6 +11,12 @@ for directory in "$runtime_root" "$output" "$native" "$companion"; do
 done
 test -f "$companion/provenance.json"
 test -f "$companion/native-patch.json"
+for file in launch.mjs bridge.mjs check.mjs tool-executor.mjs subagent-snapshot.mjs source.json; do
+  if ! cmp -s "$companion/$file" "$repo_root/packages/mcode-harness/$file"; then
+    printf 'MiniMax Code companion does not match the current source: %s\n' "$file" >&2
+    exit 1
+  fi
+done
 test "$(node "$native/cli.js" --version)" = 0.4.12
 mkdir -p "$runtime_root/cache/oac-runtime-builds"
 context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/mcode.XXXXXX")"

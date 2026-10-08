@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 13e70a4f016ed09ae6c4f80b1c280d826dd74222d4dc5c1faa764ba3e84ce61b
+source_hash: 2436c12691cc2f2753f39df73a6f480f081c3ddef1936e40c7da12c09c36a35e
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -212,7 +212,7 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 
 ## 原生安装器参与 {#native-installer-participation}
 
-适配器从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。agent host 使用该声明激活打包的 Harness。适配器负责原生布局和探测；必须在 Linux agent host 上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。自托管安装器不携带 Harness 或 Node.js。
+适配器从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind 和激活环境。agent host 使用该声明激活打包的 Harness。适配器负责原生布局；必须在 Linux agent host 上验证打包内容和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。自托管安装器不携带 Harness 或 Node.js。
 
 `deploy/distribution/AgentHost.Dockerfile` 把每个 Harness 安装在各自的目录中，并列入镜像清单 `/opt/oac/harnesses.json`。`agent.ManifestEnvironment` 通过 `Installation.Environment` 激活它。将每个新增 Harness 加入该镜像和清单，并使用共享的[镜像构建](../../../docs/zh/maintainers.md#runtime-images-and-helpers)与[视图验收](#qualify-the-view)流程。
 

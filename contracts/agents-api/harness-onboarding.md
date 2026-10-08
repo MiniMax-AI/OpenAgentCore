@@ -210,7 +210,7 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 
 ## Native installer participation
 
-An adapter supplies `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. The agent host uses this declaration to activate the packaged Harness. Adapters own native layout and probes; validate installation and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
+An adapter supplies `agent.Installation` from `installation.go` in its own package: its registered kind and activation environment. The agent host uses this declaration to activate the packaged Harness. Adapters own native layout; validate the packaged content and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
 
 `deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`. `agent.ManifestEnvironment` activates it through `Installation.Environment`. Add each new Harness to that image and manifest; use the shared [image build](../../docs/maintainers.md#runtime-images-and-helpers) and [view qualification](#qualify-the-view) workflow.
 

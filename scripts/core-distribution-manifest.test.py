@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import subprocess
 import tarfile
@@ -109,6 +110,33 @@ class DistributionTests(unittest.TestCase):
                         distribution.verify_runtime("sha256:" + "a" * 64, executable)
                 else:
                     distribution.verify_runtime("sha256:" + "a" * 64, executable)
+
+    def test_mcode_payload_rejects_stale_companion_at_the_same_version(self):
+        repository = pathlib.Path(__file__).resolve().parent.parent
+        companion = self.stage / "companion"
+        (companion / "native").mkdir(parents=True)
+        (companion / "native/cli.js").write_text('console.log("0.4.12");\n')
+        for receipt in ("provenance.json", "native-patch.json"):
+            (companion / receipt).write_text("{}")
+        files = ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json")
+        for name in files:
+            (companion / name).write_bytes((repository / "packages/mcode-harness" / name).read_bytes())
+        output = self.stage / "payload"
+        environment = {**os.environ, "OAC_DEV_HOME": str(self.stage / "dev"),
+                       "MCODE_HARNESS_BUILD_DIR": str(companion), "AGENTS_RUNTIME_BUILD_DIR": str(output)}
+        command = ["bash", str(repository / "scripts/build-mcode-runtime.sh")]
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in files:
+            with self.subTest(file=name):
+                current = (companion / name).read_bytes()
+                stale = current.replace(b'"revision": "', b'"revision": "stale-') if name == "source.json" else current + b"\n// stale companion\n"
+                (companion / name).write_bytes(stale)
+                result = subprocess.run(command, env=environment, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("does not match the current source: " + name, result.stderr)
+                self.assertEqual((output / "mcode-harness" / name).read_bytes(), current)
+                (companion / name).write_bytes(current)
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
