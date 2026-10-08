@@ -10,40 +10,40 @@ import (
 // Installation reports Core's installation facts. Core reads them from its
 // environment and build; configuration is the process settings it loaded.
 type Installation struct {
-	Object string `json:"object" enums:"core.installation"`
+	Object string `json:"object" enums:"core.installation" binding:"required"`
 	// The ID in OAC_INSTALLATION_ID_FILE.
-	InstallationID string `json:"installation_id"`
+	InstallationID string `json:"installation_id" binding:"required"`
 	// OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use.
-	PublicURL string `json:"public_url"`
+	PublicURL string `json:"public_url" binding:"required"`
 	// public_url followed by /v1.
-	APIBaseURL string `json:"api_base_url"`
+	APIBaseURL string `json:"api_base_url" binding:"required"`
 	// True when public_url names a loopback host, reachable only from the Core host.
-	LocalOnly bool `json:"local_only"`
+	LocalOnly bool `json:"local_only" binding:"required"`
 	// Full source commit Core was built from; null for development builds.
-	SourceCommit *string `json:"source_commit" extensions:"x-nullable"`
+	SourceCommit *string `json:"source_commit" extensions:"x-nullable" binding:"required"`
 	// The process settings Core loaded.
-	Configuration   InstallationConfiguration  `json:"configuration"`
-	AddressBindings deployment.AddressBindings `json:"address_bindings"`
+	Configuration   InstallationConfiguration  `json:"configuration" binding:"required"`
+	AddressBindings deployment.AddressBindings `json:"address_bindings" binding:"required"`
 }
 
 // InstallationConfiguration is the process settings Core loaded.
 type InstallationConfiguration struct {
-	Settings []InstallationSetting `json:"settings"`
+	Settings []InstallationSetting `json:"settings" binding:"required"`
 }
 
 type InstallationSetting struct {
 	// Dotted config.json key, such as ports.core.
-	Key string `json:"key"`
+	Key string `json:"key" binding:"required"`
 	// Applied value; always null for a sensitive setting.
-	Value   any `json:"value" extensions:"x-nullable"`
-	Default any `json:"default" extensions:"x-nullable"`
+	Value   any `json:"value" extensions:"x-nullable" binding:"required"`
+	Default any `json:"default" extensions:"x-nullable" binding:"required"`
 	// Present only for a sensitive setting: whether it has a value.
 	Configured *bool `json:"configured,omitempty"`
 	// False for settings fixed at installation.
-	Changeable bool `json:"changeable"`
-	Sensitive  bool `json:"sensitive"`
+	Changeable bool `json:"changeable" binding:"required"`
+	Sensitive  bool `json:"sensitive" binding:"required"`
 	// Services that restart when the setting changes.
-	Restarts []string `json:"restarts"`
+	Restarts []string `json:"restarts" enums:"core,web" binding:"required"`
 }
 
 // InstallationBindings counts what is bound to the current public URL.

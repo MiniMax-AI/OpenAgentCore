@@ -1,4 +1,4 @@
-import type { AgentSession } from "@oac/agents-client";
+import type { AdminProject, AgentSession } from "@oac/agents-client";
 import { MessageSquareText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,7 +25,6 @@ import {
   type SessionLogFilters,
 } from "./session-log";
 import "./sessions.css";
-import { type Project } from "../../lib/admin-view";
 import { collections, queryClient } from "../../lib/queries";
 import { forgetDeleted } from "../resources/detail-queries";
 import { sessionKey } from "./session-queries";
@@ -238,7 +237,7 @@ function SessionLogRow({
   now: number;
   locale: string | undefined;
   onOpen: (projectId: string, sessionId: string) => void;
-  onDelete: (target: { project: Project; sessionId: string }) => void;
+  onDelete: (target: { project: AdminProject; sessionId: string }) => void;
 }) {
   const { t } = useTranslation("sessions");
   const projectCell = allProjects ? <td><ProjectName project={row.project} /></td> : null;

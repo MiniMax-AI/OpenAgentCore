@@ -99,7 +99,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 
 ### Event rules
 
-- Session events carry `event_id`, `type` and the `session` snapshot at that transition. Turn events carry `session_id` and `turn_id`. There is no Turn `waiting` event.
+- Session events carry `event_id`, `type` and the `session` snapshot at that transition. Turn events carry `session_id` and `turn_id`; Environment events carry `session_id` and a null `turn_id`. There is no Turn `waiting` event.
 - A new Turn publishes `agent.session.turn.created`, the user `item.added`, `agent.session.in_progress`, then `agent.session.turn.in_progress`, all from one transaction. When a batch holds several messages, the later messages follow the Session activity.
 - Terminal Turn events (`completed`, `failed`, `cancelled`) carry top-level `usage` copied from the Turn snapshot at that moment, null when unknown. Other events omit it.
 - `item.added` and `item.done` always carry `output_index`, null for input Items. Function results emit `item.added` only; `item.done` is for agent output.
@@ -123,7 +123,7 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 | `mcp_call` | Server and tool identity, arguments, structured result or error |
 | `function_call`, `function_call_output` | A linked call and its result. The result always carries `output` and `error`, null when the submission omitted them; stored results keep the submitted field presence. Native file changes appear as an `apply_patch` function call with the changes as arguments and no invented result |
 | `web_search_call` | The supported action fields (`search`, `open_page`, `find_in_page`, `other`) |
-| `reasoning`, `agent_message` and the Subagent coordination calls | See [Subagents](./subagents.md). `agent_message` has no status; reasoning status can be absent or null |
+| `reasoning`, `agent_message` and the Subagent coordination calls | See [Subagents](./subagents.md). `agent_message` has no status; reasoning status can be null |
 
 A failed tool does not fail its Turn. Tool output is readable by the Session's Project and can contain the tool's own diagnostic text.
 
@@ -150,5 +150,3 @@ When an Environment fails to initialize, whether an `openai_hosted` sandbox or a
 Session reads and lists return the same Session, and input that was waiting for the Environment settles as failed in the same snapshot. The GET stream and the creation stream end after `agent.session.failed`. New input returns 409 ([input errors](#input-errors)); the Session can be deleted.
 
 The [Environment initialization contract](./environments.md#initialization-state-and-failure) defines the fixed failure reasons.
-
-Core's own `stream_interrupted` error event carries `type`, `code` and `message` without `param`; `error` events shaped like the official ones carry `param: null`.

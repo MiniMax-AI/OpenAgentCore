@@ -6,13 +6,12 @@ import { useTranslation } from "react-i18next";
 
 import { ConsolePopover } from "../../components/console-popover";
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
-import { formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
+import { epochSeconds, formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { coreMetricsQuery } from "../metrics/metrics-queries";
 import { NodeRolloutStatus } from "../sandbox/NodeRolloutStatus";
-import { seconds } from "../sandbox/NodeList";
 
 /** Nodes shown in the overview; the rest are counted and listed on the Nodes page. */
 export const FLEET_LIMIT = 4;
@@ -147,7 +146,7 @@ function NodeGlance({ node, health, stale, suspends }: { node: SandboxNode; heal
   const { t, i18n } = useTranslation("overview");
   const locale = i18n.resolvedLanguage;
   const now = Math.floor(Date.now() / 1000);
-  const seen = seconds(node.last_seen_at);
+  const seen = epochSeconds(node.last_seen_at);
   const count = (value: number) => formatInteger(value, locale);
   const diagnostic = health === "degraded" ? nodeProviderDiagnostic(node) : "";
   return (
@@ -180,7 +179,7 @@ function CoreGlance({ label, tone }: { label: string; tone: Tone }) {
   const query = useQuery({ ...coreMetricsQuery("1h"), retry: false });
   const metrics = query.data ?? null;
   const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
-  const started = seconds(metrics?.service.started_at ?? null);
+  const started = epochSeconds(metrics?.service.started_at ?? null);
   const now = Math.floor(Date.now() / 1000);
   return (
     <Facts>

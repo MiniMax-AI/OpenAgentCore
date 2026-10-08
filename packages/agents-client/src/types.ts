@@ -1,14 +1,42 @@
 import type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
-export type PageOrder = "asc" | "desc";
+import type {
+  AgentsCore, CreateVaultCredentialAuthParamStaticBearer, CreateVaultCredentialParams, CreateVaultParams,
+  DeletedAgentResource, DeletedEnvironmentTemplateResource, DeletedSessionResource, DeletedSkillResource,
+  DeletedSkillVersionResource, DeletedVaultCredentialResource, DeletedVaultResource, DeleteFileResponse,
+  EnvironmentFileListResource, EnvironmentFileResource, EnvironmentPackagesResource, EnvironmentParamNone,
+  EnvironmentParamSelfHosted, EnvironmentResourceSelfHosted, EnvironmentStatusResource, FunctionCallStatusResource,
+  HostedEnvironmentFileParam, InputContentParam, InputContentParamInputText, InputMessageParam, ListOrderParam,
+  McpOauthRefreshResource, MultiAgentConfigCurrentParam, MultiAgentConfigResource, NetworkAccessResource,
+  NetworkPolicyResource, PersistedAgentToolConfigParamFunction, PersistedAgentToolConfigParamProgrammaticToolCalling,
+  PersistedAgentToolConfigParamToolSearch, PersistedAgentToolConfigParamWebSearch, ReasoningEffortResource,
+  ReasoningParam, ReasoningResource, ReasoningSummaryResource, RotateVaultCredentialAuthParamStaticBearer,
+  RotateVaultCredentialParams, ServiceTierResource, SessionEnvironmentStateResource, SessionEnvironmentStatusResource,
+  SessionArtifactResource, SessionErrorResource, SessionInputParam, SessionInputParamAgentSessionInputCancel,
+  SessionInputParamAgentSessionInputMessage, SessionInputParamAgentSessionInputToolResult,
+  SessionRequiredActionResource, SessionRequiredActionResourceEnvironmentConnection,
+  SessionRequiredActionResourceFunctionCall, SessionStatusResource, SkillResource, SkillVersionResource,
+  TextFormatResource, TextParam, TextResource, TokenUsageResource, TurnResource, TurnStatusResource,
+  VaultCredentialAuthResourceMcpOauth, VaultCredentialAuthResourceStaticBearer, VaultCredentialResource,
+  VaultResource, VaultStatusParam, WebSearchLocationParam,
+} from "./generated/public-api";
+import type {
+  CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource, RuntimeCPUObservation,
+  RuntimeMemoryObservation, RuntimeObservationLifecycleState, RuntimeObservationReason,
+} from "./generated/core-api";
 
+// Generated types keep their schema names in ./generated/public-api; these are the client's names for them.
+export type PageOrder = ListOrderParam;
+
+/** The one cursor-list envelope; the schema repeats it for each resource. */
 export interface ListPage<T> {
+  object: "list";
   data: T[];
+  first_id: string | null;
+  last_id: string | null;
   has_more: boolean;
-  object?: "list";
-  first_id?: string | null;
-  last_id?: string | null;
 }
 
+// Call options carry query parameters and a cancellation signal; they are not wire types.
 export interface PageOptions extends ReadOptions {
   after?: string;
   limit?: number;
@@ -19,41 +47,16 @@ export interface ReadOptions {
   signal?: AbortSignal;
 }
 
-export type AgentTextFormat =
-  | { type: "text" }
-  | { type: "json_schema"; schema: Record<string, unknown> };
+export type AgentTextFormat = TextFormatResource;
+export type AgentTextConfig = TextResource;
+export type AgentTextInput = TextParam;
+export type AgentServiceTier = ServiceTierResource;
+export type AgentReasoningEffort = ReasoningEffortResource;
+export type AgentReasoningSummary = ReasoningSummaryResource;
+export type AgentReasoning = ReasoningParam;
+export type MultiAgentInput = MultiAgentConfigCurrentParam;
 
-export interface AgentTextConfig {
-  format: AgentTextFormat;
-  verbosity: "low" | "medium" | "high";
-}
-
-export interface AgentTextInput {
-  format?: AgentTextConfig["format"] | null;
-  verbosity?: AgentTextConfig["verbosity"] | null;
-}
-
-export type AgentServiceTier = "auto" | "default" | "flex" | "priority" | "fast";
-export type AgentReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-export type AgentReasoningSummary = "concise" | "detailed" | "auto";
-
-export interface AgentReasoning {
-  effort?: AgentReasoningEffort | null;
-  summary?: AgentReasoningSummary | null;
-}
-
-export interface MultiAgentInput {
-  enabled: boolean;
-  max_concurrent_subagents?: number | null;
-}
-
-export interface FunctionToolInput {
-  type: "function";
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  defer_loading?: boolean;
-}
+export type FunctionToolInput = PersistedAgentToolConfigParamFunction;
 
 /** The service-origin HTTP MCP profile accepted by current Core. */
 export interface ServiceHttpMcpToolInput {
@@ -77,128 +80,66 @@ export type AnonymousHttpMcpToolInput = Omit<ServiceHttpMcpToolInput, "credentia
   credential_id?: null;
 };
 
-export interface ToolSearchInput {
-  type: "tool_search";
-}
+export type ToolSearchInput = PersistedAgentToolConfigParamToolSearch;
 
-export interface ProgrammaticToolCallingInput {
-  type: "programmatic_tool_calling";
-  enabled?: boolean;
-}
+export type ProgrammaticToolCallingInput = PersistedAgentToolConfigParamProgrammaticToolCalling;
 
-export interface WebSearchLocationInput {
-  city?: string | null;
-  country?: string | null;
-  region?: string | null;
-  timezone?: string | null;
-}
+export type WebSearchLocationInput = WebSearchLocationParam;
 
 /**
  * Saved Agents keep every pinned mode; omitted or null `mode` is saved as `live`
  * and omitted or null `context_size` as `medium`. Session admission executes only
  * `disabled` and rejects the other modes unless the Session replaces its tools.
  */
-export interface WebSearchToolInput {
-  type: "web_search";
-  mode?: "disabled" | "cached" | "live" | null;
-  context_size?: "low" | "medium" | "high" | null;
-  /** null and [] are saved distinctly. */
-  allowed_domains?: string[] | null;
-  /** A saved location includes all four keys, with null for omitted ones. */
-  location?: WebSearchLocationInput | null;
-}
+export type WebSearchToolInput = PersistedAgentToolConfigParamWebSearch;
 
+// The tool profiles Core saves, narrowed from the schema's tool params.
 export type SavedAgentToolInput =
   | FunctionToolInput
   | ServiceHttpMcpToolInput
   | ToolSearchInput
   | ProgrammaticToolCallingInput
   | WebSearchToolInput;
+// Session function tools load eagerly.
 export type SessionFunctionToolInput = Omit<FunctionToolInput, "defer_loading"> & { defer_loading?: false };
 export type ConfigurableAgentToolInput = SessionFunctionToolInput | ServiceHttpMcpToolInput;
 
-export type VaultStatus = "active" | "archived";
+export type VaultStatus = VaultStatusParam;
 
 export interface VaultListOptions extends PageOptions {
   status?: VaultStatus | VaultStatus[];
 }
 
-export interface Vault {
-  id: string;
-  object: "vault";
-  created_at: number;
-  name: string | null;
-  metadata: Record<string, string>;
-}
+export type Vault = VaultResource;
 
-export interface VaultList extends ListPage<Vault> {
-  object: "list";
-  first_id: string | null;
-  last_id: string | null;
-}
+export type VaultList = ListPage<Vault>;
 
-export interface CreateVaultInput {
-  name?: string;
-  metadata?: Record<string, string> | null;
-}
+export type CreateVaultInput = CreateVaultParams;
 
-export interface VaultDeleted {
-  id: string;
-  object: "vault.deleted";
-  deleted: true;
-}
+export type VaultDeleted = DeletedVaultResource;
 
-export interface StaticBearerCredentialAuth {
-  type: "static_bearer";
-  mcp_server_url: string;
-}
+export type StaticBearerCredentialAuth = VaultCredentialAuthResourceStaticBearer;
 
-export interface McpOAuthRefreshMetadata {
-  client_id: string;
-  token_endpoint: string;
-  token_endpoint_auth: { type: "none" | "client_secret_basic" | "client_secret_post" };
-  resource: string | null;
-  scope: string | null;
-}
+export type McpOAuthRefreshMetadata = McpOauthRefreshResource;
 
-export interface McpOAuthCredentialAuth {
-  type: "mcp_oauth";
-  mcp_server_url: string;
-  expires_at: string | null;
-  refresh: McpOAuthRefreshMetadata | null;
-}
+export type McpOAuthCredentialAuth = VaultCredentialAuthResourceMcpOauth;
 
-export interface VaultCredential {
-  id: string;
-  vault_id: string;
-  name: string;
-  object: "vault.credential";
-  auth: StaticBearerCredentialAuth | McpOAuthCredentialAuth;
-  created_at: number;
-  updated_at: number;
-}
+export type VaultCredential = VaultCredentialResource;
 
-export interface VaultCredentialList extends ListPage<VaultCredential> {
-  object: "list";
-  first_id: string | null;
-  last_id: string | null;
-}
+export type VaultCredentialList = ListPage<VaultCredential>;
 
-export interface CreateVaultCredentialInput {
-  name: string;
-  auth: StaticBearerCredentialAuth & { token: string };
-}
+// The client writes static bearer Credentials only; it never writes MCP OAuth Credentials.
+export type CreateVaultCredentialInput = Omit<CreateVaultCredentialParams, "auth"> & {
+  auth: CreateVaultCredentialAuthParamStaticBearer;
+};
 
-export interface ReplaceVaultCredentialTokenInput {
-  auth: { type: "static_bearer"; token: string };
-}
+export type ReplaceVaultCredentialTokenInput = Omit<RotateVaultCredentialParams, "auth"> & {
+  auth: RotateVaultCredentialAuthParamStaticBearer;
+};
 
-export interface VaultCredentialDeleted {
-  id: string;
-  object: "vault.credential.deleted";
-  deleted: true;
-}
+export type VaultCredentialDeleted = DeletedVaultCredentialResource;
 
+/** The Agent resource with the client's SavedAgentCore view; Agent responses are not checked, so tools stay opaque. */
 export interface SavedAgent {
   id: string;
   object: "agent";
@@ -207,11 +148,8 @@ export interface SavedAgent {
   name: string | null;
   instructions: string | null;
   metadata: Record<string, string>;
-  multi_agent: {
-    enabled: boolean;
-    max_concurrent_subagents: number | null;
-  };
-  reasoning: AgentReasoning;
+  multi_agent: MultiAgentConfigResource;
+  reasoning: ReasoningResource;
   service_tier: AgentServiceTier;
   text: AgentTextConfig;
   tools: unknown[];
@@ -219,6 +157,7 @@ export interface SavedAgent {
   updated_at: number;
 }
 
+/** Agent params narrowed to the tool profiles and extension inputs the client sends. */
 export interface CreateAgentInput {
   x_agents_core?: SavedAgentCoreInput | null;
   model: string;
@@ -234,6 +173,7 @@ export interface CreateAgentInput {
 
 export type UpdateAgentInput = Partial<CreateAgentInput>;
 
+/** Session Agent params narrowed to the tools a Session may configure. */
 export interface InlineAgentInput {
   x_agents_core?: AgentsCoreSelection | null;
   model?: string;
@@ -245,6 +185,7 @@ export interface InlineAgentInput {
   multi_agent?: MultiAgentInput | null;
 }
 
+/** The Session's frozen Agent: the saved Agent without its resource metadata. */
 export type AgentSnapshot = Omit<SavedAgent, "object" | "metadata" | "created_at" | "updated_at" | "x_agents_core"> & {
   x_agents_core?: AgentsCoreSelection | null;
 };
@@ -253,18 +194,13 @@ declare const unknownEnvironmentType: unique symbol;
 declare const unknownItemType: unique symbol;
 declare const unknownSessionEventType: unique symbol;
 
-export interface NoneAgentEnvironment {
-  type: "none";
-}
+export type NoneAgentEnvironment = EnvironmentParamNone;
 
-export interface SelfHostedAgentEnvironmentInput {
-  type: "self_hosted";
-  workspace_directory: string;
-  capability_directories?: string[] | null;
-}
+export type SelfHostedAgentEnvironmentInput = EnvironmentParamSelfHosted;
 
 export type OpenAIHostedNetworkAccess = "enabled" | "disabled";
 
+/** Narrowed to the network mode and Template reference of the schema's hosted fields. */
 export interface OpenAIHostedAgentEnvironmentInput {
   type: "openai_hosted";
   /** Omitted or null defaults to enabled in the pinned basic Core profile. */
@@ -283,30 +219,17 @@ export type AgentEnvironmentInput =
   | SelfHostedAgentEnvironmentInput
   | OpenAIHostedAgentEnvironmentInput;
 
-export interface SelfHostedAgentEnvironment {
-  type: "self_hosted";
-  id: string;
-  remote_url: string;
-  workspace_directory: string;
-  capability_directories: string[];
-}
+export type SelfHostedAgentEnvironment = EnvironmentResourceSelfHosted;
 
-export interface AgentEnvironmentPackages {
-  npm: string[];
-  python: string[];
-  system: string[];
-}
+export type AgentEnvironmentPackages = EnvironmentPackagesResource;
 
 /**
  * Network policy of a hosted Environment or Template. `restricted` carries the
  * exact hostnames in Core's spelling and order; the other modes carry none.
  */
-export type EnvironmentNetworkAccess = "enabled" | "disabled" | "restricted";
+export type EnvironmentNetworkAccess = NetworkAccessResource;
 
-export interface EnvironmentNetworkPolicy {
-  access: EnvironmentNetworkAccess;
-  allowed_domains: string[];
-}
+export type EnvironmentNetworkPolicy = NetworkPolicyResource;
 
 /**
  * Safe output of a managed Session Environment. A basic profile has only empty
@@ -325,6 +248,7 @@ export interface OpenAIHostedAgentEnvironment {
   skills: Record<string, unknown>[];
 }
 
+// A Session Environment type this client does not know stays readable instead of failing the Session.
 export type UnknownEnvironmentType = string & { readonly [unknownEnvironmentType]: true };
 
 export interface UnknownAgentEnvironment {
@@ -338,8 +262,9 @@ export type AgentEnvironment =
   | OpenAIHostedAgentEnvironment
   | UnknownAgentEnvironment;
 
-export type EnvironmentResourceStatus = "pending" | "connected" | "disconnected" | "expired" | "failed";
+export type EnvironmentResourceStatus = EnvironmentStatusResource;
 
+// The Environment resource split by type; hosted lists are always empty.
 export interface SelfHostedAgentEnvironmentResource {
   id: string;
   object: "agent.environment";
@@ -441,19 +366,9 @@ export interface UnrecognizedEnvironmentTemplate
 
 export type EnvironmentTemplateResource = EnvironmentTemplate | UnrecognizedEnvironmentTemplate;
 
-export interface EnvironmentTemplateList {
-  object: "list";
-  data: EnvironmentTemplateResource[];
-  has_more: boolean;
-  first_id: string | null;
-  last_id: string | null;
-}
+export type EnvironmentTemplateList = ListPage<EnvironmentTemplateResource>;
 
-export interface EnvironmentTemplateDeleted {
-  id: string;
-  object: "agent.environment.template.deleted";
-  deleted: true;
-}
+export type EnvironmentTemplateDeleted = DeletedEnvironmentTemplateResource;
 
 /** A Template network write. Core validates restricted hostnames. */
 export type EnvironmentTemplateNetworkInput =
@@ -473,20 +388,10 @@ export interface CreateEnvironmentTemplateInput {
  */
 export type UpdateEnvironmentTemplateInput = CreateEnvironmentTemplateInput;
 
-export interface EnvironmentFile {
-  environment_id: string;
-  object: "agent.environment.file";
-  path: string;
-  size_bytes: number;
-}
+export type EnvironmentFile = EnvironmentFileResource;
 
 /** Official token page: has_more is true exactly when next carries a token. */
-export interface EnvironmentFileList {
-  object: "page";
-  data: EnvironmentFile[];
-  next: string | null;
-  has_more: boolean;
-}
+export type EnvironmentFileList = EnvironmentFileListResource;
 
 export interface EnvironmentFileListOptions extends ReadOptions {
   limit?: number;
@@ -496,10 +401,9 @@ export interface EnvironmentFileListOptions extends ReadOptions {
   path?: string;
 }
 
-export type EnvironmentFileCreateInput =
-  | { type: "inline"; data: string; path: string }
-  | { type: "file_id"; file_id: string; path: string };
+export type EnvironmentFileCreateInput = HostedEnvironmentFileParam;
 
+/** Narrowed to user_data Files; the pinned File schema types expires_at and status_details as optional, but Core sends null. */
 export interface SourceFile {
   id: string;
   object: "file";
@@ -513,11 +417,7 @@ export interface SourceFile {
   unrecognized?: undefined;
 }
 
-export interface SourceFileDeleted {
-  id: string;
-  object: "file";
-  deleted: true;
-}
+export type SourceFileDeleted = DeleteFileResponse;
 
 /** Files list query. Core accepts limits of 1–10000 (default 10000) and orders newest first by default. */
 export interface SourceFileListOptions extends ReadOptions {
@@ -539,14 +439,9 @@ export interface UnrecognizedSourceFile {
 
 export type SourceFileListEntry = SourceFile | UnrecognizedSourceFile;
 
-export interface SourceFileList {
-  object: "list";
-  data: SourceFileListEntry[];
-  has_more: boolean;
-  first_id: string | null;
-  last_id: string | null;
-}
+export type SourceFileList = ListPage<SourceFileListEntry>;
 
+// Binary and multipart shapes the JSON schema does not describe.
 export interface SourceFileContent {
   data: Uint8Array;
   bytes: number;
@@ -563,56 +458,26 @@ export interface SourceFileUploadInput {
  * A project-owned Skill. Top-level name and description follow the default
  * version; version numbers are positive integer strings that Core never reuses.
  */
-export interface Skill {
-  id: string;
-  object: "skill";
-  created_at: number;
-  name: string;
-  description: string;
-  default_version: string;
-  latest_version: string;
-}
+export type Skill = SkillResource;
 
-export interface SkillList extends ListPage<Skill> {
-  object: "list";
-  first_id: string | null;
-  last_id: string | null;
-}
+export type SkillList = ListPage<Skill>;
 
 /** One immutable uploaded version of a Skill. */
-export interface SkillVersion {
-  id: string;
-  object: "skill.version";
-  skill_id: string;
-  version: string;
-  name: string;
-  description: string;
-  created_at: number;
-}
+export type SkillVersion = SkillVersionResource;
 
-export interface SkillVersionList extends ListPage<SkillVersion> {
-  object: "list";
-  first_id: string | null;
-  last_id: string | null;
-}
+export type SkillVersionList = ListPage<SkillVersion>;
 
-export interface SkillDeleted {
-  id: string;
-  object: "skill.deleted";
-  deleted: true;
-}
+export type SkillDeleted = DeletedSkillResource;
 
 /** Deleting the only remaining version also deletes its Skill. */
-export interface SkillVersionDeleted {
-  id: string;
-  object: "skill.version.deleted";
-  deleted: true;
-  version: string;
-}
+export type SkillVersionDeleted = DeletedSkillVersionResource;
+
+export type SessionArtifact = SessionArtifactResource;
 
 /** Skill lists accept 0 through 100 entries; `after` is a Skill ID, or a version resource ID for version lists. */
 export type SkillListOptions = PageOptions;
 
+// Multipart upload and download shapes the JSON schema does not describe.
 export interface SkillDirectoryFile {
   /** Relative path inside one top-level folder, for example `report/SKILL.md`. */
   path: string;
@@ -637,35 +502,17 @@ export interface SkillContent {
   content_disposition: string;
 }
 
-export type SessionStatus = "idle" | "in_progress" | "requires_action" | "failed";
+export type SessionStatus = SessionStatusResource;
 
-export interface FunctionCallAction {
-  type: "function_call";
-  call_id: string;
-  turn_id: string;
-  name: string;
-  arguments: unknown;
-}
+export type FunctionCallAction = SessionRequiredActionResourceFunctionCall;
 
-export interface EnvironmentConnectionAction {
-  type: "environment_connection";
-  environment_id: string;
-}
+export type EnvironmentConnectionAction = SessionRequiredActionResourceEnvironmentConnection;
 
-export type RequiredAction = FunctionCallAction | EnvironmentConnectionAction;
+export type RequiredAction = SessionRequiredActionResource;
 
-export interface TokenUsage {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  input_tokens_details: {
-    cached_tokens: number;
-  };
-  output_tokens_details: {
-    reasoning_tokens: number;
-  };
-}
+export type TokenUsage = TokenUsageResource;
 
+/** The installation fields the projection guarantees; the extension schema marks them all optional. */
 export interface EnvironmentInstallation {
   status: "available" | "unavailable";
   version: string;
@@ -674,6 +521,7 @@ export interface EnvironmentInstallation {
   message?: string;
 }
 
+/** The Session resource composed with the client's Agent snapshot, Environment and installation projections. */
 export interface AgentSession {
   x_agents_core?: { installation: EnvironmentInstallation };
   id: string;
@@ -704,6 +552,7 @@ export interface EnvironmentCapabilityArchiveInput {
   source: { type: "base64"; media_type: "application/zip"; data: string };
 }
 
+// The extension schema types environment preparation as an open object.
 export interface EnvironmentPreparationInput {
   environment_template_id?: string;
   env?: Record<string, string> | null;
@@ -715,6 +564,7 @@ export interface EnvironmentPreparationInput {
   capability_directories?: string[] | null;
 }
 
+/** Session params composed with the client's Agent, Environment and extension inputs. */
 export interface CreateSessionInput {
   x_agents_core?: { model_provider?: ModelProviderInput | null; harness_config?: HarnessConfig; environment?: EnvironmentPreparationInput };
   agent_id?: string;
@@ -728,19 +578,13 @@ export interface CreateSessionInput {
   vault_ids?: string[];
 }
 
-export interface InputTextContent {
-  type: "input_text";
-  text: string;
-}
+export type InputTextContent = InputContentParamInputText;
 
-export interface InputMessage {
-  type?: "message";
-  role: "user";
-  content: InputTextContent[];
-}
+export type InputMessage = InputMessageParam;
 
-export type ItemStatus = "in_progress" | "completed" | "failed" | "incomplete";
+export type ItemStatus = FunctionCallStatusResource;
 
+/** Every content part an Item can hold, merged so Web reads one shape. */
 export interface ItemContent {
   type: "input_text" | "output_text" | "input_image" | "encrypted_content";
   text?: string | null;
@@ -766,13 +610,14 @@ export type KnownSessionItemType =
 
 export type UnknownSessionItemType = string & { readonly [unknownItemType]: true };
 
+/** Every Item variant's fields merged into one shape, so Web reads them without narrowing on type. */
 export interface SessionItemBase {
   id: string;
   turn_id: string;
-  /** Inter-agent messages have no status; reasoning may have an unknown status. */
+  /** Inter-agent messages have no status; reasoning may have a null status. */
   status?: ItemStatus | null;
   role?: "user" | "assistant";
-  /** Null on user messages and when the harness reports none; older Cores omit it. */
+  /** Null on user messages and when the harness reports none. */
   phase?: "commentary" | "final_answer" | null;
   content?: ItemContent[];
   command?: string;
@@ -785,7 +630,7 @@ export interface SessionItemBase {
   arguments?: unknown;
   output?: unknown;
   error?: unknown;
-  action?: WebSearchAction;
+  action?: WebSearchAction | null;
   agent_id?: string;
   sender_agent_id?: string;
   recipient_agent_id?: string;
@@ -806,52 +651,26 @@ export interface UnknownSessionItem extends SessionItemBase {
 
 export type SessionItem = KnownSessionItem | UnknownSessionItem;
 
+/** The web search action variants merged into one shape, as on SessionItem. */
 export interface WebSearchAction {
   type: "search" | "open_page" | "find_in_page" | "other";
   query?: string | null;
-  queries?: string[];
+  queries?: string[] | null;
   url?: string | null;
   pattern?: string | null;
 }
 
-export type TurnStatus = "queued" | "in_progress" | "waiting" | "completed" | "failed" | "cancelled";
+export type TurnStatus = TurnStatusResource;
 
-export interface AgentTurn {
-  id: string;
-  /**
-   * The Session's Agent ID, for root and Subagent Turns alike. Older Core
-   * releases sent the Subagent's own ID here for Subagent Turns.
-   */
-  agent_id: string;
-  /** Set on Subagent Turns, which are read through the Subagent routes. */
-  subagent_id?: string | null;
-  session_id: string;
-  object: "agent.session.turn";
-  status: TurnStatus;
-  created_at: number;
-  started_at: number | null;
-  completed_at: number | null;
-  error: { code: "internal_error"; message: string } | null;
-  usage: TokenUsage | null;
-}
+export type AgentTurn = TurnResource;
 
-export interface StreamError {
-  code: string;
-  type: string;
-  message: string;
-  /** Present on Session error events (null when unset); Environment state errors and older or interruption frames omit it. */
-  param?: string | null;
-}
+export type StreamError = SessionErrorResource;
 
-export type SessionEnvironmentStatus = "pending" | "ready" | "connected" | "disconnected" | "failed";
+export type SessionEnvironmentStatus = SessionEnvironmentStatusResource;
 
-export interface SessionEnvironmentState {
-  id: string;
-  type: string;
-  status: SessionEnvironmentStatus;
-  error: StreamError | null;
-}
+export type SessionEnvironmentState = SessionEnvironmentStateResource;
 
+/** Every projected event's fields merged into one shape, as on SessionItem. */
 export interface SessionEventBase {
   event_id: string;
   session_id?: string;
@@ -860,7 +679,7 @@ export interface SessionEventBase {
   turn?: AgentTurn;
   item?: SessionItem;
   item_id?: string;
-  /** Null on Item events for input Items; older Cores omit it. */
+  /** Null on Item events for input Items. */
   output_index?: number | null;
   content_index?: number;
   part?: ItemContent;
@@ -874,9 +693,11 @@ export interface SessionEventBase {
   usage?: TokenUsage | null;
 }
 
+/** Environment events happen outside any Turn, so their turn_id is null. */
 export type AgentSessionEnvironmentEvent = {
-  [Status in SessionEnvironmentStatus]: SessionEventBase & {
+  [Status in SessionEnvironmentStatus]: Omit<SessionEventBase, "turn_id"> & {
     type: `agent.session.environment.${Status}`;
+    turn_id: null;
     environment: SessionEnvironmentState & { status: Status };
   };
 }[SessionEnvironmentStatus];
@@ -889,7 +710,6 @@ export type KnownSessionEventType =
   | "agent.session.failed"
   | "agent.session.turn.created"
   | "agent.session.turn.in_progress"
-  | "agent.session.turn.waiting"
   | "agent.session.turn.completed"
   | "agent.session.turn.failed"
   | "agent.session.turn.cancelled"
@@ -926,18 +746,11 @@ export interface AgentSessionErrorEvent extends SessionEventBase {
 
 export type SessionEvent = AgentSessionEnvironmentEvent | AgentSessionErrorEvent | KnownSessionEvent | UnknownSessionEvent;
 
-export interface AgentDeleted {
-  id: string;
-  object: "agent.deleted";
-  deleted: true;
-}
+export type AgentDeleted = DeletedAgentResource;
 
-export interface SessionDeleted {
-  id: string;
-  object: "agent.session.deleted";
-  deleted: true;
-}
+export type SessionDeleted = DeletedSessionResource;
 
+/** submitFunctionResult's input, which the client encodes as a tool_result event. */
 export interface FunctionResultInput {
   callId: string;
   turnId: string;
@@ -946,37 +759,17 @@ export interface FunctionResultInput {
   error?: string | null;
 }
 
-export type FunctionResultContent =
-  | { type: "input_text"; text: string }
-  | { type: "input_image"; image_url: string };
+export type FunctionResultContent = InputContentParam;
 
-/** Exact public wire shape for an ordered user-message input event. */
-export interface SessionMessageInputEvent {
-  type: "agent.session.input.message";
-  input: InputMessage[];
-}
+export type SessionMessageInputEvent = SessionInputParamAgentSessionInputMessage;
 
-/** Exact public wire shape for a cancellation input event. */
-export interface SessionCancelInputEvent {
-  type: "agent.session.input.cancel";
-}
+export type SessionCancelInputEvent = SessionInputParamAgentSessionInputCancel;
 
-/** Exact public wire shape for a Function result input event. */
-export interface SessionToolResultInputEvent {
-  type: "agent.session.input.tool_result";
-  call_id: string;
-  turn_id: string;
-  success: boolean;
-  output?: string | FunctionResultContent[] | null;
-  error?: string | null;
-}
+export type SessionToolResultInputEvent = SessionInputParamAgentSessionInputToolResult;
 
-/** The three input event variants accepted by the current public Core endpoint. */
-export type SessionInputEvent =
-  | SessionMessageInputEvent
-  | SessionCancelInputEvent
-  | SessionToolResultInputEvent;
+export type SessionInputEvent = SessionInputParam;
 
+// Callbacks for the event stream readers.
 export interface StreamOptions {
   signal?: AbortSignal;
   /** Called once the authenticated streaming response has been accepted. */
@@ -989,29 +782,14 @@ export interface CreateSessionStreamOptions extends StreamOptions {
   onSession: (session: AgentSession) => void;
 }
 
-export type RuntimeObservationStatus = "observed" | "unsupported" | "unavailable";
-export type RuntimeLifecycleState = "active" | "sleeping" | "transitioning" | "pending" | "stopped";
-export type RuntimeObservationReason =
-  | "runtime_mode_not_observable"
-  | "allocation_pending"
-  | "runtime_not_running"
-  | "sample_timeout"
-  | "sample_unavailable";
+// Generated /core/v1 types keep their schema names in ./generated/core-api.
+export type {
+  HarnessModelConfiguration, RuntimeCPUObservation, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
+} from "./generated/core-api";
 
 export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
 
-export interface RuntimeCPUObservation {
-  usage_seconds_total: number | null;
-  capacity_cores: number | null;
-  usage_cores: number | null;
-  utilization_ratio: number | null;
-}
-
-export interface RuntimeMemoryObservation {
-  usage_bytes: number | null;
-  limit_bytes: number | null;
-}
-
+// The schema's flat observation cannot state each mode's null rules; this union does, and the client validates them.
 interface RuntimeObservationBase {
   id: string;
   object: "agent.runtime_observation";
@@ -1029,7 +807,7 @@ export interface RuntimeObservedObservation extends RuntimeObservationBase {
     device_id: string | null;
     connection_generation: null;
   };
-  lifecycle_state: RuntimeLifecycleState;
+  lifecycle_state: RuntimeObservationLifecycleState;
   status: "observed";
   reason: null;
   allocation_created_at: number | null;
@@ -1049,7 +827,7 @@ export interface RuntimeUnavailableObservation extends RuntimeObservationBase {
     device_id: string | null;
     connection_generation: null;
   };
-  lifecycle_state: RuntimeLifecycleState;
+  lifecycle_state: RuntimeObservationLifecycleState;
   status: "unavailable";
   reason: RuntimeUnavailableReason;
   allocation_created_at: number | null;
@@ -1109,83 +887,9 @@ export interface RuntimeHistoryQuery extends ReadOptions {
   maxPoints?: number;
 }
 
-export interface RuntimeHistoryRange {
-  start: number;
-  end: number;
-}
-
-export interface RuntimeHistoryCoveragePoint {
-  start: number;
-  end: number;
-  first_observed_at: number | null;
-  last_observed_at: number | null;
-  observation_count: number;
-  observed_count: number;
-  unavailable_count: number;
-}
-
-export interface RuntimeHistoryCPU {
-  contributor_count: number;
-  utilization_ratio: number | null;
-  capacity_cores: number | null;
-}
-
-export interface RuntimeHistoryMemory {
-  contributor_count: number;
-  usage_bytes: number | null;
-  limit_bytes: number | null;
-}
-
-export interface RuntimeHistoryPoint extends RuntimeHistoryCoveragePoint {
-  cpu: RuntimeHistoryCPU | null;
-  memory: RuntimeHistoryMemory | null;
-}
-
-export interface RuntimeHistorySeries {
-  environment_id: string;
-  allocation_id: string;
-  /** Earliest retained provider start estimate for compatible uptime display. */
-  started_at: RuntimeHistoryTime;
-  provider_type: string;
-  points: RuntimeHistoryPoint[];
-}
-
-export interface RuntimeHistoryTime {
-  seconds: number;
-  nanoseconds: number;
-}
-
-export interface RuntimeHistoryCoverage {
-  retained_start: number;
-  first_sample_at: number | null;
-  last_sample_at: number | null;
-  sample_count: number;
-  expected_sample_count: number;
-  buckets: RuntimeHistoryCoveragePoint[];
-}
-
-export interface RuntimeHistoryTokenUsagePoint {
-  start: number;
-  end: number;
-  sampled_at: number;
-  input_tokens: number;
-  output_tokens: number;
-}
-
-export interface RuntimeHistory {
-  object: "agent.runtime_history";
-  source: "durable";
-  session_id: string;
-  requested_range: RuntimeHistoryRange;
-  resolution_seconds: number;
-  generated_at: number;
-  coverage: RuntimeHistoryCoverage;
-  series: RuntimeHistorySeries[];
-  token_usage: RuntimeHistoryTokenUsagePoint[];
-}
-
 export type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 
+// The model provider shapes keep `never` guards so an input and a view can never be mistaken for each other.
 /** A complete replacement bundle. API keys are write-only. */
 export interface ModelProviderInput {
   protocol: ModelProviderProtocol;
@@ -1205,9 +909,6 @@ export interface ModelProviderView {
   api_key?: never;
 }
 
-/** A harness's deployment default model provider in Core. The key is never returned. */
-export type ProviderObservationErrorCode = "authentication_error" | "connection_failed" | "rate_limit_exceeded" | "usage_limit_exceeded" | "server_overloaded" | "server_error" | "resource_not_found" | "request_timeout" | "invalid_request";
-
 /** Native model parameters validated by the selected harness. An empty object clears them. */
 export type HarnessConfig = Record<string, unknown>;
 
@@ -1223,35 +924,15 @@ export interface ModelConfigurationView {
   harness_config: HarnessConfig;
 }
 
-export interface HarnessModelConfiguration extends ModelConfigurationView {
-  last_used_at: string | null;
-  last_error_code: ProviderObservationErrorCode | null;
-  last_error_at: string | null;
-  object: "core.model_configuration";
-  harness: CoreHarnessKind;
-  updated_at: string;
-}
-
-/** Adapter build support, independent of runtime readiness or model availability. */
-export interface ModelConfigurationSupport {
-  /** Ordered supported native protocols; the first is the default. */
-  protocols: ModelProviderInput["protocol"][];
-  accepts_harness_config: boolean;
-  token_limits_required: boolean;
-}
+// The schema declares protocols as plain strings; the harness catalog names them.
+/** Adapter build support, independent of runtime readiness or model availability. Ordered protocols; the first is the default. */
+export type ModelConfigurationSupport = Omit<ModelConfigurationSupportResource, "protocols"> & { protocols: ModelProviderProtocol[] };
 
 /**
  * A harness this Core build supports. `enabled` and `default` are read-only views of
  * the process configuration; `model_configuration` is the deployment default, or null.
  */
-export interface CoreHarness {
-  object: "core.harness";
-  id: CoreHarnessKind;
-  enabled: boolean;
-  default: boolean;
-  model_configuration: HarnessModelConfiguration | null;
-  model_configuration_support: ModelConfigurationSupport;
-}
+export type CoreHarness = Omit<CoreHarnessResource, "model_configuration_support"> & { model_configuration_support: ModelConfigurationSupport };
 
 /** Native parameter inheritance follows the extension contract; null provider clears it. */
 export interface SavedAgentCoreInput {
@@ -1266,27 +947,7 @@ export interface SavedAgentCore {
   harness_config?: HarnessConfig;
 }
 
-export interface AgentsCoreSelection {
-  harness?: CoreHarnessKind;
-  harness_config?: HarnessConfig;
-}
-
-export type ExecutionConfigurationSource = "session" | "agent" | "deployment" | "unknown";
-
-/** Immutable committed selections, not live execution health. */
-export interface SessionExecutionConfiguration {
-  object: "agent.session.execution_configuration";
-  schema_version: 1;
-  session_id: string;
-  model: { value: string | null; source: ExecutionConfigurationSource };
-  harness: { value: string | null; source: ExecutionConfigurationSource };
-  harness_config: { value: HarnessConfig; source: ExecutionConfigurationSource };
-  model_provider: {
-    source: ExecutionConfigurationSource;
-    status: "available" | "redacted" | "unavailable";
-    configuration: ModelProviderView | null;
-  };
-}
+export type AgentsCoreSelection = AgentsCore;
 
 export interface AgentCore {
   listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;

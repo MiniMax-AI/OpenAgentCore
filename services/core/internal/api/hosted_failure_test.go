@@ -193,9 +193,8 @@ func TestHostedProvisioningFailureInputConflict(t *testing.T) {
 	}
 }
 
-// Core's own interruption frame keeps the three-field error that released
-// clients validate exactly; official error events carry param null.
-func TestStreamInterruptionFrameOmitsParam(t *testing.T) {
+// Core's own interruption frame is a pinned error event with param null.
+func TestStreamInterruptionFrameIsAnErrorEvent(t *testing.T) {
 	var frame []byte
 	writeStreamFailure(func(data []byte) error { frame = data; return nil }, "session")
 	name, data, ok := strings.Cut(strings.TrimSuffix(string(frame), "\n\n"), "\n")
@@ -204,7 +203,7 @@ func TestStreamInterruptionFrameOmitsParam(t *testing.T) {
 		t.Fatalf("frame %q", frame)
 	}
 	want := map[string]any{"type": "error", "event_id": event["event_id"], "session_id": "session", "error": map[string]any{
-		"code": "stream_interrupted", "type": "server_error", "message": "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover."}}
+		"code": "stream_interrupted", "type": "server_error", "message": "The live stream was interrupted. Reconnect and retrieve the Session and its saved Items to recover.", "param": nil}}
 	if id, _ := event["event_id"].(string); id == "" || !reflect.DeepEqual(event, want) {
 		t.Fatalf("interruption frame %s", data)
 	}

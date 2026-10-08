@@ -96,7 +96,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const backend = sandboxProviderLabel(deployment.provider, locale);
   // Nodes and their sandboxes reach Core at its public URL, so a loopback one serves no other machine;
   // and without the provider's node files the installer would fail on the host. Either way no command
-  // is issued, nor before the installation is read: a failed read (an older Core, say) proves nothing.
+  // is issued, nor before the installation is read: a failed read proves nothing about the address.
   const blocker: { text: string; failed?: boolean } | null = deployment.reset
     ? { text: t("Node enrollment is paused while reset is in progress.") }
     : !fresh

@@ -19,7 +19,7 @@ describe("sandbox diagnostics", () => {
   it("names why a node's provider is not ready, reading an unknown code as provider_unavailable", () => {
     expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "host_unsupported" }))?.label).toBe("Host unsupported");
     expect(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "future_code" as SandboxNodeDiagnostic })).toBe("provider_unavailable");
-    expect(nodeProviderDiagnostic({ online: true, provider_ready: true, diagnostic: "" })).toBe("");
+    expect(nodeProviderDiagnostic({ online: true, provider_ready: true })).toBe("");
     // An offline node's last code may no longer apply.
     expect(nodeProviderDiagnostic({ online: false, provider_ready: false, diagnostic: "host_unsupported" })).toBe("");
   });

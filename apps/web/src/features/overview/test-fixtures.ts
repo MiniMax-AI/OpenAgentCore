@@ -1,10 +1,10 @@
-import type { AgentSession, SandboxNode } from "@oac/agents-client";
-import { type OwnedRuntimeObservation, type Project, type ProjectSummary } from "../../lib/admin-view";
+import type { AdminProject, AgentSession, SandboxNode } from "@oac/agents-client";
+import { type OwnedRuntimeObservation, type ProjectSummary } from "../../lib/admin-view";
 
 /** Fixtures shared by the Monitor page tests. Not part of the application bundle. */
 
-export function project(id: string, overrides: Partial<Project> = {}): Project {
-  return { id, name: id, status: "active", created_at: 1, archived_at: null, active_key_count: 1, ...overrides };
+export function project(id: string, overrides: Partial<AdminProject> = {}): AdminProject {
+  return { id, name: id, created_at: "1970-01-01T00:00:01Z", archived_at: null, active_key_count: 1, ...overrides };
 }
 
 export function summary(projectId: string, overrides: Partial<ProjectSummary> = {}): ProjectSummary {
@@ -16,7 +16,7 @@ export function summary(projectId: string, overrides: Partial<ProjectSummary> = 
     assets: { agents: 1, skills: 0, environment_templates: 0, files: 0, vaults: 0, credentials: 0 },
     sessions: { total: 0, idle: 0, in_progress: 0, requires_action: 0, failed: 0 },
     usage: null,
-    coverage: { sessions: 0, reported: 0 },
+    coverage: { total_sessions: 0, measured_sessions: 0, ratio: null },
     last_active_at: null,
     ...overrides,
   };

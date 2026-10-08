@@ -22,7 +22,7 @@ type ExecutorConnections interface {
 }
 
 type EnvironmentExecutorCredentialRequest struct {
-	KeyID  string `json:"key_id" format:"uuid"`
+	KeyID  string `json:"key_id" format:"uuid" binding:"required"`
 	Rotate bool   `json:"rotate,omitempty"`
 }
 

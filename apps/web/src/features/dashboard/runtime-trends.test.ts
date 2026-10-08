@@ -38,7 +38,7 @@ function snapshot(at: number, options: {
       model: "fixture/model",
       instructions: null,
       multi_agent: { enabled: false, max_concurrent_subagents: null },
-      reasoning: {},
+      reasoning: { effort: null, summary: null },
       service_tier: "auto",
       text: { format: { type: "text" }, verbosity: "medium" },
       tools: [],
