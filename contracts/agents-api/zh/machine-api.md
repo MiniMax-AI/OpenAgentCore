@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 08e8e034ebe1e5a4c70db9143d35f08ceec071701d16e97480220c4ec0ece19f
+source_hash: e5fb4508091ff0311acbebe10349fe9ae2c649e1fb7a721d6047f581a2fd7299
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon、Sandbox I/O 服务和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。公共源站将 `/api/v1` 转发给 Core，可以直接转发，也可以经过 Web 不改变请求的 HTTP 和 WebSocket 代理。Web 不会给机器请求添加控制台权限。
@@ -30,7 +30,7 @@ source_hash: 08e8e034ebe1e5a4c70db9143d35f08ceec071701d16e97480220c4ec0ece19f
 
 所有 HTTP 错误使用 `{"error":{"message":"…","type":"invalid_request_error","code":null,"param":null}}`。`code` 在存在时携带路由定义的原因，`param` 在存在时标识被拒绝字段。409 的类型为 `conflict_error`，5xx 的类型为 `server_error`。升级前的握手失败也使用该封装；升级后的错误属于 wire 协议。调用方使用 HTTP 状态决定重试或永久拒绝，也可显示 `error.message`。
 
-`HEAD` 不打开连接，也不查询 Runtime：daemon WebSocket、Link 和连接观察路由以 405 拒绝；节点连接对所有非 GET 方法返回 503。节点配置与身份读取支持 HEAD，并执行与 GET 相同的凭据检查。安装器下载支持 GET 和 HEAD，包括归档的条件请求与范围响应；下载错误也使用共享封装。登记只接受 POST。不支持的方法保留路由的状态及 `Allow` 头。裸 `/api/v1/agent-daemon` 和 `/api/v1/agent-daemon/install` 前缀以 301 重定向到带尾斜杠的形式，并保留查询。未知机器路由返回使用共享封装的 404。
+`HEAD` 不打开连接，也不查询 Runtime：daemon WebSocket、Link 和连接观察路由以 405 拒绝；节点连接对 GET 以外的标准 HTTP 方法返回 503。对于 `PROPFIND` 等不支持的扩展方法，共同路由器在鉴权或升级前返回 405。节点配置与身份读取支持 HEAD，并执行与 GET 相同的凭据检查。安装器下载支持 GET 和 HEAD，包括归档的条件请求与范围响应；下载错误也使用共享封装。登记只接受 POST。其他被拒绝的方法使用共享错误封装。裸 `/api/v1/agent-daemon` 和 `/api/v1/agent-daemon/install` 前缀以 301 重定向到带尾斜杠的形式，并保留查询。未知机器路由返回使用共享封装的 404。
 
 ## 凭据 {#credentials}
 

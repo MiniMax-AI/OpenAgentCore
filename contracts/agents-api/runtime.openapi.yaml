@@ -654,7 +654,7 @@ paths:
         - Sandbox Node
   /api/v1/sandbox-node/connect:
     get:
-      description: Authenticates a node credential before upgrading to the sandbox node wire protocol. Other methods return 503 without authentication or upgrade.
+      description: Authenticates a node credential before upgrading to the sandbox node wire protocol. Standard HTTP methods other than GET return 503 without authentication or upgrade. Unsupported extension methods are rejected by the shared router with 405 before authentication or upgrade.
       parameters:
         - description: Bearer node credential
           in: header

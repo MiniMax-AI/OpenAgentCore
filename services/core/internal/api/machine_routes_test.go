@@ -105,6 +105,7 @@ func TestMachineRoutesPreserveAuthorityAndMethodPrecedence(t *testing.T) {
 		{"node handshake invalid", "GET", "/sandbox-node/connect?node_id=" + nodeID, "Bearer node-key", "", 400, 1, ""},
 		{"node HEAD never authenticates", "HEAD", "/sandbox-node/connect?node_id=" + nodeID, "Bearer node-key", "", 503, 0, ""},
 		{"node POST preserves status", "POST", "/sandbox-node/connect", "", "", 503, 0, ""},
+		{"node extension stops before authentication", "PROPFIND", "/sandbox-node/connect?node_id=" + nodeID, "Bearer node-key", "", 405, 0, ""},
 		{"bootstrap credential before body", "POST", "/agent-daemon/bootstrap", "", "{", 401, 0, ""},
 		{"bootstrap wrong credential", "POST", "/agent-daemon/bootstrap", "Bearer wrong", `{"device_id":"host"}`, 401, 1, ""},
 		{"bootstrap malformed", "POST", "/agent-daemon/bootstrap", "Bearer host-key", "{", 400, 0, ""},
@@ -139,7 +140,9 @@ func TestMachineRoutesPreserveAuthorityAndMethodPrecedence(t *testing.T) {
 			request.Header.Set("Authorization", tc.authorization)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, request)
-			if response.Code != tc.status || store.calls != tc.calls || response.Header().Get("Allow") != tc.allow {
+			// Extension rejection belongs to the router; its Allow list does not
+			// declare the node handler's supported operations.
+			if response.Code != tc.status || store.calls != tc.calls || tc.method != "PROPFIND" && response.Header().Get("Allow") != tc.allow {
 				t.Fatalf("status/calls/Allow = %d/%d/%q; want %d/%d/%q; %s", response.Code, store.calls, response.Header().Get("Allow"), tc.status, tc.calls, tc.allow, response.Body)
 			}
 			var envelope v1.ErrorResponse

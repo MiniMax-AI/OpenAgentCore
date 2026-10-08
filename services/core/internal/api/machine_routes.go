@@ -27,7 +27,7 @@ func (h *Handler) registerMachineRoutes(router chi.Router) {
 		r.Get("/sandbox-node/configuration", h.sandboxNodeConfiguration)
 
 		// @Summary Open a sandbox node connection
-		// @Description Authenticates a node credential before upgrading to the sandbox node wire protocol. Other methods return 503 without authentication or upgrade.
+		// @Description Authenticates a node credential before upgrading to the sandbox node wire protocol. Standard HTTP methods other than GET return 503 without authentication or upgrade. Unsupported extension methods are rejected by the shared router with 405 before authentication or upgrade.
 		// @Tags Sandbox Nodes
 		// @Param Authorization header string true "Bearer node credential"
 		// @Param node_id query string true "Node UUID"
