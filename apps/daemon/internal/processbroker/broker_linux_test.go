@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -69,7 +70,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv(harnessEnv) == "1" {
 		os.Exit(runHarness())
 	}
+	// Signal tests require children that can catch SIGINT, even when the
+	// test runner inherited it ignored. The shim preserves inherited ignores.
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, syscall.SIGINT)
 	code := m.Run()
+	signal.Stop(interrupts)
 	service.stop()
 	os.Exit(code)
 }
@@ -139,13 +145,37 @@ func TestInterruptReachesRemoteGroup(t *testing.T) {
 	f := newFixture(t, nil)
 	cmd := f.command("bash", "-c", "trap 'echo interrupted; exit 7' INT; echo ready; while :; do sleep 0.1; done")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	out := startLine(t, cmd, "ready")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.AfterFunc(10*time.Second, func() {
+		cmd.Process.Kill()
+		out.Close()
+	})
+	waited := false
+	defer func() {
+		deadline.Stop()
+		if !waited {
+			cmd.Process.Kill()
+			cmd.Wait()
+		}
+	}()
+	reader := bufio.NewReader(out)
+	if line, err := reader.ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("first line %q, %v", line, err)
+	}
 	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}
-	rest, _ := io.ReadAll(out)
-	if err := cmd.Wait(); exitCode(err) != 7 || string(rest) != "interrupted\n" {
-		t.Fatalf("Wait = %v; output %q", err, rest)
+	rest, readErr := io.ReadAll(reader)
+	err = cmd.Wait()
+	waited = true
+	if readErr != nil || exitCode(err) != 7 || string(rest) != "interrupted\n" {
+		t.Fatalf("Wait = %v; output %q, %v", err, rest, readErr)
 	}
 }
 
