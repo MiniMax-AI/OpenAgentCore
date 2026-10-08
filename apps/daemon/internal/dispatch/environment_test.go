@@ -68,8 +68,6 @@ func (o *testOwner) Configure(r proto.PromptRequestPayload) error {
 		return errors.New("the request does not name the Session's Environment")
 	case r.WorkspaceReadOnly:
 		return nil
-	case local.WorkspaceDirectory != "/workspace":
-		return errors.New("the workspace is not /workspace")
 	case local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil:
 		return agentcapabilities.ErrInvalid
 	}
@@ -325,7 +323,7 @@ func TestOwnedRuntimeRejectsForeignSessionBind(t *testing.T) {
 	h := localPreparationHarness(t)
 	defer h.router.Shutdown(context.Background())
 	const foreign = "33333333-3333-4333-8333-333333333333"
-	if err := h.router.Handle(t.Context(), scoped(t, foreign, proto.TypeAssignmentBind, "bind-foreign", proto.AssignmentBindPayload{EnvironmentID: preparationEnvironmentID})); err != nil {
+	if err := h.router.Handle(t.Context(), scoped(t, foreign, proto.TypeAssignmentBind, "bind-foreign", proto.AssignmentBindPayload{EnvironmentID: preparationEnvironmentID, WorkspaceDirectory: "/workspace"})); err != nil {
 		t.Fatal(err)
 	}
 	if status := waitAssignmentStatus(t, h.sender, "bind-foreign"); status.ErrorCode != proto.AssignmentConflict {

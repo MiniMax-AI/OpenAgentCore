@@ -3,6 +3,7 @@ package proto
 import (
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 )
@@ -60,19 +61,28 @@ func (r AssignmentRef) Valid() bool {
 }
 
 // AssignmentBindPayload is what the Runtime fences the Session's frames with.
-// EnvironmentID is empty for a Session without an Environment. Resource and
-// AttachGrant come together, only to an agent host whose Environment has a
-// Link resource: the agent host attaches to Resource with AttachGrant, which
-// is secret.
+// EnvironmentID and WorkspaceDirectory are empty for a Session without an
+// Environment. Otherwise WorkspaceDirectory freezes its absolute root before
+// any preparation or file operation. Resource and AttachGrant come together,
+// only to an agent host whose Environment has a Link resource: the agent host
+// attaches to Resource with AttachGrant, which is secret.
 type AssignmentBindPayload struct {
-	EnvironmentID string                     `json:"environment_id,omitempty"`
-	Resource      *sandboxbootstrap.Resource `json:"resource,omitempty"`
-	AttachGrant   []byte                     `json:"attach_grant,omitempty"`
+	EnvironmentID      string                     `json:"environment_id,omitempty"`
+	WorkspaceDirectory string                     `json:"workspace_directory,omitempty"`
+	Resource           *sandboxbootstrap.Resource `json:"resource,omitempty"`
+	AttachGrant        []byte                     `json:"attach_grant,omitempty"`
 }
 
-// Validate checks that Resource and AttachGrant come together and that
-// Resource is a resource of the Environment.
+// Validate checks the frozen workspace and requires Resource and AttachGrant
+// together, with Resource belonging to the Environment.
 func (p AssignmentBindPayload) Validate() error {
+	if p.EnvironmentID == "" {
+		if p.WorkspaceDirectory != "" {
+			return errors.New("assignment_bind without an Environment forbids a workspace")
+		}
+	} else if agentcapabilities.ValidateSourceDirectories([]string{p.WorkspaceDirectory}) != nil {
+		return errors.New("assignment_bind requires a canonical absolute workspace")
+	}
 	if p.Resource == nil && len(p.AttachGrant) == 0 {
 		return nil
 	}

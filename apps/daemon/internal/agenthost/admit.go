@@ -100,8 +100,8 @@ func admit(cfg Config, roots *x509.CertPool, req agent.PrepareRequest, env Envir
 	switch {
 	case local == nil && !none:
 		return nil, invalidSession("a Session with neither a workspace nor environment none is an incomplete binding")
-	case local != nil && !isViewPath(local.WorkspaceDirectory):
-		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
+	case local != nil && !isViewPath(req.WorkspaceRoot):
+		return nil, invalidSession("workspace %q is not absolute and clean", req.WorkspaceRoot)
 	case !none && len(view.Shims) > 0 && !hasPATH(env):
 		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}

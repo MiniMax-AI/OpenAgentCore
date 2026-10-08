@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -18,7 +19,7 @@ func TestSelfHostedCapabilitySourcesAreFrozenAndStrict(t *testing.T) {
 		t.Fatal(err)
 	}
 	local := request.LocalEnvironment
-	if local.WorkspaceDirectory != "/home/user/project" || local.ToolEnvironment ||
+	if local.ToolEnvironment ||
 		local.CapabilitySources == nil || !slices.Equal(local.CapabilitySources.Directories, []string{"/home/user/skills", "/opt/plugins"}) {
 		t.Fatal("frozen source selections lost", local)
 	}
@@ -38,9 +39,13 @@ func TestSelfHostedPreparedPathsArePlatformNeutral(t *testing.T) {
 		raw, _ := json.Marshal(map[string]any{"type": "self_hosted", "workspace_directory": directory, "capability_directories": []string{directory}})
 		session := sessions.Session{ID: "session", TenantID: "tenant"}
 		environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: raw}
+		placement, parseErr := environmentconfig.ParsePlacement(raw)
+		if parseErr != nil || placement.WorkspaceDirectory != directory || !LocalWorkspaceConfiguration(raw) {
+			t.Fatal("stored workspace parser changed admission", directory, parseErr)
+		}
 		var request proto.PromptRequestPayload
 		err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{SessionEnvironmentID: environment.ID}, &request)
-		if err != nil || request.LocalEnvironment.WorkspaceDirectory != directory || request.LocalEnvironment.CapabilitySources.Directories[0] != directory {
+		if err != nil || request.LocalEnvironment.CapabilitySources.Directories[0] != directory {
 			t.Fatal("Core interpreted a Runtime source path", directory, err)
 		}
 	}

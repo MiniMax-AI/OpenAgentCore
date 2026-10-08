@@ -49,7 +49,7 @@ func serveFileWrite(h *dispatchHarness, final proto.WorkspaceWriteResultPayload)
 }
 
 func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T) {
-	h, w, environment := localWorker(t, false)
+	h, w, environment := localWorkerForSession(t, false, `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/home/user/project"}}`)
 	pool := h.s.pool
 	if _, err := pool.Exec(t.Context(), `UPDATE environments SET status='connected' WHERE id=$1`, environment.ID); err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 	rejected := func(reason string) proto.WorkspaceWriteResultPayload {
 		return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: reason}
 	}
-	for _, tc := range []struct {
+	for i, tc := range []struct {
 		body, reason, message string
 	}{
 		{`{"type":"inline","data":"YWJj","path":"/workspace/n1"}`, proto.WorkspaceWriteReasonDirectory, "file path conflicts with an existing environment file"},
@@ -138,6 +138,14 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		{copyBody, proto.WorkspaceWriteReasonUnsafe, "environment.files paths must not traverse symlinks or overwrite existing files"},
 	} {
 		done := post(token, environment.ID, tc.body)
+		if i == 0 {
+			bind := h.read(proto.TypeAssignmentBind)
+			var binding proto.AssignmentBindPayload
+			if bind.DecodePayload(&binding) != nil || binding.EnvironmentID != environment.ID || binding.WorkspaceDirectory != "/home/user/project" {
+				t.Fatal("Files.create did not bind the frozen workspace before transfer", binding)
+			}
+			h.assignmentFrame(bind)
+		}
 		id := serveFileWrite(h, rejected(tc.reason))
 		assertError(await(done), tc.message)
 		if intent, err := FixtureFileWrite(t.Context(), h.s.pool, h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {

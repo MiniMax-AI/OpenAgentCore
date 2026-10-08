@@ -2,12 +2,11 @@ package proto
 
 import "github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 
-// LocalEnvironment names a frozen workspace selection. Runtime must verify it
-// against the bound local root before resolving capabilities or native execution.
+// LocalEnvironment names the bound Environment and its preparation inputs.
+// Its workspace is frozen by assignment_bind.
 type LocalEnvironment struct {
-	ID                 string                   `json:"id"`
-	WorkspaceDirectory string                   `json:"workspace_directory"`
-	CapabilitySources  *agentcapabilities.Input `json:"capability_sources"`
+	ID                string                   `json:"id"`
+	CapabilitySources *agentcapabilities.Input `json:"capability_sources"`
 	// ToolEnvironment consumes Core-completed confidential initialization.
 	ToolEnvironment bool `json:"tool_environment,omitempty"`
 }

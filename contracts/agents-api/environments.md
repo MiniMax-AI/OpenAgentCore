@@ -71,7 +71,7 @@ The application owns the machine. It creates the Session with a clean absolute `
 
 - `remote_url` is Core's daemon WebSocket URL, derived from Core's public URL, never from request headers or a daemon address. The machine derives Core's origin from it to enroll, and Sandbox I/O serves the Link URL that enrollment returns.
 - Enrollment records the executor key that serves the Environment's Link resource; the first key keeps it. It creates no allocation and binds no Session: the Session runs on the deployment's agent host ([Session assignments](../../docs/runtime-protocol.md#session-assignments)).
-- The Session's workspace is the machine's `/workspace`: the agent host fails the preparation of an execution whose `workspace_directory` names another path. Naming a path grants no access to it.
+- The Session's workspace is the machine's declared `workspace_directory`. The agent host freezes that path on assignment binding, before initialization or file access. Naming a path grants no access to it.
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access; the machine owner stops what still runs on the machine and cleans up.
 - The workspace must survive a restart of `oac-daemon start` or Sandbox I/O. Losing it never authorizes silent replacement or replay.
@@ -206,9 +206,9 @@ Preparation runs on the Environment's machine as Sandbox I/O's account and never
 - System dependencies must be preinstalled in the managed image or by the owner of a self-hosted machine. A missing executable or library fails the operation that needs it.
 - `packages.system` is rejected in Templates and inline configuration, including a null or empty list (400, param `packages.system`). Package responses still carry the official required `system: []`.
 - npm installs into the prefix `/environment/packages/npm` and pip into the target `/environment/packages/python`; Node/npm and Python/pip must already be installed. The [tool environment](#explicit-local-tool-environment) puts their commands on `PATH` and the Python packages on `PYTHONPATH`, so native tools see them in every working directory.
-- Setup commands run with Bash, without profile or rc files. The default working directory is `/workspace`.
+- Setup commands run with Bash, without profile or rc files. The default working directory is the declared workspace; a setup `cwd` under logical `/workspace` resolves within it. Command text is never rewritten.
 
-The machine's layout is fixed: the workspace is `/workspace`, initialization records and the tool environment live in `/environment/initialization`, and packages in `/environment/packages`. Managed Providers create the initialization and package directories for Sandbox I/O's account. These are resource paths, never Environment-source or operating-system switches in Core.
+Hosted Environments use `/workspace`; self-hosted Environments use their declared workspace. Initialization records and the tool environment live in `/environment/initialization`, and packages in `/environment/packages`. Managed Providers create the initialization and package directories for Sandbox I/O's account. These are resource paths, never Environment-source or operating-system switches in Core.
 
 Every command uses the machine's network. Process ownership waits for exit and I/O settlement. Command output is discarded; a confirmed failure keeps only a bounded integer exit status.
 
@@ -308,7 +308,7 @@ Env values are readable by Agent code but never appear in public metadata or ini
 | Referenced file | 50 MiB |
 | Session or Template request body | 16 MiB |
 
-Paths must be canonical, distinct and inside the logical workspace; the agent host anchors each write to the machine's `/workspace`. This is API path scope, not a restriction on native tools running as the same user. Template metadata shows inline files as type, path and size and references as type, path and `file_id`; each Session gets fresh file IDs and sizes for both. File data stays out of ordinary configuration, responses, events and command arguments. A Template keeps references; each Session authorizes and freezes its own encrypted source bytes, so later source deletion cannot change them.
+Paths must be canonical, distinct and inside the logical workspace; the agent host maps logical `/workspace` to the declared physical workspace and anchors each write there. This is API path scope, not a restriction on native tools running as the same user. Template metadata shows inline files as type, path and size and references as type, path and `file_id`; each Session gets fresh file IDs and sizes for both. File data stays out of ordinary configuration, responses, events and command arguments. A Template keeps references; each Session authorizes and freezes its own encrypted source bytes, so later source deletion cannot change them.
 
 ### Skills
 

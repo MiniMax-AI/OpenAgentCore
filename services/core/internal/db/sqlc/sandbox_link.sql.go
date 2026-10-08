@@ -64,6 +64,7 @@ SELECT b.session_id, b.runtime_id, b.epoch, b.desired_state = 'bound' AS bound,
     (d.revoked_at IS NULL)::boolean AS agent_host, d.credential_revision,
     r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
     r.id AS resource_id, r.generation AS resource_generation,
+    (s.configuration->'environment')::jsonb AS environment_configuration,
     (COALESCE(s.configuration->'environment'->'network'->>'access', 'enabled') = 'enabled')::boolean AS network_enabled
 FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
@@ -74,22 +75,23 @@ WHERE b.assignment_id = $1
 `
 
 type GetLinkAssignmentRow struct {
-	SessionID             pgtype.UUID `json:"session_id"`
-	RuntimeID             pgtype.UUID `json:"runtime_id"`
-	Epoch                 int64       `json:"epoch"`
-	Bound                 bool        `json:"bound"`
-	AgentHost             bool        `json:"agent_host"`
-	CredentialRevision    int64       `json:"credential_revision"`
-	ResourceTenantID      pgtype.UUID `json:"resource_tenant_id"`
-	ResourceEnvironmentID pgtype.UUID `json:"resource_environment_id"`
-	ResourceKind          pgtype.Text `json:"resource_kind"`
-	ResourceID            pgtype.UUID `json:"resource_id"`
-	ResourceGeneration    pgtype.Int8 `json:"resource_generation"`
-	NetworkEnabled        bool        `json:"network_enabled"`
+	SessionID                pgtype.UUID `json:"session_id"`
+	RuntimeID                pgtype.UUID `json:"runtime_id"`
+	Epoch                    int64       `json:"epoch"`
+	Bound                    bool        `json:"bound"`
+	AgentHost                bool        `json:"agent_host"`
+	CredentialRevision       int64       `json:"credential_revision"`
+	ResourceTenantID         pgtype.UUID `json:"resource_tenant_id"`
+	ResourceEnvironmentID    pgtype.UUID `json:"resource_environment_id"`
+	ResourceKind             pgtype.Text `json:"resource_kind"`
+	ResourceID               pgtype.UUID `json:"resource_id"`
+	ResourceGeneration       pgtype.Int8 `json:"resource_generation"`
+	EnvironmentConfiguration []byte      `json:"environment_configuration"`
+	NetworkEnabled           bool        `json:"network_enabled"`
 }
 
 // The assignment with its Runtime's Attach authority, the live Link resource
-// of its Session's Environment and that Environment's network access.
+// of its Session's Environment and that Environment's frozen configuration and network access.
 func (q *Queries) GetLinkAssignment(ctx context.Context, assignmentID pgtype.UUID) (GetLinkAssignmentRow, error) {
 	row := q.db.QueryRow(ctx, getLinkAssignment, assignmentID)
 	var i GetLinkAssignmentRow
@@ -105,6 +107,7 @@ func (q *Queries) GetLinkAssignment(ctx context.Context, assignmentID pgtype.UUI
 		&i.ResourceKind,
 		&i.ResourceID,
 		&i.ResourceGeneration,
+		&i.EnvironmentConfiguration,
 		&i.NetworkEnabled,
 	)
 	return i, err

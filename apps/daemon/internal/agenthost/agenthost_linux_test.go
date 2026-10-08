@@ -84,12 +84,12 @@ func register(reg *agent.Registry, kind string, view *agent.View) {
 }
 
 // request is a Session request the agent host admits.
-func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
+func request(kind, baseURL, key string) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{
 		AgentKind:        kind,
 		Model:            "m",
 		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: baseURL, APIKey: key},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, CapabilitySources: &agentcapabilities.Input{}},
+		LocalEnvironment: &proto.LocalEnvironment{CapabilitySources: &agentcapabilities.Input{}},
 	}
 }
 
@@ -98,7 +98,7 @@ func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 func prepared(req proto.PromptRequestPayload) agent.PrepareRequest {
 	p := agent.PrepareRequest{PromptRequestPayload: req, Prepared: harnessconfig.PreparedConfiguration{Model: req.Model, Provider: *req.ModelProvider}}
 	if req.LocalEnvironment != nil {
-		p.WorkspaceRoot = req.LocalEnvironment.WorkspaceDirectory
+		p.WorkspaceRoot = logicalWorkspace
 	}
 	return p
 }
@@ -154,8 +154,9 @@ func leftEntries(t *testing.T, cfg Config) []string {
 // a Host's Environment owners and Executor factory. It records the latest
 // Executor the agent host opened for each Session.
 type daemon struct {
-	host   *Host
-	router *dispatch.Router
+	host      *Host
+	workspace string
+	router    *dispatch.Router
 	// mcp is the installed MCP that the Environment's preparation resolves
 	// into each request; the wire does not carry it.
 	mcp    []agent.EnvironmentMCP
@@ -217,6 +218,7 @@ func bindPayload(b Binding) proto.AssignmentBindPayload {
 		p.Resource = &sandboxbootstrap.Resource{TenantID: uuid.UUID(r.TenantID).String(), EnvironmentID: p.EnvironmentID, Kind: kind,
 			ID: uuid.UUID(r.ID).String(), Generation: r.Generation}
 		p.AttachGrant = b.AttachGrant
+		p.WorkspaceDirectory = logicalWorkspace
 	}
 	return p
 }
@@ -266,7 +268,11 @@ func (dm *daemon) next(t *testing.T, id string) proto.Envelope {
 func (dm *daemon) assign(t *testing.T, b Binding) {
 	t.Helper()
 	id := sandboxwire.NewID().String()
-	dm.handle(t, ref(b), proto.TypeAssignmentBind, id, bindPayload(b))
+	payload := bindPayload(b)
+	if payload.EnvironmentID != "" && dm.workspace != "" {
+		payload.WorkspaceDirectory = dm.workspace
+	}
+	dm.handle(t, ref(b), proto.TypeAssignmentBind, id, payload)
 	if status := dm.status(t, id); status.State != proto.AssignmentBound {
 		t.Fatalf("the bind is %s (%s), want bound", status.State, status.ErrorCode)
 	}

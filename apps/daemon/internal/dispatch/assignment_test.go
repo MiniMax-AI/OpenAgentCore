@@ -186,15 +186,15 @@ func TestAssignmentBindCarriesLink(t *testing.T) {
 		return waitAssignmentStatus(t, h.sender, id)
 	}
 	for id, payload := range map[string]proto.AssignmentBindPayload{
-		"no grant":          {EnvironmentID: environment, Resource: resource},
-		"no resource":       {EnvironmentID: environment, AttachGrant: []byte("grant")},
-		"other environment": {EnvironmentID: environment, Resource: &other, AttachGrant: []byte("grant")},
+		"no grant":          {EnvironmentID: environment, WorkspaceDirectory: "/workspace", Resource: resource},
+		"no resource":       {EnvironmentID: environment, WorkspaceDirectory: "/workspace", AttachGrant: []byte("grant")},
+		"other environment": {EnvironmentID: environment, WorkspaceDirectory: "/workspace", Resource: &other, AttachGrant: []byte("grant")},
 	} {
 		if got := bind(id, payload); got.ErrorCode != "invalid_request" {
 			t.Fatalf("%s: bind = %+v", id, got)
 		}
 	}
-	link := proto.AssignmentBindPayload{EnvironmentID: environment, Resource: resource, AttachGrant: []byte("grant")}
+	link := proto.AssignmentBindPayload{EnvironmentID: environment, WorkspaceDirectory: "/workspace", Resource: resource, AttachGrant: []byte("grant")}
 	if got := bind("bind", link); got.State != proto.AssignmentBound {
 		t.Fatalf("bind = %+v", got)
 	}
@@ -298,8 +298,8 @@ func TestSupersedingBindFencesTheEarlierEpoch(t *testing.T) {
 		code    string
 	}{
 		"lower":             {1, proto.AssignmentBindPayload{}, proto.AssignmentStale},
-		"changed":           {2, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString()}, proto.AssignmentConflict},
-		"other environment": {3, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString()}, proto.AssignmentConflict},
+		"changed":           {2, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}, proto.AssignmentConflict},
+		"other environment": {3, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}, proto.AssignmentConflict},
 		"repeated":          {2, proto.AssignmentBindPayload{}, ""},
 	} {
 		if got := bind(id, test.epoch, test.payload); got.ErrorCode != test.code {
@@ -319,4 +319,72 @@ func TestSupersedingBindFencesTheEarlierEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitPreparationStatus(t, h.sender, "current", "ready", "")
+}
+
+func TestAssignmentWorkspaceConflictsDoNotFenceOwner(t *testing.T) {
+	owner := &closingOwner{entered: make(chan struct{}), release: make(chan struct{})}
+	var resolutions atomic.Int32
+	sender := &recSender{}
+	r, err := dispatch.New(dispatch.Config{Registry: agent.NewRegistry(), Sender: sender, Environments: func(_ proto.AssignmentRef, bind proto.AssignmentBindPayload) dispatch.Environment {
+		resolutions.Add(1)
+		if bind.WorkspaceDirectory != "/projects/custom" {
+			t.Errorf("resolved workspace = %q", bind.WorkspaceDirectory)
+		}
+		return owner
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Shutdown(context.Background())
+	defer func() {
+		select {
+		case <-owner.release:
+		default:
+			close(owner.release)
+		}
+	}()
+	bind := func(id string, epoch uint64, workspace string) {
+		env := scoped(t, "s", proto.TypeAssignmentBind, id, proto.AssignmentBindPayload{EnvironmentID: preparationEnvironmentID, WorkspaceDirectory: workspace})
+		env.Assignment.Epoch = epoch
+		if err := r.Handle(t.Context(), env); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bind("first", 1, "/projects/custom")
+	if got := waitAssignmentStatus(t, sender, "first"); got.State != proto.AssignmentBound {
+		t.Fatalf("first bind = %+v", got)
+	}
+	for id, epoch := range map[string]uint64{"same epoch conflict": 1, "higher epoch conflict": 2} {
+		bind(id, epoch, "/workspace")
+		if got := waitAssignmentStatus(t, sender, id); got.ErrorCode != proto.AssignmentConflict {
+			t.Fatalf("%s = %+v", id, got)
+		}
+		bind(id+" repeat", 1, "/projects/custom")
+		if got := waitAssignmentStatus(t, sender, id+" repeat"); got.State != proto.AssignmentBound {
+			t.Fatalf("conflict fenced current assignment: %+v", got)
+		}
+	}
+	if owner.closes.Load() != 0 || resolutions.Load() != 1 {
+		t.Fatalf("conflicts changed owner: closes %d, resolutions %d", owner.closes.Load(), resolutions.Load())
+	}
+	bind("supersede", 2, "/projects/custom")
+	select {
+	case <-owner.entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("superseding bind did not close earlier owner")
+	}
+	for id, epoch := range map[string]uint64{"pending conflict": 2, "pending higher conflict": 3} {
+		bind(id, epoch, "/workspace")
+		if got := waitAssignmentStatus(t, sender, id); got.ErrorCode != proto.AssignmentConflict {
+			t.Fatalf("%s = %+v", id, got)
+		}
+	}
+	close(owner.release)
+	if got := waitAssignmentStatus(t, sender, "supersede"); got.State != proto.AssignmentBound {
+		t.Fatalf("conflict fenced pending assignment: %+v", got)
+	}
+	bind("current", 2, "/projects/custom")
+	if got := waitAssignmentStatus(t, sender, "current"); got.State != proto.AssignmentBound || resolutions.Load() != 2 {
+		t.Fatalf("current bind = %+v, resolutions %d", got, resolutions.Load())
+	}
 }

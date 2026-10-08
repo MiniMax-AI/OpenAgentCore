@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -167,7 +168,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err != nil {
 		return deployment.Allocation{}, err
 	}
-	placement, err := parseEnvironmentPlacement(environmentValue.Configuration)
+	placement, err := environmentconfig.ParsePlacement(environmentValue.Configuration)
 	if err != nil || placement.Type != "openai_hosted" {
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}

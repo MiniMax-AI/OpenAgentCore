@@ -68,7 +68,7 @@ const (
 	// caDir holds the agent-host image's roots, one regular PEM file each.
 	caDir = "/usr/share/ca-certificates/mozilla"
 	// workspace is the sandbox directory every Session works in.
-	workspace = "/workspace"
+	workspace = "/workspace/custom-project"
 	turnLimit = 10 * time.Minute
 )
 
@@ -99,6 +99,16 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 		Log: slog.New(slog.NewTextHandler(os.Stderr, nil))}
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
 	sb.ready(t, cfg)
+	// The logical workspace remains distinct from the bound physical root.
+	sb.files(t, cfg, func(ctx context.Context, c *sandboxfs.Client, root sandboxfs.NodeRef) {
+		walked, err := c.Walk(ctx, &sandboxfs.WalkRequest{Parent: root, Names: [][]byte{[]byte("workspace")}})
+		if err != nil || walked.Failure != nil {
+			t.Fatalf("workspace parent: %v %+v", err, walked)
+		}
+		if _, err := c.Mkdir(ctx, &sandboxfs.MkdirRequest{Parent: walked.Entries[0].Node, Name: []byte("custom-project"), Mode: 0o755}); err != nil {
+			t.Fatal(err)
+		}
+	})
 	h, err := agenthost.Open(cfg)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -150,7 +160,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 
 	configuration := proto.PromptRequestPayload{AgentKind: kind, DisableSubagents: true,
 		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"},
-		LocalEnvironment: &proto.LocalEnvironment{ID: uuid.UUID(sb.resource.EnvironmentID).String(), WorkspaceDirectory: workspace,
+		LocalEnvironment: &proto.LocalEnvironment{ID: uuid.UUID(sb.resource.EnvironmentID).String(),
 			CapabilitySources: &agentcapabilities.Input{}}}
 	if caps.FunctionTools.IsSupported() {
 		configuration.FunctionTools = []proto.FunctionTool{lookupTicket}
@@ -358,6 +368,7 @@ func (s *session) router(t *testing.T, out sender, id string) (*dispatch.Router,
 		bind.Resource = &sandboxbootstrap.Resource{TenantID: uuid.UUID(r.TenantID).String(), EnvironmentID: bind.EnvironmentID, Kind: "allocation",
 			ID: uuid.UUID(r.ID).String(), Generation: r.Generation}
 		bind.AttachGrant = s.binding.AttachGrant
+		bind.WorkspaceDirectory = workspace
 	}
 	handle(t, router, ref, proto.TypeAssignmentBind, id, bind)
 	var bound proto.AssignmentStatusPayload

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -78,7 +79,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		result.err = sessions.ErrNotFound
 		return
 	}
-	if _, err := parseEnvironmentPlacement(environment.Configuration); err != nil {
+	if _, err := environmentconfig.ParsePlacement(environment.Configuration); err != nil {
 		return
 	}
 	session, err := w.dispatcher.SessionsReader.GetSession(check, environment.TenantID, environment.SessionID)

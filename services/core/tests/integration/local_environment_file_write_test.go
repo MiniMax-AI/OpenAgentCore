@@ -38,7 +38,7 @@ func awaitLocalWrite(t *testing.T, done <-chan localWriteResult) localWriteResul
 }
 
 func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
-	h, w, environment := localWorker(t, false)
+	h, w, environment := localWorkerForSession(t, false, `{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/home/user/project"}}`)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
 	if _, err := w.WriteEnvironmentFile(t.Context(), foreign, "input", nil); !errors.Is(err, sessions.ErrNotFound) {
@@ -50,7 +50,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	// Environment work without a Turn binds the Session's assignment first.
 	bind := h.read(proto.TypeAssignmentBind)
 	var binding proto.AssignmentBindPayload
-	if bind.DecodePayload(&binding) != nil || bind.Assignment.SessionID != h.session.ID || bind.Assignment.Epoch != 1 || binding.EnvironmentID != environment.ID {
+	if bind.DecodePayload(&binding) != nil || bind.Assignment.SessionID != h.session.ID || bind.Assignment.Epoch != 1 || binding.EnvironmentID != environment.ID || binding.WorkspaceDirectory != "/home/user/project" {
 		t.Fatal("upload did not bind the Session's assignment")
 	}
 	h.assignmentFrame(bind)

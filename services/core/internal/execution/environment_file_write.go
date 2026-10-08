@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -81,7 +82,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if environment.SessionID != request.environment.SessionID {
 		return fileWriteResult{err: sessions.ErrNotFound}
 	}
-	placement, err := parseEnvironmentPlacement(environment.Configuration)
+	placement, err := environmentconfig.ParsePlacement(environment.Configuration)
 	if err != nil || (placement.Type != "openai_hosted" && placement.Type != "self_hosted") {
 		return unavailable
 	}

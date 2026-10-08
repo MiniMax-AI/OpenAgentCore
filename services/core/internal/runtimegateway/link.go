@@ -14,10 +14,10 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
@@ -165,32 +165,35 @@ func (l *LinkAuthority) authorize(ctx context.Context, peer sandboxlink.AttachPe
 // Link resource: the agent host reaches an Environment only through one.
 var ErrNoLinkResource = errors.New("agentdaemon gateway: the Environment has no live Link resource")
 
-// bindLink returns the Link resource and attach grant that runtimeID's bind of
-// ref in environmentID carries: none unless runtimeID is the agent host that
-// holds ref bound, and then environmentID's live Link resource, without which
-// it is ErrNoLinkResource.
-func (l *LinkAuthority) bindLink(ctx context.Context, runtimeID string, ref proto.AssignmentRef, environmentID string) (*sandboxbootstrap.Resource, []byte, error) {
+// bindLink resolves the immutable Environment workspace and live Link authority
+// before the Runtime receives any operation on the assignment.
+func (l *LinkAuthority) bindLink(ctx context.Context, runtimeID string, ref proto.AssignmentRef, environmentID string) (proto.AssignmentBindPayload, error) {
+	payload := proto.AssignmentBindPayload{EnvironmentID: environmentID}
 	if environmentID == "" {
-		return nil, nil, nil
+		return payload, nil
 	}
 	assignment, found, err := l.store.GetLinkAssignment(ctx, ref.AssignmentID)
-	if err != nil || !found || !assignment.AgentHost || !assignment.Bound ||
-		assignment.RuntimeID != runtimeID || assignment.SessionID != ref.SessionID || assignment.Epoch != ref.Epoch {
-		return nil, nil, err
+	if err != nil {
+		return payload, err
 	}
-	if assignment.Resource.EnvironmentID != environmentID {
-		return nil, nil, ErrNoLinkResource
+	if !found || !assignment.AgentHost || !assignment.Bound || assignment.RuntimeID != runtimeID || assignment.SessionID != ref.SessionID || assignment.Epoch != ref.Epoch || assignment.Resource.EnvironmentID != environmentID {
+		return payload, ErrNoLinkResource
+	}
+	placement, err := environmentconfig.ParsePlacement(assignment.EnvironmentConfiguration)
+	if err != nil {
+		return payload, err
 	}
 	id, err := uuid.Parse(ref.AssignmentID)
 	if err != nil {
-		return nil, nil, err
+		return payload, err
 	}
 	resource := assignment.Resource
 	grant, err := l.grant(ctx, sandboxwire.ID(id), ref.Epoch, resource.Kind, resource.ID, resource.Generation)
 	if err != nil {
-		return nil, nil, err
+		return payload, err
 	}
-	return &resource, grant, nil
+	payload.Resource, payload.AttachGrant, payload.WorkspaceDirectory = &resource, grant, placement.WorkspaceDirectory
+	return payload, nil
 }
 
 // grantBytes is the size of an attach grant: the assignment ID, epoch and
