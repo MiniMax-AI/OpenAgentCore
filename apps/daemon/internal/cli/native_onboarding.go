@@ -88,14 +88,6 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 		return errors.New("install: supplied options conflict with the Session's frozen environment")
 	}
 	o.Remote, o.Environment, o.Workspace = info.RemoteURL, info.EnvironmentID, info.Workspace
-	for name, spec := range nativeHarnesses {
-		if spec.AgentKind == info.Harness {
-			o.RequiredHarness = name
-		}
-	}
-	if o.RequiredHarness == "" {
-		return errors.New("install: the Session requires an unsupported Harness")
-	}
 	if o.Directory == "" {
 		root, err := paths.Root()
 		if err != nil {
@@ -115,7 +107,7 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, held *os.Root) error {
 	var previous nativeInstallation
 	if raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20); err == nil {
-		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || previous.Remote != o.Remote || previous.Environment != o.Environment || previous.Workspace != o.Workspace {
+		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || previous.Remote != o.Remote || previous.Environment != o.Environment {
 			return errors.New("install: this directory belongs to an incompatible installation; choose a separate directory")
 		}
 		o.Credential = previous.Credential
@@ -151,7 +143,7 @@ func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, h
 }
 
 func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOptions) error {
-	executable := filepath.Join(o.Directory, "bin", nativeExe("oac-daemon"))
+	executable := filepath.Join(o.Directory, "bin", "oac-daemon")
 	pidPath := filepath.Join(o.Directory, "daemon", paths.DefaultProfile, "connect.pid")
 	if _, err := daemonize.ReadPIDFile(pidPath); err != nil {
 		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, daemonize.ErrStaleOrCorrupt) {
@@ -160,7 +152,7 @@ func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOption
 		// Run the installed executable. A detached child must never reference the
 		// temporary bundle or inherit the short-lived authorization in argv.
 		command := exec.CommandContext(ctx, executable, "start")
-		command.Env = withNativeEnv(map[string]string{"OAC_RUNTIME_HOME": o.Directory, daemonize.BackgroundSentinelEnv: ""})
+		command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+o.Directory, daemonize.BackgroundSentinelEnv+"=")
 		command.Stdout, command.Stderr = rc.stdout, rc.stderr
 		if err := command.Run(); err != nil {
 			fmt.Fprintln(rc.stderr, "Host connection: start failed. Rerun this command to resume, or run the installed oac-daemon start.")

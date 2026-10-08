@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/mcode-runtime}"
 companion="${MCODE_HARNESS_BUILD_DIR:?Set MCODE_HARNESS_BUILD_DIR to the built companion}"
@@ -17,12 +16,6 @@ context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/mcode.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
 mkdir "$context/mcode-harness"
 cp -RL "$companion/." "$context/mcode-harness/"
-(
-  cd "$repo_root"
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
-)
-cp "$repo_root/services/core/deploy/mcode/Dockerfile" "$context/Dockerfile"
 mkdir -p "$output"
 cp -R "$context/." "$output/"
-printf 'MiniMax Code Runtime image context: %s\n' "$output"
+printf 'MiniMax Code Harness payload: %s\n' "$output"

@@ -4,11 +4,11 @@ base=$1
 authorization=$2
 shift 2
 fail() { printf '%s\n' "$*" >&2; exit 1; }
-case "$(uname -s)" in Linux) os=linux;; Darwin) os=darwin;; *) fail 'Unsupported operating system.';; esac
-case "$(uname -m)" in x86_64) arch=amd64;; arm64|aarch64) arch=arm64;; *) fail 'Unsupported processor architecture.';; esac
+case "$(uname -s)" in Linux) os=linux;; *) fail 'Self-hosted installation requires Linux amd64.';; esac
+case "$(uname -m)" in x86_64) arch=amd64;; *) fail 'Self-hosted installation requires Linux amd64.';; esac
 for tool in curl tar gzip df awk wc; do command -v "$tool" >/dev/null || fail "Required command missing: $tool"; done
 if command -v sha256sum >/dev/null; then hash=(sha256sum); else hash=(shasum -a 256); command -v shasum >/dev/null || fail 'Required command missing: shasum'; fi
-if [ "$os" = darwin ]; then command -v lockf >/dev/null || fail 'Required command missing: lockf'; else command -v flock >/dev/null || fail 'Required command missing: flock (util-linux)'; fi
+command -v flock >/dev/null || fail 'Required command missing: flock (util-linux)'
 umask 077
 root=${OAC_RUNTIME_HOME:-${HOME:?HOME must be set}/.oac}
 case "$root" in /*) ;; *) fail 'OAC_RUNTIME_HOME must be an absolute directory.';; esac
@@ -23,7 +23,7 @@ lock=$cache/download.lock
 [ ! -L "$lock" ] && { [ ! -e "$lock" ] || { [ -f "$lock" ] && [ -O "$lock" ]; }; } || fail 'Invalid native download lock.'
 # Children inherit this descriptor, so killing only the shell cannot expose an active download.
 exec 9>>"$lock"
-if [ "$os" = darwin ]; then lockf -s -t 0 9; else flock -n 9; fi || fail 'Another native download is running; wait for it to finish and retry.'
+flock -n 9 || fail 'Another native download is running; wait for it to finish and retry.'
 work=$cache/staging
 [ ! -L "$work" ] && { [ ! -e "$work" ] || { [ -d "$work" ] && [ -O "$work" ]; }; } || fail 'Invalid native download staging directory.'
 rm -rf "$work"

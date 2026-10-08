@@ -24,9 +24,9 @@ Creating or editing application assets, starting Sessions and submitting input r
 
 ## Runtime and outer isolation
 
-The Runtime daemon runs on Linux, macOS and Windows. Native platform behavior belongs to the Runtime and its Harness adapters; managed Sandbox Providers run Linux environments.
+The Runtime runs Harnesses on the Linux agent host. Managed sandboxes and self-hosted machines run the Sandbox I/O service; the [self-hosted guide](./getting-started/self-hosted.md#platforms) owns supported installation platforms and host prerequisites.
 
-Tools run with the permissions of the account that launches the daemon. The daemon adds no filesystem, permission or network isolation. Use the outer Environment for isolation: a managed Docker, E2B or microsandbox environment, or a container or VM around a self-hosted machine's Runtime. Authentication, private storage, locks and process cleanup protect the connection and lifecycle, but tools running as the same user can access Runtime data.
+Tools run with the permissions of the account that launches the Sandbox I/O service. That service adds no filesystem, permission or network isolation. Use the outer Environment for isolation: a managed Docker, E2B or microsandbox environment, or a container or VM around a self-hosted machine's service. Authentication, private storage, locks and process cleanup protect the connection and lifecycle, but tools running as the same user can access the machine's service data. Harness history and model credentials remain on the agent host.
 
 ## Secrets and audit
 

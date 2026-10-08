@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 2dd362d329e39d15c3b6ddfa727429ab282c037015dabcece938d6daaeffaa99
+source_hash: c3c3217a3bf62e87cc09966d5cb46123bb52d751adcbe91c00b0466bb6f1a593
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -168,7 +168,7 @@ Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 
 
 ### `oac-sandbox-io` {#oac-sandbox-io}
 
-`oac-sandbox-io` 是 Provider 在托管 sandbox 中启动的唯一进程，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap` 是 allocation 的 `Reference` 和 `SandboxIO`，后者是该服务的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，同时检查 `SandboxIO` Serve 的正是该 `Reference`；adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 UID 1000 启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。`BootstrapComplete` 意味着它已启动。该输入从不通过命令参数或环境变量传递。每个 Runtime 镜像都包含 `/usr/local/bin/oac-sandbox-io`。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
+`oac-sandbox-io` 是 Provider 在托管 sandbox 中启动的唯一进程，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap` 是 allocation 的 `Reference` 和 `SandboxIO`，后者是该服务的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，同时检查 `SandboxIO` Serve 的正是该 `Reference`；adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 UID 1000 启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。`BootstrapComplete` 意味着它已启动。该输入从不通过命令参数或环境变量传递。沙箱镜像包含 `/usr/local/bin/oac-sandbox-io`；Harness 打包在 agent-host 镜像中。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
 
 ### 每节点生命周期 worker {#per-node-lifecycle-workers}
 
@@ -222,7 +222,7 @@ node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 
 
 Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)）将每个 allocation 的 sandbox 作为唯一进程为 [`oac-sandbox-io`](#oac-sandbox-io) 的 container 运行，并使用相同 container setting（[`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)）：
 
-- user 1000:1000、只读 root filesystem、移除全部 capability、`no-new-privileges`、[seccomp profile](#seccomp-profile) 和 AppArmor `unconfined`；
+- user 1000:1000、只读 root filesystem、移除全部 capability、`no-new-privileges`、[seccomp profile](#seccomp-profile)；
 - node 配置的 network 和 extra host（[node 配置](configuration.md#docker-node-configuration)）；
 - deployment specification 中的 CPU 和 memory，128-process limit 和 128 MiB `/tmp` tmpfs；
 - 两个 named volume，label 包含 installation、tenant、Environment 和 allocation：`<name>-home` 挂载到 `/home`，`<name>-environment` 挂载到 `/environment`，后者的 `workspace` 子目录也挂载到 `/workspace`。Docker Engine 必须支持 volume subpath mount。
@@ -233,4 +233,4 @@ node 使用 [provider 配置](configuration.md#docker-node-configuration)中的�
 
 ### Seccomp profile {#seccomp-profile}
 
-[`seccomp.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/seccomp.json) 是 [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) 的 Moby default profile（Apache-2.0，参见 [seccomp.LICENSE](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/seccomp.LICENSE)；上游文件 SHA-256 为 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`），追加一条允许 `clone`、`unshare`、`setns`、`mount`、`umount2` 和 `pivot_root` 的规则。发行包将此文件作为 `runtime/seccomp.json` 交付每个 Docker node。
+[`seccomp.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/distribution/seccomp.json) 是 [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) 的 Moby default profile（Apache-2.0，参见 [seccomp.LICENSE](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/distribution/seccomp.LICENSE)；上游文件 SHA-256 为 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`）。发行包将此文件作为 `runtime/seccomp.json` 交付每个 Docker node。

@@ -82,9 +82,8 @@ test("shows a self-hosted Session's install command, issues its credential once,
   const install = section.getByRole("region", { name: "Connect a host" });
   await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText("bash fixture-bootstrap --authorization fixture-short-lived");
   await expect(install.getByRole("link")).toHaveAttribute("href", /docs\/getting-started\/self-hosted.md$/);
-  await install.getByRole("combobox", { name: "Host platform" }).click();
-  await page.getByRole("option", { name: "Windows · PowerShell" }).click();
-  await expect(install.locator("pre")).toContainText("fixture-bootstrap.ps1 -Authorization fixture-short-lived");
+  await expect(install).toContainText("Linux amd64");
+  await expect(install.getByRole("combobox")).toHaveCount(0);
   await install.screenshot({ path: test.info().outputPath("native-host.png") });
 
   await section.getByRole("button", { name: "Issue credential" }).click();

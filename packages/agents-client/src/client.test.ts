@@ -2796,7 +2796,7 @@ describe("OpenAIAgentsClient", () => {
 });
 
 it("preserves Session installation commands without treating them as execution configuration", () => {
-  const installation = { status: "available", version: "source", expires_at: 2000000000, commands: { posix: "bootstrap-posix", powershell: "bootstrap-windows" } };
+  const installation = { status: "available", version: "source", expires_at: 2000000000, commands: { posix: "bootstrap-posix" } };
   const resource = { ...sessionResource(), x_agents_core: { installation } };
   expect(projectAgentSession(resource).x_agents_core).toEqual({ installation });
   expect(() => projectAgentSession({ ...resource, x_agents_core: { installation: { ...installation, expires_at: "later" } } })).toThrow();

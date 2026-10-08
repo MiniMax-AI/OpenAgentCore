@@ -80,12 +80,7 @@ source_tree="$(git -C "$repo_root" rev-parse "$revision^{tree}")"
 source_epoch="$(git -C "$repo_root" show -s --format=%ct "$revision")"
 mkdir -p "$output_dir"
 stage="$(mktemp -d "$output_dir/.build.XXXXXX")"
-image_tags=()
-cleanup() {
-  if (( ${#image_tags[@]} )); then docker image rm "${image_tags[@]}" >/dev/null 2>&1 || true; fi
-  rm -rf "$stage"
-}
-trap cleanup EXIT
+trap 'rm -rf "$stage"' EXIT
 source_dir="$stage/source"
 bundle="$stage/oac-$revision-linux-amd64"
 mkdir -p "$source_dir" "$bundle/images" "$stage/core/bin" "$stage/core/microsandbox" "$stage/web" "$stage/tmp"
@@ -106,7 +101,7 @@ python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoc
 # The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
-cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
+cp deploy/distribution/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
 
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
@@ -151,30 +146,18 @@ build_image web "$stage/web"
 
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/" \
   ./apps/daemon/cmd/oac-daemon ./apps/daemon/cmd/oac-process-shim ./apps/sandboxio/cmd/oac-sandbox-io
-cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
 : "${CODEX_CLI_DIR:?Set the extracted pinned Codex Linux x64 package directory}"
 : "${MCODE_HARNESS_BUILD_DIR:?Set the existing built pinned MiniMax Code companion directory}"
 export CLAUDE_SDK_BUILD_DIR="$stage/claude-sdk"
 scripts/build-claude-sdk-runtime.sh
-# Each Harness payload is its Runtime image's context and, laid out as
-# scripts/build-agent-host-images.sh lays it out, part of the agent host's.
-tag_suffix="${stage##*.}"
+# Share the agent-host build context with the local qualification builder.
 for harness in codex claude mcode; do
   AGENTS_RUNTIME_BUILD_DIR="$stage/agent-host/$harness" bash "scripts/build-$harness-runtime.sh"
-  build_image "$harness" "$stage/agent-host/$harness"
-  image="$(cat "$stage/$harness.id")"
-  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$stage/oac-sandbox-io" "$source_dir"
-  tag="oac-distribution:$harness-$revision-$tag_suffix"
-  docker image tag "$image" "$tag"
-  image_tags+=("$tag")
 done
-cp "$stage/oac-daemon" "$stage/oac-process-shim" "$stage/agent-host/"
+cp "$stage/oac-daemon" "$stage/oac-process-shim" "$stage/oac-sandbox-io" "$stage/agent-host/"
 build_image agent-host --target agent-host --file deploy/distribution/AgentHost.Dockerfile "$stage/agent-host"
-mkdir "$stage/combined"
-cp deploy/distribution/Runtime.Dockerfile "$stage/combined/Dockerfile"
-build_image runtime \
-  --build-arg "CODEX_IMAGE=${image_tags[0]}" --build-arg "CLAUDE_IMAGE=${image_tags[1]}" \
-  --build-arg "MCODE_IMAGE=${image_tags[2]}" "$stage/combined"
+build_image runtime --target sandbox --file deploy/distribution/AgentHost.Dockerfile "$stage/agent-host"
+python3 scripts/core-distribution-manifest.py verify-runtime "$(cat "$stage/runtime.id")" "$stage/oac-sandbox-io"
 
 # Pin the linux/amd64 platform manifest, not the multi-platform tag: the
 # containerd store keeps a pulled tag's whole index, whose export holds every
@@ -243,21 +226,6 @@ fi
 mv "$stage/artifacts/"* "$output_dir/"
 if [[ -d "$stage/native-artifacts" ]]; then mv "$stage/native-artifacts/"* "$output_dir/"; fi
 mv "$bundle" "$output_dir/"
-
-# Core, Web and initialization also run natively in ARM64 Linux containers.
-# Node, hosted Runtime and agent-host payloads above remain linux/amd64.
-export GOARCH=arm64
-arm_bundle="$stage/oac-$revision-linux-arm64"
-mkdir -p "$arm_bundle/images"
-OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
-OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
-cp "$stage/core/bin/oac" "$stage/ingress/oac"
-for name in core web ingress; do
-  build_image "$name" "$stage/$name"
-  docker image save --output "$arm_bundle/images/$name.tar" "$(cat "$stage/$name.id")"
-done
-python3 scripts/core-distribution-manifest.py control-archive "$arm_bundle" "$stage" "$revision" arm64
-mv "$arm_bundle.tar.gz" "$arm_bundle.tar.gz.sha256" "$output_dir/"
 
 # The launchers and operator commands use this same portable implementation.
 for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do

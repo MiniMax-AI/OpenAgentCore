@@ -16,12 +16,6 @@ archive=claude-sdk-runtime-linux-x64-glibc.tar.gz
 mkdir "$context/claude-sdk"
 tar -xzf "$sdk_dir/$archive" -C "$context/claude-sdk"
 node "$repo_root/scripts/check-claude-sdk-runtime.mjs" "$context/claude-sdk"
-(
-  cd "$repo_root"
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=readonly -trimpath \
-    -o "$context/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
-)
-cp "$repo_root/services/core/deploy/claude/Dockerfile" "$context/Dockerfile"
 mkdir -p "$output_dir"
 cp -R "$context/." "$output_dir/"
-printf 'Claude Runtime image context: %s\n' "$output_dir"
+printf 'Claude Harness payload: %s\n' "$output_dir"

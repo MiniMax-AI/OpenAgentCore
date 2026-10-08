@@ -58,7 +58,7 @@ func newInstallFixture(t *testing.T) *installFixture {
 		}
 		switch command {
 		case "info --format {{.OSType}}/{{.Architecture}}":
-			return []byte("linux/aarch64"), nil
+			return []byte("linux/amd64"), nil
 		case "compose version --short":
 			return []byte("v2.26.0"), nil
 		case "version --format {{.Server.APIVersion}}":
@@ -241,5 +241,29 @@ func TestInstallerInterruptedProcess(t *testing.T) {
 	cmd.Wait()
 	if err := f.run(); err != nil {
 		t.Fatalf("killed installer left unrecoverable state: %v", err)
+	}
+}
+
+func TestInstallRejectsUnsupportedEngineBeforeDownload(t *testing.T) {
+	for _, platform := range []string{"linux/arm64", "linux/aarch64", "windows/amd64"} {
+		t.Run(platform, func(t *testing.T) {
+			f := newInstallFixture(t)
+			f.docker = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if strings.Join(args, " ") != "info --format {{.OSType}}/{{.Architecture}}" {
+					t.Fatal("installation continued on unsupported platform")
+				}
+				return []byte(platform), nil
+			}
+			f.download = func(context.Context, string, string) error {
+				t.Fatal("downloaded unsupported installation")
+				return nil
+			}
+			if err := f.run(); err == nil || !strings.Contains(err.Error(), "Linux amd64") {
+				t.Fatalf("unexpected result: %v", err)
+			}
+			if _, err := os.Stat(f.options.dir); !os.IsNotExist(err) {
+				t.Fatalf("installation published: %v", err)
+			}
+		})
 	}
 }

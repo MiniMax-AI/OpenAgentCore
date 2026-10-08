@@ -517,7 +517,7 @@ export interface EnvironmentInstallation {
   status: "available" | "unavailable";
   version: string;
   expires_at?: number;
-  commands?: { posix: string; powershell: string };
+  commands?: { posix: string };
   message?: string;
 }
 

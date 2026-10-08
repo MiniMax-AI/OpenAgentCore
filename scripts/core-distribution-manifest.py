@@ -23,8 +23,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/nod
 import provider_assets
 
 ARTIFACTS = {item["path"]: item["suffix"] for items in provider_assets.CATALOG.values() for item in items}
-# The standalone daemon is a distribution artifact, independent of node providers.
-ARTIFACTS["native/bin/oac-daemon"] = "daemon"
 
 
 
@@ -170,36 +168,16 @@ def image_identities(archive, build_id, architecture="amd64"):
         return config_digest, manifest_digest
 
 
-def control_archive(bundle, stage, revision, architecture):
-    bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
-    manifest = {"source_commit": revision, "platform": "linux/" + architecture,
-                "images": {}, "image_manifest_digests": {}}
-    for name in ("core", "web", "ingress"):
-        config, digest = image_identities(bundle / "images" / (name + ".tar"),
-                                         (stage / (name + ".id")).read_text().strip(), architecture)
-        manifest["images"][name], manifest["image_manifest_digests"][name] = config, digest
-    (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    target = bundle.with_name(bundle.name + ".tar.gz")
-    with tarfile.open(target, "w:gz") as output:
-        output.add(bundle, arcname=bundle.name)
-    target.with_name(target.name + ".sha256").write_text(sha256(target) + "  " + target.name + "\n")
-
-
-def verify_runtime(image, daemon, sandbox_io, source):
-    details = verify_image(image)
-    source = pathlib.Path(source)
-    files = {"/usr/local/bin/oac-daemon": pathlib.Path(daemon), "/usr/local/bin/oac-sandbox-io": pathlib.Path(sandbox_io)}
-    environment = dict(value.split("=", 1) for value in details["Config"]["Env"] if "=" in value)
-    if "OAC_RUNTIME_MCODE_BIN" in environment:
-        for name in ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json"):
-            files["/opt/mcode-harness/" + name] = source / "packages/mcode-harness" / name
+def verify_runtime(image, sandbox_io):
+    verify_image(image)
+    guest_path = "/usr/local/bin/oac-sandbox-io"
     output = subprocess.check_output(
-        ["docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum", image, *files], text=True
+        ["docker", "run", "--rm", "--label", "io.oac.build=distribution-verify", "--network", "none",
+         "--entrypoint", "sha256sum", image, guest_path], text=True
     )
     actual = dict(reversed(line.split(None, 1)) for line in output.splitlines())
-    for guest_path, local in files.items():
-        if actual.get(guest_path) != sha256(local):
-            raise ValueError("Runtime image does not match the committed build: " + guest_path)
+    if actual.get(guest_path) != sha256(sandbox_io):
+        raise ValueError("Sandbox image does not match the committed build: " + guest_path)
 
 
 def extract_runtime(archive, destination):
@@ -243,7 +221,7 @@ def native_catalog(bundle, stage, revision, source, artifact_base_url=""):
     assets = stage / "native-artifacts"
     assets.mkdir()
     for platform, entry in catalog["artifacts"].items():
-        if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
+        if platform != "linux-amd64":
             raise ValueError("Invalid native installer platform")
         archive = source / (platform + ".tar.gz")
         if archive.is_symlink() or sha256(archive) != entry["sha256"]:
@@ -598,7 +576,7 @@ def check_docs(bundle, names=BUNDLED_DOCS, files=BUNDLED_FILES):
 
 
 if __name__ == "__main__":
-    commands = {"control-archive": control_archive, "extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
+    commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
                 "built-image": built_image, "node-payload": node_payload, "manifest": manifest, "archive": archive, "bootstraps": bootstraps,
                 "release-base": release_base, "docs": docs, "native-catalog": native_catalog, "native-offline": native_offline}
     try:

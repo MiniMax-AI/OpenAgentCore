@@ -29,11 +29,11 @@ const server = createServer(async (request, response) => {
   const json = (status, value) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)); };
   if (url.pathname.endsWith('.sha256')) { response.setHeader('Content-Type', 'text/plain; charset=utf-8'); return response.end(checksum+'\n'); }
   if (url.pathname.endsWith('.tar.gz')) return createReadStream(archive).pipe(response);
-  if (url.pathname.endsWith('bootstrap.sh') || url.pathname.endsWith('bootstrap.ps1')) return createReadStream(resolve('services/core/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
+  if (url.pathname.endsWith('bootstrap.sh')) return createReadStream(resolve('services/core/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
   const body = []; for await (const chunk of request) body.push(chunk);
   if (url.pathname.endsWith('/installation') || url.pathname.endsWith('/claim')) {
     if (request.headers.authorization !== `Bearer ${authorization}`) return json(401, {});
-    if (url.pathname.endsWith('/installation')) return json(200, { version: manifest.daemon_version, protocol_version: protocol, environment_id: environment, remote_url: remote, workspace_directory: workspace, harness: 'codex' });
+    if (url.pathname.endsWith('/installation')) return json(200, { version: manifest.daemon_version, protocol_version: protocol, environment_id: environment, remote_url: remote, workspace_directory: workspace });
     const input = JSON.parse(Buffer.concat(body));
     if (secret && secret !== input.executor_token) return json(409, {});
     secret = input.executor_token;
@@ -76,18 +76,17 @@ function run(executable, args, input = '') {
 const executable = join(bundle, 'oac-daemon');
 const args = ['install', '--onboard-url', `${origin}/api/v1/agent-daemon/installation`, '--authorization', authorization, '--install-dir', installation];
 try {
-  assert.notEqual((await run(executable, [...args, '--authorization', 'expired', '--non-interactive', '--harness', 'codex'])).code, 0);
-  assert.notEqual((await run(executable, [...args, '--non-interactive'])).code, 0, 'Missing Harness must not prompt');
-  assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'])).code, 0, 'Lost claim response should fail safely');
+  assert.notEqual((await run(executable, [...args, '--authorization', 'expired', '--non-interactive'])).code, 0);
+  assert.notEqual((await run(executable, [...args, '--non-interactive'])).code, 0, 'Lost claim response should fail safely');
   const saved = JSON.parse(await readFile(join(installation, 'daemon', 'executor-credential.json'), 'utf8'));
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
   const script = resolve('services/core/internal/nativeinstaller/assets/bootstrap.sh');
-  const result = await run('bash', [script, base, authorization, '--install-dir', installation], '\n\n');
+  const result = await run('bash', [script, base, authorization, '--install-dir', installation], '\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Host connection: connected/);
   assert.match(result.output, /Model configuration: not checked/);
   assert.equal(links, 1);
-  const repeat = await run(executable, [...args, '--non-interactive', '--harness', 'codex']);
+  const repeat = await run(executable, [...args, '--non-interactive']);
   assert.equal(repeat.code, 0, `Repeat failed: ${repeat.output}`);
   assert.equal(links, 1, 'Repeated installation created a duplicate daemon');
   assert.equal(unexpected, 0, 'The daemon opened a connection other than the Sandbox Link');

@@ -29,12 +29,12 @@ class PublicationTests(unittest.TestCase):
         self.assets = pathlib.Path(self.temp.name)
         self.revision = "a" * 40
         self.stem = "oac-" + self.revision + "-linux-amd64"
-        for name in (self.stem + ".tar.gz", self.stem + "-offline.tar.gz", "install.sh", "install.ps1", "oac-" + self.revision + "-linux-arm64.tar.gz", "oac-linux-amd64", "oac-linux-arm64", "oac-darwin-amd64", "oac-darwin-arm64", "oac-windows-amd64.exe"):
+        for name in (self.stem + ".tar.gz", self.stem + "-offline.tar.gz", "install.sh", "install.ps1", "oac-linux-amd64", "oac-linux-arm64", "oac-darwin-amd64", "oac-darwin-arm64", "oac-windows-amd64.exe"):
             (self.assets / name).write_bytes(b"archive fixture")
             (self.assets / (name + ".sha256")).write_text(
                 hashlib.sha256(b"archive fixture").hexdigest() + "  " + name + "\n")
         catalog = {"version": self.revision, "artifacts": {}}
-        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
+        for platform in ("linux-amd64",):
             name = f"oac-native-{self.revision}-{platform}.tar.gz"
             (self.assets / name).write_bytes(b"native archive")
             checksum = hashlib.sha256(b"native archive").hexdigest()
@@ -68,10 +68,10 @@ class PublicationTests(unittest.TestCase):
         self.publish(tag="build-" + self.revision, mode="draft")
         self.images.assert_called_once()
         self.assertTrue(self.release["draft"])
-        self.assertEqual(len(self.release["assets"]), 28)
+        self.assertEqual(len(self.release["assets"]), 22)
 
     def test_missing_native_asset_refuses_release_creation(self):
-        (self.assets / f"oac-native-{self.revision}-windows-amd64.tar.gz").unlink()
+        (self.assets / f"oac-native-{self.revision}-linux-amd64.tar.gz").unlink()
         with self.assertRaises(FileNotFoundError):
             self.publish()
         self.assertEqual(self.writes(), [])
@@ -142,7 +142,7 @@ class PublicationTests(unittest.TestCase):
                 return result
             if endpoint == "releases/7":
                 self.assertEqual(active, 0)
-                self.assertIn(len(self.release["assets"]), (26, 28))
+                self.assertIn(len(self.release["assets"]), (20, 22))
             return self.response(repo, endpoint, *args)
         self.api.side_effect = response
         self.publish()
@@ -153,7 +153,7 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertFalse(self.release["draft"])
         self.assertFalse(self.release["prerelease"])
-        self.assertEqual(len(self.release["assets"]), 28)
+        self.assertEqual(len(self.release["assets"]), 22)
         self.assertEqual({a["name"] for a in self.release["assets"] if a["name"].endswith(".yaml")}, {"compose.yaml"})
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
@@ -348,8 +348,8 @@ class RegistryTests(unittest.TestCase):
         self.digests = {'amd64': 'sha256:' + '3' * 64, 'arm64': 'sha256:' + '4' * 64}
         self.index_digest = 'sha256:' + '5' * 64
         self.remote_images = {}
-        for arch in ('amd64', 'arm64'):
-            names = publisher.IMAGE_NAMES if arch == 'amd64' else ('core', 'web', 'ingress')
+        for arch in ('amd64',):
+            names = publisher.IMAGE_NAMES
             manifest = {'source_commit': self.revision, 'platform': 'linux/' + arch,
                         'images': dict.fromkeys(names, self.configs[arch]),
                         'image_manifest_digests': dict.fromkeys(names, self.digests[arch])}
@@ -381,7 +381,7 @@ class RegistryTests(unittest.TestCase):
             self.remote_images[ref] = {'config': {'digest': self.configs[arch]}}
         if command[1:4] == ['buildx', 'imagetools', 'create']:
             ref = command[5]; name = ref.rsplit('/', 1)[1].split(':')[0]
-            arches = ('amd64', 'arm64') if name in ('core', 'web', 'ingress') else ('amd64',)
+            arches = ('amd64',)
             self.remote_images[ref] = {'manifests': [{'platform': {'os': 'linux', 'architecture': arch}, 'digest': self.digests[arch]} for arch in arches]}
 
     def output(self, command, **kwargs):
@@ -396,11 +396,11 @@ class RegistryTests(unittest.TestCase):
     def pushes(self):
         return [call.args[0] for call in self.run.call_args_list if call.args[0][1] == 'push']
 
-    def test_publishes_and_reuses_verified_multiarch_indexes(self):
+    def test_publishes_and_reuses_verified_indexes(self):
         result = self.publish()
-        self.assertEqual(len(self.pushes()), 8)
+        self.assertEqual(len(self.pushes()), 5)
         self.assertEqual(result['ingress']['digest'], 'ghcr.io/minimax-ai/openagentcore/ingress@' + self.index_digest)
-        self.assertEqual(len(self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3']['manifests']), 2)
+        self.assertEqual(len(self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3']['manifests']), 1)
         self.run.reset_mock(); self.publish(); self.assertEqual(self.pushes(), [])
 
     def test_latest_updates_after_all_version_indexes(self):
@@ -410,7 +410,7 @@ class RegistryTests(unittest.TestCase):
         self.assertTrue(all(ref.endswith(':latest') for ref in creates[5:]))
 
     def test_conflicting_platform_prevents_every_push(self):
-        self.remote_images['ghcr.io/minimax-ai/openagentcore/web:v1.2.3-arm64'] = {'config': {'digest': 'different'}}
+        self.remote_images['ghcr.io/minimax-ai/openagentcore/web:v1.2.3-amd64'] = {'config': {'digest': 'different'}}
         with self.assertRaisesRegex(ValueError, 'different image'): self.publish()
         self.assertEqual(self.pushes(), [])
 
@@ -419,8 +419,8 @@ class RegistryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'unexpected platforms'): self.publish()
         self.assertEqual(self.pushes(), [])
 
-    def test_missing_arm_archive_prevents_loading(self):
-        (self.assets / ('oac-' + self.revision + '-linux-arm64.tar.gz')).unlink()
+    def test_missing_archive_prevents_loading(self):
+        (self.assets / ('oac-' + self.revision + '-linux-amd64.tar.gz')).unlink()
         with self.assertRaises(FileNotFoundError): self.publish()
         self.run.assert_not_called()
 

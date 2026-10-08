@@ -43,7 +43,7 @@ func TestDockerSandboxServesItsAllocation(t *testing.T) {
 	if base == "" {
 		t.Skip("explicit Docker fixture image required")
 	}
-	seccomp, err := os.ReadFile("../../../deploy/codex/seccomp.json")
+	seccomp, err := os.ReadFile("../../../../../deploy/distribution/seccomp.json")
 	if err != nil {
 		t.Fatal(err)
 	}

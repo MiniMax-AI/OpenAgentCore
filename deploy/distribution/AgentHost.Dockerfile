@@ -1,13 +1,9 @@
-# The agent-host image and the sandbox image it works in. The context is what
-# scripts/build-agent-host-images.sh prepares: the static oac-daemon,
-# oac-process-shim and oac-sandbox-io, and the Runtime image builders' Harness
-# payloads in codex/, claude/ and mcode/. Both images share the Runtime images'
-# base and the sandbox shares their package layer.
+# The context contains the static launcher, process shim and Sandbox I/O service,
+# plus the validated Harness payloads in codex/, claude/ and mcode/.
 FROM node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27 AS base
 USER root
 
-# The tools a Runtime image gives a sandbox, served by oac-sandbox-io. The
-# caller appends the bootstrap file's path.
+# Sandbox tools are served by oac-sandbox-io; the caller supplies its bootstrap.
 FROM base AS sandbox
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
@@ -21,9 +17,7 @@ ENTRYPOINT ["/usr/local/bin/oac-sandbox-io", "--bootstrap-file"]
 
 # Each Harness in its own directory, laid out as its agent.Installation
 # expects. harnesses.json is the only record of where they are; the agent host
-# reads it with agent.ManifestEnvironment. The checks are the Runtime images'
-# except MiniMax Code's companion check, which needs the tools that run in the
-# sandbox here.
+# reads it with agent.ManifestEnvironment.
 FROM base AS agent-host
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*

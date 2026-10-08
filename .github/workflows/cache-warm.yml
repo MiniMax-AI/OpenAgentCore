@@ -15,28 +15,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  companion:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: blacksmith-2vcpu-ubuntu-2204
-            github-runner: ubuntu-22.04
-          - runner: macos-15
-            github-runner: macos-15
-    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && matrix.github-runner || matrix.runner }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/node
-        with:
-          node-version: '22.22.0'
-          lockfiles: |
-            packages/claude-sdk-adapter/pnpm-lock.yaml
-            packages/mcode-harness/package-lock.json
-      - run: pnpm --dir packages/claude-sdk-adapter fetch
-      - uses: ./.github/actions/mcode-companion
-
   linux:
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 15

@@ -18,7 +18,7 @@ func runtimeContainerOptions(config Config, name string, labels map[string]strin
 	return client.ContainerCreateOptions{Name: name, Image: config.Image,
 		Config: &container.Config{User: "1000:1000", WorkingDir: "/environment/workspace", Labels: labels,
 			Entrypoint: []string{"/usr/local/bin/oac-sandbox-io", "--bootstrap-file", "/home/runtime/sandbox-io-bootstrap.json"}},
-		HostConfig: &container.HostConfig{ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges", "seccomp=" + config.Seccomp, "apparmor=unconfined"}, NetworkMode: container.NetworkMode(config.Network),
+		HostConfig: &container.HostConfig{ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges", "seccomp=" + config.Seccomp}, NetworkMode: container.NetworkMode(config.Network),
 			Resources: container.Resources{PidsLimit: &limit, Memory: memory, NanoCPUs: cpus}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=128m"},
 			Mounts: []mount.Mount{
 				{Type: mount.TypeVolume, Source: name + "-home", Target: "/home"},

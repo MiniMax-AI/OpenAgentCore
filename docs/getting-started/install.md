@@ -2,7 +2,7 @@
 title: "Install Core and Web"
 ---
 
-One command installs Core, the Web console and PostgreSQL on Linux, macOS or Windows. Sign in to Web with the Core key, set a default model and issue Project API keys. Applications call Core with those keys. Sessions run in sandboxes on nodes you add, or on E2B.
+One command installs Core, the Web console, the agent host and PostgreSQL on a Linux amd64 Docker engine. The operator launcher also runs on macOS and Windows. Sign in to Web with the Core key, set a default model and issue Project API keys. Applications call Core with those keys. Sessions run in sandboxes on nodes you add, or on E2B.
 
 1. [Check the prerequisites](#prerequisites).
 2. [Run the installer](#install).
@@ -16,8 +16,8 @@ This page follows the default path. Every flag, existing reverse proxies and off
 
 ## Prerequisites
 
-- Linux amd64/arm64 or macOS Intel/Apple Silicon with curl; Windows x64 with PowerShell.
-- Docker Engine 26 or newer and Docker Compose 2.26.0 or newer. On macOS and Windows, install and start Docker Desktop using Linux containers.
+- An operator host with curl (Linux or macOS) or PowerShell (Windows x64). Its Docker engine must meet the execution platform requirement below.
+- Docker Engine 26 or newer running Linux amd64 containers, and Docker Compose 2.26.0 or newer. ARM64 Docker engines are unsupported; the installer does not enable emulation.
 - An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
 - Free port 8080 for Web. See [ports](./install-options.md#ports). Docker must be able to publish it; the installer does not change host policy.
 - For anything off this machine, the origin in `OAC_PUBLIC_URL` must be the address browsers, nodes and executors use. You can sign in on this machine first.
