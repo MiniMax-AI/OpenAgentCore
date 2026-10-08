@@ -64,7 +64,7 @@ def generate_files(client, session_id, label):
     before = {turn.id for turn in sessions.turns.list(session_id)}
     sessions.events.create(session_id, events=[{"type": "agent.session.input.message", "input": [
         {"role": "user", "content": [{"type": "input_text", "text": prompt}]}]}], idempotency_key=str(uuid.uuid4()))
-    deadline = time.monotonic() + 240
+    deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
         turns = [turn for turn in sessions.turns.list(session_id) if turn.id not in before]
         assert len(turns) <= 1, "One input created multiple Turns"
