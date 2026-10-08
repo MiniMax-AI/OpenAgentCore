@@ -321,7 +321,7 @@ func TestRuntimePreparationInitializationReceipts(t *testing.T) {
 	}
 }
 
-func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
+func TestRuntimePreparationResultCategories(t *testing.T) {
 	for _, tc := range []struct {
 		err           error
 		outcome, code string
@@ -338,122 +338,86 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 			t.Fatalf("unsafe result: %+v", got)
 		}
 	}
-	r, sender, environment, session := capabilitiesTestRouter(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	id := uuid.NewString()
-	request := capabilityBegin(environment, session, []byte("abc"))
-	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
-	close(owner.ready)
-	r.runtimePreparations[session], r.transferBytes = owner, request.SizeBytes
-	r.shutdownWG.Add(1)
-	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
-		return context.DeadlineExceeded
-	}, func() {})
-	capabilitiesReceipt(t, sender, id, "unknown")
-	r.mu.Lock()
-	owned := r.runtimePreparations[session] == owner && owner.uncertain && owner.data == nil
-	r.mu.Unlock()
-	if !owned {
-		t.Fatal("unknown mutation released its ownership")
-	}
-	wait, stop := context.WithTimeout(context.Background(), time.Second)
-	defer stop()
-	if err := r.Shutdown(wait); err == nil {
-		t.Fatal("shutdown claimed uncertain mutation settled")
-	}
 }
 
 func TestSessionTransferBlocksOnlyItsSession(t *testing.T) {
-	for _, mode := range []string{"held", "uncertain"} {
-		t.Run(mode, func(t *testing.T) {
-			r, sender, environment, session := capabilitiesTestRouter(t)
-			other := proto.AssignmentRef{SessionID: uuid.NewString(), AssignmentID: "other", Epoch: 1}
-			bindAssignment(r, other, environment)
-			next := func(id string) proto.Envelope {
-				t.Helper()
-				select {
-				case env := <-sender.frames:
-					if env.ID != id {
-						t.Fatalf("frame %s %s, want %s", env.Type, env.ID, id)
-					}
-					return env
-				case <-time.After(3 * time.Second):
-					t.Fatal("missing frame", id)
-				}
-				return proto.Envelope{}
+	r, sender, environment, session := capabilitiesTestRouter(t)
+	other := proto.AssignmentRef{SessionID: uuid.NewString(), AssignmentID: "other", Epoch: 1}
+	bindAssignment(r, other, environment)
+	next := func(id string) proto.Envelope {
+		t.Helper()
+		select {
+		case env := <-sender.frames:
+			if env.ID != id {
+				t.Fatalf("frame %s %s, want %s", env.Type, env.ID, id)
 			}
-			if mode == "held" {
-				id := uuid.NewString()
-				if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, session, []byte("abc")))); err != nil {
-					t.Fatal(err)
-				}
-				capabilitiesReceipt(t, sender, id, "ready")
-			} else {
-				r.mu.Lock()
-				r.workspaceWrites[session] = &workspaceUpload{finished: true, uncertain: true}
-				r.mu.Unlock()
-			}
-			start := func(ref proto.AssignmentRef) string {
-				env, err := proto.NewEnvelope(proto.TypeExecutionStart, uuid.NewString(), proto.ExecutionStartPayload{Handle: "handle", ExecutorID: "executor", RunID: "run", Input: proto.TextInput("input")})
-				if err != nil {
-					t.Fatal(err)
-				}
-				env.Assignment = ref
-				_ = r.Handle(t.Context(), env)
-				var status proto.PreparationStatusPayload
-				if err := next(env.ID).DecodePayload(&status); err != nil {
-					t.Fatal(err)
-				}
-				return status.ErrorCode
-			}
-			if got := start(capabilityRef); got != "resource_unavailable" {
-				t.Fatalf("the transferring Session started a Run: %s", got)
-			}
-			if got := start(other); got != "unknown_preparation" {
-				t.Fatalf("another Session's transfer blocked execution_start: %s", got)
-			}
-			// The other Session's transfers proceed while the connection's
-			// memory bound allows their bodies.
-			id := uuid.NewString()
-			request := capabilityBegin(environment, other.SessionID, []byte("abc"))
-			env := capabilityEnvelope(t, id, request)
-			env.Assignment = other
-			if err := r.Handle(t.Context(), env); err != nil {
-				t.Fatal(err)
-			}
-			capabilitiesReceipt(t, sender, id, "ready")
-			r.mu.Lock()
-			r.finishRuntimePreparationTransferLocked(r.runtimePreparations[other.SessionID], false)
-			r.mu.Unlock()
-			capabilitiesReceipt(t, sender, id, "rejected")
-			digest := sha256.Sum256([]byte("abc"))
-			for _, buffered := range []int{transferMemory, 0} {
-				write, err := proto.NewEnvelope(proto.TypeWorkspaceWrite, uuid.NewString(), proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, SessionID: other.SessionID, Path: "proof", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])})
-				if err != nil {
-					t.Fatal(err)
-				}
-				write.Assignment = other
-				r.mu.Lock()
-				r.transferBytes += buffered
-				r.mu.Unlock()
-				if err := r.Handle(t.Context(), write); err != nil {
-					t.Fatal(err)
-				}
-				r.mu.Lock()
-				r.transferBytes -= buffered
-				r.mu.Unlock()
-				var result proto.WorkspaceWriteResultPayload
-				if err := next(write.ID).DecodePayload(&result); err != nil {
-					t.Fatal(err)
-				}
-				if want := map[int]string{0: "ready", transferMemory: "write_capacity"}[buffered]; result.Outcome != want && result.ErrorCode != want {
-					t.Fatalf("write with %d bytes buffered = %+v", buffered, result)
-				}
-			}
-			r.mu.Lock()
-			delete(r.workspaceWrites, session)
-			r.mu.Unlock()
-			shutdownCapabilitiesRouter(t, r)
-		})
+			return env
+		case <-time.After(3 * time.Second):
+			t.Fatal("missing frame", id)
+		}
+		return proto.Envelope{}
 	}
+	held := uuid.NewString()
+	if err := r.Handle(t.Context(), capabilityEnvelope(t, held, capabilityBegin(environment, session, []byte("abc")))); err != nil {
+		t.Fatal(err)
+	}
+	capabilitiesReceipt(t, sender, held, "ready")
+	start := func(ref proto.AssignmentRef) string {
+		env, err := proto.NewEnvelope(proto.TypeExecutionStart, uuid.NewString(), proto.ExecutionStartPayload{Handle: "handle", ExecutorID: "executor", RunID: "run", Input: proto.TextInput("input")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		env.Assignment = ref
+		_ = r.Handle(t.Context(), env)
+		var status proto.PreparationStatusPayload
+		if err := next(env.ID).DecodePayload(&status); err != nil {
+			t.Fatal(err)
+		}
+		return status.ErrorCode
+	}
+	if got := start(capabilityRef); got != "resource_unavailable" {
+		t.Fatalf("the transferring Session started a Run: %s", got)
+	}
+	if got := start(other); got != "unknown_preparation" {
+		t.Fatalf("another Session's transfer blocked execution_start: %s", got)
+	}
+	// The other Session's transfers proceed while the connection's
+	// memory bound allows their bodies.
+	id := uuid.NewString()
+	request := capabilityBegin(environment, other.SessionID, []byte("abc"))
+	env := capabilityEnvelope(t, id, request)
+	env.Assignment = other
+	if err := r.Handle(t.Context(), env); err != nil {
+		t.Fatal(err)
+	}
+	capabilitiesReceipt(t, sender, id, "ready")
+	r.mu.Lock()
+	r.finishRuntimePreparationTransferLocked(r.runtimePreparations[other.SessionID], false)
+	r.mu.Unlock()
+	capabilitiesReceipt(t, sender, id, "rejected")
+	digest := sha256.Sum256([]byte("abc"))
+	for _, buffered := range []int{transferMemory, 0} {
+		write, err := proto.NewEnvelope(proto.TypeWorkspaceWrite, uuid.NewString(), proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, SessionID: other.SessionID, Path: "proof", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])})
+		if err != nil {
+			t.Fatal(err)
+		}
+		write.Assignment = other
+		r.mu.Lock()
+		r.transferBytes += buffered
+		r.mu.Unlock()
+		if err := r.Handle(t.Context(), write); err != nil {
+			t.Fatal(err)
+		}
+		r.mu.Lock()
+		r.transferBytes -= buffered
+		r.mu.Unlock()
+		var result proto.WorkspaceWriteResultPayload
+		if err := next(write.ID).DecodePayload(&result); err != nil {
+			t.Fatal(err)
+		}
+		if want := map[int]string{0: "ready", transferMemory: "write_capacity"}[buffered]; result.Outcome != want && result.ErrorCode != want {
+			t.Fatalf("write with %d bytes buffered = %+v", buffered, result)
+		}
+	}
+	shutdownCapabilitiesRouter(t, r)
 }

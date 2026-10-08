@@ -91,7 +91,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			}
 			owner := &terminalHandoffExecutor{turns: make(chan *terminalHandoffTurn, 3)}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 			var creates atomic.Int32
 			registry.RegisterExecutor("handoff", func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 				creates.Add(1)

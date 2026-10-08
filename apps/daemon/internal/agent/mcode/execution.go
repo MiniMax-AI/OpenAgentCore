@@ -8,7 +8,7 @@ import (
 )
 
 func validateExecutionRequest(req proto.PromptRequestPayload) error {
-	if !req.DisableExecutionEnvironment || req.LocalEnvironment != nil || req.RequireExistingNativeSession || req.ExecutionControls == nil {
+	if !req.DisableExecutionEnvironment || req.LocalEnvironment != nil || req.ExecutionControls == nil {
 		return fmt.Errorf("mcode: unsupported execution configuration")
 	}
 	if !req.DisableSubagents && (req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1) {

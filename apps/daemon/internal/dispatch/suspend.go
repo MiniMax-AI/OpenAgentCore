@@ -219,6 +219,12 @@ func (r *Router) drainEnvironment(ctx context.Context, environmentID string) err
 	return nil
 }
 
+// rejectQuiesced answers a frame of a quiesced Environment, which admits only
+// its Sessions' releases.
+func (r *Router) rejectQuiesced(ctx context.Context, env proto.Envelope) error {
+	return errors.Join(ErrRouterQuiesced, r.reply(ctx, env, proto.TypeProtocolError, proto.ProtocolErrorPayload{Type: env.Type, ErrorCode: "resource_unavailable"}))
+}
+
 // suspensionCode is the error code of a refused quiesce or resume.
 func suspensionCode(err error) string {
 	var rejected AssignmentError

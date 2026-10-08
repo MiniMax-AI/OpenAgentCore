@@ -72,16 +72,6 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 		attempt.err = errors.Join(attempt.err, err)
 	}
 	r.mu.Lock()
-	for session, u := range r.runtimePreparations {
-		if u.uncertain {
-			attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: capability preparation of Session %s remains uncertain", session))
-		}
-	}
-	for session, u := range r.workspaceWrites {
-		if u.uncertain {
-			attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: local workspace write of Session %s remains uncertain", session))
-		}
-	}
 	for _, p := range r.preparations {
 		if p.owns {
 			cause := p.closeErr
@@ -104,20 +94,30 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 
 // closeEnvironments drains the owners of the unreleased assignments in
 // environmentID, or in every Environment when it is empty, once their work
-// has settled. A drained owner serves its Session again on the next bind.
+// has settled. It waits for a released assignment's cleanup, which closes the
+// owner itself. A drained owner serves its Session again on the next bind.
 func (r *Router) closeEnvironments(ctx context.Context, environmentID string) error {
 	r.mu.Lock()
-	var owners []*assignmentState
+	var released []*assignmentState
+	owners := map[*assignmentState]Environment{}
 	for _, a := range r.assignments {
-		if !a.released && a.environment != nil && (environmentID == "" || a.environmentID == environmentID) {
-			owners = append(owners, a)
+		switch {
+		case environmentID != "" && a.environmentID != environmentID:
+		case a.released:
+			released = append(released, a)
+		case a.environment != nil:
+			owners[a] = a.environment
 		}
 	}
 	r.mu.Unlock()
-	var errs []error
-	for _, a := range owners {
+	for _, a := range released {
 		a.cleanup.Lock()
-		if err := a.environment.Close(ctx); err != nil {
+		a.cleanup.Unlock()
+	}
+	var errs []error
+	for a, environment := range owners {
+		a.cleanup.Lock()
+		if err := environment.Close(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("dispatch: Environment of Session %s: %w", a.ref.SessionID, err))
 		}
 		a.cleanup.Unlock()

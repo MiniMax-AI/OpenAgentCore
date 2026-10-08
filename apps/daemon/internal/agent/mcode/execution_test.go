@@ -42,7 +42,6 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 	for _, change := range []func(*proto.PromptRequestPayload){
 		func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },
 		func(r *proto.PromptRequestPayload) { r.DisableSubagents = false },
-		func(r *proto.PromptRequestPayload) { r.RequireExistingNativeSession = true },
 		func(r *proto.PromptRequestPayload) { r.ExecutionControls = nil },
 	} {
 		r := testRequest(t)

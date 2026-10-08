@@ -176,7 +176,7 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 	}
 	if a := r.assignments[env.Assignment.SessionID]; a != nil && r.suspensions[a.environmentID] != nil && env.Type != proto.TypeAssignmentRelease {
 		r.mu.Unlock()
-		return ErrRouterQuiesced
+		return r.rejectQuiesced(ctx, env)
 	}
 	r.mu.Unlock()
 

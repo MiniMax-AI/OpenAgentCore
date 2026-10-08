@@ -1,8 +1,9 @@
-package v1
+package agents
 
 import (
 	"encoding/json"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -10,7 +11,7 @@ import (
 // proto.ValidateSelection checks against a Harness declaration. Callers
 // validate the tool declarations themselves. An MCP server with a
 // credential_id is authenticated.
-func HarnessSelection(agent Agent, environment *Environment) proto.Selection {
+func HarnessSelection(agent v1.Agent, environment *v1.Environment) proto.Selection {
 	selection := proto.Selection{MultiAgent: agent.MultiAgent.Enabled, TextVerbosity: agent.Text.Verbosity}
 	if agent.Text.Format.Type == "json_schema" {
 		selection.OutputSchema = agent.Text.Format.Schema

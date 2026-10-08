@@ -13,13 +13,12 @@ import (
 
 // Router.mu protects a Session's bounded transfer to its Environment owner.
 type workspaceUpload struct {
-	envelope  proto.Envelope
-	request   proto.WorkspaceWritePayload
-	data      []byte
-	ready     chan struct{}
-	finished  bool
-	apply     bool
-	uncertain bool
+	envelope proto.Envelope
+	request  proto.WorkspaceWritePayload
+	data     []byte
+	ready    chan struct{}
+	finished bool
+	apply    bool
 }
 
 func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) error {
@@ -134,10 +133,8 @@ func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, env
 	}
 	r.mu.Lock()
 	r.transferBytes -= u.request.SizeBytes
-	u.uncertain = result.Outcome == "unknown"
-	if !u.uncertain {
-		delete(r.workspaceWrites, u.request.SessionID)
-	}
+	// An unknown outcome stays with the Environment owner, which quarantines it.
+	delete(r.workspaceWrites, u.request.SessionID)
 	r.mu.Unlock()
 	_ = r.sendWorkspaceWrite(ctx, u.envelope, result)
 }
