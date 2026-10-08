@@ -3,6 +3,14 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 package="$repo_root/packages/mcode-harness"
+version="$(python3 - "$package/source.json" "$repo_root/internal/harnessconfig/builtin/catalog.json" <<'PY'
+import json, sys
+source = json.load(open(sys.argv[1]))
+version = next(entry['version'] for entry in json.load(open(sys.argv[2])) if entry['kind'] == 'mcode')
+assert source['version'] == version, 'MiniMax Code source.json version does not match the Harness catalog'
+print(version)
+PY
+)"
 source="${MCODE_NATIVE_SOURCE:?Set MCODE_NATIVE_SOURCE to the pinned upstream checkout}"
 native="${MCODE_CLI_DIR:?Set MCODE_CLI_DIR to the pinned CLI package supplying native dependencies}"
 case "$(uname -s):$(uname -m)" in
@@ -33,7 +41,7 @@ if [[ -f "$source/.cache/artifacts/code-0.3.11.tgz" ]]; then
 fi
 printf '%s\n' "$revision" > "$context/upstream/.oac-source-revision"
 cp "$package/"*.mjs "$package/"*.ts "$package/"*.json "$context/"
-test "$(node "$native/cli.js" --version)" = 0.4.12
+test "$(node "$native/cli.js" --version)" = "$version"
 (
   cd "$context"
   MCODE_SOURCE="$context/upstream" node patch-native.mjs

@@ -52,7 +52,7 @@ class SelectionTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location("catalog_generator", Path(__file__).with_name("generate-harness-catalog.py"))
         generator = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(generator)
-        with patch.object(generator, "go", side_effect=lambda source: source):
+        with patch.object(generator, "go", side_effect=lambda source, **kwargs: source):
             outputs = generator.render(generator.load_catalog(generator.ROOT / generator.CATALOG))
         for path in [*map(str, outputs), "scripts/acceptance/harness_catalog.py"]:
             with self.subTest(path=path):

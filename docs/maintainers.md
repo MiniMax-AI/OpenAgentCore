@@ -58,6 +58,8 @@ The catalog records the commit, the Runtime protocol version, each archive's SHA
 
 `make build-core-distribution` builds the agent-host and sandbox targets of `deploy/distribution/AgentHost.Dockerfile`. Run commands from the repository root on Linux amd64; outputs default to `${OAC_DEV_HOME:-$HOME/.oac}/build`.
 
+[Harness version pins](../contracts/agents-api/harness-onboarding.md#native-version-pins) define the build inputs and generated package projections. Run `make check-harness-catalog` before preparing payloads.
+
 Prepare the official pinned Codex Linux x64 package and the MiniMax companion with `scripts/prepare-release-runtimes.sh`, or supply `CODEX_CLI_DIR` and `MCODE_HARNESS_BUILD_DIR` for existing prepared inputs. `scripts/build-{codex,claude,mcode}-runtime.sh` validate and stage Harness payloads for both image builders; they do not build guest Runtime images. The Claude payload is a checksummed export of the pinned SDK and adapter:
 
 ```sh

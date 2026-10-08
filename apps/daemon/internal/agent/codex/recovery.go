@@ -6,10 +6,12 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+
+	configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
 )
 
 func SupportsNativeSessionRecovery(version string) bool {
-	return strings.TrimSpace(version) == "codex-cli 0.153.4"
+	return strings.TrimSpace(version) == "codex-cli "+configuration.NativeVersion
 }
 
 func (s *Session) recoverRoot(plan SessionPlan) (string, error) {

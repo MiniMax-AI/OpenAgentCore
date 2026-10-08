@@ -30,16 +30,16 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 | Adapter | Native configuration, resources, API calls, event translation and restrictions | `apps/daemon/internal/agent/<kind>` |
 | Harness | Native model and tool loop and history | Pinned SDK or executable |
 | Declaration | The Harness's support, against which Core and the Runtime admit each selection | `internal/harnessconfig/<kind>` |
-| Registration | Adapter declarations, installed views and the installation's narrowed support | `apps/daemon/internal/agent/<kind>/declaration.go`; static list in `apps/daemon/internal/cli/agent_host_linux.go` |
+| Registration | Adapter declarations, installed views and the installation's narrowed support | `apps/daemon/internal/agent/<kind>/declaration.go`; catalog-generated list in `apps/daemon/internal/cli/harness_catalog_linux.go` |
 
 An Environment supplies execution resources. Managed E2B, Docker and microsandbox machines and application-owned machines differ in provisioning and connection; each serves the sandbox to the Linux agent host, which runs every Harness in a [view](#run-in-an-agent-host-view) of it under this same contract. Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](./environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
 
 ## Steps
 
-1. **Pin the native source.** Record the upstream package version and source revision and document the native entry point next to the adapter.
+1. **Pin the native source.** Add the upstream package version to the [Harness catalog](./harness-catalog.md), keep any source revision in one authored owner ([native version pins](#native-version-pins)), and document the native entry point next to the adapter.
 2. **Implement the adapter** in `apps/daemon/internal/agent/<kind>`: a view whose `ViewExecutorFactory` prepares an `Executor`, and a `Turn` ([required interfaces](#required-adapter-interfaces), [lifetimes](#executor-and-turn-lifetimes), [view](#run-in-an-agent-host-view)). Reuse the shared process, credential and configuration helpers.
-3. **Declare its support and register it.** Declare the support in `internal/harnessconfig/<kind>` with one catalog entry ([declare support](#declare-support)), then declare the kind in the adapter and add it to the agent host's static list in `apps/daemon/internal/cli/agent_host_linux.go` ([register the adapter](#register-the-adapter)).
-4. **Package native prerequisites.** Supply the adapter's installation and add the Harness to the agent-host image ([native installer participation](#native-installer-participation)).
+3. **Declare its support and register it.** Declare the support in `internal/harnessconfig/<kind>` with one catalog entry ([declare support](#declare-support)), then export the adapter declaration for generated agent-host registration ([register the adapter](#register-the-adapter)).
+4. **Package native prerequisites.** Supply the adapter's installation and add the Harness to the agent-host image ([native Harness packaging](#native-harness-packaging)).
 5. **Enable and select the engine** with the `core.harnesses` setting and [Harness selection](./model-execution.md#harness-selection).
 6. **Qualify it** ([qualify the adapter](#qualify-the-adapter)) and record each native difference in the [coverage ledger](./index.md).
 
@@ -147,7 +147,7 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 ## Register the adapter
 
-Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_host_linux.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_host_linux.go). The declaration contains the kind with the capabilities of the shared model `Configuration`'s declaration, that `Configuration` and a `Discover` function. Discovery receives the diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and view declaration. Return nil when the adapter is not configured; return an unavailable descriptor without a view when configured prerequisites fail. Keep version gates and view-selection conditions inside the adapter; they only clear support.
+Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<configuration>/declaration.go`. `make generate-harness-catalog` generates the agent host's declaration and `Installation()` lists in `apps/daemon/internal/cli/harness_catalog_linux.go` from each catalog entry's `configuration` package. The declaration contains the kind with the capabilities of the shared model `Configuration`'s declaration, that `Configuration` and a `Discover` function. Discovery receives the diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and view declaration. Return nil when the adapter is not configured; return an unavailable descriptor without a view when configured prerequisites fail. Keep version gates and view-selection conditions inside the adapter; they only clear support.
 
 [`cli/agent_host_linux.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_host_linux.go) registers each discovered Runtime that has a view with `RegisterKind` and `RegisterView`. The agent host then registers each such kind for dispatch through `Registry.Register`, which composes the declaration with the Environments it serves, and installs its own Executor factory with `RegisterExecutor`; that factory builds the Session's view and calls the view's `ViewExecutorFactory`.
 
@@ -167,7 +167,7 @@ The runnable test-only example [`testdata/onboarding/main.go`](https://github.co
 
 ## Declare support
 
-Core recognizes the [built-in Harness registrations](./harness-catalog.md). Add one entry to `internal/harnessconfig/builtin/catalog.json` with the public `kind`, the display `label` and the model `configuration` package under `internal/harnessconfig`, then run `make generate-harness-catalog`. It generates the model configuration registry, client identifiers and display names and the registration reference; public input validators read the generated registry. `make openapi` derives Harness enums from the same catalog, so do not add handwritten enums to DTO tags or route annotations. `make check-harness-catalog` rejects stale projections.
+Core recognizes the [built-in Harness registrations](./harness-catalog.md). Add one entry to `internal/harnessconfig/builtin/catalog.json` with the public `kind`, the display `label`, the pinned upstream `version` and the model `configuration` package under `internal/harnessconfig`, then run `make generate-harness-catalog`. It generates the model configuration registry, agent-host declaration and installation lists, version pin projections, client identifiers and display names and the registration reference; public input validators read the generated registry. `make openapi` derives Harness enums from the same catalog, so do not add handwritten enums to DTO tags or route annotations. `make check-harness-catalog` rejects stale projections.
 
 The `Declaration` of `Configuration()` in `internal/harnessconfig/<kind>` is the Harness's support: a `proto.Declaration` with its `AgentKindCapabilities`, its message, image, MCP and output-schema limits, and in `Conflicts` the feature pairs it supports alone but not together. It states the adapter's maximum support and is the only source: Core reads it through `builtin.Registry()`, and the adapter's Runtime descriptor starts from it. Discovery and the Environment owner only clear support, and Core rejects a heartbeat that widens it. Declare only real differences between Harnesses; a rule that holds for every Harness is a common check in `proto.ValidateSelection`.
 
@@ -236,9 +236,17 @@ Warm continuation is the default and records cold recovery as `unverified`. To q
 
 Run `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py` with the pinned SDK to check credential handling and the owned restart boundary without a model. Existing deterministic Core integration tests remain the authority for schema validation, atomic admission, durable receipts and rejection semantics. Real-model results qualify only the selected suite, protocol, Harness and placement. Provider lifecycle, native identity, credential isolation, deferred discovery and unselected suites need separate evidence; view-only results do not qualify the public path.
 
-## Native installer participation
+## Native version pins
 
-An adapter supplies `agent.Installation` from `installation.go` in its own package: its registered kind and activation environment. The agent host uses this declaration to activate the packaged Harness. Adapters own native layout; validate the packaged content and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
+`internal/harnessconfig/builtin/catalog.json` owns each built-in Harness's upstream version. Build scripts read that catalog; adapter constants and package version fields are generated projections. Update the catalog and run `make generate-harness-catalog` before building, then use `make check-harness-catalog` to verify freshness. A version change requires [native qualification](#qualify-the-adapter).
+
+For Claude, `version` pins the official Agent SDK dependency in `packages/claude-sdk-adapter/package.json`; its pnpm lock must resolve that exact version and installs stay frozen. Update the lock through pnpm when changing the pin. Native Claude Code's version comes from the installed SDK's `claudeCodeVersion` metadata and is checked against its runtime report. Do not author a separate native Claude Code pin.
+
+For MiniMax, `packages/mcode-harness/source.json` owns the upstream repository and source revision; its `version` is projected from the catalog. The companion artifact carries `source.json`, so its source validation and provenance work independently of the checkout.
+
+## Native Harness packaging
+
+An adapter supplies `agent.Installation` from `installation.go` in its own package: its registered `AgentKind` and activation `Environment`. The generated registration passes these declarations to `agent.ManifestEnvironment`, which activates the packaged Harness from the image manifest. Adapters own native layout; validate the packaged content and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
 
 `deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`. `agent.ManifestEnvironment` activates it through `Installation.Environment`. Add each new Harness to that image and manifest; use the shared [image build](../../docs/maintainers.md#runtime-images-and-helpers) and [view qualification](#qualify-the-view) workflow.
 
