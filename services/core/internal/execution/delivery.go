@@ -53,7 +53,7 @@ func abort(peer *runtimegateway.Session, ref proto.AssignmentRef, runID string) 
 	_ = send(context.Background(), peer, ref, proto.TypePromptCancel, runID, proto.PromptCancelPayload{})
 }
 
-func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, runID string, input proto.MessageInput, first int64, prepared *preparedStart) (result Result, status string) {
+func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, declaration proto.Declaration, runID string, input proto.MessageInput, first int64, prepared *preparedStart) (result Result, status string) {
 	changed, unsubscribeChanges := d.notifications.subscribe(tenantID, sessionID)
 	defer unsubscribeChanges()
 	status = sessions.TurnFailed
@@ -102,7 +102,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{assignment: prepared.assignment, kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools}
+	functions := &functionExchange{assignment: prepared.assignment, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -289,7 +289,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				cancelSent = time.Now()
 				continue
 			}
-			if err := functions.start(cancelCtx, peer); err != nil {
+			if err := functions.start(cancelCtx, peer, declaration); err != nil {
 				result.ErrorCode = "function_result_invalid"
 				return
 			}
@@ -328,7 +328,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if !pending.waiting && !pending.written {
-				if validateDelivery(peer, request.AgentKind, proto.Selection{Messages: pending.input}) != nil {
+				if proto.ValidateSelection(declaration, proto.Selection{Messages: pending.input}) != nil {
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}
