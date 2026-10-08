@@ -41,6 +41,7 @@ type fakeTx struct {
 	insertEnvironmentDevice  func() error
 	loadSessionDevice        func() (ExecutionDevice, bool, error)
 	claimInitialization      func() (bool, error)
+	unclaimInitialization    func() (bool, error)
 	completeInitialization   func() (bool, error)
 	failInitialization       func() error
 	loadConnection           func() (EnvironmentConnection, bool, error)

@@ -106,7 +106,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				t.Fatal("missing socket consumed initialization")
 			}
 			p.deferred = false
-			if err := p.connect(sandbox.Bootstrap{DeviceID: owner.DeviceID, Credential: p.credential}); err != nil {
+			if err := p.connect(p.bootstrap); err != nil {
 				t.Fatal(err)
 			}
 			want := "complete"

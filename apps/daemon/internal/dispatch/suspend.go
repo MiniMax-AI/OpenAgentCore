@@ -90,8 +90,8 @@ func (r *Router) handleQuiesce(ctx context.Context, env proto.Envelope) error {
 }
 
 // handleResume reopens the quiesced Environment that the resume names. A
-// rollback of an Environment this connection has not quiesced is accepted
-// and changes nothing.
+// resume of an Environment this connection has not quiesced, as after a
+// restart, is accepted and changes nothing.
 func (r *Router) handleResume(ctx context.Context, env proto.Envelope) error {
 	var request proto.EnvironmentSuspendPayload
 	if env.ID == "" || len(env.ID) > 128 || env.DecodeRequest(&request) != nil {
@@ -99,7 +99,7 @@ func (r *Router) handleResume(ctx context.Context, env proto.Envelope) error {
 	}
 	r.mu.Lock()
 	err := r.resumeLocked(env.Assignment, request)
-	if errors.Is(err, errNotSuspended) && request.Rollback {
+	if errors.Is(err, errNotSuspended) && r.suspensions[request.EnvironmentID] == nil {
 		err = nil
 	}
 	r.mu.Unlock()

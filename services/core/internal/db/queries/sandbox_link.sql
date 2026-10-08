@@ -2,6 +2,15 @@
 SELECT tenant_id, environment_id, kind, generation, credential_hash FROM sandbox_resources
 WHERE id = $1 AND live;
 
+-- name: ListLiveSandboxResources :many
+-- Every live Link resource. Quiesced compute is between a quiesce and the
+-- wake that resumes it.
+SELECT r.tenant_id, r.environment_id, r.kind, r.id, r.generation,
+    COALESCE(a.compute_phase NOT IN ('disabled', 'running'), false)::boolean AS quiesced
+FROM sandbox_resources r
+LEFT JOIN runtime_allocations a ON r.kind = 'allocation' AND a.id = r.id
+WHERE r.live;
+
 -- name: GetAgentHostCredential :one
 SELECT COALESCE(credential_hash, '')::text AS credential_hash, credential_revision FROM devices
 WHERE id = $1 AND agent_host AND revoked_at IS NULL;

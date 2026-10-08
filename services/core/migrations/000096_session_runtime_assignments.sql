@@ -1,8 +1,9 @@
 -- +goose Up
 -- A Session's binding to its Runtime becomes a fenced assignment. Core
--- advances epoch with each change of desired_state; applied_epoch is the
--- latest released epoch the Runtime acknowledged, or that no Runtime can act
--- on because its Runtime lost authority.
+-- advances epoch when it releases the assignment and when a later release
+-- adds home removal; applied_epoch is the latest released epoch the Runtime
+-- acknowledged, or that no Runtime can act on because its Runtime lost
+-- authority.
 ALTER TABLE session_devices RENAME TO session_runtime_assignments;
 ALTER TABLE session_runtime_assignments RENAME COLUMN device_id TO runtime_id;
 ALTER INDEX session_devices_pkey RENAME TO session_runtime_assignments_pkey;

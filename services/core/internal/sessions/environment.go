@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 )
 
@@ -77,6 +78,10 @@ type EnvironmentInitialization struct {
 	EnvironmentID, SessionID, TenantID, DeviceID, State, Engine string
 	// Assignment is the Session's bound assignment to DeviceID.
 	Assignment proto.AssignmentRef
+	// Resource is the Environment's Link resource, or the zero Resource when
+	// it has none; ResourceLive reports whether it may be served.
+	Resource     sandboxbootstrap.Resource
+	ResourceLive bool
 }
 
 // EnvironmentInputActivity is the reservation-owned override before a newer Turn exists.

@@ -138,6 +138,15 @@ func (t *environmentTx) ClaimInitialization(ctx context.Context, environment str
 	return count == 1, err
 }
 
+func (t *environmentTx) UnclaimInitialization(ctx context.Context, environment string) (bool, error) {
+	id, err := parseID(environment)
+	if err != nil {
+		return false, err
+	}
+	count, err := t.q.UnclaimEnvironmentInitialization(ctx, id)
+	return count == 1, err
+}
+
 func (t *environmentTx) CompleteInitialization(ctx context.Context, environment string) (bool, error) {
 	id, err := parseID(environment)
 	if err != nil {

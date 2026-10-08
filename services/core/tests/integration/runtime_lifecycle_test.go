@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -85,16 +86,21 @@ func managedWorker(t *testing.T, s *Store, key string, p sandbox.SandboxProvider
 // managedWorkerMode is managedWorker that also runs the Worker when run is set.
 func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProvider, run bool) (*execution.Worker, func()) {
 	t.Helper()
-	registry := runtimegateway.NewRegistry()
+	dispatcher := &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: webRuntimes(t, s, key, p, nil)}
 	if peer, ok := p.(interface {
-		setRuntimeGateway(*testing.T, string, *runtimegateway.Registry)
+		setRuntimeGateway(*testing.T, string, *runtimegateway.Registry, *sandboxlinktest.Server)
 	}); ok {
-		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
+		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: dispatcher.Registry})
 		server := httptest.NewServer(http.HandlerFunc(handler.WS))
 		t.Cleanup(server.Close)
-		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
+		link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
+		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), dispatcher.Registry, link)
+		dispatcher.Links = link.Relay
 	}
-	w := startWebWorker(t, s, registry, key, p, nil)
+	w, err := startNextWorker(t.Context(), s, dispatcher)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if run {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)

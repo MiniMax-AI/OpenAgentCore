@@ -153,6 +153,16 @@ func (rl *Relay) RevokeResource(ref sandboxlink.ResourceRef) {
 	rl.releaseLocked(key, r)
 }
 
+// Serving reports whether the relay holds a serve peer of ref at
+// ref.Generation. It is this process's view, held in memory like the rest of
+// the relay.
+func (rl *Relay) Serving(ref sandboxlink.ResourceRef) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	r := rl.resources[keyOf(ref)]
+	return r != nil && r.serve != nil && r.serve.hello.Resource.Generation == ref.Generation
+}
+
 type resourceKey struct {
 	tenant, environment, id sandboxwire.ID
 	kind                    sandboxlink.ResourceKind

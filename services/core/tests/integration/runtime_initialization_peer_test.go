@@ -12,17 +12,20 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/gorilla/websocket"
 )
 
 // initializationPeer exercises the real authenticated gateway and chunk receipts.
-// The provider fixture bootstraps its socket; all initialization runs on that peer.
+// The provider fixture bootstraps its socket, and Serves the bootstrap's Link
+// resource at link; all initialization runs on that peer.
 type initializationPeer struct {
 	t            *testing.T
 	endpoint     string
 	registry     *runtimegateway.Registry
+	link         *sandboxlinktest.Server
 	apply        func(proto.RuntimePreparePayload, []byte) proto.RuntimePrepareResultPayload
 	writes       atomic.Int32
 	commandCalls atomic.Int32
@@ -30,15 +33,23 @@ type initializationPeer struct {
 	unavailable  bool
 	bootstrap    sandbox.Bootstrap
 	binds        chan proto.AssignmentBindPayload // when not nil, receives each bind's payload
+	closeOnBind  bool                             // close the socket at a bind instead of replying
 }
 
-func (p *initializationPeer) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry) {
-	p.t, p.endpoint, p.registry = t, endpoint, registry
+func (p *initializationPeer) setRuntimeGateway(t *testing.T, endpoint string, registry *runtimegateway.Registry, link *sandboxlinktest.Server) {
+	p.t, p.endpoint, p.registry, p.link = t, endpoint, registry, link
 }
 func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 	p.bootstrap = b
 	if p.deferred {
 		return nil
+	}
+	if p.link != nil && b.SandboxIO.Credential != "" {
+		select {
+		case <-startLinkServe(p.t, p.link, []byte(b.SandboxIO.Credential), b.SandboxIO.Resource.Ref()).connected:
+		case <-time.After(linkWait):
+			return context.DeadlineExceeded
+		}
 	}
 	c, _, err := websocket.DefaultDialer.Dial(p.endpoint+"?device_id="+b.DeviceID+"&version="+proto.Version, http.Header{"Authorization": {"Bearer " + b.Credential}})
 	if err != nil {
@@ -61,6 +72,10 @@ func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 				var bind proto.AssignmentBindPayload
 				if p.binds != nil && env.DecodePayload(&bind) == nil {
 					p.binds <- bind
+				}
+				if p.closeOnBind {
+					_ = c.Close()
+					return
 				}
 				if c.WriteJSON(reply) != nil {
 					return

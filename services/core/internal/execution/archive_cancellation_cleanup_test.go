@@ -173,7 +173,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal("Kill bypassed durable cleanup ownership", allocation, err)
 				}
 			}}
-			lifecycle := &runtimeLifecycle{sessions: sessionReader, sessionExecution: leased.Sessions, deployment: leased.Deployment, deployments: deployments, reader: reader, lease: leased.Lease, registry: registry, links: relay.New(nil), config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
+			lifecycle := &runtimeLifecycle{sessions: sessionReader, sessionExecution: leased.Sessions, deployment: leased.Deployment, deployments: deployments, reader: reader, lease: leased.Lease, registry: registry, links: relay.New(nil), config: RuntimeProvider{InstallationID: installation, Provider: provider}}
 			if checkpoint {
 				lifecycle.config.Provider = waitingCleanupCheckpoint{beforeKill: provider.beforeKill}
 			}

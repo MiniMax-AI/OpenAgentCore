@@ -70,10 +70,8 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 	if err != nil {
 		return err
 	}
-	if err := r.deployment.ClearWake(ctx, next, owner.ComputeActivityAt); err != nil {
-		return err
-	}
-	return r.observeConnection(ctx, next)
+	// The Worker's pass publishes the Environment connected again.
+	return r.deployment.ClearWake(ctx, next, owner.ComputeActivityAt)
 }
 
 func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {

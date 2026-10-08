@@ -75,7 +75,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}, nil
 	}, unusedPreparation(t))
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), configuration)
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, configuration)
 	if err != nil {
 		t.Fatal(err)
 	}

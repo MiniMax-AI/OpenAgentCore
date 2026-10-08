@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -26,8 +27,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// nodeIsolationProvider Serves each allocation it creates at link.
 type nodeIsolationProvider struct {
 	*fakeCheckpointProvider
+	link      *sandboxlinktest.Server
 	blockMu   sync.Mutex
 	blocked   map[string]bool
 	mode      string
@@ -54,6 +57,13 @@ func (p *nodeIsolationProvider) Create(ctx context.Context, b sandbox.Bootstrap)
 	info, err := p.fakeCheckpointProvider.Create(ctx, b)
 	if err == nil {
 		err = p.connect(ctx, b)
+	}
+	if err == nil {
+		select {
+		case <-startLinkServe(p.preparation.t, p.link, []byte(b.SandboxIO.Credential), b.SandboxIO.Resource.Ref()).connected:
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
 	}
 	return info, err
 }
@@ -98,7 +108,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	s := NewWithCredentialCipher(pool, cipher)
 	registry := runtimegateway.NewRegistry()
 	cp := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
+	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s))), blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
 	preparationContext, cancelPreparation := context.WithCancel(t.Context())
 	t.Cleanup(cancelPreparation)
 	cp.preparation = &initializationPeer{t: t, apply: func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {
@@ -126,7 +136,10 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: webDeployment(t, s, "microsandbox"), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
-	f.worker = startWebWorker(t, s, registry, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})
+	f.worker, err = startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: registry, Links: p.link.Relay, ManagedRuntimes: webRuntimes(t, s, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(f.stop)
 	f.epoch = fixtureOwnerEpoch(t, s)
 	f.enroll(f.nodeA)
