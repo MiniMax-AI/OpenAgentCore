@@ -57,7 +57,7 @@ def prepare_pinned_payload(destination):
 def build_images(directory, tag):
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     protocol = re.search(r'const Version = "([^"]+)"', (ROOT / 'internal/agentdaemon/proto/version.go').read_text()).group(1)
-    go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': os.environ.get('GOARCH', 'amd64')}
+    go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
 
     def go_build(package, output, build_revision=revision):
         output.parent.mkdir(parents=True, exist_ok=True)

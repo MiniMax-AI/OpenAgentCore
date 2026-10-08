@@ -34,7 +34,7 @@ func defaultRunContext() *runContext {
 // commands lists subcommands in --help render order: the user's
 // likely flow install → start → stop / logs.
 var commands = []command{
-	{name: "install", summary: "Install a native daemon and selected Harnesses", run: runInstall},
+	{name: "install", summary: "Install the sandbox launcher and Sandbox I/O", run: runInstall},
 	{name: "start", summary: "Start the installed native daemon", run: runStart},
 	{name: "agent-host", summary: "Serve Sessions from the agent-host container", run: runAgentHost},
 	{name: "stop", summary: "Stop the background daemon", run: runStop},

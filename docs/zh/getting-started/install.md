@@ -1,10 +1,10 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 4a340f0b9ebaf1c1477373c0a4279fcd3548340b2cdbef3b43d233e5872cef44
+source_hash: baa93565e3ec6c26752f692a3ad7771dc1b5259f98350620381b4d4315014a2e
 ---
 
-一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
+一条命令即可在 Linux amd64 Docker 引擎上安装 Core、Web 控制台、agent host 和 PostgreSQL。操作员启动器也可在 macOS 和 Windows 上运行。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
 
 1. [检查前置条件](#prerequisites)。
 2. [运行安装程序](#install)。
@@ -18,8 +18,8 @@ source_hash: 4a340f0b9ebaf1c1477373c0a4279fcd3548340b2cdbef3b43d233e5872cef44
 
 ## 前置条件 {#prerequisites}
 
-- Linux amd64/arm64 或 macOS Intel/Apple Silicon，需安装 curl；Windows x64 需 PowerShell。
-- Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。macOS 和 Windows 使用已启动的 Docker Desktop，并选择 Linux 容器。
+- 操作端需要 curl（Linux 或 macOS）或 PowerShell（Windows x64）；其 Docker 引擎必须满足下面的执行平台要求。
+- 运行 Linux amd64 容器的 Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。不支持 ARM64 Docker 引擎；安装器不会启用模拟。
 - 能运行 `docker` 并向自己的主目录写入文件的账号。普通用户和 root 均可；安装程序不会调用 sudo。
 - Web 的 8080 端口空闲。参阅[端口](install-options.md#ports)。Docker 必须能发布该端口；安装程序不会修改主机策略。
 - 本机以外的访问要求 `OAC_PUBLIC_URL` 就是浏览器、节点和执行器使用的地址。可以先在本机登录。

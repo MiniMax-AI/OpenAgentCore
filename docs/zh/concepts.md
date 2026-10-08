@@ -1,7 +1,7 @@
 ---
 title: "概念"
 source: docs/concepts.md
-source_hash: 2d65b520ffc8ccce8836d6196fb9daa217a438e4f79ae2aee70d4cb77da4c606
+source_hash: a1ec30de00bdb8aa75db3b2da705e6b5444ec590000c31a2b0e9d81875fc6822
 ---
 
 Project 是 OpenAgentCore 的执行租户。应用使用其 API key；运维人员使用独立的 Core key 管理安装实例。[API 索引](api/index.md) 将每类调用方映射到对应命名空间和凭据。
@@ -26,9 +26,9 @@ Project 和 key 存储在 PostgreSQL 中。Core 仅在签发时返回一次 key 
 
 ## Runtime 与外层隔离 {#runtime-and-outer-isolation}
 
-Runtime daemon 在 Linux、macOS 和 Windows 上运行。原生平台行为由 Runtime 及其 Harness adapter 负责；托管 Sandbox Provider 运行 Linux 环境。
+Runtime 在 Linux agent host 上运行 Harness。托管沙箱和自托管机器运行 Sandbox I/O 服务；[自托管指南](./getting-started/self-hosted.md#platforms)定义支持的安装平台和主机前提条件。
 
-工具以启动 daemon 的账户权限运行。daemon 不增加文件系统、权限或网络隔离。应使用外层 Environment 提供隔离：托管 Docker、E2B 或 microsandbox 环境，或在自托管机器的 Runtime 外使用容器或虚拟机。认证、私有存储、锁和进程清理保护连接与生命周期，但以同一用户运行的工具可以访问 Runtime 数据。
+工具以启动 Sandbox I/O 服务的账户权限运行。该服务不增加文件系统、权限或网络隔离。应使用外层 Environment 提供隔离：托管 Docker、E2B 或 microsandbox 环境，或在自托管机器的服务外使用容器或虚拟机。认证、私有存储、锁和进程清理保护连接与生命周期，但以同一用户运行的工具可以访问机器上的服务数据。Harness 历史和模型凭据保留在 agent host 上。
 
 ## 秘密与审计 {#secrets-and-audit}
 

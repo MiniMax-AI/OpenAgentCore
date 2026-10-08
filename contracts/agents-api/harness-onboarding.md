@@ -238,13 +238,13 @@ Run `python -m unittest discover -s services/core/tests -p qualify_public_native
 
 ## Native installer participation
 
-An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
+An adapter supplies `agent.Installation` from `installation.go` in its own package: its registered kind and activation environment. The agent host uses this declaration to activate the packaged Harness. Adapters own native layout; validate the packaged content and execution on the Linux agent host. Missing or incompatible native content fails; it never installs itself during a Turn. Self-hosted installers carry no Harness or Node.js.
 
-The agent-host image uses the same contract. `deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`, and `agent.ManifestEnvironment` activates it from there through `Installation.Environment`. A Harness the agent host runs is added there too.
+`deploy/distribution/AgentHost.Dockerfile` installs each Harness in its own directory and lists it in the image's manifest, `/opt/oac/harnesses.json`. `agent.ManifestEnvironment` activates it through `Installation.Environment`. Add each new Harness to that image and manifest; use the shared [image build](../../docs/maintainers.md#runtime-images-and-helpers) and [view qualification](#qualify-the-view) workflow.
 
 ## Native process ownership
 
-The daemon's `clirunner` starts every native child in its own Unix process group (a Job object on Windows); other hosts reject the launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
+The daemon's `clirunner` starts every native child in its own process group on Linux; other platforms return its typed unsupported error. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
 
 Owned output pipes stay readable after the leader exits. Consumers drain stdout and stderr before calling `Wait`, which joins the cached process result and closes the readers. `Done` reports leader reaping and group cleanup signals; it is not a native execution receipt or proof of persisted history. SDK adapters settle each Turn and drain its observations before publishing completion, and Executor close also closes the query and awaits the native child. Process groups are lifecycle supervision, not isolation or containment of descendants that leave the group.
 
@@ -356,8 +356,8 @@ Run the adapter's Turns, cancellation and continuation in a view, then qualify e
 
 ## Native references
 
-| Harness | Adapter | Native transport | Runtime guide |
-| --- | --- | --- | --- |
-| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) |
-| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) | [Claude Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) |
-| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/mcode/README.md) |
+| Harness | Adapter | Native transport |
+| --- | --- | --- |
+| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server |
+| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) |
+| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP and native workspace companion |

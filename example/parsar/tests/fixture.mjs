@@ -265,7 +265,7 @@ createServer(async (req, res) => {
       ...(body.environment.type === "self_hosted" ? {
         x_agents_core: { installation: {
           status: "available", version: "fixture", expires_at: now() + 1800,
-          commands: { posix: "bash fixture-native-bootstrap.sh", powershell: "& fixture-native-bootstrap.ps1" },
+          commands: { posix: "bash fixture-native-bootstrap.sh" },
         } },
       } : {}),
       status: "idle",

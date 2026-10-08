@@ -21,7 +21,7 @@ import (
 // Exercise the shipped script against two actual TLS origins. The downloaded
 // executable is a fixture so this test cannot install software or call a model.
 func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("POSIX bootstrap")
 	}
 	for _, tool := range []string{"bash", "curl", "tar"} {
@@ -82,7 +82,7 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 			}))
 			defer core.Close()
 			result := filepath.Join(t.TempDir(), "result")
-			command := exec.Command("bash", "assets/bootstrap.sh", core.URL+"/api/v1/agent-daemon/install/build", "private-grant", "--harness", "codex")
+			command := exec.Command("bash", "assets/bootstrap.sh", core.URL+"/api/v1/agent-daemon/install/build", "private-grant", "--non-interactive")
 			command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+t.TempDir(), "CURL_CA_BUNDLE="+ca, "OAC_BOOTSTRAP_TEST_RESULT="+result, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 			output, err := command.CombinedOutput()
 			if valid {
@@ -93,7 +93,7 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !strings.Contains(string(args), core.URL+"/api/v1/agent-daemon/installation\n--authorization\nprivate-grant\n--harness\ncodex") {
+				if !strings.Contains(string(args), core.URL+"/api/v1/agent-daemon/installation\n--authorization\nprivate-grant\n--non-interactive") {
 					t.Fatalf("incorrect install handoff: %s", args)
 				}
 			} else {

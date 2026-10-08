@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-sandbox-io build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-codex-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-sandbox-io build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-claude-sdk-runtime build-mcode-harness
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make build-sandbox-io  Build the Sandbox I/O service for Linux' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -158,17 +158,8 @@ check-mcode-harness:
 	@for script in packages/mcode-harness/*.mjs; do node --check "$$script"; done
 	bash -n scripts/build-mcode-harness.sh scripts/build-mcode-runtime.sh
 
-build-codex-runtime:
-	./scripts/build-codex-runtime.sh
-
-build-claude-runtime:
-	./scripts/build-claude-runtime.sh
-
 build-mcode-harness:
 	./scripts/build-mcode-harness.sh
-
-build-mcode-runtime:
-	./scripts/build-mcode-runtime.sh
 
 .PHONY: build-microsandbox-provider check-microsandbox-provider
 build-microsandbox-provider:

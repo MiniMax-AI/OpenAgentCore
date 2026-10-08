@@ -40,24 +40,21 @@ func bootstrapFixtureArchive(t *testing.T) []byte {
 
 func bootstrapCommand(t *testing.T, base, home string) *exec.Cmd {
 	t.Helper()
-	var command *exec.Cmd
-	if runtime.GOOS == "windows" {
-		command = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-File", "assets/bootstrap.ps1", "-Base", base, "-Authorization", "fixture-grant")
-	} else {
-		command = exec.Command("bash", "assets/bootstrap.sh", base, "fixture-grant")
-	}
+	command := exec.Command("bash", "assets/bootstrap.sh", base, "fixture-grant")
 	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 	return command
 }
 
 func TestBootstrapRecovery(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skip("Linux amd64 bootstrap")
+	}
 	archive := bootstrapFixtureArchive(t)
 	for _, scenario := range []string{"metadata-503", "archive-truncated", "missing", "corrupt"} {
 		t.Run(scenario, func(t *testing.T) {
 			var metadata, downloads atomic.Int32
 			sum := fmt.Sprintf("%x", sha256.Sum256(archive))
-			// Windows exercises the real downloader, then rejects the fixture before execution.
-			if scenario == "corrupt" || runtime.GOOS == "windows" {
+			if scenario == "corrupt" {
 				sum = strings.Repeat("0", 64)
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +86,7 @@ func TestBootstrapRecovery(t *testing.T) {
 				if err == nil || !bytes.Contains(output, []byte("no qualified installer")) || downloads.Load() != 0 || metadata.Load() != 1 {
 					t.Fatalf("missing: %v %s", err, output)
 				}
-			} else if scenario == "corrupt" || runtime.GOOS == "windows" {
+			} else if scenario == "corrupt" {
 				if err == nil || !bytes.Contains(output, []byte("checksum mismatch")) {
 					t.Fatalf("corrupt: %v %s", err, output)
 				}
@@ -113,8 +110,8 @@ func TestBootstrapRecovery(t *testing.T) {
 }
 
 func TestBootstrapDiscardsStaleStagingOnly(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX executable fixture; Windows recovery is covered separately")
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skip("Linux amd64 bootstrap")
 	}
 	home := t.TempDir()
 	staging := filepath.Join(home, "native-download", "staging")
@@ -142,7 +139,7 @@ func TestBootstrapDiscardsStaleStagingOnly(t *testing.T) {
 }
 
 func TestBootstrapRejectsLowSpaceBeforeNetwork(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("POSIX disk-space fixture")
 	}
 	home := t.TempDir()
@@ -165,7 +162,7 @@ func TestBootstrapRejectsLowSpaceBeforeNetwork(t *testing.T) {
 }
 
 func TestBootstrapExplainsUnexecutableInstaller(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skip("POSIX executable permissions")
 	}
 	var buffer bytes.Buffer
@@ -200,27 +197,5 @@ func TestBootstrapExplainsUnexecutableInstaller(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, "native-download", "staging")); !os.IsNotExist(err) {
 		t.Fatal("staging remains")
-	}
-}
-
-func TestWindowsBootstrapChecksArchiveToolBeforeDownload(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("Windows archive prerequisite")
-	}
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
-	defer server.Close()
-	home := filepath.Join(t.TempDir(), "runtime")
-	command := bootstrapCommand(t, server.URL, home)
-	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "''") + "'" }
-	// Keep the real SystemRoot while PowerShell itself loads.
-	command.Args = []string{command.Path, "-NoProfile", "-NonInteractive", "-Command",
-		"$env:SystemRoot = " + quote(t.TempDir()) + "; & './assets/bootstrap.ps1' -Base " + quote(server.URL) + " -Authorization 'fixture-grant'"}
-	output, err := command.CombinedOutput()
-	if err == nil || !bytes.Contains(output, []byte("tar.exe is required")) || requests.Load() != 0 {
-		t.Fatalf("%v: %s", err, output)
-	}
-	if _, err := os.Stat(home); !os.IsNotExist(err) {
-		t.Fatal("home created before prerequisite check")
 	}
 }

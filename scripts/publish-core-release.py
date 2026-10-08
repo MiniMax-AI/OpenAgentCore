@@ -109,42 +109,41 @@ def registry_image(reference):
 
 
 def publish_images(assets, repository, revision, tag, floating_latest=False):
-    """Verify both architectures before publishing immutable platform tags and indexes."""
+    """Verify Linux amd64 images before publishing immutable tags and indexes."""
     image_tag = tag.replace("+", "_")
     if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}", image_tag):
         raise ValueError("Release version exceeds the container tag format")
     with tempfile.TemporaryDirectory(prefix="oac-ghcr-") as directory:
         directory = pathlib.Path(directory)
         entries = {}
-        for architecture in ("amd64", "arm64"):
-            stem = "oac-" + revision + "-linux-" + architecture
-            with tarfile.open(assets / (stem + ".tar.gz"), "r:gz") as archive:
-                manifest = json.load(archive.extractfile(stem + "/manifest.json"))
-                if manifest["source_commit"] != revision or manifest["platform"] != "linux/" + architecture:
-                    raise ValueError("Registry images do not match the release")
-                names = IMAGE_NAMES if architecture == "amd64" else ("core", "web", "ingress")
-                for name in names:
-                    path = directory / (name + "-" + architecture + ".tar")
-                    if name == "runtime":
-                        artifact = manifest["artifacts"]["images/runtime.tar.gz"]
-                        filename = artifact["filename"]
-                        if pathlib.Path(filename).name != filename:
-                            raise ValueError("Invalid Runtime asset filename")
-                        compressed = assets / filename
-                        if compressed.is_symlink() or distribution.sha256(compressed) != artifact["sha256"]:
-                            raise ValueError("Runtime image checksum mismatch")
-                        with gzip.open(compressed, "rb") as source, path.open("wb") as target:
-                            shutil.copyfileobj(source, target)
-                    else:
-                        member = archive.getmember(stem + "/images/" + name + ".tar")
-                        if not member.isfile():
-                            raise ValueError("Expected a regular image archive")
-                        with archive.extractfile(member) as source, path.open("wb") as target:
-                            shutil.copyfileobj(source, target)
-                    expected = (manifest["images"][name], manifest["image_manifest_digests"][name])
-                    if distribution.image_identities(path, expected[0], architecture) != expected:
-                        raise ValueError("Release image identity mismatch: " + name)
-                    entries[name, architecture] = (path, *expected)
+        architecture = "amd64"
+        stem = "oac-" + revision + "-linux-" + architecture
+        with tarfile.open(assets / (stem + ".tar.gz"), "r:gz") as archive:
+            manifest = json.load(archive.extractfile(stem + "/manifest.json"))
+            if manifest["source_commit"] != revision or manifest["platform"] != "linux/" + architecture:
+                raise ValueError("Registry images do not match the release")
+            for name in IMAGE_NAMES:
+                path = directory / (name + "-" + architecture + ".tar")
+                if name == "runtime":
+                    artifact = manifest["artifacts"]["images/runtime.tar.gz"]
+                    filename = artifact["filename"]
+                    if pathlib.Path(filename).name != filename:
+                        raise ValueError("Invalid Runtime asset filename")
+                    compressed = assets / filename
+                    if compressed.is_symlink() or distribution.sha256(compressed) != artifact["sha256"]:
+                        raise ValueError("Runtime image checksum mismatch")
+                    with gzip.open(compressed, "rb") as source, path.open("wb") as target:
+                        shutil.copyfileobj(source, target)
+                else:
+                    member = archive.getmember(stem + "/images/" + name + ".tar")
+                    if not member.isfile():
+                        raise ValueError("Expected a regular image archive")
+                    with archive.extractfile(member) as source, path.open("wb") as target:
+                        shutil.copyfileobj(source, target)
+                expected = (manifest["images"][name], manifest["image_manifest_digests"][name])
+                if distribution.image_identities(path, expected[0], architecture) != expected:
+                    raise ValueError("Release image identity mismatch: " + name)
+                entries[name, architecture] = (path, *expected)
         references = {}
         for (name, architecture), (path, config, digest) in entries.items():
             subprocess.run(["docker", "load", "--input", str(path)], check=True)
@@ -234,7 +233,7 @@ def publish(assets, repository, revision, tag, mode):
     # The builder validates the manifest and Runtime assets. Verify archives again
     # after the Actions artifact transfer between jobs.
     stem = "oac-" + revision + "-linux-amd64"
-    archives = [assets / (stem + ".tar.gz"), assets / ("oac-" + revision + "-linux-arm64.tar.gz"), assets / "install.sh", assets / "install.ps1"]
+    archives = [assets / (stem + ".tar.gz"), assets / "install.sh", assets / "install.ps1"]
     archives.extend(assets / name for name in ("oac-linux-amd64", "oac-linux-arm64", "oac-darwin-amd64", "oac-darwin-arm64", "oac-windows-amd64.exe"))
     if mode == "publish" or (assets / (stem + "-offline.tar.gz")).exists():
         archives.append(assets / (stem + "-offline.tar.gz"))
@@ -250,7 +249,7 @@ def publish(assets, repository, revision, tag, mode):
     if catalog["version"] != revision or not catalog["artifacts"]:
         raise ValueError("Native installer catalog does not match the release")
     for platform, entry in catalog["artifacts"].items():
-        if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
+        if platform != "linux-amd64":
             raise ValueError("Invalid native installer platform")
         path = assets / f"oac-native-{revision}-{platform}.tar.gz"
         if (distribution.sha256(path) != entry["sha256"]

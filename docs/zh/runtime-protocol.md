@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 5c72353535e1a5adc69cedde20408a38dfcfb2a4256c6335f9f9e381fc71b0ed
+source_hash: 472fdc062cf4304066d056bccae0dc0644283b5ac1d1e3ffca785a940a15a79d
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -192,7 +192,7 @@ adapter 可以给 Run 的 `error` frame 添加 `code` 和 `http_status`。它们
 
 接受的 code 为 `authentication_error`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`invalid_request`、`resource_not_found`、`request_timeout`、`context_length_exceeded`、`cyber_policy` 和 `connection_failed`（[`engine_failure.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/engine_failure.go)）。仅 `connection_failed` 保留 `http_status`，且只能是 100 到 599 的整数；其他 status 都丢弃。值缺失、格式错误或未知时保持未分类错误，不丢弃 Usage 或 `done`。
 
-Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)仅为 Core error 为 `engine_failed` 的失败 Turn 暴露类别。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter 指南给出各 Harness 的映射；adapter 不依据错误文字分类。
+Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)仅为 Core error 为 `engine_failed` 的失败 Turn 暴露类别。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/error_classification.go) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/src/adapter.ts) adapter 实现定义各 Harness 的映射；adapter 不依据错误文字分类。
 
 ## 工作区操作 {#workspace-operations}
 

@@ -1,7 +1,7 @@
 ---
 title: "Environment 执行器凭证"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: b1e07476ee5307bb57f58a94547a9ebde1cf377aeb456117c150632108435f7e
+source_hash: 54ab0ff969c6a8c69799358cd0c7627fa8b508405b77833654f0ab47bfeb3341
 ---
 
 执行器凭证允许 `oac-daemon` 为一个 `self_hosted` Environment 注册，并通过 [sandbox Link](../../../docs/zh/sandbox-link-protocol.md) 为它提供服务。它只授权该 Environment 的私有 daemon 路由（`/api/v1/agent-daemon/*`），以及注册后在 Link 上 Serve 该 Environment 的 enrollment resource，不授权 `/v1`、`/core/v1`、sandbox node 注册或 Project 资源。Project 的 principal 是其执行 principal。Core 只保存密钥摘要。
@@ -22,7 +22,7 @@ Core 不创建、停止或回收机器。断开连接、撤销凭证或删除 Se
 | `status` | `available`；当 Core 没有匹配的原生安装器时为 `unavailable`，此时 `message` 说明原因 |
 | `version` | 命令安装的 Core 构建版本 |
 | `expires_at` | grant 到期的 Unix 时间，为响应生成后 30 分钟 |
-| `commands.posix`, `commands.powershell` | Linux/macOS 和 Windows PowerShell 的安装命令 |
+| `commands.posix` | Linux amd64 的安装命令 |
 
 grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本。在到期、Session 被删除、Project 被归档或 Core 运行另一构建版本时失效。重新读取 Session 会获得新 grant。Core 不存储 grant：每个响应重新签名，存储的事件从不包含它。将命令视为临时秘密：它能领取凭证，但不能执行工作或读取文件。
 
@@ -32,9 +32,9 @@ grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本�
 
 | 路由 | 授权 | 用途 |
 | --- | --- | --- |
-| `GET /api/v1/agent-daemon/install/{version}/bootstrap.sh`, `bootstrap.ps1` | 无 | 平台 bootstrap 脚本 |
+| `GET /api/v1/agent-daemon/install/{version}/bootstrap.sh` | 无 | Linux bootstrap 脚本 |
 | `GET /api/v1/agent-daemon/install/{version}/{os}-{arch}.sha256`, `{os}-{arch}.tar.gz` | 无 | 安装器校验和与归档；Core 提供本地副本，或以 307 重定向到目录中的版本化发布 URL |
-| `POST /api/v1/agent-daemon/installation` | Grant | 固定绑定：`version`、`protocol_version`、`environment_id`、`remote_url`、`workspace_directory`、`harness` |
+| `POST /api/v1/agent-daemon/installation` | Grant | 固定绑定：`version`、`protocol_version`、`environment_id`、`remote_url`、`workspace_directory` |
 | `POST /api/v1/agent-daemon/installation/claim` | Grant | `{"executor_token":"SECRET"}`；204 |
 
 无效或过期的 grant 返回 401 `installation_authorization_invalid`。没有匹配安装器时，grant 路由返回 503 `installation_unavailable`。Core 用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations) 签名每个 grant。格式错误的密钥返回 400。产物路由不携带凭证，grant 只发送给 Core，不发送给产物主机。

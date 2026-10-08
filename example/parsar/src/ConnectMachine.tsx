@@ -46,12 +46,11 @@ export function ConnectMachine({
     failed: "连接失败",
   };
   const status = query.data?.status;
-  const windows = machine.platform === "windows";
   const installation = session.x_agents_core?.installation;
   const command =
     installation?.status === "available" &&
     (installation.expires_at ?? 0) > Date.now() / 1000
-      ? installation.commands?.[windows ? "powershell" : "posix"]
+      ? installation.commands?.posix
       : undefined;
   return (
     <>
@@ -76,12 +75,12 @@ export function ConnectMachine({
             <DialogTitle>连接用户机器</DialogTitle>
           </DialogHeader>
           <div className="space-y-5 text-base">
-            <p>在用户机器的{windows ? " PowerShell" : "终端"}中运行安装命令。</p>
+            <p>在 Linux amd64 用户机器的终端中运行安装命令。</p>
             <div className="flex items-center gap-2">
               <span>工作目录：{machine.workspace_directory}</span>
               <Help>
-                安装器会下载与 Core 匹配的 Runtime 和所选执行引擎，创建工作目录并连接此会话。
-                Windows 上 Claude Code 还需要 Git Bash。Runtime 使用启动用户的权限。
+                安装器会下载与 Core 匹配的启动器和 Sandbox I/O 服务并连接此会话。
+                工具使用启动用户的权限执行，执行引擎运行在 agent host 上。
               </Help>
             </div>
             {command ? (

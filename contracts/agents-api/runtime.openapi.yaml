@@ -189,8 +189,6 @@ definitions:
     properties:
       environment_id:
         type: string
-      harness:
-        type: string
       protocol_version:
         type: string
       remote_url:

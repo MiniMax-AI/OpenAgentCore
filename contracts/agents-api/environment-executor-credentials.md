@@ -20,7 +20,7 @@ Session create, retrieve and update responses of a `self_hosted` Session carry `
 | `status` | `available`, or `unavailable` when this Core has no matching native installers; `message` then says so |
 | `version` | The Core build the commands install |
 | `expires_at` | Unix time when the grant expires, 30 minutes after the response |
-| `commands.posix`, `commands.powershell` | The install command for Linux/macOS and for Windows PowerShell |
+| `commands.posix` | The install command for Linux amd64 |
 
 The grant is bound to the Environment, the Session creator's principal and the Core build. It stops working when it expires, when the Session is deleted, when the Project is archived or when Core runs a different build. Reading the Session again returns a fresh grant. Core stores no grant: each response signs a new one, and stored events never carry it. Treat the command as a temporary secret: it can claim the credential, but it cannot run work or read files.
 
@@ -30,9 +30,9 @@ The installer calls these machine routes on Core:
 
 | Route | Authorization | Purpose |
 | --- | --- | --- |
-| `GET /api/v1/agent-daemon/install/{version}/bootstrap.sh`, `bootstrap.ps1` | None | Platform bootstrap scripts |
+| `GET /api/v1/agent-daemon/install/{version}/bootstrap.sh` | None | Linux bootstrap script |
 | `GET /api/v1/agent-daemon/install/{version}/{os}-{arch}.sha256`, `{os}-{arch}.tar.gz` | None | Installer checksum and archive. Core serves a local copy, or redirects (307) to the versioned release URL in its catalog |
-| `POST /api/v1/agent-daemon/installation` | Grant | The frozen binding: `version`, `protocol_version`, `environment_id`, `remote_url`, `workspace_directory`, `harness` |
+| `POST /api/v1/agent-daemon/installation` | Grant | The frozen binding: `version`, `protocol_version`, `environment_id`, `remote_url`, `workspace_directory` |
 | `POST /api/v1/agent-daemon/installation/claim` | Grant | `{"executor_token":"SECRET"}`; 204 |
 
 An invalid or expired grant returns 401 `installation_authorization_invalid`. Without matching installers the grant routes return 503 `installation_unavailable`. Core signs each grant with the installation's [`secrets/core/credential.key`](../../docs/configuration.md#compose-installations). A malformed secret returns 400. Artifact routes carry no credential, and the grant is sent only to Core, never to an artifact host.

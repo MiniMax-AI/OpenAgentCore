@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Package an already qualified Docker Runtime as a pinned E2B template build."""
+"""Package an already qualified Docker sandbox as a pinned E2B template build."""
 import argparse
 import hashlib
 import json
@@ -13,7 +13,7 @@ from e2b import Template
 
 BASE = 'node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27'
 parser = argparse.ArgumentParser()
-parser.add_argument('--image', required=True, help='Qualified linux/amd64 Runtime image digest')
+parser.add_argument('--image', required=True, help='Qualified linux/amd64 sandbox image digest')
 parser.add_argument('--name', required=True)
 parser.add_argument('--api-key-file', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
@@ -23,10 +23,6 @@ if not args.image.startswith('sha256:') or not args.output.is_absolute() or not 
 image = json.loads(subprocess.check_output(['docker', 'image', 'inspect', args.image]))[0]
 if image['Architecture'] != 'amd64' or image['Os'] != 'linux':
     parser.error('A qualified Linux amd64 image is required')
-environment = dict(value.split('=', 1) for value in image['Config']['Env']
-                   if value.startswith(('HOME=', 'OAC_')))
-if environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace':
-    parser.error('Image does not use the colocated Runtime layout')
 dev_home = Path(os.environ.get('OAC_DEV_HOME') or Path.home() / '.oac')
 if not dev_home.is_absolute():
     parser.error('OAC_DEV_HOME must be absolute')
@@ -34,36 +30,28 @@ state = dev_home / 'build/e2b'
 state.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory(dir=state) as temporary:
     context = Path(temporary)
-    tree = context / 'runtime'
+    tree = context / 'sandbox'
     tree.mkdir()
-    # These public ancestors are synthesized, not extracted from the Runtime.
+    # These public ancestors are synthesized, not extracted from the sandbox.
     # Keep their archive modes independent of the caller's private umask.
-    for parent in ['usr', 'usr/local', 'etc']:
+    for parent in ['usr', 'usr/local', 'usr/local/bin']:
         directory = tree / parent
         directory.mkdir()
         directory.chmod(0o755)
-    container = subprocess.check_output(['docker', 'create', args.image], text=True).strip()
+    container = subprocess.check_output(['docker', 'create', '--label', 'io.oac.build=e2b-template', args.image], text=True).strip()
     try:
-        for path in ['/usr/local/bin', '/usr/local/codex-resources', '/etc/codex', '/opt']:
-            destination = tree / path.lstrip('/')
-            with tempfile.TemporaryFile() as copied:
-                result = subprocess.run(['docker', 'cp', container + ':' + path, '-'],
-                                        stdout=copied, stderr=subprocess.PIPE)
-                if result.returncode:
-                    if path in ['/usr/local/codex-resources', '/etc/codex'] and b'Could not find the file' in result.stderr:
-                        continue
-                    raise RuntimeError('Cannot extract Runtime path: ' + path)
-                copied.seek(0)
-                with tarfile.open(fileobj=copied) as archive:
-                    # Qualified images contain absolute native executable symlinks.
-                    archive.extractall(destination.parent, filter='tar')
+        with tempfile.TemporaryFile() as copied:
+            path = '/usr/local/bin/oac-sandbox-io'
+            subprocess.run(['docker', 'cp', container + ':' + path, '-'], stdout=copied, check=True)
+            copied.seek(0)
+            with tarfile.open(fileobj=copied) as archive:
+                archive.extractall(tree / 'usr/local/bin', filter='tar')
     finally:
         subprocess.run(['docker', 'rm', container], check=True, stdout=subprocess.DEVNULL)
     bundle = context / 'runtime.tar.gz'
     with tarfile.open(bundle, 'w:gz') as archive:
         for entry in tree.iterdir():
             archive.add(entry, arcname=entry.name)
-    (context / 'runtime-env.json').write_text(json.dumps(environment))
     for name in ['managed_init.py', 'helper_contract_generated.py']:
         (context / name).write_bytes(Path(__file__).with_name(name).read_bytes())
     template = (Template(file_context_path=context).from_image(BASE)
@@ -71,15 +59,12 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
                          'ca-certificates bash git python3 python3-pip ripgrep util-linux '
                          '&& rm -rf /var/lib/apt/lists/*', user='root')
                 .copy('runtime.tar.gz', '/root/runtime.tar.gz', user='root')
-                .copy('runtime-env.json', '/etc/oac-runtime-env.json', user='root')
                 .copy('managed_init.py', '/opt/oac-e2b/managed_init.py', user='root')
                 .copy('helper_contract_generated.py', '/opt/oac-e2b/helper_contract_generated.py', user='root')
                 .run_cmd('tar --no-same-owner -xzf /root/runtime.tar.gz -C / && rm /root/runtime.tar.gz '
                          '&& usermod -l runtime -d /home/runtime node '
-                         '&& mkdir -p /home/runtime/.oac /environment/workspace /environment/staging /environment/initialization /environment/packages /workspace '
+                         '&& mkdir -p /home/runtime /environment/workspace /environment/initialization /environment/packages /workspace '
                          '&& chown -R 1000:1000 /home/runtime /environment '
-                         '&& chmod 0700 /home/runtime/.oac /environment/staging '
-                         '&& chmod 0444 /etc/oac-runtime-env.json '
                          '&& chmod 0555 /opt/oac-e2b /opt/oac-e2b/managed_init.py /opt/oac-e2b/helper_contract_generated.py', user='root')
                 .set_user('runtime').set_workdir('/environment/workspace'))
     result = Template.build(template, name=args.name, cpu_count=2, memory_mb=2048,

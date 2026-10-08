@@ -58,7 +58,10 @@ func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T)
 	if f.authorizedEnvironment != response.Environment.ID || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("wrong authorization scope or caching")
 	}
-	for _, shell := range []string{"posix", "powershell"} {
+	if len(response.XAgentsCore.Installation.Commands) != 1 {
+		t.Fatal("unexpected installation platforms")
+	}
+	for _, shell := range []string{"posix"} {
 		command := response.XAgentsCore.Installation.Commands[shell]
 		if !strings.Contains(command, "short-lived-install-grant") || strings.Contains(command, "project-key") || strings.Contains(command, "fixture-model") {
 			t.Fatal("incorrect command authority")

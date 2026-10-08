@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import subprocess
 import tarfile
@@ -55,7 +56,7 @@ class DistributionTests(unittest.TestCase):
         source = self.stage / "qualified-native"
         source.mkdir()
         catalog = {"version": REVISION, "protocol_version": "fixture", "artifacts": {}}
-        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
+        for platform in ("linux-amd64",):
             raw = ("native:" + platform).encode()
             (source / (platform + ".tar.gz")).write_bytes(raw)
             catalog["artifacts"][platform] = {"sha256": hashlib.sha256(raw).hexdigest()}
@@ -74,7 +75,7 @@ class DistributionTests(unittest.TestCase):
         distribution.archive(self.bundle, "1", "offline")
         with tarfile.open(self.bundle.with_name(self.bundle.name + "-offline.tar.gz")) as archive:
             native = [p for p in archive.getmembers() if "native-installers/" in p.name and p.name.endswith(".tar.gz")]
-            self.assertEqual(len(native), 3)
+            self.assertEqual(len(native), 1)
             for member in native:
                 platform = pathlib.Path(member.name).name.removesuffix(".tar.gz")
                 self.assertEqual(archive.extractfile(member).read(), (source / (platform + ".tar.gz")).read_bytes())
@@ -83,6 +84,59 @@ class DistributionTests(unittest.TestCase):
             filename = f"oac-native-{REVISION}-{platform}.tar.gz"
             self.assertEqual(entry["url"], RELEASE_BASE + "/" + filename)
             self.assertEqual(distribution.sha256(self.stage / "native-artifacts" / filename), entry["sha256"])
+
+    def test_native_catalog_rejects_unsupported_installation_platforms(self):
+        for platform in ("linux-arm64", "darwin-arm64", "windows-amd64"):
+            with self.subTest(platform=platform):
+                source = self.stage / platform
+                source.mkdir()
+                (source / "catalog.json").write_text(json.dumps({
+                    "version": REVISION, "artifacts": {platform: {"sha256": "a" * 64}},
+                }))
+                stage = self.stage / (platform + "-stage")
+                stage.mkdir()
+                with self.assertRaisesRegex(ValueError, "Invalid native installer platform"):
+                    distribution.native_catalog(self.bundle, stage, REVISION, source)
+
+    def test_sandbox_executable_must_match_build_input(self):
+        executable = self.stage / "oac-sandbox-io"
+        executable.write_bytes(b"sandbox service")
+        path = "/usr/local/bin/oac-sandbox-io"
+        for digest in (distribution.sha256(executable), "0" * 64):
+            with self.subTest(digest=digest), mock.patch.object(distribution, "verify_image"), \
+                    mock.patch.object(distribution.subprocess, "check_output", return_value=digest + "  " + path + "\n"):
+                if digest == "0" * 64:
+                    with self.assertRaisesRegex(ValueError, "Sandbox image does not match"):
+                        distribution.verify_runtime("sha256:" + "a" * 64, executable)
+                else:
+                    distribution.verify_runtime("sha256:" + "a" * 64, executable)
+
+    def test_mcode_payload_rejects_stale_companion_at_the_same_version(self):
+        repository = pathlib.Path(__file__).resolve().parent.parent
+        companion = self.stage / "companion"
+        (companion / "native").mkdir(parents=True)
+        (companion / "native/cli.js").write_text('console.log("0.4.12");\n')
+        for receipt in ("provenance.json", "native-patch.json"):
+            (companion / receipt).write_text("{}")
+        files = ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json")
+        for name in files:
+            (companion / name).write_bytes((repository / "packages/mcode-harness" / name).read_bytes())
+        output = self.stage / "payload"
+        environment = {**os.environ, "OAC_DEV_HOME": str(self.stage / "dev"),
+                       "MCODE_HARNESS_BUILD_DIR": str(companion), "AGENTS_RUNTIME_BUILD_DIR": str(output)}
+        command = ["bash", str(repository / "scripts/build-mcode-runtime.sh")]
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in files:
+            with self.subTest(file=name):
+                current = (companion / name).read_bytes()
+                stale = current.replace(b'"revision": "', b'"revision": "stale-') if name == "source.json" else current + b"\n// stale companion\n"
+                (companion / name).write_bytes(stale)
+                result = subprocess.run(command, env=environment, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("does not match the current source: " + name, result.stderr)
+                self.assertEqual((output / "mcode-harness" / name).read_bytes(), current)
+                (companion / name).write_bytes(current)
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

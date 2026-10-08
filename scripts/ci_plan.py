@@ -8,7 +8,7 @@ from pathlib import Path, PurePosixPath
 import subprocess
 
 JOBS = ("hygiene", "distribution", "compose", "backend", "harness", "example", "web", "web-acceptance", "website", "api", "native", "lint")
-NODE_JOBS = ("harness", "example", "web", "web-acceptance", "website", "native")
+NODE_JOBS = ("harness", "example", "web", "web-acceptance", "website")
 GO_JOBS = ("distribution", "compose", "backend", "api", "native")
 # Exact file matches keep new workflows/actions conservative until classified.
 CI_INPUTS = {
@@ -21,7 +21,6 @@ CI_INPUTS = {
     ".github/workflows/ci-review.yml": ("lint",),
     ".github/workflows/website.yml": ("website", "lint"),
     ".github/actions/node/action.yml": (*NODE_JOBS, "lint"),
-    ".github/actions/mcode-companion/action.yml": ("native", "lint"),
     ".github/actions/e2b-provider/action.yml": ("api", "lint"),
     ".github/workflows/cache-warm.yml": ("lint",),
     "scripts/ci_plan.py": JOBS,
