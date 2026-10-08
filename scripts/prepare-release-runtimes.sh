@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Prepare pinned upstream inputs once, then reuse the existing Runtime builders.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+catalog="$repo_root/internal/harnessconfig/builtin/catalog.json"
+codex_version="$(python3 -c 'import json,sys; print(next(entry["version"] for entry in json.load(open(sys.argv[1])) if entry["kind"] == "codex"))' "$catalog")"
 release_root="$HOME/.oac/build/release-inputs"
 if [[ -e "$release_root" ]]; then
   printf 'Release input directory already exists; use a fresh build host\n' >&2
@@ -10,13 +12,13 @@ if [[ -e "$release_root" ]]; then
 fi
 mkdir -p "$release_root/codex" "$release_root/mcode-native"
 cd "$release_root/codex"
-npm pack --ignore-scripts --silent @openai/codex@0.153.4-linux-x64 > package-name.txt
+npm pack --ignore-scripts --silent "@openai/codex@$codex_version-linux-x64" > package-name.txt
 tar -xzf "$(cat package-name.txt)"
 
 pin="$repo_root/packages/mcode-harness/source.json"
 source_repository="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repository"])' "$pin")"
 source_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$pin")"
-source_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$pin")"
+source_version="$(python3 -c 'import json,sys; print(next(entry["version"] for entry in json.load(open(sys.argv[1])) if entry["kind"] == "mcode"))' "$catalog")"
 git init --quiet "$release_root/mcode-source"
 git -C "$release_root/mcode-source" remote add origin "$source_repository"
 git -C "$release_root/mcode-source" fetch --depth 1 origin "$source_revision"

@@ -138,6 +138,39 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual((output / "mcode-harness" / name).read_bytes(), current)
                 (companion / name).write_bytes(current)
 
+    def test_codex_payload_uses_catalog_pin_and_preserves_package_identity(self):
+        repository = self.stage / "repository"
+        scripts = repository / "scripts"
+        scripts.mkdir(parents=True)
+        builder = pathlib.Path(__file__).with_name("build-codex-runtime.sh")
+        (scripts / builder.name).write_bytes(builder.read_bytes())
+        catalog = repository / "internal/harnessconfig/builtin/catalog.json"
+        catalog.parent.mkdir(parents=True)
+        catalog.write_text(json.dumps([{"kind": "codex", "version": "9.8.7"}]))
+        package = self.stage / "package"
+        native = package / "vendor/x86_64-unknown-linux-musl/bin"
+        native.mkdir(parents=True)
+        for executable in ("codex", "codex-code-mode-host"):
+            (native / executable).write_text("#!/bin/sh\nexit 0\n")
+            (native / executable).chmod(0o755)
+        manifest = {"name": "@openai/codex", "version": "9.8.7-linux-x64"}
+        (package / "package.json").write_text(json.dumps(manifest))
+        output = self.stage / "payload"
+        environment = {**os.environ, "OAC_DEV_HOME": str(self.stage / "dev"),
+                       "CODEX_CLI_DIR": str(package), "AGENTS_RUNTIME_BUILD_DIR": str(output)}
+        command = ["bash", str(scripts / builder.name)]
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads((output / "package.json").read_text()), manifest)
+        for invalid in ({**manifest, "version": "9.8.6-linux-x64"},
+                        {**manifest, "name": "unofficial-codex"}):
+            with self.subTest(package=invalid):
+                (package / "package.json").write_text(json.dumps(invalid))
+                result = subprocess.run(command, env=environment, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Expected pinned official Linux x64 package", result.stderr)
+                self.assertEqual(json.loads((output / "package.json").read_text()), manifest)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

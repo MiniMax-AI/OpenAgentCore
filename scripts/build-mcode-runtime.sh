@@ -17,7 +17,8 @@ for file in launch.mjs bridge.mjs check.mjs tool-executor.mjs subagent-snapshot.
     exit 1
   fi
 done
-test "$(node "$native/cli.js" --version)" = 0.4.12
+version="$(python3 -c 'import json,sys; print(next(entry["version"] for entry in json.load(open(sys.argv[1])) if entry["kind"] == "mcode"))' "$repo_root/internal/harnessconfig/builtin/catalog.json")"
+test "$(node "$native/cli.js" --version)" = "$version"
 mkdir -p "$runtime_root/cache/oac-runtime-builds"
 context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/mcode.XXXXXX")"
 trap 'rm -rf "$context"' EXIT

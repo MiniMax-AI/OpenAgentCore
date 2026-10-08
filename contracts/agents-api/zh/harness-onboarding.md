@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: d0bda847967fc8744b20d18fbf2cfaa86072a40ba18ef582e6ec828623e2bc7c
+source_hash: a571ca6ea6b43f89f1669be989ecaf52838181705ba5facbc4f66a72cccd9e57
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -32,16 +32,16 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 | Adapter | 原生配置、资源、API 调用、事件转换和限制 | `apps/daemon/internal/agent/<kind>` |
 | Harness | 原生模型和工具循环以及历史记录 | 锁定版本的 SDK 或可执行文件 |
 | 声明 | Harness 的支持范围，Core 和 Runtime 据此准入每个选择 | `internal/harnessconfig/<kind>` |
-| 注册 | 适配器声明、已安装视图和该安装收窄后的支持 | `apps/daemon/internal/agent/<kind>/declaration.go`；`apps/daemon/internal/cli/agent_host_linux.go` 中的静态列表 |
+| 注册 | 适配器声明、已安装视图和该安装收窄后的支持 | `apps/daemon/internal/agent/<kind>/declaration.go`；`apps/daemon/internal/cli/harness_catalog_linux.go` 中由目录生成的列表 |
 
 Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；它们都把沙箱提供给 Linux agent host，由 agent host 在沙箱的[视图](#run-in-an-agent-host-view)中按同一契约运行每个 Harness。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型 Provider 提供模型通信设置，而不负责 Turn 调度或原生进程所有权。
 
 ## 步骤 {#steps}
 
-1. **锁定原生来源。** 记录上游包版本和源修订版本，并在适配器旁记录原生入口点。
+1. **锁定原生来源。** 将上游包版本加入 [Harness 目录](harness-catalog.md)，将源修订版本保留在唯一编写来源中（[原生版本固定](#native-version-pins)），并在适配器旁记录原生入口点。
 2. **实现适配器**，位置为 `apps/daemon/internal/agent/<kind>`：实现一个视图，其 `ViewExecutorFactory` 准备 `Executor`，以及 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)、[view](#run-in-an-agent-host-view)）。复用共享的进程、凭据和配置辅助函数。
-3. **声明支持并注册。** 在 `internal/harnessconfig/<kind>` 中声明支持并添加一个目录条目（[declare support](#declare-support)），然后在适配器中声明 kind，并将其添加到 `apps/daemon/internal/cli/agent_host_linux.go` 中 agent host 的静态列表（[register the adapter](#register-the-adapter)）。
-4. **打包原生先决条件。** 提供适配器的安装描述，并将 Harness 加入 agent-host 镜像（[native installer participation](#native-installer-participation)）。
+3. **声明支持并注册。** 在 `internal/harnessconfig/<kind>` 中声明支持并添加一个目录条目（[declare support](#declare-support)），然后导出适配器声明，供生成的 agent-host 注册列表使用（[register the adapter](#register-the-adapter)）。
+4. **打包原生先决条件。** 提供适配器的安装描述，并将 Harness 加入 agent-host 镜像（[原生 Harness 打包](#native-harness-packaging)）。
 5. **启用并选择引擎**，通过 `core.harnesses` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
 6. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将每项原生差异记录到[覆盖台账](index.md)。
 
@@ -149,7 +149,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_host_linux.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_host_linux.go) 的 `harnessDeclarations` 中。声明包含 kind 及共享模型 `Configuration` 的声明中的能力、该 `Configuration` 和 `Discover` 函数。发现过程接收诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和视图声明。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带视图的不可用描述符。将版本门控和视图选择条件保留在适配器内部；它们只能清除支持。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<configuration>/declaration.go` 导出一个 `agent.Declaration`。`make generate-harness-catalog` 根据各目录条目的 `configuration` 包，在 `apps/daemon/internal/cli/harness_catalog_linux.go` 中生成 agent host 的声明和 `Installation()` 列表。声明包含 kind 及共享模型 `Configuration` 的声明中的能力、该 `Configuration` 和 `Discover` 函数。发现过程接收诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和视图声明。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带视图的不可用描述符。将版本门控和视图选择条件保留在适配器内部；它们只能清除支持。
 
 [`cli/agent_host_linux.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_host_linux.go) 以 `RegisterKind` 和 `RegisterView` 注册每个带视图的已发现 Runtime。随后 agent host 通过 `Registry.Register` 为 dispatch 注册每个这样的 kind，该方法把声明与 agent host 提供的 Environment 组合，再以 `RegisterExecutor` 安装 agent host 自己的 Executor 工厂；该工厂构建 Session 的视图，并调用视图的 `ViewExecutorFactory`。
 
@@ -169,7 +169,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 声明支持 {#declare-support}
 
-Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/harnessconfig/builtin/catalog.json` 添加一个条目，包含公共 `kind`、显示 `label` 和 `internal/harnessconfig` 下的模型 `configuration` 包，然后运行 `make generate-harness-catalog`。它会生成模型配置 registry、客户端标识符和显示名称以及注册参考；公共输入验证器读取生成的 registry。`make openapi` 从同一目录派生 Harness 枚举，因此不要在 DTO 标签或路由注解中添加手写枚举。`make check-harness-catalog` 会拒绝过时的投影。
+Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/harnessconfig/builtin/catalog.json` 添加一个条目，包含公共 `kind`、显示 `label`、固定的上游 `version` 和 `internal/harnessconfig` 下的模型 `configuration` 包，然后运行 `make generate-harness-catalog`。它会生成模型配置 registry、agent-host 声明和安装列表、版本固定值投影、客户端标识符和显示名称以及注册参考；公共输入验证器读取生成的 registry。`make openapi` 从同一目录派生 Harness 枚举，因此不要在 DTO 标签或路由注解中添加手写枚举。`make check-harness-catalog` 会拒绝过时的投影。
 
 `internal/harnessconfig/<kind>` 中 `Configuration()` 的 `Declaration` 就是 Harness 的支持范围：一个 `proto.Declaration`，包含其 `AgentKindCapabilities`、消息、图像、MCP 和输出 schema 限制，以及 `Conflicts` 中它能单独支持但不能同时支持的功能对。它说明适配器的最大支持范围，并且是唯一来源：Core 通过 `builtin.Registry()` 读取它，适配器的 Runtime 描述符也从它开始。发现过程和 Environment owner 只能清除支持，Core 拒绝扩大该声明的心跳。只声明 Harness 之间的真实差异；对每个 Harness 都成立的规则属于 `proto.ValidateSelection` 中的通用检查。
 
@@ -238,9 +238,17 @@ python services/core/tests/qualify_public_native.py \
 
 使用锁定的 SDK 运行 `python -m unittest discover -s services/core/tests -p qualify_public_native_test.py`，可在不调用模型的情况下检查凭据处理和所拥有的重启边界。现有确定性 Core 集成测试仍负责 schema 验证、原子准入、持久化回执和拒绝语义。真实模型结果仅证明所选套件、协议、Harness 和放置方式。Provider 生命周期、原生身份、凭据隔离、延迟发现和未选择的套件需要独立证据；仅通过 view 测试不能证明公共调用路径。
 
-## 原生安装器参与 {#native-installer-participation}
+## 原生版本固定 {#native-version-pins}
 
-适配器从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind 和激活环境。agent host 使用该声明激活打包的 Harness。适配器负责原生布局；必须在 Linux agent host 上验证打包内容和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。自托管安装器不携带 Harness 或 Node.js。
+`internal/harnessconfig/builtin/catalog.json` 拥有每个内置 Harness 的上游版本。构建脚本读取该目录；适配器常量和包版本字段是生成的投影。更新目录并运行 `make generate-harness-catalog` 后再构建，然后使用 `make check-harness-catalog` 验证投影是否最新。版本变更需要[原生验收](#qualify-the-adapter)。
+
+对于 Claude，`version` 固定 `packages/claude-sdk-adapter/package.json` 中的官方 Agent SDK 依赖；其 pnpm 锁文件必须解析到该精确版本，安装保持 frozen 模式。更改固定版本时通过 pnpm 更新锁文件。原生 Claude Code 的版本来自已安装 SDK 的 `claudeCodeVersion` 元数据，并与其运行时报告进行核验。不要单独编写原生 Claude Code 版本固定值。
+
+对于 MiniMax，`packages/mcode-harness/source.json` 拥有上游仓库和源修订版本；其 `version` 从目录投影而来。配套程序构件携带 `source.json`，因此其源验证和来源记录可以独立于检出目录运行。
+
+## 原生 Harness 打包 {#native-harness-packaging}
+
+适配器从自身包中的 `installation.go` 提供 `agent.Installation`：已注册的 `AgentKind` 和激活 `Environment`。生成的注册列表将这些声明传给 `agent.ManifestEnvironment`，由它根据镜像清单激活打包的 Harness。适配器负责原生布局；必须在 Linux agent host 上验证打包内容和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。自托管安装器不携带 Harness 或 Node.js。
 
 `deploy/distribution/AgentHost.Dockerfile` 把每个 Harness 安装在各自的目录中，并列入镜像清单 `/opt/oac/harnesses.json`。`agent.ManifestEnvironment` 通过 `Installation.Environment` 激活它。将每个新增 Harness 加入该镜像和清单，并使用共享的[镜像构建](../../../docs/zh/maintainers.md#runtime-images-and-helpers)与[视图验收](#qualify-the-view)流程。
 

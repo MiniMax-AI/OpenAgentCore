@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: baa93565e3ec6c26752f692a3ad7771dc1b5259f98350620381b4d4315014a2e
+source_hash: 0753c0a4b761a6cb16181413a6567245be03cb4805469a65e0aebf2bea344a9f
 ---
 
 一条命令即可在 Linux amd64 Docker 引擎上安装 Core、Web 控制台、agent host 和 PostgreSQL。操作员启动器也可在 macOS 和 Windows 上运行。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -24,7 +24,7 @@ source_hash: baa93565e3ec6c26752f692a3ad7771dc1b5259f98350620381b4d4315014a2e
 - Web 的 8080 端口空闲。参阅[端口](install-options.md#ports)。Docker 必须能发布该端口；安装程序不会修改主机策略。
 - 本机以外的访问要求 `OAC_PUBLIC_URL` 就是浏览器、节点和执行器使用的地址。可以先在本机登录。
 
-沙箱节点运行在 Linux amd64 上。在 macOS 或 Windows 上部署 Core 时，可连接 Linux 节点，或使用 E2B。
+沙箱节点运行在 Linux amd64 上。操作员启动器在 macOS 或 Windows 上运行时，其 Docker 引擎仍必须是 Linux amd64；请连接 Linux 沙箱节点或使用 E2B。
 
 ## 安装 {#install}
 

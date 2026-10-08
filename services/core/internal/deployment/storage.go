@@ -159,10 +159,7 @@ type SessionArchiveTx interface {
 	// one.
 	FindAllocation(environment string) (Allocation, bool, error)
 	// RequestArchiveCleanup releases the Session's Runtime assignment without
-	// home removal, revokes the allocation's device and records that its
-	// resources await cleanup. The device's first revocation records the
-	// Session's active Turn whose cancellation was requested, which the
-	// archived cancellation receipt reports.
+	// home removal and records that its allocation's resources await cleanup.
 	RequestArchiveCleanup(current Allocation) error
 	// ReleasePlacement releases the node placement of the Session's
 	// Environments that have no allocation.

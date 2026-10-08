@@ -110,11 +110,11 @@ curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://cor
 
 `401` means `/v1` reached Core, which asks for a key. `404` means it reached Web: fix the proxy, or application calls and every node connection will fail.
 
-TLS verification stays on everywhere. With a private certificate authority, node hosts, self-hosted machines and the Runtime image must trust it.
+TLS verification stays on everywhere. With a private certificate authority, the agent-host and sandbox images, node hosts and self-hosted machines must trust it for the HTTPS endpoints they call.
 
 ### Try it locally with a quick tunnel
 
-A [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) gives a trial installation with external ingress a temporary public HTTPS address. It forwards to one port, so put a local proxy with the same routes in front:
+A [Cloudflare quick tunnel](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) provides a temporary public HTTPS address for connection and download checks. [Quick Tunnels do not support SSE](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/#limitations), so Agents API streaming requires an HTTPS ingress that supports SSE. The tunnel forwards to one port, so put a local proxy with the same routes in front:
 
 ```caddyfile
 http://:8443 {

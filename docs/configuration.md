@@ -122,13 +122,13 @@ The named Docker volume `<project>_data` contains these paths. Docker manages Li
 
 ## Docker node configuration
 
-The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources, the Runtime release and capacity remain in [Core’s database](#runtime-settings-web).
+The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources, the sandbox release and capacity remain in [Core’s database](#runtime-settings-web).
 
 | Field | Installer value | Meaning |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
-| `image` | The Runtime image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
-| `network` | `oac-node-<installation-id>` | Runtime container network |
+| `image` | The sandbox image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
+| `network` | `oac-node-<installation-id>` | Sandbox container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
 
 The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.

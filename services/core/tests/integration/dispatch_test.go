@@ -19,12 +19,25 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
+
+// fixtureGateway composes the daemon transport as cmd/server does.
+func fixtureGateway(t *testing.T, s *Store, publicWSURL string) (http.Handler, *runtimegateway.Registry) {
+	t.Helper()
+	registry := runtimegateway.NewRegistry()
+	h := runtimegateway.NewHandler(runtimegateway.HandlerConfig{
+		Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry,
+		Heartbeat: sessionService(t, s), Links: runtimegateway.NewLinkAuthority(sessionAdapter(s)), PublicWSURL: publicWSURL,
+	})
+	r := chi.NewRouter()
+	r.Route("/api/v1", func(r chi.Router) { runtimegateway.RegisterRoutes(r, h) })
+	return r, registry
+}
 
 type dispatchHarness struct {
 	writeMu      sync.Mutex
@@ -94,13 +107,10 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	server.Config.Handler, h.registry = fixtureGateway(t, s, wsURL)
 	server.Start()
 	h.url = server.URL
-	t.Cleanup(func() { server.Close(); runtime.CloseConnections(h.registry) })
+	t.Cleanup(func() { server.Close(); h.registry.CloseConnections() })
 	u, _ := url.Parse(wsURL)
 	u.RawQuery = url.Values{"device_id": {h.device.ID}, "version": {proto.Version}}.Encode()
 	h.conn, _, err = websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})

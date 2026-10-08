@@ -19,9 +19,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudesdk"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/codex"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agenthost"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
@@ -49,8 +46,6 @@ const (
 
 // agentHostUIDs is the range the agent host runs its Executors as.
 var agentHostUIDs = agenthost.UIDRange{First: 70000, Count: 4096}
-
-var harnessDeclarations = []agent.Declaration{codex.Declaration, mcode.Declaration, claudesdk.Declaration}
 
 func runAgentHost(rc *runContext, args []string) error {
 	return serveAgentHost(context.Background(), rc, args, harnessDeclarations)
@@ -99,7 +94,7 @@ func serveAgentHost(parent context.Context, rc *runContext, args []string, decla
 	ctx, cancel := daemonize.NotifyContext(parent)
 	defer cancel()
 
-	env, err := agent.ManifestEnvironment(agentHostManifest, claudesdk.Installation(), codex.Installation(), mcode.Installation())
+	env, err := agent.ManifestEnvironment(agentHostManifest, harnessInstallations...)
 	if err != nil {
 		return fmt.Errorf("agent-host: %w", err)
 	}

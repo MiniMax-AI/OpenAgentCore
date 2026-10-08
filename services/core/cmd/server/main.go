@@ -58,7 +58,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
@@ -68,6 +67,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -211,13 +211,17 @@ func run(config processconfig.Config) error {
 	}
 	executorURL := config.PublicOrigin.DaemonWebSocket()
 	links := runtimegateway.NewLinkAuthority(sessionStore)
-	daemonHandler, registry, err := runtime.NewGateway(sessionStore, sessionService, links, executorURL)
-	if err != nil {
-		return err
-	}
-	defer runtime.CloseConnections(registry)
+	registry := runtimegateway.NewRegistry()
+	gateway := runtimegateway.NewHandler(runtimegateway.HandlerConfig{
+		Authenticator: runtimegateway.NewAuthenticator(sessionStore), Registry: registry,
+		Heartbeat: sessionService, Links: links, PublicWSURL: executorURL,
+	})
+	daemonHandler := chi.NewRouter()
+	daemonHandler.Route("/api/v1", func(r chi.Router) { runtimegateway.RegisterRoutes(r, gateway) })
+	defer registry.CloseConnections()
 	linkRelay := relay.New(links)
 	defer linkRelay.Close()
+	connections := &runtimeenrollment.Connections{Store: sessionStore, Links: linkRelay}
 	var catalog *nativeinstaller.Catalog
 	if config.NativeInstallers != "" {
 		catalog, err = nativeinstaller.Load(config.NativeInstallers, buildRevision)
@@ -324,7 +328,7 @@ func run(config processconfig.Config) error {
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    sessionStore,
-		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, links: linkRelay},
+		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: connections,
 		Admin: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 		Execution: api.Execution{
@@ -350,7 +354,7 @@ func run(config processconfig.Config) error {
 	}
 	handler := serverHandler(apiHandler, &daemonRoutes{gateway: daemonHandler,
 		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService, config.PublicOrigin),
-		connection:  runtimeenrollment.ConnectionHandler(sessionStore, linkRelay),
+		connection:  connections,
 		nodeConnect: managedNodes.hub})
 	server := &http.Server{Addr: config.Addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)

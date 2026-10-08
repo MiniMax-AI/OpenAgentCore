@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 9d004eb3855c91d8e6059f81f1d7018be98c75daba44c347798b6a89c3c720c6
+source_hash: b69ab5a1de19ef81942658187d93dfca14c325c3824e7379e88899f3e3cebf61
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -59,6 +59,8 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ### Runtime 镜像和辅助程序 {#runtime-images-and-helpers}
 
 `make build-core-distribution` 构建 `deploy/distribution/AgentHost.Dockerfile` 的 agent-host 和 sandbox 目标。在 Linux amd64 上从仓库根目录执行命令；输出默认位于 `${OAC_DEV_HOME:-$HOME/.oac}/build`。
+
+[Harness 版本固定](../../contracts/agents-api/zh/harness-onboarding.md#native-version-pins)定义构建输入和生成的包投影。准备载荷前运行 `make check-harness-catalog`。
 
 使用 `scripts/prepare-release-runtimes.sh` 准备固定版本的官方 Codex Linux x64 包和 MiniMax 配套程序，或通过 `CODEX_CLI_DIR` 和 `MCODE_HARNESS_BUILD_DIR` 指向已有输入。`scripts/build-{codex,claude,mcode}-runtime.sh` 为两个镜像构建器校验并准备 Harness 载荷，不构建客体 Runtime 镜像。Claude 载荷是固定 SDK 和适配器的带校验和导出：
 

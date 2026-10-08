@@ -17,7 +17,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Core service setup, tests and generation | [Core service guide](services/core/README.md) |
 | Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
 | Environment ownership, preparation, Skills, Plugins, packages and MCP bindings | [Environments](contracts/agents-api/environments.md) |
-| Built-in Harness identifiers and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
+| Built-in Harness identifiers, display names and version pins | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
 | Harness registration, support declaration and acceptance | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness selection, model providers and native parameters | [Model execution](contracts/agents-api/model-execution.md) |
 | Provider registration and lifecycle | [Sandbox Provider guide](docs/sandbox-provider.md) |
@@ -113,7 +113,7 @@ The role needs `CREATE DATABASE`: tests of database-wide state, such as the exec
 
 ### Contract and schema rules
 
-- `internal/harnessconfig/builtin/catalog.json` is the single authored public Harness registration list. `make generate-harness-catalog` generates Go configuration/profile registration, client identifiers/names and the reference, and projects the model-provider protocol names of `internal/modelprovider/config.go` to the client; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
+- `internal/harnessconfig/builtin/catalog.json` owns public Harness registration and native version pins. `make generate-harness-catalog` generates Go configuration and agent-host registration, version pin projections, client identifiers/names and the reference, and projects the model-provider protocol names of `internal/modelprovider/config.go` to the client; `make openapi` derives the matching enums. [Harness onboarding](contracts/agents-api/harness-onboarding.md#native-version-pins) owns native package and source projection rules. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
 - `make sqlc-generate` owns only `services/core/internal/db/sqlc` (sqlc v1.29.0). Do not rewrite landed migrations.
 - `make check-runtime-contract` is the focused Core–Runtime contract entry point; see [Contract verification](docs/runtime-protocol.md#contract-verification). It also runs through `check-go` and `check-core`.
 

@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 8feb92673f53693a526366264e0ff5094f69112859bfa0882e217a2b3ca07282
+source_hash: 7f7326bcbc718daa44de601d9df6321d4e1a32fa713f081bc3877e4b23d000fd
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -125,6 +125,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - 在[凭据网关](./model-execution.md#credential-gateway)之后，固定版本的 Codex 在本地压缩历史，从不调用 `/responses/compact`。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
+- Claude Code 和 MiniMax Code 不支持 `native_session_recovery`：Session 已有启动过的 Turn，但 Core 未记录原生 Session ID 时，执行会被拒绝。已有原生 ID 时的冷启动续聊属于另一种情况；该声明既不拒绝它，也不证明它已通过验收。参见[公共路径验收](./harness-onboarding.md#qualify-the-public-path)。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
 - 消息图像必须是内嵌的 PNG 或 JPEG data URI；远程 URL、`file_id` 和 `detail` 会被拒绝。
 
