@@ -14,11 +14,14 @@ import uuid
 
 import httpx2
 from openai import OpenAI
+from jsonschema import Draft202012Validator
 
 from official_hosted_functions_native import verify_hosted_functions
 from official_hosted_structured_native import verify_hosted_structured
 from official_pending_actions_native import verify_pending_actions
 from official_workspace_images_native import verify_workspace_images
+from official_schema import ResponseValidator
+from official_session_initial_input import verify_initial_input_retry
 from official_environment_composition import verify_composition
 from session_cleanup import delete_session
 
@@ -33,46 +36,116 @@ def verify_none(client, foreign, http, agent_options, session_options, ready, re
     sessions = client.beta.agents.sessions
     marker = "memory-" + uuid.uuid4().hex
     key = "create-" + uuid.uuid4().hex
-    session = sessions.create(agent=agent_options, **session_options, idempotency_key=key)
-    proof = {"checks": [], "session": session.id, "runs": []}
-    root = str(client.base_url).rstrip("/") + "/agents/sessions/" + session.id
+    initial = "Remember " + marker + ". Reply with exactly that string. Do not use tools."
+    request = {"agent": agent_options, **session_options, "input": initial}
+    request.update(request.pop("extra_body", {}))
+    endpoint = str(client.base_url).rstrip("/") + "/agents/sessions"
     headers = {"Authorization": "Bearer " + client.api_key, "OpenAI-Beta": "agents=v1"}
+    validate = ResponseValidator(Path(__file__).resolve().parents[3] / "contracts/agents-api/openapi.yaml")
+    events_schema = Draft202012Validator({"components": validate.contract["components"],
+                                         "$ref": "#/components/schemas/SessionEvent"})
+    session = None
+    proof = {"checks": [], "runs": [], "snapshots": [], "unverified": []}
     try:
-        assert sessions.create(agent=agent_options, **session_options, idempotency_key=key).id == session.id
-        ready(session)
-        for suffix in ("", "/items", "/turns"):
-            assert http.get(root + suffix, headers={**headers, "Authorization": "Bearer " + foreign.api_key}).status_code == 404
-        proof["checks"].append("create_retry_and_foreign_history_rejection")
-        for index, prompt in enumerate(("Remember " + marker + ". Reply with exactly that string. Do not use tools.",
-                                        "Recall the string from our previous turn. Reply with exactly that string. Do not use tools.")):
-            if index and restart is not None:
-                restart()
-            with sessions.stream(session.id, input=prompt, idempotency_key=key + str(index), timeout=240) as stream:
-                events = [event.to_dict() for event in stream]
+        for index in range(2):
+            if index == 0:
+                stream = sessions.create(agent=agent_options, **session_options, input=initial,
+                                         stream=True, extra_headers={"Idempotency-Key": key}, timeout=240)
+            else:
+                if restart is not None:
+                    restart()
+                stream = sessions.stream(session.id,
+                    input="Recall the string from our previous turn. Reply with exactly that string. Do not use tools.",
+                    idempotency_key=key + "-continue", timeout=240)
+            events = []
             proof["runs"].append(events)
+            with stream:
+                for event in stream:
+                    value = event.to_dict()
+                    events.append(value)
+                    if index == 0 and len(events) == 1:
+                        assert event.type == "agent.session.created"
+                        session = event.session
+                        proof["session"] = session.id
+                        events_schema.validate(value)
+                        ready(session)
+                        root = endpoint + "/" + session.id
+                        # Admission has committed before the first creation event.
+                        for response in verify_initial_input_retry(sessions, http, endpoint,
+                                {**headers, "Idempotency-Key": key}, request, session.id):
+                            validate(response)
+                        assert sessions.create(agent=agent_options, **session_options, input=initial,
+                                               extra_headers={"Idempotency-Key": key}).id == session.id
+                        for suffix in ("", "/items", "/turns"):
+                            response = http.get(root + suffix, headers={**headers, "Authorization": "Bearer " + foreign.api_key})
+                            assert response.status_code == 404
+                            validate(response)
+                    else:
+                        events_schema.validate(value)
             record(proof)
             types = [event["type"] for event in events]
             terminals = [event for event in events if event["type"] in {
                 "agent.session.turn.completed", "agent.session.turn.failed", "agent.session.turn.cancelled"}]
             assert len(terminals) == 1 and terminals[0]["type"] == "agent.session.turn.completed"
+            terminal = terminals[0]
             assert types[-1] == "agent.session.idle"
+            assert types.count("agent.session.turn.created") == 1
             assert types.index("agent.session.turn.created") < types.index("agent.session.turn.completed") < len(types) - 1
             assert len({event["event_id"] for event in events}) == len(events)
+            assert all("usage" not in event for event in events if event is not terminal)
+            snapshots = {}
             for name in ("items", "turns"):
                 response = http.get(root + "/" + name, headers=headers, params={"limit": 100, "order": "asc"})
                 assert response.status_code == 200 and not response.json()["has_more"]
+                validate(response)
                 expected = getattr(sessions, name).list(session.id, limit=100, order="asc").to_dict()
                 assert response.json() == expected
-            items = list(sessions.items.list(session.id, limit=100, order="asc"))
-            answers = [item.to_dict() for item in items if item.type == "message" and item.role == "assistant"]
+                snapshots[name] = response.json()["data"]
+            response = http.get(root, headers=headers)
+            assert response.status_code == 200
+            validate(response)
+            current = response.json()
+            assert current == sessions.retrieve(session.id).to_dict()
+            assert current["status"] == "idle" and current["required_actions"] == [] and current["error"] is None
+            turns = snapshots["turns"]
+            assert len(turns) == index + 1
+            assert all(turn["status"] == "completed" and turn["error"] is None and turn["subagent_id"] is None for turn in turns)
+            assert terminal["turn_id"] == turns[-1]["id"]
+            assert terminal["turn"] == turns[-1] and terminal["usage"] == turns[-1]["usage"]
+            answers = [item for item in snapshots["items"] if item["type"] == "message" and item["role"] == "assistant"]
             assert marker in "".join(part.get("text", "") for part in answers[-1]["content"])
-            assert len(sessions.turns.list(session.id).data) == index + 1
-            assert sessions.retrieve(session.id).required_actions == []
-        proof["checks"].append(("cold_agent_host" if restart is not None else "warm") + "_text_history_sse_and_sdk_raw_parity")
+            measured = [turn["usage"] for turn in turns if turn["usage"] is not None]
+            for usage in measured:
+                assert usage["input_tokens"] > 0 and usage["output_tokens"] > 0
+                assert usage["total_tokens"] == usage["input_tokens"] + usage["output_tokens"]
+                assert 0 <= usage["input_tokens_details"]["cached_tokens"] <= usage["input_tokens"]
+                assert 0 <= usage["output_tokens_details"]["reasoning_tokens"] <= usage["output_tokens"]
+            if len(measured) == len(turns):
+                totals = {field: sum(usage[field] for usage in measured)
+                          for field in ("input_tokens", "output_tokens", "total_tokens")}
+                for field, detail in (("input_tokens_details", "cached_tokens"), ("output_tokens_details", "reasoning_tokens")):
+                    totals[field] = {detail: sum(usage[field][detail] for usage in measured)}
+                assert current["usage"] == totals
+            else:
+                assert current["usage"] is None
+            for turn in turns:
+                if turn["usage"] is None:
+                    gap = "Native measured usage unavailable for Turn " + turn["id"]
+                    if gap not in proof["unverified"]:
+                        proof["unverified"].append(gap)
+            proof["snapshots"].append({**snapshots, "session": current})
+            if index == 0:
+                for response in verify_initial_input_retry(sessions, http, endpoint,
+                        {**headers, "Idempotency-Key": key}, request, session.id):
+                    validate(response)
+                proof["checks"].append("initial_input_create_retry_conflict_one_native_turn_and_foreign_history_rejection")
+        proof["checks"].append("native_usage_measurements_or_explicit_unknown_and_session_totals")
+        proof["checks"].append(("cold_agent_host" if restart is not None else "warm") + "_text_history_sse_and_sdk_raw_schema_parity")
         return proof["checks"]
     finally:
         record(proof)
-        delete_session(sessions, session.id)
+        if session is not None:
+            delete_session(sessions, session.id)
 
 
 def main():
