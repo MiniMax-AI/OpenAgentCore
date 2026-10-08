@@ -37,7 +37,7 @@ export const coreErrors = {
   "sandbox_operation_unsupported": "The selected sandbox provider does not support this operation.",
   "environment_unavailable": "The Session's environment is no longer available.",
   "execution_unavailable": "Execution is temporarily unavailable. Try again later.",
-  "runtime_history_unavailable": "Runtime history is unavailable on this Core.",
+  "runtime_history_unavailable": "Runtime history is temporarily unavailable. Try again later.",
   "runtime_history_unsupported": "Runtime history is not supported for this Session.",
   "core_metrics_unavailable": "Core metrics could not be read. Try again later.",
   "file_transfer_unavailable": "The file transfer is unavailable. Try again later.",

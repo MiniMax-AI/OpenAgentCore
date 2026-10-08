@@ -20,17 +20,16 @@ import (
 // (image_manifest_digest) names the loaded image, so the installer records the
 // one this host resolves.
 type Native struct {
-	Host          string   `json:"host"`
-	Image         string   `json:"image"`
-	Network       string   `json:"network"`
-	SeccompFile   string   `json:"seccomp_file"`
-	ExtraHosts    []string `json:"extra_hosts"`
-	NestedSandbox bool     `json:"nested_sandbox"`
+	Host          string `json:"host"`
+	Image         string `json:"image"`
+	Network       string `json:"network"`
+	SeccompFile   string `json:"seccomp_file"`
+	NestedSandbox bool   `json:"nested_sandbox"`
 }
 
 func decodeNative(config sandbox.NodeConfig) (Native, error) {
 	var entry Native
-	if sandbox.DecodeConfigurationObject(config.Native, &entry, "host", "image", "network", "seccomp_file", "extra_hosts", "nested_sandbox") != nil {
+	if sandbox.DecodeConfigurationObject(config.Native, &entry, "host", "image", "network", "seccomp_file", "nested_sandbox") != nil {
 		return entry, errors.New("invalid managed Docker node configuration")
 	}
 	release := config.Specification.Runtime
@@ -63,7 +62,7 @@ func BuildNode(config sandbox.NodeConfig, _ sandbox.LocalOptions, result *sandbo
 		return closeProvider, errors.New("invalid managed Docker endpoint")
 	}
 	closeProvider = func() { _ = c.Close() }
-	provider, err := New(c, Config{InstallationID: config.InstallationID, Image: entry.Image, Network: entry.Network, Seccomp: string(seccomp), ExtraHosts: entry.ExtraHosts, NestedSandbox: entry.NestedSandbox, Resources: &config.Specification.Resources})
+	provider, err := New(c, Config{InstallationID: config.InstallationID, Image: entry.Image, Network: entry.Network, Seccomp: string(seccomp), NestedSandbox: entry.NestedSandbox, Resources: &config.Specification.Resources})
 	if err != nil {
 		closeProvider()
 		return func() {}, errors.New("invalid managed Docker provider configuration")
