@@ -14,11 +14,12 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httpx2
-from openai import BadRequestError, OpenAI
+from openai import BadRequestError, NotFoundError, OpenAI
 
 from official_environment_files_native import generate_files
 from official_environment_composition import composition_fixture
 from official_environment_initial_files import assert_initial_bytes_script
+import official_environment_composition as composition
 
 import qualify_public_native as qualification
 
@@ -215,6 +216,53 @@ class QualificationTests(unittest.TestCase):
             (workspace / 'initial.bin').write_bytes(b'changed')
             with self.assertRaises(AssertionError):
                 exec(compile(script, '<initial byte assertion>', 'exec'), {'Path': Path})
+
+    def test_mcp_hold_waits_for_directory_and_turn_without_hiding_errors(self):
+        request = httpx2.Request('GET', 'https://core.example/v1/files')
+        missing = NotFoundError('missing', response=httpx2.Response(404, request=request), body=None)
+        invalid = BadRequestError('invalid', response=httpx2.Response(400, request=request), body=None)
+        output = SimpleNamespace(path='/workspace/outputs/composition.json', size_bytes=2)
+        ticks = '/workspace/plugin-mcp-hold/ticks.jsonl'
+        invocation = '/workspace/plugin-mcp-hold/invocation.json'
+        growing = [[SimpleNamespace(path=ticks, size_bytes=size), SimpleNamespace(path=invocation, size_bytes=1)]
+                   for size in (5, 10, 15, 20)]
+        fixture = {'configuration': {}, 'prompt': 'verify', 'outputs': {output.path: b'{}'},
+                   'composition_proof': {}, 'hold_prompt': 'hold', 'hold_server': 'server',
+                   'hold_paths': {'ticks': ticks, 'invocation': invocation}}
+        for label, polling, error in (
+            ('delayed directory and turn', [missing, *growing, growing[-1]], None),
+            ('directory disappeared', [missing, growing[0], missing], NotFoundError),
+            ('other error', [invalid], BadRequestError),
+        ):
+            with self.subTest(label), contextlib.ExitStack() as patches:
+                client = MagicMock()
+                sessions = client.beta.agents.sessions
+                session = SimpleNamespace(id='session', environment=SimpleNamespace(id='environment'), status='idle', required_actions=[])
+                sessions.create.return_value = sessions.retrieve.return_value = session
+                sessions.turns.list.side_effect = [[], [], [], [], [SimpleNamespace(id='hold-turn', status='in_progress')]]
+                sessions.turns.retrieve.return_value = SimpleNamespace(status='cancelled')
+                stream_events = [{'type': 'agent.session.turn.completed', 'turn': {'id': 'completed-turn'}},
+                                 {'type': 'agent.session.idle'}]
+                sessions.stream.return_value.__enter__.return_value = [
+                    SimpleNamespace(to_dict=lambda event=event: event) for event in stream_events]
+                client.beta.agents.environments.files.list.side_effect = [[output], [output], *polling]
+                patches.enter_context(patch.object(composition, 'composition_fixture', return_value=fixture))
+                for name in ('change_and_delete_sources', 'verify_composition_metadata', 'verify_session_artifacts', 'verify_plugin_mcp_items'):
+                    patches.enter_context(patch.object(composition, name, return_value={}))
+                patches.enter_context(patch.object(composition.time, 'sleep'))
+                options = {'environment': {'type': 'openai_hosted'},
+                           'extra_body': {'x_agents_core': {'model_provider': self.settings['model_provider']}}}
+                if error is not None:
+                    with self.assertRaises(error):
+                        composition.verify_composition(client, MagicMock(), MagicMock(), self.settings['agent'],
+                            options, ready=MagicMock(), restart=None, record=MagicMock())
+                    sessions.turns.retrieve.assert_not_called()
+                else:
+                    checks = composition.verify_composition(client, MagicMock(), MagicMock(), self.settings['agent'],
+                        options, ready=MagicMock(), restart=None, record=MagicMock())
+                    self.assertIn('native_mcp_cancel_retry_stops_descendant_effects', checks)
+                    sessions.turns.retrieve.assert_called_once_with('hold-turn', session_id='session')
+                    self.assertEqual(sessions.events.create.call_count, 3)
 
 
 if __name__ == "__main__":

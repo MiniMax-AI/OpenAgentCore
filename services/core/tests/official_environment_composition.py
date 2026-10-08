@@ -7,6 +7,8 @@ import time
 import uuid
 import zipfile
 
+from openai import NotFoundError
+
 from official_environment_initial_files import initial_files, assert_initial_bytes_script
 from official_environment_plugin_mcp import plugin_mcp_fixture, verify_plugin_mcp_metadata, verify_plugin_mcp_items
 from official_environment_setup import setup_configuration, native_setup_script, verify_setup_metadata
@@ -161,13 +163,20 @@ def verify_composition(client, foreign, http, agent_options, session_options, re
                                    idempotency_key=uuid.uuid4().hex)
             deadline = time.monotonic() + 180
             observed = None
+            directory_seen = False
             while time.monotonic() < deadline:
                 turns = [turn for turn in sessions.turns.list(session.id) if turn.id not in before]
                 assert len(turns) <= 1 and not any(turn.status in {'completed', 'failed', 'cancelled'} for turn in turns)
-                rows = client.beta.agents.environments.files.list(session.environment.id, path='/workspace/plugin-mcp-hold')
-                sizes = {row.path: row.size_bytes for row in rows}
+                try:
+                    rows = client.beta.agents.environments.files.list(session.environment.id, path='/workspace/plugin-mcp-hold')
+                    sizes = {row.path: row.size_bytes for row in rows}
+                    directory_seen = True
+                except NotFoundError:
+                    if directory_seen:
+                        raise
+                    sizes = {}
                 size = sizes.get(fixture['hold_paths']['ticks'], 0)
-                if observed is not None and size > observed and fixture['hold_paths']['invocation'] in sizes:
+                if turns and observed is not None and size > observed and fixture['hold_paths']['invocation'] in sizes:
                     break
                 if size:
                     observed = size
