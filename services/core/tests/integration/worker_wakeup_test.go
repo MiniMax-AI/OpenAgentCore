@@ -34,7 +34,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			h := newDispatchHarness(t)
 			enableWorkerEnvironment(t, h)
 			h.session = publicSession(t, h, "wakeup")
-			_, pool := testStore(t)
+			pool := h.s.pool
 			trace := &schedulerQueryOrder{first: make(chan string, 1)}
 			config := pool.Config()
 			config.ConnConfig.Tracer = trace

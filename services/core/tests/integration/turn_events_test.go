@@ -81,7 +81,8 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, conflict); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
-	reopened, pool := testStore(t)
+	reopened := reopenStore(t, h.s)
+	pool := reopened.pool
 	defer pool.Close()
 	page, err := reopened.ListTurnEvents(ctx, tenant, session.ID, input.TurnID, 0, 1)
 	if err != nil || len(page) != 1 || page[0].Ordinal != 1 {
@@ -101,7 +102,7 @@ func TestEventLimitStillAllowsTerminalFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, pool := testStore(t)
+	pool := h.s.pool
 	defer pool.Close()
 	if _, err := pool.Exec(ctx, "UPDATE turns SET event_bytes=33554432 WHERE id=$1", input.TurnID); err != nil {
 		t.Fatal(err)

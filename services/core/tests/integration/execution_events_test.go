@@ -22,7 +22,8 @@ func TestExecutionPersistsLiveAndCancelledPartialOutput(t *testing.T) {
 	h.write(input.TurnID, proto.TypeToolCall, proto.ToolCallPayload{ID: "tool-1", Name: "Bash", Stage: "before", Observation: &proto.ToolObservation{Kind: "command", Command: "pwd", Status: "in_progress"}})
 	h.write(input.TurnID, proto.TypeToolCall, proto.ToolCallPayload{ID: "tool-1", Name: "Bash", Stage: "after", Observation: &proto.ToolObservation{Kind: "command", Command: "pwd", Status: "completed"}})
 	h.write(input.TurnID, proto.TypeUsage, proto.UsagePayload{Usage: proto.Usage{InputTokens: 11, OutputTokens: 2}})
-	reopened, pool := testStore(t)
+	reopened := reopenStore(t, h.s)
+	pool := reopened.pool
 	defer pool.Close()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -80,7 +81,7 @@ func TestExecutionDoesNotCompleteAfterEventPersistenceFailure(t *testing.T) {
 	input := h.message("start", "Output beyond storage budget")
 	result := h.run(ctx, input.TurnID)
 	h.read(testExecutionRequest)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	defer pool.Close()
 	if _, err := pool.Exec(ctx, "UPDATE turns SET event_bytes=33554432 WHERE id=$1", input.TurnID); err != nil {
 		t.Fatal(err)

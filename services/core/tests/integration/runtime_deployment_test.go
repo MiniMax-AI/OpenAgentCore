@@ -37,7 +37,7 @@ func TestRuntimeDeploymentResetPreservesCreationRetriesAndOtherPlacements(t *tes
 	if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM sessions WHERE tenant_id=$1", tenant).Scan(&count); err != nil || count != 1 {
 		t.Fatal("rejection left partial Session", count, err)
 	}
-	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
 		t.Fatal("reset reserved new allocation", err)
 	}
 	for _, kind := range []string{"none", "self_hosted"} {
@@ -50,10 +50,10 @@ func TestRuntimeDeploymentResetPreservesCreationRetriesAndOtherPlacements(t *tes
 	if err := deploymentExecution(t, w).CancelReset(ctx, installation, 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrAdmissionClosed) {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("wrong installation reserved resource", err)
 	}
-	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString())); err != nil {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 		t.Fatal("cancelled reset did not reopen allocation", err)
 	}
 }

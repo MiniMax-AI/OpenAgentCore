@@ -10,7 +10,7 @@ import (
 
 func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 	h := newDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	wanted := map[string]string{}
 	for range 103 {
 		pending := workerEnvironmentReservation(t, h)
@@ -40,7 +40,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		default:
 			runtime := h.environments[pending.SessionID]
 			if state == "revoked" {
-				if err := sessionService(t, h.s).RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
+				if _, err := h.s.pool.Exec(t.Context(), "UPDATE devices SET revoked_at=clock_timestamp() WHERE id=$1", runtime.device.ID); err != nil {
 					t.Fatal(err)
 				}
 				work, err := sessionAdapter(h.s).ListEnvironmentInputWork(t.Context(), "", []string{runtime.device.ID})

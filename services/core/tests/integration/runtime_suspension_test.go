@@ -22,7 +22,7 @@ func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, depl
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,12 +79,12 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 			case "subagent_queued", "subagent_in_progress", "subagent_waiting":
 				child := uuid.NewString()
 				runtimeSuspensionSQL(t, pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, completed)
-				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, completed)
+				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, registerAgentHost(t, s, owner.TenantID).ID, completed)
 				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn',$4,clock_timestamp())`, uuid.NewString(), owner.SessionID, child, strings.TrimPrefix(kind, "subagent_"))
 			case "input_reservation":
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
 			case "file_write":
-				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64))
+				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256) VALUES($1,$2,$3,$4)`, uuid.NewString(), owner.EnvironmentID, registerAgentHost(t, s, owner.TenantID).ID, strings.Repeat("a", 64))
 			}
 			activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 			if err != nil {
@@ -347,10 +347,10 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			case "subagent":
 				child := uuid.NewString()
 				runtimeSuspensionSQL(t, pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, turn)
-				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, turn)
+				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, registerAgentHost(t, s, owner.TenantID).ID, turn)
 				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at,completed_at) VALUES($1,$2,$3,'child-turn','completed',clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.SessionID, child)
 			default:
-				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
+				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, registerAgentHost(t, s, owner.TenantID).ID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
 			until := time.Now().Add(time.Hour)
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrAllocationConflict) {
@@ -405,7 +405,7 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
+	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

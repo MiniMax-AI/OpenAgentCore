@@ -42,7 +42,8 @@ func TestExecutionNegotiatesAndPersistsToolObservations(t *testing.T) {
 	_ = env.DecodePayload(&cancel)
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
 	h.finished(result, sessions.TurnCancelled)
-	reopened, pool := testStore(t)
+	reopened := reopenStore(t, h.s)
+	pool := reopened.pool
 	defer pool.Close()
 	events, err := reopened.ListTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 0, 100)
 	if err != nil {

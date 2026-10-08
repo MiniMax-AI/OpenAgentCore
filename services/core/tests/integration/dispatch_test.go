@@ -67,7 +67,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 		} `json:"environment"`
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
-	s, _ := testStore(t)
+	s, _ := newManagedTestStore(t)
 	if snapshot.Environment.Type == "openai_hosted" {
 		s, _ = configuredStore(t)
 	}
@@ -286,7 +286,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	newStore, _ := testStore(t)
+	newStore := reopenStore(t, h.s)
 	h.s, h.owned = newStore, nil
 	bound, err := sessionAdapter(newStore).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {
