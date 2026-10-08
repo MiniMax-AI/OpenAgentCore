@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 3f233005176090ef87c13442f439296001950bb835262969a0b48970b51af7f4
+source_hash: 502101c3da92eaa4a86fd64167f99eed39542dfba8b6620d1b8751454bd2cadd
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -10,7 +10,7 @@ source_hash: 3f233005176090ef87c13442f439296001950bb835262969a0b48970b51af7f4
 
 | 接口 | 路径 | 身份验证 | 控制台用途 |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；Add node 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置的发行版 Runtime release。参见 [console server](console-server.md) |
+| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/console/orcarouter/*`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；Add node 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置的发行版 Runtime release；OrcaRouter provider 的来源、模型目录和 PKCE 兑换，使用运维人员自己的 OrcaRouter 密钥。参见 [console server](console-server.md) |
 | Administrator API | `/core/v1/**`，不包括 `/core/v1/sandbox` | Core 密钥，由控制台服务器添加 | 项目、密钥、资源读取和删除、诊断、执行器凭据和安装命令、来源信息、汇总、Core 指标、安装信息、默认模型 |
 | Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | Sandbox 配置；Overview 和 Sandbox metrics 中的 Nodes、机群与容量数据；每个项目的 Runtime observations |
 | Agents API | `/v1/**` | 项目 API 密钥 | 不使用。控制台会向开发者说明如何调用它（参见 [Provenance and monitoring](#provenance-and-monitoring)） |
@@ -87,7 +87,10 @@ source_hash: 3f233005176090ef87c13442f439296001950bb835262969a0b48970b51af7f4
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 列出 Harnesses | `GET /core/v1/harnesses` | System 的 Default model 卡片：每个 Harness 的只读 `enabled` 和 `default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 上的默认模型；如果没有默认模型，则为任意已启用 Harness 上的默认模型） |
+| 列出 Harnesses | `GET /core/v1/harnesses` | System 的 Default model 卡片：每个 Harness 的只读 `enabled` 和 `default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 上的默认模型；如果没有默认模型，则为任意已启用 Harness 上的默认模型）。OrcaRouter 的连接状态来自模型配置对话框，而非此列表 |
+| OrcaRouter 来源 | `GET /console/orcarouter/config` | **Set**/**Replace** 对话框的 OrcaRouter provider：写入 Core 的认证来源与推理基址，二者均无需手动输入，也不硬编码任何公开来源 |
+| OrcaRouter 目录 | `GET /console/orcarouter/catalog?capability=` | 选择 OrcaRouter 时对话框的模型控件：该 workspace 的模型，使用输入的密钥经 `X-OrcaRouter-Key` 请求头读取，并为文本 Harness 过滤为 `chat`。密钥被拒（401）与目录不可达都会显示可见状态和已验证的回退列表，而非自由文本 |
+| OrcaRouter 兑换 | `POST /console/orcarouter/exchange` | **Connect with OrcaRouter**：把 PKCE 授权码兑换为 API 密钥，并像粘贴的密钥一样作为 provider 密钥写入 Core |
 | 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** 或 **Replace**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息；随后再次读取列表 |
 | 清除 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**，需确认，随后再次读取列表 |
 

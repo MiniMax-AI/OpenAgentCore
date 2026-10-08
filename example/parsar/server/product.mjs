@@ -73,6 +73,43 @@ export function productAPI(store, core, fetchImpl = fetch) {
   return async (method, path, body) => {
     if (path === "/app/providers/discover" && method === "POST")
       return providers.discover(body);
+    // OrcaRouter account routes: catalog discovery and the two credential
+    // adapters. They read and write the same provider record the ordinary
+    // provider path uses, so nothing downstream knows which adapter ran.
+    const orca = path.match(
+      /^\/app\/providers\/([a-f0-9-]{36})\/orcarouter\/(catalog|connect|connect\/code|cancel|credential)$/,
+    );
+    if (orca) {
+      const [, providerId, action] = orca;
+      if (action === "catalog" && method === "POST")
+        return providers.orca.catalog(providerId, body?.capability ?? "chat");
+      if (action === "connect" && method === "POST")
+        return providers.orca.startLogin(providerId);
+      if (action === "connect/code" && method === "POST")
+        return providers.orca.submitLogin(providerId, body);
+      if (action === "cancel" && method === "POST") {
+        providers.orca.cancelLogin(providerId);
+        return providers.orca.view(providerId);
+      }
+      if (action === "credential" && method === "DELETE") {
+        // An explicit clear removes the credential; a failed login never does.
+        const row = store.get("providers", providerId);
+        if (!row || row.provider !== "orcarouter")
+          throw new AppError(404, "该 Provider 不是 OrcaRouter。");
+        const { api_key, ...rest } = row;
+        store.put("providers", {
+          ...rest,
+          credential_source: "",
+          status: "ok",
+          generation: (row.generation ?? 0) + 1,
+          revision: row.revision + 1,
+        });
+        return providers.orca.view(providerId);
+      }
+      if (action === "credential" && method === "GET")
+        return providers.orca.view(providerId);
+      throw new AppError(405, "Method not allowed.");
+    }
     const match = path.match(/^\/app\/([a-z]+)(?:\/([a-f0-9-]{36}))?$/);
     if (!match || !kinds.has(match[1]) || (match[2] && !uuid.test(match[2])))
       throw new AppError(404, "Not found.");
@@ -84,6 +121,9 @@ export function productAPI(store, core, fetchImpl = fetch) {
       return kind === "providers"
         ? {
             ...publicProvider(value),
+            ...(value.provider === "orcarouter"
+              ? { orcarouter: providers.orca.view(id) }
+              : {}),
             models: store
               .list("models")
               .filter((model) => model.provider_id === id),

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   product,
+  type OrcaRouterCatalog,
   type ModelProfile,
   type ProviderProfile,
 } from "./lib/product";
@@ -14,9 +15,19 @@ import {
   DialogTitle,
   DialogFooter,
 } from "./components/ui/dialog";
-import { Field, Help, ErrorNotice } from "./components/shared";
+import { Field, Help, ErrorNotice, OrcaRouterConnect } from "./components/shared";
 
 type Choice = { model: string; name: string };
+
+const orcaKeyConsole = "https://www.orcarouter.ai/console/authorized-apps";
+const orcaInferenceBase = "https://api.orcarouter.ai/v1";
+/** The provider a saved record belongs to, or "" for manual entry. */
+const providerOf = (value: ProviderProfile) => value.provider ?? "";
+
+/** An error's message, never its payload: a rejection may mention a credential. */
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error ?? "");
+}
 
 export function ProviderEditor({
   value,
@@ -86,6 +97,18 @@ function ProviderForm({
   const [base, setBase] = useState(value.base_url || "");
   const [key, setKey] = useState("");
   const [step, setStep] = useState<"connection" | "models">("connection");
+  // OrcaRouter is a named provider, not a free base URL: choosing it fixes the
+  // inference base and offers the two credential adapters below.
+  const [preset, setPreset] = useState<"" | "orcarouter">(() =>
+    providerOf(value) === "orcarouter" ||
+    value.base_url?.startsWith("https://api.orcarouter.ai")
+      ? "orcarouter"
+      : "",
+  );
+  const [catalogSource, setCatalogSource] = useState("");
+  const [degraded, setDegraded] = useState(false);
+  const [catalogReason, setCatalogReason] = useState("");
+  const [connectError, setConnectError] = useState<unknown>(null);
   const initial = models.filter((model) => model.provider_id === value.id);
   const [choices, setChoices] = useState<Choice[]>(initial);
   const [selected, setSelected] = useState(
@@ -101,17 +124,37 @@ function ProviderForm({
     id: value.id,
     revision: value.revision,
     name: name.trim(),
-    base_url: base.trim(),
+    ...(preset === "orcarouter"
+      ? { preset: "orcarouter", base_url: orcaInferenceBase }
+      : { base_url: base.trim() }),
     ...(key ? { api_key: key } : {}),
   });
   const discover = useMutation({
     mutationFn: () =>
-      product<{ models: string[] }>("providers/discover", "POST", connection()),
-    onSuccess: ({ models: found }) => {
-      setCatalog(found);
+      product<OrcaRouterCatalog & { models: unknown[] }>(
+        "providers/discover",
+        "POST",
+        connection(),
+      ),
+    onSuccess: (found) => {
+      // The OrcaRouter catalog answers with metadata; a generic provider answers
+      // with IDs alone. Both feed the same checkbox list.
+      const models = (found.models as (string | { id: string; name?: string })[]).map(
+        (entry) => (typeof entry === "string" ? entry : entry.id),
+      );
+      setCatalog(models);
+      if ("catalog_source" in found) {
+        setCatalogSource(found.catalog_source);
+        setDegraded(found.degraded);
+        setCatalogReason(found.reason ?? "");
+      } else {
+        setCatalogSource("");
+        setDegraded(false);
+        setCatalogReason("");
+      }
       setChoices((old) => [
         ...old,
-        ...found
+        ...models
           .filter((id) => !old.some((row) => row.model === id))
           .map((model) => ({ model, name: model.slice(0, 80) })),
       ]);
@@ -196,16 +239,43 @@ function ProviderForm({
                 placeholder="例如 MiniMax"
               />
             </Field>
-            <Field label="Base URL" id="provider-base">
-              <Input
-                id="provider-base"
+            <Field label="Provider 类型" id="provider-preset">
+              <select
+                id="provider-preset"
                 disabled={busy}
-                value={base}
-                maxLength={2000}
-                onChange={(e) => setBase(e.target.value)}
-                placeholder="https://api.example.com/v1"
-              />
+                className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-base"
+                value={preset}
+                onChange={(e) => {
+                  const next = e.target.value === "orcarouter" ? "orcarouter" : "";
+                  setPreset(next);
+                  if (next === "orcarouter" && !name.trim()) setName("OrcaRouter");
+                }}
+              >
+                <option value="">通用 OpenAI 兼容服务</option>
+                <option value="orcarouter">OrcaRouter</option>
+              </select>
             </Field>
+            {preset === "orcarouter" ? (
+              <Field label="推理地址" id="provider-base-fixed">
+                <Input
+                  id="provider-base-fixed"
+                  readOnly
+                  value={orcaInferenceBase}
+                  aria-describedby="provider-orca-note"
+                />
+              </Field>
+            ) : (
+              <Field label="Base URL" id="provider-base">
+                <Input
+                  id="provider-base"
+                  disabled={busy}
+                  value={base}
+                  maxLength={2000}
+                  onChange={(e) => setBase(e.target.value)}
+                  placeholder="https://api.example.com/v1"
+                />
+              </Field>
+            )}
             <Field label="API Key" id="provider-key">
               <Input
                 id="provider-key"
@@ -220,6 +290,63 @@ function ProviderForm({
                 }
               />
             </Field>
+            {preset === "orcarouter" && (
+              <div className="space-y-2">
+                <p className="text-sm text-fg-muted" id="provider-orca-note">
+                  OrcaRouter 密钥在
+                  <a
+                    className="mx-1 underline underline-offset-4"
+                    href={orcaKeyConsole}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    OrcaRouter 控制台
+                  </a>
+                  创建和撤销；密钥仅保存在本机后端。
+                  {value.orcarouter?.status === "needs_reauth" && (
+                    <strong className="ml-1 text-danger">
+                      当前凭据已被撤销，请重新连接或填写新的 API Key。
+                    </strong>
+                  )}
+                </p>
+                <OrcaRouterConnect
+                  id={value.id}
+                  disabled={busy}
+                  change={value.id}
+                  connect={async () => {
+                    const base = await product<{
+                      authorize_url: string;
+                      redirect_uri: string;
+                    }>(`providers/${value.id}/orcarouter/connect`, "POST", {});
+                    window.open(base.authorize_url, "_blank", "noopener");
+                    return base;
+                  }}
+                  cancel={async () => {
+                    await product(
+                      `providers/${value.id}/orcarouter/cancel`,
+                      "POST",
+                      {},
+                      { keepalive: true },
+                    );
+                  }}
+                  complete={(code) =>
+                    product(
+                      `providers/${value.id}/orcarouter/connect/code`,
+                      "POST",
+                      { code },
+                    )
+                  }
+                  onCredentials={() => {
+                    void cache.invalidateQueries({ queryKey: ["providers"] });
+                  }}
+                  onError={(error) => {
+                    // The mutation's own error slot is not reachable from here.
+                    setConnectError(error);
+                  }}
+                />
+                {connectError ? <ErrorNotice error={new Error(messageOf(connectError))} /> : null}
+              </div>
+            )}
             <div className="flex items-center gap-2 text-base">
               <span>模型连接</span>
               <Help>
@@ -248,6 +375,17 @@ function ProviderForm({
                 自定义模型
               </Button>
             </div>
+            {catalogSource && (
+              <p
+                className="text-sm text-fg-muted"
+                data-catalog-source={catalogSource}
+                role="status"
+              >
+                {degraded
+                  ? `实时目录不可用${catalogReason ? `（${catalogReason}）` : ""}，以下为已验证的离线模型列表。`
+                  : `模型目录来自 ${catalogSource}`}
+              </p>
+            )}
             {custom && (
               <div className="space-y-3 rounded-lg border border-line p-3">
                 <Field label="模型 ID" id="custom-model">

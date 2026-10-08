@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError, text } from "./store.mjs";
+import { orcaRouterAPI } from "./orcarouter.mjs";
+import { orcaInferenceBase, orcaOrigins } from "../shared/orcarouter.mjs";
 
 export function publicProvider({ api_key, ...provider }) {
   return { ...provider, has_api_key: Boolean(api_key) };
@@ -46,12 +48,19 @@ function connection(body, previous) {
 }
 
 export function providerAPI(store, fetchImpl) {
+  const orcaAccounts = orcaRouterAPI(store, fetchImpl);
   return {
     async discover(body) {
       const { base_url, api_key } = connection(
         body,
         body.id ? store.get("providers", body.id) : undefined,
       );
+      // An OrcaRouter account reads its own catalog through the credential
+      // adapter, which owns the capability filter and the degraded ladder.
+      const existing = body.id ? store.get("providers", body.id) : undefined;
+      const mode = body.capability ?? "chat";
+      if (existing?.provider === "orcarouter")
+        return orcaAccounts.catalog(body.id, mode);
       if (!base_url) throw new AppError(400, "请填写 Base URL。");
       const endpoint = base_url.endsWith("/v1")
         ? `${base_url}/models`
@@ -102,6 +111,26 @@ export function providerAPI(store, fetchImpl) {
         revision: (previous?.revision || 0) + 1,
         ...connection(body, previous),
       };
+      // OrcaRouter is a named provider preset: its inference base is the
+      // gateway's own, so the operator never types a URL that could silently
+      // point somewhere else. Any other provider keeps manual entry.
+      if (body.preset === "orcarouter" || previous?.provider === "orcarouter") {
+        value.provider = "orcarouter";
+        value.base_url = orcaInferenceBase(orcaOrigins(process.env).api);
+        // The API Key and the PKCE connect flow both write `api_key`; the
+        // credential adapter that produced it stays recorded for the two
+        // distinct status entries in the UI.
+        value.credential_source =
+          body.credential_source === "pkce"
+            ? "pkce"
+            : body.api_key || !previous?.api_key
+              ? "api_key"
+              : previous?.credential_source || "api_key";
+        value.status = "ok";
+        value.generation = (previous?.generation ?? 0) + (body.api_key ? 1 : 0);
+        if (typeof body.account === "string" && body.account.trim())
+          value.account = body.account.trim().slice(0, 200);
+      }
       const existing = store
         .list("models")
         .filter((model) => model.provider_id === id);
@@ -145,5 +174,7 @@ export function providerAPI(store, fetchImpl) {
         return publicProvider(value);
       });
     },
+    /** The OrcaRouter credential seam: one interface, two adapters. */
+    orca: orcaAccounts,
   };
 }

@@ -20,6 +20,8 @@ __pycache__/
 /web
 playwright-report/
 test-results/
+# The OrcaRouter UI evidence is rendered by the verification run, never committed.
+/orca-evidence/
 /.agents/
 /.issue-agent/
 /ISSUE_AGENT.md

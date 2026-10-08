@@ -22,6 +22,7 @@ type console struct {
 	transport           *http.Transport
 	host                string
 	auth                *consoleAuth
+	orca                orcaRouter
 }
 
 type consoleActorContextKey struct{}
@@ -41,6 +42,12 @@ func newConsole(c config) (*console, error) {
 	}
 	origin, _ := url.Parse(c.origin)
 	h := &console{config: c, root: root, host: origin.Host, auth: newConsoleAuth(c)}
+	orca, err := loadOrcaRouter()
+	if err != nil {
+		root.Close()
+		return nil, err
+	}
+	h.orca = orca
 	if c.nodePayloadDir != "" {
 		h.nodePayload, err = os.OpenRoot(c.nodePayloadDir)
 		if err != nil {
@@ -178,6 +185,13 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			authError(w, http.StatusUnauthorized, "Sign in to the console")
 		}
+		return
+	}
+	if r.URL.Path == "/console/orcarouter" || strings.HasPrefix(r.URL.Path, "/console/orcarouter/") {
+		// Signed in and same-origin; the console server holds the OrcaRouter
+		// origins and performs the credential-bearing request itself. The API key
+		// arrives in a request header and is never placed in a URL.
+		h.serveOrcaRouter(w, r)
 		return
 	}
 	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {

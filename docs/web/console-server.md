@@ -36,6 +36,7 @@ The deployment's reverse proxy sends every path to the console. The console forw
 | `/console/auth`, `/console/auth/login`, `/console/auth/logout` | No | [Sign-in](#sign-in) |
 | `/`, `/index.html`, `/favicon.svg`, `/oac-mark.svg`, `/assets/*` | No | Static console assets |
 | `/console/config` | Yes | [Console configuration](#console-configuration) |
+| `/console/orcarouter/*` | Yes | [OrcaRouter provider](#orcarouter-provider) |
 | `/core/v1/*` | Yes | [Forwarded to Core](#forwarding-to-core) |
 | `/core` and other paths under `/core/` | Yes | 404 |
 | Any other path | Yes | Static assets; a path without a file extension falls back to `index.html` |
@@ -91,6 +92,23 @@ Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a meth
 | `node_installer` | Whether the console serves a node installation payload |
 | `node_installer_sha256` | SHA-256 of that payload's `node-install.pyz`; Add node commands verify it before running the installer |
 | `node_artifacts` | The providers (`docker`, `microsandbox`) whose node artifacts the payload holds, locally or as a pinned release download. Read on every request, so artifacts added by rerunning the installer appear without a restart |
+
+## OrcaRouter provider
+
+OrcaRouter is a named model provider the console offers beside the other OpenAI-compatible endpoints. Its inference base and its authentication origin are separate public origins and the console never derives one from the other, so the browser composes both from what this route reports and never hardcodes a public origin. `ORCA_BASE_URL` sets a shared self-hosted origin; `ORCA_AUTH_BASE_URL` and `ORCA_API_BASE_URL` override it explicitly and win over it. Each origin needs HTTPS, or an HTTP loopback origin for a self-hosted deployment. The console's own transport reaches those origins directly, ignoring ambient HTTP proxy settings.
+
+`GET /console/orcarouter/config` returns what the signed-in browser needs, all of it public:
+
+| Field | Meaning |
+| --- | --- |
+| `auth_origin` | The authentication origin; `authorize_url` is this origin plus the fixed `/auth` |
+| `api_origin` | The inference and catalog origin |
+| `inference_base` | The address the console writes to Core as this provider's base URL: `api_origin` plus its `/v1` segment |
+| `key_console` | The OrcaRouter page where an operator manages issued keys |
+
+`GET /console/orcarouter/catalog?capability=` reads the configured catalog with the operator's own key, which travels in the `X-OrcaRouter-Key` request header: never in a URL, never logged, never returned. `capability` is one of `chat`, `embedding`, `image`, `video`, `rerank`, or empty for the whole list. The console reduces each record to its `id`, `name`, `context_length`, `max_completion_tokens`, `supported_endpoint_types` and `input_modalities`, so pricing and provider internals stay on the server, and bounds the read at 512 KiB and 2000 records. A response that is not the expected shape, an upstream failure and a redirect are reported as `degraded` with a reason; a rejected key is a distinct 401 so the console can say the key is unusable instead of showing an empty list.
+
+`POST /console/orcarouter/exchange` redeems a PKCE authorization code. It requires `code`, `code_verifier` and `code_challenge_method`, and accepts only `S256`. The console posts the code and verifier to the authentication origin's `/api/v1/auth/keys` — the inference origin's `/v1/auth/keys` is not the exchange — and returns the issued key once. The upstream body is never forwarded.
 
 ## Node installation payload
 

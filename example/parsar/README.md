@@ -37,6 +37,7 @@ Use one server process and a dedicated Project for this local single-user exampl
 A few more implementation details:
 
 - **Providers and models** are saved together in one SQLite transaction. Editing reads a Provider and its models as one snapshot; changing a model advances the Provider's revision.
+- **OrcaRouter** is offered as a named provider beside the generic OpenAI-compatible one. Choosing the OrcaRouter preset fixes the Base URL to `https://api.orcarouter.ai/v1` and takes the credential either way: paste an `sk-orca-…` key, or use **Connect with OrcaRouter**, which runs OAuth 2.0 with PKCE, S256 and a loopback redirect on `127.0.0.1`, then exchanges the one-time code for an API key. Both entrances produce the same provider key, and the model list comes from that workspace's `GET /v1/models`; a rejected key or an unreachable catalog shows the verified fallback list, never free text.
 - **Browser calls** use `OpenAIAgentsClient`, with a small public HTTP reader for Artifacts (not yet exposed by that client); only Session creation goes through a small server adapter. Closing the browser aborts the upstream stream, never the running Session.
 - **Workspaces:** hosted Sessions each get their own. User-machine Sessions use the selected host directory, so the same path means shared files.
 - **Skills on a user machine** come only from local capability directories in this example; it rejects Agents bound to managed Skills instead of ignoring them. Core itself can deliver managed Skills to user machines through `x_agents_core.environment`.

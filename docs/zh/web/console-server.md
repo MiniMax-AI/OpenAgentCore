@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 2cc4b562301d95640d2b653ec522a5407a70a98e1f4e3c1fe89bd246ffd1199e
+source_hash: d633871cb9642848b9d035c888447bcde8311e12c76e8e69d922203be18ab6f1
 ---
 
 控制台服务器（`services/web`、`oac-web` 进程）提供构建后的控制台，使用 Core 密钥认证管理员，并将已登录浏览器的 `/core/v1` 请求携带该密钥转发到 Core。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
@@ -38,6 +38,7 @@ flowchart LR
 | `/console/auth`、`/console/auth/login`、`/console/auth/logout` | 否 | [登录](#sign-in) |
 | `/`、`/index.html`、`/favicon.svg`、`/oac-mark.svg`、`/assets/*` | 否 | 控制台静态资源 |
 | `/console/config` | 是 | [控制台配置](#console-configuration) |
+| `/console/orcarouter/*` | 是 | [OrcaRouter provider](#orcarouter-provider) |
 | `/core/v1/*` | 是 | [转发到 Core](#forwarding-to-core) |
 | `/core` 及 `/core/` 下其他路径 | 是 | 404 |
 | 其他路径 | 是 | 静态资源；无扩展名的路径回退到 `index.html` |
@@ -93,6 +94,23 @@ flowchart LR
 | `node_installer` | 控制台是否提供节点安装文件 |
 | `node_installer_sha256` | 文件中 `node-install.pyz` 的 SHA-256；Add node 命令执行安装程序前验证它 |
 | `node_artifacts` | 文件中包含节点资产的提供商（`docker`、`microsandbox`），资产在本地或通过固定发行下载提供。每次请求都读取，因此重新运行安装程序新增的资产无需重启即可出现 |
+
+## OrcaRouter provider {#orcarouter-provider}
+
+OrcaRouter 是控制台与其他 OpenAI 兼容端点并列提供的具名模型 provider。它的推理基址与认证来源是两个不同的公开来源，控制台绝不从其中一个推导另一个，因此浏览器从本路由返回的值组合二者，绝不硬编码公开来源。`ORCA_BASE_URL` 设置共享的自托管来源；`ORCA_AUTH_BASE_URL` 和 `ORCA_API_BASE_URL` 显式覆盖它并优先。每个来源都需要 HTTPS，自托管部署可用 HTTP 回环来源。控制台自身的传输层直接访问这些来源，忽略环境中的 HTTP 代理设置。
+
+`GET /console/orcarouter/config` 返回已登录浏览器所需的全部内容，均为公开信息：
+
+| 字段 | 含义 |
+| --- | --- |
+| `auth_origin` | 认证来源；`authorize_url` 是该来源加固定的 `/auth` |
+| `api_origin` | 推理与目录来源 |
+| `inference_base` | 控制台写入 Core 的该 provider 基址：`api_origin` 加其 `/v1` 路径段 |
+| `key_console` | 运维人员管理已签发密钥的 OrcaRouter 页面 |
+
+`GET /console/orcarouter/catalog?capability=` 使用运维人员自己的密钥读取配置的目录，密钥经由 `X-OrcaRouter-Key` 请求头传递：绝不放入 URL、绝不记录日志、绝不返回。`capability` 取 `chat`、`embedding`、`image`、`video`、`rerank` 之一，或留空表示整个列表。控制台把每条记录裁剪为 `id`、`name`、`context_length`、`max_completion_tokens`、`supported_endpoint_types` 和 `input_modalities`，因此价格与厂商内部信息留在服务端，并将读取限制在 512 KiB 和 2000 条记录。响应结构不符、上游失败和重定向都会以带原因的 `degraded` 报告；密钥被拒绝则是独立的 401，使控制台能说明密钥不可用，而不是显示空列表。
+
+`POST /console/orcarouter/exchange` 兑换 PKCE 授权码。它要求 `code`、`code_verifier` 和 `code_challenge_method`，且只接受 `S256`。控制台把 code 与 verifier 提交到认证来源的 `/api/v1/auth/keys` —— 推理来源的 `/v1/auth/keys` 不是兑换端点 —— 并一次性返回签发的密钥。上游响应体绝不转发。
 
 ## 节点安装文件 {#node-installation-payload}
 

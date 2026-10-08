@@ -453,3 +453,82 @@ test("MiniMax MCP bindings reject before Core for text-only and hosted placement
   }
   assert.equal(calls, 0);
 });
+
+test("an OrcaRouter Provider is named, keeps a fixed inference base, and both credential routes work", async () => {
+  const store = openStore(":memory:");
+  const id = randomUUID();
+  const authCalls = [];
+  const api = productAPI(
+    store,
+    null,
+    async (url, init) => {
+      authCalls.push({ url: String(url), init });
+      if (String(url).includes("/auth/keys"))
+        return Response.json({ key: "sk-orca-issued", user_id: "7", scope: "api" });
+      return Response.json({
+        data: [
+          { id: "openai/gpt-5.5", supported_endpoint_types: ["openai"], architecture: { input_modalities: ["text", "image"] } },
+          { id: "openai/gpt-image-1", supported_endpoint_types: ["image-generation"] },
+        ],
+      });
+    },
+  );
+  // The preset fixes the inference base: no operator-supplied URL reaches Core.
+  const saved = await api("PUT", `/app/providers/${id}`, {
+    name: "OrcaRouter",
+    preset: "orcarouter",
+    api_key: "sk-orca-pasted",
+  });
+  assert.equal(saved.base_url, "https://api.orcarouter.ai/v1");
+  assert.equal(saved.provider, "orcarouter");
+  assert.equal(saved.credential_source, "api_key");
+  assert.equal(saved.has_api_key, true);
+  assert.equal(JSON.stringify(saved).includes("sk-orca-pasted"), false);
+
+  // The catalog route filters by the entrance's capability.
+  const catalog = await api("POST", `/app/providers/${id}/orcarouter/catalog`, { capability: "chat" });
+  assert.deepEqual(catalog.models.map((model) => model.id), ["openai/gpt-5.5"]);
+  assert.equal(catalog.degraded, false);
+  assert.match(catalog.catalog_source, /^https:\/\/api\.orcarouter\.ai\/v1\/models/);
+
+  // The credential route reads the safe view and never a key.
+  const view = await api("GET", `/app/providers/${id}/orcarouter/credential`);
+  assert.equal(view.has_api_key, true);
+  assert.equal(view.inference_base, "https://api.orcarouter.ai/v1");
+  assert.equal(JSON.stringify(view).includes("sk-orca-pasted"), false);
+
+  // A discover on an OrcaRouter account goes through the credential adapter.
+  const discovered = await api("POST", "/app/providers/discover", { id, capability: "chat" });
+  assert.equal(discovered.models[0].id, "openai/gpt-5.5");
+
+  // An explicit clear removes the credential and reports it as gone.
+  const cleared = await api("DELETE", `/app/providers/${id}/orcarouter/credential`);
+  assert.equal(cleared.has_api_key, false);
+  assert.equal(cleared.credential_source, "");
+  // Clearing bumps the generation so any in-flight asynchronous failure of the
+  // removed credential can never be attributed to the next one.
+  assert.equal(cleared.generation, 2);
+
+  // With no credential left, discovery refuses instead of calling the gateway.
+  await assert.rejects(api("POST", "/app/providers/discover", { id, capability: "chat" }), /API Key/);
+  store.close();
+});
+
+test("clearing the OrcaRouter credential does not delete the linked reliability records", async () => {
+  const store = openStore(":memory:");
+  const id = randomUUID();
+  const api = productAPI(store, null, async () => Response.json({ data: [] }));
+  await api("PUT", `/app/providers/${id}`, { name: "OrcaRouter", preset: "orcarouter", api_key: "sk-orca-pasted" });
+  const model = await api("PUT", `/app/models/${randomUUID()}`, {
+    name: "GPT",
+    model: "openai/gpt-5.5",
+    provider_id: id,
+  });
+  const cleared = await api("DELETE", `/app/providers/${id}/orcarouter/credential`);
+  assert.equal(cleared.has_api_key, false);
+  assert.equal(cleared.name, "OrcaRouter");
+  assert.equal(cleared.base_url, "https://api.orcarouter.ai/v1");
+  // The provider record survives; the model binding still points at it.
+  assert.equal(store.get("models", model.id).provider_id, id);
+  store.close();
+});

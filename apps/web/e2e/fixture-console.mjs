@@ -123,6 +123,9 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
     deployment: null,
     // Whether the console has its node installation payload, and so serves both installers.
     installers,
+    // What the browser asked the OrcaRouter routes for, in order; and whether the
+    // catalog should answer as an outage instead of a live list.
+    orcaReads: [], orcaCatalogDown: false,
     // The providers whose node files the console serves (/console/config node_artifacts).
     nodeArtifacts: artifacts.split(",").filter(Boolean),
   };
@@ -209,6 +212,57 @@ async function consoleRoute(request, response, url) {
       node_installer: served, node_installer_sha256: served ? "a".repeat(64) : "",
       node_artifacts: served ? state.nodeArtifacts : [],
     });
+  }
+  if (url.pathname.startsWith("/console/orcarouter/")) {
+    if (auth.mode !== "authenticated" || !request.headers.cookie?.includes(SESSION_COOKIE)) return error(response, 401, "Sign in to the console.");
+    return orcarouterRoute(request, response, url);
+  }
+  return error(response, 404, "Not found.");
+}
+
+/** The two OrcaRouter origins the fixture deployment names, as the console service does. */
+const ORCA_AUTH_ORIGIN = "https://www.orcarouter.ai";
+const ORCA_API_ORIGIN = "https://api.orcarouter.ai";
+/** The fixture accepts this one key and nobody else's; it is not a real credential. */
+const ORCA_FIXTURE_KEY = "sk-orca-fixture-0f1e2d3c";
+/** The catalog the fixture's workspace serves, with the shapes the filters must tell apart. */
+const ORCA_FIXTURE_CATALOG = [
+  { id: "openai/gpt-5.5", name: "OpenAI: GPT-5.5", context_length: 272000, max_completion_tokens: 128000, supported_endpoint_types: ["openai", "openai-response"], architecture: { input_modalities: ["text", "image", "file"] }, modalities_declared: true },
+  { id: "anthropic/claude-opus-4.8", name: "Anthropic: Claude Opus 4.8", context_length: 1000000, max_completion_tokens: 128000, supported_endpoint_types: ["openai", "anthropic"], architecture: { input_modalities: ["text", "image"] }, modalities_declared: true },
+  { id: "deepseek/deepseek-v4-pro", name: "DeepSeek: DeepSeek V4 Pro", context_length: 1048576, max_completion_tokens: 384000, supported_endpoint_types: ["openai"], architecture: { input_modalities: ["text"] }, modalities_declared: true },
+  { id: "openai/text-embedding-3-large", name: "OpenAI: Text Embedding 3 Large", supported_endpoint_types: ["embeddings"], architecture: { input_modalities: ["text"] }, modalities_declared: true },
+  { id: "openai/gpt-image-1", name: "OpenAI: GPT Image 1", supported_endpoint_types: ["image-generation"], architecture: { input_modalities: ["text", "image"] }, modalities_declared: true },
+];
+
+/**
+ * The console service's OrcaRouter routes: the deployment's origins, the model
+ * catalog of the operator's workspace, and the PKCE code exchange. Each is a
+ * same-origin route behind the console session, and the API key travels in a
+ * request header exactly as the real service takes it.
+ */
+async function orcarouterRoute(request, response, url) {
+  if (url.pathname === "/console/orcarouter/config" && request.method === "GET") {
+    state.orcaReads.push("config");
+    return send(response, 200, { object: "console.orcarouter", auth_origin: ORCA_AUTH_ORIGIN, api_origin: ORCA_API_ORIGIN, authorize_url: `${ORCA_AUTH_ORIGIN}/auth`, key_console: `${ORCA_AUTH_ORIGIN}/console/authorized-apps` });
+  }
+  if (url.pathname === "/console/orcarouter/catalog" && request.method === "GET") {
+    const capability = url.searchParams.get("capability") ?? "";
+    if (!["", "chat", "embedding", "image", "video", "rerank"].includes(capability)) return error(response, 400, "Unknown catalog capability");
+    const key = request.headers["x-orcarouter-key"] ?? "";
+    state.orcaReads.push(`catalog:${capability}`);
+    // A key OrcaRouter would reject is separated from an outage, as upstream.
+    if (!key || key === "sk-orca-revoked") return error(response, 401, "OrcaRouter rejected this API key");
+    if (state.orcaCatalogDown) return send(response, 200, { models: [], catalog_origin: ORCA_API_ORIGIN, degraded: true, reason: "catalog_unreachable" });
+    return send(response, 200, { models: ORCA_FIXTURE_CATALOG, catalog_origin: ORCA_API_ORIGIN, degraded: false });
+  }
+  if (url.pathname === "/console/orcarouter/exchange" && request.method === "POST") {
+    if (!/^application\/json\s*(;|$)/i.test(request.headers["content-type"] ?? "")) return error(response, 415, "Use application/json");
+    const input = await body(request).catch(() => null);
+    state.orcaReads.push("exchange");
+    // S256 is mandatory; a `plain` challenge is refused before any code is redeemed.
+    if (!input || input.code_challenge_method !== "S256" || typeof input.code !== "string" || typeof input.code_verifier !== "string" || !input.code || !input.code_verifier) return error(response, 400, "A one-time code and its S256 verifier are required");
+    if (input.code !== "fixture-consent-code") return error(response, 403, "The OrcaRouter code is unknown, expired or already used; start the connection again");
+    return send(response, 200, { key: ORCA_FIXTURE_KEY, scope: "api", provider: "orcarouter" });
   }
   return error(response, 404, "Not found.");
 }
@@ -595,6 +649,10 @@ async function fixtureRoute(request, response, url) {
     reset(url.searchParams.get("auth") ?? "login", url.searchParams.get("projects") === "none", url.searchParams.get("sandbox") ?? "configured", url.searchParams.get("nodes") ?? "demo", url.searchParams.get("installation") ?? "public", url.searchParams.get("installers") !== "none", url.searchParams.get("artifacts") ?? undefined);
     return send(response, 200, { ok: true });
   }
+  if (url.pathname === "/__fixture/orcarouter" && request.method === "POST") {
+    state.orcaCatalogDown = (await body(request)).catalog_down === true;
+    return send(response, 200, { catalog_down: state.orcaCatalogDown });
+  }
   if (url.pathname === "/__fixture/deployment" && request.method === "POST") {
     // Explicit backend observations, never a simulation driven by browser time.
     const input = await body(request);
@@ -629,6 +687,7 @@ async function fixtureRoute(request, response, url) {
     return send(response, 200, node);
   }
   if (url.pathname === "/__fixture/requests") return send(response, 200, { violations: state.violations, writes: state.writes });
+  if (url.pathname === "/__fixture/orcarouter") return send(response, 200, { reads: state.orcaReads, catalog_down: state.orcaCatalogDown, catalog: ORCA_FIXTURE_CATALOG, key: ORCA_FIXTURE_KEY });
   return error(response, 404, "Not found.");
 }
 
