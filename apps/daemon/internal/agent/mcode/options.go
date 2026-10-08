@@ -8,12 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -24,61 +21,16 @@ type launchOptions struct {
 	// bindings are the effective MCP bindings rendered into MCP; native MCP
 	// tool calls are observed against them.
 	bindings []agent.MCPBinding
-	// start runs the native process; nil selects clirunner.Start. script is
-	// the CLI entry when the binary is node rather than the CLI itself.
+	// start runs node with script, the CLI entry, as the native process.
 	start  func(clirunner.StartOptions) (*clirunner.Process, error)
 	script string
-	// spawn runs the Subagent history reader beside the native process in an
-	// agent-host view, with reader's node, script and data directory as the
-	// view presents them. nil runs the installed reader on the host over
-	// DataDir.
+	// spawn runs the Subagent history reader beside the native process, with
+	// reader's node, script and data directory as the view presents them.
 	spawn  func(clirunner.StartOptions) (*clirunner.Process, error)
 	reader clirunner.StartOptions
-	// home is an agent-host view's Session home on the host. It contains
-	// DataDir and belongs to the Session user, so the daemon reads DataDir
-	// only within it.
+	// home is the Session home on the host. It contains DataDir and belongs
+	// to the Session user, so the daemon reads DataDir only within it.
 	home string
-}
-
-func prepareOptions(req agent.PrepareRequest) (launchOptions, error) {
-	return prepareOptionsWithTools(req, nil)
-}
-
-// prepareOptionsWithTools prepares the Session's native data directory. With
-// tools, the workspace bridge presents the Environment's workspace and Skills.
-func prepareOptionsWithTools(req agent.PrepareRequest, tools *workspaceTools) (launchOptions, error) {
-	var result launchOptions
-	err := validateExecutionRequest(req.PromptRequestPayload)
-	if err != nil {
-		return result, err
-	}
-	if !req.DisableSubagents {
-		if _, _, err := subagentReader(); err != nil {
-			return result, err
-		}
-	}
-	if result.DataDir, err = dataDirectory(req.StateKey); err != nil {
-		return result, err
-	}
-	result.Dir = filepath.Join(result.DataDir, "workspace")
-	if err := os.MkdirAll(result.DataDir, 0o700); err != nil {
-		return result, err
-	}
-	if err := os.MkdirAll(result.Dir, 0o700); err != nil {
-		return result, err
-	}
-	data, err := os.OpenRoot(result.DataDir)
-	if err != nil {
-		return result, err
-	}
-	defer data.Close()
-	if err := writeNativeConfig(req, data, result.DataDir, tools); err != nil {
-		return result, err
-	}
-	result.Model = req.Prepared.Model
-	result.Env = append(executionEnvironment(), nativeEnvironment(req.PromptRequestPayload, result.DataDir)...)
-	result.MCP = []map[string]any{}
-	return result, nil
 }
 
 // writeNativeConfig writes the instructions and native configuration into the
@@ -116,7 +68,7 @@ func writeNativeConfig(req agent.PrepareRequest, data *os.Root, dataDir string, 
 			}
 			names := make([]string, 0, len(tools.skills))
 			for _, skill := range tools.skills {
-				link, target := filepath.Join("skills", skill.Metadata.Name), localworkspace.SkillPath(skill)
+				link, target := filepath.Join("skills", skill.Metadata.Name), skill.Root()
 				actual, err := data.Readlink(link)
 				switch {
 				case errors.Is(err, fs.ErrNotExist):
@@ -176,55 +128,16 @@ func nativeEnvironment(req proto.PromptRequestPayload, dataDir string) []string 
 }
 
 // readData reads a file the native process wrote in its data directory,
-// without leaving the Session home in a view.
+// without leaving the Session home.
 func (o launchOptions) readData(name string) ([]byte, error) {
-	trusted := o.home
-	if trusted == "" {
-		trusted = o.DataDir
-	}
-	rel, err := filepath.Rel(trusted, filepath.Join(o.DataDir, name))
+	rel, err := filepath.Rel(o.home, filepath.Join(o.DataDir, name))
 	if err != nil {
 		return nil, err
 	}
-	root, err := os.OpenRoot(trusted)
+	root, err := os.OpenRoot(o.home)
 	if err != nil {
 		return nil, err
 	}
 	defer root.Close()
 	return root.ReadFile(rel)
-}
-
-// dataDirectory returns the native data directory of the Session's state
-// key. It never derives runtime state from the subprocess cwd.
-func dataDirectory(stateKey string) (string, error) {
-	root, err := paths.Root()
-	if err != nil {
-		return "", fmt.Errorf("mcode: resolve data directory: %w", err)
-	}
-	parts := []string{root, "runtime", "mcode", "state"}
-	for _, part := range strings.Split(stateKey, "/") {
-		if safe := safePathPart(part); safe != "" {
-			parts = append(parts, safe)
-		}
-	}
-	if len(parts) == 4 {
-		return "", fmt.Errorf("mcode: invalid agent state key %q", stateKey)
-	}
-	return filepath.Join(parts...), nil
-}
-
-func safePathPart(value string) string {
-	var b strings.Builder
-	for _, r := range strings.TrimSpace(value) {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	value = b.String()
-	if value == "." || value == ".." {
-		return ""
-	}
-	return value
 }

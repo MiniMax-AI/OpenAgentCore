@@ -6,25 +6,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // SessionPlan holds the resolved per-prompt launch plan derived from
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
-	// Cwd is the working directory passed to codex and the spawned
-	// app-server: the bound workspace root for an Environment request and,
-	// for environment:none, the Session's private CODEX_HOME or a view's work
-	// directory.
+	// Cwd is the working directory of the app-server in the view: the
+	// Environment's workspace root, or the view's work directory with
+	// environment none.
 	Cwd string
 
-	// Env is the environment slice (KEY=value) the plan adds. A local
-	// codex layers it onto os.Environ(); in an agent-host view it is the
-	// complete environment. Includes CODEX_HOME.
+	// Env is the app-server's complete environment (KEY=value), including
+	// CODEX_HOME.
 	Env []string
 
 	// ExtraConfig is a list of `-c key=value` overrides applied at the
@@ -64,17 +60,9 @@ type SessionPlan struct {
 	Cleanup func()
 }
 
-// BuildSessionPlan derives a SessionPlan from the request's prepared model
-// configuration and ExecutionControls. The codex binary is resolved via PATH.
-func BuildSessionPlan(req agent.PrepareRequest) (SessionPlan, error) {
-	return buildSessionPlan(req, func() (agent.ViewDir, error) {
-		home, err := allocCodexHome(req.StateKey)
-		return agent.ViewDir{Host: home, View: home}, err
-	})
-}
-
-// buildSessionPlan derives the plan with CODEX_HOME from allocHome, which runs
-// only after the request validates.
+// buildSessionPlan derives the plan from the request's prepared model
+// configuration and ExecutionControls, with CODEX_HOME from allocHome, which
+// runs only after the request validates.
 func buildSessionPlan(req agent.PrepareRequest, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
 	plan := SessionPlan{
 		// Harnesses run unattended: Codex never offers its ask-the-user tool.
@@ -125,32 +113,6 @@ func buildSessionPlan(req agent.PrepareRequest, allocHome func() (agent.ViewDir,
 // helpers
 // ---------------------------------------------------------------------------
 
-func allocCodexHome(agentStateKey string) (string, error) {
-	if strings.TrimSpace(agentStateKey) == "" {
-		return "", fmt.Errorf("codex: agentStateKey required for CODEX_HOME allocation")
-	}
-	root, err := paths.Root()
-	if err != nil {
-		return "", err
-	}
-	parts := strings.Split(agentStateKey, "/")
-	safeParts := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if safe := safePathPartCodex(part); safe != "" {
-			safeParts = append(safeParts, safe)
-		}
-	}
-	if len(safeParts) == 0 {
-		return "", fmt.Errorf("codex: invalid agentStateKey %q", agentStateKey)
-	}
-	dirParts := append([]string{root, "daemon", "agent-sessions"}, safeParts...)
-	dir := filepath.Join(dirParts...)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("codex: create CODEX_HOME %s: %w", dir, err)
-	}
-	return dir, nil
-}
-
 // openNativeHome opens CODEX_HOME from its parent. Every read and write in the
 // home goes through this Root: the Session user owns a view home, and a link
 // it leaves there resolves only inside the parent, never outside it.
@@ -187,22 +149,6 @@ func resetGeneratedConfig(codexHome string) error {
 // nativeProvider renders the frozen model provider as Codex's provider entry.
 func nativeProvider(provider modelprovider.Provider) providerConfig {
 	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses"}
-}
-
-func safePathPartCodex(runID string) string {
-	var b strings.Builder
-	for _, r := range runID {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	out := b.String()
-	if out == "" {
-		return "run"
-	}
-	return out
 }
 
 // strconv quotes a value as a TOML string. Done by reusing the JSON

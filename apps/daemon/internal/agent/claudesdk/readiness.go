@@ -104,19 +104,11 @@ func CheckRuntime(ctx context.Context, config Config) (RuntimeInfo, error) {
 	if binary == "" {
 		binary = "node"
 	}
-	env := append(append([]string{}, os.Environ()...), config.Env...)
-	if config.Workspace != nil {
-		var err error
-		_, env, err = workspaceEnvironment(config)
-		if err != nil {
-			return RuntimeInfo{}, err
-		}
-	}
 	process, err := clirunner.Start(clirunner.StartOptions{
 		Parent: ctx, Binary: binary,
 		Args:        []string{filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js"), config.Entrypoint},
 		Dir:         filepath.Dir(config.Entrypoint),
-		Env:         env,
+		Env:         append(os.Environ(), config.Env...),
 		KillTimeout: 250 * time.Millisecond,
 	})
 	if err != nil {

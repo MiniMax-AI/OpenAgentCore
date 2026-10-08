@@ -58,19 +58,21 @@ func TestRegistryRegisterPanicsOnEmptyKind(t *testing.T) {
 	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration())
 }
 
-func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
+func TestRegistryRegisterRejectsViewForUnavailableRuntime(t *testing.T) {
 	info := proto.SupportedAgentKind{Kind: "k", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}
-	executor := func(context.Context, agent.PrepareRequest) (agent.Executor, error) { return nil, nil }
+	view := &agent.View{Proxy: agent.ViewProxyNone, Executor: func(context.Context, agent.PrepareRequest, agent.ViewSession) (agent.Executor, error) {
+		return nil, nil
+	}}
 	registry := agent.NewRegistry()
 	defer func() {
 		if recover() == nil {
-			t.Fatal("unavailable runtime registered factories")
+			t.Fatal("unavailable runtime registered a view")
 		}
 		if len(registry.SupportedAgentKinds()) != 0 {
 			t.Fatal("rejected runtime changed registry")
 		}
 	}()
-	registry.Register(agent.Declaration{Info: info, Configuration: prototest.ModelConfiguration()}, agent.Runtime{Info: info, Executor: executor}, agent.EnvironmentSupport{Local: true})
+	registry.Register(agent.Declaration{Info: info, Configuration: prototest.ModelConfiguration()}, agent.Runtime{Info: info, View: view}, agent.EnvironmentSupport{Local: true})
 }
 
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {

@@ -2,7 +2,6 @@ package claudesdk
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -41,35 +40,13 @@ func validateMCPServers(servers []proto.MCPHTTPServer) error {
 	return nil
 }
 
-// Only generated references cross the private bridge; secrets stay in the owned
-// process environment and are expanded by the native HTTP client.
+// mcpHTTPServer is an HTTP MCP server as the bridge receives it: a
+// credential-free endpoint, to which the Session's gateway adds any credential.
 type mcpHTTPServer struct {
-	ServerLabel       string    `json:"server_label"`
-	ServerURL         string    `json:"server_url,omitempty"`
-	AllowedTools      *[]string `json:"allowed_tools"`
-	Required          bool      `json:"required,omitempty"`
-	BearerTokenEnvVar string    `json:"bearer_token_env_var,omitempty"`
-}
-
-func prepareMCPHTTP(declarations *[]proto.MCPHTTPServer) (*[]mcpHTTPServer, []string) {
-	if declarations == nil {
-		return nil, nil
-	}
-	servers := make([]mcpHTTPServer, len(*declarations))
-	var env []string
-	for i, declaration := range *declarations {
-		server := mcpHTTPServer{ServerLabel: declaration.ServerLabel, ServerURL: declaration.ServerURL, Required: declaration.Required}
-		if declaration.AllowedTools != nil {
-			tools := append([]string{}, (*declaration.AllowedTools)...)
-			server.AllowedTools = &tools
-		}
-		if declaration.BearerToken != nil {
-			server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
-			env = append(env, server.BearerTokenEnvVar+"="+*declaration.BearerToken)
-		}
-		servers[i] = server
-	}
-	return &servers, env
+	ServerLabel  string    `json:"server_label"`
+	ServerURL    string    `json:"server_url,omitempty"`
+	AllowedTools *[]string `json:"allowed_tools"`
+	Required     bool      `json:"required,omitempty"`
 }
 
 type mcpState struct {

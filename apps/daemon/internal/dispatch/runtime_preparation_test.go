@@ -226,7 +226,7 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 		t.Fatal(err)
 	}
 	capabilitiesReceipt(t, sender, id, "ready")
-	if err := r.Quiesce(t.Context(), capabilityRef, proto.EnvironmentSuspendPayload{EnvironmentID: environment, SuspendID: uuid.NewString()}); !errors.Is(err, ErrRouterBusy) {
+	if err := r.fenceEnvironment(capabilityRef, proto.EnvironmentSuspendPayload{EnvironmentID: environment, SuspendID: uuid.NewString()}); !errors.Is(err, ErrRouterBusy) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte("abc"))

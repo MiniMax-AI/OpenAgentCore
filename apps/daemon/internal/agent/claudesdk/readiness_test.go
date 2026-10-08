@@ -19,10 +19,9 @@ const readyReport = `{"type":"runtime_ready","protocol":3,"node":"22.22.2","sdk"
 
 func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
+	config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
-	}}
+	}}, Home: root}
 	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true,
 		Model: "fixture", MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", Required: true}}}
 	if _, err := startSingleTurn(t.Context(), config, req, "run", proto.TextInput("hello"), make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support required HTTP MCP" {
@@ -32,11 +31,10 @@ func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 
 func TestHTTPMCPRejectsOldPackagedRuntime(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
+	config := testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready", "GORACE=atexit_sleep_ms=0",
-	}}
-	info, err := CheckRuntime(t.Context(), config)
+	}}, Home: root}
+	info, err := CheckRuntime(t.Context(), config.Config)
 	if err != nil || info.SupportsHTTPMCP() {
 		t.Fatal("old runtime acquired MCP support", err)
 	}
@@ -71,20 +69,6 @@ func TestRuntimeReadiness(t *testing.T) {
 				t.Fatal("probe created execution state")
 			}
 		})
-	}
-}
-
-func TestMCPBearerRejectsAnonymousOnlyRuntimeWithoutProbeSecrets(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
-		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
-	}}
-	token := "private-fixture-token"
-	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true,
-		Model: "fixture", MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}}
-	if _, err := startSingleTurn(t.Context(), config, req, "run", proto.TextInput("hello"), make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support authenticated HTTP MCP" {
-		t.Fatalf("old runtime executed authenticated request or readiness received its secret: %v", err)
 	}
 }
 
@@ -123,11 +107,6 @@ func runReadinessHelper() {
 	case "ready":
 		_, _ = fmt.Fprintln(os.Stdout, readyReport)
 	case "ready-http-mcp":
-		for _, value := range os.Environ() {
-			if strings.HasPrefix(value, "OAC_RUNTIME_MCP_BEARER_") {
-				os.Exit(5)
-			}
-		}
 		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":3`, `"protocol":3,"features":["mcp_http_tools"]`, 1))
 	case "malformed":
 		_, _ = fmt.Fprintln(os.Stdout, "not-json")

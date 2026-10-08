@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 )
 
@@ -21,7 +20,7 @@ import (
 func registerSkills(ctx context.Context, rpc *JSONRPCClient, cwd string, skills []agentcapabilities.InstalledSkill) error {
 	roots := make([]string, 0, len(skills))
 	for _, skill := range skills {
-		roots = append(roots, localworkspace.SkillPath(skill))
+		roots = append(roots, skill.Root())
 	}
 	if _, err := rpc.Request(ctx, "skills/extraRoots/set", SkillsExtraRootsSetParams{ExtraRoots: roots}); err != nil {
 		return fmt.Errorf("codex: register skill roots: %w", err)

@@ -143,16 +143,13 @@ func TestRequiredHistoryResolution(t *testing.T) {
 }
 
 func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
-	// Recovery searches history for the Session's working directory: the private
-	// home for environment:none and the bound workspace root otherwise.
+	// Recovery searches history for the Session's working directory: the view's
+	// work directory for environment:none and the workspace root otherwise.
 	for _, environment := range []string{"none", "local"} {
 		t.Run(environment, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.RequireExistingNativeSession = true
-			cwd, err := allocCodexHome(req.StateKey)
-			if err != nil {
-				t.Fatal(err)
-			}
+			cwd := filepath.Join(root, "home", agent.ViewWorkName)
 			if environment == "local" {
 				cwd = filepath.Join(root, "workspace")
 				if err := os.Mkdir(cwd, 0o700); err != nil {
@@ -187,28 +184,6 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 			}
 			if !found {
 				t.Fatal("prepared start lost recovery requirement")
-			}
-		})
-	}
-}
-
-func TestRecoveryRequiresWritableAgentState(t *testing.T) {
-	for _, mode := range []string{"no-state", "read-only"} {
-		t.Run(mode, func(t *testing.T) {
-			req, cfg, root := preparationFixture(t)
-			req.RequireExistingNativeSession = true
-			switch mode {
-			case "no-state":
-				req.StateKey = ""
-			case "read-only":
-				req.WorkspaceReadOnly = true
-			}
-			if e, err := newExecutor(t.Context(), req, cfg); err == nil {
-				_ = e.Close(t.Context())
-				t.Fatal("invalid recovery admitted")
-			}
-			if len(preparationFrames(t, root)) != 0 {
-				t.Fatal("invalid recovery launched native process")
 			}
 		})
 	}

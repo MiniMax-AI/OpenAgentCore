@@ -3,7 +3,6 @@ package dispatch_test
 import (
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
@@ -72,30 +70,6 @@ func (p *controlledPreparation) CancellationOutcome() proto.DonePayload {
 const preparationEnvironmentID = "11111111-1111-4111-8111-111111111111"
 const preparationSessionID = "22222222-2222-4222-8222-222222222222"
 
-func preparationWorkspace(t *testing.T) *localworkspace.Binding {
-	t.Helper()
-	runtimeHome := t.TempDir()
-	if err := os.Chmod(runtimeHome, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for name, value := range map[string]string{
-		"OAC_RUNTIME_ENVIRONMENT_ID":       preparationEnvironmentID,
-		"OAC_RUNTIME_SESSION_ID":           preparationSessionID,
-		"OAC_RUNTIME_WORKSPACE":            t.TempDir(),
-		"OAC_RUNTIME_CAPABILITY_DIRECTORY": t.TempDir(),
-		"OAC_RUNTIME_HOME":                 runtimeHome,
-		"OAC_RUNTIME_NETWORK_ACCESS":       "enabled",
-		"OAC_RUNTIME_ALLOWED_DOMAINS":      "",
-	} {
-		t.Setenv(name, value)
-	}
-	binding, err := localworkspace.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return binding
-}
-
 func localPreparationHarness(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t)
@@ -103,7 +77,7 @@ func localPreparationHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	var err error
-	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: preparationWorkspace(t).Resolve})
+	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: newTestOwner(preparationEnvironmentID, preparationSessionID).Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,10 +91,17 @@ func preparationRequest() proto.ExecutionPreparePayload {
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory) *dispatch.Router {
 	t.Helper()
+	return ownedPreparationRouter(t, sender, timeout, factory, newTestOwner(preparationEnvironmentID, preparationSessionID))
+}
+
+// ownedPreparationRouter is preparationRouter with owner as the Session's
+// Environment owner.
+func ownedPreparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory, owner *testOwner) *dispatch.Router {
+	t.Helper()
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	reg.RegisterExecutor("prepared", preparationExecutorFixture(factory))
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, Environments: preparationWorkspace(t).Resolve})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, Environments: owner.Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}

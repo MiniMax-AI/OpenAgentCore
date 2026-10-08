@@ -6,7 +6,6 @@ export type HTTPServer = {
   server_url: string;
   allowed_tools: string[] | null;
   required?: boolean;
-  bearer_token_env_var?: string;
 };
 export type ToolIdentity = { server: string; name: string };
 
@@ -20,10 +19,9 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw new Error("invalid_request");
   const labels = new Set<string>();
-  const references = new Set<string>();
   for (const server of value) {
     if (!server || typeof server !== "object" ||
-        Object.keys(server).some(key => !["server_label", "server_url", "allowed_tools", "bearer_token_env_var", "required"].includes(key)) ||
+        Object.keys(server).some(key => !["server_label", "server_url", "allowed_tools", "required"].includes(key)) ||
         (server.required !== undefined && typeof server.required !== "boolean") ||
         typeof server.server_label !== "string" || !server.server_label || labels.has(server.server_label) ||
         typeof server.server_url !== "string" ||
@@ -34,12 +32,6 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
     const url = new URL(server.server_url);
     if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password ||
         server.server_url.includes("?") || server.server_url.includes("#")) throw new Error("invalid_request");
-    if (server.bearer_token_env_var !== undefined) {
-      const reference = server.bearer_token_env_var;
-      if (url.protocol !== "https:" || typeof reference !== "string" ||
-          !/^OAC_RUNTIME_MCP_BEARER_[A-Z2-7]{26,}$/.test(reference) || references.has(reference)) throw new Error("invalid_request");
-      references.add(reference);
-    }
     labels.add(server.server_label);
   }
   return value;
@@ -79,14 +71,12 @@ export class MCPProfile {
     for (const server of declarations) {
       const prefix = `mcp__${server.server_label}__`;
       if ("command" in server) {
-        this.servers[server.server_label] = { type: "stdio", command: server.command, args: [...(server.args ?? [])], env: {}, alwaysLoad: true };
+        this.servers[server.server_label] = { type: "stdio", command: server.command, args: [], env: {}, alwaysLoad: true };
       } else {
-        const reference = server.bearer_token_env_var;
-        if (reference && !process.env[reference]) throw new Error("missing MCP credential environment");
-        // An explicit empty Authorization suppresses native OAuth and automatic auth.
-        // Keep bearer references literal: SDK server configuration enters native argv.
+        // An explicit empty Authorization suppresses native OAuth and automatic
+        // auth; the Session's gateway adds any credential.
         this.servers[server.server_label] = { type: "http", url: server.server_url, alwaysLoad: true,
-          headers: { Authorization: reference ? `Bearer \${${reference}}` : "" } };
+          headers: { Authorization: "" } };
       }
       if (server.allowed_tools === null) this.allowed.push(prefix + "*");
       else if (!server.allowed_tools.length) this.denied.push(prefix + "*");
@@ -143,10 +133,6 @@ export class MCPProfile {
   }
 
   permits(name: string): boolean { return this.admitted && this.identities.has(name); }
-
-  credentialReferences(): string[] {
-    return this.declarations.flatMap(server => "bearer_token_env_var" in server && server.bearer_token_env_var ? [server.bearer_token_env_var] : []);
-  }
 
   close(): void { this.admitted = false; this.release(false); }
 }

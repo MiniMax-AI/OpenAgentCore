@@ -145,4 +145,4 @@ These are best-effort Core receipt times after the terminal commit, not provider
 
 ## Acceptance
 
-`TestNativeModelProtocolPublicExecution` (`services/core/tests/integration/model_protocol_native_test.go`) with `services/core/tests/official_model_protocol_native.py` runs each Harness against real provider APIs through the pinned official client. It runs when `OAC_TEST_OFFICIAL_SDK_PYTHON`, `OAC_TEST_NATIVE_DAEMON_BIN`, `OAC_TEST_NATIVE_PROOF_DIR` and `OAC_TEST_MODEL_PROTOCOL_OPTIONS` are set; the last names a private model settings file. Never commit those settings or print their values.
+Qualify each protocol declared by a Harness through the pinned official client, Core, the agent host and a real provider API. Cover initial execution, warm continuation, function results, cancellation and history continuity after restart. Record exact revisions, native versions and commands; adapter or view tests alone do not qualify public API protocol acceptance. Keep model settings in private operator files and never commit or print them.

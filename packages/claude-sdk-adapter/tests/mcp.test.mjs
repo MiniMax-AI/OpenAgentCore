@@ -30,7 +30,10 @@ test("invalid remote declarations fail at the bridge boundary", () => {
   for (const value of [null, {}, [{ ...declaration(null), server_label: "" }],
     [{ ...declaration(null), server_url: "https://user:secret@example.invalid/mcp" }],
     [{ ...declaration(null), server_url: "https://example.invalid/mcp?" }],
-    [{ ...declaration(null), required: "true" }], [{ ...declaration(null), required: null }], [declaration(null), declaration([])]]) {
+    [{ ...declaration(null), required: "true" }], [{ ...declaration(null), required: null }], [declaration(null), declaration([])],
+    // The Session's gateway adds credentials; none crosses the bridge.
+    [{ ...declaration(null), bearer_token: "secret" }], [{ ...declaration(null), headers: { Authorization: "Bearer secret" } }],
+    [{ ...declaration(null), bearer_token_env_var: "OAC_RUNTIME_MCP_BEARER_" + "A".repeat(26) }]]) {
     assert.throws(() => parseStart(JSON.stringify({ ...start, mcp_http_servers: value })));
   }
   assert.deepEqual(parseStart(JSON.stringify({ ...start, mcp_http_servers: [declaration(null), { ...declaration([]), server_label: "empty" }] })).mcp_http_servers,

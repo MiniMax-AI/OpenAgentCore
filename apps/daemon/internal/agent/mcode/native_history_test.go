@@ -13,10 +13,11 @@ import (
 // Neither that history nor a missing ID may prepare an Executor, so no Turn can
 // run against it or silently replace it with a new session.
 func TestNativeMCodeHistoryIsolation(t *testing.T) {
-	binary, options, foreign := os.Getenv("OAC_RUNTIME_MCODE_BIN"), os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS"), os.Getenv("OAC_TEST_MCODE_FOREIGN_NATIVE_ID")
-	if binary == "" || options == "" || foreign == "" {
-		t.Skip("native executable, private provider options and foreign history ID required")
+	options, foreign := os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS"), os.Getenv("OAC_TEST_MCODE_FOREIGN_NATIVE_ID")
+	if options == "" || foreign == "" {
+		t.Skip("private provider options and foreign history ID required")
 	}
+	install := installedView(t)
 	raw, err := os.ReadFile(options)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +31,7 @@ func TestNativeMCodeHistoryIsolation(t *testing.T) {
 			req.AgentSessionID = id
 			ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
 			defer cancel()
-			e, err := prepareExecutor(t, ctx, req)
+			e, err := prepareExecutor(t, ctx, install, req)
 			if e != nil || err == nil || !strings.Contains(err.Error(), "session/load:") || strings.Contains(err.Error(), "deadline exceeded") {
 				t.Fatal("native history was not explicitly rejected")
 			}

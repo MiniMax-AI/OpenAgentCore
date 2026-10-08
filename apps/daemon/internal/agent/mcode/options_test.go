@@ -12,26 +12,24 @@ import (
 
 func TestOptionsRefreshManagedState(t *testing.T) {
 	t.Setenv("MINIMAX_DATA_DIR", "/wrong")
+	install, session := fakeInstall("node"), hostSession(t)
 	req := testRequest(t)
-	opts, err := prepareOptions(prepared(t, req))
+	opts, err := install.prepare(prepared(t, req), session)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(opts.Dir, os.Getenv("OAC_RUNTIME_HOME")+string(os.PathSeparator)) {
-		t.Fatalf("workdir escaped managed state: %s", opts.Dir)
-	}
-	dataDir := ""
+	var dataDirs []string
 	for _, entry := range opts.Env {
 		if value, ok := strings.CutPrefix(entry, "MINIMAX_DATA_DIR="); ok {
-			dataDir = value
+			dataDirs = append(dataDirs, value)
 		}
 	}
-	if dataDir != opts.DataDir {
+	if len(dataDirs) != 1 || dataDirs[0] != opts.DataDir {
 		t.Fatal("native data directory is not the adapter's")
 	}
 	req.SystemPrompt = ""
 	req.AgentSessionID = "native-1"
-	refreshed, err := prepareOptions(prepared(t, req))
+	refreshed, err := install.prepare(prepared(t, req), session)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,23 +71,9 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := testRequest(t)
 			tt.edit(&req)
-			if _, err := prepareOptions(prepared(t, req)); err == nil {
+			if _, err := fakeInstall("node").prepare(prepared(t, req), hostSession(t)); err == nil {
 				t.Fatal("expected validation failure")
 			}
 		})
-	}
-}
-
-func TestDataDirectoryRequiresAgentState(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", home)
-	for _, key := range []string{"", " ", "../.."} {
-		if _, err := dataDirectory(key); err == nil {
-			t.Fatalf("state key %q accepted", key)
-		}
-	}
-	got, err := dataDirectory("../session-1/a b")
-	if want := filepath.Join(home, "runtime", "mcode", "state", "session-1", "a_b"); err != nil || got != want {
-		t.Fatalf("data directory = %q, %v; want %q", got, err, want)
 	}
 }

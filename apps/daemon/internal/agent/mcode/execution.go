@@ -2,7 +2,6 @@ package mcode
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -25,9 +24,6 @@ func configureTextExecution(config map[string]any) {
 	config["askUser"] = map[string]bool{"enabled": false}
 	config["beta"] = map[string]bool{"browserUseTooling": false, "mcodeTools": false, "threadGoal": false}
 }
-
-// Harness children use the daemon user's ordinary environment.
-func executionEnvironment() []string { return os.Environ() }
 
 // ACP commands are only recognized for a single text block. A second, empty
 // block keeps public input as user text.

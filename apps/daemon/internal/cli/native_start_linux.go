@@ -72,7 +72,7 @@ func runSandboxLauncher(parent context.Context, rc *runContext, background bool,
 		return err
 	}
 	if background && !daemonize.IsBackgroundChild() {
-		return spawnBackground(parent, rc, paths.DefaultProfile, os.Args)
+		return spawnBackground(parent, rc, os.Args)
 	}
 	dir := filepath.Join(root, "daemon")
 	held, err := os.OpenRoot(dir)
@@ -148,4 +148,68 @@ func runSandboxIO(ctx context.Context, rc *runContext, held *os.Root, program, b
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = sandboxStopGrace
 	return cmd.Run()
+}
+
+// spawnBackground forks the daemon into the background. Parent
+// returns after printing the child PID; child re-enters runStart
+// with BackgroundSentinelEnv set so the same launcher runs in either
+// mode.
+func spawnBackground(ctx context.Context, rc *runContext, argv []string) error {
+	logPath, err := paths.LogFile()
+	if err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	pidPath, err := paths.PIDFile()
+	if err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	// Serialize the live-process check and publication across concurrent starts.
+	if err := runtimefs.EnsurePrivateDir(filepath.Dir(pidPath)); err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(filepath.Dir(pidPath))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	unlock, err := runtimefs.LockDirectory(root)
+	if err != nil {
+		return errors.New("start: startup is busy; wait and retry")
+	}
+	defer unlock()
+	// Refuse to start a second background daemon.
+	if pid, err := daemonize.ReadPIDFile(pidPath); err == nil {
+		return fmt.Errorf("start: background daemon already running (pid=%d); run `oac-daemon stop` first", pid)
+	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, daemonize.ErrStaleOrCorrupt) {
+		return fmt.Errorf("start: check pidfile: %w", err)
+	}
+	// Stale pidfile → remove so Spawn starts clean.
+	_ = daemonize.RemovePIDFile(pidPath)
+
+	if err := daemonize.EnsureLogFile(logPath); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	pid, err := daemonize.Spawn(argv, daemonize.ReExecOptions{
+		LogPath: logPath,
+		PIDPath: pidPath,
+	})
+	if err != nil {
+		return fmt.Errorf("start: spawn background: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		if stopErr := daemonize.StopPIDFile(pidPath, stopTimeout); stopErr != nil {
+			return fmt.Errorf("start: interrupted startup cleanup: %w", stopErr)
+		}
+		return err
+	}
+	fmt.Fprintf(rc.stdout, "oac-daemon: backgrounded (pid=%d)\n", pid)
+	fmt.Fprintf(rc.stdout, "  logs : %s\n", logPath)
+	fmt.Fprintf(rc.stdout, "  pid  : %s\n", pidPath)
+	fmt.Fprintln(rc.stdout, "  stop : oac-daemon stop")
+	return nil
 }

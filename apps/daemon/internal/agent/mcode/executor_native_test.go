@@ -15,13 +15,14 @@ import (
 // This opt-in test makes real model calls and uses an isolated native home.
 // Provider options are read from a private file and never included in failures.
 func TestNativeMCodeExecutorReuse(t *testing.T) {
-	binary, options := os.Getenv("OAC_RUNTIME_MCODE_BIN"), os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS")
-	if binary == "" || options == "" {
-		t.Skip("native executable and private provider options required")
+	options := os.Getenv("OAC_TEST_MCODE_REAL_OPTIONS")
+	if options == "" {
+		t.Skip("private provider options required")
 	}
+	install, session := installedView(t), hostSession(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Minute)
 	defer cancel()
-	if version, err := CheckCLIAvailable(ctx, binary); err != nil || version != SupportedVersion {
+	if version, err := CheckCLIAvailable(ctx, install.cli); err != nil || version != SupportedVersion {
 		t.Fatal("pinned native version verification failed")
 	}
 	raw, err := os.ReadFile(options)
@@ -32,7 +33,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 	if json.Unmarshal(raw, &req) != nil {
 		t.Fatal("invalid private provider options")
 	}
-	value, err := NewExecutorFactory(nil)(ctx, prepared(t, req))
+	value, err := install.executor(ctx, prepared(t, req), session)
 	if err != nil {
 		t.Fatal("native Executor preparation failed")
 	}
@@ -155,7 +156,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 		}
 		cleanupStop()
 		req.AgentSessionID = nativeID
-		recovered, recoverErr := NewExecutorFactory(nil)(ctx, prepared(t, req))
+		recovered, recoverErr := install.executor(ctx, prepared(t, req), session)
 		if recoverErr != nil || recovered == nil {
 			t.Fatal("exact native history recovery failed")
 		}

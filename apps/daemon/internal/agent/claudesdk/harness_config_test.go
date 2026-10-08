@@ -2,18 +2,14 @@ package claudesdk
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestHarnessConfigReachesBridge(t *testing.T) {
-	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
-	config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"effort":"high","thinking":{"type":"enabled","budgetTokens":1024}}`)}
-	start, _, err := prepareConfiguration(config, prepared(t, req))
+	start, _, err := prepareOptions(prepared(t, req))
 	if err != nil {
 		t.Fatal(err)
 	}

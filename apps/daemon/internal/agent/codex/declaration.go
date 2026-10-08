@@ -34,7 +34,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	recovery := proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	caps.NativeSessionRecovery, caps.LocalEnvironment, caps.MCPHTTPRequired = recovery, recovery, recovery
 	caps.TextVerbosity = proto.CapabilityFromBool(SupportsTextVerbosity)
-	runtime.Executor = NewExecutorFactory()
 	runtime.View = discoverView(version)
 	fmt.Fprintf(options.Stdout, "Codex preflight ok (%s)\n", version)
 	return runtime

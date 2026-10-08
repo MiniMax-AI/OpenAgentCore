@@ -30,7 +30,6 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 | Nodes and daemons–Core (`/api/v1` HTTP routes; the node and daemon wire protocols are separate rows) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](contracts/agents-api/machine-api.md) |
 | Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
-| Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Runtime and Sandbox I/O service–relay (Link) | `internal/sandboxlink/protocol.go` | [Sandbox link protocol](docs/sandbox-link-protocol.md) |
 | Provider–Sandbox I/O startup | `internal/sandboxbootstrap/bootstrap.go` | [Sandbox bootstrap](docs/sandbox-bootstrap.md) |
 | Runtime–file service | `internal/sandboxfs/protocol.go` | [File access protocol](docs/file-access-protocol.md) |

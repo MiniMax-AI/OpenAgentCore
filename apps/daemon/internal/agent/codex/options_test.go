@@ -8,10 +8,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
-	plan, err := BuildSessionPlan(prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
+func TestSessionPlan_DefaultsToBypass(t *testing.T) {
+	plan, err := testPlan(t, prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
-		t.Fatalf("BuildSessionPlan: %v", err)
+		t.Fatal(err)
 	}
 	if !slices.Contains(plan.ExtraConfig, [2]string{"tools.experimental_request_user_input.enabled", "false"}) {
 		t.Fatalf("default plan must disable the native ask-the-user tool, got %+v", plan.ExtraConfig)
@@ -22,10 +22,10 @@ func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
 	plan.Cleanup()
 }
 
-func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
-	plan, err := BuildSessionPlan(prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
+func TestSessionPlan_SetsCodexHomeAndEnv(t *testing.T) {
+	plan, err := testPlan(t, prepared(t, "conv-1/agent-1/codex", proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
 	if err != nil {
-		t.Fatalf("BuildSessionPlan: %v", err)
+		t.Fatal(err)
 	}
 	defer plan.Cleanup()
 	hasCodexHome := false
@@ -46,33 +46,8 @@ func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
 	}
 }
 
-func TestBuildSessionPlan_StableCodexHomeByStateKey(t *testing.T) {
-	stateKey := "conv-stable/agent-stable/codex"
-	planA, err := BuildSessionPlan(prepared(t, stateKey, proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
-	if err != nil {
-		t.Fatalf("BuildSessionPlan A: %v", err)
-	}
-	planB, err := BuildSessionPlan(prepared(t, stateKey, proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider()}))
-	if err != nil {
-		t.Fatalf("BuildSessionPlan B: %v", err)
-	}
-	if codexHomeFromEnv(planA.Env) == "" || codexHomeFromEnv(planA.Env) != codexHomeFromEnv(planB.Env) {
-		t.Fatalf("CODEX_HOME must be stable by state key: A=%q B=%q", codexHomeFromEnv(planA.Env), codexHomeFromEnv(planB.Env))
-	}
-}
-
-func codexHomeFromEnv(env []string) string {
-	for _, kv := range env {
-		if strings.HasPrefix(kv, "CODEX_HOME=") {
-			return strings.TrimPrefix(kv, "CODEX_HOME=")
-		}
-	}
-	return ""
-}
-
-func TestBuildSessionPlan_CarriesModelAndSystemPrompt(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(prepared(t, "conv/agent/codex", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "MiniMax-M3", SystemPrompt: "current reference"}))
+func TestSessionPlan_CarriesModelAndSystemPrompt(t *testing.T) {
+	plan, err := testPlan(t, prepared(t, "conv/agent/codex", proto.PromptRequestPayload{ModelProvider: fixtureProvider(), Model: "MiniMax-M3", SystemPrompt: "current reference"}))
 	if err != nil {
 		t.Fatal(err)
 	}

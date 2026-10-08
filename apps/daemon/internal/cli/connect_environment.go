@@ -9,22 +9,16 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
+	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"github.com/google/uuid"
 )
 
-type environmentEnrollment struct {
-	DeviceID           string `json:"device_id"`
-	SessionID          string `json:"session_id"`
-	EnvironmentID      string `json:"environment_id"`
-	WorkspaceDirectory string `json:"workspace_directory"`
-}
+// bootstrapTimeout bounds each enrollment request.
+const bootstrapTimeout = 10 * time.Second
 
 func environmentClient() *http.Client {
 	return &http.Client{Timeout: bootstrapTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -71,6 +65,10 @@ func executorCredential(path, environment string) (string, string, error) {
 	return key.KeyID, key.Token, nil
 }
 
+func readEnvironmentPrivateFile(path string) ([]byte, error) {
+	return runtimefs.ReadPrivatePath(path, 16*1024)
+}
+
 func decodeEnvironmentJSON(raw []byte, value any) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -81,18 +79,6 @@ func decodeEnvironmentJSON(raw []byte, value any) error {
 		return errors.New("trailing JSON")
 	}
 	return nil
-}
-
-func enrollEnvironment(ctx context.Context, client *http.Client, base, environment, credential string) (environmentEnrollment, error) {
-	var out environmentEnrollment
-	raw, err := requestEnrollment(ctx, client, base, environment, credential)
-	if err != nil {
-		return out, err
-	}
-	if decodeEnvironmentJSON(raw, &out) != nil || !environmentUUID(out.DeviceID) || !environmentUUID(out.SessionID) || out.EnvironmentID != environment || out.WorkspaceDirectory == "/" || agentcapabilities.ValidateLocalDirectories([]string{out.WorkspaceDirectory}) != nil {
-		return environmentEnrollment{}, errors.New("connect: invalid Environment enrollment response")
-	}
-	return out, nil
 }
 
 // requestEnrollment returns the body of a successful enrollment; each caller
@@ -126,82 +112,21 @@ func requestEnrollment(ctx context.Context, client *http.Client, base, environme
 	return raw, nil
 }
 
-func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string) (*transport.BootstrapResponse, error) {
-	boot, err := transport.BootstrapWithClient(ctx, environmentClient(), prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
-	if err != nil {
-		return nil, errors.New("connect: Environment bootstrap failed")
-	}
-	if boot.DeviceID != prof.RuntimeID || boot.WSURL != remote {
-		return nil, errors.New("connect: Environment bootstrap changed the bound device or remote_url")
-	}
-	return boot, nil
-}
-
-func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background bool, remote, environment, credentialFile string) error {
-	base, err := environmentBase(remote)
-	if err != nil {
-		return err
-	}
-	if !environmentUUID(environment) {
-		return errors.New("connect: canonical Environment ID required")
-	}
-	if err = checkEnvironmentTarget(remote, environment); err != nil {
-		return err
-	}
-	keyID, credential, err := executorCredential(credentialFile, environment)
-	if err != nil {
-		return err
-	}
-	// The -b parent reports a rejection to its terminal; the process that owns
-	// the connection parks instead.
-	parks := !background || daemonize.IsBackgroundChild()
-	rejected := func(err error) error {
-		if message := environmentRejection(err, keyID, environment); parks && message != "" {
-			return parkEnvironment(parent, rc.stderr, message)
-		}
-		return err
-	}
-	ctx, cancel := context.WithTimeout(parent, bootstrapTimeout)
-	defer cancel()
-	bound, err := enrollEnvironment(ctx, environmentClient(), base, environment, credential)
-	if err != nil {
-		return rejected(err)
-	}
-	if err = parent.Err(); err != nil {
-		return err
-	}
-	if err = bindEnvironmentRuntime(remote, bound, credentialFile); err != nil {
-		return err
-	}
-	if background && !daemonize.IsBackgroundChild() {
-		return spawnBackground(parent, rc, profile, os.Args)
-	}
-	// Discovery consumes the immutable Runtime binding; it must follow enrollment.
-	discovery, err := preflightAgentCLIs(parent, rc, profile)
-	if err != nil {
-		return err
-	}
-	prof := auth.Profile{ServerURL: base, RuntimeID: bound.DeviceID, RunnerCredential: credential}
-	return rejected(mainLoopRemote(parent, rc, profile, prof, discovery, remote))
-}
-
 var (
 	errEnvironmentCredentialRejected = errors.New("connect: Environment enrollment rejected (HTTP 401)")
 	errEnvironmentBindingConflict    = errors.New("connect: Environment enrollment rejected (HTTP 409)")
 )
 
-// environmentRejection names the fix for a permanent Environment rejection:
-// enrollment 401 or 409, or a permanent WebSocket rejection or close. It returns
-// "" for anything else (transport failures, 5xx, 404), which keeps the ordinary
-// failure exit so the Runtime's restart policy retries it.
+// environmentRejection names the fix for a permanent enrollment rejection,
+// 401 or 409. It returns "" for anything else (transport failures, 5xx, 404),
+// which keeps the ordinary failure exit so the Runtime's restart policy
+// retries it.
 func environmentRejection(err error, keyID, environment string) string {
 	reconnect, remove := "install it for this Runtime and restart it", "stop this Runtime"
 	switch {
 	case errors.Is(err, errEnvironmentBindingConflict):
 		return fmt.Sprintf("executor credential %s cannot connect: Environment %s is bound to a different executor credential. This Runtime will not retry. Rotate the credential first used for this Environment instead of issuing a new one, then %s. To remove this Runtime instead, %s.", keyID, environment, reconnect, remove)
-	case errors.Is(err, transport.ErrIncompatibleVersion):
-		return fmt.Sprintf("Core refused this Runtime's daemon version for Environment %s; the Runtime comes from a different Core distribution. This Runtime will not retry; %s.", environment, remove)
-	case errors.Is(err, errEnvironmentCredentialRejected), errors.Is(err, transport.ErrPermanent):
+	case errors.Is(err, errEnvironmentCredentialRejected):
 		return fmt.Sprintf("executor credential %s for Environment %s was rejected by Core (revoked, rotated, or its Session was deleted). This Runtime will not retry. To reconnect it, rotate this credential in Web (Session > Executor credentials > Rotate), then %s. To remove it instead, %s.", keyID, environment, reconnect, remove)
 	}
 	return ""

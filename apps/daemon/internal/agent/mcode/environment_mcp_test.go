@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
+// environmentMCPFixture is an installed stdio MCP server.
 func environmentMCPFixture() agent.EnvironmentMCP {
 	return agent.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/fixture", Server: agentplugin.MCPServer{
 		Name: "proof.server", Type: "stdio", Command: "never-exec-before-sandbox", Args: []string{"private-argument"},
@@ -22,97 +23,87 @@ func environmentMCPFixture() agent.EnvironmentMCP {
 	}}
 }
 
-func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
+// stdioBinding and httpBinding are MCP bindings as the agent host hands them
+// to the view: a stdio server under its alias and an HTTP server at the
+// Session gateway's endpoint.
+func stdioBinding() agent.MCPBinding {
+	return agent.MCPBinding{ServerLabel: "proof.server", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio",
+		Stdio: &agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "proof.server", Type: "stdio", Command: agent.ViewAlias(0)}}}
+}
+
+func httpBinding() agent.MCPBinding {
+	return agent.MCPBinding{ServerLabel: "remote", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "http", ServerURL: "http://127.0.0.1:4102/mcp/remote"}
+}
+
+// sessionParams returns the MCP servers and working directory that the ACP
+// Session of the CLI recording into record received.
+func sessionParams(t *testing.T, record string) (string, []map[string]any) {
+	t.Helper()
+	raw, err := os.ReadFile(record + ".session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var params struct {
+		SessionID string           `json:"sessionId"`
+		Cwd       string           `json:"cwd"`
+		MCP       []map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(raw, &params); err != nil {
+		t.Fatal(err)
+	}
+	return params.Cwd, params.MCP
+}
+
+func TestEnvironmentMCPRunsAliasInWorkspaceForNewAndLoadedSessions(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "load"}[resume], func(t *testing.T) {
-			c, req, record := workspaceFixture(t)
-			req.MCP = []agent.EnvironmentMCP{environmentMCPFixture()}
+			req := workspaceRequest(t)
 			if resume {
 				req.AgentSessionID = "native-1"
 			}
-			t.Setenv("USER_SELECTED", "must-not-resolve-from-daemon")
-			t.Setenv("MODEL_SECRET", "must-not-forward")
-			resource, err := NewExecutorFactory(&c)(t.Context(), req)
-			if err != nil {
+			record := filepath.Join(t.TempDir(), "calls")
+			if _, err := hostExecutor(t, t.Context(), helperInstall(t, "prepared", record), req, hostSession(t, stdioBinding())); err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = resource.Close(context.Background()) })
-			raw, err := os.ReadFile(record + ".session")
-			if err != nil {
-				t.Fatal(err)
-			}
-			var params struct {
-				SessionID string `json:"sessionId"`
-				Cwd       string `json:"cwd"`
-				MCP       []struct {
-					Name, Command string
-					Args          []string
-					Env           []map[string]string
-				} `json:"mcpServers"`
-			}
-			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 || params.MCP[0].Name != "oac_workspace" {
-				t.Fatal("environment MCP displaced workspace tools")
-			}
-			cwd, err := os.ReadFile(record + ".cwd")
+			cwd, servers := sessionParams(t, record)
+			process, err := os.ReadFile(record + ".cwd")
 			workspace, pathErr := filepath.EvalSymlinks(req.WorkspaceRoot)
-			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.WorkspaceRoot {
-				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", cwd, params.Cwd)
+			if err != nil || pathErr != nil || string(process) != workspace || cwd != req.WorkspaceRoot {
+				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", process, cwd)
 			}
-			server := params.MCP[1]
-			executable, _ := os.Executable()
-			if server.Name != "proof.server" || server.Command != executable || server.Env == nil || len(server.Env) != 0 ||
-				!reflect.DeepEqual(server.Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/fixture", "proof.server"}) {
-				t.Fatal("ACP declaration bypassed the shared Runtime launcher")
+			if len(servers) != 2 || servers[0]["name"] != "oac_workspace" {
+				t.Fatalf("environment MCP displaced workspace tools: %v", servers)
 			}
-			if (params.SessionID != "") != resume || strings.Contains(string(raw), "must-not") || strings.Contains(string(raw), "private-argument") {
-				t.Fatal("native attachment changed identity or exposed private inputs")
+			if server := servers[1]; server["name"] != "proof.server" || server["command"] != agent.ViewAlias(0) || !reflect.DeepEqual(server["args"], []any{}) || !reflect.DeepEqual(server["env"], []any{}) {
+				t.Fatalf("stdio MCP = %v", server)
+			}
+			calls, _ := os.ReadFile(record)
+			if strings.Contains(string(calls), "session/load") != resume {
+				t.Fatalf("native attachment changed identity: %s", calls)
 			}
 		})
 	}
 }
 
-func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T) {
-	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "restricted", "disabled", "duplicate"} {
+func TestEnvironmentHTTPMCPRejectsCredentialsBeforePreparation(t *testing.T) {
+	for _, name := range []string{"headers", "bearer"} {
 		t.Run(name, func(t *testing.T) {
-			c, req, _ := workspaceFixture(t)
-			req.MCP = []agent.EnvironmentMCP{environmentMCPFixture()}
-			switch name {
-			case "http-headers", "http-bearer-insecure", "http-bearer-missing":
-				req.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
-				if name == "http-headers" {
-					req.MCP[0].Server.HTTPHeaders = map[string]string{"X-Private": "secret"}
-				}
-				if name == "http-bearer-missing" {
-					req.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
-				}
-				if name == "http-bearer-insecure" {
-					req.MCP[0].Server.URL = "http://example.invalid/mcp"
-					token := "confidential-http-token"
-					req.MCP[0].BearerToken = &token
-				}
-			case "restricted", "disabled":
-				c.Network = name
-			case "duplicate":
-				req.MCP = append(req.MCP, environmentMCPFixture())
+			binding := httpBinding()
+			if name == "headers" {
+				binding.HTTPHeaders = map[string]string{"X-Private": "secret"}
+			} else {
+				token := "confidential-http-token"
+				binding.BearerToken = &token
 			}
-			if _, err := prepareWorkspaceOptions(c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
-				t.Fatal("unqualified declaration accepted or credential exposed")
+			if _, err := fakeInstall("node").prepare(workspaceRequest(t), hostSession(t, binding)); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
+				t.Fatal("credential accepted or exposed")
 			}
 		})
 	}
 }
 
 func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
-	c, req, _ := workspaceFixture(t)
-	req.MCP = []agent.EnvironmentMCP{environmentMCPFixture()}
-	script, err := os.ReadFile(c.Binary)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(c.Binary, []byte(strings.Replace(string(script), "HELPER=prepared", "HELPER=prepared-mcp-cancel", 1)), 0700); err != nil {
-		t.Fatal(err)
-	}
-	resource, err := NewExecutorFactory(&c)(t.Context(), req)
+	resource, err := hostExecutor(t, t.Context(), helperInstall(t, "prepared-mcp-cancel", ""), workspaceRequest(t), hostSession(t, stdioBinding()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +114,6 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = resource.Close(context.Background()) })
 	select {
 	case event := <-out:
 		var call proto.ToolCallPayload
@@ -176,86 +166,25 @@ func mcpRegistryEntry(server, segment, tool, toolSegment string) map[string]any 
 }
 
 func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
-	for _, authenticated := range []bool{false, true} {
-		c, req, record := workspaceFixture(t)
-		item := agent.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
-		const token = "private-mcp-canary"
-		if authenticated {
-			value := token
-			item.BearerToken = &value
-		}
-		req.MCP = []agent.EnvironmentMCP{item}
-		resource, err := NewExecutorFactory(&c)(t.Context(), req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = resource.Close(context.Background()) })
-		raw, err := os.ReadFile(record + ".session")
-		if err != nil {
-			t.Fatal(err)
-		}
-		var params struct {
-			MCP []struct {
-				Name, Type, URL string
-				Headers         []map[string]string
-			} `json:"mcpServers"`
-		}
-		if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 {
-			t.Fatal("HTTP MCP displaced workspace tools")
-		}
-		server := params.MCP[1]
-		if server.Name != "remote" || server.Type != "http" || server.URL != item.Server.URL || server.Headers == nil {
-			t.Fatal("invalid native HTTP projection")
-		}
-		if authenticated {
-			if !reflect.DeepEqual(server.Headers, []map[string]string{{"name": "Authorization", "value": "Bearer " + token}}) {
-				t.Fatal("credential missing from ACP transport")
-			}
-		} else if len(server.Headers) != 0 {
-			t.Fatal("anonymous MCP inherited credentials")
-		}
-		dataDir := resource.(*executor).opts.DataDir
-		for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
-			body, err := os.ReadFile(filepath.Join(dataDir, name))
-			if err != nil && !os.IsNotExist(err) {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(body), token) {
-				t.Fatal("MCP credential persisted in native configuration")
-			}
-		}
-	}
-}
-
-func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
-	c, req, _ := workspaceFixture(t)
-	token := "selected-public-vault-canary"
-	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
-	opts, err := prepareWorkspaceOptions(c, req)
+	record := filepath.Join(t.TempDir(), "calls")
+	e, err := hostExecutor(t, t.Context(), helperInstall(t, "prepared", record), workspaceRequest(t), hostSession(t, httpBinding()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(opts.MCP)
-	if err != nil || !strings.Contains(string(raw), "Bearer "+token) {
-		t.Fatal("selected token not supplied to native ACP")
+	_, servers := sessionParams(t, record)
+	if len(servers) != 2 || servers[0]["name"] != "oac_workspace" {
+		t.Fatalf("HTTP MCP displaced workspace tools: %v", servers)
 	}
-	err = filepath.WalkDir(opts.DataDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	if server := servers[1]; server["name"] != "remote" || server["type"] != "http" || server["url"] != httpBinding().ServerURL || !reflect.DeepEqual(server["headers"], []any{}) {
+		t.Fatalf("invalid native HTTP projection: %v", server)
+	}
+	for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
+		body, err := os.ReadFile(filepath.Join(e.opts.DataDir, name))
+		if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
 		}
-		if d.IsDir() {
-			return nil
+		if strings.Contains(string(body), httpBinding().ServerURL) {
+			t.Fatalf("%s persists the Session's HTTP MCP", name)
 		}
-		value, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if strings.Contains(string(value), token) {
-			t.Fatal("public credential persisted in native state")
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 }

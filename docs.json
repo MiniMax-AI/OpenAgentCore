@@ -36,7 +36,6 @@
           "docs/concepts",
           "docs/architecture",
           "docs/runtime-protocol",
-          "docs/runtime-bootstrap",
           "docs/sandbox-provider",
           "docs/sandbox-bootstrap",
           "docs/sandbox-link-protocol",

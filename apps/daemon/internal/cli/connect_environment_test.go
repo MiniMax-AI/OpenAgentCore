@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/google/uuid"
 )
 
@@ -29,52 +28,6 @@ func TestEnvironmentConnectionURL(t *testing.T) {
 	}
 }
 
-func TestEnvironmentEnrollmentAndBootstrap(t *testing.T) {
-	environment := uuid.NewString()
-	want := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/workspace"}
-	var remote string
-	var enrolls, bootstraps int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer private-canary" {
-			t.Error("wrong authorization")
-		}
-		if r.Method != http.MethodPost {
-			t.Error("wrong method")
-		}
-		var body map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Error(err)
-		}
-		switch r.URL.Path {
-		case "/api/v1/agent-daemon/enroll":
-			enrolls++
-			if len(body) != 1 || body["environment_id"] != environment {
-				t.Error("wrong enrollment body")
-			}
-			_ = json.NewEncoder(w).Encode(want)
-		case "/api/v1/agent-daemon/bootstrap":
-			bootstraps++
-			if len(body) != 1 || body["device_id"] != want.DeviceID {
-				t.Error("wrong bootstrap body")
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"device_id": want.DeviceID, "ws_url": remote, "heartbeat_seconds": 15})
-		default:
-			t.Error("unexpected endpoint")
-		}
-	}))
-	defer server.Close()
-	remote = "ws" + strings.TrimPrefix(server.URL, "http") + "/api/v1/agent-daemon/ws"
-	base, _ := environmentBase(remote)
-	got, err := enrollEnvironment(context.Background(), environmentClient(), base, environment, "private-canary")
-	if err != nil || got != want {
-		t.Fatalf("enrollment: %v", err)
-	}
-	boot, err := environmentBootstrap(context.Background(), auth.Profile{ServerURL: base, RuntimeID: want.DeviceID, RunnerCredential: "private-canary"}, remote)
-	if err != nil || boot.WSURL != remote || enrolls != 1 || bootstraps != 1 {
-		t.Fatalf("bootstrap: %v", err)
-	}
-}
-
 func TestEnvironmentTransportRejectsRedirectAndUntrustedBodies(t *testing.T) {
 	var leaked bool
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { leaked = true }))
@@ -87,30 +40,14 @@ func TestEnvironmentTransportRejectsRedirectAndUntrustedBodies(t *testing.T) {
 				_, _ = w.Write([]byte("private-response-canary"))
 			}))
 			defer server.Close()
-			_, err := enrollEnvironment(context.Background(), environmentClient(), server.URL, uuid.NewString(), "private-canary")
+			_, err := requestEnrollment(context.Background(), environmentClient(), server.URL, uuid.NewString(), "private-canary")
 			if err == nil || strings.Contains(err.Error(), "canary") {
 				t.Fatal("enrollment error exposed body or accepted failure")
-			}
-			_, err = environmentBootstrap(context.Background(), auth.Profile{ServerURL: server.URL, RuntimeID: uuid.NewString(), RunnerCredential: "private-canary"}, "unused")
-			if err == nil || strings.Contains(err.Error(), "canary") {
-				t.Fatal("bootstrap error exposed body or accepted failure")
 			}
 		})
 	}
 	if leaked {
 		t.Fatal("credential redirected")
-	}
-}
-
-func TestEnvironmentBootstrapCannotChangeConnection(t *testing.T) {
-	device := uuid.NewString()
-	for _, response := range []map[string]string{{"device_id": uuid.NewString(), "ws_url": "wss://core/api/v1/agent-daemon/ws"}, {"device_id": device, "ws_url": "wss://other/api/v1/agent-daemon/ws"}, {"device_id": device}} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(response) }))
-		_, err := environmentBootstrap(context.Background(), auth.Profile{ServerURL: server.URL, RuntimeID: device, RunnerCredential: "canary"}, "wss://core/api/v1/agent-daemon/ws")
-		server.Close()
-		if err == nil {
-			t.Fatal("changed connection accepted")
-		}
 	}
 }
 
@@ -146,110 +83,5 @@ func TestExecutorCredentialFile(t *testing.T) {
 	}
 	if _, _, err := executorCredential(path, environment); err != nil {
 		t.Fatal("operator permissions rejected", err)
-	}
-}
-
-func TestEnvironmentBindingPreservesIdentityAndHistory(t *testing.T) {
-	root := t.TempDir()
-	if err := os.Chmod(root, 0700); err != nil {
-		t.Fatal(err)
-	}
-	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
-	if err := saveEnvironmentBinding(root, want); err != nil {
-		t.Fatal(err)
-	}
-	history := filepath.Join(root, "daemon", "agent-sessions", "retained")
-	if err := os.MkdirAll(filepath.Dir(history), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(history, []byte("unchanged-history"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := saveEnvironmentBinding(root, want); err != nil {
-		t.Fatal(err)
-	}
-	for _, mutate := range []func(*environmentBinding){func(b *environmentBinding) { b.Enrollment.SessionID = uuid.NewString() }, func(b *environmentBinding) { b.Enrollment.EnvironmentID = uuid.NewString() }, func(b *environmentBinding) { b.Enrollment.DeviceID = uuid.NewString() }, func(b *environmentBinding) { b.RemoteURL = "wss://other/api/v1/agent-daemon/ws" }} {
-		changed := want
-		mutate(&changed)
-		if err := saveEnvironmentBinding(root, changed); err == nil {
-			t.Fatal("identity overwritten")
-		}
-	}
-	if raw, _ := os.ReadFile(history); string(raw) != "unchanged-history" {
-		t.Fatal("history changed")
-	}
-	if err := os.Remove(filepath.Join(root, "daemon", "environment.json")); err != nil {
-		t.Fatal(err)
-	}
-	if err := saveEnvironmentBinding(root, want); err == nil {
-		t.Fatal("unlabelled history adopted")
-	}
-}
-
-func TestEnvironmentBindingAllowsOperatorFilePermissions(t *testing.T) {
-	root := t.TempDir()
-	if err := os.Chmod(root, 0700); err != nil {
-		t.Fatal(err)
-	}
-	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
-	if err := os.WriteFile(filepath.Join(root, "installed-bundle"), []byte("bundle"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := saveEnvironmentBinding(root, want); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(root, "daemon", "environment.json")
-	if err := os.Chmod(path, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := saveEnvironmentBinding(root, want); err != nil {
-		t.Fatal("operator permissions rejected", err)
-	}
-}
-
-func TestEnvironmentTargetCheckedBeforeCredentialTransmission(t *testing.T) {
-	root := t.TempDir()
-	if err := os.Chmod(root, 0700); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("OAC_RUNTIME_HOME", root)
-	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
-	if err := saveEnvironmentBinding(root, want); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkEnvironmentTarget(want.RemoteURL, want.Enrollment.EnvironmentID); err != nil {
-		t.Fatal(err)
-	}
-	if err := checkEnvironmentTarget("wss://other/api/v1/agent-daemon/ws", want.Enrollment.EnvironmentID); err == nil {
-		t.Fatal("new credential recipient accepted")
-	}
-	if err := checkEnvironmentTarget(want.RemoteURL, uuid.NewString()); err == nil {
-		t.Fatal("new Environment accepted")
-	}
-}
-
-func TestEnvironmentEnrollmentRejectsWrongIdentityAndWorkspace(t *testing.T) {
-	environment := uuid.NewString()
-	good := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/workspace"}
-	for _, mutate := range []func(*environmentEnrollment){func(b *environmentEnrollment) { b.EnvironmentID = uuid.NewString() }, func(b *environmentEnrollment) { b.DeviceID = "" }, func(b *environmentEnrollment) { b.SessionID = "invalid" }, func(b *environmentEnrollment) { b.WorkspaceDirectory = "relative" }} {
-		bad := good
-		mutate(&bad)
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(bad) }))
-		_, err := enrollEnvironment(context.Background(), environmentClient(), server.URL, environment, "secret")
-		server.Close()
-		if err == nil {
-			t.Fatal("invalid binding accepted")
-		}
-	}
-}
-
-func TestEnvironmentEnrollmentAcceptsPhysicalWorkspaceSelection(t *testing.T) {
-	environment := uuid.NewString()
-	want := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/srv/runtime/workspace"}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(want) }))
-	defer server.Close()
-	actual, err := enrollEnvironment(t.Context(), environmentClient(), server.URL, environment, "secret")
-	if err != nil || actual != want {
-		t.Fatal("canonical workspace selection refused", actual, err)
 	}
 }

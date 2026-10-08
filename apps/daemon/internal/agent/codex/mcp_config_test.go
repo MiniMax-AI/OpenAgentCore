@@ -58,9 +58,8 @@ func TestWriteCodexMCPConfig_EmitsStreamableHTTPURL(t *testing.T) {
 	dir := t.TempDir()
 	servers := map[string]mcpServerConfig{
 		"docs": {
-			Name:           "docs",
-			URL:            "https://docs.example.com/mcp",
-			EnvHTTPHeaders: map[string]string{"Authorization": "DOCS_AUTHORIZATION"},
+			Name: "docs",
+			URL:  "https://docs.example.com/mcp",
 		},
 	}
 	if err := writeCodexMCPConfig(dir, servers); err != nil {
@@ -70,20 +69,14 @@ func TestWriteCodexMCPConfig_EmitsStreamableHTTPURL(t *testing.T) {
 	if !strings.Contains(string(body), `url = "https://docs.example.com/mcp"`) || strings.Contains(string(body), "command =") {
 		t.Fatalf("remote config: %s", body)
 	}
-	if !strings.Contains(string(body), `env_http_headers = {"Authorization" = "DOCS_AUTHORIZATION"}`) {
-		t.Fatalf("remote headers: %s", body)
-	}
 }
 
 // TestWriteCodexMCPConfig_FreshHomeDropsStaleEntries documents the
-// "fresh entries only" guarantee: callers allocate a brand-new
-// CODEX_HOME per prompt (BuildSessionPlan does this via allocCodexHome
-// + plan.Cleanup), so the previous run's mcp_servers can't leak.
+// "fresh entries only" guarantee: buildSessionPlan removes the generated
+// config.toml before writing, so the previous run's mcp_servers can't leak.
 //
-// writeCodexMCPConfig itself is APPEND semantics now — the truncation
-// guarantee lives in allocCodexHome's RemoveAll, not in the writer.
-// Test that workflow explicitly so a future refactor that breaks the
-// fresh-home contract fails here.
+// writeCodexMCPConfig itself is APPEND semantics — the truncation
+// guarantee lives in resetGeneratedConfig, not in the writer.
 func TestWriteCodexMCPConfig_FreshHomeDropsStaleEntries(t *testing.T) {
 	dir1 := t.TempDir()
 	first := map[string]mcpServerConfig{

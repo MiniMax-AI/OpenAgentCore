@@ -18,7 +18,7 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 			req := testRequest(t)
 			req.ModelProvider.Protocol = modelprovider.Protocol(tc.protocol)
 			req.Model = "chosen-model"
-			opts, err := prepareOptions(prepared(t, req))
+			opts, err := fakeInstall("node").prepare(prepared(t, req), hostSession(t))
 			if err != nil {
 				t.Fatal(err)
 			}

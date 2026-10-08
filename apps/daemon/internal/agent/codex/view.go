@@ -135,12 +135,7 @@ func prepareViewPlan(ctx context.Context, req agent.PrepareRequest, cfg sessionC
 	if (req.LocalEnvironment == nil) != req.DisableExecutionEnvironment || !path.IsAbs(cwd) {
 		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
-	// The Harness runs each stdio alias without arguments, which the native
-	// configuration reports as an empty list.
-	servers, _, err := mcpServersFromBindings(view.MCP, func(stdio agent.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
-	if err != nil {
-		return SessionPlan{}, err
-	}
+	servers := mcpServersFromBindings(view.MCP)
 	plan, err := buildSessionPlan(req, func() (agent.ViewDir, error) { return viewHome(view.Home) })
 	if err != nil {
 		return SessionPlan{}, fmt.Errorf("codex: build session plan: %w", err)

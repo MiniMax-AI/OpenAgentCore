@@ -21,7 +21,6 @@ import (
 
 func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := cancellationConfig(root, "wait")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -47,7 +46,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	if err := running.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal("cancelled execution accepted steering", err)
 	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(config.StateDir(), "release"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := running.Cancel(ctx); err != nil {
@@ -85,7 +84,6 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 	for _, mode := range []string{"failure", "wrong-identity", "before-identity"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 8)
@@ -120,7 +118,6 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 
 func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := cancellationConfig(root, "wait")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -133,7 +130,7 @@ func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	if event := <-out; event.Type != proto.TypeDelta {
 		t.Fatal("missing native readiness barrier")
 	}
-	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(config.StateDir(), "release"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := running.Cancel(ctx); err != nil {
@@ -158,12 +155,12 @@ func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	}
 }
 
-func cancellationConfig(root, mode string) Config {
-	return Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=cancellation-" + mode, "GORACE=atexit_sleep_ms=0"}}
+func cancellationConfig(root, mode string) testBridge {
+	return testBridge{Config: Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=cancellation-" + mode, "GORACE=atexit_sleep_ms=0"}}, Home: root}
 }
 
 func cancellationRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
+	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 }
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {

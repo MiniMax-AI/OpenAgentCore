@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,14 +17,24 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-// Opt in with the installed native CLI; the default test gate uses protocol fixtures.
-func TestNativeMCodeACP(t *testing.T) {
-	binary := os.Getenv("OAC_TEST_MCODE_INTEGRATION_BIN")
-	if binary == "" {
-		t.Skip("set OAC_TEST_MCODE_INTEGRATION_BIN to run native ACP smoke test")
+// installedView is the installed MiniMax Code that the installation
+// environment names, as a view install on this host. Without one the test is
+// skipped; the default test gate uses protocol fixtures.
+func installedView(t *testing.T) viewInstall {
+	t.Helper()
+	if os.Getenv("OAC_RUNTIME_MCODE_BIN") == "" || os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE") == "" {
+		t.Skip("set OAC_RUNTIME_MCODE_BIN, OAC_RUNTIME_MCODE_NODE and OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE to run the installed native CLI")
 	}
+	programs, err := findPrograms()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return viewInstall{node: programs.node, cli: programs.binary, bridge: programs.bridge, assets: filepath.Join(filepath.Dir(programs.binary), "assets")}
+}
+
+func TestNativeMCodeACP(t *testing.T) {
+	install, session := installedView(t), hostSession(t)
 	req := testRequest(t)
-	t.Setenv("OAC_RUNTIME_MCODE_BIN", binary)
 	var mu sync.Mutex
 	var requests []string
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +57,11 @@ func TestNativeMCodeACP(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		t.Cleanup(cancel)
 		out := make(chan proto.Envelope, 64)
-		if _, err := startTurn(t, ctx, req, runID, input, out); err != nil {
+		e, err := hostExecutor(t, ctx, install, prepared(t, req), session)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.StartTurn(ctx, runID, input, out); err != nil {
 			t.Fatal(err)
 		}
 		var done proto.DonePayload

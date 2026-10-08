@@ -14,9 +14,32 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func preparationFixture(t *testing.T, mode string) Config {
+// workspaceBridge is an installed bridge fixture with a Session home and a
+// local Environment's workspace.
+func workspaceBridge(t *testing.T) testBridge {
 	t.Helper()
-	config := workspaceFixture(t)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"workspace", "home", "bin", "runtime/dist"} {
+		if err := os.MkdirAll(filepath.Join(root, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	config := testBridge{Config: Config{Node: filepath.Join(root, "bin", "node"), Entrypoint: filepath.Join(root, "runtime", "dist", "main.js")},
+		Home: filepath.Join(root, "home"), Workspace: filepath.Join(root, "workspace")}
+	for _, name := range []string{config.Node, config.Entrypoint, filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js")} {
+		if err := os.WriteFile(name, nil, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return config
+}
+
+func preparationFixture(t *testing.T, mode string) testBridge {
+	t.Helper()
+	config := workspaceBridge(t)
 	binary, err := filepath.EvalSymlinks(os.Args[0])
 	if err != nil {
 		t.Fatal(err)

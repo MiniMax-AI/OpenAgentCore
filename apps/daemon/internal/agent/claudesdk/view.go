@@ -113,12 +113,8 @@ func prepareView(layout viewLayout, req agent.PrepareRequest, view agent.ViewSes
 	if (environment == nil) != req.DisableExecutionEnvironment || environment != nil && !workspacePathSyntax(req.WorkspaceRoot) || view.Launch == nil || view.Proxy == "" {
 		return startRequest{}, nil, errors.New("claudesdk: a view Executor requires the sandbox workspace or environment none, Launch and the gateway proxy")
 	}
-	// The gateway adds each credential and header, and the Harness runs each
-	// stdio alias without arguments.
-	servers, _, err := mcpServers(view.MCP, func(stdio agent.EnvironmentMCP) (string, []string) { return stdio.Server.Command, nil })
-	if err != nil {
-		return startRequest{}, nil, err
-	}
+	// The gateway adds each credential and header.
+	servers := mcpServers(view.MCP)
 	start, provider, err := prepareOptions(req)
 	if err != nil {
 		return startRequest{}, nil, err

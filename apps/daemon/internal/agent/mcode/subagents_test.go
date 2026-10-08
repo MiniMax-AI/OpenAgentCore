@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -72,18 +73,11 @@ func TestSubagentSnapshotRejectsMissingParentProvenance(t *testing.T) {
 // The ACP cancelled response may precede the root native Turn becoming terminal.
 func TestSubagentSettlementIncludesActiveRootTurn(t *testing.T) {
 	dir := t.TempDir()
-	node, bridge := filepath.Join(dir, "node"), filepath.Join(dir, "bridge.mjs")
-	for name, data := range map[string]string{
-		node:   "#!/bin/sh\ncat \"$3/snapshot.json\"\n",
-		bridge: "",
-		filepath.Join(dir, "subagent-snapshot.mjs"): "",
-	} {
-		if err := os.WriteFile(name, []byte(data), 0700); err != nil {
-			t.Fatal(err)
-		}
+	node := filepath.Join(dir, "node")
+	if err := os.WriteFile(node, []byte("#!/bin/sh\ncat \"$3/snapshot.json\"\n"), 0700); err != nil {
+		t.Fatal(err)
 	}
-	t.Setenv("OAC_RUNTIME_MCODE_NODE", node)
-	t.Setenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE", bridge)
+	reader := clirunner.StartOptions{Binary: node, Args: []string{filepath.Join(dir, "subagent-snapshot.mjs"), dir}}
 	for _, status := range []string{"accepted", "aborted"} {
 		t.Run(status, func(t *testing.T) {
 			raw := []byte(`{"version":1,"complete":true,"rootSessionId":"root","sessions":[{"id":"root","turns":[{"id":"current","status":"` + status + `"}]}]}`)
@@ -92,7 +86,7 @@ func TestSubagentSettlementIncludesActiveRootTurn(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 			defer cancel()
-			s := &Session{ctx: ctx, sessionID: "root", opts: launchOptions{DataDir: dir}, frames: make(chan rpcFrame)}
+			s := &Session{ctx: ctx, sessionID: "root", opts: launchOptions{DataDir: dir, spawn: clirunner.Start, reader: reader}, frames: make(chan rpcFrame)}
 			err := s.settleSubagents()
 			if (err != nil) != (status == "accepted") {
 				t.Fatalf("root %s settlement error = %v", status, err)

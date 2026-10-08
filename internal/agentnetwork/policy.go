@@ -88,8 +88,3 @@ func (p Policy) Narrows(template Policy) bool {
 	}
 	return true
 }
-
-// Equal compares validated effective authority, independent of public list order.
-func (p Policy) Equal(other Policy) bool {
-	return p.Access == other.Access && p.Validate() == nil && other.Validate() == nil && slices.Equal(p.Hosts(), other.Hosts())
-}

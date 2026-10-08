@@ -17,7 +17,7 @@ func TestExecutorNativeConfirmationSurvivesCleanup(t *testing.T) {
 			if mode == "pending_function" || mode == "pending_function_unconfirmed" {
 				req.FunctionTools = []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}}
 			}
-			owner, err := NewExecutorFactory(config)(t.Context(), prepared(t, req))
+			owner, err := config.factory()(t.Context(), prepared(t, req))
 			if err != nil {
 				t.Fatal(err)
 			}

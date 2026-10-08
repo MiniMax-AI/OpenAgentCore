@@ -29,7 +29,7 @@ func checkCatalogDescendantCancellation(t *testing.T, finish string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- prepareModelVerbosity(ctx, binary, &SessionPlan{Cwd: dir}) }()
+	go func() { done <- verifyModelVerbosity(ctx, catalogProbe{binary: binary, dir: dir}, &SessionPlan{}) }()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "ready")); err == nil {
