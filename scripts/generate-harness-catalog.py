@@ -19,6 +19,7 @@ def load_catalog(path):
     if not isinstance(entries, list) or not entries:
         raise ValueError("Harness catalog must be a nonempty list")
     kinds = set()
+    configurations = set()
     for entry in entries:
         if not isinstance(entry, dict) or set(entry) != {"kind", "label", "configuration", "version"}:
             raise ValueError("Invalid Harness catalog fields")
@@ -26,13 +27,14 @@ def load_catalog(path):
             raise ValueError("Harness catalog values must be strings")
         if not re.fullmatch(r"[a-z][a-z0-9_]*", entry["kind"]) or entry["kind"] in kinds:
             raise ValueError("Invalid or duplicate Harness kind")
-        if not re.fullmatch(r"[a-z][a-z0-9]*", entry["configuration"]):
-            raise ValueError("Invalid configuration package")
+        if not re.fullmatch(r"[a-z][a-z0-9]*", entry["configuration"]) or entry["configuration"] in configurations:
+            raise ValueError("Invalid or duplicate configuration package")
         if not entry["label"].strip() or any(c in entry["label"] for c in "\n\r\t|"):
             raise ValueError("Invalid Harness label")
         if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", entry["version"]):
             raise ValueError("Invalid pinned Harness version")
         kinds.add(entry["kind"])
+        configurations.add(entry["configuration"])
     return sorted(entries, key=lambda entry: entry["kind"])
 
 

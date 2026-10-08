@@ -108,7 +108,7 @@ class HarnessCatalogTests(unittest.TestCase):
 
     def test_invalid_or_duplicate_registration_is_rejected(self):
         entry = {"kind": "example", "label": "Example", "configuration": "example", "version": "1.2.3"}
-        candidates = [[], [entry, entry], [{**entry, "kind": "bad/kind"}],
+        candidates = [[], [entry, entry], [entry, {**entry, "kind": "another"}], [{**entry, "kind": "bad/kind"}],
                       [{**entry, "configuration": "../example"}],
                       [{**entry, "unknown": True}], [{**entry, "version": "^1.2.3"}],
                       [{**entry, "version": "1.2.3-linux-x64"}], [{**entry, "version": 123}]]
