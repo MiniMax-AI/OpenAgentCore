@@ -12,9 +12,8 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
  * `sandbox` the sandbox deployment, `nodes: "none"` a deployment no node has joined, and
  * `installation` how config.json's public_url is set: "public" (HTTPS, the default), "local"
  * (loopback: only the Core machine reaches the API, and every sandbox selection is rejected) or "stale" (public,
- * with a node enrolled with an earlier address), and `installers: "none"` a console without its node installation payload, so it serves neither
- * the node nor the self-hosted installer. `nodeArtifacts` lists the providers the console has
- * node files for, both by default; as in the console, microsandbox needs Docker's files too.
+ * with a node enrolled with an earlier address), and `installers: "none"` a Core without its node installation payload. `nodeArtifacts` lists the providers Core has
+ * complete node files for, both by default.
  */
 export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; installers?: "none"; nodeArtifacts?: ("docker" | "microsandbox")[] }
 

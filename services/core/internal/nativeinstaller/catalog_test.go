@@ -27,10 +27,10 @@ func TestCatalogRequiresMatchedImmutableArtifacts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "linux-amd64.tar.gz"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load(dir, "wrong-build"); err == nil {
+	if _, err := loadNative(dir, "wrong-build"); err == nil {
 		t.Fatal("accepted mismatched Core")
 	}
-	catalog, err := Load(dir, "build")
+	catalog, err := loadNative(dir, "build")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestCatalogRequiresMatchedImmutableArtifacts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "linux-amd64.tar.gz"), []byte("changed"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load(dir, "build"); err == nil {
+	if _, err := loadNative(dir, "build"); err == nil {
 		t.Fatal("accepted corrupt archive")
 	}
 }
@@ -69,7 +69,7 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 		}
 	}
 	save()
-	catalog, err := Load(dir, "build")
+	catalog, err := loadNative(dir, "build")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 		modified.URL = bad
 		manifest.Artifacts["linux-amd64"] = modified
 		save()
-		if _, err := Load(dir, "build"); err == nil {
+		if _, err := loadNative(dir, "build"); err == nil {
 			t.Fatalf("accepted %s", bad)
 		}
 		manifest.Artifacts["linux-amd64"] = previous
@@ -95,7 +95,7 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "linux-amd64.tar.gz"), payload, 0600); err != nil {
 		t.Fatal(err)
 	}
-	catalog, err = Load(dir, "build")
+	catalog, err = loadNative(dir, "build")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,13 +107,13 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "linux-amd64.tar.gz"), []byte("corrupt"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load(dir, "build"); err == nil {
+	if _, err := loadNative(dir, "build"); err == nil {
 		t.Fatal("corruption must not fall back to online download")
 	}
 }
 
 func TestMissingCatalogServesNoInstallers(t *testing.T) {
-	if catalog, err := Load(t.TempDir(), "build"); catalog != nil || err != nil {
+	if catalog, err := loadNative(t.TempDir(), "build"); catalog != nil || err != nil {
 		t.Fatal(catalog, err)
 	}
 }
@@ -127,7 +127,7 @@ func TestCatalogRejectsUnsupportedPlatforms(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, "catalog.json"), raw, 0600); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := Load(dir, "build"); err == nil {
+			if _, err := loadNative(dir, "build"); err == nil {
 				t.Fatal("unsupported platform accepted")
 			}
 		})
@@ -185,6 +185,27 @@ func TestDownloadResponsesKeepConditionalRangesAndJSONErrors(t *testing.T) {
 		var body v1.ErrorResponse
 		if response.Header().Get("Content-Type") != "application/json" || response.Header().Get("Content-Length") != "" || json.Unmarshal(response.Body.Bytes(), &body) != nil || body.Error.Message == "" {
 			t.Fatalf("download error: %v", response)
+		}
+	}
+}
+
+func TestInstallerChecksumsMatchSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/checksums.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct{ Valid, Invalid []string }
+	if err = json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range fixture.Valid {
+		if !checksum.MatchString(value) {
+			t.Fatalf("valid checksum rejected: %q", value)
+		}
+	}
+	for _, value := range fixture.Invalid {
+		if checksum.MatchString(value) {
+			t.Fatalf("invalid checksum accepted: %q", value)
 		}
 	}
 }

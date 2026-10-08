@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 81c6eba549710a69817aad66ca1e3d519b2920e00de868532e0bf62fd58e11fb
+source_hash: 93f76a4b608e08bb4c4a9f215b2c9802015d9c0782c19403e1f31ba0ea5e3633
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -62,7 +62,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `OAC_OAUTH_TRUSTED_ORIGINS` | unset | Comma-separated HTTPS origins |
 | `OAC_HISTORY_SETTINGS_FILE` | unset | 可选的 [Runtime 历史文件](#runtime-history-file)。敏感；Core 只报告它是否已配置 |
 
-未设置或为空的值使用默认值。编辑 `.env`，然后运行 `oac apply`。Core 在启动时一次性读取所有进程设置及设置指向的文件，并在 `GET /core/v1/installation` 报告加载的结果。`oac-core check-config` 会在不启动 Core 的情况下加载并校验同样的设置和文件。`OAC_PROVIDER_ROOT` 下的原生安装程序目录清单不属于设置，Core 只在启动时检查它。错误信息只指明变量名，绝不包含其值。敏感设置只报告是否已配置。
+未设置或为空的值使用默认值。编辑 `.env`，然后运行 `oac apply`。Core 在启动时一次性读取所有进程设置及设置指向的文件，并在 `GET /core/v1/installation` 报告加载的结果。`oac-core check-config` 会在不启动 Core 的情况下加载并校验同样的设置和文件。`OAC_PROVIDER_ROOT` 下的安装目录清单是分发文件，不是设置。Core 在启动时验证元数据，并在读取安装信息或选择部署时重新检查节点构件可用性；参阅[安装信息](../../contracts/agents-api/zh/admin-api.md#installation-facts)。错误信息只指明变量名，绝不包含其值。敏感设置只报告是否已配置。
 
 ### Runtime 历史文件 {#runtime-history-file}
 
@@ -85,7 +85,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | 设置 | Web 中的位置 | Core API | 注意事项 |
 | --- | --- | --- | --- |
 | 沙箱后端：Docker、microsandbox 或 E2B | **System** → **Manage sandbox configuration**：设置向导，最后点击 **Save configuration** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个后端，在首次登录后选择。要改用其他后端，必须先执行 **Reset deployment**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
-| 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web 会推荐 [Provider 声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
+| 沙箱大小、E2B 密钥和模板构建 | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web 会推荐 [Provider 声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
 | 节点及其容量 | **Nodes**：**Add node**；在节点页面上使用 **Edit node** 和 **Remove node** | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
 | 项目和 API 密钥 | **Projects and keys**：**Create project**、**Rename**、**Issue key**、**Revoke**、**Archive** | `/core/v1/projects` | 密钥只显示一次；Core 存储其摘要 |
 | 每个 Harness 的默认模型 | **System** → **Default model configuration**：**Set** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
@@ -118,7 +118,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `secrets/agent-host/` | `identity.json`，即 [agent host 的身份](#agent-host-container) | Core 和 agent host |
 | `state/` | 私有 Provider 状态，在 Core 中挂载到 `/state`。每个适配器拥有一个子目录；E2B 使用 `e2b/`，不允许组或其他用户访问 | Core |
 | `agent-host/` | [agent host 的状态目录](#agent-host-container) | agent host；初始化时检查它是否为空 |
-| `node-payload/` | 已验证的节点安装元数据 | Web |
+| `node-payload/` | 已验证的节点安装元数据，只读挂载于 `/opt/oac/node-payload` | Core |
 
 初始化会准备该目录；应用服务以只读方式接收各自的机密目录。`docker compose exec web oac-web core-key` 把 Core 密钥打印到运维人员终端，不写入容器日志。数据库密码和凭据加密密钥绝不打印。
 
@@ -193,7 +193,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 | `OAC_INSTALLATION_ID_FILE` | 必填。`/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它 |
 | `OAC_AGENT_HOST_IDENTITY_FILE` | 必填。`/run/agent-host/identity.json`：[agent host 的身份](#agent-host-container)，其 `runtime_id` 为规范 UUID。Core 启动时用该 ID 和凭据注册 agent host；新凭据会隔离旧凭据认证过的 Link，已吊销的 agent host 保持吊销 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS`、`OAC_HISTORY_SETTINGS_FILE`、`OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | 对应的[进程设置](#settings)。Web 也读取三个日志设置 |
-| `OAC_PROVIDER_ROOT` | 适配器构件的绝对根目录。Core 镜像设置为 `/opt/oac`。每个适配器都拥有此根目录下的辅助路径。当其中的 `native-installers/` 目录包含 `catalog.json` 时，Core 在核对该目录清单与自身发行版后提供自托管守护进程安装程序。适配器状态位于 `/state`，即数据卷的 [`state/`](#compose-installations) |
+| `OAC_PROVIDER_ROOT` | 适配器构件的绝对根目录。Core 镜像设置为 `/opt/oac`。每个适配器都拥有此根目录下的辅助路径。Core 从 `native-installers/` 加载自托管守护进程安装程序，从 `node-payload/` 加载节点安装文件，并将其元数据与自身源码提交核对。缺少可选分发时报告不可用；元数据无效则拒绝启动。没有源码提交的开发构建不发布匹配的安装分发。[安装信息](../../contracts/agents-api/zh/admin-api.md#installation-facts)描述可用性。适配器状态位于 `/state`，即数据卷的 [`state/`](#compose-installations) |
 
 Core 会记录所加载的历史文件路径，但绝不记录环境变量的值或文件内容。
 
@@ -210,6 +210,5 @@ Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时�
 | `OAC_WEB_UPSTREAM` | `http://core:8091` | Core 的源地址，可以使用 HTTP 或 HTTPS，且不得包含凭据、查询参数或路径。健康检查探测其 `/healthz` |
 | `OAC_WEB_CORE_KEY_FILE` | 必填 | 常规文件的绝对路径，该文件没有组或其他用户权限，并保存 Core 密钥：至少 32 个字符、不含空白字符、最大 4 KiB |
 | `OAC_WEB_DIST` | `/www` | 已构建控制台的绝对目录；必须包含 `index.html` |
-| `OAC_WEB_NODE_PAYLOAD_DIR` | 未设置 | 所匹配发行版的节点载荷（即安装程序的 `node-payload/`）的绝对路径。未设置时，不提供 `/node-install/*`，且 Add node 不可用 |
 
 未设置或为空的变量使用其默认值。无效值会阻止控制台启动，并显示一条指明变量名的消息。控制台还会读取三个日志[进程设置](#settings)，并拒绝 Core 拒绝的值。对于不在同一台计算机上的任何浏览器，请使用 HTTPS。

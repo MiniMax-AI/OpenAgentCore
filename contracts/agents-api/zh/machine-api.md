@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: e5fb4508091ff0311acbebe10349fe9ae2c649e1fb7a721d6047f581a2fd7299
+source_hash: a86ae06466685405c0c1a378a24b4ddbb492a4f0a38e148752b97157e04ddd48
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon、Sandbox I/O 服务和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。公共源站将 `/api/v1` 转发给 Core，可以直接转发，也可以经过 Web 不改变请求的 HTTP 和 WebSocket 代理。Web 不会给机器请求添加控制台权限。
@@ -10,6 +10,7 @@ source_hash: e5fb4508091ff0311acbebe10349fe9ae2c649e1fb7a721d6047f581a2fd7299
 
 | 路由 | 调用方 | 凭据 | 契约 |
 | --- | --- | --- | --- |
+| `GET` / `HEAD sandbox-node/install/…` | 节点安装器 | 无 | [节点安装下载](#node-installation-downloads) |
 | `GET sandbox-node/configuration` | 节点安装器与节点 | 登记 token，或节点凭据加 `X-OAC-Node-ID` | [读取节点配置](#read-the-node-configuration) |
 | `POST sandbox-node/enroll` | 节点安装器 | 登记 token | [登记节点](#enroll-a-node) |
 | `GET sandbox-node/identity?node_id=` | 节点 | 节点凭据 | [恢复节点身份](#recover-a-node-s-identity) |
@@ -45,6 +46,14 @@ source_hash: e5fb4508091ff0311acbebe10349fe9ae2c649e1fb7a721d6047f581a2fd7299
 Core 对存储的每个 token 和凭据仅保留 SHA-256 摘要；安装授权经签名但不存储。凭据不可互换：各自仅适用于自身路由。
 
 ## 节点路由 {#node-routes}
+
+### 节点安装下载 {#node-installation-downloads}
+
+Core 在 `/api/v1/sandbox-node/install/` 公开提供匹配发行版的节点安装文件，无需登录或凭据。固定安装程序 URL 为 `<public_url>/api/v1/sandbox-node/install/releases/<source_commit>/node-install.pyz`；来源提交和校验和取自[安装信息](admin-api.md#installation-facts)。安装器的 `--source-url` 仍是源站地址，不包含下载路径。
+
+允许下载的文件只有 `node-install.pyz`、`manifest.json`、`SHA256SUMS`、`runtime/seccomp.json` 和清单声明的 `artifacts/` 文件。`releases/<source_commit>/` 将元数据和构件固定到同一发行版；保留的节点代次读取其保存的发行版。路径穿越、编码分隔符、逃出载荷目录的符号链接、目录、私有文件和未声明构件均不可下载。
+
+本地文件通过 GET 或 HEAD 提供，支持条件请求和 Range（200、206、304、416）；HEAD 不返回响应体。缺失的已声明执行构件只能以 307 重定向到经验证的固定版本 HTTPS 发行地址。Core 不下载或缓存远端构件。安装器独立验证大小和 SHA-256；元数据不跟随重定向。有关发布、下载锁和恢复，参阅[节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract)。
 
 ### 读取节点配置 {#read-the-node-configuration}
 

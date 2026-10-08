@@ -92,11 +92,11 @@ A dropped generation can never be prepared or used again. A helper's exit is evi
 
 ## Matched fresh installation
 
-The host program release and Core's selected Runtime release are independent. A fresh node gets its executable and private preparer from the console's current release, and reads the exact Runtime source, image identities and native runtime and firmware digests from its authenticated configuration. When that Runtime is older, the console still serves its immutable `releases/<source>/` manifest, checksums and allowlisted artifacts: the Runtime helper, firmware, seccomp profile and image bytes come from the selected release, and artifact URLs stay pinned to their verified manifest even if the console's current release changes during a download.
+A fresh node gets its executable and private preparer from Core's matched distribution, and reads the exact Runtime source, image identities and native runtime and firmware digests from its authenticated configuration. A retained generation can pin another saved Runtime release. Its helper, firmware, seccomp profile and image bytes come from that release's immutable manifest and checksums through [node installation downloads](./machine-api.md#node-installation-downloads). Artifact URLs stay pinned to the verified manifest throughout the download.
 
 A missing retained release refuses the installation rather than substituting the current Runtime, and so does a local bundle that holds only a different Runtime. These refusals happen before the installer writes the node identity, imports the Runtime, registers the node or starts its service.
 
-A published console release keeps its metadata and artifact bytes. Publishing it again first validates all metadata and every existing declared artifact, then may atomically add only missing, checksum-matched declared artifacts; any conflict prevents every addition, and nothing is overwritten.
+A published node distribution keeps its metadata and artifact bytes. Publishing it again first validates all metadata and every existing declared artifact, then may atomically add only missing, checksum-matched declared artifacts; any conflict prevents every addition, and nothing is overwritten.
 
 ## Restart recovery
 

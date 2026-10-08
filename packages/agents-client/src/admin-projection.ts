@@ -1,3 +1,5 @@
+import { projectSandboxRuntimeRelease, type SandboxProvider } from "./sandbox-client";
+import { deploymentContract } from "./deployment-contract";
 import { coreHarnessKinds, modelProviderProtocols } from "./harness-catalog";
 import { AgentCoreError, projectRuntimeObservation, projectSavedAgentConfiguration } from "./client";
 import { projectTokenUsage } from "./usage-projection";
@@ -9,7 +11,7 @@ import {
   adminRuntimeObservationListFields, adminSessionCountsFields, adminSummaryResponseFields, adminSummaryRowFields, adminUsageCoverageFields,
   coreHarnessFields, coreHarnessListFields, executorConnectionFields, executorConnectionStatusValues, executorCredentialFields,
   executorCredentialListFields, harnessModelConfigurationFields, providerErrorCodeValues, installationConfigurationFields,
-  installationFields, installationSettingFields, installationSettingRequired, installationServiceValues, issuedExecutorCredentialFields,
+  installationFields, nodeInstallationFields, installationSettingFields, installationSettingRequired, installationServiceValues, issuedExecutorCredentialFields,
   managedArchiveFields, managedArchiveStateValues, modelConfigurationSupportFields, projectFields, projectsAPIKeyFields, resourceOwnerFields,
   resourceOwnerListFields, runtimeDiskObservationFields, writeauditAPIKeyFields, actionValues, writeauditOperationFields,
   resourceTypeValues, writeauditPageFields,
@@ -266,7 +268,20 @@ export function projectInstallation(value: unknown): CoreInstallation {
   if (installation.object !== "core.installation" || canonicalUuid(installation.installation_id) === null ||
     typeof origin !== "string" || installation.api_base_url !== `${origin}/v1` ||
     typeof installation.local_only !== "boolean" ||
-    (installation.source_commit !== null && (typeof installation.source_commit !== "string" || !/^[0-9a-f]{40}$/.test(installation.source_commit)))) return invalidAdminResponse();
+    (installation.source_commit !== null && (typeof installation.source_commit !== "string" || !new RegExp(`^(?:${deploymentContract.source_commit_pattern})(?![\\s\\S])`).test(installation.source_commit)))) return invalidAdminResponse();
+  let nodeInstallation = null;
+  if (installation.node_installation !== null) {
+    if (installation.source_commit === null) return invalidAdminResponse();
+    const node = record(installation.node_installation, nodeInstallationFields);
+    if (typeof node.installer_sha256 !== "string" || !/^[a-f0-9]{64}(?![\s\S])/.test(node.installer_sha256) || !isRecord(node.runtime_releases)) return invalidAdminResponse();
+    const releases = Object.fromEntries(Object.entries(node.runtime_releases).map(([provider, value]) => {
+      if (!hasOwn(deploymentContract.providers, provider) || deploymentContract.providers[provider as SandboxProvider].mode !== "nodes") return invalidAdminResponse();
+      const release = projectSandboxRuntimeRelease(value, provider as SandboxProvider);
+      if (release.source_commit !== installation.source_commit) return invalidAdminResponse();
+      return [provider, release];
+    }));
+    nodeInstallation = { installer_sha256: node.installer_sha256, runtime_releases: releases };
+  }
   const bindings = record(installation.address_bindings, addressBindingsFields);
   if (![bindings.nodes, bindings.nodes_on_other_address, bindings.hosted_sandboxes, bindings.self_hosted_executors].every(isNonnegativeInteger) ||
     (bindings.nodes_on_other_address as number) > (bindings.nodes as number)) return invalidAdminResponse();
@@ -274,5 +289,5 @@ export function projectInstallation(value: unknown): CoreInstallation {
   if (!Array.isArray(configuration.settings)) return invalidAdminResponse();
   const settings = configuration.settings.map(projectInstallationSetting);
   if (new Set(settings.map((setting) => setting.key)).size !== settings.length) return invalidAdminResponse();
-  return { ...installation, address_bindings: { ...bindings }, configuration: { settings } } as unknown as CoreInstallation;
+  return { ...installation, node_installation: nodeInstallation, address_bindings: { ...bindings }, configuration: { settings } } as unknown as CoreInstallation;
 }

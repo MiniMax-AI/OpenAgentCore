@@ -11,7 +11,6 @@ import { CommandBlock } from "./node-commands";
 export interface NodeCleanup {
   name: string;
   installationId: string;
-  scriptDigest: string;
   /** The Core address the node enrolled with, when it is no longer the deployment's; else null. */
   oldAddress: string | null;
 }
@@ -33,8 +32,9 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
   const join = (...sentences: string[]) => sentences.join(i18n.resolvedLanguage?.startsWith("zh") ? "" : " ");
   const installation = useQuery({ ...installationQuery, enabled: cleanup !== null });
   const sourceUrl = installation.data ? nodeSourceUrl(installation.data) : null;
-  const command = (force = false) => cleanup && sourceUrl
-    ? nodeUninstallCommand({ sourceUrl, installationId: cleanup.installationId, scriptDigest: cleanup.scriptDigest, force }) : "";
+  const distribution = installation.data?.node_installation;
+  const command = (force = false) => cleanup && sourceUrl && distribution && installation.data?.source_commit
+    ? nodeUninstallCommand({ sourceUrl, installationId: cleanup.installationId, scriptDigest: distribution.installer_sha256, sourceCommit: installation.data.source_commit, force }) : "";
   const stays = cleanup ? t("{{name}} is removed from Core, but its service and files stay on the host.", { name: cleanup.name }) : "";
   return <Modal open={open} title={t("Clean up the host")} onClose={onClose} footer={<button className="button primary" type="button" onClick={onClose}>{t("Done")}</button>}>
     {cleanup && !installation.data ? <div className="sandbox-add-node form-stack">
@@ -43,7 +43,7 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
         : <p role="status">{t("Checking this installation's public URL…")}</p>}
     </div> : cleanup && installation.data && !sourceUrl ? <div className="sandbox-add-node form-stack">
       <p>{join(stays, t("Other machines can't reach this installation's public URL, {{url}}, so no uninstall command can be given.", { url: installation.data.public_url }))}</p>
-    </div> : cleanup ? <div className="sandbox-add-node form-stack">
+    </div> : cleanup && !distribution ? <div className="sandbox-add-node form-stack"><p>{join(stays, t("This Core has no matching node installer."))}</p></div> : cleanup ? <div className="sandbox-add-node form-stack">
       <p>{t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command()} value={command()} label={t("Uninstall command")} autoFocus />
       <p className="sandbox-cleanup-note">{t("It never deletes sandboxes, volumes or images.")}</p>

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 )
 
 type InstallationService string
@@ -28,6 +29,8 @@ type Installation struct {
 	LocalOnly bool `json:"local_only" binding:"required"`
 	// Full source commit Core was built from; null for development builds.
 	SourceCommit *string `json:"source_commit" extensions:"x-nullable" binding:"required"`
+	// Matched node installer and currently servable Provider releases; null when absent.
+	NodeInstallation *nativeinstaller.NodeInstallation `json:"node_installation" extensions:"x-nullable" binding:"required"`
 	// The process settings Core loaded.
 	Configuration   InstallationConfiguration  `json:"configuration" binding:"required"`
 	AddressBindings deployment.AddressBindings `json:"address_bindings" binding:"required"`
@@ -74,5 +77,6 @@ func (h *Handler) getInstallation(w http.ResponseWriter, r *http.Request) {
 	}
 	value := h.Installation
 	value.AddressBindings = bindings
+	value.NodeInstallation = h.Distribution.NodeInstallation()
 	writeJSON(w, http.StatusOK, value)
 }

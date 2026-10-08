@@ -53,5 +53,5 @@ export const coreErrorDetails = {
   "keyLimit": "Enter a valid API key of at most {{max}} characters.",
   "resourceRange": "Enter a whole number from {{min}} to {{max}}.",
   "resourceMin": "Enter a whole number of at least {{min}}.",
-  "runtime": "Use a valid immutable Runtime release for this backend."
+  "runtime": "This Core has no matching installation distribution for the selected provider."
 } as const;

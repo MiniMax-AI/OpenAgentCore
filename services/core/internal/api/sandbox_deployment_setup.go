@@ -16,11 +16,10 @@ type SandboxDeploymentInput struct {
 	ExpectedGeneration *uint64 `json:"expected_generation" binding:"required"`
 	// Per-sandbox limits, required for Docker and microsandbox. E2B may omit
 	// them; Core then uses the validated template build's cpus and memory_mib.
-	Resources     sandbox.Resources       `json:"resources"`
-	Runtime       *sandbox.RuntimeRelease `json:"runtime,omitempty"`
-	Provider      string                  `json:"provider"`
-	Configuration json.RawMessage         `json:"configuration" swaggertype:"object"`
-	Credential    json.RawMessage         `json:"credential,omitempty" swaggertype:"object"`
+	Resources     sandbox.Resources `json:"resources"`
+	Provider      string            `json:"provider"`
+	Configuration json.RawMessage   `json:"configuration" swaggertype:"object"`
+	Credential    json.RawMessage   `json:"credential,omitempty" swaggertype:"object"`
 }
 
 type SandboxDeploymentChangeInput struct {
@@ -33,7 +32,7 @@ func (h *Handler) selection(v SandboxDeploymentInput) (sandbox.Selection, error)
 	if err != nil {
 		return sandbox.Selection{}, err
 	}
-	return sandbox.Selection{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}, Configuration: c}, nil
+	return sandbox.Selection{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: h.Distribution.RuntimeRelease(v.Provider)}, Configuration: c}, nil
 }
 
 // DeploymentChanges sets up and updates the sandbox deployment through the
@@ -51,7 +50,7 @@ type DeploymentReset interface {
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. Every provider returns 409 sandbox_configuration_error while the public URL is loopback or not https. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
+// @Description Selects a provider and enforced resource limits. Core supplies the pinned Runtime release from its matching installation distribution and rejects runtime input. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. Every provider returns 409 sandbox_configuration_error while the public URL is loopback or not https. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -66,7 +65,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var input SandboxDeploymentInput
-	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == nil {
+	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}
@@ -99,7 +98,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var input SandboxDeploymentChangeInput
-	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "runtime", "expected_generation") != nil || input.ExpectedGeneration == nil {
+	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}

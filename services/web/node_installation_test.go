@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +20,10 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 			if r.Header.Get("Authorization") != "Bearer node-token" {
 				t.Errorf("node credential was replaced for %s", r.URL.Path)
 			}
+		} else if strings.HasPrefix(r.URL.Path, "/api/v1/sandbox-node/install/") {
+			if r.Header.Get("Authorization") != "" {
+				t.Error("anonymous installation download acquired a Core credential")
+			}
 		} else if r.Header.Get("Authorization") != "Bearer server-admin" {
 			t.Errorf("incorrect upstream authority for %s", r.URL.Path)
 		}
@@ -34,14 +36,11 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 	}))
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
-	dist, payload := t.TempDir(), t.TempDir()
-	release := activeRelease(t, payload, map[string]any{})
-	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(release, "node-install.pyz"), "print('installer')"}, {filepath.Join(release, "self-hosted-install.pyz"), "print('self-hosted')"}, {filepath.Join(release, "caller.key"), "must-not-be-served"}} {
-		if err := os.WriteFile(file.path, []byte(file.value), 0600); err != nil {
-			t.Fatal(err)
-		}
+	dist := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("console"), 0600); err != nil {
+		t.Fatal(err)
 	}
-	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, coreKey: "server-admin", nodePayloadDir: payload})
+	h, err := newConsole(config{origin: testOrigin, upstream: u, dist: dist, coreKey: "server-admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,12 +62,10 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 		{"GET", "/core/v1/sandbox/nodes", "node", 401},
 		{"GET", "/core/v1/projects", "session", 200},
 		{"POST", "/api/v1/sandbox-node/enroll", "node", 200},
-		{"GET", "/console/config", "session", 200},
-		{"GET", "/console/config", "none", 401},
-		{"GET", "/node-install/node-install.pyz", "none", 200},
-		{"GET", "/node-install/caller.key", "none", 404},
-		{"GET", "/node-install/self-hosted-install.pyz", "none", 404},
-		{"POST", "/node-install/node-install.pyz", "none", 405},
+		{"GET", "/core/v1/installation", "session", 200},
+		{"GET", "/core/v1/installation", "none", 401},
+		{"GET", "/api/v1/sandbox-node/install/releases/" + strings.Repeat("a", 40) + "/node-install.pyz", "none", 200},
+		{"HEAD", "/api/v1/sandbox-node/install/releases/" + strings.Repeat("a", 40) + "/node-install.pyz", "none", 200},
 	} {
 		r := consoleRequest(t, server, tc.method, tc.path)
 		if tc.auth != "session" {
@@ -87,14 +84,8 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 		if strings.Contains(body, "server-admin") || strings.Contains(body, "project-token") || strings.Contains(body, "must-not-be-served") {
 			t.Fatal("credential leaked")
 		}
-		// Web verifies each downloaded installer against these digests before running it.
-		nodeDigest := sha256.Sum256([]byte("print('installer')"))
-		if tc.path == "/console/config" && tc.status == 200 && (!strings.Contains(body, `"node_installer":true`) ||
-			!strings.Contains(body, `"node_installer_sha256":"`+hex.EncodeToString(nodeDigest[:])+`"`) || strings.Contains(body, "self_hosted_installer")) {
-			t.Fatalf("console configuration = %s", body)
-		}
 	}
-	if calls.Load() != 7 {
+	if calls.Load() != 10 {
 		t.Fatalf("unexpected upstream requests: %d", calls.Load())
 	}
 	r := consoleRequest(t, server, "POST", "/core/v1/sandbox/deployment")

@@ -3,15 +3,21 @@ package providers_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -130,10 +136,38 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	runtime := sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), Artifacts: map[string]string{"regional_image": "sha256:" + strings.Repeat("b", 64)}}
+	root := t.TempDir()
+	entries := map[string]any{}
+	for _, artifact := range adapter.NodeArtifacts {
+		entries[artifact.Path] = map[string]any{"filename": runtime.SourceCommit + "-" + artifact.Suffix, "size": 8, "sha256": strings.Repeat("c", 64)}
+	}
+	manifest, _ := json.Marshal(map[string]any{"source_commit": runtime.SourceCommit, "platform": "linux/amd64", "artifact_base_url": "https://downloads.example/v1", "artifacts": entries, "regional": map[string]string{"image": runtime.Artifacts["regional_image"]}, "images": map[string]string{"runtime": "sha256:" + strings.Repeat("1", 64)}, "image_manifest_digests": map[string]string{"runtime": "sha256:" + strings.Repeat("2", 64)}, "runtime_ref": "oac-runtime@sha256:" + strings.Repeat("3", 64), "microsandbox": map[string]string{"runtime_sha256": strings.Repeat("4", 64), "firmware_sha256": strings.Repeat("5", 64)}})
+	files := map[string][]byte{"manifest.json": manifest, "node-install.pyz": []byte("installer"), "runtime/seccomp.json": []byte("{}")}
+	sums := ""
+	for name, data := range files {
+		sums += fmt.Sprintf("%x  %s\n", sha256.Sum256(data), name)
+	}
+	files["SHA256SUMS"] = []byte(sums)
+	for name, data := range files {
+		path := filepath.Join(root, "node-payload", "releases", runtime.SourceCommit, name)
+		if os.MkdirAll(filepath.Dir(path), 0700) != nil || os.WriteFile(path, data, 0600) != nil {
+			t.Fatal("fixture publication")
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "node-payload", "active.json"), []byte(`{"source_commit":"`+runtime.SourceCommit+`"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	distribution, err := nativeinstaller.Load(root, runtime.SourceCommit, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer distribution.Close()
 	// The flow reaches only the deployment setup; every other dependency
 	// panics if called.
 	h, err := api.NewHandler(api.Dependencies{
-		Engine: "codex", CoreKeys: auth, InstallationBindings: service,
+		Engine: "codex", CoreKeys: auth, InstallationBindings: service, Distribution: distribution,
 		Projects: struct{ api.Projects }{}, ProjectsReader: struct{ api.ProjectsReader }{},
 		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},
 		Vaults: struct{ api.Vaults }{}, VaultsReader: struct{ api.VaultsReader }{},
@@ -169,8 +203,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), Artifacts: map[string]string{"regional_image": "sha256:" + strings.Repeat("b", 64)}}
-	body, _ := json.Marshal(map[string]any{"provider": kind, "expected_generation": 0, "resources": sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, "runtime": runtime, "configuration": map[string]string{"zone": "west"}})
+	body, _ := json.Marshal(map[string]any{"provider": kind, "expected_generation": 0, "resources": sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, "configuration": map[string]string{"zone": "west"}})
 	request := httptest.NewRequest("POST", "/core/v1/sandbox/deployment", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer fixture-admin")
 	response := httptest.NewRecorder()
@@ -184,6 +217,27 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	}
 	if saved.Specification.Runtime.SourceCommit != runtime.SourceCommit || len(saved.Specification.Runtime.Artifacts) != 1 || saved.Specification.Runtime.Artifacts["regional_image"] != runtime.Artifacts["regional_image"] {
 		t.Fatal("adapter artifact did not roundtrip", saved.Specification.Runtime)
+	}
+
+	// Missing distribution must not hide a stale generation before preparation.
+	missing := sandbox.Selection{Provider: kind, ExpectedGeneration: 0, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: regionalConfiguration{Zone: "west"}}
+	var stale *deployment.GenerationStaleError
+	if err := changes.CheckSetup(t.Context(), installation, missing); !errors.As(err, &stale) {
+		t.Fatal("missing distribution replaced stale generation", err)
+	}
+	missing.ExpectedGeneration = saved.Generation
+	var validation *sandbox.ValidationError
+	if err := registry.ValidateSpecification(kind, missing.DeploymentSpec); !errors.As(err, &validation) || validation.Param != "runtime" {
+		t.Fatal("missing distribution not typed", err)
+	}
+	// The Core-selected release is stable across an explicit idempotent setup.
+	retry, _ := json.Marshal(map[string]any{"provider": kind, "expected_generation": saved.Generation, "resources": sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, "configuration": map[string]string{"zone": "west"}})
+	request = httptest.NewRequest("POST", "/core/v1/sandbox/deployment", bytes.NewReader(retry))
+	request.Header.Set("Authorization", "Bearer fixture-admin")
+	response = httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	if response.Code != 200 {
+		t.Fatal("idempotent Core-selected release", response.Code, response.Body.String())
 	}
 	var raw []byte
 	if err = pool.QueryRow(t.Context(), "SELECT provider_config FROM runtime_deployment").Scan(&raw); err != nil || !strings.Contains(string(raw), `"zone": "west"`) {

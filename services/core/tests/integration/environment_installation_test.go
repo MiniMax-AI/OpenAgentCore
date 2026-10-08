@@ -37,7 +37,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 		t.Fatal("authorization", err)
 	}
 	handler, err := publicHandler(t, s, fixtureKeyResolver{}, "codex", func(d *api.Dependencies) {
-		d.Execution.NativeInstaller = &api.NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build"}}
+		d.Execution.NativeInstaller = &api.NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build", Artifacts: map[string]nativeinstaller.Artifact{"linux-amd64": {}}}}
 	})
 	if err != nil {
 		t.Fatal(err)

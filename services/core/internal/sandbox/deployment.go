@@ -69,9 +69,10 @@ type RuntimeRelease struct {
 	Artifacts    map[string]string `json:"artifacts" binding:"required"`
 }
 
-func (r RuntimeRelease) validate(artifacts map[string]ArtifactRule) error {
+// Validate checks the pinned identities against their adapter declaration.
+func (r RuntimeRelease) Validate(artifacts map[string]ArtifactRule) error {
 	invalid := &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: Runtime must reference one immutable distribution", ErrInvalid)}
-	if !regexp.MustCompile("^(?:"+sourceCommitPattern+")$").MatchString(r.SourceCommit) || len(r.Artifacts) != len(artifacts) {
+	if !regexp.MustCompile("^(?:"+SourceCommitPattern+")$").MatchString(r.SourceCommit) || len(r.Artifacts) != len(artifacts) {
 		return invalid
 	}
 	for name, rule := range artifacts {
@@ -99,9 +100,9 @@ func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy)
 		return nil
 	}
 	if s.Runtime == nil {
-		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
+		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: this Core has no matching installation distribution for the selected provider", ErrInvalid)}
 	}
-	return s.Runtime.validate(policy.Artifacts)
+	return s.Runtime.Validate(policy.Artifacts)
 }
 
 func (s DeploymentSpec) Digest(provider string) string {

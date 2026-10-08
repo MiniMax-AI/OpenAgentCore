@@ -155,7 +155,7 @@ Nodes on other hosts keep running. To uninstall them the usual way, remove them 
 
 An installation runs one release for its whole life. In-place version upgrades and downgrades are not supported. Nothing migrates data between releases.
 
-To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the console that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
+To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the Core release that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
 
 An interrupted installation can [resume with its saved configuration](./install.md#install). An unrelated nonempty directory is refused.
 
@@ -184,6 +184,6 @@ Installation and mutating `oac` commands share the [installation lock](../config
 | Core | No published port. Web forwards `/v1`, `/api/v1` and `/docs` | No published port. Web forwards `/v1`, `/api/v1` and `/docs` |
 | PostgreSQL | No published port | No published port |
 
-Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It forwards `/v1` and `/api/v1` to Core unchanged, with the caller's own credential, serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM access. Machine routes under `/api/v1` use their own enrollment and connection credentials. No service receives a Docker socket.
+Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It forwards `/v1` and `/api/v1` to Core unchanged, with the caller's own credential and has no Docker or KVM access. Core serves public node downloads and authenticates machine enrollment and connections under `/api/v1`; see the [machine connection API](../../contracts/agents-api/machine-api.md). No service receives a Docker socket.
 
 Sandboxes are the isolation boundary ([Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](./nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](./nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.

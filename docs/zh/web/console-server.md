@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 2cc4b562301d95640d2b653ec522a5407a70a98e1f4e3c1fe89bd246ffd1199e
+source_hash: 8e6a27804d34799bf7a7ee380487e30af2b1688174975e28f6bd71c2210f381c
 ---
 
 控制台服务器（`services/web`、`oac-web` 进程）提供构建后的控制台，使用 Core 密钥认证管理员，并将已登录浏览器的 `/core/v1` 请求携带该密钥转发到 Core。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
@@ -34,17 +34,15 @@ flowchart LR
 | `/healthz` | 否 | `GET` 或 `HEAD` 返回 `200 ok` |
 | `/v1`、`/api/v1` 及其下级路径 | — | 原样转发到 Core，保留调用方凭据、流式响应和 WebSocket 升级 |
 | `/docs`、`/docs/*` | 否 | API 参考及其 OpenAPI 文档，原样转发到 Core |
-| `/node-install/*` | 否 | 节点安装文件（参阅[节点安装文件](#node-installation-payload)） |
 | `/console/auth`、`/console/auth/login`、`/console/auth/logout` | 否 | [登录](#sign-in) |
 | `/`、`/index.html`、`/favicon.svg`、`/oac-mark.svg`、`/assets/*` | 否 | 控制台静态资源 |
-| `/console/config` | 是 | [控制台配置](#console-configuration) |
 | `/core/v1/*` | 是 | [转发到 Core](#forwarding-to-core) |
 | `/core` 及 `/core/` 下其他路径 | 是 | 404 |
 | 其他路径 | 是 | 静态资源；无扩展名的路径回退到 `index.html` |
 
 除 `/healthz`、`/v1`、`/api/v1` 和 `/docs` 外，每个请求首先必须通过这些检查：
 
-1. **Host 与来源。** `Host` 请求头必须等于 `OAC_PUBLIC_URL` 的主机。存在 `Origin` 时必须等于该来源，`Sec-Fetch-Site` 必须为 `same-origin` 或 `none`。写请求既无 `Origin` 又无 `Sec-Fetch-Site: same-origin` 时，需要同源 `Referer`。否则控制台返回 403。`/node-install/*` 仅检查主机和路径。
+1. **Host 与来源。** `Host` 请求头必须等于 `OAC_PUBLIC_URL` 的主机。存在 `Origin` 时必须等于该来源，`Sec-Fetch-Site` 必须为 `same-origin` 或 `none`。写请求既无 `Origin` 又无 `Sec-Fetch-Site: same-origin` 时，需要同源 `Referer`。否则控制台返回 403。
 2. **安全请求。** 路径必须以 `/` 开头，不含 `%`、反斜杠、NUL、点路径段或空路径段。绝对形式请求目标、`CONNECT` 和 `TRACE` 返回 400。`Upgrade` 头返回 400，但 `/v1`、`/api/v1` 和 `/docs` 在这些检查之前就被转发。因此 `/core/v1` 请求无法离开该前缀。
 3. **登录。** 需要登录的路径在无有效会话 cookie 时返回 401。
 
@@ -66,6 +64,8 @@ flowchart LR
 
 控制台不重试请求。浏览器代码通过 [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md) 的类型化客户端调用 `/core/v1`；[控制台 API 使用](console-api-usage.md)列出各页面读写内容。
 
+节点安装信息来自 [Core 安装信息](../../../contracts/agents-api/zh/admin-api.md#installation-facts)。Core 通过同一个不改变请求的 `/api/v1` 代理提供[节点安装下载](../../../contracts/agents-api/zh/machine-api.md#node-installation-downloads)。控制台没有安装载荷目录或分发目录清单。
+
 ## 登录 {#sign-in}
 
 | 方法和路由 | 请求 | 结果 |
@@ -83,20 +83,6 @@ flowchart LR
 - 失败尝试共享每分钟 10 次预算；超出后，错误密钥返回 429 和 `Retry-After: 60`。正确密钥始终可以登录，因此控制台拒绝使用少于 32 字符的 Core 密钥启动。
 
 登录错误：请求体格式错误为 400，错误密钥为 401 `Invalid Core key`，非 `POST` 方法为 405，非 JSON 请求体为 415，上述频率限制为 429，无法创建会话为 503。
-
-## 控制台配置 {#console-configuration}
-
-`GET /console/config` 返回已登录浏览器添加节点所需的信息：
-
-| 字段 | 含义 |
-| --- | --- |
-| `node_installer` | 控制台是否提供节点安装文件 |
-| `node_installer_sha256` | 文件中 `node-install.pyz` 的 SHA-256；Add node 命令执行安装程序前验证它 |
-| `node_artifacts` | 文件中包含节点资产的提供商（`docker`、`microsandbox`），资产在本地或通过固定发行下载提供。每次请求都读取，因此重新运行安装程序新增的资产无需重启即可出现 |
-
-## 节点安装文件 {#node-installation-payload}
-
-设置 `OAC_WEB_NODE_PAYLOAD_DIR` 后，控制台在 `/node-install/` 无需登录地提供匹配发行版的节点文件：`node-install.pyz`、`manifest.json`、`SHA256SUMS`、`runtime/seccomp.json`，以及清单声明的 `artifacts/` 下节点资产。本地缺失的资产重定向（307）到固定发行下载地址。节点安装和卸载命令从 `<public_url>/node-install/` 下载，因此反向代理必须将该路径发给控制台。节点自行验证每个校验和。
 
 ## 公开地址 {#public-address}
 

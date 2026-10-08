@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 8a781b20f0a359de77594ca570c4e1723332ac16a60d9a9be405ca5e2422e87d
+source_hash: f7e1349a5a2dee975b0837499625c8902360ed79be99ece39fd43acbbf9bfed0
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -139,8 +139,13 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL` |
 | `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
 | `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
+| `node_installation` | 节点安装分发，见下文；不可用时为 null |
 | `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
 | `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |
+
+`node_installation` 非 null 时包含 `installer_sha256` 和 `runtime_releases`。前者是匹配 Core 源码提交的节点安装程序 SHA-256；后者以提供商为键，值为[Runtime 发行版](sandbox-deployment.md#runtime-release)。空映射表示安装程序可用，但尚无提供商的完整构件；卸载命令仍可使用安装程序。缺少节点分发或开发构建没有源码提交时，该字段为 null；非 null 时 `source_commit` 必须存在。
+
+Core 在启动时验证固定发行版元数据，每次读取安装信息或选择部署时重新检查构件可用性：本地普通文件及其大小，或已验证的固定 HTTPS 下载地址。同一发行版补齐离线构件后无需重启即可使用。节点命令使用同一次响应的 `public_url`、`source_commit` 和 `installer_sha256`，按[节点安装下载](machine-api.md#node-installation-downloads)构造固定发行版 URL。
 
 `configuration.settings` 为 Core 加载的每项设置一条记录，包含以点分隔的 `key`、生效的 `value`、`default`、是否 `changeable`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`、`database`）。
 

@@ -58,7 +58,7 @@ Model providers are not process settings; see [Default models](#default-models).
 | `OAC_OAUTH_TRUSTED_ORIGINS` | unset | Comma-separated HTTPS origins |
 | `OAC_HISTORY_SETTINGS_FILE` | unset | Optional [Runtime history file](#runtime-history-file). Sensitive; Core reports only whether it is configured |
 
-An unset or empty value selects the default. Edit `.env`, then run `oac apply`. Core reads every process setting, and every file a setting names, once at startup and reports what it loaded at `GET /core/v1/installation`. `oac-core check-config` loads and validates the same settings and files without starting Core. The native installer catalog under `OAC_PROVIDER_ROOT` is not a setting; Core checks it only when it starts. Errors name the variable, never its value. Sensitive settings report only whether they are configured.
+An unset or empty value selects the default. Edit `.env`, then run `oac apply`. Core reads every process setting, and every file a setting names, once at startup and reports what it loaded at `GET /core/v1/installation`. `oac-core check-config` loads and validates the same settings and files without starting Core. The installation catalogs under `OAC_PROVIDER_ROOT` are distribution files, not settings. Core validates their metadata at startup and rechecks node artifact availability when reading installation facts or selecting a deployment; see [installation facts](../contracts/agents-api/admin-api.md#installation-facts). Errors name the variable, never its value. Sensitive settings report only whether they are configured.
 
 ### Runtime history file
 
@@ -81,7 +81,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
 | Sandbox backend: Docker, microsandbox or E2B | **System** → **Manage sandbox configuration**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation, chosen after the first sign-in. Another backend needs **Reset deployment** first; see [change the sandbox configuration](./getting-started/nodes.md#change-the-sandbox-configuration) |
-| Sandbox size, Runtime release, E2B key and template build | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
+| Sandbox size, E2B key and template build | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
 | Nodes and their capacity | **Nodes**: **Add node**; **Edit node** and **Remove node** on a node's page | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and the [nodes guide](./getting-started/nodes.md) |
 | Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
 | Default model per harness | **System** → **Default model configuration**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
@@ -114,7 +114,7 @@ The initialization service generates secrets and the installation ID once, then 
 | `secrets/agent-host/` | `identity.json`, the [agent host's identity](#agent-host-container) | Core and the agent host |
 | `state/` | Private Provider state, mounted in Core at `/state`. Each adapter owns a subdirectory; E2B uses `e2b/`, with no group or other access | Core |
 | `agent-host/` | The [agent host's state directory](#agent-host-container) | The agent host; initialization checks whether it is empty |
-| `node-payload/` | Verified node installation metadata | Web |
+| `node-payload/` | Verified node installation metadata, mounted read-only at `/opt/oac/node-payload` | Core |
 
 Initialization prepares this directory; application services receive their secret directories read-only. `docker compose exec web oac-web core-key` prints the Core key to the operator terminal without writing it to container logs. Database passwords and credential encryption keys are never printed.
 
@@ -189,7 +189,7 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 | `OAC_INSTALLATION_ID_FILE` | Required. `/run/oac/installation.id`: the installation ID, a canonical UUID. Core refuses an ID other than the one its database recorded |
 | `OAC_AGENT_HOST_IDENTITY_FILE` | Required. `/run/agent-host/identity.json`: the [agent host's identity](#agent-host-container), whose `runtime_id` is a canonical UUID. When Core starts it registers the agent host with that ID and credential; a new credential fences the Links the old one authenticated, and a revoked agent host stays revoked |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
-| `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
+| `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core loads self-hosted daemon installers from `native-installers/` and node installation files from `node-payload/`, checking their metadata against its own source revision. Missing optional distributions are unavailable; malformed metadata rejects startup. A development build without a source revision publishes no matched installation distribution. [Installation facts](../contracts/agents-api/admin-api.md#installation-facts) describes availability. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 
 Core logs the history file path it loads, never environment values or file contents.
 
@@ -206,6 +206,5 @@ Compose sets these for Web. Set them yourself only when you run the console with
 | `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path. The healthcheck probes its `/healthz` |
 | `OAC_WEB_CORE_KEY_FILE` | Required | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
 | `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
-| `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |
 
 An unset or empty variable selects its default. An invalid value stops the console at startup with a message naming the variable. The console also reads the three log [process settings](#settings) and rejects the values Core rejects. Use HTTPS for any browser that is not on the same machine.

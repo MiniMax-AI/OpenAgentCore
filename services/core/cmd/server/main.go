@@ -208,13 +208,12 @@ func run(config processconfig.Config) error {
 	linkRelay := relay.New(links)
 	defer linkRelay.Close()
 	connections := &runtimeenrollment.Connections{Store: sessionStore, Links: linkRelay}
-	var catalog *nativeinstaller.Catalog
-	if config.NativeInstallers != "" {
-		catalog, err = nativeinstaller.Load(config.NativeInstallers, buildRevision)
-		if err != nil {
-			return err
-		}
+	catalog, err := nativeinstaller.Load(config.ProviderPaths.ArtifactRoot, buildRevision, sandboxProviders)
+	if err != nil {
+		return err
 	}
+	defer catalog.Close()
+
 	var nativeInstaller *api.NativeInstaller
 	if buildRevision != "" {
 		nativeInstaller = &api.NativeInstaller{Version: buildRevision, Base: config.PublicOrigin.InstallerBase(), Catalog: catalog}
@@ -306,7 +305,7 @@ func run(config processconfig.Config) error {
 	}
 	deps := api.Dependencies{
 		Engine: config.DefaultHarness, Harnesses: config.Harnesses, CoreKeys: config.CoreKeys,
-		Installation: installationFacts(config), InstallationBindings: deploymentService,
+		Installation: installationFacts(config), InstallationBindings: deploymentService, Distribution: catalog,
 		Projects: projectService, ProjectsReader: projectStore,
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,

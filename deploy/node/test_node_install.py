@@ -43,6 +43,15 @@ class Response(io.BytesIO):
     status, headers = 200, {}
 
 
+class MetadataTransportTests(unittest.TestCase):
+    def test_fetch_uses_machine_route_for_current_and_retained_metadata(self):
+        for name in ("manifest.json", "SHA256SUMS", "releases/" + "a" * 40 + "/manifest.json"):
+            with self.subTest(name=name), mock.patch.object(installer, "open_request", return_value=io.BytesIO(b"metadata")) as opened:
+                with installer.fetch("https://core.example", name) as response:
+                    self.assertEqual(response.read(), b"metadata")
+                opened.assert_called_once_with("https://core.example/api/v1/sandbox-node/install/" + name)
+
+
 class NodeInstallTests(unittest.TestCase):
     def setUp(self):
         base = Path.home() / ".oac/tests/node-install"
@@ -92,8 +101,8 @@ class NodeInstallTests(unittest.TestCase):
 
     def artifact_response(self, request, **kwargs):
         url = getattr(request, "full_url", request)
-        # The fixture manifest records a release URL; nodes still download from their console.
-        self.assertTrue(url.startswith(self.args.source_url + "/node-install/releases/" + self.manifest["source_commit"] + "/artifacts/"), url)
+        # The fixture manifest records a release URL; nodes still download through Core.
+        self.assertTrue(url.startswith(self.args.source_url + "/api/v1/sandbox-node/install/releases/" + self.manifest["source_commit"] + "/artifacts/"), url)
         for name, item in self.manifest["artifacts"].items():
             if url.endswith("/" + item["filename"]):
                 return Response(self.payloads[name])
@@ -187,7 +196,7 @@ class NodeInstallTests(unittest.TestCase):
         def artifact_response(request, **_kwargs):
             url = getattr(request, "full_url", request)
             for manifest, files in ((program, payloads), (self.manifest, self.payloads)):
-                prefix = self.args.source_url + "/node-install/releases/" + manifest["source_commit"] + "/artifacts/"
+                prefix = self.args.source_url + "/api/v1/sandbox-node/install/releases/" + manifest["source_commit"] + "/artifacts/"
                 for name, item in manifest["artifacts"].items():
                     if url == prefix + item["filename"]:
                         # Only the node executable comes from the host release.

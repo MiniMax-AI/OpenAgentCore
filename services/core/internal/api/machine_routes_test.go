@@ -67,7 +67,7 @@ func TestMachineRoutesPreserveAuthorityAndMethodPrecedence(t *testing.T) {
 	deps.Execution.Enrollment = runtimeenrollment.EnrollmentHandler(store, origin)
 	deps.Execution.Connection = &runtimeenrollment.Connections{Store: store, Links: links}
 	deps.Execution.Links = links
-	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build"}}
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{Version: "build", Artifacts: map[string]nativeinstaller.Artifact{"linux-amd64": {}}}}
 	nodeID := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{Authenticate: func(_ context.Context, id, credential string) (node.Identity, error) {
 		store.calls++

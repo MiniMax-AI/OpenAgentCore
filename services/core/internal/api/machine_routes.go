@@ -84,7 +84,7 @@ func (h *Handler) registerMachineRoutes(router chi.Router) {
 		r.Handle("/agent-daemon/connection", h.Execution.Connection)
 
 		if installer := h.Execution.NativeInstaller; installer != nil {
-			if installer.Catalog != nil {
+			if installer.Catalog.NativeAvailable() {
 				// @Summary Download native installation content
 				// @Description Public versioned bootstrap script, checksum or Linux amd64 archive. An archive may redirect to its qualified release URL; local archives support conditional and range requests. GET and HEAD share the download headers.
 				// @Tags Native Installation
@@ -101,6 +101,23 @@ func (h *Handler) registerMachineRoutes(router chi.Router) {
 			}
 			r.Post("/agent-daemon/installation", h.prepareNativeInstallation)
 			r.Post("/agent-daemon/installation/claim", h.claimNativeInstallation)
+		}
+
+		if h.Distribution != nil {
+			// @Summary Download sandbox node installation content
+			// @Description Public matched Linux amd64 installer, metadata or declared artifact. Versioned releases remain addressable; artifacts may redirect to pinned HTTPS release URLs. Local downloads support conditional and range requests.
+			// @Tags Sandbox Nodes
+			// @Produce octet-stream
+			// @Param path path string true "Metadata filename, artifacts/{filename}, or releases/{source_commit}/{filename}"
+			// @Success 200 {file} file
+			// @Success 206 {file} file
+			// @Success 304 "Not Modified"
+			// @Success 307 "Temporary Redirect"
+			// @Failure 400,403,404,405,416,500 {object} v1.ErrorResponse
+			// @Router /api/v1/sandbox-node/install/{path} [get]
+			// @Router /api/v1/sandbox-node/install/{path} [head]
+			r.Get("/sandbox-node/install/*", h.Distribution.ServeNodeHTTP)
+			r.Head("/sandbox-node/install/*", h.Distribution.ServeNodeHTTP)
 		}
 
 		// @Summary Open a sandbox Link

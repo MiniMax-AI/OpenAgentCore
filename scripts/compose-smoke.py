@@ -55,7 +55,8 @@ def prepare_pinned_payload(destination):
 
 
 def build_images(directory, tag):
-    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    # Match the fixture's Core identity to its verified distribution metadata.
+    revision = json.loads((ROOT / 'deploy/compose/smoke-pins.json').read_text())['revision']
     protocol = re.search(r'const Version = "([^"]+)"', (ROOT / 'internal/agentdaemon/proto/version.go').read_text()).group(1)
     go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
 
@@ -151,7 +152,7 @@ def main():
     origin = 'http://localhost:8080'
     address = ''
 
-    def request(path, body=None, headers=None, status=200):
+    def request(path, body=None, headers=None, status=200, anonymous=False):
         if body is not None and not isinstance(body, bytes):
             body = json.dumps(body).encode()
         req = urllib.request.Request(address + path, data=body, headers={
@@ -159,7 +160,7 @@ def main():
             'Content-Type': 'application/json', 'OpenAI-Beta': 'agents=v1', **(headers or {}),
         })
         try:
-            response = browser.open(req, timeout=30)
+            response = (client() if anonymous else browser).open(req, timeout=30)
         except urllib.error.HTTPError as error:
             response = error
         with response:
@@ -206,9 +207,11 @@ def main():
         api = {'Authorization': 'Bearer ' + project_key}
         assert get('/v1/agents', headers=api)['data'] == [], 'Authenticated API is unavailable'
 
-        installer = request('/node-install/node-install.pyz')
-        checksums = dict(line.split('  ', 1)[::-1] for line in request('/node-install/SHA256SUMS').decode().splitlines())
-        assert hashlib.sha256(installer).hexdigest() == checksums['node-install.pyz'], 'Node installer checksum mismatch'
+        assert facts['source_commit'] == pins['revision'] and facts['node_installation'], 'Missing matching Core distribution'
+        download = '/api/v1/sandbox-node/install/releases/' + facts['source_commit'] + '/'
+        installer = request(download + 'node-install.pyz', anonymous=True)
+        checksums = dict(line.split('  ', 1)[::-1] for line in request(download + 'SHA256SUMS', anonymous=True).decode().splitlines())
+        assert hashlib.sha256(installer).hexdigest() == checksums['node-install.pyz'] == facts['node_installation']['installer_sha256'], 'Node installer checksum mismatch'
         boundary = 'oac-compose-smoke'
         content = b'x' * (5 * 1024 * 1024)
         body = (f'--{boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nuser_data\r\n'

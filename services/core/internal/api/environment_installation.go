@@ -19,7 +19,7 @@ type NativeInstaller struct {
 	Version string
 	// Base is the public URL prefix of the versioned installer downloads.
 	Base string
-	// Catalog holds the matching installation artifacts. It is nil when the
+	// Catalog holds installation artifacts; NativeAvailable is false when the
 	// operator installed none: installations then report unavailable and the
 	// grant routes answer 503 installation_unavailable.
 	Catalog *nativeinstaller.Catalog
@@ -32,7 +32,7 @@ func (h *Handler) installationFor(ctx context.Context, principal identity.Princi
 		return result, nil
 	}
 	result.Version = installer.Version
-	if installer.Catalog == nil {
+	if !installer.Catalog.NativeAvailable() {
 		return result, nil
 	}
 	token, expires, err := h.Environments.AuthorizeEnvironmentInstallation(ctx, principal, environment, installer.Version)
@@ -63,7 +63,7 @@ func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request,
 // are registered only when this Core serves a native installer.
 func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Request) (sessions.InstallationAuthorization, string, bool) {
 	w.Header().Set("Cache-Control", "no-store")
-	if h.Execution.NativeInstaller.Catalog == nil {
+	if !h.Execution.NativeInstaller.Catalog.NativeAvailable() {
 		writeError(w, 503, "installation_unavailable", "Matching native installation artifacts are unavailable.")
 		return sessions.InstallationAuthorization{}, "", false
 	}

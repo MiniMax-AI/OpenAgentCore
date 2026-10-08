@@ -53,7 +53,7 @@ export type SandboxAllocation = NodeAllocation;
 // The schema types each Provider's configuration, credential and metadata as free-form objects; the client names E2B's.
 /**
  * Core derives the deployment's address from the installation public URL; a `core_url` member is rejected.
- * `expected_generation` is required, zero for first setup. Docker and microsandbox require `resources` and `runtime`;
+ * `expected_generation` is required, zero for first setup. Node providers require `resources`; Core selects their Runtime release;
  * E2B may omit `resources` to adopt its template build's CPU and memory, and always runs that build.
  */
 export type InitializeSandboxDeployment = Omit<SandboxDeploymentInput, "provider" | "configuration" | "credential"> & {
@@ -103,12 +103,19 @@ function projectSpecification(value: unknown, provider: SandboxProvider): Sandbo
   const rules = deploymentContract.providers[provider].artifacts;
   valid(hasOwn(specification, "runtime") === (Object.keys(rules).length > 0));
   if (!hasOwn(specification, "runtime")) return { resources: { ...resources } as unknown as SandboxResources };
-  const runtime = members(specification.runtime, runtimeReleaseFields);
+  return { resources: { ...resources } as unknown as SandboxResources, runtime: projectSandboxRuntimeRelease(specification.runtime, provider) };
+}
+
+/** Validate a provider release using the same declaration as saved specifications. */
+export function projectSandboxRuntimeRelease(value: unknown, provider: SandboxProvider): SandboxRuntimeRelease {
+  const rules = deploymentContract.providers[provider].artifacts;
+  valid(Object.keys(rules).length > 0);
+  const runtime = members(value, runtimeReleaseFields);
   const matches = (value: unknown, pattern: string) => typeof value === "string" && new RegExp(`^(?:${pattern})(?![\\s\\S])`).test(value);
   valid(matches(runtime.source_commit, deploymentContract.source_commit_pattern));
   const artifacts = members(runtime.artifacts, Object.keys(rules));
   valid(Object.entries(rules).every(([name, rule]) => matches(artifacts[name], rule.pattern)));
-  return { resources: { ...resources } as unknown as SandboxResources, runtime: { source_commit: runtime.source_commit as string, artifacts: { ...artifacts } as Record<string, string> } };
+  return { source_commit: runtime.source_commit as string, artifacts: { ...artifacts } as Record<string, string> };
 }
 /** The adapter's public projection has no credential member. */
 function projectE2B(configuration: unknown, metadata: unknown): Pick<SandboxDeployment, "configuration" | "metadata"> {

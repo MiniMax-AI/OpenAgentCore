@@ -74,6 +74,19 @@ def main() -> None:
             raise ValueError("Expected one Runtime observation reason field")
         observation = observation.replace(marker, marker + "        pattern: '" + fixture["schema_pattern"] + "'\n")
         document = document[:start] + observation + document[end:]
+    # The catalog owns checksum syntax; response schemas use strict ECMA endings.
+    catalog = (Path(__file__).resolve().parent.parent / "services/core/internal/nativeinstaller/catalog.go").read_text()
+    checksum = re.search(r'const checksumPattern = "([^"]+)"', catalog)
+    if checksum is None:
+        raise ValueError("Missing installer checksum declaration")
+    start = document.index("  nativeinstaller.NodeInstallation:\n")
+    end = re.search(r"^  \S", document[start + 1:], re.M).start() + start + 1
+    node = document[start:end]
+    marker = "      installer_sha256:\n        type: string\n"
+    if node.count(marker) != 1:
+        raise ValueError("Expected one node installer checksum field")
+    node = node.replace(marker, marker + "        pattern: '^(?:" + checksum.group(1) + ")(?![\\s\\S])'\n")
+    document = document[:start] + node + document[end:]
     series_start = "  v1.RuntimeHistorySeries:\n"
     series_end = "\n  v1.RuntimeHistoryTime:\n"
     if document.count(series_start) != 1 or document.count(series_end) != 1:

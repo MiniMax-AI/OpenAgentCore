@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: cd12954864bf9c15cf2d700fc3d9ebaf6126c0ab4297784850cfdd32b86ae656
+source_hash: 87469c706dabc52eb29de00c107ba99038024212556191dbf7bb2efd0f92421f
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -10,9 +10,9 @@ source_hash: cd12954864bf9c15cf2d700fc3d9ebaf6126c0ab4297784850cfdd32b86ae656
 
 ## 添加节点前 {#before-you-add-a-node}
 
-- **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 控制台下载文件，并通过 `public_url` 连接 Core。设置前，Add node 显示 *Set a public address other machines can reach before adding nodes*；参阅[配置公开地址](install.md#configure-the-domain-and-https)。
+- **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 下载文件，并通过 `public_url` 连接 Core。设置前，Add node 显示 *Set a public address other machines can reach before adding nodes*；参阅[配置公开地址](install.md#configure-the-domain-and-https)。
 - **沙箱配置已保存。** 打开 **System** → **Manage sandbox configuration**，选择 **Own machines**、后端和沙箱规格，最后选择 **Save configuration**。要更改已保存的配置，先选择 **Reset deployment**。同一安装的所有节点使用同一后端。
-- **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，Add node 显示 *This console has no node files for …*。
+- **Core 能提供节点文件。** 节点从 Core 下载 Runtime 和提供商文件；Core 缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，Add node 显示 *This Core has no node files for …*。
 
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
 
@@ -23,7 +23,7 @@ Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添
 3. 选择 **Generate command** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 10 分钟内执行；Web 显示倒计时，过期后提供 **Generate new command**。
 4. 在主机上执行。Web 跟踪节点从注册、连接到就绪的过程。
 
-命令从你的控制台下载节点安装程序、检查 SHA-256，并使用一次性注册令牌运行它。安装程序下载节点文件并逐一对照发行清单验证、导入 Runtime 镜像、注册节点、启动服务，并等待 Core 报告节点已连接且就绪。程序不安装软件；前置条件缺失时，会在修改任何内容之前停止并输出一行提示。
+命令从 Core 下载节点安装程序、检查 SHA-256，并使用一次性注册令牌运行它。安装程序下载节点文件并逐一对照发行清单验证、导入 Runtime 镜像、注册节点、启动服务，并等待 Core 报告节点已连接且就绪。程序不安装软件；前置条件缺失时，会在修改任何内容之前停止并输出一行提示。
 
 安装和移除节点需要 root。除非 shell 已是 root，Web 命令会使用 `sudo`。安装程序创建 `oac-node` 服务用户和系统服务；节点以该用户运行，而非 root。普通用户运行安装程序时，会在读取注册令牌或修改主机前失败。
 
@@ -108,13 +108,13 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
    ```sh
     (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
    printf '\n==> Downloading node installer...\n' &&
-   curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
+   curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/api/v1/sandbox-node/install/releases/<source-commit>/node-install.pyz' -o "$d/node-install.pyz" &&
    printf '==> Verifying node installer...\n' &&
    printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
    $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
-卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **Old Core address gone?**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 Nodes 页面移除节点。不使用对话框时，从 `https://core.example/node-install/SHA256SUMS` 的 `node-install.pyz` 行获取安装程序 SHA-256。卸载停止并移除服务、节点状态、记录和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
+卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **Old Core address gone?**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 Nodes 页面移除节点。不使用对话框时，将[安装信息](../../../contracts/agents-api/zh/admin-api.md#installation-facts)的 `source_commit` 用作 `<source-commit>`，并从 `https://core.example/api/v1/sandbox-node/install/releases/<source-commit>/SHA256SUMS` 的 `node-install.pyz` 行获取安装程序 SHA-256。卸载停止并移除服务、节点状态、记录和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
 
 程序不删除沙箱、卷或镜像。保留 Runtime 镜像并输出 `docker image rm` 命令。microsandbox 保留 `/var/lib/oac-node/.oac/m/` 存储，并输出删除方法（`sudo -u oac-node rm -rf <store>`）；存储删除前保留所创建的账号，之后重新卸载。使用 `--force` 时 microVM 可能仍使用存储，请先检查 `pgrep -u oac-node`。可以重复卸载直到完成。
 
@@ -170,7 +170,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 | `capacity_insufficient` | Host too small | 主机 CPU 或内存不足以运行一个沙箱 | 使用更大主机或修改沙箱规格 |
 | `runtime_image_unavailable` | Runtime image missing | 提供商中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
 | `artifacts_unavailable` | Provider files missing | 固定版本的提供商文件（例如 microsandbox 的 Runtime、固件或辅助程序）缺失或 SHA-256 检查失败 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
-| `runtime_download_failed` | Runtime download failed | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到控制台和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
+| `runtime_download_failed` | Runtime download failed | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到 Core 和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
 
 新用户组成员关系仅对新进程生效。重启节点服务：`sudo systemctl restart oac-node-<installation-id>.service`。已注册但从未连接的节点通常无法通过公开 URL 访问 Core，或 `/api/v1` WebSocket 无法通过反向代理。
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -24,6 +25,8 @@ type Dependencies struct {
 	// InstallationBindings counts what is bound to the current public URL.
 	Installation         Installation
 	InstallationBindings InstallationBindings
+	// Distribution is nil when no matched installation artifacts are installed.
+	Distribution *nativeinstaller.Catalog
 
 	Projects             Projects
 	ProjectsReader       ProjectsReader

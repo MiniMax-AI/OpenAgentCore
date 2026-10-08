@@ -14,11 +14,9 @@ import { sandboxProviderLabel, sandboxRequestError } from "../../lib/sandbox-lab
 import { checklistOpenFor, modelStep, nextStepAfterNode } from "../overview/getting-started";
 import { harnessesQuery } from "../system/harness-queries";
 import { nodeSourceUrl } from "./core-origin";
-import { nodeFilesAvailable, type SandboxConsoleConfig } from "./console-config";
 import { nodeInstallCommand, nodeLogCommand } from "./enrollment-command";
 import { CommandBlock, CopyCommand, HostRequirements } from "./node-commands";
 import { enrolledNode, enrollmentProgress, formatCountdown, progressSteps, type StepState } from "./node-enrollment";
-import { sandboxConsoleConfigQuery } from "./sandbox-queries";
 
 /** The host requirements open by default until this browser has shown them once. */
 const REQUIREMENTS_SEEN = "oac-web.node-requirements-seen";
@@ -44,10 +42,10 @@ const DEFAULT_RETAINED = "8";
  * sudo (or directly as root), which installs the node as a system service.
  * The log hint names that system service. No command is issued until the installation
  * is read: one whose public URL other machines can't use (loopback, as
- * `local_only` says), an unreadable one, or a console that
- * reports no node files for the deployment's provider (`node_artifacts`) says
+ * `local_only` says), an unreadable one, or a Core that
+ * reports no node files for the deployment's provider (`node_installation.runtime_releases`) says
  * so instead. Each opening, and each return to the window while open, reads
- * the installation and the console again, so a fix on the Core host shows
+ * the installation again, so a fix on the Core host shows
  * without a reload.
  *
  * The page keeps this dialog mounted, so a command survives closing it: it is
@@ -57,9 +55,8 @@ const DEFAULT_RETAINED = "8";
  * list: read on each opening, every few seconds while open, and once more at
  * expiry, since a node registered by the command outranks its expiry.
  */
-export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open, fresh, onClose, onRefresh }: {
+export function NodeEnrollment({ client, deployment, nodes, open, fresh, onClose, onRefresh }: {
   client: SandboxAdminClient;
-  consoleConfig: SandboxConsoleConfig;
   deployment: SandboxDeployment;
   nodes: SandboxNode[];
   open: boolean;
@@ -91,7 +88,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // Nodes download from, and reach Core at, the public URL; the browser's address may be a tunnel or loopback.
   // The deployment's core_url is the same address, but the installation is read again on each opening, so a fix shows at once.
   const publicUrl = installation.data ? nodeSourceUrl(installation.data) : null;
-  const available = consoleConfig.node_installer;
+  const available = installation.data?.node_installation;
   const provider = deployment.mode === "nodes" && deployment.provider ? deployment.provider : null;
   const backend = sandboxProviderLabel(deployment.provider, locale);
   // Nodes and their sandboxes reach Core at its public URL, so a loopback one serves no other machine;
@@ -105,8 +102,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
     : !publicUrl
       ? { text: t("Set a public address other machines can reach before adding nodes.") }
-      : !nodeFilesAvailable(consoleConfig, deployment.provider)
-        ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
+      : !available?.runtime_releases[deployment.provider]
+        ? { text: t("This Core has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
         : null;
   // Core takes whole numbers from 1 to a million, with the retained limit at least the active one.
   const suspends = deployment.suspension !== null;
@@ -137,7 +134,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // Expired only once a read begun after the expiry found no node for the command.
   const expired = lapsed && fresh && checked !== null && checked.startedAt >= expiresAt && checked.nodes === nodes;
   const command = enrollment && provider && available && publicUrl && (registered || !expired) && !ready
-    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256 }) : "";
+    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: available.installer_sha256, sourceCommit: installation.data!.source_commit! }) : "";
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
   const check = useCallback(async () => {
@@ -151,11 +148,10 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   }, [onRefresh]);
   useEffect(() => () => { generation.current++; request.current?.abort(); }, []);
   useEffect(() => { if (open) rememberRequirementsSeen(); }, [open]);
-  // Rerunning ./install.sh or oac apply on the Core host changes what the console and the installation report.
+  // Rerunning ./install.sh or oac apply on the Core host changes the installation distribution Core reports.
   useEffect(() => {
     if (!open) return;
     const reread = () => {
-      void queryClient.invalidateQueries({ queryKey: sandboxConsoleConfigQuery.queryKey });
       void queryClient.invalidateQueries({ queryKey: installationQuery.queryKey });
     };
     reread();
@@ -266,10 +262,10 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : sandboxDiagnosticMessage(progress.problem, locale);
   return createPortal(<Modal open={open} title={t("Add node")} onClose={close} footer={footer}>
     <div className="sandbox-add-node form-stack">
-      {!available ? <p role="status">{t("This console serves no node installer. For a console deployed by hand, point OAC_WEB_NODE_PAYLOAD_DIR at the distribution's node payload and restart it.")}</p>
-      : !enrollment && blocker ? blocker.failed
+      {!enrollment && blocker ? blocker.failed
         ? <p role="alert">{blocker.text} <button className="text-action" type="button" disabled={installation.isFetching} onClick={() => void installation.refetch()}>{t("Try again")}</button></p>
         : <p role="status">{blocker.text}</p>
+      : !available ? <p role="status">{t("This Core has no matching node installer.")}</p>
       : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <p>{t("Set the sandbox limits for the host you want to add.")}</p>

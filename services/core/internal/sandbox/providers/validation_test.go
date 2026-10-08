@@ -39,7 +39,7 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 		runtime  *sandbox.RuntimeRelease
 		message  string
 	}{
-		{"docker", nil, "managed nodes require a pinned Runtime release"},
+		{"docker", nil, "this Core has no matching installation distribution for the selected provider"},
 		{"docker", &sandbox.RuntimeRelease{}, "Runtime must reference one immutable distribution"},
 		{"e2b", &sandbox.RuntimeRelease{}, "E2B Runtime is selected by its immutable template build"},
 	} {

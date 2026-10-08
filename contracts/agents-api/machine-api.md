@@ -8,6 +8,7 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox 
 
 | Route | Caller | Credential | Contract |
 | --- | --- | --- | --- |
+| `GET` / `HEAD sandbox-node/install/…` | Node installer | None | [Node installation downloads](#node-installation-downloads) |
 | `GET sandbox-node/configuration` | Node installer and node | Enrollment token, or node credential with `X-OAC-Node-ID` | [Read the node configuration](#read-the-node-configuration) |
 | `POST sandbox-node/enroll` | Node installer | Enrollment token | [Enroll a node](#enroll-a-node) |
 | `GET sandbox-node/identity?node_id=` | Node | Node credential | [Recover a node's identity](#recover-a-nodes-identity) |
@@ -43,6 +44,14 @@ Every HTTP error uses `{"error":{"message":"…","type":"invalid_request_error",
 Core keeps only a SHA-256 digest of each token and credential it stores; installation grants are signed and not stored. Credentials are not interchangeable: each works only on its own routes.
 
 ## Node routes
+
+### Node installation downloads
+
+Core publicly serves its matched node installation files at `/api/v1/sandbox-node/install/`, without sign-in or credentials. The pinned installer URL is `<public_url>/api/v1/sandbox-node/install/releases/<source_commit>/node-install.pyz`; the revision and checksum come from [installation facts](./admin-api.md#installation-facts). The installer's `--source-url` remains an origin, without the download path.
+
+The allowlist contains only `node-install.pyz`, `manifest.json`, `SHA256SUMS`, `runtime/seccomp.json` and the manifest-declared files under `artifacts/`. `releases/<source_commit>/` pins metadata and artifacts to one release; retained node generations read their saved release. Path traversal, encoded separators, symlinks escaping the payload root, directories, private files and undeclared artifacts cannot be downloaded.
+
+Local files support GET and HEAD, conditional requests and Range responses (200, 206, 304, 416); HEAD has no response body. Missing declared execution artifacts may redirect with 307 only to verified, version-pinned HTTPS release downloads. Core neither downloads nor caches remote artifacts. Installers independently verify size and SHA-256, and metadata requests never follow redirects. The [node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract) owns publication, download locks and recovery.
 
 ### Read the node configuration
 

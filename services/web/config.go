@@ -15,10 +15,10 @@ import (
 )
 
 type config struct {
-	addr, origin, dist      string
-	coreKey, nodePayloadDir string
-	upstream                *url.URL
-	log                     log.Config
+	addr, origin, dist string
+	coreKey            string
+	upstream           *url.URL
+	log                log.Config
 }
 
 // loadConfig reads Web's settings. An unset or empty variable selects its
@@ -50,10 +50,6 @@ func loadConfig() (config, error) {
 	}
 	if utf8.RuneCountInString(c.coreKey) < minimumCoreKeyLength {
 		return config{}, errors.New("the Core key in OAC_WEB_CORE_KEY_FILE must have at least 32 characters")
-	}
-	c.nodePayloadDir = os.Getenv("OAC_WEB_NODE_PAYLOAD_DIR")
-	if c.nodePayloadDir != "" && !filepath.IsAbs(c.nodePayloadDir) {
-		return config{}, errors.New("OAC_WEB_NODE_PAYLOAD_DIR must be absolute")
 	}
 	return c, nil
 }

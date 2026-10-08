@@ -19,6 +19,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 //go:embed assets/*
@@ -35,14 +36,51 @@ type Catalog struct {
 	Artifacts       map[string]Artifact `json:"artifacts"`
 	directory       string
 	local           map[string]bool
+	nodes           *nodePayload
 }
 
-var checksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
+const checksumPattern = "[0-9a-f]{64}"
 
-// Load checks the matched catalog without downloading execution payloads. Local
+var checksum = regexp.MustCompile("^" + checksumPattern + "$")
+
+// Load reads the installation's existing catalogs from their artifact root.
+// A development build or absent artifacts has no qualified distribution.
+func Load(root, version string, registry *providers.Registry) (*Catalog, error) {
+	if root == "" || version == "" {
+		return nil, nil
+	}
+	c, err := loadNative(filepath.Join(root, "native-installers"), version)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := loadNodes(filepath.Join(root, "node-payload"), version, registry)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil && nodes == nil {
+		return nil, nil
+	}
+	if c == nil {
+		c = &Catalog{Version: version}
+	}
+	c.nodes = nodes
+	return c, nil
+}
+
+// NativeAvailable distinguishes native artifacts from a node-only catalog.
+func (c *Catalog) NativeAvailable() bool { return c != nil && len(c.Artifacts) != 0 }
+
+func (c *Catalog) Close() error {
+	if c != nil && c.nodes != nil {
+		return c.nodes.root.Close()
+	}
+	return nil
+}
+
+// loadNative checks the matched catalog without downloading execution payloads. Local
 // offline archives are verified once; the directory stays immutable while serving.
 // A directory without catalog.json holds no installer and returns nil.
-func Load(directory, version string) (*Catalog, error) {
+func loadNative(directory, version string) (*Catalog, error) {
 	raw, err := os.ReadFile(filepath.Join(directory, "catalog.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil

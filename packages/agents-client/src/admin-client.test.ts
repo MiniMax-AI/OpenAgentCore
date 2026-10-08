@@ -1,3 +1,5 @@
+import checksumFixture from "../../../services/core/internal/nativeinstaller/testdata/checksums.json";
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { AdminClient } from "./admin-client";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
@@ -336,10 +338,51 @@ describe("AdminClient installation", () => {
   const headers = { key: "core.runtime_history.headers", value: null, default: null, configured: true, changeable: true, sensitive: true, restarts: ["core"] };
   const installation = {
     object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
-    local_only: false, source_commit: "a".repeat(40),
+    local_only: false, source_commit: "a".repeat(40), node_installation: null,
     configuration: { settings: [port, headers] },
     address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },
   };
+  const runtime = { source_commit: installation.source_commit, artifacts: { image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64) } };
+  const node = { installer_sha256: "d".repeat(64), runtime_releases: { docker: runtime } };
+  it("shares installer checksum acceptance with Core and its schema", async () => {
+    const schema = readFileSync(new URL("../../../contracts/agents-api/core.openapi.yaml", import.meta.url), "utf8");
+    const field = schema.split("  nativeinstaller.NodeInstallation:\n")[1]?.split("      runtime_releases:")[0];
+    const pattern = field?.match(/pattern: '([^']+)'/)?.[1];
+    expect(pattern).toBeDefined();
+    for (const value of checksumFixture.valid) {
+      expect(new RegExp(pattern!).test(value)).toBe(true);
+      await expect(clientWith({ ...installation, node_installation: { ...node, installer_sha256: value } }).client.retrieveInstallation()).resolves.toBeDefined();
+    }
+    for (const value of checksumFixture.invalid) {
+      expect(new RegExp(pattern!).test(value)).toBe(false);
+      await expect(clientWith({ ...installation, node_installation: { ...node, installer_sha256: value } }).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
+  });
+  it("reads a matched Core distribution and allows an installer without available providers", async () => {
+    for (const node_installation of [node, { ...node, runtime_releases: {} }]) {
+      const snapshot = { ...installation, node_installation };
+      expect(await clientWith(snapshot).client.retrieveInstallation()).toEqual(snapshot);
+    }
+  });
+  it("rejects malformed, unmatched or undeclared node installation facts", async () => {
+    const invalidNodes = [
+      {}, { ...node, extra: true }, { ...node, installer_sha256: "bad" },
+      { ...node, installer_sha256: node.installer_sha256 + "\n" },
+      { ...node, runtime_releases: null }, { ...node, runtime_releases: [] },
+      { ...node, runtime_releases: { unknown: runtime } }, { ...node, runtime_releases: { e2b: runtime } },
+      { ...node, runtime_releases: { docker: { ...runtime, source_commit: "e".repeat(40) } } },
+      { ...node, runtime_releases: { docker: { ...runtime, source_commit: runtime.source_commit + "\n" } } },
+      { ...node, runtime_releases: { docker: { ...runtime, artifacts: {} } } },
+      { ...node, runtime_releases: { docker: { ...runtime, artifacts: { ...runtime.artifacts, extra: "bad" } } } },
+      { ...node, runtime_releases: { docker: { ...runtime, artifacts: { ...runtime.artifacts, image_id: runtime.artifacts.image_id + "\n" } } } },
+    ];
+    for (const node_installation of invalidNodes) {
+      await expect(clientWith({ ...installation, node_installation }).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
+    await expect(clientWith({ ...installation, source_commit: null, node_installation: node }).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
+    const { node_installation: _node, ...missing } = installation;
+    await expect(clientWith(missing).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
   it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {
     expect(await clientWith(installation).client.retrieveInstallation()).toEqual(installation);
     expect(await clientWith({ ...installation, source_commit: null }).client.retrieveInstallation()).toMatchObject({ source_commit: null });
@@ -352,6 +395,7 @@ describe("AdminClient installation", () => {
       { ...installation, token: "leak" },
       { ...installation, configuration: null },
       { ...installation, installation_id: null },
+      { ...installation, source_commit: installation.source_commit + "\n" },
       { ...installation, public_url: null, api_base_url: null },
       configuration([{ ...port, configured: true }]),
     ]) {

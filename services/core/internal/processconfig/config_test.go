@@ -54,14 +54,14 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 	if c.Addr != "127.0.0.1:8091" || c.PublicOrigin.String() != "https://core.example" || c.InstallationID != testInstallationID || c.AgentHostID != "2f1c4a7e-9b3d-4e5f-8a6b-1c2d3e4f5a6b" || c.CredentialKey == nil || c.CoreKeys == nil ||
 		c.ExecutionConcurrency != 4 || c.DefaultHarness != "codex" || strings.Join(c.Harnesses, ",") != "claude_sdk,codex,mcode" ||
-		c.WriteAuditRetention != 90*24*time.Hour || c.OAuthTrustedOrigins != nil || c.NativeInstallers != "" || c.ProviderPaths.StateRoot != "/state" {
+		c.WriteAuditRetention != 90*24*time.Hour || c.OAuthTrustedOrigins != nil || c.ProviderPaths.StateRoot != "/state" {
 		t.Fatalf("%+v", c)
 	}
 	if h := c.RuntimeHistory; h.File != "" || h.Endpoint != "" || h.QueueCapacity != 256 || h.Timeout != 2*time.Second || h.SampleInterval != 30*time.Second {
 		t.Fatalf("%+v", h)
 	}
 	t.Setenv("OAC_PROVIDER_ROOT", "/opt/oac")
-	if c, err = Load(); err != nil || c.ProviderPaths.ArtifactRoot != "/opt/oac" || c.NativeInstallers != "/opt/oac/native-installers" {
+	if c, err = Load(); err != nil || c.ProviderPaths.ArtifactRoot != "/opt/oac" {
 		t.Fatal(c, err)
 	}
 }

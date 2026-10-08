@@ -7,7 +7,7 @@ const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
  * The download lock protects disposable files; verified entries remain usable
  * by other running installers. A leading space supports HISTCONTROL=ignorespace.
  */
-function nodeInstaller(sourceUrl: string, scriptDigest: string): string {
+function nodeInstaller(sourceUrl: string, scriptDigest: string, sourceCommit: string): string {
   if (!/^[0-9a-f]{64}$/.test(scriptDigest)) throw new Error("Invalid node installer checksum");
   return ` (umask 077
 [ "$(uname -s)/$(uname -m)" = Linux/x86_64 ] || { printf 'Node installation requires Linux amd64. Use a Linux host for Nodes, or a self-hosted Session for this machine.\\n' >&2; exit 1; }
@@ -26,7 +26,7 @@ s=; [ "$(id -u)" -eq 0 ] || s=sudo
 export http_proxy="\${http_proxy-\${HTTP_PROXY-}}" https_proxy="\${https_proxy-\${HTTPS_PROXY-}}" no_proxy="\${no_proxy-\${NO_PROXY-}}"
 export HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy" NO_PROXY="$no_proxy"
 printf '\\n==> Downloading node installer...\\n' &&
-curl -fs --connect-timeout 15 --max-time 60 --retry 2 --retry-connrefused --retry-delay 1 --max-filesize 1048576 ${quote(sourceUrl + "/node-install/node-install.pyz")} -o "$d/download.partial" || { c=$?; printf 'Cannot download node installer; check the console URL, TLS and proxy settings.\\n' >&2; exit "$c"; }
+curl -fs --connect-timeout 15 --max-time 60 --retry 2 --retry-connrefused --retry-delay 1 --max-filesize 1048576 ${quote(sourceUrl + "/api/v1/sandbox-node/install/releases/" + sourceCommit + "/node-install.pyz")} -o "$d/download.partial" || { c=$?; printf 'Cannot download node installer; check the Core URL, TLS and proxy settings.\\n' >&2; exit "$c"; }
 printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' ${quote(scriptDigest)} "$d/download.partial" | sha256sum -c --status || { printf 'Node installer checksum mismatch; generate a fresh command in Web and retry.\\n' >&2; exit 1; }
 mv "$d/download.partial" "$installer" || exit
@@ -44,10 +44,10 @@ const runInstaller = `$s \${s:+--preserve-env=http_proxy,https_proxy,no_proxy,HT
  * standard input (`printf` is a shell builtin), never in an argument, the
  * environment or sudo's command line.
  */
-export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, installationId, scriptDigest }: {
-  token: string; coreUrl: string; sourceUrl: string; provider: SandboxProvider; installationId: string; scriptDigest: string;
+export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, installationId, scriptDigest, sourceCommit }: {
+  token: string; coreUrl: string; sourceUrl: string; provider: SandboxProvider; installationId: string; scriptDigest: string; sourceCommit: string;
 }): string {
-  return `${nodeInstaller(sourceUrl, scriptDigest)}printf '%s\\n' ${quote(token)} | ${runInstaller} --enrollment-token-stdin --source-url ${quote(sourceUrl)} --core-url ${quote(coreUrl)} --provider ${quote(provider)} --installation-id ${quote(installationId)})`;
+  return `${nodeInstaller(sourceUrl, scriptDigest, sourceCommit)}printf '%s\\n' ${quote(token)} | ${runInstaller} --enrollment-token-stdin --source-url ${quote(sourceUrl)} --core-url ${quote(coreUrl)} --provider ${quote(provider)} --installation-id ${quote(installationId)})`;
 }
 
 /**
@@ -56,8 +56,8 @@ export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, instal
  * confirms with Core, at the address the node enrolled with, that the node is
  * removed; `force` skips that check, for an address that no longer answers.
  */
-export function nodeUninstallCommand({ sourceUrl, installationId, scriptDigest, force = false }: { sourceUrl: string; installationId: string; scriptDigest: string; force?: boolean }): string {
-  return `${nodeInstaller(sourceUrl, scriptDigest)}${runInstaller} --uninstall --installation-id ${quote(installationId)}${force ? " --force" : ""})`;
+export function nodeUninstallCommand({ sourceUrl, installationId, scriptDigest, sourceCommit, force = false }: { sourceUrl: string; installationId: string; scriptDigest: string; sourceCommit: string; force?: boolean }): string {
+  return `${nodeInstaller(sourceUrl, scriptDigest, sourceCommit)}${runInstaller} --uninstall --installation-id ${quote(installationId)}${force ? " --force" : ""})`;
 }
 
 /**
