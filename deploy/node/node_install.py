@@ -279,11 +279,11 @@ def micro_home(installation_id):
     return directory
 
 
-def provider_config(root, args, manifest, runtime_image):
+def provider_config(root, args, runtime_image):
     result = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url + "/api/v1",
               "specification": args.configuration["specification"], "generation": args.configuration["generation"]}
     if args.provider == "docker":
-        result["docker"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
+        result["native"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
                             "network": "oac-node-" + args.installation_id,
                             "seccomp_file": str(root / "runtime/seccomp.json"), "nested_sandbox": True}
     else:
@@ -291,11 +291,9 @@ def provider_config(root, args, manifest, runtime_image):
         port = endpoint.port or (443 if endpoint.scheme == "https" else 80)
         addresses = sorted({entry[4][0] for entry in socket.getaddrinfo(endpoint.hostname, port, type=socket.SOCK_STREAM)})
         core_rules = [{"action": "allow", "direction": "egress", "destination": address, "protocol": "tcp", "port": str(port)} for address in addresses]
-        result["microsandbox"] = {
+        result["native"] = {
             "helper_path": str(root / MICRO[0]), "runtime_path": str(root / MICRO[1]), "firmware_path": str(root / MICRO[2]),
-            "runtime_sha256": manifest["microsandbox"]["runtime_sha256"], "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
-            "runtime_home": str(getattr(args, "runtime_home", micro_home(args.installation_id))), "image": manifest["runtime_ref"],
-            **args.configuration["specification"]["resources"],
+            "runtime_home": str(getattr(args, "runtime_home", micro_home(args.installation_id))),
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": core_rules + [
                 {"action": "allow", "direction": "egress", "destination": "public"},
                 {"action": "allow", "direction": "egress", "destination": "host", "protocol": "udp", "port": "53"},
@@ -417,7 +415,7 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
     runtime_image = prepare_runtime(root, args, manifest)
     # Retain the original network policy when recovering a partial installation.
     if not existing_file(root / "provider.json"):
-        write_once(root / "provider.json", json_text(provider_config(root, args, manifest, runtime_image)))
+        write_once(root / "provider.json", json_text(provider_config(root, args, runtime_image)))
     else:
         node_spec.verify_provider(json.loads((root / "provider.json").read_text()), args.configuration, runtime_image)
     marker = root / "registered.json"
@@ -1092,7 +1090,7 @@ def remove_node_files(root, installation_id):
     Runs as the node's own user, so a link it planted can never reach another user's files."""
     no_links(root)
     provider = private_json(root / "provider.json") or {}
-    image = (provider.get("docker") or {}).get("image")
+    image = (provider.get("native") or {}).get("image")
     runtime_home = micro_home(installation_id)
     if root.exists():
         shutil.rmtree(root)

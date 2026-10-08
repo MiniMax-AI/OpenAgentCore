@@ -1,6 +1,9 @@
 package sandbox
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Node readiness classes. A node probe returns or wraps the class of its first
 // failed check and keeps the Provider's detail, such as host paths or daemon
@@ -20,6 +23,14 @@ var (
 	// The host cannot hold one sandbox of the deployment specification.
 	ErrCapacityInsufficient = errors.New("node cannot provide one sandbox of the deployment specification")
 )
+
+// CheckCapacity reports whether a host can hold one sandbox of the given resources.
+func CheckCapacity(r Resources, cpus int, memory uint64) error {
+	if cpus < int(r.CPUs) || memory < uint64(r.MemoryMiB)*1024*1024 {
+		return fmt.Errorf("%w: one sandbox requires %d CPUs and %d MiB memory; available host capacity is %d CPUs and %d MiB", ErrCapacityInsufficient, r.CPUs, r.MemoryMiB, cpus, memory/1024/1024)
+	}
+	return nil
+}
 
 // NodeProviderUnavailable also reports every readiness failure without a class.
 const NodeProviderUnavailable = "provider_unavailable"

@@ -47,7 +47,7 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 	values := map[uint64]node.GenerationProvider{}
 	recovery := []sandbox.GenerationReference{}
 	collection := []sandbox.GenerationReference{}
-	seen := map[uint64]providerconfig.Config{}
+	seen := map[uint64]sandbox.NodeConfig{}
 	closeValues := func() {
 		for _, v := range values {
 			if v.Close != nil {
@@ -56,7 +56,7 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 		}
 	}
 	for _, path := range paths {
-		var config providerconfig.Config
+		var config sandbox.NodeConfig
 		if strings.HasSuffix(path, ".preparing") {
 			journal, readErr := readGenerationJournal(path)
 			err = readErr
@@ -166,8 +166,8 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, StateDirectory: stateDir, Identity: stored.Identity, Credential: stored.Credential, Generations: manager})
 }
 
-func buildGeneration(registry *providerconfig.Registry, config providerconfig.Config, stateDir string) (node.GenerationProvider, error) {
-	built, closeProvider, err := registry.Build(config, providerconfig.LocalOptions{GenerationStateDirectory: stateDir})
+func buildGeneration(registry *providerconfig.Registry, config sandbox.NodeConfig, stateDir string) (node.GenerationProvider, error) {
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: stateDir})
 	if err != nil {
 		return node.GenerationProvider{}, err
 	}
@@ -175,12 +175,12 @@ func buildGeneration(registry *providerconfig.Registry, config providerconfig.Co
 }
 
 type generationJournal struct {
-	InstallationID      string                 `json:"installation_id"`
-	Generation          uint64                 `json:"generation"`
-	SpecificationDigest string                 `json:"specification_digest"`
-	NativeComplete      json.RawMessage        `json:"native_complete,omitempty"`
-	ImportStarted       json.RawMessage        `json:"import_started,omitempty"`
-	Configuration       *providerconfig.Config `json:"configuration,omitempty"`
+	InstallationID      string              `json:"installation_id"`
+	Generation          uint64              `json:"generation"`
+	SpecificationDigest string              `json:"specification_digest"`
+	NativeComplete      json.RawMessage     `json:"native_complete,omitempty"`
+	ImportStarted       json.RawMessage     `json:"import_started,omitempty"`
+	Configuration       *sandbox.NodeConfig `json:"configuration,omitempty"`
 }
 
 func readGenerationJournal(path string) (generationJournal, error) {
@@ -211,23 +211,17 @@ func readGenerationJournal(path string) (generationJournal, error) {
 }
 
 // The preparation configuration is an immutable plan, never a usable provider.
-// Only Docker's two specification-proven local IDs can differ at publication.
-func sameGenerationPlan(final, plan providerconfig.Config) bool {
-	if plan.Docker != nil && final.Docker != nil {
-		runtime := plan.Specification.Runtime
-		if final.Docker.Image != runtime.ImageID && final.Docker.Image != runtime.ImageManifestDigest {
-			return false
-		}
-		copyDocker := *plan.Docker
-		copyDocker.Image = final.Docker.Image
-		plan.Docker = &copyDocker
-	}
+// A generation's Core-visible envelope is fixed; native is the adapter's
+// node-local state, which preparation may resolve and the adapter validates
+// when it builds.
+func sameGenerationPlan(final, plan sandbox.NodeConfig) bool {
+	final.Native, plan.Native = nil, nil
 	return reflect.DeepEqual(final, plan)
 }
 
 // Pending-only entries stay recovery/collection-only. No journal is readiness
 // or authority to collect without a fresh current-connection Core grant.
-func generationLocalState(config providerconfig.Config, stateDir string) (string, error) {
+func generationLocalState(config sandbox.NodeConfig, stateDir string) (string, error) {
 	directory := filepath.Join(stateDir, "generations")
 	info, err := os.Lstat(directory)
 	if os.IsNotExist(err) {

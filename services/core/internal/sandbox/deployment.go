@@ -113,3 +113,8 @@ func (s DeploymentSpec) Digest(provider string) string {
 type Description struct {
 	Mode, BackendFingerprint string
 }
+
+func BackendFingerprint(kind, namespace string) string {
+	digest := sha256.Sum256([]byte(kind + "\x00" + namespace))
+	return hex.EncodeToString(digest[:])
+}
