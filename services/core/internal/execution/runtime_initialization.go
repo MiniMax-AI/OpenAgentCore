@@ -67,14 +67,15 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 				// Placement binds an agent host once the Environment serves;
 				// a later scan claims the preparation on it.
 				if _, err := w.place(ctx, owner.TenantID, owner.SessionID, owner.EnvironmentID, func(id string) bool {
-					// The Turn path's predicate: the host advertises the
-					// Harness as available.
+					// A host that knows the kind is ready even when its
+					// Harness is unavailable, so the initialization fails
+					// typed below instead of waiting for another host.
 					peer, err := w.dispatcher.authorizedPeer(ctx, id)
 					if err != nil {
 						return false
 					}
-					_, err = runtimeDeclaration(peer, owner.Engine)
-					return err == nil
+					_, _, known := peer.AgentKindStatus(owner.Engine)
+					return known
 				}); err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 					return err
 				}
