@@ -35,7 +35,6 @@ func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config
 	if err = validateExecutorFeatures(info, start); err != nil {
 		return nil, err
 	}
-	start.Type = "executor_prepare"
 	base, err := run()
 	if err != nil {
 		return nil, err

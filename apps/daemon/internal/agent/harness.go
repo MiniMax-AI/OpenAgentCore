@@ -41,6 +41,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
@@ -532,6 +533,10 @@ type ExecutorFactory func(context.Context, PrepareRequest) (Executor, error)
 // sets Prepared. A Turn's run ID and input arrive in Executor.StartTurn.
 type PrepareRequest struct {
 	proto.PromptRequestPayload
+	// PreparationDeadline is the dispatch-owned absolute preparation deadline.
+	// It must be nonzero and preserved through preparation, never restarted.
+	// The factory context owns the Executor lifetime; this deadline does not.
+	PreparationDeadline time.Time
 	// Prepared is the model configuration, validated against the kind's
 	// declaration. An adapter takes its model, provider and native parameters
 	// only from here.

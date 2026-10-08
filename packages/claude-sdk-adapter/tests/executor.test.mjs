@@ -23,7 +23,7 @@ globalThis.startupFixture=async({options})=>{
  const close=()=>{child.stdin.end();interrupt?.()};
  options.abortController.signal.addEventListener('abort',close);
  return {close,query(prompt){assert.equal(queried,false);queried=true;process.send({type:'query'});return {
-  close,async initializationResult(){return process.argv[1]==="no-hook-report" ? {} : process.argv[1]==="false-hook-report" ? {hooks_applied:false} : {hooks_applied:true}},
+  close,async initializationResult(){if(process.argv[1]==="late-ready"){const expired=Date.now()+120000;Date.now=()=>expired;}return process.argv[1]==="no-hook-report" ? {} : process.argv[1]==="false-hook-report" ? {hooks_applied:false} : {hooks_applied:true}},
   async interrupt(){process.send({type:'interrupt'});interrupt?.();if(process.argv[1]==='rejected')throw new Error('interrupt failed');return ['unknown','pending-function-unknown'].includes(process.argv[1]) ? undefined : {still_queued:process.argv[1]==='queued' ? ['not-consumed'] : []}},
   async *[Symbol.asyncIterator](){
    for await(const user of prompt){
@@ -77,9 +77,9 @@ async function launch(t,mode="normal") {
  const wait=async predicate=>{const until=Date.now()+5000;while(!predicate()){assert.ok(Date.now()<until,JSON.stringify({events,observations,stderr}));await new Promise(resolve=>setTimeout(resolve,5))}};
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
  const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
- send({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",
+ send({type:"executor_prepare",preparation_deadline:Date.now()+60000,cwd:"/tmp",model:"fixture",system_prompt:"",
  ...(mode==="features" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
- await wait(()=>events.some(event=>event.type==="executor_ready"));
+ await wait(()=>events.some(event=>event.type===(mode==="late-ready"?"error":"executor_ready")));
  assert.equal(observations.filter(event=>event.type==="input").length,0);
  return {child,events,observations,closed,wait,send,start};
 }
@@ -192,4 +192,12 @@ for (const mode of ["pending-function-result", "pending-function-terminal", "pen
   child.stdin.end();
  }
  assert.deepEqual(await closed,{code:0,signal:null});
+});
+
+test("an initialization finishing past the original deadline never publishes ready or consumes input",{timeout:10000},async t=>{
+ const {events,observations,closed}=await launch(t,"late-ready");
+ assert.deepEqual(await closed,{code:0,signal:null});
+ assert.equal(events.some(event=>event.type==="executor_ready"),false);
+ assert.equal(observations.some(event=>event.type==="input"),false);
+ assert.equal(observations.filter(event=>event.type==="native_closed").length,1);
 });

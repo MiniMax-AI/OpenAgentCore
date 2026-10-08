@@ -1,9 +1,11 @@
 package claudesdk
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
@@ -55,10 +57,26 @@ func prepared(t testing.TB, req proto.PromptRequestPayload) agent.PrepareRequest
 	if err != nil {
 		t.Fatal(err)
 	}
-	return agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration}
+	return agent.PrepareRequest{PreparationDeadline: time.Now().Add(time.Minute), PromptRequestPayload: req, Prepared: configuration}
 }
 
 // fixtureProvider is the provider every Claude request carries.
 func fixtureProvider() *modelprovider.Provider {
 	return &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://model.example", APIKey: "fixture-key"}
+}
+
+func TestPreparationDeadlineReachesBridgeUnchanged(t *testing.T) {
+	req := prepared(t, proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, Model: "test-model"})
+	deadline := time.Now().Add(3 * time.Minute).Truncate(time.Millisecond)
+	req.PreparationDeadline = deadline
+	start, _, err := prepareTestView(t, req)
+	if err != nil || start.PreparationDeadline != deadline.UnixMilli() {
+		t.Fatalf("deadline=%d error=%v", start.PreparationDeadline, err)
+	}
+	for _, invalid := range []time.Time{{}, time.Now().Add(-time.Second)} {
+		req.PreparationDeadline = invalid
+		if _, _, err := prepareTestView(t, req); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("invalid budget: %v", err)
+		}
+	}
 }

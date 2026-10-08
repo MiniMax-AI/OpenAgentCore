@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 56b2a40b814062de7d636af33ad2eb7671b8b3eb11781e32caacdf3d3985ae73
+source_hash: a18a2221b28aa01596574a1db63e1bf643dc43fb73c15261fb8932dd447f499b
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -61,7 +61,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 
 [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ViewExecutorFactory`、`Executor`、`Turn` 和 `TurnSettlement`。`Turn` 是一个接口：`Cancel`、`CancellationOutcome`、`SteerWithReceipt`、`SubmitFunctionResult` 和 `AwaitSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。适配器不支持的操作返回 Unsupported，由能力声明而不是方法决定 Runtime 是否调用它。所有接口都使用中立协议类型。
 
-视图的 `ViewExecutorFactory` 接收一个 `agent.PrepareRequest`：`execution_prepare` 携带的 Session 配置、Registry 按 kind 的声明一次性准备好的模型配置（`Prepared`）、Session 的原生状态键（`StateKey`），以及由 Environment owner 填写的 Environment 工作区和已安装 Capabilities（`WorkspaceRoot`、`CapabilityRoot`、`Skills`、`MCP`）。适配器只从 `Prepared` 获取模型、提供商和原生参数，从不自行解析 `model` 或 `model_provider`。Turn 的 Run ID 和输入通过 `Executor.StartTurn` 传入。
+视图的 `ViewExecutorFactory` 接收一个 `agent.PrepareRequest`：`execution_prepare` 携带的 Session 配置、Registry 按 kind 的声明一次性准备好的模型配置（`Prepared`）、Session 的原生状态键（`StateKey`），以及由 Environment owner 填写的 Environment 工作区和已安装 Capabilities（`WorkspaceRoot`、`CapabilityRoot`、`Skills`、`MCP`）。适配器只从 `Prepared` 获取模型、提供商和原生参数，从不自行解析 `model` 或 `model_provider`。Dispatch 还提供 admission 创建时唯一确定的必填绝对截止时间 `PreparationDeadline`。Environment 准备、Registry 与 View 原样传递它。原生初始化必须在截止时间前结束；适配器向 SDK 传递初始化预算时，必须从剩余时间推导，并拒绝已耗尽的预算。工厂上下文独立拥有 Executor 生命周期：接管准备完成的 Executor 后，不得让准备截止时间约束后续 Turn。Turn 的 Run ID 和输入通过 `Executor.StartTurn` 传入。
 
 例如，Codex 适配器保留其 app-server 和 thread，Claude 适配器保留一个流式 Query，MiniMax 适配器保留其 ACP 连接和原生 session。它们都公开相同的 Executor 和 Turn 契约。原生回调和资源保留在适配器内部；Runtime 负责准入、空闲过期和替换。取消通过 `Turn.Cancel` 精确定位到目标 Turn，适配器则向 Runtime 提供原生完成证据。
 

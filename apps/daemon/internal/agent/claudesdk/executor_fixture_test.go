@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
@@ -59,7 +60,7 @@ func startSingleTurn(ctx context.Context, config testBridge, req proto.PromptReq
 	if err != nil {
 		return nil, err
 	}
-	resource, err := config.factory()(ctx, agent.PrepareRequest{PromptRequestPayload: req, Prepared: configuration})
+	resource, err := config.factory()(ctx, agent.PrepareRequest{PreparationDeadline: time.Now().Add(time.Minute), PromptRequestPayload: req, Prepared: configuration})
 	if err != nil {
 		return nil, err
 	}

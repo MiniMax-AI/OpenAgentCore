@@ -1,7 +1,9 @@
 package claudesdk
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -21,26 +23,30 @@ type subagentOptions struct {
 }
 
 type startRequest struct {
-	NativeModelOptions *nativeModelOptions  `json:"native_model_options,omitempty"`
-	ToolSearch         bool                 `json:"tool_search,omitempty"`
-	Subagents          *subagentOptions     `json:"subagents,omitempty"`
-	OutputFormat       *proto.OutputFormat  `json:"output_format,omitempty"`
-	Type               string               `json:"type"`
-	Model              string               `json:"model"`
-	SystemPrompt       string               `json:"system_prompt"`
-	Cwd                string               `json:"cwd"`
-	Resume             string               `json:"resume,omitempty"`
-	Functions          []proto.FunctionTool `json:"functions,omitempty"`
-	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
-	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
-	RequireHistory     bool                 `json:"require_history,omitempty"`
+	PreparationDeadline int64                `json:"preparation_deadline"`
+	NativeModelOptions  *nativeModelOptions  `json:"native_model_options,omitempty"`
+	ToolSearch          bool                 `json:"tool_search,omitempty"`
+	Subagents           *subagentOptions     `json:"subagents,omitempty"`
+	OutputFormat        *proto.OutputFormat  `json:"output_format,omitempty"`
+	Type                string               `json:"type"`
+	Model               string               `json:"model"`
+	SystemPrompt        string               `json:"system_prompt"`
+	Cwd                 string               `json:"cwd"`
+	Resume              string               `json:"resume,omitempty"`
+	Functions           []proto.FunctionTool `json:"functions,omitempty"`
+	MCPHTTPServers      *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
+	Workspace           *workspaceProfile    `json:"workspace,omitempty"`
+	RequireHistory      bool                 `json:"require_history,omitempty"`
 }
 
 // prepareOptions renders the request's execution configuration and the
 // selected model provider. The registered factory already admitted the
 // selection against the declaration.
 func prepareOptions(req agent.PrepareRequest) (startRequest, []string, error) {
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ToolSearch: req.ToolSearch}
+	if req.PreparationDeadline.IsZero() || !time.Now().Before(req.PreparationDeadline) {
+		return startRequest{}, nil, context.DeadlineExceeded
+	}
+	start := startRequest{PreparationDeadline: req.PreparationDeadline.UnixMilli(), Type: "executor_prepare", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ToolSearch: req.ToolSearch}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}

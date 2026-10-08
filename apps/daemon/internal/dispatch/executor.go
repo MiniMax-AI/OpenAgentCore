@@ -186,7 +186,7 @@ func (r *Router) prepareExecutor(p *preparationState, configuration proto.Prompt
 	}
 	var native agent.Executor
 	var err error
-	req := agent.PrepareRequest{PromptRequestPayload: configuration, StateKey: "agents-api-" + owner.sessionID, Assignment: p.request.Assignment}
+	req := agent.PrepareRequest{PromptRequestPayload: configuration, StateKey: "agents-api-" + owner.sessionID, Assignment: p.request.Assignment, PreparationDeadline: p.deadline}
 	if owner.ctx.Err() == nil {
 		if environment != nil {
 			req, err = environment.Prepare(owner.ctx, req)
