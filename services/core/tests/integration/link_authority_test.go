@@ -536,7 +536,8 @@ func TestRegisteredAgentHostAuthenticates(t *testing.T) {
 func TestInitializationBindsAgentHost(t *testing.T) {
 	for _, environment := range []string{`{"type":"openai_hosted"}`, `{"type":"self_hosted","workspace_directory":"/workspace"}`} {
 		t.Run(environment, func(t *testing.T) {
-			s, _ := newManagedTestStore(t)
+			// Hosted work is admitted only on a configured deployment.
+			s, _ := configuredStore(t)
 			tenant, host := uuid.NewString(), registerAgentHost(t, s, "")
 			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 				Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":` + environment + `}`),

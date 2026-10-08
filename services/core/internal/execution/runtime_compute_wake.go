@@ -55,16 +55,21 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 	return r.deployment.ClearWake(ctx, next, owner.ComputeActivityAt)
 }
 
-// waitServing waits, for at most 30 seconds, until the relay holds the serve
-// peer of the allocation's Link resource.
+// waitServing waits until the relay holds the serve peer of the allocation's
+// Link resource, for at most 20 seconds, which leaves the pass's 30-second
+// operation time to resume the Environment. A shutdown or lost lease returns
+// its own error rather than a compute diagnostic.
 func (r *runtimeLifecycle) waitServing(ctx context.Context, owner deployment.Allocation) error {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	wait, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	timer := time.NewTicker(100 * time.Millisecond)
 	defer timer.Stop()
 	for !r.links.Serving(serveResource(owner).Ref()) {
 		select {
-		case <-ctx.Done():
+		case <-wait.Done():
+			if errors.Is(ctx.Err(), context.Canceled) {
+				return ctx.Err()
+			}
 			return sandbox.ErrComputeUnconfirmed
 		case <-timer.C:
 		}

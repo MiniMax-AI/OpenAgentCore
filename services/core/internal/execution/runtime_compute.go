@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -119,14 +120,6 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	if compute.Status != "running" || !compute.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
-	bound, err := r.allocationAssignment(ctx, owner)
-	if err != nil {
-		return err
-	}
-	peer, err := assignedRuntimePeer(ctx, r.sessions, r.registry, bound)
-	if err != nil {
-		return err
-	}
 	if _, err := r.deployment.CheckRunning(ctx, owner); err != nil {
 		return err
 	}
@@ -141,6 +134,23 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	policy := r.config.Suspension
 	if policy == nil || !activity.ReadyToSuspend(policy.IdleTimeout) {
 		return nil
+	}
+	// Only the assigned agent host quiesces the Environment. An unplaced
+	// Session has nothing to quiesce, and a later pass retries a host that is
+	// not connected; neither is a sandbox fault.
+	bound, err := r.allocationAssignment(ctx, owner)
+	if errors.Is(err, sessions.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	peer, err := assignedRuntimePeer(ctx, r.sessions, r.registry, bound)
+	if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, runtimegateway.ErrSessionClosed) || errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 	state.SuspendID, state.RestoreID, state.Rollback = uuid.NewString(), "", false
 	until := activity.ObservedAt.Add(policy.Retention)
