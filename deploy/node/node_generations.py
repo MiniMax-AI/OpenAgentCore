@@ -101,7 +101,7 @@ def generation_marker(root, generation, suffix, digest, installation, installer)
             keys.add("configuration")
             plan = value["configuration"]
             if (not isinstance(plan, dict) or plan.get("installation_id") != installation or plan.get("generation") != generation
-                    or plan.get("provider") not in ("docker", "microsandbox")
+                    or plan.get("provider") not in installer.node_spec.NODE_PROVIDERS
                     or installer.node_spec.digest(plan["provider"], plan.get("specification")) != digest):
                 raise installer.InstallError("Invalid generation preparation plan")
         if type(value.get("import_started")) is not bool:

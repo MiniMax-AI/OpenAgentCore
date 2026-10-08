@@ -91,6 +91,12 @@ class SpecificationTests(unittest.TestCase):
         with self.assertRaises(node_spec.SpecificationError):
             node_spec.validate(self.data, self.args)
 
+    def test_direct_and_unknown_providers_are_not_node_configurations(self):
+        for provider in ("e2b", "unknown"):
+            data = dict(self.data, provider=provider)
+            with self.subTest(provider=provider), self.assertRaises(node_spec.SpecificationError):
+                node_spec.validate(data, self.args)
+
     def test_capacity_requires_approved_bounded_integers(self):
         for key, value in (("max_active", None), ("max_active", True), ("max_active", 0),
                            ("max_retained", 1), ("max_retained", 1000001)):

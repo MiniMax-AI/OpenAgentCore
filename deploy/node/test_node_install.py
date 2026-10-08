@@ -77,7 +77,7 @@ class NodeInstallTests(unittest.TestCase):
         self.fail_registration = False
         self.register_stderr = None
         for patch in (mock.patch.object(installer.Path, "home", return_value=self.home),
-                      mock.patch.object(installer, "preflight"),
+                      mock.patch.object(installer, "preflight", side_effect=self.service_check),
                       mock.patch.object(installer, "wait_ready"),
                       mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
                       mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
@@ -88,6 +88,11 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"statically linked", b""))):
             patch.start()
             self.addCleanup(patch.stop)
+
+    def service_check(self, args):
+        # Stub process/device admission without suppressing native store setup.
+        with mock.patch.object(installer.os, "access", return_value=True), mock.patch.object(installer, "checked", return_value=""):
+            installer.provider_installation(args.provider)["service_check"](args)
 
     def configuration_response(self, request, **kwargs):
         resources = {"cpus": 3, "memory_mib": 6144}
@@ -853,6 +858,22 @@ class NodeInstallTests(unittest.TestCase):
                         fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self.assertEqual(stat.S_IMODE((locks / "oac-node.lock").stat().st_mode), 0o600)
 
+    def test_docker_network_conflict_precedes_capacity_and_host_mutation(self):
+        system = self.sudo_host()
+        def checked(arguments, failure, **kwargs):
+            if "{{json .}}" in arguments:
+                return json.dumps({"MemoryLimit": True, "CpuCfsQuota": True, "NCPU": 0, "MemTotal": 0})
+            if "network" in arguments:
+                return "oac-node-" + self.args.installation_id
+            return self.checked(arguments, failure, **kwargs)
+        with mock.patch.object(installer, "checked", side_effect=checked), mock.patch.object(installer, "host_lock") as lock:
+            with self.assertRaisesRegex(installer.InstallError, "Another node.*Nothing was changed"):
+                installer.install_system(self.args, "synthetic-once-token")
+            lock.assert_not_called()
+        self.assertFalse((system / "etc").exists())
+        self.assertFalse((system / "units").exists())
+        self.assertFalse(installer.SERVICE_HOME.exists())
+
     def test_sudo_mode_refusals_change_nothing(self):
         foreign = SimpleNamespace(pw_name="oac-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/oac-node", pw_shell="/bin/bash")
         for case, message in (("selinux", "SELinux is enforcing"), ("docker", "Docker Engine is not installed"),
@@ -1114,15 +1135,56 @@ class NodeInstallTests(unittest.TestCase):
 
 
 class NodePrerequisiteTests(unittest.TestCase):
+    def test_installer_implementations_match_declared_node_providers(self):
+        declared = {name for name, rules in node_spec._CONTRACT["providers"].items() if rules["mode"] == "nodes"}
+        self.assertEqual(set(node_spec.NODE_PROVIDERS), declared)
+        self.assertEqual(set(installer.PROVIDERS), declared)
+        self.assertEqual(set(installer.provider_assets.CATALOG), declared)
+
+    def test_direct_and_unknown_providers_never_reach_native_installation(self):
+        for provider in ("e2b", "unknown"):
+            args = SimpleNamespace(provider=provider, installation_id="fixture", core_url="https://core.example",
+                                   configuration={"specification": {}, "generation": 1})
+            with self.subTest(provider=provider), \
+                    mock.patch.object(installer.os, "getuid", return_value=1000), \
+                    mock.patch.object(installer.platform, "system", return_value="Linux"), \
+                    mock.patch.object(installer.platform, "machine", return_value="x86_64"), \
+                    mock.patch.object(installer, "checked") as checked, \
+                    mock.patch.object(installer.os, "access") as access:
+                for operation in (lambda: installer.preflight(args),
+                                  lambda: installer.prepare_runtime(Path("/unused"), args, {}),
+                                  lambda: installer.provider_config(Path("/unused"), args, None),
+                                  lambda: installer.system_unit(Path("/unused"), provider)):
+                    with self.assertRaisesRegex(installer.InstallError, "Unsupported node provider"):
+                        operation()
+                checked.assert_not_called()
+                access.assert_not_called()
+
     def test_preflight_rejects_missing_kvm_before_downloads(self):
         with mock.patch.object(installer.platform, "system", return_value="Linux"), \
                 mock.patch.object(installer.platform, "machine", return_value="x86_64"), \
                 mock.patch.object(installer.os, "getuid", return_value=1000), \
                 mock.patch.object(installer.os, "access", return_value=False), \
-                mock.patch.object(installer, "fetch") as fetch:
+                mock.patch.object(installer, "fetch") as fetch, \
+                mock.patch.object(installer, "micro_home") as home:
             with self.assertRaisesRegex(installer.InstallError, "/dev/kvm"):
-                installer.preflight("microsandbox")
+                installer.preflight(SimpleNamespace(provider="microsandbox"))
             fetch.assert_not_called()
+            home.assert_not_called()
+
+    def test_service_check_refuses_unowned_micro_store(self):
+        base = Path.home() / ".oac/tests/node-install"
+        base.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=base) as directory:
+            home = Path(directory)
+            unknown = home / "unknown"
+            unknown.write_bytes(b"preserve")
+            with mock.patch.object(installer.os, "access", return_value=True), \
+                    mock.patch.object(installer, "micro_home", return_value=home):
+                with self.assertRaisesRegex(installer.InstallError, "unowned state"):
+                    installer.micro_service_check(SimpleNamespace(installation_id="fixture"))
+            self.assertEqual(unknown.read_bytes(), b"preserve")
+            self.assertFalse((home / "oac-installation.json").exists())
 
     def test_microsandbox_short_home_is_stable_and_rejects_long_user_home(self):
         with mock.patch.object(installer.Path, "home", return_value=Path("/home/node")):

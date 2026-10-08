@@ -33,6 +33,8 @@ def release(provider, manifest):
 _CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"source_commit_pattern\":\"[0-9a-f]{40}\",\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"artifacts\":{\"image_id\":{\"pattern\":\"sha256:[0-9a-f]{64}\",\"manifest_path\":[\"images\",\"runtime\"]},\"image_manifest_digest\":{\"pattern\":\"sha256:[0-9a-f]{64}\",\"manifest_path\":[\"image_manifest_digests\",\"runtime\"]}},\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"artifacts\":{},\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"disk\":true,\"artifacts\":{\"firmware_sha256\":{\"pattern\":\"[0-9a-f]{64}\",\"manifest_path\":[\"microsandbox\",\"firmware_sha256\"]},\"microsandbox_ref\":{\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\",\"manifest_path\":[\"runtime_ref\"]},\"runtime_sha256\":{\"pattern\":\"[0-9a-f]{64}\",\"manifest_path\":[\"microsandbox\",\"runtime_sha256\"]}},\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
+NODE_PROVIDERS = tuple(name for name, rules in _CONTRACT["providers"].items() if rules["mode"] == "nodes")
+
 
 def canonical_spec(provider, specification):
     rules = _CONTRACT["providers"][provider]
@@ -89,7 +91,7 @@ def validate(data, args):
         raise SpecificationError(PUBLIC_URL_CHANGED)
     try:
         provider, spec = data["provider"], data["specification"]
-        if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
+        if (provider not in NODE_PROVIDERS or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
                 or set(spec) != {"resources", "runtime"}
