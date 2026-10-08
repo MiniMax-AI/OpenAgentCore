@@ -4,6 +4,8 @@ definitions:
     properties:
       executor_token:
         type: string
+    required:
+      - executor_token
     type: object
   deployment.Enrollment:
     properties:
@@ -473,6 +475,12 @@ paths:
   /api/v1/agent-daemon/installation:
     post:
       description: Accepts a short-lived Environment installation Bearer authorization, not a Project or Core key. Returns frozen connection constraints; it does not claim or rotate credentials.
+      parameters:
+        - description: Bearer installation grant
+          in: header
+          name: Authorization
+          required: true
+          type: string
       produces:
         - application/json
       responses:
@@ -501,6 +509,11 @@ paths:
         - application/json
       description: A valid installation Bearer authorization can claim one connect-only key. The client persists its generated secret before submitting it. Retries must present that same secret; a different, rotated or revoked credential is never replaced.
       parameters:
+        - description: Bearer installation grant
+          in: header
+          name: Authorization
+          required: true
+          type: string
         - description: Locally persisted executor secret
           in: body
           name: body

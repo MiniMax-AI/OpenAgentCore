@@ -84,6 +84,7 @@ func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Reque
 // @Description Accepts a short-lived Environment installation Bearer authorization, not a Project or Core key. Returns frozen connection constraints; it does not claim or rotate credentials.
 // @Tags Native Installation
 // @Produce json
+// @Param Authorization header string true "Bearer installation grant"
 // @Success 200 {object} v1.NativeInstallationContext
 // @Failure 401,404,503 {object} v1.ErrorResponse
 // @Router /api/v1/agent-daemon/installation [post]
@@ -111,13 +112,14 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 }
 
 type NativeInstallationClaim struct {
-	ExecutorToken string `json:"executor_token"`
+	ExecutorToken string `json:"executor_token" binding:"required"`
 }
 
 // @Summary Claim an Environment's installation credential
 // @Description A valid installation Bearer authorization can claim one connect-only key. The client persists its generated secret before submitting it. Retries must present that same secret; a different, rotated or revoked credential is never replaced.
 // @Tags Native Installation
 // @Accept json
+// @Param Authorization header string true "Bearer installation grant"
 // @Param body body api.NativeInstallationClaim true "Locally persisted executor secret"
 // @Success 204
 // @Failure 400,401,409,503 {object} v1.ErrorResponse

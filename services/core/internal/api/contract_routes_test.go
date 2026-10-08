@@ -129,3 +129,39 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 		}
 	}
 }
+
+func TestInstallationContractRequiresGrantAndExecutorToken(t *testing.T) {
+	raw, err := os.ReadFile("../../../../contracts/agents-api/runtime.openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct {
+				Name     string `yaml:"name"`
+				In       string `yaml:"in"`
+				Required bool   `yaml:"required"`
+			}
+		} `yaml:"paths"`
+		Definitions map[string]struct {
+			Required []string `yaml:"required"`
+		} `yaml:"definitions"`
+	}
+	if err := yaml.Unmarshal(raw, &contract); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/agent-daemon/installation", "/api/v1/agent-daemon/installation/claim"} {
+		present := false
+		for _, parameter := range contract.Paths[path]["post"].Parameters {
+			if parameter.In == "header" && parameter.Name == "Authorization" && parameter.Required {
+				present = true
+			}
+		}
+		if !present {
+			t.Errorf("%s does not require its installation grant", path)
+		}
+	}
+	if !slices.Contains(contract.Definitions["api.NativeInstallationClaim"].Required, "executor_token") {
+		t.Fatal("claim schema does not require the executor secret")
+	}
+}
