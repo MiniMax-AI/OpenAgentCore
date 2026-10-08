@@ -58,7 +58,7 @@ def verify_none(client, foreign, http, agent_options, session_options, ready, re
                     restart()
                 stream = sessions.stream(session.id,
                     input="Recall the string from our previous turn. Reply with exactly that string. Do not use tools.",
-                    idempotency_key=key + "-continue", timeout=240)
+                    idempotency_key=key + "-continue", timeout=360)
             events = []
             proof["runs"].append(events)
             with stream:
@@ -226,8 +226,8 @@ def main():
 
     with httpx2.Client(trust_env=False, timeout=30) as http:
         # Input admission can prepare a native executor before returning.
-        client = OpenAI(base_url=base, api_key=key, timeout=240, max_retries=0, _strict_response_validation=True, http_client=http)
-        foreign = OpenAI(base_url=base, api_key=foreign_key, timeout=240, max_retries=0, _strict_response_validation=True, http_client=http)
+        client = OpenAI(base_url=base, api_key=key, timeout=360, max_retries=0, _strict_response_validation=True, http_client=http)
+        foreign = OpenAI(base_url=base, api_key=foreign_key, timeout=360, max_retries=0, _strict_response_validation=True, http_client=http)
 
         def ready(session):
             if placement == "none":

@@ -83,7 +83,7 @@ class QualificationTests(unittest.TestCase):
                 with self.assertRaises(BadRequestError):
                     sdk.beta.agents.sessions.events.create("fixture-session", events=[{
                         "type": "agent.session.input.message", "input": [{"role": "user", "content": [{"type": "input_text", "text": "fixture"}]}]}])
-                self.assertEqual(requests[-1].extensions["timeout"]["read"], 240)
+                self.assertEqual(requests[-1].extensions["timeout"]["read"], 360)
             http.get("https://core.example/v1/agents/sessions/fixture-session")
             self.assertEqual(requests[-1].extensions["timeout"]["read"], 30)
             return []

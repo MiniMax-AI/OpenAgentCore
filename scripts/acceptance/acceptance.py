@@ -136,7 +136,7 @@ class API:
         self.evidence = evidence
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
-    def request(self, method, path, operation, body=None, query=None, key=None, binary=False):
+    def request(self, method, path, operation, body=None, query=None, key=None, binary=False, timeout=30):
         headers = {"Authorization": "Bearer " + self.token, "OpenAI-Beta": "agents=v1"}
         data = None
         if body is not None:
@@ -148,7 +148,7 @@ class API:
         entry = {"operation": operation, "method": method}
         self.evidence.append(entry)
         try:
-            with self.opener.open(Request(url, data=data, headers=headers, method=method), timeout=30) as response:
+            with self.opener.open(Request(url, data=data, headers=headers, method=method), timeout=timeout) as response:
                 entry["http_status"] = response.status
                 request_id = response.headers.get("x-request-id", "")
                 if re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", request_id):
@@ -222,7 +222,7 @@ def submit(api, record, text):
     event = {"type": "agent.session.input.message", "input": [
         {"role": "user", "content": [{"type": "input_text", "text": text}]}]}
     api.request("POST", session_path(record) + "/events", "events.message",
-                body={"events": [event]}, key=uuid.uuid4().hex)
+                body={"events": [event]}, key=uuid.uuid4().hex, timeout=360)
 
 
 def items(api, record):

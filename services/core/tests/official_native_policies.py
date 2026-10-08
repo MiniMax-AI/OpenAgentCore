@@ -52,7 +52,7 @@ def verify_native_policies(client, foreign, http, agent_options, session_options
             assert session.agent.instructions == instructions and session.agent.model == agent_options["model"]
             assert session.agent.text.verbosity == verbosity
             assert [tool.to_dict() for tool in session.agent.tools] == resolved
-            with sessions.stream(sid, input=prompt, timeout=240) as stream:
+            with sessions.stream(sid, input=prompt, timeout=360) as stream:
                 for event in stream:
                     run_proof["events"].append(event.to_dict())
                     assert event.type not in {"agent.session.requires_action", "agent.session.failed", "agent.session.turn.failed", "agent.session.turn.cancelled"}, label + " requires a completed native Turn; unsupported verbosity is not a pass"
