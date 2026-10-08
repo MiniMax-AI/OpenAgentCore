@@ -16,12 +16,12 @@ import (
 )
 
 // ReserveAllocation commits the allocation of the tenant's hosted Environment
-// and its dedicated device together, before the provider creates compute.
+// before the provider creates compute.
 // installation is the provider key the allocation is provisioned for, and
-// credentialHash and serveCredentialHash the SHA-256 digests of the device
-// and Link Serve credentials. An existing allocation for the same installation
-// returns Replayed; only a fresh one authorizes the one Create call.
-func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key AllocationKey, installation, credentialHash, serveCredentialHash string) (Allocation, error) {
+// serveCredentialHash is the SHA-256 digest of the Link Serve credential.
+// An existing allocation for the same installation returns Replayed; only a
+// fresh one authorizes the one Create call.
+func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key AllocationKey, installation, serveCredentialHash string) (Allocation, error) {
 	key, err := key.parse()
 	if err != nil {
 		return Allocation{}, err
@@ -29,9 +29,8 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 	if installation, err = parseID(installation); err != nil {
 		return Allocation{}, err
 	}
-	registration, err := sessions.NewDeviceRegistration("managed-runtime", credentialHash)
 	serve, serveErr := hex.DecodeString(serveCredentialHash)
-	if err != nil || serveErr != nil || len(serve) != sha256.Size {
+	if serveErr != nil || len(serve) != sha256.Size {
 		return Allocation{}, fmt.Errorf("%w: SHA-256 credential digest required", ErrInvalidInput)
 	}
 	var result Allocation
@@ -70,7 +69,7 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 		if environment.Status == "failed" || environment.Status == "expired" {
 			return ErrInvalidInput
 		}
-		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation, ServeCredentialHash: hex.EncodeToString(serve)}
+		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, ProviderKey: installation, Generation: d.Generation, ServeCredentialHash: hex.EncodeToString(serve)}
 		if d.Mode == "nodes" {
 			reserved, err := tx.LoadReserved()
 			if err != nil {
@@ -80,10 +79,6 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 				return err
 			}
 			allocation.NodeID, allocation.Generation = reserved.NodeID, reserved.Generation
-		}
-		device := sessions.ExecutionDevice{ID: allocation.DeviceID, Name: registration.Name}
-		if err := sessions.CreateEnvironmentDevice(ctx, tx, environment.ID, device, registration.CredentialHash); err != nil {
-			return err
 		}
 		result, err = tx.InsertAllocation(allocation)
 		return err
@@ -168,19 +163,19 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 			result = current
 			return nil
 		}
-		if err := tx.RevokeDevice(current); err != nil {
+		if err := tx.ReleaseAssignment(ctx, false); err != nil {
 			return err
 		}
-		// The revocation commits with the Session's settlement, which reads
+		// The release commits with the Session's settlement, which reads
 		// the allocation's expiry after it.
-		revoked, err := tx.LoadAllocation()
+		observed, err := tx.LoadAllocation()
 		if err != nil {
 			return err
 		}
-		if revoked.SessionDeleted {
+		if observed.SessionDeleted {
 			err = sessions.CancelWork(ctx, tx)
 		} else {
-			err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, nil)
+			err = sessions.TerminateEnvironment(ctx, tx, observed.Expired, sessions.ProvisioningFailureReason, nil)
 		}
 		if err != nil {
 			return err
@@ -300,14 +295,14 @@ func (e *ExecutionOperations) change(ctx context.Context, owner Allocation, live
 }
 
 // checkAllocation returns the stored allocation when it is still the owner's:
-// the same allocation, device, installation and node. A live change also
+// the same allocation, installation and node. A live change also
 // requires the Session undeleted.
 func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, error) {
 	current, err := tx.LoadAllocation()
 	if err != nil {
 		return Allocation{}, err
 	}
-	if current.ID != owner.ID || current.DeviceID != owner.DeviceID || current.ProviderKey != owner.ProviderKey || current.NodeID != owner.NodeID {
+	if current.ID != owner.ID || current.ProviderKey != owner.ProviderKey || current.NodeID != owner.NodeID {
 		return Allocation{}, ErrAllocationConflict
 	}
 	if !live {

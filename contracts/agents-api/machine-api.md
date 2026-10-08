@@ -16,14 +16,13 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox 
 | `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | Self-hosted installer | Installation grant | [Installation grant](./environment-executor-credentials.md#installation-grant) |
 | `POST agent-daemon/enroll` | Self-hosted daemon | Executor credential | [Enroll a self-hosted daemon](#enroll-a-self-hosted-daemon) |
 | `GET agent-daemon/connection?environment_id=` | Self-hosted installer | Executor credential | [Private connection confirmation](./environment-executor-credentials.md#private-connection-confirmation) |
-| `POST agent-daemon/bootstrap` | Runtime daemon | Daemon credential | [Daemon bootstrap](#daemon-bootstrap) |
-| `GET agent-daemon/device-status?device_id=` | Runtime daemon | Daemon credential | [Device status](#device-status) |
-| WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | Daemon credential | [Core–Runtime protocol](../../docs/runtime-protocol.md) |
+| `POST agent-daemon/bootstrap` | Agent-host Runtime | Agent-host credential | [Daemon bootstrap](#daemon-bootstrap) |
+| WebSocket `GET agent-daemon/ws?device_id=&version=` | Agent-host Runtime | Agent-host credential | [Core–Runtime protocol](../../docs/runtime-protocol.md) |
 | WebSocket `GET sandbox-link` | Sandbox I/O service (serve peer) and agent-host Runtime (attach peer) | The resource's Serve credential or the agent host's Runtime credential, in the Link Hello | [Sandbox link protocol](../../docs/sandbox-link-protocol.md) |
 
 Every credential travels in an `Authorization: Bearer` header, except on `sandbox-link`, where each peer sends it in its Link Hello after the upgrade. No credential travels in a URL. Core derives the [Link URL](../../docs/configuration.md#changing-the-public-url) from `OAC_PUBLIC_URL`.
 
-The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes, the two installation routes and the `sandbox-link` upgrade, whose messages the Sandbox link protocol defines. The `sandbox-node/connect` and `agent-daemon/ws` WebSockets and the daemon bootstrap, device-status, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
+The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes, the two installation routes and the `sandbox-link` upgrade, whose messages the Sandbox link protocol defines. The `sandbox-node/connect` and `agent-daemon/ws` WebSockets and the daemon bootstrap, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
 
 ## Credentials
 
@@ -33,22 +32,9 @@ The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only th
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
 | Executor credential | The installation claim, or the Core-key [executor credential routes](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the Serve credential of the Environment's enrollment on `sandbox-link` |
-| Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap`, `device-status` and `ws` |
+| Agent-host credential | Installation initialization writes the [agent-host identity](../../docs/configuration.md#agent-host-container); Core registers it at startup | `agent-daemon/bootstrap`, `agent-daemon/ws` and `sandbox-link` as an attach peer |
 
 Core keeps only a SHA-256 digest of each token and credential it stores; installation grants are signed and not stored. Credentials are not interchangeable: each works only on its own routes.
-
-### Operator device profile
-
-`oac-core-device` provisions a Runtime device profile directly in the database:
-
-```sh
-umask 077
-mkdir -p ~/.oac/daemon/default
-OAC_DATABASE_URL=... oac-core-device --tenant <tenant-uuid> --name 'engine host' --url https://core.example > ~/.oac/daemon/default/auth.json
-oac-daemon connect --profile default
-```
-
-`--tenant` is the Project's execution tenant UUID and `--url` Core's origin without a path. The command prints the profile once: `server_url` (the origin plus `/api/v1`), `runtime_id` (the device ID), `runner_credential` and `device_name`. Use a new profile rather than overwriting another device's file, and copy it privately to the same path on a remote host. `oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` revokes the device: new connections are refused at once, and an open connection closes at its next heartbeat. Core binds Sessions only to the deployment's agent host ([Session assignments](../../docs/runtime-protocol.md#session-assignments)), so a device of this profile runs no Session.
 
 ## Node routes
 
@@ -100,13 +86,9 @@ The credential is checked before any deployment state, so a rejected credential,
 
 ### Daemon bootstrap
 
-`POST /api/v1/agent-daemon/bootstrap` with the daemon credential and `{"device_id": "…"}` returns `device_id`, `workspace_id`, `ws_url` (derived from `OAC_PUBLIC_URL`, never from request headers), `heartbeat_seconds` and `protocol_version`. The daemon then dials `ws_url` as the [Core–Runtime protocol](../../docs/runtime-protocol.md#ownership-and-connection) describes.
+`POST /api/v1/agent-daemon/bootstrap` with the agent-host credential and `{"device_id": "…"}` returns `device_id`, `workspace_id` (an empty string for the deployment-scoped host), `ws_url` (derived from `OAC_PUBLIC_URL`, never from request headers), `heartbeat_seconds` and `protocol_version`. The daemon then dials `ws_url` as the [Core–Runtime protocol](../../docs/runtime-protocol.md#ownership-and-connection) describes.
 
-### Device status
-
-`GET /api/v1/agent-daemon/device-status?device_id=` with the daemon credential returns `device_id` and `online`, which says whether the device has a live connection to Core.
-
-The bootstrap, device-status and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
+The bootstrap and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
 
 ### Enroll a self-hosted daemon
 

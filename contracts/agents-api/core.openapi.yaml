@@ -2816,10 +2816,6 @@ definitions:
         format: uuid
         type: string
         x-nullable: true
-      device_id:
-        format: uuid
-        type: string
-        x-nullable: true
       kind:
         enum:
           - managed_allocation
@@ -2829,7 +2825,6 @@ definitions:
     required:
       - allocation_id
       - connection_generation
-      - device_id
       - kind
     type: object
   v1.RuntimeMemoryObservation:

@@ -78,7 +78,7 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 	}
 	for _, owner := range []deployment.Allocation{idleOwner, initialOwner} {
 		got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: owner.EnvironmentID})
-		if err != nil || got.ID != owner.ID || got.DeviceID != owner.DeviceID {
+		if err != nil || got.ID != owner.ID {
 			t.Fatal("restart replaced allocation identity", got, err)
 		}
 	}

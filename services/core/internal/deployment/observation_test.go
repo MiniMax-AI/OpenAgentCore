@@ -56,7 +56,7 @@ func TestObservationResolverBindsManagedSessionEnvironmentAndAllocation(t *testi
 		measured: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`),
 		allocation: Allocation{
 			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
-			ProviderKey: "provider", DeviceID: "device", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
+			ProviderKey: "provider", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
 		},
 	})
 	if err != nil {
@@ -66,7 +66,7 @@ func TestObservationResolverBindsManagedSessionEnvironmentAndAllocation(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != runtimeobs.ModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" || target.Instance.DeviceID != "device" {
+	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != runtimeobs.ModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" {
 		t.Fatalf("incorrect managed identity binding: %+v", target)
 	}
 	if string(target.Instance.ProviderState) != `{"current":{"name":"sandbox"}}` {
@@ -193,7 +193,7 @@ func TestObservationResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) 
 func TestObservationResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
 	base := Allocation{
 		ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
-		ProviderKey: "provider", DeviceID: "device",
+		ProviderKey: "provider",
 	}
 	for _, mutate := range []func(*Allocation){
 		func(value *Allocation) { value.TenantID = "other" },

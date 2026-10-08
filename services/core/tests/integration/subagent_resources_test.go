@@ -32,7 +32,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	journal := sessionExecution(t, owner.lease)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	err := sessionExecution(t, owner.lease).BindSessionDevice(ctx, tenant, session.ID, host.ID)
 	if err != nil {
 		t.Fatal(err)

@@ -24,7 +24,7 @@ func allocation(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted
 		ComputePhase: row.ComputePhase, ComputeRevision: row.ComputeRevision, ComputeState: row.ComputeState,
 		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: timestamp(row.ComputeRetainedUntil),
 		ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID), SessionID: uuidString(session), TenantID: uuidString(tenant),
-		DeviceID: uuidString(row.DeviceID), ProviderKey: uuidString(row.ProviderKey), ServeGeneration: uint64(row.ServeGeneration), State: row.State, CreateSettled: row.CreateSettled,
+		ProviderKey: uuidString(row.ProviderKey), ServeGeneration: uint64(row.ServeGeneration), State: row.State, CreateSettled: row.CreateSettled,
 		SessionDeleted: deleted.Valid, Expired: expired, CreatedAt: row.CreatedAt.Time,
 	}
 }
@@ -202,10 +202,6 @@ func (t *reservationTx) InsertAllocation(a deployment.NewAllocation) (deployment
 	if err != nil {
 		return deployment.Allocation{}, err
 	}
-	device, err := parseID(a.DeviceID)
-	if err != nil {
-		return deployment.Allocation{}, err
-	}
 	provider, err := parseID(a.ProviderKey)
 	if err != nil {
 		return deployment.Allocation{}, err
@@ -215,7 +211,7 @@ func (t *reservationTx) InsertAllocation(a deployment.NewAllocation) (deployment
 		return deployment.Allocation{}, err
 	}
 	row, err := t.q.CreateRuntimeAllocation(t.ctx, sqlc.CreateRuntimeAllocationParams{
-		ID: id, EnvironmentID: t.environment, DeviceID: device, ProviderKey: provider, NodeID: node,
+		ID: id, EnvironmentID: t.environment, ProviderKey: provider, NodeID: node,
 		DeploymentGeneration: pgtype.Int8{Int64: int64(a.Generation), Valid: true},
 		ServeCredentialHash:  pgtype.Text{String: a.ServeCredentialHash, Valid: true},
 	})
@@ -319,18 +315,6 @@ func (t *allocationTx) change(current deployment.Allocation, write func(context.
 type cleanupTx struct {
 	*allocationTx
 	*sessionpg.SessionTx
-}
-
-func (t *cleanupTx) RevokeDevice(current deployment.Allocation) error {
-	device, err := parseID(current.DeviceID)
-	if err != nil {
-		return err
-	}
-	// The release follows the revocation, which leaves no Runtime to deliver it to.
-	if _, err := t.q.RevokeRuntimeCleanupDevice(t.ctx, sqlc.RevokeRuntimeCleanupDeviceParams{TenantID: t.tenant, DeviceID: device}); err != nil {
-		return err
-	}
-	return t.ReleaseAssignment(t.ctx, false)
 }
 
 func (t *cleanupTx) RequestCleanup(current deployment.Allocation) (deployment.Allocation, error) {

@@ -53,7 +53,7 @@ type fakeCheckpointProvider struct {
 func newFakeCheckpointProvider(t *testing.T, s *Store) *fakeCheckpointProvider {
 	t.Helper()
 	p := &fakeCheckpointProvider{t: t, lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, serving: map[string]*linkServe{},
-		host: registerAgentHost(t, s, ""), registry: runtimegateway.NewRegistry(), link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))}
+		host: registerAgentHost(t, s), registry: runtimegateway.NewRegistry(), link: sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))}
 	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: p.registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
@@ -454,7 +454,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	}
 	queued := f.queued(suspended)
 	awake := f.phase(tenant, env.ID, "running")
-	if awake.SessionID != session.ID || awake.ID != owner.ID || awake.DeviceID != owner.DeviceID || f.provider.creates != 1 || f.provider.restores != 1 || f.provider.snapshotDeletes != 1 || f.provider.resumes.Load() != 1 {
+	if awake.SessionID != session.ID || awake.ID != owner.ID || f.provider.creates != 1 || f.provider.restores != 1 || f.provider.snapshotDeletes != 1 || f.provider.resumes.Load() != 1 {
 		t.Fatal("wake replaced Session or replayed allocation")
 	}
 	var completedCount, queuedCount int
@@ -587,9 +587,6 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 			reconcileManagedState(t, f.worker, f.store, tenant, env.ID, "released")
 			if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 {
 				t.Fatal("retained snapshot survived cleanup")
-			}
-			if _, ok, err := sessionAdapter(f.store).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-				t.Fatal("cleanup retained daemon authority", err)
 			}
 		})
 	}

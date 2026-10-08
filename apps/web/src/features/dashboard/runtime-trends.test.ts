@@ -70,7 +70,6 @@ function snapshot(at: number, options: {
     instance: {
       kind: "managed_allocation",
       allocation_id: options.allocationId ?? "33333333-3333-4333-8333-333333333333",
-      device_id: null,
       connection_generation: null,
     },
     lifecycle_state: "active",
@@ -115,7 +114,7 @@ describe("Runtime live-window trends", () => {
     const pending = snapshot(120_000);
     pending.observations = [{
       ...pending.observations[0]!,
-      instance: { kind: "managed_allocation", allocation_id: null, device_id: null, connection_generation: null },
+      instance: { kind: "managed_allocation", allocation_id: null, connection_generation: null },
       lifecycle_state: "pending",
       status: "unavailable",
       reason: "allocation_pending",

@@ -85,9 +85,6 @@ type Session struct {
 	// heartbeat persists daemon-advertised capability snapshots.
 	heartbeat      HeartbeatTouch
 	credentialHash string
-	// archivedCancellations reads the receipt an archived Session's
-	// cancellation owes this connection's delivery.
-	archivedCancellations ArchivedCancellationStore
 	// links supplies the Link fields of this connection's binds.
 	links *LinkAuthority
 
@@ -135,11 +132,6 @@ type Session struct {
 
 	// closeOnce guards the shutdown path so concurrent Close calls
 	// collapse into one.
-	receiptMu    sync.Mutex
-	deliveries   map[string]struct{}
-	receiptDrain runtimedevice.ArchivedCancellationReceipt
-	receiptTimer *time.Timer
-
 	closeOnce sync.Once
 	closed    chan struct{}
 }
@@ -250,7 +242,6 @@ func (s *Session) setDeclarations(kinds []proto.SupportedAgentKind, homeRemoval 
 // releases connection ownership. It establishes no execution outcome. Idempotent.
 func (s *Session) Close(reason string) {
 	s.closeOnce.Do(func() {
-		s.stopReceiptTimer()
 		close(s.closed)
 		_ = s.conn.Close()
 		// Transport failure must remain distinct from native execution facts.
@@ -290,7 +281,7 @@ func (s *Session) CloseWithCode(code int, reason string) {
 // daemon frame inherits the caller's trace_id. Callers that explicitly
 // set env.Trace win.
 func (s *Session) Send(ctx context.Context, env proto.Envelope) error {
-	if s.IsClosed() || !s.allowsReceiptFrame(env, true) {
+	if s.IsClosed() {
 		return ErrSessionClosed
 	}
 	if env.Trace == "" {
@@ -356,9 +347,6 @@ func (s *Session) writeLoop() {
 			if !ok {
 				return
 			}
-			if !s.allowsReceiptFrame(env, true) {
-				continue
-			}
 			raw, err := json.Marshal(env)
 			if err != nil {
 				s.log("agentdaemon gateway: marshal outbound envelope: %v", err)
@@ -390,9 +378,7 @@ func (s *Session) readLoop() {
 			s.log("agentdaemon gateway: read frame: %v", err)
 			return
 		}
-		if !s.receiptDraining() {
-			s.markSeen()
-		}
+		s.markSeen()
 
 		var env proto.Envelope
 		if err := json.Unmarshal(raw, &env); err != nil {
@@ -430,23 +416,12 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		return
 	}
 	if status.Deleted {
-		draining, drainErr := s.DrainArchivedCancellation(ctx)
-		if drainErr == nil && draining {
-			return
-		}
-		s.log("agentdaemon gateway: runtime retired, closing session device=%s", s.DeviceID)
-		// "retired" rather than "deleted by admin": the row may have
-		// been soft-deleted by sandbox stale-row cleanup or by an
-		// actual admin action; the daemon only sees it's no longer
-		// the current owner.
-		s.CloseWithCode(CloseRuntimeDeleted, "runtime retired")
+		s.log("agentdaemon gateway: runtime authorization changed, closing session device=%s", s.DeviceID)
+		s.CloseWithCode(CloseRuntimeDeleted, "runtime authorization changed")
 	}
 }
 
 func (s *Session) dispatch(env proto.Envelope) {
-	if !s.allowsReceiptFrame(env, false) {
-		return
-	}
 	switch env.Type {
 	case proto.TypeWorkspaceExportResult:
 		s.dispatchWorkspaceExport(env)

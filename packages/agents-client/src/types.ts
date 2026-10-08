@@ -804,7 +804,6 @@ export interface RuntimeObservedObservation extends RuntimeObservationBase {
   instance: {
     kind: "managed_allocation";
     allocation_id: string;
-    device_id: string | null;
     connection_generation: null;
   };
   lifecycle_state: RuntimeObservationLifecycleState;
@@ -824,7 +823,6 @@ export interface RuntimeUnavailableObservation extends RuntimeObservationBase {
   instance: {
     kind: "managed_allocation";
     allocation_id: string | null;
-    device_id: string | null;
     connection_generation: null;
   };
   lifecycle_state: RuntimeObservationLifecycleState;
@@ -841,7 +839,7 @@ export interface RuntimeNoneObservation extends RuntimeObservationBase {
   environment_id: null;
   mode: "none";
   provider_type: null;
-  instance: { kind: "none"; allocation_id: null; device_id: null; connection_generation: null };
+  instance: { kind: "none"; allocation_id: null; connection_generation: null };
   lifecycle_state: null;
   status: "unsupported";
   reason: "runtime_mode_not_observable";
@@ -859,7 +857,6 @@ export interface RuntimeSelfHostedObservation extends RuntimeObservationBase {
   instance: {
     kind: "self_hosted_connection";
     allocation_id: null;
-    device_id: string | null;
     connection_generation: string | null;
   };
   lifecycle_state: null;

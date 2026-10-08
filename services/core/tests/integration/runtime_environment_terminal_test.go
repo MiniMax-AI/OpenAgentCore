@@ -27,7 +27,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			writer := executionWriter(t, s)
-			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -50,9 +50,6 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			// Only a hosted failure records a provisioning failure, with the generic reason.
 			if failure := ended.EnvironmentFailure; expired != (failure == nil) || !expired && (failure.Reason != sessions.ProvisioningFailureReason || failure.FailedAt.IsZero()) {
 				t.Fatal("terminal failure projection", failure)
-			}
-			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
-				t.Fatal("terminal credential remained usable", err)
 			}
 			failed, err := sessionExecution(t, writer.lease).PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			if err != nil || failed.State != sessions.EnvironmentInputFailed || len(failed.Receipts) != 0 || failed.SettledAt == nil || !failed.Deadline.Equal(reservation.Deadline) {
@@ -123,7 +120,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := executionWriter(t, s)
-	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,8 +144,5 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	allocation, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || allocation.State != "creating" {
 		t.Fatal("partial allocation transition", err)
-	}
-	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
-		t.Fatal("partial credential revocation", err)
 	}
 }

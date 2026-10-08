@@ -38,13 +38,9 @@ func fixtureLinkResource(t *testing.T, s *Store, tenant string, session sessions
 		}
 		return resource, []byte(key.Token)
 	}
-	device, err := FixtureEnvironmentDevice(t, t.Context(), s.pool, tenant, environment, "sandbox", runtimedevice.HashCredential(uuid.NewString()))
-	if err != nil {
-		t.Fatal(err)
-	}
 	resource := sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: environment, Kind: "allocation", ID: uuid.NewString(), Generation: 1}
 	serve := []byte(uuid.NewString())
-	insertAllocation(t, s, resource, device.ID, serve)
+	insertAllocation(t, s, resource, serve)
 	return resource, serve
 }
 
@@ -56,7 +52,7 @@ func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session sessions.Se
 	// The Runtime shares the harness's Core, not its connection or write lock.
 	other := &dispatchHarness{t: h.t, s: h.s, lease: h.lease, owned: h.owned, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,
 		admissions: h.admissions, environments: h.environments, link: h.link}
-	host := registerAgentHost(t, h.s, h.tenant)
+	host := registerAgentHost(t, h.s)
 	other.device, other.credential = sessions.ExecutionDevice{ID: host.ID, Name: "agent host"}, host.Credential
 	other.resource, other.serve = fixtureLinkResource(t, h.s, h.tenant, session)
 	// The placement precedes Serve, so a running Worker cannot place the
@@ -125,7 +121,7 @@ func completeEmptyArtifactExport(t *testing.T, h *dispatchHarness, frames ...<-c
 
 func assertNoRuntimeAllocation(t *testing.T, h *dispatchHarness) {
 	t.Helper()
-	_, pool := testStore(t)
+	pool := h.s.pool
 	var count int
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id IN (SELECT id FROM environments WHERE session_id=$1)", h.session.ID).Scan(&count); err != nil || count != 0 {
 		t.Fatal("self-hosted fixture allocated managed compute", count, err)

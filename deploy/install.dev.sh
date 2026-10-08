@@ -67,7 +67,6 @@ go_build() {
 (
   cd "$repo_root"
   go_build services/core/cmd/server "$build/core/bin/oac-core"
-  go_build services/core/cmd/device "$build/core/bin/oac-core-device"
   go_build services/core/cmd/environment-key "$build/core/bin/oac-core-environment-key"
   go_build services/core/cmd/oac "$build/core/bin/oac"
   go_build services/web "$build/web/oac-web"

@@ -716,10 +716,9 @@ export const runtimeHistoryTokenUsagePointFields = ["end", "input_tokens", "outp
 export interface RuntimeInstance {
   allocation_id: string | null;
   connection_generation: string | null;
-  device_id: string | null;
   kind: RuntimeInstanceKind;
 }
-export const runtimeInstanceFields = ["allocation_id", "connection_generation", "device_id", "kind"] as const;
+export const runtimeInstanceFields = ["allocation_id", "connection_generation", "kind"] as const;
 export const runtimeInstanceKindValues = ["managed_allocation", "self_hosted_connection", "none"] as const;
 export type RuntimeInstanceKind = (typeof runtimeInstanceKindValues)[number];
 export interface RuntimeMemoryObservation {

@@ -43,7 +43,6 @@ jobs:
       - name: Build standalone commands
         run: |
           OAC_DEV_CORE_BUILD_DIR="$RUNNER_TEMP/oac-core-build" make build-core
-          "$RUNNER_TEMP/oac-core-build/oac-core-device" --help
           "$RUNNER_TEMP/oac-core-build/oac-core-environment-key" --help
       - uses: actions/setup-python@v6
         with:

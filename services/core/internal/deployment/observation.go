@@ -85,7 +85,7 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 			return runtimeobs.Target{}, errors.New("Runtime allocation does not match resolved ownership")
 		}
 		target.Instance = runtimeobs.Instance{
-			AllocationID: allocation.ID, ProviderKey: allocation.ProviderKey, DeviceID: allocation.DeviceID,
+			AllocationID: allocation.ID, ProviderKey: allocation.ProviderKey,
 			AllocationState: allocation.State, AllocationCreatedAt: allocation.CreatedAt,
 			ComputePhase: allocation.ComputePhase, ProviderState: append(json.RawMessage(nil), allocation.ComputeState...),
 		}

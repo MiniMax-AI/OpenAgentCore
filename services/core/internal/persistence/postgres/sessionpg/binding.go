@@ -33,7 +33,6 @@ var (
 	_ sessions.EnvironmentTerminationTx = (*SessionTx)(nil)
 	_ sessions.InputStartTx             = (*SessionTx)(nil)
 	_ sessions.ComputeAdmissionTx       = (*SessionTx)(nil)
-	_ sessions.EnvironmentDeviceTx      = (*SessionTx)(nil)
 	_ sessions.InputProjectionTx        = (*SessionTx)(nil)
 	_ sessions.TurnTx                   = (*SessionTx)(nil)
 )
@@ -150,37 +149,6 @@ func (t *SessionTx) ExpireEnvironment(ctx context.Context, environment string) e
 	count, err := t.q.ExpireSessionEnvironment(ctx, sqlc.ExpireSessionEnvironmentParams{ID: id, SessionID: t.session, TenantID: t.tenant})
 	if err == nil && count != 1 {
 		return sessions.ErrNotFound
-	}
-	return err
-}
-
-func (t *SessionTx) LoadBoundDevice(ctx context.Context) (bool, error) {
-	_, err := t.q.GetSessionDevice(ctx, sqlc.GetSessionDeviceParams{TenantID: t.tenant, ID: t.session})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	return err == nil, err
-}
-
-// InsertEnvironmentDevice inserts the device only for the Session's own hosted
-// Environment. The insert takes no row when the Environment already has a
-// device, including one a concurrent transaction inserted first, or cannot
-// take one: that is sessions.ErrDeviceBindingConflict.
-func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, environment string, device sessions.ExecutionDevice, credentialHash string) error {
-	id, err := parseID(device.ID)
-	if err != nil {
-		return err
-	}
-	environmentID, err := parseID(environment)
-	if err != nil {
-		return err
-	}
-	_, err = t.q.CreateEnvironmentDevice(ctx, sqlc.CreateEnvironmentDeviceParams{
-		ID: id, TenantID: t.tenant, SessionID: t.session, EnvironmentID: environmentID,
-		Name: device.Name, CredentialHash: pgtype.Text{String: credentialHash, Valid: true},
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return sessions.ErrDeviceBindingConflict
 	}
 	return err
 }

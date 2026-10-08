@@ -119,7 +119,7 @@ func (w *Worker) place(ctx context.Context, tenant, session, environment string,
 	if !errors.Is(err, sessions.ErrNotFound) {
 		return false, err
 	}
-	hosts, err := w.dispatcher.SessionsReader.ListAgentHosts(ctx, tenant)
+	hosts, err := w.dispatcher.SessionsReader.ListAgentHosts(ctx)
 	if err != nil {
 		return false, err
 	}

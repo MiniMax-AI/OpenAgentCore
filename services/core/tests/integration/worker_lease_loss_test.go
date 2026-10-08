@@ -13,7 +13,7 @@ import (
 
 func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	h := newDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	h.session = publicSession(t, h, "active")
 	queued := publicSession(t, h, "queued")

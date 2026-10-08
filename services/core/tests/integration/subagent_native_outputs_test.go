@@ -14,7 +14,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	s, pool := testStore(t)
 	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	err := sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +86,7 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	s, _ := testStore(t)
 	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
-	host := registerAgentHost(t, s, tenant)
+	host := registerAgentHost(t, s)
 	err := sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID)
 	if err != nil {
 		t.Fatal(err)

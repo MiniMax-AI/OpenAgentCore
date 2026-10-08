@@ -22,7 +22,6 @@ type RuntimeObservation struct {
 type RuntimeInstance struct {
 	Kind                 string  `json:"kind" enums:"managed_allocation,self_hosted_connection,none" binding:"required"`
 	AllocationID         *string `json:"allocation_id" extensions:"x-nullable" binding:"required" format:"uuid"`
-	DeviceID             *string `json:"device_id" extensions:"x-nullable" binding:"required" format:"uuid"`
 	ConnectionGeneration *string `json:"connection_generation" extensions:"x-nullable" binding:"required" format:"uuid"`
 }
 

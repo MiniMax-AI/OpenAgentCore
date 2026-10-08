@@ -1,6 +1,6 @@
 -- name: CreateRuntimeAllocation :one
-INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, node_id, deployment_generation, serve_credential_hash)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
+INSERT INTO runtime_allocations (id, environment_id, provider_key, node_id, deployment_generation, serve_credential_hash)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 
 -- name: GetRuntimeAllocation :one
 SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired

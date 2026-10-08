@@ -5,7 +5,7 @@ import type { SandboxAllocation } from "@oac/agents-client";
 import { hostedObservation, node, session } from "../overview/test-fixtures";
 import { hostedRuntimeRows, hostedRuntimeUsage, loadHostedRuntimes, matchesRuntime, runtimeSnapshot } from "./sandbox-runtime";
 
-const none = { ...hostedObservation("plain", "p1"), mode: "none", instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", cpu: null, memory: null } as unknown as ReturnType<typeof hostedObservation>;
+const none = { ...hostedObservation("plain", "p1"), mode: "none", instance: { kind: "none", allocation_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", cpu: null, memory: null } as unknown as ReturnType<typeof hostedObservation>;
 
 describe("loadHostedRuntimes", () => {
   it("keeps hosted observations, reads their Sessions through their project and bounds the reads", async () => {

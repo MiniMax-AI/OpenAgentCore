@@ -83,7 +83,6 @@ type AllocationCleanupStorage interface {
 // ReservationTx is one Session-locked allocation reservation. The Session is
 // the owner of the Environment the transaction was opened for.
 type ReservationTx interface {
-	sessions.EnvironmentDeviceTx
 	// LoadEnvironment reads the Session's Environment.
 	LoadEnvironment(ctx context.Context) (sessions.Environment, error)
 	// FindAllocation returns the Environment's allocation and whether it has
@@ -127,9 +126,9 @@ type AllocationTx interface {
 type AllocationCleanupTx interface {
 	AllocationTx
 	sessions.EnvironmentTerminationTx
-	// RevokeDevice releases the Session's Runtime assignment without home
-	// removal, then revokes the allocation's device.
-	RevokeDevice(current Allocation) error
+	// ReleaseAssignment releases the Session's Runtime assignment, retaining
+	// its native home when removeHome is false.
+	ReleaseAssignment(ctx context.Context, removeHome bool) error
 	// RequestCleanup records that the allocation's resources await cleanup.
 	RequestCleanup(current Allocation) (Allocation, error)
 }

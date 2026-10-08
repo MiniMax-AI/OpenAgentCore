@@ -67,7 +67,7 @@ func awaitEnvironmentAdmission(t *testing.T, result <-chan environmentAdmissionR
 
 func environmentAdmissionPending(t *testing.T, h *dispatchHarness, key string) sessions.EnvironmentInputReservation {
 	t.Helper()
-	_, pool := testStore(t)
+	pool := h.s.pool
 	var id string
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "input reservation", func() bool {
 		return pool.QueryRow(t.Context(), "SELECT id::text FROM environment_input_reservations WHERE session_id=$1 AND idempotency_key=$2", h.session.ID, key).Scan(&id) == nil
@@ -171,7 +171,7 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 			defer cancel()
 			response := submitEnvironmentAdmission(ctx, h, worker, "waiting")
 			pending := environmentAdmissionPending(t, h, "waiting")
-			_, pool := testStore(t)
+			pool := h.s.pool
 			expected := execution.ErrEnvironmentInputExpired
 			switch name {
 			case "expired":

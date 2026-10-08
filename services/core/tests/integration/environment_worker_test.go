@@ -11,7 +11,7 @@ import (
 
 func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	h := newDispatchHarness(t)
-	_, pool := testStore(t)
+	pool := h.s.pool
 	enableWorkerEnvironment(t, h)
 	pending := map[string]sessions.EnvironmentInputReservation{}
 	for range 2 {

@@ -101,8 +101,7 @@ func TestEventLimitStillAllowsTerminalFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, pool := testStore(t)
-	defer pool.Close()
+	pool := h.s.pool
 	if _, err := pool.Exec(ctx, "UPDATE turns SET event_bytes=33554432 WHERE id=$1", input.TurnID); err != nil {
 		t.Fatal(err)
 	}

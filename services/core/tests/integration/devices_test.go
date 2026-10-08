@@ -12,35 +12,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
-
-func registerTestDevice(t *testing.T, s *Store, tenant string) (sessions.ExecutionDevice, string) {
-	t.Helper()
-	secret := uuid.NewString() + uuid.NewString()
-	d, err := sessionService(t, s).CreateDevice(context.Background(), tenant, "isolated executor", runtimedevice.HashCredential(secret))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return d, secret
-}
 
 func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := context.Background()
 	tenant, session := newTurnSession(t, s)
 	otherTenant, otherSession := newTurnSession(t, s)
-	a, b := registerAgentHost(t, s, tenant), registerAgentHost(t, s, tenant)
-	ordinary, _ := registerTestDevice(t, s, tenant)
+	a, b := registerAgentHost(t, s), registerAgentHost(t, s)
 	// The binds run on an execution lease of their own, which closes before
 	// the pool does.
 	lease, err := pgunit.AcquireLease(ctx, pool)
@@ -52,8 +39,8 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sessions bind only agent hosts, and only within their own tenant.
-	for _, args := range [][3]string{{tenant, session.ID, ordinary.ID}, {otherTenant, session.ID, a.ID}, {tenant, otherSession.ID, a.ID}} {
+	// Session ownership remains tenant-scoped even though hosts are deployment-wide.
+	for _, args := range [][3]string{{otherTenant, session.ID, a.ID}, {tenant, otherSession.ID, a.ID}} {
 		if err := execution.BindSessionDevice(ctx, args[0], args[1], args[2]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign binding: %v", err)
 		}
@@ -94,6 +81,9 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if _, err := sessionAdapter(s).GetSessionDevice(ctx, otherTenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign lookup: %v", err)
 	}
+	if err := execution.BindSessionDevice(ctx, otherTenant, otherSession.ID, a.ID); err != nil {
+		t.Fatal("deployment host could not serve another tenant", err)
+	}
 	if err := lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -114,12 +104,12 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
-	tenant, _ := newTurnSession(t, s)
-	a, secret := registerTestDevice(t, s, tenant)
-	_, foreignSecret := registerTestDevice(t, s, uuid.NewString())
+	a := registerAgentHost(t, s)
+	secret := a.Credential
+	foreignSecret := registerAgentHost(t, s).Credential
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
+	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +169,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	if err != nil || current == previous || current.IsClosed() {
 		t.Fatalf("replacement connection missing: %v", err)
 	}
-	if err := sessionService(t, s).RevokeDevice(ctx, tenant, a.ID); err != nil {
+	if _, err := s.pool.Exec(ctx, "UPDATE devices SET revoked_at=clock_timestamp() WHERE id=$1", a.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := second.WriteJSON(map[string]any{"type": proto.TypeHeartbeat, "payload": map[string]any{"version": "test", "home_removal": false}}); err != nil {

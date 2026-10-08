@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -248,49 +247,5 @@ func TestTerminateEnvironmentThroughTheBindingExpires(t *testing.T) {
 	_, changes := journal(t, pool, session)
 	if changes[0].Event.Type != "agent.session.failed" || !changes[0].Settled || changes[0].EnvironmentInputActivity.Failure != "environment_unavailable" || changes[0].EnvironmentFailure != nil {
 		t.Fatalf("change %+v", changes[0])
-	}
-}
-
-func TestCreateEnvironmentDeviceCreatesOneDevice(t *testing.T) {
-	pool := pgtest.Open(t)
-	hash := strings.Repeat("a", 64)
-	create := func(tenant, session, environment pgtype.UUID, device uuid.UUID, commit bool) error {
-		dedicated := sessions.ExecutionDevice{ID: device.String(), Name: "runtime"}
-		return pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
-			if err := sessions.CreateEnvironmentDevice(t.Context(), BindSession(sqlc.New(tx), tenant, session), uuid.UUID(environment.Bytes).String(), dedicated, hash); err != nil || commit {
-				return err
-			}
-			return errRollback
-		})
-	}
-	created := func(session pgtype.UUID) []uuid.UUID {
-		rows, err := pool.Query(t.Context(), `SELECT d.id FROM devices d JOIN environments e ON e.id = d.environment_id WHERE e.session_id = $1`, session)
-		if err != nil {
-			t.Fatal(err)
-		}
-		devices, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
-		if err != nil {
-			t.Fatal(err)
-		}
-		return devices
-	}
-
-	tenant, session, environment := newEnvironment(t, pool, "openai_hosted", "pending")
-	if err := create(tenant, session, environment, uuid.New(), false); !errors.Is(err, errRollback) || len(created(session)) != 0 {
-		t.Fatalf("rolled back creation created %v: %v", created(session), err)
-	}
-	if err := create(pgID(uuid.New()), session, environment, uuid.New(), true); !errors.Is(err, sessions.ErrDeviceBindingConflict) || len(created(session)) != 0 {
-		t.Fatalf("other tenant created %v: %v", created(session), err)
-	}
-	device := uuid.New()
-	if err := create(tenant, session, environment, device, true); err != nil || !reflect.DeepEqual(created(session), []uuid.UUID{device}) {
-		t.Fatalf("created %v: %v", created(session), err)
-	}
-	if err := create(tenant, session, environment, uuid.New(), true); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
-		t.Fatalf("second device: %v", err)
-	}
-	tenant, session, environment = newEnvironment(t, pool, "self_hosted", "pending")
-	if err := create(tenant, session, environment, uuid.New(), true); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
-		t.Fatalf("self-hosted device: %v", err)
 	}
 }

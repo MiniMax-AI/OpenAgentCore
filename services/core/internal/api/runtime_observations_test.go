@@ -109,7 +109,7 @@ func TestRuntimeObservationResponsePreservesObservedZero(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
 	sessionID, environmentID := uuid.NewString(), uuid.NewString()
 	value, err := runtimeObservationResponse(runtimeobs.Observation{
-		Target: runtimeobs.Target{SessionID: sessionID, EnvironmentID: environmentID, Mode: runtimeobs.ModeManaged, Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), DeviceID: uuid.NewString(), AllocationState: "running", ComputePhase: "running", AllocationCreatedAt: now.Add(-time.Hour)}},
+		Target: runtimeobs.Target{SessionID: sessionID, EnvironmentID: environmentID, Mode: runtimeobs.ModeManaged, Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationState: "running", ComputePhase: "running", AllocationCreatedAt: now.Add(-time.Hour)}},
 		Status: runtimeobs.StatusObserved, ProviderType: "docker", ResolvedAt: now,
 		Sample: &runtimeobs.Sample{ObservedAt: now, CPUUsageSecondsTotal: &zeroCPU, MemoryUsageBytes: &zeroMemory},
 	})
@@ -147,7 +147,7 @@ func TestRuntimeObservationResponseRejectsTimesOutsidePublicContract(t *testing.
 	base := runtimeobs.Observation{
 		Target: runtimeobs.Target{
 			SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
-			Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), DeviceID: uuid.NewString(), AllocationCreatedAt: now.Add(-time.Hour)},
+			Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationCreatedAt: now.Add(-time.Hour)},
 		},
 		Status: runtimeobs.StatusObserved, ResolvedAt: now,
 		Sample: &runtimeobs.Sample{ObservedAt: now, StartedAt: timePointer(now.Add(-time.Minute))},

@@ -23,7 +23,4 @@ RETURNING id, generation;
 
 -- name: TouchAuthenticatedDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
-WHERE devices.id = sqlc.arg(id) AND EXISTS (
-    SELECT 1 FROM runtime_device_authority a
-    WHERE a.id = devices.id AND a.credential_hash = sqlc.arg(credential_hash)
-);
+WHERE id = sqlc.arg(id) AND revoked_at IS NULL AND credential_hash = sqlc.arg(credential_hash);
