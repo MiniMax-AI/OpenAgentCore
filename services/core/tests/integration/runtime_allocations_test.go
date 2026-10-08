@@ -158,7 +158,9 @@ func TestRuntimeAllocationCleanupReleasesAssignmentAndKeepsIdentity(t *testing.T
 	s, installation := configuredStore(t)
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
-	_, environment := localEnvironment(t, s, tenant)
+	session, environment := localEnvironment(t, s, tenant)
+	host := registerAgentHost(t, s, tenant)
+	assignSession(t, s, session.ID, host.ID)
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
@@ -172,6 +174,14 @@ func TestRuntimeAllocationCleanupReleasesAssignmentAndKeepsIdentity(t *testing.T
 	}
 	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
+	}
+	var desired string
+	var removeHome bool
+	if err := s.pool.QueryRow(t.Context(), "SELECT desired_state, remove_home FROM session_runtime_assignments WHERE session_id=$1", session.ID).Scan(&desired, &removeHome); err != nil || desired != "released" || removeHome {
+		t.Fatal("cleanup did not release assignment while retaining home", desired, removeHome, err)
+	}
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), host.ID); err != nil || !ok {
+		t.Fatal("allocation cleanup revoked shared host", err)
 	}
 	if _, err := deploymentExecution(t, w).CheckRunning(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatalf("cleanup kept the allocation running: %v", err)

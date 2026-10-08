@@ -67,9 +67,11 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte) *dispatchH
 		} `json:"environment"`
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
-	s, _ := newManagedTestStore(t)
+	var s *Store
 	if snapshot.Environment.Type == "openai_hosted" {
 		s, _ = configuredStore(t)
+	} else {
+		s, _ = newManagedTestStore(t)
 	}
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()

@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -20,6 +21,15 @@ func TestArchiveCancellationThenDeleteRemovesHome(t *testing.T) {
 	if _, err := h.s.pool.Exec(t.Context(), "INSERT INTO projects(id,name,tenant_id,subject_kind,subject_id) VALUES($1,'Archive cleanup',$1,'service_account',$2)", h.tenant, "project:"+h.tenant); err != nil {
 		t.Fatal(err)
 	}
+	setup, err := deploymentService(t, h.s).Setup(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &lifecycleProvider{resources: map[string]sandbox.Info{h.resource.ID: {
+		Reference:  sandbox.Reference{TenantID: h.tenant, EnvironmentID: h.resource.EnvironmentID, AllocationID: h.resource.ID},
+		ProviderID: h.resource.ID, State: "running", BootstrapComplete: true, CreateSettled: true,
+	}}}
+	h.d.ManagedRuntimes = webRuntimes(t, h.s, setup.InstallationID, provider, nil)
 	owner := h.owner()
 	worker := startOwnedWorker(t, t.Context(), h.s, h.d, owner)
 	runWorker(t, worker)
@@ -43,11 +53,20 @@ func TestArchiveCancellationThenDeleteRemovesHome(t *testing.T) {
 		t.Fatal(err)
 	}
 	allocation, err := deploymentStore(h.s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: h.tenant, EnvironmentID: h.session.Environment.ID})
-	if err != nil || allocation.State != "cleanup_pending" {
+	if err != nil || (allocation.State != "cleanup_pending" && allocation.State != "released") {
 		t.Fatal("archive lost cleanup ownership", allocation, err)
 	}
 	// Provider cleanup and host cancellation proceed independently. Only the host's
 	// receipt can settle the Turn, even after the sandbox stops Serving.
+	if err := worker.ReconcileManagedRuntimes(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	provider.mu.Lock()
+	killed := provider.kills > 0
+	provider.mu.Unlock()
+	if !killed {
+		t.Fatal("provider cleanup did not proceed before cancellation receipt")
+	}
 	h.stopServing()
 	var cancellation proto.PromptCancelPayload
 	var release proto.Envelope

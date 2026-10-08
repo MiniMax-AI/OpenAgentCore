@@ -59,9 +59,11 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 			t.Fatal("unconnected work selected", work, err)
 		}
 	}
-	unboundWorkerEnvironmentReservation(t, &dispatchHarness{s: h.s, tenant: uuid.NewString()})
+	otherTenant := uuid.NewString()
+	other := unboundWorkerEnvironmentReservation(t, &dispatchHarness{s: h.s, tenant: otherTenant})
+	wanted[other.ID] = other.SessionID
 	seen, cursor := 0, ""
-	for _, count := range []int{100, 4, 0} {
+	for _, count := range []int{100, 5, 0} {
 		devices := []string{h.device.ID}
 		for _, runtime := range h.environments {
 			devices = append(devices, runtime.device.ID)
@@ -71,7 +73,11 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 			t.Fatal("environment work page", len(work), count, err)
 		}
 		for _, item := range work {
-			if item.TenantID != h.tenant || item.SessionID != wanted[item.ReservationID] || item.ReservationID <= cursor {
+			tenant := h.tenant
+			if item.ReservationID == other.ID {
+				tenant = otherTenant
+			}
+			if item.TenantID != tenant || item.SessionID != wanted[item.ReservationID] || item.ReservationID <= cursor {
 				t.Fatal("wrong scope or pagination", item)
 			}
 			cursor = item.ReservationID
