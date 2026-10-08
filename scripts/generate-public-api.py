@@ -406,15 +406,20 @@ def core_module(document, public, bindings):
     taken = [ts_name(name) for name in local] + list(imported)
     for name in local:
         names[name] = ts_name(name) if taken.count(ts_name(name)) == 1 else name.split('.')[0].capitalize() + ts_name(name)
-    schemas = {}
+    schemas, hoisted = {}, []
     for name in local:
         schema = schemas[names[name]] = json.loads(refs.sub(lambda ref: f'"#/definitions/{names[ref[1]]}"', json.dumps(definitions[name])))
         for field, member in schema.get('properties', {}).items():
             target = member.get('items', member)
             if len(target.get('enum', [])) > 1:
                 enum = names[name] + ''.join(part.capitalize() for part in field.split('_'))
+                hoisted.append(enum)
                 schemas[enum] = {'type': target.pop('type'), 'enum': target.pop('enum')}
                 target['$ref'] = '#/definitions/' + enum
+    # A prefixed or hoisted name must not replace another type.
+    emitted = [*imported, *(names[name] for name in local), *hoisted]
+    if len(emitted) != len(set(emitted)):
+        raise ValueError('TypeScript names collide')
     used = sorted(imported.intersection(refs.findall(json.dumps(schemas))))
     header = ['import type { ' + ', '.join(used) + ' } from "./public-api";'] if used else []
     return ts_module(schemas, 'contracts/agents-api/core.openapi.yaml', header)

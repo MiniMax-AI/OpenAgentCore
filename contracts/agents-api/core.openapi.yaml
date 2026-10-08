@@ -292,7 +292,9 @@ definitions:
       type:
         type: string
     required:
+      - code
       - message
+      - param
       - type
     type: object
   api.CoreErrorResponse:

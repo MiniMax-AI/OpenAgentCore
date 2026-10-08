@@ -120,14 +120,14 @@ export interface ConfigurationDiscoveryInput {
 export const configurationDiscoveryInputFields = ["configuration", "credential", "query"] as const;
 export const configurationDiscoveryInputRequired = [] as const;
 export interface CoreAPIError {
-  code?: string | null;
+  code: string | null;
   details?: Record<string, unknown>;
   message: string;
-  param?: string | null;
+  param: string | null;
   type: string;
 }
 export const coreAPIErrorFields = ["code", "details", "message", "param", "type"] as const;
-export const coreAPIErrorRequired = ["message", "type"] as const;
+export const coreAPIErrorRequired = ["code", "message", "param", "type"] as const;
 export interface CoreErrorResponse {
   error: CoreAPIError;
 }
