@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -11,13 +12,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -28,7 +30,7 @@ import (
 // observations through the model configuration adapter on s, runs Session use
 // cases and reads through the Session service and adapter on s, and reads the
 // deployment through the deployment adapter on s. Without the dispatcher's
-// sandbox runtimes it runs fixtureRuntimes.
+// provider dependencies it uses a lifecycleProvider fixture.
 func startWorker(t testing.TB, ctx context.Context, s *Store, dispatcher *execution.Dispatcher) *execution.Worker {
 	t.Helper()
 	worker, err := startWorkerErr(t, ctx, s, dispatcher)
@@ -86,8 +88,23 @@ func startOwnedWorkerErr(t testing.TB, ctx context.Context, s *Store, dispatcher
 	if owned.Links == nil {
 		owned.Links = relay.New(runtimegateway.NewLinkAuthority(sessionAdapter(s)))
 	}
-	if owned.ManagedRuntimes == nil {
-		owned.ManagedRuntimes = fixtureRuntimes(t, s)
+	if owned.InstallationID == "" {
+		view, err := deployments.View(ctx)
+		if err != nil {
+			return nil, errors.Join(err, owner.Lease.Close(ctx))
+		}
+		owned.InstallationID = view.InstallationID
+		if owned.InstallationID == "" {
+			owned.InstallationID = testInstallation(t)
+		}
+	}
+	if owned.Providers == nil && owned.NodeProviders == nil {
+		p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
+		owned.Providers = &fixtureProviderRegistry{t: t, provider: p, lookup: providers.Builtin().Lookup}
+		owned.NodeProviders = fixtureNodeProviders{t: t, provider: p}
+	}
+	if owned.SandboxLink == "" {
+		owned.SandboxLink = "wss://core.invalid/api/v1/sandbox-link"
 	}
 	return execution.StartWorker(ctx, &owned, owner)
 }
@@ -102,22 +119,6 @@ func testInstallation(t testing.TB) string {
 		t.Fatal(err)
 	}
 	return strings.TrimSpace(string(value))
-}
-
-// fixtureRuntimes is webRuntimes on a lifecycleProvider for the installation
-// that claimed s's database, or for testInstallation before one did. On an
-// unconfigured deployment it never loads a provider.
-func fixtureRuntimes(t testing.TB, s *Store) *execution.RuntimeProvider {
-	t.Helper()
-	view, err := deploymentService(t, s).View(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	installation := view.InstallationID
-	if installation == "" {
-		installation = testInstallation(t)
-	}
-	return webRuntimes(t, s, installation, &lifecycleProvider{resources: map[string]sandbox.Info{}}, nil)
 }
 
 // executionOwner acquires the execution lease on s's database and builds the
@@ -183,34 +184,64 @@ func webDeployment(t *testing.T, s *Store, provider string) string {
 	return installation
 }
 
-// webRuntimes is the Worker's sandbox runtimes as cmd/server builds them for
-// installation: a deferred provider that runs s's committed Web setup on p.
-func webRuntimes(t testing.TB, s *Store, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.RuntimeProvider {
-	deployments := deploymentService(t, s)
-	return execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation,
-			SandboxLink: "wss://core.invalid/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p, Suspension: suspension}, nil
-	}, unusedPreparation(t))
+// fixtureProviderRegistry constructs the controlled provider through the same
+// registry boundary as server startup. Setup declarations stay with the builtin registry.
+type fixtureProviderRegistry struct {
+	t        testing.TB
+	provider sandbox.SandboxProvider
+	lookup   func(string) (providers.Adapter, error)
 }
 
-// unusedPreparation is the preparer of a test that submits no sandbox
-// selection through the Worker; preparing one fails the test.
-func unusedPreparation(t testing.TB) execution.RuntimeDeploymentPreparer {
-	return func(context.Context, deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
-		t.Error("the test prepared a sandbox selection it did not submit")
-		return execution.PreparedRuntimeDeployment{}, errors.New("unexpected sandbox selection preparation")
+func (f *fixtureProviderRegistry) Lookup(kind string) (providers.Adapter, error) {
+	if f.lookup == nil {
+		f.t.Errorf("unexpected provider lookup for %q", kind)
+		return providers.Adapter{}, errors.New("unexpected provider lookup")
 	}
+	return f.lookup(kind)
+}
+func (f *fixtureProviderRegistry) BuildDirect(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
+	if f.provider == nil {
+		f.t.Error("unexpected direct provider construction")
+		return nil, errors.New("unexpected direct provider construction")
+	}
+	return f.provider, nil
+}
+func (f *fixtureProviderRegistry) DiscoverSelection(_ context.Context, c sandbox.DirectConfig) (sandbox.Selection, error) {
+	return c.Selection, nil
+}
+func (f *fixtureProviderRegistry) DiscoverConfiguration(context.Context, string, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
+	f.t.Error("unexpected provider configuration discovery")
+	return nil, errors.New("unexpected provider configuration discovery")
+}
+func (f *fixtureProviderRegistry) VerifyCredential(context.Context, sandbox.DirectConfig, []sandbox.Reference) error {
+	f.t.Error("unexpected provider credential verification")
+	return errors.New("unexpected provider credential verification")
 }
 
-// startWebWorker starts the Worker on webRuntimes, with links as its Link
-// relay or a new one when links is nil.
-func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, links *relay.Relay, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.Worker {
+type fixtureNodeProviders struct {
+	t        testing.TB
+	provider sandbox.SandboxProvider
+}
+
+func (f fixtureNodeProviders) Proxy(string, providercontract.Operations, uint64) sandbox.SandboxProvider {
+	if f.provider == nil {
+		f.t.Error("unexpected node provider construction")
+		return nil
+	}
+	return f.provider
+}
+
+// webDispatcher uses the manager's committed setup loading and generation routing
+// with controlled providers at the registry and node transport boundaries.
+func webDispatcher(t testing.TB, installation string, p sandbox.SandboxProvider, registry *runtimegateway.Registry, links *relay.Relay) *execution.Dispatcher {
+	return &execution.Dispatcher{Registry: registry, Links: links, InstallationID: installation, SandboxLink: "wss://core.invalid/api/v1/sandbox-link", Providers: &fixtureProviderRegistry{t: t, provider: p, lookup: providers.Builtin().Lookup}, NodeProviders: fixtureNodeProviders{t: t, provider: p}}
+}
+
+// startWebWorker starts the Worker on the committed deployment, with links as
+// its Link relay or a new one when links is nil.
+func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, links *relay.Relay, installation string, p sandbox.SandboxProvider) *execution.Worker {
 	t.Helper()
-	w, err := startNextWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: links, ManagedRuntimes: webRuntimes(t, s, installation, p, suspension)})
+	w, err := startNextWorker(t, t.Context(), s, webDispatcher(t, installation, p, registry, links))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -92,8 +92,8 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	}}
 	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: webDeployment(t, s, "microsandbox"), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
-	// The suspension setup explicitly dates its activity two minutes in the past.
-	f.worker = startWebWorker(t, s, cp.registry, cp.link.Relay, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})
+	// The suspension setup dates its activity before the committed idle timeout.
+	f.worker = startWebWorker(t, s, cp.registry, cp.link.Relay, f.key, p)
 	t.Cleanup(f.stop)
 	f.epoch = fixtureOwnerEpoch(t, s)
 	f.enroll(f.nodeA)

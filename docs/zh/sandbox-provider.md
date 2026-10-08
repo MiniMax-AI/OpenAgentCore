@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: af35eef1f8c73b311a6166a5aa0352c61f33c71c834803f2e7bab6e51be3d965
+source_hash: 56570ea0d859bdfc26a2de3ea85ad8a002f03f7b5376010e9e4e195092b2a52f
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供计算资源，以及在其中启动 [Sandbox I/O 服务](#oac-sandbox-io)的有界引导流程；该服务是 Provider 启动的唯一进程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -132,7 +132,7 @@ configuration adapter 必须非 nil，包括其具体值。每个 `Configuration
 
 预览和持久化使用 `providers.Normalize` 与 `providers.Describe`。`providers.DiscoverSelection` 在提交前解析省略的原生值，持久化时再次验证完整 specification。`providers.ResolveChange` 负责配置继承，比较使用 normalized selector，使预览、重试和提交共享默认值。store 负责事务、凭据加密、generation fencing、资源所有权和通用对象存储：仅 adapter 解释 `provider_config` 与 `provider_metadata`，`provider_credential` 保存绑定到安装实例与 generation 的密文。保留 generation 保持原公开配置和 metadata，通过 adapter 组合当前凭据，因此替换凭据不重写保留 selector。数据库约束检查对象结构，不检查注册列表。
 
-具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 调用已准备的 verification 和 fencing callback，不按厂商分支。
+具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 负责验证与隔离，由 setup 的凭据要求和 adapter 声明的验证支持决定是否执行。其 runtime manager 加载与准备部署 setup，并发布 generation 单调递增的缓存。公共 `sandbox` generation router 将每个 allocation 解析为 direct adapter，或绑定其 node 与 generation 的 node proxy。
 
 厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回 provider、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过 provider name。
 

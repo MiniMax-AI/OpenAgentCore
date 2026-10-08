@@ -1,4 +1,4 @@
-package main
+package execution
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
@@ -28,14 +27,14 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id}
+	s := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setupInstallationID: id}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
-	_, err := s.prepare(t.Context(), selection)
+	_, err := s.prepareDeployment(t.Context(), selection)
 	if !errors.Is(err, sandbox.ErrConfigurationSelection) || strings.Contains(err.Error(), "synthetic-private-key") || s.selected.Load() != nil {
 		t.Fatal("rejected candidate lost its safe diagnostic or was published", err)
 	}
-	s.deployment = &fakeDeploymentSetups{t: t, setup: committedSetup(&selection)}
-	if restored, err := s.load(t.Context()); err != nil || restored == nil || restored.Provider == nil {
+	s.setups = &fakeDeploymentSetups{t: t, setup: committedSetup(&selection)}
+	if restored, err := s.loadDeployment(t.Context()); err != nil || restored == nil || restored.Provider == nil {
 		t.Fatal("template rejection prevented loading committed resource ownership", err)
 	}
 }
@@ -69,12 +68,12 @@ else:
 		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	allocation := func(context.Context, sandbox.Reference) (deployment.Setup, error) { return selection, nil }
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id,
-		deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&selection), allocationSetup: allocation}}
-	if _, err := s.prepare(t.Context(), selection); err == nil || s.selected.Load() != nil {
+	s := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setupInstallationID: id,
+		setups: &fakeDeploymentSetups{t: t, setup: committedSetup(&selection), allocationSetup: allocation}}
+	if _, err := s.prepareDeployment(t.Context(), selection); err == nil || s.selected.Load() != nil {
 		t.Fatal("invalid new template selection was published", err)
 	}
-	loaded, err := s.load(t.Context())
+	loaded, err := s.loadDeployment(t.Context())
 	if err != nil || loaded == nil {
 		t.Fatal("committed provider became inaccessible", err)
 	}
@@ -107,9 +106,9 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t}}
+	s := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setupInstallationID: id, setups: &fakeDeploymentSetups{t: t}}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
-	candidate, err := s.prepare(t.Context(), selection)
+	candidate, err := s.prepareDeployment(t.Context(), selection)
 	disk := int32(24063)
 	if err != nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild == nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.CPUs != 4 || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.MemoryMiB != 4096 ||
 		*candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.RootDiskMiB != disk || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.Status != "ready" {
@@ -117,11 +116,11 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	}
 	// The published candidate enforces the adopted resources.
 	selection.Specification.Resources = sandbox.Resources{CPUs: 4, MemoryMiB: 4096}
-	provider, err := s.provider(selection)
+	_, err = s.provider(selection)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.(*e2b.Provider).ValidateDeployment(t.Context()); err != nil {
+	if _, err := s.providers.DiscoverSelection(t.Context(), s.direct(selection)); err != nil {
 		t.Fatal(err)
 	}
 	logged, err := os.ReadFile(requests)
@@ -142,21 +141,9 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t}}
+	s := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setupInstallationID: id, setups: &fakeDeploymentSetups{t: t}}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-team-a", Template: "public-team-b:" + uuid.NewString()}}
-	if _, err := s.prepare(t.Context(), selection); !errors.Is(err, sandbox.ErrCredentialOwnership) || s.selected.Load() != nil {
+	if _, err := s.prepareDeployment(t.Context(), selection); !errors.Is(err, sandbox.ErrCredentialOwnership) || s.selected.Load() != nil {
 		t.Fatal("public readability accepted as team ownership", err)
-	}
-}
-
-func TestManagedSetupRoutesProviderWithoutCredentialRequirement(t *testing.T) {
-	s := &managedSetup{}
-	config := &execution.RuntimeProvider{ProviderKind: "docker"}
-	candidate, err := s.routeGenerations(
-		execution.PreparedRuntimeDeployment{Config: config},
-		deployment.Setup{Provider: "docker", Mode: "nodes"},
-	)
-	if err != nil || candidate.Config != config || candidate.FenceCredential != nil || candidate.VerifyCredential != nil {
-		t.Fatalf("explicit no-credential provider required credential routing: %v", err)
 	}
 }

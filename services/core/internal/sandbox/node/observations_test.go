@@ -89,11 +89,11 @@ func TestObservationsRouteThroughAssignedNodeWithoutLifecycleCalls(t *testing.T)
 	stopSecond := runObservationNode(t, hub, server.URL, second, b)
 	ra, rb := reference(), reference()
 	assignments := map[sandbox.Reference]string{ra: first.NodeID, rb: second.NodeID}
-	source := hub.GenerationProvider(docker.Operations(), func(_ context.Context, r sandbox.Reference) (string, uint64, error) {
+	source := sandbox.NewGenerationRouter(docker.Operations(), func(_ context.Context, r sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
 		if id, ok := assignments[r]; ok {
-			return id, 1, nil
+			return hub.Proxy(id, docker.Operations(), 1), func() {}, nil
 		}
-		return "", 0, sandbox.ErrOwnership
+		return nil, nil, sandbox.ErrOwnership
 	})
 	for _, test := range []struct {
 		ref      sandbox.Reference

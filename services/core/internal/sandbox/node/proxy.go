@@ -10,30 +10,27 @@ import (
 )
 
 type provider struct {
-	hub               *Hub
-	resolveGeneration func(context.Context, sandbox.Reference) (string, uint64, error)
-	operations        providercontract.Operations
+	hub        *Hub
+	nodeID     string
+	generation uint64
+	operations providercontract.Operations
 }
 
 var _ sandbox.SandboxProvider = (*provider)(nil)
 
 // Proxy binds a fixed node and deployment generation explicitly.
 func (h *Hub) Proxy(id string, declared providercontract.Operations, generation uint64) sandbox.SandboxProvider {
-	return h.GenerationProvider(declared, func(context.Context, sandbox.Reference) (string, uint64, error) { return id, generation, nil })
+	return &provider{hub: h, operations: maps.Clone(declared), nodeID: id, generation: generation}
 }
 func (p *provider) call(ctx context.Context, q request) (response, error) {
 	if err := providercontract.Require(p, operationMethod(q.Operation)); err != nil {
 		return response{}, err
 	}
-	id, generation, err := p.resolveGeneration(ctx, q.Reference)
-	if err != nil {
-		return response{}, err
-	}
-	if !validID(id) || !validGeneration(generation) {
+	if !validID(p.nodeID) || !validGeneration(p.generation) {
 		return response{}, sandbox.ErrOwnership
 	}
-	q.DeploymentGeneration = generation
-	out, err := p.hub.call(ctx, id, q)
+	q.DeploymentGeneration = p.generation
+	out, err := p.hub.call(ctx, p.nodeID, q)
 	if errors.Is(err, providercontract.ErrUnsupported) {
 		if _, valid := providercontract.UnsupportedReason(err, operationMethod(q.Operation)); !valid {
 			return response{}, sandbox.ErrComputeUnconfirmed
@@ -131,11 +128,4 @@ func (p *provider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s sa
 }
 func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "resume_compute", Reference: r, Compute: &c})
-}
-
-// GenerationProvider routes every operation with allocation-owned generation,
-// distinct from the request's compute generation. declared is the kind's
-// registered operations.
-func (h *Hub) GenerationProvider(declared providercontract.Operations, resolve func(context.Context, sandbox.Reference) (string, uint64, error)) sandbox.SandboxProvider {
-	return &provider{hub: h, operations: maps.Clone(declared), resolveGeneration: resolve}
 }

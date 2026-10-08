@@ -1,4 +1,4 @@
-package main
+package execution
 
 import (
 	"context"
@@ -54,9 +54,9 @@ print(json.dumps({'Version':1,'Info':info}))
 		value.Configuration = &key
 		return value, nil
 	}
-	setup := &managedSetup{processPaths: paths, registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, allocationSetup: allocation}, installationID: id}
+	setup := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setups: &fakeDeploymentSetups{t: t, allocationSetup: allocation}, setupInstallationID: id}
 	// A facade retained by a generation-one lifecycle still reads current credentials.
-	router := &generationRouter{setup: setup}
+	router := sandbox.NewGenerationRouter(e2b.Operations(), setup.directProvider)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := router.GetInfo(ctx, ref); err != nil {
@@ -150,19 +150,19 @@ print(json.dumps(result))
 			committed := current
 			setups := &fakeDeploymentSetups{t: t, setup: committedSetup(&committed), withCredential: credentialService(t),
 				generationPage: func(context.Context, int64) ([]deployment.Setup, error) { return nil, nil }}
-			allocations := &fakeGenerationAllocations{t: t, credentialAllocations: func(context.Context, string) ([]deployment.Allocation, error) { return nil, nil }}
-			s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: setups, allocations: allocations}
-			loaded, err := s.load(t.Context())
+			allocations := &strictDeploymentReader{t: t, credentialAllocations: func(context.Context, string) ([]deployment.Allocation, error) { return nil, nil }}
+			s := &runtimeManager{processPaths: paths, providers: providers.Builtin(), setupInstallationID: id, setups: setups, deploymentReader: allocations}
+			loaded, err := s.loadDeployment(t.Context())
 			if err != nil {
 				t.Fatal(err)
 			}
 			next := current
 			next.Configuration = &e2b.DeploymentConfiguration{APIKey: tc.candidateKey, Template: tc.candidateTemplate + build}
-			candidate, err := s.prepare(t.Context(), next)
+			candidate, err := s.prepareDeployment(t.Context(), next)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = candidate.VerifyCredential(t.Context())
+			err = s.verifyCredential(t.Context(), candidate.Setup)
 			var reset *deployment.ResetRequiredError
 			if tc.reset {
 				if !errors.As(err, &reset) || errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
