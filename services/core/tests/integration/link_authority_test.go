@@ -31,7 +31,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -541,13 +540,10 @@ func TestInitializationBindsAgentHost(t *testing.T) {
 			resource, serve := fixtureLinkResource(t, s, tenant, session)
 			server := httptest.NewUnstartedServer(nil)
 			endpoint := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), endpoint)
-			if err != nil {
-				t.Fatal(err)
-			}
+			handler, registry := fixtureGateway(t, s, endpoint)
 			server.Config.Handler = handler
 			server.Start()
-			t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+			t.Cleanup(func() { server.Close(); registry.CloseConnections() })
 			link := startLinkRoute(t, s)
 			runWorker(t, startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, Links: link.Relay}))
 			within(t, startLinkServe(t, link, serve, resource.Ref()).connected)

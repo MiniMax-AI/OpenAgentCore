@@ -46,7 +46,7 @@ func TestEnrolledSandboxConnectionRevocationAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	link := sandboxlinktest.StartRelay(t, runtimegateway.NewLinkAuthority(sessionAdapter(s)))
-	connection := runtimeenrollment.ConnectionHandler(sessionAdapter(s), link.Relay)
+	connection := &runtimeenrollment.Connections{Store: sessionAdapter(s), Links: link.Relay}
 	assertConnection := func(target, token, status string, code int) {
 		t.Helper()
 		request := httptest.NewRequest("GET", "/api/v1/agent-daemon/connection?environment_id="+target, nil)

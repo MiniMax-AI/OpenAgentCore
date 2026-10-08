@@ -57,7 +57,7 @@ func TestConnectionReadContract(t *testing.T) {
 		req := httptest.NewRequest(tc.method, "/api/v1/agent-daemon/connection?"+tc.query, nil)
 		req.Header.Set("Authorization", tc.bearer)
 		res := httptest.NewRecorder()
-		ConnectionHandler(s, relay.New(sandboxlinktest.NewAuthority())).ServeHTTP(res, req)
+		(&Connections{Store: s, Links: relay.New(sandboxlinktest.NewAuthority())}).ServeHTTP(res, req)
 		if res.Code != tc.code || s.calls != tc.calls || res.Header().Get("Cache-Control") != "no-store" {
 			t.Fatalf("%s %s: %d, %d calls", tc.method, tc.query, res.Code, s.calls)
 		}
@@ -147,7 +147,7 @@ func TestRuntimeConnectedFollowsServeAndCurrentAuthority(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := tc.store
-			got, err := RuntimeConnected(t.Context(), &s, srv.Relay, resource.EnvironmentID, digest)
+			got, err := (&Connections{Store: &s, Links: srv.Relay}).ExecutorConnected(t.Context(), resource.EnvironmentID, digest)
 			if got != tc.want || !errors.Is(err, tc.err) {
 				t.Fatalf("connected=%v err=%v", got, err)
 			}

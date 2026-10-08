@@ -17,7 +17,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -109,13 +108,10 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	foreignSecret := registerAgentHost(t, s).Credential
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), runtimegateway.NewLinkAuthority(sessionAdapter(s)), wsURL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	handler, registry := fixtureGateway(t, s, wsURL)
 	server.Config.Handler = handler
 	server.Start()
-	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+	t.Cleanup(func() { server.Close(); registry.CloseConnections() })
 	for _, token := range []string{"", "session-api-key", foreignSecret, secret} {
 		body, _ := json.Marshal(map[string]string{"device_id": a.ID})
 		req, _ := http.NewRequest(http.MethodPost, server.URL+"/api/v1/agent-daemon/bootstrap", bytes.NewReader(body))
