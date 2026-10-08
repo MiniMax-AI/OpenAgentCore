@@ -105,7 +105,7 @@ class DistributionTests(unittest.TestCase):
             if logical.startswith("native/"):
                 path.chmod(0o555)
         self.identities = {}
-        for name in ("core", "web", "runtime", "database", "ingress"):
+        for name in ("core", "web", "runtime", "database", "ingress", "agent-host"):
             self.identities[name] = image_archive(self.bundle / "images" / (name + ".tar"), name)
             (self.stage / (name + ".id")).write_text(self.identities[name][0] + "\n")
         (self.bundle / "node-install.pyz").write_bytes(b"node installer")

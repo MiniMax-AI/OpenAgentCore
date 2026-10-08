@@ -62,7 +62,7 @@ RULES = (
     (("deploy/install.sh", "deploy/install.ps1", "deploy/test_install.ps1"), (".sh", ".ps1"), ("native", "distribution")),
     (("services/core/internal/nativeinstaller/",), GO, ("native", "distribution")),
     (("services/core/deploy/", "services/core/tools/"), CORE, ("distribution",)),
-    (("apps/daemon/",), GO, ("backend", "native")),
+    (("apps/daemon/",), GO, ("backend", "native", "compose")),
     (("apps/sandboxio/",), GO, ("backend",)),
     (("internal/",), (*GO, ".json"), ("backend", "api", "native", "distribution", "compose")),
     (("internal/harnessconfig/",), (*GO, ".json"), ("web", "web-acceptance", "example", "harness")),

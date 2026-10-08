@@ -32,7 +32,7 @@ class ComposeTests(unittest.TestCase):
         env.pop('OAC_PUBLIC_URL', None)
         env.pop('OAC_HOST', None)
         env.pop('OAC_WEB_PORT', None)
-        for name in ('OAC_IMAGE_CORE', 'OAC_IMAGE_WEB', 'OAC_IMAGE_INGRESS'):
+        for name in ('OAC_IMAGE_CORE', 'OAC_IMAGE_WEB', 'OAC_IMAGE_INGRESS', 'OAC_IMAGE_AGENT_HOST'):
             env.pop(name, None)
         env['OAC_DATA_DIR'] = '/tmp/oac-compose-fixture'
         if public_url is not None:
@@ -53,7 +53,7 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(services['database']['depends_on']['init']['condition'], 'service_completed_successfully')
         self.assertIn('pg_isready -h 127.0.0.1', services['database']['healthcheck']['test'][1])
         self.assertEqual(services['core']['depends_on']['database']['condition'], 'service_healthy')
-        self.assertEqual(sorted(services), ['core', 'database', 'init', 'web'])
+        self.assertEqual(sorted(services), ['agent-host', 'core', 'database', 'init', 'web'])
         for service in services.values():
             self.assertNotIn('build', service)
             if service is not services['web']:
@@ -65,6 +65,19 @@ class ComposeTests(unittest.TestCase):
                 self.assertEqual(volume['source'], 'data')
             self.assertNotIn('platform', service)
         self.assertEqual({v['target'] for v in services['web']['volumes']}, {'/run/oac', '/node-payload'})
+        agent_host = services['agent-host']
+        self.assertEqual(agent_host['network_mode'], 'service:core')
+        self.assertEqual((agent_host['cgroup'], sorted(agent_host['cap_add']), agent_host['security_opt']),
+                         ('private', ['NET_ADMIN', 'SYS_ADMIN'], ['apparmor=unconfined']))
+        self.assertEqual([device['source'] for device in agent_host['devices']], ['/dev/fuse'])
+        self.assertEqual(agent_host['command'], ['agent-host', '--identity-file', '/run/agent-host/identity.json',
+                                                 '--core-url', 'http://127.0.0.1:8091'])
+        def mounts(name):
+            return [(v['target'], v['volume']['subpath'], v.get('read_only', False)) for v in services[name]['volumes']]
+        identity = ('/run/agent-host', 'secrets/agent-host', True)
+        self.assertIn(identity, mounts('core'))
+        self.assertEqual(mounts('agent-host'), [identity, ('/var/lib/oac/agent-host', 'agent-host', False)])
+        self.assertEqual(services['core']['environment']['OAC_AGENT_HOST_IDENTITY_FILE'], '/run/agent-host/identity.json')
         self.assertIsNone(services['core']['command'])
         self.assertNotIn('OAC_WEB_INSTALLATION_SOCKET', services['web']['environment'])
         self.assertEqual(services['init']['command'], ['/usr/local/bin/oac', 'init'])
@@ -105,11 +118,13 @@ class ComposeTests(unittest.TestCase):
 
 
     def test_platform_network_injection_keeps_the_file_valid(self):
-        # Dokploy isolated deployments attach a project network to every service.
+        # Dokploy attaches a project network to the services it routes to or the
+        # operator selects. The agent host shares Core's network and joins none.
         transformed = copy.deepcopy(self.compose)
         transformed['networks']['platform'] = {}
         for service in transformed['services'].values():
-            service.setdefault('networks', {})['platform'] = None
+            if 'network_mode' not in service:
+                service.setdefault('networks', {})['platform'] = None
         subprocess.run(
             ['docker', 'compose', '-f', '-', 'config', '--quiet'],
             input=json.dumps(transformed), text=True, check=True)

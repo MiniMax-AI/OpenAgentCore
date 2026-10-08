@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Start this checkout. Core, Web and the init image are built here. Node
-# metadata still comes from the release named in deploy/compose/smoke-pins.json.
+# Start this checkout. Core, Web, the agent host and the init image are built
+# here. Node metadata still comes from the release named in
+# deploy/compose/smoke-pins.json.
 # The published installer is install.sh.
 set -euo pipefail
 
@@ -17,8 +18,10 @@ usage() {
   cat <<'EOF'
 Usage: install.dev.sh [--install-dir DIR] [--host ADDRESS] [--web-port PORT]
 
-Builds Core, Web and the init image from this checkout and starts them.
-Open http://localhost:<port> and sign in with the printed Core key.
+Builds Core, Web, the agent host and the init image from this checkout and
+starts them. The agent-host build takes the Harness inputs that
+scripts/build-agent-host-images.sh needs. Open http://localhost:<port> and sign
+in with the printed Core key.
 EOF
 }
 
@@ -96,6 +99,8 @@ tag="oac-local"
 docker build -q --platform linux/amd64 -t "$tag/core:dev" "$build/core" >/dev/null
 docker build -q --platform linux/amd64 -t "$tag/web:dev" "$build/web" >/dev/null
 docker build -q --platform linux/amd64 -t "$tag/ingress:dev" "$build/ingress" >/dev/null
+OAC_AGENT_HOST_IMAGE="$tag/agent-host:dev" OAC_SANDBOX_IMAGE="$tag/sandbox:dev" \
+  bash "$repo_root/scripts/build-agent-host-images.sh" -q >/dev/null
 
 python3 - "$repo_root" "$install_dir" <<'PY'
 import importlib.util, json, sys
@@ -119,6 +124,7 @@ OAC_WEB_PORT=$web_port
 OAC_IMAGE_CORE=$tag/core:dev
 OAC_IMAGE_WEB=$tag/web:dev
 OAC_IMAGE_INGRESS=$tag/ingress:dev
+OAC_IMAGE_AGENT_HOST=$tag/agent-host:dev
 EOF
 
 (

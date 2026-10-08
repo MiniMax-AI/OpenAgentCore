@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 286ca5de3c5f97cf261feea1145b98cf59055c5f197fa7ad3bb02bf0e281a5b4
+source_hash: 48e9776a3ac7b42b4b651304b8bf003d26c07745b239c1567ce5e0d7fb8f0540
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -9,7 +9,7 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 | 类别 | 示例 | 归属位置 | 修改方式 | 生效方式 |
 | --- | --- | --- | --- | --- |
 | [进程设置](#process-settings) | 公共 URL、端口、日志、Harness、执行并发度、审计保留期、OAuth 来源、Runtime 历史记录 | 安装目录中的 `.env`（默认 `~/.oac/core`） | 编辑 `.env`，然后运行 `oac apply` | `oac apply` 会重新创建读取了这些已更改设置的服务 |
-| [机密信息](#compose-installations) | 数据库密码、凭据加密密钥、安装 ID、Core 密钥及由其派生的 Core 密钥摘要 | Compose 数据卷中的 `secrets/`，每项一份 | 初始化时一次性生成；`oac rotate-core-key` 替换 Core 密钥及其摘要 | `oac rotate-core-key` 会重启 Core 和 Web |
+| [机密信息](#compose-installations) | 数据库密码、凭据加密密钥、安装 ID、agent-host 身份、Core 密钥及由其派生的 Core 密钥摘要 | Compose 数据卷中的 `secrets/`，每项一份 | 初始化时一次性生成；`oac rotate-core-key` 替换 Core 密钥及其摘要 | `oac rotate-core-key` 会重启 Core 和 Web |
 | [运行时设置](#runtime-settings-web) | 沙箱后端和大小、节点、项目和密钥、默认模型、执行器凭据 | Core 的 PostgreSQL 数据库 | 在 Web 中修改，或使用 Core 密钥调用 Core API（`/core/v1`） | 保存时无需重启 Core；节点会异步准备 Runtime 变更 |
 
 Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置，并在 **Startup settings** 下以只读方式显示 Core 加载的进程设置。没有任何配置文件定义项目或 API 密钥。
@@ -115,7 +115,9 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `secrets/database/` | 生成的数据库密码 | PostgreSQL 和 Core |
 | `secrets/core/` | 凭据加密密钥、安装 ID 和 Core 密钥摘要 | Core |
 | `secrets/web/` | 生成的 Core 登录密钥 | Web |
+| `secrets/agent-host/` | `identity.json`，即 [agent host 的身份](#agent-host-container) | Core 和 agent host |
 | `state/` | 私有 Provider 状态，在 Core 中挂载到 `/state`。每个适配器拥有一个子目录；E2B 使用 `e2b/`，不允许组或其他用户访问 | Core |
+| `agent-host/` | [agent host 的状态目录](#agent-host-container) | agent host；初始化时检查它是否为空 |
 | `node-payload/` | 已验证的节点安装元数据 | Web |
 
 初始化会准备该目录；应用服务以只读方式接收各自的机密目录。`docker compose exec web oac-web core-key` 把 Core 密钥打印到运维人员终端，不写入容器日志。数据库密码和凭据加密密钥绝不打印。
@@ -159,6 +161,8 @@ agent host 需要一个委派给它的 cgroup v2 目录。它在该目录中为�
 
 agent host 为镜像的 `/opt/oac/harnesses.json` 所安装、且声明了视图的每个 Harness 提供服务；没有任何 Harness 时它也会启动并连接。它把每个 Session 的 home（含 Harness 的原生历史）保存在 `/var/lib/oac/agent-host`，该目录必须比容器存活更久，Session 才能在重启后继续。连接断开后它按退避策略重新拨号；当 Core 连续两分钟不可达时，agent host 以非零状态退出，由其监管程序重启。
 
+Compose 安装把 agent host 作为 `agent-host` 服务运行在 Core 的网络命名空间中，并使用 `--core-url http://127.0.0.1:8091`。它从以只读方式挂载的[数据卷](#compose-installations) `secrets/agent-host/` 读取身份，并把状态目录保存在数据卷的 `agent-host/` 中。
+
 绝不要为 agent host 设置 `GODEBUG=http2debug`。设置后，Go 的 HTTP/2 实现会记录它编码的每个请求头，包括 agent host 添加的模型和 MCP 凭据。
 
 ## 安装目录 {#installation-directory}
@@ -173,7 +177,7 @@ agent host 为镜像的 `/opt/oac/harnesses.json` 所安装、且声明了视图
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。
 
-Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
+Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core`、`agent-host` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
@@ -188,6 +192,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 | `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
 | `OAC_CORE_KEY_DIGESTS_FILE` | 必填。`/run/oac/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
 | `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它 |
+| `OAC_AGENT_HOST_IDENTITY_FILE` | `/run/agent-host/identity.json`：[agent host 的身份](#agent-host-container)，其 `runtime_id` 为规范 UUID。设置 `OAC_PUBLIC_URL` 时必须设置，且只能与它一同设置。Core 启动时用该 ID 和凭据注册 agent host；新凭据会隔离旧凭据认证过的 Link，已吊销的 agent host 保持吊销 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS`、`OAC_HISTORY_SETTINGS_FILE`、`OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | 对应的[进程设置](#settings)。Web 也读取三个日志设置 |
 | `OAC_PROVIDER_ROOT` | 适配器构件的绝对根目录。Core 镜像设置为 `/opt/oac`。每个适配器都拥有此根目录下的辅助路径。当其中的 `native-installers/` 目录包含 `catalog.json` 时，Core 在核对该目录清单与自身发行版后提供自托管守护进程安装程序。适配器状态位于 `/state`，即数据卷的 [`state/`](#compose-installations) |
 

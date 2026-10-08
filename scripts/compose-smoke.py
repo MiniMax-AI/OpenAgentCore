@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Exercise the Compose installation in an isolated Docker project.
 
-Core, Web and the gateway image are built from this checkout. Web serves a
-placeholder page instead of the console build. Node metadata comes from the
-release pinned in deploy/compose/smoke-pins.json.
+Core, Web, the agent host and the gateway image are built from this checkout.
+Web serves a placeholder page instead of the console build, and the agent host
+has no Harness. Node metadata comes from the release pinned in
+deploy/compose/smoke-pins.json.
 """
 
 import hashlib
@@ -17,6 +18,7 @@ import signal
 import tarfile
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -62,7 +64,7 @@ def build_images(directory, tag):
         subprocess.run(['go', 'build', '-trimpath', '-ldflags', '-X main.buildRevision=' + build_revision,
                         '-o', str(output), './' + package], cwd=ROOT, env=go_env, check=True)
 
-    contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress')}
+    contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress', 'agent-host')}
     core = contexts['core']
     for name, package in (('oac-core', 'server'), ('oac-core-device', 'device'),
                           ('oac-core-environment-key', 'environment-key'), ('oac', 'oac')):
@@ -83,6 +85,18 @@ def build_images(directory, tag):
     payload_revision = prepare_pinned_payload(ingress / 'node-payload')
     go_build('services/core/cmd/oac', ingress / 'oac', payload_revision)
     (ingress / 'Dockerfile').write_bytes((ROOT / 'deploy/distribution/Ingress.Dockerfile').read_bytes())
+    # The agent-host image without its Harnesses: CA roots, the daemon, the
+    # process shim and a manifest that installs none. Its base is Core's,
+    # because the agent-host base is pinned to an amd64 manifest.
+    agent_host = contexts['agent-host']
+    for name in ('oac-daemon', 'oac-process-shim'):
+        go_build('apps/daemon/cmd/' + name, agent_host / name)
+    (agent_host / 'harnesses.json').write_text('{"node": "/usr/local/bin/node", "harnesses": {}}\n')
+    base = re.search(r'^FROM (\S+)', (ROOT / 'deploy/distribution/Dockerfile').read_text(), re.M).group(1)
+    (agent_host / 'Dockerfile').write_text(
+        f'FROM {base}\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates'
+        ' && rm -rf /var/lib/apt/lists/*\nCOPY oac-daemon oac-process-shim /opt/oac/bin/\nCOPY harnesses.json /opt/oac/\n'
+        'ENTRYPOINT ["/opt/oac/bin/oac-daemon"]\n')
     for path in directory.glob('image-*/**/*'):
         path.chmod(0o755 if path.is_dir() or os.access(path, os.X_OK) else 0o644)
     images = {}
@@ -115,7 +129,7 @@ def main():
     override.write_text(json.dumps({'services': {'init': {'network_mode': 'none'}}}))
     env = {**os.environ, 'COMPOSE_PROGRESS': 'plain',
            'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0',
-           **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
+           **{'OAC_IMAGE_' + name.upper().replace('-', '_'): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
     command = ['docker', 'compose', '--env-file', os.devnull, '-p', project,
                '-f', str(rendered), '-f', str(override)]
@@ -161,6 +175,14 @@ def main():
         assert all(key not in logs for key in keys), 'Credentials appeared in container logs'
         return logs
 
+    def agent_host_connected():
+        # Core registered the identity the agent host presents, and the agent
+        # host opened its views; a failed Open or registration never connects.
+        deadline = time.monotonic() + 60
+        while 'msg="ws connected"' not in compose('logs', '--no-color', 'agent-host').decode():
+            assert time.monotonic() < deadline, 'The agent host did not connect to Core'
+            time.sleep(1)
+
     def terminate(_signum, _frame):
         raise SystemExit(1)
 
@@ -168,6 +190,7 @@ def main():
     try:
         print('Starting the images with an unset public URL and an empty data directory', flush=True)
         compose('up', '-d', '--wait', '--wait-timeout', '600', timeout=900)
+        agent_host_connected()
         address = 'http://' + compose('port', 'web', '8080').decode().strip()
         key = compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip()
         assert re.fullmatch(r'oac_admin_[0-9a-f]{64}', key), 'Missing generated sign-in key'
@@ -222,8 +245,9 @@ def main():
         compose('down')
         compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
         assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == rotated, 'Rotated key was not retained'
+        agent_host_connected()
         private_logs(key, rotated, project_key)
-        print('PASS: startup, origin validation, sign-in, API, upload, node installer, key rotation and persistent installation', flush=True)
+        print('PASS: startup, agent-host connection, origin validation, sign-in, API, upload, node installer, key rotation and persistent installation', flush=True)
     except BaseException:
         # Service status identifies failed containers without dumping secret-bearing logs.
         status = subprocess.run(command + ['ps', '--all'], env=env, capture_output=True, timeout=30)

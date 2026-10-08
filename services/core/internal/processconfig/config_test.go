@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
+
+const agentHostIdentity = `{"runtime_id": "2f1c4a7e-9b3d-4e5f-8a6b-1c2d3e4f5a6b", "credential": "synthetic-credential"}`
 
 // required sets the settings Load requires and returns a file writer.
 func required(t *testing.T) func(name, content string) string {
@@ -43,7 +46,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Addr != "127.0.0.1:8091" || c.PublicOrigin != nil || c.InstallationID != "" || c.CredentialKey != nil || c.CoreKeys == nil ||
+	if c.Addr != "127.0.0.1:8091" || c.PublicOrigin != nil || c.InstallationID != "" || c.AgentHostID != "" || c.CredentialKey != nil || c.CoreKeys == nil ||
 		c.ExecutionConcurrency != 4 || c.DefaultHarness != "codex" || strings.Join(c.Harnesses, ",") != "claude_sdk,codex,mcode" ||
 		c.WriteAuditRetention != 90*24*time.Hour || c.OAuthTrustedOrigins != nil || c.NativeInstallers != "" || c.ProviderPaths.StateRoot != "/state" {
 		t.Fatalf("%+v", c)
@@ -68,16 +71,17 @@ func TestLoadRejectsInvalidValuesWithoutEchoingThem(t *testing.T) {
 	rejects(t, "OAC_CORE_KEY_DIGESTS_FILE", "synthetic-secret")
 	required(t)
 	for variable, value := range map[string]string{
-		"OAC_PUBLIC_URL":            "https://user:synthetic-secret@core.example",
-		"OAC_EXECUTION_CONCURRENCY": "synthetic-secret",
-		"OAC_DEFAULT_HARNESS":       "synthetic-secret",
-		"OAC_HARNESSES":             "codex,synthetic-secret",
-		"OAC_WRITE_AUDIT_RETENTION": "synthetic-secret",
-		"OAC_OAUTH_TRUSTED_ORIGINS": "https://synthetic-secret.example/token",
-		"OAC_LOG_LEVEL":             "verbose",
-		"OAC_INSTALLATION_ID_FILE":  write("installation.id", "synthetic-secret"),
-		"OAC_CREDENTIAL_KEY_FILE":   write("credential.key", "synthetic-secret"),
-		"OAC_HISTORY_SETTINGS_FILE": write("history.json", `{"secret":"synthetic-secret"}`),
+		"OAC_PUBLIC_URL":               "https://user:synthetic-secret@core.example",
+		"OAC_EXECUTION_CONCURRENCY":    "synthetic-secret",
+		"OAC_DEFAULT_HARNESS":          "synthetic-secret",
+		"OAC_HARNESSES":                "codex,synthetic-secret",
+		"OAC_WRITE_AUDIT_RETENTION":    "synthetic-secret",
+		"OAC_OAUTH_TRUSTED_ORIGINS":    "https://synthetic-secret.example/token",
+		"OAC_LOG_LEVEL":                "verbose",
+		"OAC_INSTALLATION_ID_FILE":     write("installation.id", "synthetic-secret"),
+		"OAC_AGENT_HOST_IDENTITY_FILE": write("identity.json", `{"runtime_id": "synthetic-secret", "credential": "c"}`),
+		"OAC_CREDENTIAL_KEY_FILE":      write("credential.key", "synthetic-secret"),
+		"OAC_HISTORY_SETTINGS_FILE":    write("history.json", `{"secret":"synthetic-secret"}`),
 	} {
 		t.Run(variable, func(t *testing.T) {
 			t.Setenv(variable, value)
@@ -87,13 +91,37 @@ func TestLoadRejectsInvalidValuesWithoutEchoingThem(t *testing.T) {
 	t.Setenv("OAC_INSTALLATION_ID_FILE", write("valid.id", "8c5f4f5e-2c55-4c43-9a49-7f2f3f2d1d10\n"))
 	rejects(t, "OAC_PUBLIC_URL", "")
 	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
+	t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", write("valid.json", agentHostIdentity))
 	if c, err := Load(); err != nil || c.InstallationID != "8c5f4f5e-2c55-4c43-9a49-7f2f3f2d1d10" {
 		t.Fatal(c.InstallationID, err)
 	}
 }
 
+func TestAgentHostIdentityComesWithTheRuntimeGateway(t *testing.T) {
+	write := required(t)
+	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
+	rejects(t, "OAC_AGENT_HOST_IDENTITY_FILE", "")
+	for _, content := range []string{
+		`{"runtime_id": "2F1C4A7E-9B3D-4E5F-8A6B-1C2D3E4F5A6B", "credential": "synthetic-secret"}`,
+		`{"runtime_id": "2f1c4a7e-9b3d-4e5f-8a6b-1c2d3e4f5a6b", "credential": " "}`,
+		`{"runtime_id": "2f1c4a7e-9b3d-4e5f-8a6b-1c2d3e4f5a6b", "credential": "synthetic-secret", "name": "x"}`,
+		`{"runtime_id": "2f1c4a7e-9b3d-4e5f-8a6b-1c2d3e4f5a6b", "credential": "synthetic-secret"} {}`,
+	} {
+		t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", write("identity.json", content))
+		rejects(t, "OAC_AGENT_HOST_IDENTITY_FILE", "synthetic-secret")
+	}
+	t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", write("identity.json", agentHostIdentity+"\n"))
+	c, err := Load()
+	if err != nil || c.AgentHostID != "2f1c4a7e-9b3d-4e5f-8a6b-1c2d3e4f5a6b" || c.AgentHostCredentialHash != runtimedevice.HashCredential("synthetic-credential") {
+		t.Fatal(c.AgentHostID, err)
+	}
+	t.Setenv("OAC_PUBLIC_URL", "")
+	rejects(t, "OAC_AGENT_HOST_IDENTITY_FILE", "")
+}
+
 func TestPublicURLMustBeACanonicalOrigin(t *testing.T) {
-	required(t)
+	write := required(t)
+	t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", write("identity.json", agentHostIdentity))
 	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://127.0.0.1:8091", "http://core.example"} {
 		t.Setenv("OAC_PUBLIC_URL", value)
 		if c, err := Load(); err != nil || c.PublicOrigin.String() != value {
@@ -208,6 +236,7 @@ func TestRuntimeHistoryFile(t *testing.T) {
 func TestSettingsReportEffectiveValuesAndHideHistory(t *testing.T) {
 	write := required(t)
 	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
+	t.Setenv("OAC_AGENT_HOST_IDENTITY_FILE", write("identity.json", agentHostIdentity))
 	t.Setenv("OAC_EXECUTION_CONCURRENCY", "8")
 	t.Setenv("OAC_LOG_LEVEL", "warn")
 	t.Setenv("OAC_WRITE_AUDIT_RETENTION", "1440m")

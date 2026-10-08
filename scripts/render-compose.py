@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fill the Compose template with one release's node metadata.
 
-The template is deploy/compose/compose.yaml. The initialization image is pinned; Core and Web default to latest. A release publishes the rendered file; this script does not run Docker.
+The template is deploy/compose/compose.yaml. The initialization image is pinned; Core, Web and the agent host default to latest. A release publishes the rendered file; this script does not run Docker.
 """
 import hashlib
 import pathlib

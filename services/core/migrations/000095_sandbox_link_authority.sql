@@ -3,7 +3,8 @@
 -- resource at serve_generation. A self_hosted enrollment's resource is served
 -- with its executor credential while that key is authorized for the
 -- Environment. Only a marked agent host may Attach; credential_revision fences
--- links that a rotated credential authenticated.
+-- links that a rotated credential authenticated. An agent host may belong to
+-- no tenant, such as the deployment's own; every other device belongs to one.
 ALTER TABLE runtime_allocations
   ADD COLUMN serve_credential_hash text CHECK (serve_credential_hash ~ '^[0-9a-f]{64}$'),
   ADD COLUMN serve_generation bigint NOT NULL DEFAULT 1 CHECK (serve_generation > 0);
@@ -18,7 +19,8 @@ CREATE TABLE sandbox_enrollments (
 ALTER TABLE devices
   ADD COLUMN agent_host boolean NOT NULL DEFAULT false,
   ADD COLUMN credential_revision bigint NOT NULL DEFAULT 1 CHECK (credential_revision > 0),
-  ADD CONSTRAINT devices_agent_host CHECK (NOT agent_host OR (environment_id IS NULL AND executor_key_id IS NULL));
+  ALTER COLUMN tenant_id DROP NOT NULL,
+  ADD CONSTRAINT devices_agent_host CHECK (CASE WHEN agent_host THEN environment_id IS NULL AND executor_key_id IS NULL ELSE tenant_id IS NOT NULL END);
 
 -- Every Link resource with its Serve credential hash. A resource is live
 -- while that credential may Serve it.
@@ -43,8 +45,10 @@ JOIN environment_executor_credentials c ON c.key_id = n.executor_key_id;
 
 -- +goose Down
 DROP VIEW sandbox_resources;
+DELETE FROM devices WHERE tenant_id IS NULL;
 ALTER TABLE devices
   DROP CONSTRAINT devices_agent_host,
+  ALTER COLUMN tenant_id SET NOT NULL,
   DROP COLUMN credential_revision,
   DROP COLUMN agent_host;
 DROP TABLE sandbox_enrollments;

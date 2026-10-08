@@ -1,16 +1,16 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 5c3db1ed5d8a29741bb90770dcab336711ef06aa95a7f546c0d6586d51b8d7c4
+source_hash: 4446c6769f46b6379e6ee078b8cfa2450190321cff34faaa2525e72e47cef350
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
 
 ## 构建分发包 {#build-a-distribution}
 
-分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
+分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、ingress、agent-host 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
 
-Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。宿主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
+Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime、agent-host 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。宿主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
 
 
 请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.9 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请先准备固定版本的 Codex 包和 MiniMax Code 配套程序，然后执行构建：
@@ -31,7 +31,6 @@ make build-core-distribution
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | 用于提供生成的资源文件名的带版本 HTTPS 目录（绝不能使用 `latest`）。除非 `CORE_DISTRIBUTION_OFFLINE=1`，否则为必填项 |
 | `CORE_DISTRIBUTION_OFFLINE` | 设为 `1` 时还会构建离线归档 |
 | `CODEX_CLI_DIR`、`MCODE_HARNESS_BUILD_DIR` | `prepare-release-runtimes.sh` 固定的 Runtime 输入 |
-| `CORE_DISTRIBUTION_CODEX_IMAGE`、`CORE_DISTRIBUTION_CLAUDE_IMAGE`、`CORE_DISTRIBUTION_MCODE_IMAGE` | 使用现有 Harness 镜像，而不是构建这些镜像；值必须是以不可变 `sha256:` 镜像 ID 表示的现有镜像。三个变量必须全部设置或全部不设置；每个镜像都必须包含由该提交构建的守护进程 |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | 原生安装器目录；请参阅[原生安装器](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | `~/.oac` 下的输出目录。默认值：`~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker 构建网络：`default`、`host` 或 `none` |
@@ -59,7 +58,7 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 
 ### Runtime 镜像和辅助程序 {#runtime-images-and-helpers}
 
-`make build-core-distribution` 会构建以下全部内容。也可以单独构建其中一项，以测试某个 Harness 镜像或辅助程序。所有命令都必须从仓库根目录运行；默认输出位于 `${OAC_DEV_HOME:-$HOME/.oac}/build` 下。
+`make build-core-distribution` 会构建以下除沙箱镜像外的全部内容。也可以单独构建其中一项，以测试某个 Harness 镜像或辅助程序。所有命令都必须从仓库根目录运行；默认输出位于 `${OAC_DEV_HOME:-$HOME/.oac}/build` 下。
 
 **Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@0.153.4-linux-x64`（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
 
@@ -102,7 +101,7 @@ export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute
 bash scripts/build-agent-host-images.sh
 ```
 
-该脚本将三个 Runtime 镜像构建器的产物准备到同一个上下文中，加入静态的 `oac-daemon`、`oac-process-shim` 和 `oac-sandbox-io`，并将 `deploy/distribution/AgentHost.Dockerfile` 的两个目标分别构建为 `OAC_AGENT_HOST_IMAGE`（默认 `oac-agent-host:dev`）和 `OAC_SANDBOX_IMAGE`（默认 `oac-sandbox:dev`）。其余参数（例如 `--label`）会传给两次 `docker build`。agent-host 镜像把每个 Harness 安装在 `/opt/oac/harnesses` 下各自的目录中，`/opt/oac/harnesses.json` 是这些位置的唯一记录；agent host 通过 `agent.ManifestEnvironment` 读取它。沙箱镜像具有 Runtime 镜像的基础层和软件包，不含守护进程和 Harness，并以 UID/GID 1000 运行 `oac-sandbox-io --bootstrap-file <path>`。[认定视图资格](../../contracts/agents-api/zh/harness-onboarding.md#qualify-the-view)会运行这两个镜像；[Agent-host 容器](configuration.md#agent-host-container)列出 agent host 的需求。CI 和发布流程都不构建它们。
+该脚本将三个 Runtime 镜像构建器的产物准备到同一个上下文中，加入静态的 `oac-daemon`、`oac-process-shim` 和 `oac-sandbox-io`，并将 `deploy/distribution/AgentHost.Dockerfile` 的两个目标分别构建为 `OAC_AGENT_HOST_IMAGE`（默认 `oac-agent-host:dev`）和 `OAC_SANDBOX_IMAGE`（默认 `oac-sandbox:dev`）。其余参数（例如 `--label`）会传给两次 `docker build`。agent-host 镜像把每个 Harness 安装在 `/opt/oac/harnesses` 下各自的目录中，`/opt/oac/harnesses.json` 是这些位置的唯一记录；agent host 通过 `agent.ManifestEnvironment` 读取它。沙箱镜像具有 Runtime 镜像的基础层和软件包，不含守护进程和 Harness，并以 UID/GID 1000 运行 `oac-sandbox-io --bootstrap-file <path>`。[认定视图资格](../../contracts/agents-api/zh/harness-onboarding.md#qualify-the-view)会运行这两个镜像；[Agent-host 容器](configuration.md#agent-host-container)列出 agent host 的需求。分发构建用其 Runtime 镜像构建器准备的载荷构建并发布 agent-host 镜像；CI 和发布流程都不构建沙箱镜像。
 
 **E2B 辅助程序。**
 
@@ -146,9 +145,9 @@ git push origin v1.2.3
 
 ### 容器注册表 {#container-registry}
 
-版本发布和手动 `build-<full SHA>` 草稿使用 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime` 或 `ingress`。Core、Web 和 ingress 索引包含 Linux amd64 和 arm64 镜像，Runtime 包含 Linux amd64。各平台镜像使用 `<version>-<architecture>` 标签，从发行归档加载。已有版本标签必须与发行镜像及平台集合一致。发布器校验全部版本索引后，才为稳定版更新 `latest`；预发布版和草稿保持 `latest` 不变。PostgreSQL 使用上游镜像。容器标签中的 SemVer 构建元数据用 `_` 替换 `+`，版本字符串上限为 128 个字符。镜像校验后，发布器上传该版本的 `compose.yaml` 和校验和清单。Compose 用索引摘要固定 ingress，初始化时检查其构建版本与 Compose 版本一致。
+版本发布和手动 `build-<full SHA>` 草稿使用 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime`、`ingress` 或 `agent-host`。Core、Web 和 ingress 索引包含 Linux amd64 和 arm64 镜像，Runtime 和 agent-host 包含 Linux amd64。各平台镜像使用 `<version>-<architecture>` 标签，从发行归档加载。已有版本标签必须与发行镜像及平台集合一致。发布器校验全部版本索引后，才为稳定版更新 `latest`；预发布版和草稿保持 `latest` 不变。PostgreSQL 使用上游镜像。容器标签中的 SemVer 构建元数据用 `_` 替换 `+`，版本字符串上限为 128 个字符。镜像校验后，发布器上传该版本的 `compose.yaml` 和校验和清单。Compose 用索引摘要固定 ingress，初始化时检查其构建版本与 Compose 版本一致。
 
-合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部四个软件包改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
+合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部五个软件包改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
 
 GHCR 和 GitHub Releases 不共享事务。发布失败后，GHCR 中可能仍会保留一些匹配的版本标签；请保留这些镜像，并使用原始构件按照下文的草稿恢复流程操作。除清单缺失以外，注册表故障都会停止发布。作业摘要会记录按摘要固定的引用。这些镜像和渲染后的 Compose 文件仍需要[配置](configuration.md)中描述的配置、机密和路由。
 
@@ -193,7 +192,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 `.github/actionlint.yaml` 会选择 hygiene 和 lint。已知工作流变更会选择其使用方：CI review 和 actionlint 工作流运行 hygiene 和 lint；原生工作流变更会添加原生检查；API 验收工作流变更会添加启用容器验收的 API 检查；网站工作流变更会添加网站检查。共享 Node 操作会选择使用它的每个作业以及 lint。新工作流或未分类的工作流/操作会选择完整门禁，直至在计划器中声明其使用方。计划器测试和 CI 测量脚本运行 hygiene；更改计划器本身会运行完整门禁。
 
-Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建；Web 提供占位页面而不是控制台构建。构建时的节点元数据来自 `deploy/compose/smoke-pins.json` 固定的发布版本；初始化容器禁用网络运行。冒烟矩阵使用 Linux amd64 和 arm64 原生 runner；原生矩阵在 Linux、macOS 和 Windows 上构建并测试共享的 Core 安装器。
+Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、守护进程、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web、agent host 和 ingress 镜像都从当前检出构建；Web 提供占位页面而不是控制台构建，agent-host 镜像不含 Harness；冒烟测试会检查 agent host 能连接到 Core。构建时的节点元数据来自 `deploy/compose/smoke-pins.json` 固定的发布版本；初始化容器禁用网络运行。冒烟矩阵使用 Linux amd64 和 arm64 原生 runner；原生矩阵在 Linux、macOS 和 Windows 上构建并测试共享的 Core 安装器。
 
 Go 模块和工作区输入会选择后端、API（包括容器）、原生和分发检查。每个 Node 模块都拥有自己的清单和锁文件。网站依赖项会选择网站检查；Web 依赖项会选择 Web 和浏览器检查；示例依赖项会选择示例检查；共享 TypeScript 客户端依赖项会选择 Web、浏览器和示例检查；Claude 适配器依赖项会选择 Harness、原生和分发检查。共享包管理器配置会选择所有 Node 使用方。根 TypeScript 配置会选择 Web 和示例检查；适配器 TypeScript 配置会选择 Harness 和原生检查。每个所选集合都包含 hygiene。混合变更会累加其使用方，并且每个作业都读取同一计划，而不是维护各自的路径列表。例如，仅修改通知的 PR 会跳过数据库、浏览器和原生作业，而同时修改通知和 Core 的 PR 会添加后端和 API 检查。
 

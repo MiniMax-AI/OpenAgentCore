@@ -20,6 +20,12 @@ if credential_key:
         "--mount", f"type=bind,source={credential_key},target=/run/credential.key,readonly",
         "--env", "OAC_CREDENTIAL_KEY_FILE=/run/credential.key",
     ])
+agent_host_identity = os.environ.get("OAC_AGENT_HOST_IDENTITY_FILE")
+if agent_host_identity:
+    args.extend([
+        "--mount", f"type=bind,source={agent_host_identity},target=/run/agent-host/identity.json,readonly",
+        "--env", "OAC_AGENT_HOST_IDENTITY_FILE=/run/agent-host/identity.json",
+    ])
 for name in ("OAC_DATABASE_URL", "OAC_ADDR", "OAC_DEFAULT_HARNESS", "OAC_PUBLIC_URL"):
     args.extend(["--env", name])
 args.append(os.environ["OAC_DEV_CORE_IMAGE"])

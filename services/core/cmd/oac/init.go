@@ -24,7 +24,7 @@ var releaseMembers = []string{"manifest.json", "SHA256SUMS", "node-install.pyz",
 var dataOwners = []struct {
 	name string
 	uid  int
-}{{"database", 70}, {"secrets", 65532}, {"state", 65532}, {"node-payload", 65532}}
+}{{"database", 70}, {"secrets", 65532}, {"state", 65532}, {"node-payload", 65532}, {"agent-host", 0}}
 
 var chown = os.Chown
 
@@ -165,7 +165,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 	}
-	for _, name := range []string{"core", "web", "database"} {
+	for _, name := range []string{"core", "web", "database", "agent-host"} {
 		if err := ownedDir(filepath.Join(root, "secrets", name), 0o700, 65532); err != nil {
 			return err
 		}
@@ -201,7 +201,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 		nextStep("verify_empty_data")
-		for _, name := range []string{"database", "state"} {
+		for _, name := range []string{"database", "state", "agent-host"} {
 			entries, err := os.ReadDir(filepath.Join(root, name))
 			if err != nil {
 				return err
@@ -256,6 +256,11 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			{"secrets/database/password", func() string { return randomHex(32) }},
 			{"secrets/core/credential.key", func() string { return base64.StdEncoding.EncodeToString(randomBytes(32)) }},
 			{"secrets/core/installation.id", func() string { return uuid.NewString() }},
+			// Core registers the agent host from this file; the agent host presents the credential as written.
+			{"secrets/agent-host/identity.json", func() string {
+				identity, _ := json.Marshal(map[string]string{"runtime_id": uuid.NewString(), "credential": base64.StdEncoding.EncodeToString(randomBytes(32))})
+				return string(identity)
+			}},
 		}
 		for _, secret := range generators {
 			path := filepath.Join(root, secret.name)

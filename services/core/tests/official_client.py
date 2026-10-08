@@ -87,6 +87,10 @@ def main():
         # Enable the real Worker/gateway admission path without connecting a daemon.
         # Synthetic fixture inputs remain queued; this is not live model acceptance.
         env["OAC_PUBLIC_URL"] = f"http://127.0.0.1:{port}"
+        agent_host_identity = Path(directory) / "agent-host.json"
+        agent_host_identity.touch(mode=0o600)
+        agent_host_identity.write_text(json.dumps({"runtime_id": str(uuid.uuid4()), "credential": secrets.token_urlsafe(32)}))
+        env["OAC_AGENT_HOST_IDENTITY_FILE"] = str(agent_host_identity)
         with (Path(directory) / "server.log").open("w+") as log:
             def start():
                 nonlocal process

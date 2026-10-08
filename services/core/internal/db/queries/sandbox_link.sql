@@ -20,3 +20,15 @@ JOIN devices d ON d.id = b.runtime_id
 LEFT JOIN environments e ON e.session_id = b.session_id
 LEFT JOIN sandbox_resources r ON r.environment_id = e.id AND r.live
 WHERE b.assignment_id = $1;
+
+-- name: RegisterAgentHost :one
+-- The deployment's agent host, with no tenant, Environment or executor key.
+-- A new credential advances the revision, which fences the Links the old one
+-- authenticated; a revocation stays. No row means the ID belongs to a device
+-- that is not an agent host.
+INSERT INTO devices (id, name, credential_hash, agent_host)
+VALUES ($1, 'agent-host', sqlc.arg(credential_hash), true)
+ON CONFLICT (id) DO UPDATE SET credential_hash = EXCLUDED.credential_hash,
+    credential_revision = devices.credential_revision + (devices.credential_hash IS DISTINCT FROM EXCLUDED.credential_hash)::int
+WHERE devices.agent_host
+RETURNING id;
