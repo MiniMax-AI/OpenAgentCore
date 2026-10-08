@@ -100,7 +100,7 @@ jobs:
           path: |
             ~/.npm/_cacache
             ~/.oac/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz
-          key: release-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-release-runtimes.sh', 'packages/mcode-harness/source.json', 'scripts/core-distribution-manifest.py') }}
+          key: release-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-release-runtimes.sh', 'internal/harnessconfig/builtin/catalog.json', 'packages/mcode-harness/source.json', 'scripts/core-distribution-manifest.py') }}
           restore-keys: |
             release-downloads-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Check release metadata and prepare pinned harnesses
