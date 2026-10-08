@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -39,7 +40,7 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 	if err := json.Unmarshal(session.Configuration, &configuration); err != nil || configuration.Environment == nil {
 		return runtimeobs.Target{}, errors.New("invalid stored Runtime environment configuration")
 	}
-	target := runtimeobs.Target{TenantID: session.TenantID, SessionID: session.ID, Mode: runtimeobs.Mode(configuration.Environment.Type)}
+	target := runtimeobs.Target{TenantID: session.TenantID, SessionID: session.ID, Mode: v1.RuntimeObservationMode(configuration.Environment.Type)}
 	// Telemetry counts measured usage continuously, including active Turns.
 	// Public Session usage stays null until every root Turn ends measured.
 	measured, err := r.sessions.MeasuredSessionUsage(ctx, session.TenantID, session.ID)
@@ -52,12 +53,12 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 	}
 	target.TokenUsage = usage
 	switch target.Mode {
-	case runtimeobs.ModeNone:
+	case v1.RuntimeModeNone:
 		if session.Environment != nil {
 			return runtimeobs.Target{}, errors.New("environment:none unexpectedly has a durable Environment")
 		}
 		return target, nil
-	case runtimeobs.ModeSelfHosted:
+	case v1.RuntimeModeSelfHosted:
 		if session.Environment == nil {
 			return runtimeobs.Target{}, errors.New("self-hosted Session is missing its Environment")
 		}
@@ -66,7 +67,7 @@ func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID s
 		}
 		target.EnvironmentID = session.Environment.ID
 		return target, nil
-	case runtimeobs.ModeManaged:
+	case v1.RuntimeModeManaged:
 		if session.Environment == nil {
 			return runtimeobs.Target{}, errors.New("managed Session is missing its Environment")
 		}

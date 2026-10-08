@@ -7,12 +7,13 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 )
 
 type Observation struct {
 	Target         Target
-	Status         Status
+	Status         v1.RuntimeObservationStatus
 	Sample         *Sample
 	Reason         string
 	ProviderType   string
@@ -190,10 +191,10 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 	target, err := s.resolver.Resolve(ctx, tenantID, sessionID)
 	resolvedAt := s.now()
 	if errors.Is(err, ErrUnavailable) {
-		if target.TenantID != tenantID || target.SessionID != sessionID || target.Mode != ModeManaged || target.EnvironmentID == "" {
+		if target.TenantID != tenantID || target.SessionID != sessionID || target.Mode != v1.RuntimeModeManaged || target.EnvironmentID == "" {
 			return Observation{}, nil, errors.New("Runtime observation resolver returned invalid pending allocation identity")
 		}
-		return Observation{Target: target, Status: StatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, nil, nil
+		return Observation{Target: target, Status: v1.RuntimeStatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, nil, nil
 	}
 	if err != nil {
 		return Observation{}, nil, err
@@ -201,14 +202,14 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 	if target.TenantID != tenantID || target.SessionID != sessionID {
 		return Observation{}, nil, errors.New("Runtime observation resolver returned mismatched ownership")
 	}
-	if (target.Mode == ModeNone && target.EnvironmentID != "") ||
-		((target.Mode == ModeSelfHosted || target.Mode == ModeManaged) && target.EnvironmentID == "") {
+	if (target.Mode == v1.RuntimeModeNone && target.EnvironmentID != "") ||
+		((target.Mode == v1.RuntimeModeSelfHosted || target.Mode == v1.RuntimeModeManaged) && target.EnvironmentID == "") {
 		return Observation{}, nil, errors.New("Runtime observation resolver returned mismatched Environment identity")
 	}
-	if target.Mode == ModeNone || target.Mode == ModeSelfHosted {
-		return Observation{Target: target, Status: StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: resolvedAt}, nil, nil
+	if target.Mode == v1.RuntimeModeNone || target.Mode == v1.RuntimeModeSelfHosted {
+		return Observation{Target: target, Status: v1.RuntimeStatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: resolvedAt}, nil, nil
 	}
-	if target.Mode != ModeManaged || target.Instance.AllocationID == "" || target.Instance.ProviderKey == "" {
+	if target.Mode != v1.RuntimeModeManaged || target.Instance.AllocationID == "" || target.Instance.ProviderKey == "" {
 		return Observation{}, nil, errors.New("invalid managed Runtime observation target")
 	}
 	if !target.Instance.AllocationCreatedAt.IsZero() &&
@@ -217,9 +218,9 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 	}
 	switch target.Instance.AllocationState {
 	case "creating":
-		return Observation{Target: target, Status: StatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, nil, nil
+		return Observation{Target: target, Status: v1.RuntimeStatusUnavailable, Reason: "allocation_pending", ResolvedAt: resolvedAt}, nil, nil
 	case "cleanup_pending", "released":
-		return Observation{Target: target, Status: StatusUnavailable, Reason: "runtime_not_running", ResolvedAt: resolvedAt}, nil, nil
+		return Observation{Target: target, Status: v1.RuntimeStatusUnavailable, Reason: "runtime_not_running", ResolvedAt: resolvedAt}, nil, nil
 	case "running":
 	default:
 		return Observation{}, nil, errors.New("invalid managed Runtime allocation state")
@@ -229,14 +230,14 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 
 // complete classifies one provider result and hands it to history export.
 func (s *Service) complete(ctx context.Context, read *sourceRead, sample Sample, err error, sourceDuration time.Duration, collectionSource CollectionSource, owner OwnershipChecker) (Observation, error) {
-	observation := Observation{Target: read.target, Status: StatusUnavailable, ProviderType: read.providerType, SourceDuration: sourceDuration}
+	observation := Observation{Target: read.target, Status: v1.RuntimeStatusUnavailable, ProviderType: read.providerType, SourceDuration: sourceDuration}
 	switch {
 	case errors.Is(err, providercontract.ErrUnsupported):
 		reason, valid := providercontract.UnsupportedReason(err, "Observe")
 		if !valid {
 			return Observation{}, providercontract.ErrContract
 		}
-		observation.Status, observation.Reason = StatusUnsupported, reason
+		observation.Status, observation.Reason = v1.RuntimeStatusUnsupported, reason
 	case errors.Is(err, context.DeadlineExceeded):
 		observation.Reason = "sample_timeout"
 	case errors.Is(err, ErrNotRunning):
@@ -249,7 +250,7 @@ func (s *Service) complete(ctx context.Context, read *sourceRead, sample Sample,
 		if err := sample.validate(s.now()); err != nil {
 			return Observation{}, err
 		}
-		observation.Status, observation.Sample = StatusObserved, &sample
+		observation.Status, observation.Sample = v1.RuntimeStatusObserved, &sample
 	}
 	observation.ResolvedAt = s.now()
 	return s.finish(ctx, observation, collectionSource, owner)

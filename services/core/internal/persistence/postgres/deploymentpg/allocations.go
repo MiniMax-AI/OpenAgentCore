@@ -20,7 +20,7 @@ import (
 // allocation converts a stored allocation with the facts of its Session.
 func allocation(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted pgtype.Timestamptz, expired bool) deployment.Allocation {
 	return deployment.Allocation{
-		DeploymentGeneration: uint64(row.DeploymentGeneration.Int64), NodeID: uuidString(row.NodeID), ObservationError: row.ObservationError,
+		DeploymentGeneration: uint64(row.DeploymentGeneration.Int64), NodeID: uuidString(row.NodeID), ObservationError: deployment.AllocationDiagnostic(row.ObservationError),
 		ComputePhase: row.ComputePhase, ComputeRevision: row.ComputeRevision, ComputeState: row.ComputeState,
 		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: timestamp(row.ComputeRetainedUntil),
 		ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID), SessionID: uuidString(session), TenantID: uuidString(tenant),
@@ -282,12 +282,12 @@ func (t *allocationTx) SetCompute(current deployment.Allocation, change deployme
 	})
 }
 
-func (t *allocationTx) RecordObservation(current deployment.Allocation, diagnostic string) error {
+func (t *allocationTx) RecordObservation(current deployment.Allocation, diagnostic deployment.AllocationDiagnostic) error {
 	id, err := parseID(current.ID)
 	if err != nil {
 		return err
 	}
-	return t.q.SetRuntimeObservation(t.ctx, sqlc.SetRuntimeObservationParams{ID: id, ComputeRevision: current.ComputeRevision, State: current.State, ObservationError: diagnostic})
+	return t.q.SetRuntimeObservation(t.ctx, sqlc.SetRuntimeObservationParams{ID: id, ComputeRevision: current.ComputeRevision, State: current.State, ObservationError: string(diagnostic)})
 }
 
 // change applies a guarded write to current and returns the stored result
@@ -401,7 +401,7 @@ func (s *Store) NodeAllocations(ctx context.Context, nodeID string) ([]deploymen
 	result := make([]deployment.NodeAllocation, 0, len(rows))
 	for _, a := range rows {
 		result = append(result, deployment.NodeAllocation{
-			DeploymentGeneration: uint64(a.DeploymentGeneration.Int64), Diagnostic: a.ObservationError, ID: uuidString(a.ID), NodeID: uuidString(a.NodeID),
+			DeploymentGeneration: uint64(a.DeploymentGeneration.Int64), Diagnostic: deployment.AllocationDiagnostic(a.ObservationError), ID: uuidString(a.ID), NodeID: uuidString(a.NodeID),
 			TenantID: uuidString(a.TenantID), SessionID: uuidString(a.SessionID), EnvironmentID: uuidString(a.EnvironmentID), State: a.State,
 			ComputePhase: a.ComputePhase, ComputePhaseChangedAt: timestamp(a.ComputePhaseChangedAt), Initialization: a.Initialization, CreatedAt: a.CreatedAt.Time,
 		})

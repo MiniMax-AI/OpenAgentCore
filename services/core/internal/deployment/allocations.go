@@ -245,8 +245,10 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 // RecordObservation records a diagnostic for the observed compute revision
 // and state of a node-backed allocation. It never releases ownership, changes
 // public readiness or authorizes replacement.
-func (e *ExecutionOperations) RecordObservation(ctx context.Context, owner Allocation, diagnostic string) error {
-	if !observationDiagnostics[diagnostic] {
+func (e *ExecutionOperations) RecordObservation(ctx context.Context, owner Allocation, diagnostic AllocationDiagnostic) error {
+	switch diagnostic {
+	case AllocationObserved, AllocationNodeUnavailable, AllocationResourceMissing, AllocationComputeUnconfirmed, AllocationOwnershipMismatch, AllocationProviderUnavailable:
+	default:
 		return ErrInvalidInput
 	}
 	if owner.NodeID == "" {

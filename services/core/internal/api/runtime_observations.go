@@ -78,7 +78,7 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 	}
 	result := v1.RuntimeObservation{
 		ID: observation.Target.SessionID, Object: "agent.runtime_observation", SessionID: observation.Target.SessionID,
-		Mode: string(observation.Target.Mode), Status: string(observation.Status), ResolvedAt: observation.ResolvedAt.Unix(),
+		Mode: observation.Target.Mode, Status: observation.Status, ResolvedAt: observation.ResolvedAt.Unix(),
 	}
 	if observation.Target.EnvironmentID != "" {
 		result.EnvironmentID = &observation.Target.EnvironmentID
@@ -93,8 +93,8 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 		result.Reason = &observation.Reason
 	}
 	switch observation.Target.Mode {
-	case runtimeobs.ModeManaged:
-		result.Instance.Kind = "managed_allocation"
+	case v1.RuntimeModeManaged:
+		result.Instance.Kind = v1.RuntimeInstanceManagedAllocation
 		lifecycleState, err := runtimeLifecycleState(observation.Target.Instance)
 		if err != nil {
 			return v1.RuntimeObservation{}, err
@@ -107,13 +107,13 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 			created := observation.Target.Instance.AllocationCreatedAt.Unix()
 			result.AllocationCreatedAt = &created
 		}
-	case runtimeobs.ModeSelfHosted:
-		result.Instance.Kind = "self_hosted_connection"
+	case v1.RuntimeModeSelfHosted:
+		result.Instance.Kind = v1.RuntimeInstanceSelfHostedConnection
 		if observation.Target.Instance.ConnectionGeneration != "" {
 			result.Instance.ConnectionGeneration = &observation.Target.Instance.ConnectionGeneration
 		}
-	case runtimeobs.ModeNone:
-		result.Instance.Kind = "none"
+	case v1.RuntimeModeNone:
+		result.Instance.Kind = v1.RuntimeInstanceNone
 	default:
 		return v1.RuntimeObservation{}, errors.New("invalid Runtime observation mode")
 	}
@@ -135,25 +135,25 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 	return result, nil
 }
 
-func runtimeLifecycleState(instance runtimeobs.Instance) (string, error) {
+func runtimeLifecycleState(instance runtimeobs.Instance) (v1.RuntimeObservationLifecycleState, error) {
 	switch instance.AllocationState {
 	case "":
 		if instance.AllocationID == "" {
-			return "pending", nil
+			return v1.RuntimeLifecyclePending, nil
 		}
 		return "", errors.New("invalid Runtime allocation state")
 	case "creating":
-		return "pending", nil
+		return v1.RuntimeLifecyclePending, nil
 	case "cleanup_pending", "released":
-		return "stopped", nil
+		return v1.RuntimeLifecycleStopped, nil
 	case "running":
 		switch instance.ComputePhase {
 		case "suspended":
-			return "sleeping", nil
+			return v1.RuntimeLifecycleSleeping, nil
 		case "quiescing", "suspending", "restoring", "waking":
-			return "transitioning", nil
+			return v1.RuntimeLifecycleTransitioning, nil
 		case "disabled", "running":
-			return "active", nil
+			return v1.RuntimeLifecycleActive, nil
 		default:
 			return "", errors.New("invalid Runtime compute phase")
 		}

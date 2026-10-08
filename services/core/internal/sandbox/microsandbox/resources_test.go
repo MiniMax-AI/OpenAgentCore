@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -21,7 +22,7 @@ func observationTarget(t *testing.T, compute Compute) runtimeobs.Target {
 	}
 	r := testRef()
 	return runtimeobs.Target{
-		TenantID: r.TenantID, SessionID: "55555555-5555-4555-8555-555555555555", EnvironmentID: r.EnvironmentID, Mode: runtimeobs.ModeManaged,
+		TenantID: r.TenantID, SessionID: "55555555-5555-4555-8555-555555555555", EnvironmentID: r.EnvironmentID, Mode: v1.RuntimeModeManaged,
 		Instance: runtimeobs.Instance{AllocationID: r.AllocationID, ProviderKey: testConfig().InstallationID, AllocationState: "running", ComputePhase: "running", ProviderState: state},
 	}
 }

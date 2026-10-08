@@ -3,11 +3,13 @@ package runtimeobs
 import (
 	"testing"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 func TestExporterOutageDoesNotDelayOtherDestinations(t *testing.T) {
 	now := time.Now()
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	blocked := &gatedExporter{started: make(chan struct{}, 1), release: make(chan struct{})}
 	records := make(chan ExportRecord, 1)
 	service, err := NewService(fixedResolver{target: target}, sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),

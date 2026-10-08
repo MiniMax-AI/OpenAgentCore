@@ -10,14 +10,14 @@ import (
 	"regexp"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
 
 const scopeName = "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/otlpexporter"
@@ -161,16 +161,16 @@ func validateRecord(record runtimeobs.ExportRecord) error {
 		return errors.New("invalid Runtime history result reason")
 	}
 	switch record.Mode {
-	case runtimeobs.ModeNone, runtimeobs.ModeSelfHosted, runtimeobs.ModeManaged:
+	case v1.RuntimeModeNone, v1.RuntimeModeSelfHosted, v1.RuntimeModeManaged:
 	default:
 		return errors.New("invalid Runtime history mode")
 	}
 	switch record.Status {
-	case runtimeobs.StatusObserved:
+	case v1.RuntimeStatusObserved:
 		if record.Sample == nil {
 			return errors.New("observed Runtime history record has no sample")
 		}
-	case runtimeobs.StatusUnavailable, runtimeobs.StatusUnsupported:
+	case v1.RuntimeStatusUnavailable, v1.RuntimeStatusUnsupported:
 		if record.Sample != nil {
 			return errors.New("unobserved Runtime history record has a sample")
 		}

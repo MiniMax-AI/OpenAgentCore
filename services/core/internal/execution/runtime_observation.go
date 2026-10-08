@@ -12,22 +12,22 @@ func (r *runtimeLifecycle) recordObservation(ctx context.Context, owner deployme
 	if owner.NodeID == "" {
 		return
 	}
-	diagnostic := ""
+	diagnostic := deployment.AllocationObserved
 	if observed != nil {
 		switch {
 		case errors.Is(observed, sandbox.ErrOwnership):
-			diagnostic = "ownership_mismatch"
+			diagnostic = deployment.AllocationOwnershipMismatch
 		case errors.Is(observed, sandbox.ErrNotFound):
-			diagnostic = "compute_unconfirmed"
+			diagnostic = deployment.AllocationComputeUnconfirmed
 			if owner.CreateSettled {
-				diagnostic = "resource_missing"
+				diagnostic = deployment.AllocationResourceMissing
 			}
 		case errors.Is(observed, sandbox.ErrComputeUnconfirmed):
-			diagnostic = "compute_unconfirmed"
+			diagnostic = deployment.AllocationComputeUnconfirmed
 		default:
-			diagnostic = "provider_unavailable"
+			diagnostic = deployment.AllocationProviderUnavailable
 			if online, err := r.reader.NodeOnline(ctx, owner.NodeID); err == nil && !online {
-				diagnostic = "node_unavailable"
+				diagnostic = deployment.AllocationNodeUnavailable
 			}
 		}
 	}

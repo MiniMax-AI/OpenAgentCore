@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/google/uuid"
 	"github.com/moby/moby/api/types/container"
@@ -18,7 +19,7 @@ import (
 func TestObserveVerifiesOwnershipThenReadsOneShotStats(t *testing.T) {
 	installationID := uuid.NewString()
 	target := runtimeobs.Target{
-		TenantID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
+		TenantID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: v1.RuntimeModeManaged,
 		Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), ProviderKey: installationID},
 	}
 	observed := time.Now().UTC().Truncate(time.Microsecond)

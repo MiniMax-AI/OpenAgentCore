@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -66,7 +67,7 @@ func TestObservationResolverBindsManagedSessionEnvironmentAndAllocation(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != runtimeobs.ModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" {
+	if target.TenantID != "tenant" || target.SessionID != "session" || target.EnvironmentID != "environment" || target.Mode != v1.RuntimeModeManaged || target.Instance.AllocationID != "allocation" || target.Instance.ProviderKey != "provider" {
 		t.Fatalf("incorrect managed identity binding: %+v", target)
 	}
 	if string(target.Instance.ProviderState) != `{"current":{"name":"sandbox"}}` {
@@ -165,7 +166,7 @@ func TestObservationResolverReportsManagedAllocationAsUnavailable(t *testing.T) 
 		t.Fatal(err)
 	}
 	target, err := r.Resolve(t.Context(), "tenant", "session")
-	if !errors.Is(err, runtimeobs.ErrUnavailable) || target.EnvironmentID != "environment" || target.Mode != runtimeobs.ModeManaged {
+	if !errors.Is(err, runtimeobs.ErrUnavailable) || target.EnvironmentID != "environment" || target.Mode != v1.RuntimeModeManaged {
 		t.Fatalf("allocation absence was not preserved: %+v %v", target, err)
 	}
 }

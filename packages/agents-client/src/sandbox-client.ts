@@ -4,7 +4,7 @@ import { deploymentContract } from "./deployment-contract";
 import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId, schemaFields } from "./response-projection";
 import {
   deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
-  hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields, nodeDetailRequired,
+  hostHistoryFields, hostHistoryPointFields, allocationDiagnosticValues, nodeAllocationFields, nodeDetailFields, nodeDetailRequired,
   nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRequired, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
   resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues, runtimeReleaseFields,
   sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
@@ -218,7 +218,7 @@ function projectAllocations(value: unknown, nodeId: string): { data: SandboxAllo
   valid(Array.isArray(list.data));
   return { data: (list.data as unknown[]).map((entry) => {
     const allocation = members(entry, nodeAllocationFields);
-    valid(isNonnegativeInteger(allocation.deployment_generation) && strings(allocation, allocationStrings) && sameResourceId(allocation.node_id as string, nodeId) && isOneOf(nodeAllocationDiagnosticValues, allocation.diagnostic) &&
+    valid(isNonnegativeInteger(allocation.deployment_generation) && strings(allocation, allocationStrings) && sameResourceId(allocation.node_id as string, nodeId) && isOneOf(allocationDiagnosticValues, allocation.diagnostic) &&
       nullable(timestamp)(allocation.compute_phase_changed_at) && timestamp(allocation.created_at));
     return { ...allocation } as unknown as SandboxAllocation;
   }) };

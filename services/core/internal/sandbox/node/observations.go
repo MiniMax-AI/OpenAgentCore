@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -13,7 +14,7 @@ func observationReference(target runtimeobs.Target) sandbox.Reference {
 }
 
 func validObservation(target runtimeobs.Target, reference sandbox.Reference) bool {
-	return target.Mode == runtimeobs.ModeManaged && validID(target.SessionID) &&
+	return target.Mode == v1.RuntimeModeManaged && validID(target.SessionID) &&
 		validID(target.Instance.ProviderKey) && observationReference(target) == reference && target.TokenUsage == nil
 }
 

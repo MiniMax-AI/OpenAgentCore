@@ -5,6 +5,7 @@ import (
 	"math"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -32,7 +33,7 @@ type Observation struct {
 // changes a sandbox.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
 	reference := sandbox.Reference{TenantID: target.TenantID, EnvironmentID: target.EnvironmentID, AllocationID: target.Instance.AllocationID}
-	if target.Mode != runtimeobs.ModeManaged || !validReference(reference) {
+	if target.Mode != v1.RuntimeModeManaged || !validReference(reference) {
 		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
 	if target.Instance.ProviderKey != p.config.InstallationID {

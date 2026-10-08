@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -77,7 +78,7 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	info, e := p.Create(ctx, b)
 	contracttest.AssertObservation(t, info, e, b.Reference, "", "running")
 	resources, e := p.Observe(ctx, runtimeobs.Target{
-		TenantID: b.TenantID, EnvironmentID: b.EnvironmentID, Mode: runtimeobs.ModeManaged,
+		TenantID: b.TenantID, EnvironmentID: b.EnvironmentID, Mode: v1.RuntimeModeManaged,
 		Instance: runtimeobs.Instance{AllocationID: b.AllocationID, ProviderKey: installationID},
 	})
 	if e != nil || resources.StartedAt == nil || resources.CPUUsageSecondsTotal == nil || resources.MemoryUsageBytes == nil || resources.CPUCapacityCores == nil || resources.MemoryLimitBytes == nil {

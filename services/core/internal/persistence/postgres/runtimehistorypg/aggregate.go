@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +26,7 @@ type rawSample struct {
 	allocation string
 	startedAt  *time.Time
 	provider   string
-	status     runtimeobs.Status
+	status     v1.RuntimeObservationStatus
 	hasSample  bool
 	metrics    map[string]float64
 }
@@ -307,7 +307,7 @@ func safeUint64(value float64) (uint64, error) {
 
 func addCoverage(value *coverageAggregate, sample *rawSample) {
 	value.observations++
-	if sample.status == runtimeobs.StatusObserved {
+	if sample.status == v1.RuntimeStatusObserved {
 		value.observed++
 	} else {
 		value.unavailable++
