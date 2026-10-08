@@ -1,11 +1,13 @@
 package codex
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -121,6 +123,56 @@ func TestPublicMCPHTTPPreflightRedactsNativeErrors(t *testing.T) {
 	}
 	if err := <-done; err == nil || strings.Contains(err.Error(), "synthetic-secret") {
 		t.Fatal("native error was accepted or exposed", err)
+	}
+}
+
+func TestPublicMCPHTTPPreflightUsesDefaultRequestBudget(t *testing.T) {
+	req, cfg, root := preparationFixture(t)
+	req.ExecutionControls = nil
+	t.Setenv("OAC_TEST_PREPARATION_MCP_DELAY", "6s")
+	if _, err := testExecutor(t, "complete", req, cfg); err != nil {
+		t.Fatalf("valid MCP configuration after remote metadata work: %v", err)
+	}
+	assertPreparationOnly(t, root)
+	waitPreparationMethod(t, root, "config/read")
+}
+
+func TestPublicMCPHTTPPreflightBudgetFailuresStayRedacted(t *testing.T) {
+	for _, mode := range []string{"request-timeout", "owner-cancel"} {
+		t.Run(mode, func(t *testing.T) {
+			client, server, cleanup := NewTestClient()
+			defer cleanup()
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if mode == "request-timeout" {
+				client.cfg.RequestTimeout = 100 * time.Millisecond
+			}
+			done := make(chan error, 1)
+			go func() {
+				done <- verifyMCPConfig(ctx, client.JSONRPCClient, SessionPlan{Cwd: "/synthetic-private/workspace"})
+			}()
+			var request JsonRpcRequest
+			if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.Method != "config/read" {
+				t.Fatal("unexpected preflight request", request.Method)
+			}
+			if mode == "owner-cancel" {
+				cancel()
+			}
+			select {
+			case err := <-done:
+				if err == nil || err.Error() != "codex: cannot verify public MCP configuration" {
+					t.Fatal("budget failure was accepted or exposed", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("preflight ignored its configured budget or parent cancellation")
+			}
+			if mode == "request-timeout" && ctx.Err() != nil {
+				t.Fatal("request budget changed the parent context", ctx.Err())
+			}
+		})
 	}
 }
 

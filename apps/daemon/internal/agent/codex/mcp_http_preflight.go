@@ -5,16 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
-	"time"
 )
 
 // config/read loads the same cwd and CLI layers without MCP discovery. Native
 // mcpServerStatus/list instead opens eager discovery connections; do not use it
 // to decide whether undeclared servers are safe to contact.
 func verifyMCPConfig(ctx context.Context, rpc *JSONRPCClient, plan SessionPlan) error {
-	check, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	raw, err := rpc.Request(check, "config/read", map[string]any{"cwd": plan.Cwd, "includeLayers": false})
+	raw, err := rpc.Request(ctx, "config/read", map[string]any{"cwd": plan.Cwd, "includeLayers": false})
 	if err != nil {
 		// Native configuration errors and responses can contain operator secrets.
 		return errors.New("codex: cannot verify public MCP configuration")

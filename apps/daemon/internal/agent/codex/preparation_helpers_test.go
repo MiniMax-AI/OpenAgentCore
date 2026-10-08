@@ -227,6 +227,13 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			}
 			result = map[string]any{"data": []any{map[string]any{"skills": listed, "errors": []any{}}}}
 		case "config/read":
+			if delay := os.Getenv("OAC_TEST_PREPARATION_MCP_DELAY"); delay != "" {
+				duration, err := time.ParseDuration(delay)
+				if err != nil {
+					os.Exit(6)
+				}
+				time.Sleep(duration)
+			}
 			data, err := os.ReadFile(os.Getenv("OAC_TEST_PREPARATION_MCP_CONFIG"))
 			if err != nil || json.Unmarshal(data, &result) != nil {
 				os.Exit(6)
