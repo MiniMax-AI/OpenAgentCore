@@ -124,15 +124,17 @@ class Provider:
             raise Failure('ownership')
         return cloud
 
-    def check_domain(self, cloud):
+    def check_domain(self, sandbox_domain):
         domain = self.options()['domain']
-        sandbox_domain = cloud.sandbox_domain
         if not isinstance(sandbox_domain, str) or not (
                 sandbox_domain == domain or sandbox_domain.endswith('.' + domain)):
             raise Failure('ownership')
 
     def qualified(self, cloud):
-        self.check_domain(cloud)
+        # SDK information reads may omit the domain; they never supply the
+        # connection material used for envd requests.
+        if cloud.sandbox_domain is not None:
+            self.check_domain(cloud.sandbox_domain)
         template = self.config['Template'].split(':', 1)[0]
         if cloud.template_id not in (template, self.config['Template']):
             raise Failure('invalid')
@@ -170,6 +172,7 @@ class Provider:
         material = (self.receipt.data or {}).get('connection')
         if not material or material['sandbox_id'] != cloud.sandbox_id:
             raise Failure('unconfirmed')
+        self.check_domain(material['sandbox_domain'])
         return restore(material, self.options())
 
     def inspect(self):
@@ -218,7 +221,7 @@ class Provider:
             raise Failure('unconfirmed') from None
         self.receipt.save(status='created', ids=[cloud.sandbox_id], connection=connection_material(cloud))
         # A create response must not steer envd traffic to an unrelated host.
-        self.check_domain(cloud)
+        self.check_domain(cloud.sandbox_domain)
         # SDK Create returns connection material, but no metadata or resources.
         # Read its exact ID before writing credentials, even when Core adopts the
         # template's resources and does not supply explicit limits.
