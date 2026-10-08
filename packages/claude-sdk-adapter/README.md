@@ -6,6 +6,8 @@ This package translates the pinned native Claude Agent SDK into OpenAgentCore's 
 
 ## Develop and verify
 
+The [Harness catalog](../../contracts/agents-api/harness-onboarding.md#native-version-pins) owns the SDK version projected into this package manifest. The SDK supplies the native Claude Code version through its own metadata.
+
 From the repository root, install the pinned workspace dependencies and run:
 
 ```sh

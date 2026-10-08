@@ -12,7 +12,7 @@ For each tool call, the bridge starts `launch.mjs` with the Session's private pr
 
 ## Build
 
-`source.json` pins the CLI and native tool source. The pinned npm package supplies native runtime dependencies; the CLI is built from source into the same artifact. On Linux x86_64 or macOS arm64:
+`source.json` owns the upstream repository and revision for the CLI and native tools; its version is generated from the [Harness catalog](../../contracts/agents-api/harness-onboarding.md#native-version-pins). The pinned npm package supplies native runtime dependencies; the CLI is built from source into the same artifact. On Linux x86_64 or macOS arm64:
 
 ```sh
 MCODE_NATIVE_SOURCE=/absolute/upstream/checkout MCODE_CLI_DIR=/absolute/pinned/package bash scripts/build-mcode-harness.sh
