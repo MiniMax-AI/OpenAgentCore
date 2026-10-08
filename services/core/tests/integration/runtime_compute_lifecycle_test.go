@@ -347,13 +347,12 @@ type computeLifecycleFixture struct {
 	stop     func()
 	key      string
 	node     string
-	policy   execution.RuntimeSuspensionPolicy
 }
 
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
-	f := &computeLifecycleFixture{t: t, store: s, provider: newFakeCheckpointProvider(t, s), key: webDeployment(t, s, "microsandbox"), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour}}
+	f := &computeLifecycleFixture{t: t, store: s, provider: newFakeCheckpointProvider(t, s), key: webDeployment(t, s, "microsandbox")}
 	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -365,7 +364,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	w := startWebWorker(t, f.store, f.provider.registry, f.provider.link.Relay, f.key, f.provider, &f.policy)
+	w := startWebWorker(t, f.store, f.provider.registry, f.provider.link.Relay, f.key, f.provider)
 	// The Worker's claim starts a new owner epoch, in which the node reconnects.
 	onlineManagerNode(t, f.store, f.node)
 	var once sync.Once
@@ -418,8 +417,13 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deplo
 func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	assignSession(f.t, f.store, owner.SessionID, f.provider.host.ID)
-	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')`, id, owner.SessionID)
-	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
+	view, err := deploymentService(f.t, f.store).View(f.t.Context())
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	idleSeconds := view.Suspension.IdleSeconds + 60
+	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-make_interval(secs => $3))`, id, owner.SessionID, idleSeconds)
+	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-make_interval(secs => $2) WHERE id=$1`, owner.ID, idleSeconds)
 	return id
 }
 func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {

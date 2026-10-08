@@ -169,11 +169,10 @@ func run(config processconfig.Config) error {
 	}
 	// Node callbacks run only once the HTTP server serves, after the Worker starts.
 	var worker *execution.Worker
-	managedNodes := configureManagedNodes(deploymentService, deploymentStore, sandboxProviders, config, func(ctx context.Context) error {
+	managedNodes := configureManagedNodes(deploymentService, deploymentStore, func(ctx context.Context) error {
 		return worker.CheckOwnership(ctx)
 	})
-	defer managedNodes.hub.Close()
-	observationSource := managedNodes.setup.observationSource
+	defer managedNodes.Close()
 	observationResolver, err := deployment.NewObservationResolver(sessionStore, deploymentStore)
 	if err != nil {
 		return err
@@ -182,20 +181,10 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	observationService, err := runtimeobs.NewService(observationResolver, observationSource, history.Options...)
-	if err != nil {
+	defer func() {
 		if history.Exporter != nil {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			closeRuntimeHistory(closeCtx, history.Exporter)
-		}
-		return err
-	}
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = observationService.Close(closeCtx)
-		if history.Exporter != nil {
 			closeRuntimeHistory(closeCtx, history.Exporter)
 		}
 	}()
@@ -233,12 +222,13 @@ func run(config processconfig.Config) error {
 	if buildRevision != "" {
 		nativeInstaller = &api.NativeInstaller{Version: buildRevision, Base: config.PublicOrigin.InstallerBase(), Catalog: catalog}
 	}
+	sandboxLink, _ := config.PublicOrigin.SandboxLink()
 	dispatcher := &execution.Dispatcher{Registry: registry,
 		Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
-		Sessions:        sessionService,
-		SessionsReader:  sessionStore,
-		Links:           linkRelay,
-		ManagedRuntimes: managedNodes.runtime, MaxConcurrentExecutions: config.ExecutionConcurrency}
+		Sessions:       sessionService,
+		SessionsReader: sessionStore,
+		Links:          linkRelay,
+		Providers:      sandboxProviders, NodeProviders: managedNodes, ProviderPaths: config.ProviderPaths, InstallationID: config.InstallationID, SandboxLink: sandboxLink, MaxConcurrentExecutions: config.ExecutionConcurrency}
 	lease, err := pgunit.AcquireLease(ctx, pool)
 	if err != nil {
 		return err
@@ -267,6 +257,15 @@ func run(config processconfig.Config) error {
 		if workerDone != nil {
 			<-workerDone
 		}
+	}()
+	observationService, err := runtimeobs.NewService(observationResolver, worker.ObservationSource, history.Options...)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = observationService.Close(closeCtx)
 	}()
 	// The Worker owns every sampling sweep.
 	sampler, err := runtimeobs.NewSampler(observationResolver, observationService, worker, runtimeobs.SamplerOptions{})
@@ -345,7 +344,7 @@ func run(config processconfig.Config) error {
 			NodeAllocations:        deploymentStore,
 			DeploymentChanges:      worker,
 			DeploymentReset:        worker,
-			ConfigurationDiscovery: managedNodes.setup,
+			ConfigurationDiscovery: worker,
 		},
 	}
 	apiHandler, err := api.NewHandler(deps)
@@ -355,7 +354,7 @@ func run(config processconfig.Config) error {
 	handler := serverHandler(apiHandler, &daemonRoutes{gateway: daemonHandler,
 		enrollment:  runtimeenrollment.EnrollmentHandler(sessionService, config.PublicOrigin),
 		connection:  connections,
-		nodeConnect: managedNodes.hub})
+		nodeConnect: managedNodes})
 	server := &http.Server{Addr: config.Addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	done := make(chan error, 1)
 	go func() { done <- server.ListenAndServe() }()

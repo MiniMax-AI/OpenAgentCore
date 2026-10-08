@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -29,9 +31,13 @@ type runtimeManager struct {
 	connections         *environmentConnections
 	config              RuntimeProvider
 	setupInstallationID string
-	loadDeployment      func(context.Context) (*RuntimeProvider, error)
-	prepareDeployment   RuntimeDeploymentPreparer
-	publishUnconfigured func(uint64)
+	setups              deploymentSetups
+	providers           ProviderRegistry
+	nodeProviders       NodeProviders
+	processPaths        sandbox.ProcessPaths
+	sandboxLink         string
+	selected            atomic.Pointer[managedSelection]
+	providerCalls       sandbox.CallFence
 	resetCursor         string
 	resetRequestedAt    time.Time
 	setupGate           chan struct{}

@@ -63,7 +63,7 @@ func TestGenerationWireRoutesOldOwnershipAndCurrentTargetSeparately(t *testing.T
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
 	for _, generation := range []uint64{1, 17, 9} {
-		proxy := hub.GenerationProvider(docker.Operations(), func(context.Context, sandbox.Reference) (string, uint64, error) { return id.NodeID, generation, nil })
+		proxy := hub.Proxy(id.NodeID, docker.Operations(), generation)
 		ref := reference()
 		if _, err := proxy.GetInfo(ctx, ref); err != nil {
 			t.Fatal("retained generation info failed", generation, err)

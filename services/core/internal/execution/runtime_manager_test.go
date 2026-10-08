@@ -23,7 +23,7 @@ func (heldLease) Close(context.Context) error { return nil }
 func testRuntimeManager(t *testing.T) *runtimeManager {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	m := &runtimeManager{lease: heldLease{}, config: RuntimeProvider{ProviderKind: "docker", Mode: "nodes", Provider: &drainFixtureProvider{}}, loadDeployment: func(context.Context) (*RuntimeProvider, error) { return nil, nil }, ctx: ctx, cancel: cancel, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}
+	m := &runtimeManager{lease: heldLease{}, config: RuntimeProvider{ProviderKind: "docker", Mode: "nodes", Provider: &drainFixtureProvider{}}, ctx: ctx, cancel: cancel, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}
 	t.Cleanup(func() { m.stop(); m.drain() })
 	return m
 }

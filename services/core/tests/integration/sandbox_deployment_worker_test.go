@@ -22,19 +22,10 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	deployments := deploymentService(t, s)
 	id := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	configuration := execution.NewDeferredRuntimeProvider(id, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, BackendFingerprint: setup.BackendFingerprint, SandboxLink: "wss://core.example/api/v1/sandbox-link", Provider: p}, nil
-	}, func(ctx context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
-	})
 	start := func() (*execution.Worker, func()) {
 		t.Helper()
-		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
+		w := startWorker(t, t.Context(), s, webDispatcher(t, id, p, runtimegateway.NewRegistry(), nil))
 		var once sync.Once
 		stop := func() {
 			once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })

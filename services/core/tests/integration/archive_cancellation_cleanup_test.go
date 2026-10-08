@@ -29,7 +29,7 @@ func TestArchiveCancellationThenDeleteRemovesHome(t *testing.T) {
 		Reference:  sandbox.Reference{TenantID: h.tenant, EnvironmentID: h.resource.EnvironmentID, AllocationID: h.resource.ID},
 		ProviderID: h.resource.ID, State: "running", BootstrapComplete: true, CreateSettled: true,
 	}}}
-	h.d.ManagedRuntimes = webRuntimes(t, h.s, setup.InstallationID, provider, nil)
+	h.d = webDispatcher(t, setup.InstallationID, provider, h.d.Registry, h.d.Links)
 	owner := h.owner()
 	worker := startOwnedWorker(t, t.Context(), h.s, h.d, owner)
 	runWorker(t, worker)

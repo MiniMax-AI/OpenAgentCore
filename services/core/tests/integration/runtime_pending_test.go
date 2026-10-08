@@ -25,7 +25,7 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 		t.Fatal(err)
 	}
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	start := func() *execution.Worker { return startWebWorker(t, s, runtimegateway.NewRegistry(), nil, key, p, nil) }
+	start := func() *execution.Worker { return startWebWorker(t, s, runtimegateway.NewRegistry(), nil, key, p) }
 	stop := func(w *execution.Worker) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

@@ -5,27 +5,17 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
-
-type managedNodes struct {
-	setup   *managedSetup
-	runtime *execution.RuntimeProvider
-	hub     *node.Hub
-}
 
 // configureManagedNodes serves the nodes of the Web-managed deployment. Node
 // presence and health and the generation of each allocation go through the
 // deployment service; the owner epoch that fences connections and the
 // allocations each generation retains are read from the deployment reader.
-func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, registry *providers.Registry, config processconfig.Config, owner func(context.Context) error) *managedNodes {
-	result := &managedNodes{}
-	result.hub = node.NewHub(node.HubOptions{
+func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, owner func(context.Context) error) *node.Hub {
+	return node.NewHub(node.HubOptions{
 		Generations: func(ctx context.Context, n node.Identity, connection string, epoch uint64, health node.Health) error {
 			if err := owner(ctx); err != nil {
 				return err
@@ -70,12 +60,6 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
 		},
 	})
-	// An origin without a sandbox Link admits no hosted sandbox.
-	link, _ := config.PublicOrigin.SandboxLink()
-	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, sandboxLink: link}
-	result.runtime = execution.NewDeferredRuntimeProvider(config.InstallationID, result.setup.load, result.setup.prepare)
-	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
-	return result
 }
 
 func nodeHealthRecord(health node.Health) deployment.NodeHealth {

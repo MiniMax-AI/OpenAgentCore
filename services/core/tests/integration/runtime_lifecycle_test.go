@@ -78,7 +78,7 @@ func managedWorker(t *testing.T, s *Store, key string, p sandbox.SandboxProvider
 // managedWorkerMode is managedWorker that also runs the Worker when run is set.
 func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProvider, run bool) (*execution.Worker, func()) {
 	t.Helper()
-	dispatcher := &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: webRuntimes(t, s, key, p, nil)}
+	dispatcher := webDispatcher(t, key, p, runtimegateway.NewRegistry(), nil)
 	if peer, ok := p.(interface {
 		setRuntimeGateway(*testing.T, *Store, string, *runtimegateway.Registry, *sandboxlinktest.Server)
 	}); ok {

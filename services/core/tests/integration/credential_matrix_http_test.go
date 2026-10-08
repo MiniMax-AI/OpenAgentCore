@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
@@ -92,19 +91,10 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	created("POST", "/core/v1/projects/"+project.ID+"/environments/"+environment.ID+"/executor-credentials", coreKey, `{"key_id":"`+uuid.NewString()+`"}`, &executor)
 
 	// A node credential: a Docker deployment, an enrollment token issued with the Core key, and an enrolled node.
-	deployments := deploymentService(t, s)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	runtimes := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, BackendFingerprint: setup.BackendFingerprint, SandboxLink: "wss://core.example/api/v1/sandbox-link", Provider: provider}, nil
-	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
-	})
-	worker := startWorker(t, ctx, s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
+
+	worker := startWorker(t, ctx, s, webDispatcher(t, installation, provider, runtimegateway.NewRegistry(), nil))
 	var stop sync.Once
 	t.Cleanup(func() {
 		stop.Do(func() {
