@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -155,7 +156,9 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 		t.Fatal("active preparation was duplicated", frame.Type)
 	case <-time.After(time.Second):
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, h.s.pool)
 	stop()
+	awaitRelease()
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stored, err := sessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
 	if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
