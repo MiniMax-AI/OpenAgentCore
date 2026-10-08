@@ -22,10 +22,15 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			wakeOwner := f.provision(wakeTenant, wakeEnv)
 			f.phase(wakeTenant, wakeEnv.ID, "running")
 			assignSession(t, f.store, wakeOwner.SessionID, f.provider.host.ID)
-			if _, err := f.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')", uuid.NewString(), wakeOwner.SessionID); err != nil {
+			view, err := f.nodes.View(t.Context())
+			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := f.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", wakeOwner.ID); err != nil {
+			idleSeconds := view.Suspension.IdleSeconds + 60
+			if _, err := f.pool.Exec(t.Context(), "INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-make_interval(secs => $3))", uuid.NewString(), wakeOwner.SessionID, idleSeconds); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := f.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-make_interval(secs => $2) WHERE id=$1", wakeOwner.ID, idleSeconds); err != nil {
 				t.Fatal(err)
 			}
 			f.phase(wakeTenant, wakeEnv.ID, "suspended")

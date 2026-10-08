@@ -8,10 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/google/uuid"
@@ -68,14 +66,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	id := initializeE2BDeployment(t, owner)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	configuration := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}, nil
-	}, unusedPreparation(t))
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, configuration)
+	m, err := testManager(t, owner, deployments, reader, id, hub.Proxy(uuid.NewString(), docker.Operations(), 1))
 	if err != nil {
 		t.Fatal(err)
 	}

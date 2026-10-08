@@ -9,9 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -26,13 +24,14 @@ func TestDeferredSandboxDeploymentLoadsOnceBeforeNodeCreation(t *testing.T) {
 	var selected atomic.Bool
 	var loads atomic.Int32
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, configuration.Provider)
+	m.setups = &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) {
 		loads.Add(1)
 		if !selected.Load() {
-			return nil, nil
+			return deployment.Setup{InstallationID: id}, nil
 		}
-		return configuration, nil
-	}, unusedPreparation(t)))
+		return deployment.Setup{InstallationID: id, Provider: "docker", Mode: "nodes", Generation: 1, BackendFingerprint: configuration.BackendFingerprint, Operations: docker.Operations()}, nil
+	}}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,11 +70,12 @@ func TestDeferredSandboxDeploymentLoadsOnceBeforeNodeCreation(t *testing.T) {
 
 func TestDeferredSandboxDeploymentShutdownCancelsLoad(t *testing.T) {
 	entered := make(chan struct{})
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(uuid.NewString(), func(ctx context.Context) (*RuntimeProvider, error) {
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, uuid.NewString(), nil)
+	m.setups = &fakeDeploymentSetups{t: t, setup: func(ctx context.Context) (deployment.Setup, error) {
 		close(entered)
 		<-ctx.Done()
-		return nil, ctx.Err()
-	}, unusedPreparation(t)))
+		return deployment.Setup{}, ctx.Err()
+	}}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,12 +96,13 @@ func TestDeferredSandboxProviderFailureKeepsRecoveryAvailable(t *testing.T) {
 	available := false
 	loadErr := ErrExecutionUnavailable
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, configuration.Provider)
+	m.setups = &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) {
 		if !available {
-			return nil, loadErr
+			return deployment.Setup{}, loadErr
 		}
-		return configuration, nil
-	}, unusedPreparation(t)))
+		return deployment.Setup{InstallationID: id, Provider: "docker", Mode: "nodes", Generation: 1, BackendFingerprint: configuration.BackendFingerprint, Operations: docker.Operations()}, nil
+	}}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,10 +129,9 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 	id := uuid.NewString()
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	rejected := errors.New("candidate provider unavailable")
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil },
-		func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error) {
-			return PreparedRuntimeDeployment{}, rejected
-		}))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, id, config.Provider)
+	selectTestProvider(t, m, config)
+	m.providers = &fakeProviderRegistry{t: t, build: func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) { return nil, rejected }}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,10 +144,10 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := sandbox.Selection{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}, DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 1024}}}
-	if _, err := m.prepareCandidate(t.Context(), input); !errors.Is(err, rejected) {
+	if _, err := m.prepareCandidate(t.Context(), input); err == nil || !strings.Contains(err.Error(), rejected.Error()) {
 		t.Fatal("candidate rejection was lost", err)
 	}
-	if m.config.Generation != 1 || m.config.Provider != config.Provider || m.switching || old.lifecycle.ctx.Err() != nil {
+	if m.config.Generation != 1 || m.config.Provider != old.lifecycle.config.Provider || m.switching || old.lifecycle.ctx.Err() != nil {
 		t.Fatal("rejected candidate replaced or drained the active configuration")
 	}
 	_, finish, err := m.enter(t.Context())
@@ -160,12 +160,12 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 func TestSandboxCandidateValidationDoesNotHoldManagerLock(t *testing.T) {
 	id := uuid.NewString()
 	entered, release := make(chan struct{}), make(chan struct{})
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil },
-		func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error) {
-			close(entered)
-			<-release
-			return PreparedRuntimeDeployment{}, errors.New("rejected")
-		}))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, id, nil)
+	m.providers = &fakeProviderRegistry{t: t, build: func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
+		close(entered)
+		<-release
+		return nil, errors.New("rejected")
+	}}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,7 @@ func TestCommittedSandboxCandidatePublishesAfterShutdown(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t)))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,12 +201,11 @@ func TestCommittedSandboxCandidatePublishesAfterShutdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	var published *RuntimeProvider
-	candidate := PreparedRuntimeDeployment{Config: config, Publish: func(value *RuntimeProvider) { published = value }}
+	candidate := preparedRuntimeDeployment{Config: config}
 	m.stop()
 	m.publishDeployment(candidate, deployment.View{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b", Reset: &deployment.Reset{}})
 	m.drain()
-	if m.config.Generation != 2 || published == nil || published.Generation != 2 || m.switching {
+	if published := m.selected.Load(); m.config.Generation != 2 || published == nil || published.Generation != 2 || m.switching {
 		t.Fatal("committed candidate was lost during shutdown")
 	}
 	if _, _, err := m.enter(t.Context()); !errors.Is(err, ErrExecutionUnavailable) {

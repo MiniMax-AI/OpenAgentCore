@@ -66,7 +66,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.SessionsReader == nil {
 		return nil, errors.New("execution worker requires the Session reader")
 	}
-	if dispatcher.ManagedRuntimes == nil {
+	if dispatcher.Providers == nil {
 		return nil, errors.New("execution worker requires the sandbox runtime provider")
 	}
 	owned, err := dispatcher.Bind(owner)
@@ -81,7 +81,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	}
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), connections: &environmentConnections{current: make(map[string]*runtimeConnection), served: make(map[sandboxbootstrap.Resource]uint64)}}
-	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.Links, worker.connections, owned.ManagedRuntimes)
+	worker.runtimes, err = newRuntimeManager(owner, owned, worker.connections)
 	if err != nil {
 		return nil, err
 	}

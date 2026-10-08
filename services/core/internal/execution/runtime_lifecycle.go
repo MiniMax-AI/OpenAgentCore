@@ -23,18 +23,14 @@ import (
 // RuntimeProvider binds one deployment to one sandbox installation.
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
-	// PublishUnconfigured updates the shared observation cache after reset commit.
-	PublishUnconfigured func(uint64)
-	Generation          uint64
-	Mode                string
-	loadDeployment      func(context.Context) (*RuntimeProvider, error)
-	prepareDeployment   RuntimeDeploymentPreparer
-	ProviderKind        string
-	SandboxLink         string
-	InstallationID      string
-	BackendFingerprint  string
-	Provider            sandbox.SandboxProvider
-	Suspension          *RuntimeSuspensionPolicy
+	Generation         uint64
+	Mode               string
+	ProviderKind       string
+	SandboxLink        string
+	InstallationID     string
+	BackendFingerprint string
+	Provider           sandbox.SandboxProvider
+	Suspension         *RuntimeSuspensionPolicy
 }
 
 type runtimeLifecycle struct {
@@ -61,16 +57,15 @@ type runtimeLifecycle struct {
 	wakeHints       chan struct{}
 }
 
-func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, links *relay.Relay, connections *environmentConnections, config *RuntimeProvider) (*runtimeManager, error) {
-	if config == nil {
-		return nil, sandbox.ErrInvalid
-	}
-	id, err := uuid.Parse(config.InstallationID)
-	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || config.loadDeployment == nil || config.prepareDeployment == nil || registry == nil {
+func newRuntimeManager(owner Owner, d *Dispatcher, connections *environmentConnections) (*runtimeManager, error) {
+	id, err := uuid.Parse(d.InstallationID)
+	if err != nil || id == uuid.Nil || id.String() != d.InstallationID || d.Providers == nil || d.NodeProviders == nil || d.Registry == nil {
 		return nil, sandbox.ErrInvalid
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, links: links, connections: connections, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{sessions: d.SessionsReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: d.Deployment, deploymentReader: d.DeploymentReader, lease: owner.Lease, registry: d.Registry, links: d.Links, connections: connections, setupInstallationID: d.InstallationID,
+		setups: d.Deployment, providers: d.Providers, nodeProviders: d.NodeProviders, processPaths: d.ProviderPaths, sandboxLink: d.SandboxLink,
+		setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {

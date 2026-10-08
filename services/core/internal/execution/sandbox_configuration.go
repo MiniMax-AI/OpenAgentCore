@@ -1,40 +1,19 @@
-package main
+package execution
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
-
-// managedSetup publishes one immutable selection to execution, bootstrap and
-// observation. The database owns the selection; this cache is never a writer.
-type managedSetup struct {
-	processPaths sandbox.ProcessPaths
-	// registry builds the selected direct provider and discovers configuration;
-	// the deployment setup reports what the registration declares.
-	registry       *providers.Registry
-	deployment     deploymentSetups
-	allocations    generationAllocations
-	hub            *node.Hub
-	installationID string
-	// sandboxLink is the Link every sandbox Serves on, empty when the origin
-	// has no Link.
-	sandboxLink   string
-	selected      atomic.Pointer[managedSelection]
-	providerCalls sandbox.CallFence
-}
 
 // deploymentSetups reads the committed deployment setup and its retained
 // generations. *deployment.Service implements it.
@@ -48,26 +27,37 @@ type deploymentSetups interface {
 	AllocationGeneration(context.Context, sandbox.Reference) (string, uint64, error)
 }
 
-// generationAllocations pages the unreleased allocations whose generations
-// still hold a credential. deployment.Reader implements it.
-type generationAllocations interface {
-	CredentialAllocations(context.Context, string) ([]deployment.Allocation, error)
+// ProviderRegistry is the setup and direct-construction dependency of execution.
+// The composition root supplies the registered providers; support stays declared
+// by their ConfigurationAdapter and SandboxProvider contracts.
+type ProviderRegistry interface {
+	Lookup(string) (providers.Adapter, error)
+	BuildDirect(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
+	DiscoverConfiguration(context.Context, string, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error)
+	DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error)
+	VerifyCredential(context.Context, sandbox.DirectConfig, []sandbox.Reference) error
+}
+
+// NodeProviders binds allocation-owned node and generation identities to the
+// node transport. The server supplies its node.Hub.
+type NodeProviders interface {
+	Proxy(string, providercontract.Operations, uint64) sandbox.SandboxProvider
 }
 
 // DiscoverConfiguration asks a Provider which configuration values its
 // credential can use, with this installation's process paths.
-func (s *managedSetup) DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
-	return s.registry.DiscoverConfiguration(ctx, provider, input, s.processPaths)
+func (w *Worker) DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+	return w.runtimes.providers.DiscoverConfiguration(ctx, provider, input, w.runtimes.processPaths)
 }
 
 // Empty selections retain their generation so a delayed provider load cannot
 // republish a backend retired by reset.
 type managedSelection struct {
 	Generation uint64
-	Config     *execution.RuntimeProvider
+	Config     *RuntimeProvider
 }
 
-func (s *managedSetup) publishSelection(generation uint64, config *execution.RuntimeProvider) *execution.RuntimeProvider {
+func (s *runtimeManager) publishSelection(generation uint64, config *RuntimeProvider) *RuntimeProvider {
 	next := &managedSelection{Generation: generation, Config: config}
 	for {
 		current := s.selected.Load()
@@ -79,22 +69,18 @@ func (s *managedSetup) publishSelection(generation uint64, config *execution.Run
 		}
 	}
 }
-func (s *managedSetup) publish(config *execution.RuntimeProvider) {
-	s.publishSelection(config.Generation, config)
-}
-func (s *managedSetup) publishUnconfigured(generation uint64) { s.publishSelection(generation, nil) }
 
-func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, error) {
-	setup, err := s.deployment.Setup(ctx)
+func (s *runtimeManager) loadDeployment(ctx context.Context) (*RuntimeProvider, error) {
+	setup, err := s.setups.Setup(ctx)
 	if errors.Is(err, deployment.ErrCredentialUnreadable) {
 		// A replaced credential key blocks hosted execution, not Core.
 		log.Warn(ctx, "Hosted provider credential is unreadable; administrator recovery remains available", "error", err)
-		return nil, fmt.Errorf("%w: %w", execution.ErrExecutionUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrExecutionUnavailable, err)
 	}
 	if err != nil {
 		return nil, err
 	}
-	if setup.InstallationID != s.installationID {
+	if setup.InstallationID != s.setupInstallationID {
 		return nil, errors.New("sandbox installation does not match setup")
 	}
 	if setup.Provider == "" {
@@ -104,65 +90,63 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 		return selected.Config, nil
 	}
 	candidate, err := s.configuration(setup)
-	if err == nil {
-		candidate, err = s.routeGenerations(candidate, setup)
-	}
 	if err != nil {
 		log.Warn(ctx, "Hosted provider is unavailable; administrator recovery remains available", "provider", setup.Provider, "error", err)
-		return nil, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
+		return nil, fmt.Errorf("%w: %v", ErrExecutionUnavailable, err)
 	}
 	return s.publishSelection(setup.Generation, candidate.Config), nil
 }
 
 // prepare validates a setup the deployment prepared for a selection, which has
 // already rejected a provider whose guests cannot reach the public URL.
-func (s *managedSetup) prepare(ctx context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
+func (s *runtimeManager) prepareDeployment(ctx context.Context, setup deployment.Setup) (preparedRuntimeDeployment, error) {
 	candidate, err := s.configuration(setup)
 	if err != nil {
-		return execution.PreparedRuntimeDeployment{}, err
+		return preparedRuntimeDeployment{}, err
 	}
-	adapter, err := s.registry.Lookup(setup.Provider)
+	adapter, err := s.providers.Lookup(setup.Provider)
 	if err != nil {
-		return execution.PreparedRuntimeDeployment{}, err
+		return preparedRuntimeDeployment{}, err
 	}
 	direct := s.direct(setup)
 	selection := direct.Selection
 	if adapter.Configuration.Requirements().SelectionDiscovery.State == providercontract.Supported {
-		if selection, err = s.registry.DiscoverSelection(ctx, direct); err != nil {
-			return execution.PreparedRuntimeDeployment{}, err
+		if selection, err = s.providers.DiscoverSelection(ctx, direct); err != nil {
+			return preparedRuntimeDeployment{}, err
 		}
 		setup.Specification, setup.Configuration = selection.DeploymentSpec, selection.Configuration
 		if candidate, err = s.configuration(setup); err != nil {
-			return execution.PreparedRuntimeDeployment{}, err
+			return preparedRuntimeDeployment{}, err
 		}
 	}
-	candidate.Selection = &selection
-	return s.routeGenerations(candidate, setup)
+	candidate.Selection = selection
+	candidate.Setup = setup
+	return candidate, nil
 }
 
 // Loading an already committed selection must retain provider access to its
 // owned resources, even when a new-template validation would now fail.
-func (s *managedSetup) configuration(setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
-	if setup.InstallationID != s.installationID {
-		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox installation does not match setup")
+func (s *runtimeManager) configuration(setup deployment.Setup) (preparedRuntimeDeployment, error) {
+	if setup.InstallationID != s.setupInstallationID {
+		return preparedRuntimeDeployment{}, errors.New("sandbox installation does not match setup")
 	}
 	provider, err := s.provider(setup)
 	if err != nil {
-		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
+		return preparedRuntimeDeployment{}, fmt.Errorf("%w: %v", ErrExecutionUnavailable, err)
 	}
-	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode,
+	selected := &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode,
 		SandboxLink: s.sandboxLink, BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	if setup.Suspension != nil {
-		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
+		selected.Suspension = &RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
 			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second}
 	}
-	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.publish}, nil
+	return preparedRuntimeDeployment{Config: selected, Setup: setup}, nil
 }
 
-// observationSource returns the selected Provider and its registered kind for
+// ObservationSource returns the selected Provider and its registered kind for
 // Runtime observation.
-func (s *managedSetup) observationSource(ctx context.Context) (runtimeobs.Source, string, error) {
-	selected, err := s.load(ctx)
+func (w *Worker) ObservationSource(ctx context.Context) (runtimeobs.Source, string, error) {
+	selected, err := w.runtimes.loadDeployment(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -174,17 +158,31 @@ func (s *managedSetup) observationSource(ctx context.Context) (runtimeobs.Source
 
 // provider builds the setup's provider. The setup carries the mode and
 // declared operations that deployment read from the provider's registration.
-func (s *managedSetup) provider(setup deployment.Setup) (sandbox.SandboxProvider, error) {
+func (s *runtimeManager) provider(setup deployment.Setup) (sandbox.SandboxProvider, error) {
 	if setup.Mode == string(sandbox.DeploymentNodes) {
-		if s.hub == nil {
+		if s.nodeProviders == nil {
 			return nil, errors.New("sandbox node transport is unavailable")
 		}
-		return s.hub.GenerationProvider(setup.Operations, s.deployment.AllocationGeneration), nil
+		return sandbox.NewGenerationRouter(setup.Operations, func(ctx context.Context, ref sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
+			id, generation, err := s.setups.AllocationGeneration(ctx, ref)
+			if err != nil {
+				return nil, nil, err
+			}
+			return s.nodeProviders.Proxy(id, setup.Operations, generation), func() {}, nil
+		}), nil
 	}
-	return s.registry.BuildDirect(s.direct(setup))
+	provider, err := s.providers.BuildDirect(s.direct(setup))
+	if err != nil {
+		return nil, err
+	}
+	routed := sandbox.NewGenerationRouter(provider.ProviderOperations(), s.directProvider)
+	if err := sandbox.ValidateProvider(routed); err != nil {
+		return nil, err
+	}
+	return routed, nil
 }
 
 // direct is the setup's input to direct-mode construction and setup operations.
-func (s *managedSetup) direct(setup deployment.Setup) sandbox.DirectConfig {
+func (s *runtimeManager) direct(setup deployment.Setup) sandbox.DirectConfig {
 	return sandbox.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls}
 }

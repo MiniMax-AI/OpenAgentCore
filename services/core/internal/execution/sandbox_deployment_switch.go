@@ -115,7 +115,7 @@ func (m *runtimeManager) activateDeployment(ctx context.Context, expected deploy
 		m.publishEmptyDeployment(expected.InstallationID, expected.Generation)
 		return nil
 	}
-	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != string(expected.Mode) || config.ProviderKind != expected.Provider || config.loadDeployment != nil {
+	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != string(expected.Mode) || config.ProviderKind != expected.Provider {
 		return sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)
@@ -155,28 +155,36 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input sandbox.Sele
 	if err != nil {
 		return deployment.View{}, err
 	}
-	if input.HasCredential() || candidate.VerifyCredential != nil {
-		if candidate.VerifyCredential == nil || candidate.FenceCredential == nil {
+	if input.HasCredential() || candidate.Setup.UsesCredential {
+		if !candidate.Setup.UsesCredential {
 			return deployment.View{}, ErrExecutionUnavailable
 		}
-		if err := candidate.VerifyCredential(ctx); err != nil {
+		adapter, err := m.providers.Lookup(candidate.Setup.Provider)
+		if err != nil {
+			return deployment.View{}, err
+		}
+		if err := adapter.Configuration.Requirements().CredentialVerification.Check("VerifyCredential"); err != nil {
+			return deployment.View{}, err
+		}
+		if err := m.verifyCredential(ctx, candidate.Setup); err != nil {
 			return deployment.View{}, err
 		}
 		if input.ReplacesCredential() {
 			fenceCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
-			release, err := candidate.FenceCredential(fenceCtx)
+			release, err := m.providerCalls.Fence(fenceCtx)
 			if err != nil {
-				return deployment.View{}, err
+				return deployment.View{}, sandbox.ErrConfigurationUnconfirmed
 			}
 			defer release()
 			// The final scan includes allocations admitted during preliminary verification.
-			if err := candidate.VerifyCredential(fenceCtx); err != nil {
+			if err := m.verifyCredential(fenceCtx, candidate.Setup); err != nil {
 				return deployment.View{}, err
 			}
 		}
 	}
-	result, err := m.deployment.Update(ctx, m.setupInstallationID, *candidate.Selection)
+
+	result, err := m.deployment.Update(ctx, m.setupInstallationID, candidate.Selection)
 	if err != nil {
 		return deployment.View{}, err
 	}
@@ -211,9 +219,7 @@ func (m *runtimeManager) publishEmptyDeployment(installationID string, generatio
 	defer m.mu.Unlock()
 	m.config = RuntimeProvider{InstallationID: installationID, Generation: generation}
 	m.nodes = make(map[string]*runtimeNode)
-	if m.publishUnconfigured != nil {
-		m.publishUnconfigured(generation)
-	}
+	m.publishSelection(generation, nil)
 	m.switching = false
 	m.switchDrained = nil
 }

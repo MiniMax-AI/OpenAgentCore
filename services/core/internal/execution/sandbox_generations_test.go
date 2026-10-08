@@ -3,12 +3,12 @@ package execution
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"testing"
+	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -31,27 +31,36 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	provider := hub.Proxy(uuid.NewString(), docker.Operations(), 1)
-	verifyCalls, published, fenced, released := 0, 0, 0, 0
+	verifyCalls := 0
 	var rejectAt int
 	var rejection error = sandbox.ErrCredentialOwnership
-	config := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: setup.Generation, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}, nil
-	}, func(ctx context.Context, setup deployment.Setup) (PreparedRuntimeDeployment, error) {
-		return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider},
-			VerifyCredential: func(context.Context) error {
-				verifyCalls++
-				if verifyCalls == rejectAt {
-					return rejection
-				}
+	m, err := testManager(t, owner, deployments, reader, id, provider)
+	m.providers = &fakeProviderRegistry{t: t, lookup: providers.Builtin().Lookup,
+		build:    func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) { return provider, nil },
+		discover: func(_ context.Context, c sandbox.DirectConfig) (sandbox.Selection, error) { return c.Selection, nil },
+		verify: func(ctx context.Context, c sandbox.DirectConfig, _ []sandbox.Reference) error {
+			if c.Selection.Configuration.(*e2b.DeploymentConfiguration).APIKey != "old-key" {
 				return nil
-			},
-			FenceCredential: func(context.Context) (func(), error) { fenced++; return func() { released++ }, nil }, Publish: func(*RuntimeProvider) { published++ }}, nil
-	})
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, config)
+			}
+			verifyCalls++
+			probe, cancel := context.WithTimeout(ctx, time.Millisecond)
+			defer cancel()
+			release, err := m.providerCalls.Enter(probe)
+			if verifyCalls == 1 && err != nil {
+				t.Error("preliminary verification unexpectedly fenced", err)
+			}
+			if verifyCalls == 2 && !errors.Is(err, context.DeadlineExceeded) {
+				t.Error("final verification was not fenced", err)
+			}
+			if release != nil {
+				release()
+			}
+			if verifyCalls == rejectAt {
+				return rejection
+			}
+			return nil
+		},
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,9 +99,16 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 			t.Fatal("failure published", failure)
 		}
 		committed, err := deployments.Setup(t.Context())
-		if err != nil || committed.Generation != 1 || committed.Configuration.(*e2b.DeploymentConfiguration).APIKey != "old-key" || published != 0 || fenced != released {
+		if err != nil || committed.Generation != 1 || committed.Configuration.(*e2b.DeploymentConfiguration).APIKey != "old-key" || m.selected.Load().Generation != 1 {
 			t.Fatal("partial credential publication", failure, err)
 		}
+		probe, cancel := context.WithTimeout(t.Context(), time.Second)
+		release, fenceErr := m.providerCalls.Enter(probe)
+		cancel()
+		if fenceErr != nil {
+			t.Fatal("failed update retained fence", fenceErr)
+		}
+		release()
 		current, err := m.node("")
 		if err != nil || current != old || m.switching {
 			t.Fatal("online failure drained an owned lifecycle", err)
@@ -101,8 +117,8 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	verifyCalls = 0
 	rejectAt = 0
 	result, err := worker.UpdateSandboxDeployment(audit, request)
-	if err != nil || result.Generation != 2 || verifyCalls != 2 || published != 1 || fenced != released {
-		t.Fatal(result, verifyCalls, published, err)
+	if err != nil || result.Generation != 2 || verifyCalls != 2 || m.selected.Load().Generation != 2 {
+		t.Fatal(result, verifyCalls, m.selected.Load(), err)
 	}
 	current, err := m.node("")
 	if err != nil || current != old {

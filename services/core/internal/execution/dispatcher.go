@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
@@ -52,9 +53,13 @@ type Dispatcher struct {
 	// durable Serve authority or an assignment's attach authority ends, and
 	// before it destroys the resource or sends the release. It is required.
 	Links *relay.Relay
-	// ManagedRuntimes provisions hosted Environments on the sandbox deployment.
-	// It is required.
-	ManagedRuntimes *RuntimeProvider
+	// Providers and NodeProviders construct direct adapters and fixed node proxies.
+	// Both are required; the runtime manager owns deployment setup and routing.
+	Providers      ProviderRegistry
+	NodeProviders  NodeProviders
+	ProviderPaths  sandbox.ProcessPaths
+	InstallationID string
+	SandboxLink    string
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
 	// Zero uses DefaultExecutionConcurrency. It is independent of sandbox capacity.
 	MaxConcurrentExecutions int
