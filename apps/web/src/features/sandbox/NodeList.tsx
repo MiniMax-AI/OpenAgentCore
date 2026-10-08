@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { NameCell, RowActions } from "../../components/list-ui";
-import { formatDateTime, formatRelative } from "../../lib/format";
+import { epochSeconds, formatDateTime, formatRelative } from "../../lib/format";
 import type { MessageKey } from "../../lib/locale-strings";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
@@ -56,12 +56,6 @@ export function OldAddressHint() {
   return <span className="node-status-hint">{t("Remove and add again")}</span>;
 }
 
-export function seconds(value: string | null): number | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
-}
-
 export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspends = false, onOpen, onRemove }: {
   nodes: readonly SandboxNode[];
   /** The deployment's address; a node enrolled with another one is on an old address. */
@@ -111,10 +105,10 @@ export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspend
                 </td>
                 <td className="numeric">{node.active} / {node.max_active}</td>
                 {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
-                <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
-                  {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}
+                <td className="numeric" title={node.last_seen_at ? formatDateTime(epochSeconds(node.last_seen_at), locale) : undefined}>
+                  {node.last_seen_at ? formatRelative(epochSeconds(node.last_seen_at), now, locale) : t("Never")}
                 </td>
-                <td className="nodes-nowrap">{formatDateTime(seconds(node.created_at), locale)}</td>
+                <td className="nodes-nowrap">{formatDateTime(epochSeconds(node.created_at), locale)}</td>
                 <td className="actions-cell">
                   <RowActions>
                     <button className="text-action danger" type="button" disabled={disabled} aria-label={t("Remove {{name}}", { name })} onClick={() => onRemove(node)}>

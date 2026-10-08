@@ -47,8 +47,8 @@ openapi:
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
-	go run ./scripts/openapi-split $(OPENAPI_FLAGS) "$$output/swagger.yaml" "$$output/extensions.json" contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml; \
-	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --extensions "$$output/extensions.json"
+	go run ./scripts/openapi-split $(OPENAPI_FLAGS) "$$output/swagger.yaml" "$$output/extensions.json" "$$output/core.json" contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml; \
+	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --extensions "$$output/extensions.json" --core "$$output/core.json"
 
 check-sqlc:
 	python3 scripts/check-sqlc.py

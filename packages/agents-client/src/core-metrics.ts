@@ -1,111 +1,25 @@
 import { AgentCoreError } from "./client";
 import { CoreRequester, type CoreClientOptions } from "./core-request";
+import { isOneOf } from "./response-projection";
 import type { ReadOptions } from "./types";
+import { jobStatusValues, serviceStateStatusValues, type CoremetricsView, type JobStatus, type Latency, type ServiceState, type ServiceStateStatus } from "./generated/core-api";
 
 function invalidCoreMetrics(): never {
   throw new AgentCoreError("Core metrics: the response is not JSON.", 0, "invalid_response");
 }
 
+export type CoreMetricsRange = "1h" | "6h" | "24h" | "7d";
+export type CoreJobStatus = JobStatus;
 /**
  * Core's own health as the one `oac-core` process sees it: execution slots
  * and the Turn queue (a Postgres table polled by the worker), connected
  * daemons, the PostgreSQL database, background jobs and the process itself.
  * `GET /core/v1/metrics`, defined in
  * contracts/agents-api/core-metrics.md; every figure Core cannot measure is
- * null, never zero.
+ * null, never zero. The client reads a service status it does not recognise
+ * as `unknown`, which is never shown as running.
  */
-export type CoreMetricsRange = "1h" | "6h" | "24h" | "7d";
-export type CoreJobStatus = "ok" | "failing" | "stopped" | "unknown";
-
-export interface CoreLatency {
-  p50: number | null;
-  p95: number | null;
-}
-
-export interface CoreExecutionBucket {
-  start: string;
-  /** Highest queued Turn count seen in the bucket. */
-  queued: number | null;
-  /** Highest in-progress Turn count seen in the bucket. */
-  in_progress: number | null;
-  queue_wait_p95_ms: number | null;
-}
-
-export interface CoreDatabaseBucket {
-  start: string;
-  ping_p95_ms: number | null;
-  pool_in_use: number | null;
-}
-
-export interface CoreProcessBucket {
-  start: string;
-  /** Highest CPU use observed in the bucket, in cores. */
-  cpu_cores: number | null;
-  /** Highest resident memory observed in the bucket. */
-  rss_bytes: number | null;
-}
-
-export interface CoreJob {
-  /** `scheduler`, `runtime_sampler`, `history_cleanup`, `audit_cleanup`, or another bounded name. */
-  id: string;
-  status: CoreJobStatus;
-  last_run_at: string | null;
-  /** Items the last run handled (Turns dispatched, Runtimes sampled, rows removed). */
-  processed: number | null;
-  failed: number | null;
-}
-
-export interface CoreMetrics {
-  object: "core.metrics";
-  range: { start: string; end: string; resolution_seconds: number };
-  service: {
-    /** `unknown` stands for a status this client does not recognise; it is never shown as running. */
-    status: "running" | "degraded" | "unknown";
-    /** Build revision (source commit) of the running Core. */
-    revision: string | null;
-    started_at: string | null;
-    /** Whether this process holds the database's execution lease. */
-    execution_owner: boolean | null;
-  };
-  execution: {
-    slots_in_use: number;
-    slots_total: number;
-    queued_turns: number | null;
-    /** Queued Turns whose Session has no connected daemon (part of queued_turns). */
-    waiting_for_daemon: number | null;
-    in_progress_turns: number | null;
-    oldest_queued_seconds: number | null;
-    connected_daemons: number;
-    /** Turns failed with execution_interrupted in the range. */
-    interrupted: number | null;
-    /** Requests refused with execution_unavailable in the range. */
-    unavailable: number | null;
-    queue_wait_ms: CoreLatency;
-    series: CoreExecutionBucket[];
-  };
-  database: {
-    ping_ms: CoreLatency;
-    pool: { in_use: number | null; idle: number | null; max: number | null };
-    size_bytes: number | null;
-    series: CoreDatabaseBucket[];
-  };
-  jobs: CoreJob[];
-  process: {
-    /** Go heap in use (runtime.MemStats.Alloc), not resident memory. */
-    memory_bytes: number | null;
-    goroutines: number | null;
-    /**
-     * CPU used over the last sample interval, in cores; the CPU available to
-     * the process; resident memory; its memory limit; and a series
-     * (contracts/agents-api/core-metrics.md). Null when Core cannot measure them.
-     */
-    cpu_cores: number | null;
-    cpu_limit_cores: number | null;
-    rss_bytes: number | null;
-    memory_limit_bytes: number | null;
-    series: CoreProcessBucket[];
-  };
-}
+export type CoreMetrics = Omit<CoremetricsView, "service"> & { service: Omit<ServiceState, "status"> & { status: ServiceStateStatus | "unknown" } };
 
 type Json = Record<string, unknown>;
 
@@ -138,12 +52,10 @@ function list<T>(value: unknown, item: (entry: Json, index: number) => T, path: 
   return value.map((entry, index) => item(record(entry, `${path}[${index}]`), index));
 }
 
-function latency(value: unknown): CoreLatency {
+function latency(value: unknown): Latency {
   const entry = optional(value);
   return { p50: number(entry.p50), p95: number(entry.p95) };
 }
-
-const jobStatuses = new Set<CoreJobStatus>(["ok", "failing", "stopped", "unknown"]);
 
 /** Validates the envelope and normalises every missing figure to null. */
 export function projectCoreMetrics(value: unknown): CoreMetrics {
@@ -155,7 +67,7 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
   const database = optional(body.database);
   const pool = optional(database.pool);
   const process = optional(body.process);
-  const status = service.status === "running" || service.status === "degraded" ? service.status : "unknown";
+  const status = isOneOf(serviceStateStatusValues, service.status) ? service.status : "unknown";
   const resolution = number(range.resolution_seconds);
   if (resolution === null || resolution <= 0) throw new AgentCoreError("Core metrics: range.resolution_seconds is missing.", 0, "invalid_response");
   return {
@@ -197,7 +109,7 @@ export function projectCoreMetrics(value: unknown): CoreMetrics {
     },
     jobs: list(body.jobs, (entry, index) => ({
       id: String(entry.id ?? index),
-      status: jobStatuses.has(entry.status as CoreJobStatus) ? entry.status as CoreJobStatus : "unknown",
+      status: isOneOf(jobStatusValues, entry.status) ? entry.status : "unknown",
       last_run_at: text(entry.last_run_at),
       processed: number(entry.processed),
       failed: number(entry.failed),

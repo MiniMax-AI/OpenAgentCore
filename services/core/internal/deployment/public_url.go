@@ -82,10 +82,10 @@ func (o PublicOrigin) SandboxLink() (string, error) {
 // the address current at the time, and self-hosted executors were installed
 // with an advertised remote_url.
 type AddressBindings struct {
-	Nodes               int64 `json:"nodes"`
-	NodesOnOtherAddress int64 `json:"nodes_on_other_address"`
-	HostedSandboxes     int64 `json:"hosted_sandboxes"`
-	SelfHostedExecutors int64 `json:"self_hosted_executors"`
+	Nodes               int64 `json:"nodes" binding:"required"`
+	NodesOnOtherAddress int64 `json:"nodes_on_other_address" binding:"required"`
+	HostedSandboxes     int64 `json:"hosted_sandboxes" binding:"required"`
+	SelfHostedExecutors int64 `json:"self_hosted_executors" binding:"required"`
 }
 
 // AddressBindings counts what is bound to the installation public URL.

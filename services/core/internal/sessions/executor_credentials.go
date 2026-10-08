@@ -31,17 +31,17 @@ type ExecutorCredentialReader interface {
 }
 
 type IssuedExecutorCredential struct {
-	KeyID         string `json:"key_id"`
+	KeyID         string `json:"key_id" binding:"required"`
 	EnvironmentID string `json:"environment_id,omitempty"`
-	Token         string `json:"executor_token"`
+	Token         string `json:"executor_token" binding:"required"`
 }
 
 // ExecutorCredential is the metadata of one Environment executor credential.
 // Its secret is returned only when issued or rotated.
 type ExecutorCredential struct {
-	KeyID     string     `json:"key_id" format:"uuid"`
-	CreatedAt time.Time  `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable"`
+	KeyID     string     `json:"key_id" format:"uuid" binding:"required"`
+	CreatedAt time.Time  `json:"created_at" binding:"required"`
+	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable" binding:"required"`
 }
 
 // ExecutorConnectionState is the Environment's enrollment: the key that

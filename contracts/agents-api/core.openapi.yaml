@@ -23,6 +23,17 @@ definitions:
         type: string
       trace_id:
         type: string
+    required:
+      - action
+      - actor_label
+      - admin_credential_id
+      - created_at
+      - id
+      - project_id
+      - request_id
+      - resource_id
+      - resource_type
+      - trace_id
     type: object
   adminaudit.Page:
     properties:
@@ -34,6 +45,10 @@ definitions:
         type: boolean
       next_cursor:
         type: string
+    required:
+      - data
+      - has_more
+      - next_cursor
     type: object
   api.AdminRuntimeObservation:
     properties:
@@ -41,6 +56,9 @@ definitions:
         $ref: '#/definitions/api.AdminRuntimeObservationDetail'
       project_id:
         type: string
+    required:
+      - observation
+      - project_id
     type: object
   api.AdminRuntimeObservationDetail:
     properties:
@@ -150,17 +168,29 @@ definitions:
         type: array
       first_id:
         type: string
+        x-nullable: true
       has_more:
         type: boolean
       last_id:
         type: string
+        x-nullable: true
       object:
+        enum:
+          - list
         type: string
+    required:
+      - data
+      - first_id
+      - has_more
+      - last_id
+      - object
     type: object
   api.AdminSessionArchiveRequest:
     properties:
       expected_generation:
         type: integer
+    required:
+      - expected_generation
     type: object
   api.AdminSessionCounts:
     properties:
@@ -174,6 +204,12 @@ definitions:
         type: integer
       total:
         type: integer
+    required:
+      - failed
+      - idle
+      - in_progress
+      - requires_action
+      - total
     type: object
   api.AdminSummaryResponse:
     properties:
@@ -185,25 +221,43 @@ definitions:
         type: boolean
       next_cursor:
         type: string
+    required:
+      - data
+      - has_more
+      - next_cursor
     type: object
   api.AdminSummaryRow:
     properties:
       agent_id:
         type: string
+        x-nullable: true
       assets:
-        $ref: '#/definitions/sessions.AdminAssetCounts'
+        allOf:
+          - $ref: '#/definitions/sessions.AdminAssetCounts'
+        x-nullable: true
       coverage:
         $ref: '#/definitions/api.AdminUsageCoverage'
       key_id:
         type: string
+        x-nullable: true
       last_active_at:
         type: integer
+        x-nullable: true
       project_id:
         type: string
       sessions:
         $ref: '#/definitions/api.AdminSessionCounts'
       usage:
         $ref: '#/definitions/v1.TokenUsage'
+    required:
+      - agent_id
+      - assets
+      - coverage
+      - key_id
+      - last_active_at
+      - project_id
+      - sessions
+      - usage
     type: object
   api.AdminUsageCoverage:
     properties:
@@ -211,8 +265,13 @@ definitions:
         type: integer
       ratio:
         type: number
+        x-nullable: true
       total_sessions:
         type: integer
+    required:
+      - measured_sessions
+      - ratio
+      - total_sessions
     type: object
   api.CoreAPIError:
     properties:
@@ -233,7 +292,9 @@ definitions:
       type:
         type: string
     required:
+      - code
       - message
+      - param
       - type
     type: object
   api.CoreErrorResponse:
@@ -322,6 +383,10 @@ definitions:
         x-nullable: true
       params:
         type: object
+    required:
+      - code
+      - failed_at
+      - params
     type: object
   api.EnvironmentExecutorCredentialRequest:
     properties:
@@ -330,6 +395,8 @@ definitions:
         type: string
       rotate:
         type: boolean
+    required:
+      - key_id
     type: object
   api.ExecutorConnection:
     properties:
@@ -444,6 +511,15 @@ definitions:
         description: Full source commit Core was built from; null for development builds.
         type: string
         x-nullable: true
+    required:
+      - address_bindings
+      - api_base_url
+      - configuration
+      - installation_id
+      - local_only
+      - object
+      - public_url
+      - source_commit
     type: object
   api.InstallationConfiguration:
     properties:
@@ -451,6 +527,8 @@ definitions:
         items:
           $ref: '#/definitions/api.InstallationSetting'
         type: array
+    required:
+      - settings
     type: object
   api.InstallationSetting:
     properties:
@@ -468,6 +546,9 @@ definitions:
       restarts:
         description: Services that restart when the setting changes.
         items:
+          enum:
+            - core
+            - web
           type: string
         type: array
       sensitive:
@@ -475,6 +556,13 @@ definitions:
       value:
         description: Applied value; always null for a sensitive setting.
         x-nullable: true
+    required:
+      - changeable
+      - default
+      - key
+      - restarts
+      - sensitive
+      - value
     type: object
   api.ItemDiagnosticTiming:
     properties:
@@ -488,16 +576,25 @@ definitions:
         x-nullable: true
       started_at:
         type: string
+    required:
+      - completed_at
+      - item_id
+      - observed_duration_ms
+      - started_at
     type: object
   api.ProjectAPIKeyRequest:
     properties:
       name:
         type: string
+    required:
+      - name
     type: object
   api.ProjectRequest:
     properties:
       name:
         type: string
+    required:
+      - name
     type: object
   api.ResourceOwnerList:
     properties:
@@ -505,6 +602,8 @@ definitions:
         items:
           $ref: '#/definitions/writeaudit.ResourceOwner'
         type: array
+    required:
+      - data
     type: object
   api.RuntimeDiskObservation:
     properties:
@@ -526,6 +625,8 @@ definitions:
         items:
           $ref: '#/definitions/deployment.NodeAllocation'
         type: array
+    required:
+      - data
     type: object
   api.SandboxDeploymentChangeInput:
     properties:
@@ -578,6 +679,10 @@ definitions:
         type: string
       token:
         type: string
+    required:
+      - enrollment_id
+      - expires_at
+      - token
     type: object
   api.SandboxEnrollmentTokenRequest:
     properties:
@@ -595,6 +700,8 @@ definitions:
         type: string
       updated:
         type: boolean
+    required:
+      - id
     type: object
   api.SandboxNodeList:
     properties:
@@ -602,6 +709,8 @@ definitions:
         items:
           $ref: '#/definitions/deployment.Node'
         type: array
+    required:
+      - data
     type: object
   api.SessionDiagnosticFailure:
     properties:
@@ -646,6 +755,11 @@ definitions:
         type: string
       turn_id:
         type: string
+    required:
+      - code
+      - failed_at
+      - params
+      - source
     type: object
   api.SessionDiagnostics:
     properties:
@@ -666,6 +780,11 @@ definitions:
           - requires_action
           - failed
         type: string
+    required:
+      - failure
+      - object
+      - session_id
+      - status
     type: object
   api.TurnDiagnostics:
     properties:
@@ -689,6 +808,14 @@ definitions:
         type: string
       turn_id:
         type: string
+    required:
+      - failure
+      - items
+      - items_truncated
+      - object
+      - session_id
+      - status
+      - turn_id
     type: object
   coremetrics.Database:
     properties:
@@ -703,6 +830,11 @@ definitions:
       size_bytes:
         type: integer
         x-nullable: true
+    required:
+      - ping_ms
+      - pool
+      - series
+      - size_bytes
     type: object
   coremetrics.DatabaseBucket:
     properties:
@@ -714,6 +846,10 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - ping_p95_ms
+      - pool_in_use
+      - start
     type: object
   coremetrics.Execution:
     properties:
@@ -747,6 +883,18 @@ definitions:
       waiting_for_daemon:
         type: integer
         x-nullable: true
+    required:
+      - connected_daemons
+      - in_progress_turns
+      - interrupted
+      - oldest_queued_seconds
+      - queue_wait_ms
+      - queued_turns
+      - series
+      - slots_in_use
+      - slots_total
+      - unavailable
+      - waiting_for_daemon
     type: object
   coremetrics.ExecutionBucket:
     properties:
@@ -761,6 +909,11 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - in_progress
+      - queue_wait_p95_ms
+      - queued
+      - start
     type: object
   coremetrics.Job:
     properties:
@@ -776,7 +929,18 @@ definitions:
         type: integer
         x-nullable: true
       status:
+        enum:
+          - ok
+          - failing
+          - stopped
+          - unknown
         type: string
+    required:
+      - failed
+      - id
+      - last_run_at
+      - processed
+      - status
     type: object
   coremetrics.Latency:
     properties:
@@ -786,6 +950,9 @@ definitions:
       p95:
         type: number
         x-nullable: true
+    required:
+      - p50
+      - p95
     type: object
   coremetrics.Pool:
     properties:
@@ -798,6 +965,10 @@ definitions:
       max:
         type: integer
         x-nullable: true
+    required:
+      - idle
+      - in_use
+      - max
     type: object
   coremetrics.Process:
     properties:
@@ -823,6 +994,14 @@ definitions:
         items:
           $ref: '#/definitions/coremetrics.ProcessBucket'
         type: array
+    required:
+      - cpu_cores
+      - cpu_limit_cores
+      - goroutines
+      - memory_bytes
+      - memory_limit_bytes
+      - rss_bytes
+      - series
     type: object
   coremetrics.ProcessBucket:
     properties:
@@ -834,6 +1013,10 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - cpu_cores
+      - rss_bytes
+      - start
     type: object
   coremetrics.Range:
     properties:
@@ -843,6 +1026,10 @@ definitions:
         type: integer
       start:
         type: string
+    required:
+      - end
+      - resolution_seconds
+      - start
     type: object
   coremetrics.ServiceState:
     properties:
@@ -856,7 +1043,15 @@ definitions:
         type: string
         x-nullable: true
       status:
+        enum:
+          - running
+          - degraded
         type: string
+    required:
+      - execution_owner
+      - revision
+      - started_at
+      - status
     type: object
   coremetrics.View:
     properties:
@@ -869,6 +1064,8 @@ definitions:
           $ref: '#/definitions/coremetrics.Job'
         type: array
       object:
+        enum:
+          - core.metrics
         type: string
       process:
         $ref: '#/definitions/coremetrics.Process'
@@ -876,6 +1073,14 @@ definitions:
         $ref: '#/definitions/coremetrics.Range'
       service:
         $ref: '#/definitions/coremetrics.ServiceState'
+    required:
+      - database
+      - execution
+      - jobs
+      - object
+      - process
+      - range
+      - service
     type: object
   deployment.AddressBindings:
     properties:
@@ -887,6 +1092,11 @@ definitions:
         type: integer
       self_hosted_executors:
         type: integer
+    required:
+      - hosted_sandboxes
+      - nodes
+      - nodes_on_other_address
+      - self_hosted_executors
     type: object
   deployment.HostHistory:
     properties:
@@ -896,6 +1106,9 @@ definitions:
         type: array
       resolution_seconds:
         type: integer
+    required:
+      - points
+      - resolution_seconds
     type: object
   deployment.HostHistoryPoint:
     properties:
@@ -910,6 +1123,11 @@ definitions:
         x-nullable: true
       start:
         type: string
+    required:
+      - available_disk_bytes_min
+      - cpu_utilization_max
+      - memory_used_bytes_max
+      - start
     type: object
   deployment.Node:
     properties:
@@ -917,8 +1135,10 @@ definitions:
         type: integer
       available_disk_bytes:
         type: integer
+        x-nullable: true
       available_memory_bytes:
         type: integer
+        x-nullable: true
       cleanup_pending:
         type: integer
       core_url:
@@ -928,6 +1148,7 @@ definitions:
         type: string
       cpu_count:
         type: integer
+        x-nullable: true
       created_at:
         type: string
       diagnostic:
@@ -948,6 +1169,7 @@ definitions:
         type: string
       last_seen_at:
         type: string
+        x-nullable: true
       max_active:
         type: integer
       max_retained:
@@ -970,6 +1192,28 @@ definitions:
         type: integer
       snapshots:
         type: integer
+    required:
+      - active
+      - available_disk_bytes
+      - available_memory_bytes
+      - cleanup_pending
+      - core_url
+      - cpu_count
+      - created_at
+      - enrollment_id
+      - id
+      - last_seen_at
+      - max_active
+      - max_retained
+      - name
+      - online
+      - provider
+      - provider_ready
+      - reserved
+      - retained
+      - rollout
+      - running
+      - snapshots
     type: object
   deployment.NodeAllocation:
     properties:
@@ -984,6 +1228,13 @@ definitions:
       deployment_generation:
         type: integer
       diagnostic:
+        enum:
+          - ""
+          - node_unavailable
+          - resource_missing
+          - compute_unconfirmed
+          - ownership_mismatch
+          - provider_unavailable
         type: string
       environment_id:
         type: string
@@ -999,6 +1250,19 @@ definitions:
         type: string
       tenant_id:
         type: string
+    required:
+      - compute_phase
+      - compute_phase_changed_at
+      - created_at
+      - deployment_generation
+      - diagnostic
+      - environment_id
+      - id
+      - initialization
+      - node_id
+      - session_id
+      - state
+      - tenant_id
     type: object
   deployment.NodeDetail:
     properties:
@@ -1006,8 +1270,10 @@ definitions:
         type: integer
       available_disk_bytes:
         type: integer
+        x-nullable: true
       available_memory_bytes:
         type: integer
+        x-nullable: true
       cleanup_pending:
         type: integer
       core_url:
@@ -1017,6 +1283,7 @@ definitions:
         type: string
       cpu_count:
         type: integer
+        x-nullable: true
       created_at:
         type: string
       diagnostic:
@@ -1041,6 +1308,7 @@ definitions:
         type: string
       last_seen_at:
         type: string
+        x-nullable: true
       max_active:
         type: integer
       max_retained:
@@ -1063,6 +1331,30 @@ definitions:
         type: integer
       snapshots:
         type: integer
+    required:
+      - active
+      - available_disk_bytes
+      - available_memory_bytes
+      - cleanup_pending
+      - core_url
+      - cpu_count
+      - created_at
+      - enrollment_id
+      - history
+      - host
+      - id
+      - last_seen_at
+      - max_active
+      - max_retained
+      - name
+      - online
+      - provider
+      - provider_ready
+      - reserved
+      - retained
+      - rollout
+      - running
+      - snapshots
     type: object
   deployment.NodeHost:
     properties:
@@ -1084,6 +1376,13 @@ definitions:
       total_memory_bytes:
         type: integer
         x-nullable: true
+    required:
+      - available_disk_bytes
+      - available_memory_bytes
+      - cpu_utilization
+      - effective_cpu_cores
+      - observed_at
+      - total_memory_bytes
     type: object
   deployment.NodeRollout:
     properties:
@@ -1109,6 +1408,9 @@ definitions:
           - update_required
           - unknown
         type: string
+    required:
+      - ready_generation
+      - state
     type: object
   deployment.NodeUpdate:
     properties:
@@ -1119,10 +1421,16 @@ definitions:
         type: integer
       name:
         type: string
+    required:
+      - max_active
+      - name
     type: object
   deployment.Reset:
     properties:
       clear:
+        enum:
+          - auto
+          - force
         type: string
       deadline_at:
         type: string
@@ -1134,6 +1442,12 @@ definitions:
         $ref: '#/definitions/deployment.ResetRemaining'
       requested_at:
         type: string
+    required:
+      - clear
+      - deadline_at
+      - forced_at
+      - remaining
+      - requested_at
     type: object
   deployment.ResetOfflineNode:
     properties:
@@ -1143,6 +1457,10 @@ definitions:
         type: string
       resources:
         type: integer
+    required:
+      - name
+      - node_id
+      - resources
     type: object
   deployment.ResetRemaining:
     properties:
@@ -1158,6 +1476,12 @@ definitions:
         type: array
       on_offline_nodes:
         type: integer
+    required:
+      - busy
+      - cleanup
+      - idle
+      - offline_nodes
+      - on_offline_nodes
     type: object
   deployment.ResetRequest:
     properties:
@@ -1183,6 +1507,9 @@ definitions:
         type: integer
       pending:
         type: integer
+    required:
+      - allocations
+      - pending
     type: object
   deployment.Rollout:
     properties:
@@ -1197,6 +1524,10 @@ definitions:
           - settled
           - preparing
         type: string
+    required:
+      - nodes
+      - previous_generation_sandboxes
+      - state
     type: object
   deployment.RolloutNodes:
     properties:
@@ -1210,6 +1541,12 @@ definitions:
         type: integer
       update_required:
         type: integer
+    required:
+      - failed
+      - preparing
+      - ready
+      - unknown
+      - update_required
     type: object
   deployment.Suspension:
     properties:
@@ -1217,6 +1554,9 @@ definitions:
         type: integer
       retention_seconds:
         type: integer
+    required:
+      - idle_seconds
+      - retention_seconds
     type: object
   deployment.View:
     properties:
@@ -1234,6 +1574,10 @@ definitions:
       metadata:
         type: object
       mode:
+        enum:
+          - ""
+          - nodes
+          - direct
         type: string
       owner_epoch:
         type: integer
@@ -1256,6 +1600,18 @@ definitions:
           - $ref: '#/definitions/deployment.Suspension'
         description: Idle suspension policy; null unless the selected Provider declares checkpoint support.
         x-nullable: true
+    required:
+      - core_url
+      - credential_configured
+      - generation
+      - installation_id
+      - mode
+      - owner_epoch
+      - provider
+      - reset
+      - resources
+      - rollout
+      - suspension
     type: object
   projects.APIKey:
     properties:
@@ -1271,6 +1627,14 @@ definitions:
         type: string
       revoked_at:
         type: string
+        x-nullable: true
+    required:
+      - created_at
+      - id
+      - name
+      - prefix
+      - project_id
+      - revoked_at
     type: object
   projects.IssuedAPIKey:
     properties:
@@ -1288,6 +1652,15 @@ definitions:
         type: string
       revoked_at:
         type: string
+        x-nullable: true
+    required:
+      - created_at
+      - id
+      - key
+      - name
+      - prefix
+      - project_id
+      - revoked_at
     type: object
   projects.KeyPage:
     properties:
@@ -1297,6 +1670,9 @@ definitions:
         type: array
       has_more:
         type: boolean
+    required:
+      - data
+      - has_more
     type: object
   projects.Page:
     properties:
@@ -1306,6 +1682,9 @@ definitions:
         type: array
       has_more:
         type: boolean
+    required:
+      - data
+      - has_more
     type: object
   projects.Project:
     properties:
@@ -1313,12 +1692,19 @@ definitions:
         type: integer
       archived_at:
         type: string
+        x-nullable: true
       created_at:
         type: string
       id:
         type: string
       name:
         type: string
+    required:
+      - active_key_count
+      - archived_at
+      - created_at
+      - id
+      - name
     type: object
   sandbox.ConfigurationDiscoveryInput:
     properties:
@@ -1335,6 +1721,8 @@ definitions:
         $ref: '#/definitions/sandbox.Resources'
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
+    required:
+      - resources
     type: object
   sandbox.Resources:
     properties:
@@ -1346,6 +1734,9 @@ definitions:
         type: integer
       root_disk_mib:
         type: integer
+    required:
+      - cpus
+      - memory_mib
     type: object
   sandbox.RuntimeRelease:
     properties:
@@ -1361,6 +1752,13 @@ definitions:
         type: string
       source_commit:
         type: string
+    required:
+      - firmware_sha256
+      - image_id
+      - image_manifest_digest
+      - microsandbox_ref
+      - runtime_sha256
+      - source_commit
     type: object
   sessions.AdminAssetCounts:
     properties:
@@ -1376,6 +1774,13 @@ definitions:
         type: integer
       vaults:
         type: integer
+    required:
+      - agents
+      - credentials
+      - environment_templates
+      - files
+      - skills
+      - vaults
     type: object
   sessions.ExecutorCredential:
     properties:
@@ -1387,6 +1792,10 @@ definitions:
       revoked_at:
         type: string
         x-nullable: true
+    required:
+      - created_at
+      - key_id
+      - revoked_at
     type: object
   sessions.IssuedExecutorCredential:
     properties:
@@ -1396,6 +1805,9 @@ definitions:
         type: string
       key_id:
         type: string
+    required:
+      - executor_token
+      - key_id
     type: object
   sessions.ManagedArchive:
     properties:
@@ -1404,7 +1816,15 @@ definitions:
       session_id:
         type: string
       state:
+        enum:
+          - active
+          - cleanup_pending
+          - released
         type: string
+    required:
+      - environment_id
+      - session_id
+      - state
     type: object
   v1.Agent:
     properties:
@@ -3328,6 +3748,8 @@ definitions:
       id:
         type: string
       kind:
+        enum:
+          - issued
         type: string
       name:
         type: string
@@ -3335,10 +3757,25 @@ definitions:
         type: string
       revoked_at:
         type: string
+        x-nullable: true
+    required:
+      - id
+      - kind
+      - name
+      - prefix
+      - revoked_at
     type: object
   writeaudit.Operation:
     properties:
       action:
+        enum:
+          - create
+          - update
+          - delete
+          - send_events
+          - upload_file
+          - upload_version
+          - update_default_version
         type: string
       api_key:
         $ref: '#/definitions/writeaudit.APIKey'
@@ -3353,9 +3790,30 @@ definitions:
       resource_id:
         type: string
       resource_type:
+        enum:
+          - agent
+          - session
+          - environment
+          - environment_template
+          - skill
+          - skill_version
+          - file
+          - vault
+          - credential
+          - artifact
         type: string
       trace_id:
         type: string
+    required:
+      - action
+      - api_key
+      - created_at
+      - id
+      - parent_id
+      - request_id
+      - resource_id
+      - resource_type
+      - trace_id
     type: object
   writeaudit.Page:
     properties:
@@ -3367,13 +3825,22 @@ definitions:
         type: boolean
       next_cursor:
         type: string
+    required:
+      - data
+      - has_more
+      - next_cursor
     type: object
   writeaudit.ResourceOwner:
     properties:
       api_key:
-        $ref: '#/definitions/writeaudit.APIKey'
+        allOf:
+          - $ref: '#/definitions/writeaudit.APIKey'
+        x-nullable: true
       resource_id:
         type: string
+    required:
+      - api_key
+      - resource_id
     type: object
 info:
   contact: {}

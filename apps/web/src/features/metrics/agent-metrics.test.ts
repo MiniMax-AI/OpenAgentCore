@@ -40,6 +40,7 @@ function turn(id: string, sessionId: string, overrides: Partial<AgentTurn> = {})
   return {
     id,
     agent_id: "agent",
+    subagent_id: null,
     session_id: sessionId,
     object: "agent.session.turn",
     status: "completed",
@@ -144,7 +145,7 @@ describe("helpers", () => {
 });
 
 function page<T extends { id: string }>(data: T[], hasMore: boolean): ListPage<T> {
-  return { data, has_more: hasMore, last_id: data[data.length - 1]?.id ?? null };
+  return { object: "list", data, first_id: data[0]?.id ?? null, last_id: data[data.length - 1]?.id ?? null, has_more: hasMore };
 }
 
 describe("loadAgentMetricsActivity", () => {

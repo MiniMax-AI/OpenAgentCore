@@ -1,8 +1,34 @@
 import { coreHarnessKinds } from "./harness-catalog";
 import { projectEnvironmentInstallation } from "./installation-projection";
-import { exactFields, onlyFields, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId } from "./response-projection";
+import {
+  exactFields, onlyFields, schemaFields, variantFields, isOneOf, isRecord, hasOwn, canonicalUuid, isNonnegativeInteger, sameResourceId,
+  type FieldNames,
+} from "./response-projection";
+import {
+  agentsCoreFields, createVaultCredentialAuthParamStaticBearerFields, createVaultCredentialParamsFields,
+  deletedEnvironmentTemplateResourceFields, environmentParamNoneFields, environmentParamSelfHostedFields,
+  environmentParamSelfHostedRequired, deletedVaultCredentialResourceFields, deletedVaultResourceFields,
+  deleteFileResponseFields, environmentFileListResourceFields, environmentFileResourceFields, environmentResourceNoneFields,
+  environmentResourceSelfHostedFields, environmentStatusResourceValues, hostedEnvironmentFileParamFileIdFields,
+  hostedEnvironmentFileParamInlineFields, inputContentParamFields, inputMessageParamFields, inputMessageParamRequired,
+  listFilesResponseFields, multiAgentConfigResourceFields, openAIFileFields, publicEnvironmentResourceFields,
+  reasoningEffortResourceValues, reasoningResourceFields, rotateVaultCredentialAuthParamStaticBearerFields,
+  rotateVaultCredentialParamsFields, reasoningSummaryResourceValues, savedAgentCoreFields,
+  serviceTierResourceValues, sessionAgentResourceFields, sessionAgentResourceRequired, sessionCoreFields,
+  sessionEnvironmentErrorResourceFields, sessionEnvironmentStateResourceFields, sessionErrorResourceFields,
+  sessionEventAgentSessionCreatedFields, sessionEventErrorFields, sessionEventFields,
+  sessionInputParamAgentSessionInputCancelFields, sessionInputParamAgentSessionInputMessageFields,
+  sessionInputParamAgentSessionInputToolResultFields, sessionInputParamAgentSessionInputToolResultRequired,
+  sessionRequiredActionResourceFields, sessionResourceFields, sessionResourceRequired, sessionStatusResourceValues,
+  textFormatResourceFields, textResourceFields, vaultCredentialResourceFields, vaultListResourceFields, vaultResourceFields,
+  verbosityResourceValues,
+} from "./generated/public-api";
+import {
+  runtimeCPUObservationFields, runtimeInstanceFields, runtimeMemoryObservationFields, runtimeObservationFields,
+  runtimeObservationLifecycleStateValues, runtimeObservationModeValues, runtimeObservationReasonValues, runtimeObservationStatusValues,
+} from "./generated/core-api";
 import { projectTokenUsage } from "./usage-projection";
-import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
+import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage } from "./history-projection";
 import { projectOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 import { safeProvider } from "./execution-configuration-projection";
 import { createSSEDecoder } from "./sse";
@@ -67,7 +93,6 @@ import type {
   SessionEvent,
   SessionListOptions,
   SessionInputEvent,
-  SessionMessageInputEvent,
   SessionToolResultInputEvent,
   SessionItem,
   SourceFile,
@@ -99,7 +124,6 @@ import type {
   VaultDeleted,
   VaultList,
   VaultListOptions,
-  EnvironmentResourceStatus,
 } from "./types";
 
 export interface OpenAIAgentsClientOptions {
@@ -190,16 +214,6 @@ export function createIdempotencyKey(): string {
   return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function requireIdempotencyKey(value: unknown): asserts value is string {
-  if (
-    typeof value !== "string" ||
-    goWhitespaceOnlyPattern.test(value) ||
-    new TextEncoder().encode(value).length > 128
-  ) {
-    throw new TypeError("Idempotency key must be non-blank and at most 128 UTF-8 bytes.");
-  }
-}
-
 function addPageOptions(params: URLSearchParams, options?: PageOptions): void {
   if (options?.after) params.set("after", options.after);
   if (options?.limit !== undefined) params.set("limit", String(options.limit));
@@ -207,21 +221,10 @@ function addPageOptions(params: URLSearchParams, options?: PageOptions): void {
 }
 
 export function addVaultPageOptions(params: URLSearchParams, options?: VaultListOptions): void {
-  if (options?.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100)) {
-    throw new TypeError("Vault list limit must be an integer from 1 through 100.");
-  }
-  if (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") {
-    throw new TypeError("Vault list order must be asc or desc.");
-  }
   addPageOptions(params, options);
-  if (options?.status === undefined) return;
-  const statuses = Array.isArray(options.status) ? options.status : [options.status];
-  if (statuses.length === 0 || statuses.some((status) => status !== "active" && status !== "archived")) {
-    throw new TypeError("Vault status must be active, archived, or a non-empty array of those values.");
-  }
-  if (Array.isArray(options.status)) {
-    statuses.forEach((status) => params.append("status[]", status));
-  } else {
+  if (Array.isArray(options?.status)) {
+    options.status.forEach((status) => params.append("status[]", status));
+  } else if (options?.status !== undefined) {
     params.set("status", options.status);
   }
 }
@@ -231,174 +234,56 @@ function withQuery(path: string, params: URLSearchParams): string {
   return query ? `${path}?${query}` : path;
 }
 
-const environmentResourceFields = new Set(["id", "object", "type", "status", "files", "plugins", "skills"]);
-const environmentFileFields = new Set(["environment_id", "object", "path", "size_bytes"]);
-const environmentFileListFields = new Set(["object", "data", "next", "has_more"]);
-const sourceFileFields = new Set([
-  "id", "object", "bytes", "created_at", "filename", "purpose", "status", "expires_at", "status_details",
-]);
-const sourceFileDeletedFields = new Set(["id", "object", "deleted"]);
 const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const sourceFileIdPattern = /^file-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Bounds the download buffer a Content-Length header can make the client allocate.
 const maxSourceFileBytes = 512 * 1024 * 1024;
-const maxEnvironmentFileBytes = 50 * 1024 * 1024;
-// Core applies the official 5 MiB decoded bound to inline data; file_id copies keep 50 MiB.
-const maxInlineEnvironmentFileBytes = 5 * 1024 * 1024;
-const sourceFileListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
-// Core's Files list bound; it defaults to its maximum.
+// Core's default Files page size, which binds a page listed without a limit.
 const maxSourceFileListLimit = 10000;
-const environmentTemplateDeletedFields = new Set(["id", "object", "deleted"]);
-const vaultFields = new Set(["id", "object", "created_at", "name", "metadata"]);
-const vaultListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
-const vaultDeletedFields = new Set(["id", "object", "deleted"]);
-const vaultCredentialFields = new Set(["id", "vault_id", "name", "object", "auth", "created_at", "updated_at"]);
-const vaultCredentialDeletedFields = new Set(["id", "object", "deleted"]);
-const sessionFields = new Set([
-  "id", "object", "agent", "environment", "status", "error", "metadata",
-  "required_actions", "vault_ids", "usage", "created_at", "last_active_at",
-]);
-const agentSnapshotFields = new Set([
-  "id", "model", "name", "instructions", "multi_agent", "reasoning",
-  "service_tier", "text", "tools",
-]);
-const agentSnapshotAcceptedFields = new Set([...agentSnapshotFields, "x_agents_core"]);
-const sessionAgentCoreFields = new Set(["harness", "harness_config"]);
-const savedAgentCoreFields = new Set(["harness", "model_provider", "harness_config"]);
-const multiAgentFields = new Set(["enabled", "max_concurrent_subagents"]);
-const reasoningFields = new Set(["effort", "summary"]);
-const textFields = new Set(["format", "verbosity"]);
-const sessionStatuses = new Set(["idle", "in_progress", "requires_action", "failed"]);
-const serviceTiers = new Set(["auto", "default", "flex", "priority", "fast"]);
-const reasoningEfforts = new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
-const reasoningSummaries = new Set(["concise", "detailed", "auto"]);
-const sessionMessageEventFields = new Set(["type", "input"]);
-const sessionCancelEventFields = new Set(["type"]);
-const sessionToolResultEventFields = new Set(["type", "call_id", "turn_id", "success", "output", "error"]);
-const inputMessageFields = new Set(["type", "role", "content"]);
-const inputTextFields = new Set(["type", "text"]);
-const inputImageFields = new Set(["type", "image_url"]);
-const maxSessionInputEvents = 64;
-const maxSessionInputRequestBytes = 1024 * 1024;
-const goWhitespaceOnlyPattern = /^[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/u;
-const streamErrorFields = new Set(["code", "type", "message"]);
-// Error events carry the pinned SessionError, whose param is null when unset.
-const sessionErrorFields = new Set([...streamErrorFields, "param"]);
-const environmentStateFields = new Set(["id", "type", "status", "error"]);
-const snapshotEventFields = new Set(["type", "event_id", "session_id", "session"]);
-const turnEventFields = new Set(["type", "event_id", "session_id", "turn_id", "turn"]);
-// Terminal Turn events also carry top-level usage mirroring the Turn snapshot.
-const terminalTurnEventFields = new Set([...turnEventFields, "usage"]);
-const terminalTurnEventTypes = new Set([
-  "agent.session.turn.completed", "agent.session.turn.failed", "agent.session.turn.cancelled",
-]);
-const itemEventFields = new Set(["type", "event_id", "session_id", "turn_id", "item_id", "output_index", "item"]);
-const contentPartEventFields = new Set([
-  "type", "event_id", "session_id", "turn_id", "item_id", "output_index", "content_index", "part",
-]);
-const outputTextEventBaseFields = [
-  "type", "event_id", "session_id", "turn_id", "item_id", "output_index", "content_index",
-] as const;
-const commandDeltaEventFields = new Set([
-  "type", "event_id", "session_id", "turn_id", "item_id", "output_index", "delta",
-]);
-const environmentEventFields = new Set(["type", "event_id", "session_id", "environment"]);
-const errorEventFields = new Set(["type", "event_id", "session_id", "error"]);
+// An unknown event never carries a field whose meaning a projected event defines.
 const unsafeUnknownEventFields = new Set([
   "session", "turn", "turn_id", "item", "item_id", "output_index", "content_index", "part", "delta", "text", "error", "environment",
 ]);
-const runtimeObservationFields = new Set([
-  "id", "object", "session_id", "environment_id", "mode", "provider_type", "instance", "status", "reason",
-  "lifecycle_state", "allocation_created_at", "resolved_at", "observed_at", "started_at", "cpu", "memory",
-]);
-const runtimeInstanceFields = new Set(["kind", "allocation_id", "device_id", "connection_generation"]);
-const runtimeCPUFields = new Set(["usage_seconds_total", "capacity_cores", "usage_cores", "utilization_ratio"]);
-const runtimeMemoryFields = new Set(["usage_bytes", "limit_bytes"]);
-const runtimeObservationReasons = new Set([
-  "runtime_mode_not_observable", "allocation_pending", "runtime_not_running",
-  "sample_timeout", "sample_unavailable",
-]);
 const runtimeProviderTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
-const runtimeLifecycleStates = new Set(["active", "sleeping", "transitioning", "pending", "stopped"]);
-function utf8Length(value: string): number {
-  return new TextEncoder().encode(value).length;
+function invalidSessionInputBatch(): never {
+  throw new TypeError("Invalid Session input event batch.");
 }
 
-function invalidSessionInputBatch(message = "Invalid Session input event batch."): never {
-  throw new TypeError(message);
+function canonicalInputContent(part: unknown): FunctionResultContent {
+  if (!isRecord(part)) return invalidSessionInputBatch();
+  const fields = variantFields(inputContentParamFields, part.type);
+  if (!fields || !exactFields(part, fields)) return invalidSessionInputBatch();
+  if (part.type === "input_text" && typeof part.text === "string") return { type: "input_text", text: part.text };
+  if (part.type === "input_image" && typeof part.image_url === "string") return { type: "input_image", image_url: part.image_url };
+  return invalidSessionInputBatch();
 }
 
 function canonicalInputMessage(value: unknown): InputMessage {
   if (
-    !isRecord(value) || !onlyFields(value, inputMessageFields) ||
-    !hasOwn(value, "role") || !hasOwn(value, "content") ||
-    value.role !== "user" || !Array.isArray(value.content) || value.content.length === 0 ||
-    (hasOwn(value, "type") && value.type !== "message")
+    !isRecord(value) || !schemaFields(value, inputMessageParamFields, inputMessageParamRequired) ||
+    value.role !== "user" || !Array.isArray(value.content) || (hasOwn(value, "type") && value.type !== "message")
   ) {
     return invalidSessionInputBatch();
   }
-  let text = "";
-  const content = Array.from(value.content, (part) => {
-    if (
-      !isRecord(part) || !exactFields(part, inputTextFields) ||
-      part.type !== "input_text" || typeof part.text !== "string"
-    ) {
-      return invalidSessionInputBatch();
-    }
-    text += part.text;
-    return { type: "input_text" as const, text: part.text };
-  });
-  // Core admits whitespace-only text verbatim; only all-empty text rejects.
-  if (text === "") return invalidSessionInputBatch();
-  return hasOwn(value, "type")
-    ? { type: "message", role: "user", content }
-    : { role: "user", content };
-}
-
-function canonicalFunctionOutput(value: unknown): string | FunctionResultContent[] | null {
-  if (value === null || typeof value === "string") return value;
-  if (!Array.isArray(value)) return invalidSessionInputBatch();
-  return Array.from(value, (part) => {
-    if (!isRecord(part)) return invalidSessionInputBatch();
-    if (part.type === "input_text") {
-      if (!exactFields(part, inputTextFields) || typeof part.text !== "string") {
-        return invalidSessionInputBatch();
-      }
-      return { type: "input_text" as const, text: part.text };
-    }
-    if (part.type === "input_image") {
-      if (!exactFields(part, inputImageFields) || typeof part.image_url !== "string") {
-        return invalidSessionInputBatch();
-      }
-      return { type: "input_image" as const, image_url: part.image_url };
-    }
-    return invalidSessionInputBatch();
-  });
+  const content = Array.from(value.content, canonicalInputContent);
+  return hasOwn(value, "type") ? { type: "message", role: "user", content } : { role: "user", content };
 }
 
 function canonicalSessionInputEvent(value: unknown): SessionInputEvent {
-  if (!isRecord(value) || !hasOwn(value, "type") || typeof value.type !== "string") {
-    return invalidSessionInputBatch();
-  }
+  if (!isRecord(value)) return invalidSessionInputBatch();
   switch (value.type) {
-    case "agent.session.input.message": {
-      if (!exactFields(value, sessionMessageEventFields) || !Array.isArray(value.input) || value.input.length === 0) {
+    case "agent.session.input.message":
+      if (!exactFields(value, sessionInputParamAgentSessionInputMessageFields) || !Array.isArray(value.input)) {
         return invalidSessionInputBatch();
       }
-      return {
-        type: "agent.session.input.message",
-        input: Array.from(value.input, canonicalInputMessage),
-      } satisfies SessionMessageInputEvent;
-    }
+      return { type: "agent.session.input.message", input: Array.from(value.input, canonicalInputMessage) };
     case "agent.session.input.cancel":
-      if (!exactFields(value, sessionCancelEventFields)) return invalidSessionInputBatch();
+      if (!exactFields(value, sessionInputParamAgentSessionInputCancelFields)) return invalidSessionInputBatch();
       return { type: "agent.session.input.cancel" };
     case "agent.session.input.tool_result": {
       if (
-        !onlyFields(value, sessionToolResultEventFields) ||
-        !hasOwn(value, "call_id") || !hasOwn(value, "turn_id") || !hasOwn(value, "success") ||
-        typeof value.call_id !== "string" || value.call_id.length === 0 ||
-        typeof value.turn_id !== "string" || value.turn_id.length === 0 ||
-        typeof value.success !== "boolean" ||
+        !schemaFields(value, sessionInputParamAgentSessionInputToolResultFields, sessionInputParamAgentSessionInputToolResultRequired) ||
+        typeof value.call_id !== "string" || typeof value.turn_id !== "string" || typeof value.success !== "boolean" ||
         (hasOwn(value, "error") && value.error !== null && typeof value.error !== "string")
       ) {
         return invalidSessionInputBatch();
@@ -409,7 +294,11 @@ function canonicalSessionInputEvent(value: unknown): SessionInputEvent {
         turn_id: value.turn_id,
         success: value.success,
       };
-      if (hasOwn(value, "output")) event.output = canonicalFunctionOutput(value.output);
+      if (hasOwn(value, "output")) {
+        const output = value.output;
+        if (output !== null && typeof output !== "string" && !Array.isArray(output)) return invalidSessionInputBatch();
+        event.output = Array.isArray(output) ? Array.from(output, canonicalInputContent) : output;
+      }
       if (hasOwn(value, "error")) event.error = value.error as string | null;
       return event;
     }
@@ -419,22 +308,12 @@ function canonicalSessionInputEvent(value: unknown): SessionInputEvent {
 }
 
 function encodeSessionInputBatch(events: readonly SessionInputEvent[]): string {
-  if (!Array.isArray(events) || events.length > maxSessionInputEvents) {
-    return invalidSessionInputBatch("Session input event batch must contain at most 64 events.");
-  }
-  const body = JSON.stringify({ events: Array.from(events, canonicalSessionInputEvent) });
-  // Core's HTTP handler bounds the complete wire request at 1 MiB. Its separate
-  // 512 KiB internal limit is measured after Go decodes, reshapes and canonically
-  // re-encodes individual payloads, so approximating it from browser JSON would
-  // reject valid wire requests (notably around Go's HTML and U+2028 escaping).
-  if (utf8Length(body) > maxSessionInputRequestBytes) {
-    return invalidSessionInputBatch("Session input event request exceeds 1 MiB.");
-  }
-  return body;
+  if (!Array.isArray(events)) return invalidSessionInputBatch();
+  return JSON.stringify({ events: Array.from(events, canonicalSessionInputEvent) });
 }
 
 function isTrimmedName(value: unknown): value is string {
-  return typeof value === "string" && value === value.trim() && utf8Length(value) >= 1 && utf8Length(value) <= 256;
+  return typeof value === "string" && value !== "" && value === value.trim();
 }
 
 function validMetadata(value: unknown): value is Record<string, string> {
@@ -457,7 +336,7 @@ function invalidVaultResponse(code: string, message: string): never {
 }
 
 export function projectVault(value: unknown, expectedId?: string): Vault {
-  if (!isRecord(value) || !exactFields(value, vaultFields)) {
+  if (!isRecord(value) || !exactFields(value, vaultResourceFields)) {
     return invalidVaultResponse("invalid_vault_resource", "OpenAgentCore returned an invalid Vault resource.");
   }
   if (
@@ -484,7 +363,7 @@ export function projectVaultCredential(
   expectedVaultId: string,
   expectedCredentialId?: string,
 ): VaultCredential {
-  if (!isRecord(value) || !exactFields(value, vaultCredentialFields) || !isRecord(value.auth)) {
+  if (!isRecord(value) || !exactFields(value, vaultCredentialResourceFields) || !isRecord(value.auth)) {
     return invalidVaultResponse("invalid_vault_credential", "OpenAgentCore returned invalid Credential metadata.");
   }
   if (
@@ -526,14 +405,11 @@ function projectVaultPage<T extends { id: string; created_at: number }>(
   code: string,
   message: string,
 ): { object: "list"; data: T[]; has_more: boolean; first_id: string | null; last_id: string | null } {
-  if (!isRecord(value) || !exactFields(value, vaultListFields) || value.object !== "list" || !Array.isArray(value.data) || typeof value.has_more !== "boolean") {
+  if (!isRecord(value) || !exactFields(value, vaultListResourceFields) || value.object !== "list" || !Array.isArray(value.data) || typeof value.has_more !== "boolean") {
     return invalidVaultResponse(code, message);
   }
-  const limit = options?.limit ?? 20;
   const order = options?.order ?? "desc";
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || (order !== "asc" && order !== "desc") || value.data.length > limit) {
-    return invalidVaultResponse(code, message);
-  }
+  if (value.data.length > (options?.limit ?? 20)) return invalidVaultResponse(code, message);
   const data = value.data.map(project);
   const ids = new Set(data.map((entry) => entry.id));
   const firstId = data[0]?.id ?? null;
@@ -569,7 +445,7 @@ function projectDeletedResource<T extends VaultDeleted | VaultCredentialDeleted>
   value: unknown,
   expectedId: string,
   object: T["object"],
-  fields: Set<string>,
+  fields: FieldNames,
   code: string,
 ): T {
   if (!isRecord(value) || !exactFields(value, fields) || !sameUuid(value.id, expectedId) || value.object !== object || value.deleted !== true) {
@@ -608,7 +484,7 @@ type AgentConfiguration<Core> = Omit<AgentSnapshot, "x_agents_core"> & { x_agent
 /** A Session's effective Agent preserves its explicit native selections. */
 function projectSessionAgentCore(value: unknown): AgentsCoreSelection | null | undefined {
   if (value === undefined || value === null) return value;
-  if (!isRecord(value) || !onlyFields(value, sessionAgentCoreFields) ||
+  if (!isRecord(value) || !onlyFields(value, agentsCoreFields) ||
     (hasOwn(value, "harness") && !isHarnessKind(value.harness)) ||
     (hasOwn(value, "harness_config") && !isRecord(value.harness_config))) {
     return invalidSessionResource();
@@ -652,10 +528,9 @@ function projectAgentConfiguration<Core>(
   value: unknown,
   projectCore: (value: unknown) => Core | null | undefined,
 ): AgentConfiguration<Core> {
-  if (
-    !isRecord(value) || !onlyFields(value, agentSnapshotAcceptedFields) ||
-    [...agentSnapshotFields].some((field) => !hasOwn(value, field))
-  ) return invalidSessionResource();
+  if (!isRecord(value) || !schemaFields(value, sessionAgentResourceFields, sessionAgentResourceRequired)) {
+    return invalidSessionResource();
+  }
   const agentsCore = projectCore(value.x_agents_core);
   const multiAgent = value.multi_agent;
   const reasoning = value.reasoning;
@@ -665,26 +540,23 @@ function projectAgentConfiguration<Core>(
     typeof value.model !== "string" || value.model.trim() === "" ||
     !(value.name === null || typeof value.name === "string") ||
     !(value.instructions === null || typeof value.instructions === "string") ||
-    !isRecord(multiAgent) || !exactFields(multiAgent, multiAgentFields) ||
+    !isRecord(multiAgent) || !exactFields(multiAgent, multiAgentConfigResourceFields) ||
     typeof multiAgent.enabled !== "boolean" ||
     !(multiAgent.max_concurrent_subagents === null ||
       (Number.isSafeInteger(multiAgent.max_concurrent_subagents) && Number(multiAgent.max_concurrent_subagents) > 0)) ||
-    !isRecord(reasoning) || !onlyFields(reasoning, reasoningFields) ||
-    !(reasoning.effort === undefined || reasoning.effort === null || reasoningEfforts.has(String(reasoning.effort))) ||
-    !(reasoning.summary === undefined || reasoning.summary === null || reasoningSummaries.has(String(reasoning.summary))) ||
-    !serviceTiers.has(String(value.service_tier)) ||
-    !isRecord(text) || !exactFields(text, textFields) ||
-    (text.verbosity !== "low" && text.verbosity !== "medium" && text.verbosity !== "high") ||
+    !isRecord(reasoning) || !exactFields(reasoning, reasoningResourceFields) ||
+    !(reasoning.effort === null || isOneOf(reasoningEffortResourceValues, reasoning.effort)) ||
+    !(reasoning.summary === null || isOneOf(reasoningSummaryResourceValues, reasoning.summary)) ||
+    !isOneOf(serviceTierResourceValues, value.service_tier) ||
+    !isRecord(text) || !exactFields(text, textResourceFields) || !isOneOf(verbosityResourceValues, text.verbosity) ||
     !isRecord(text.format) || !Array.isArray(value.tools)
   ) return invalidSessionResource();
 
   const format = text.format;
-  if (
-    (format.type === "text" && !exactFields(format, new Set(["type"]))) ||
-    (format.type === "json_schema" &&
-      (!exactFields(format, new Set(["type", "schema"])) || !isRecord(format.schema))) ||
-    (format.type !== "text" && format.type !== "json_schema")
-  ) return invalidSessionResource();
+  const formatFields = variantFields(textFormatResourceFields, format.type);
+  if (!formatFields || !exactFields(format, formatFields) || (format.type === "json_schema" && !isRecord(format.schema))) {
+    return invalidSessionResource();
+  }
 
   return {
     id: value.id,
@@ -696,8 +568,8 @@ function projectAgentConfiguration<Core>(
       enabled: multiAgent.enabled,
       max_concurrent_subagents: multiAgent.max_concurrent_subagents as number | null,
     },
-    reasoning: { ...reasoning } as AgentSession["agent"]["reasoning"],
-    service_tier: value.service_tier as AgentSession["agent"]["service_tier"],
+    reasoning: { effort: reasoning.effort, summary: reasoning.summary },
+    service_tier: value.service_tier,
     text: {
       format: format.type === "text"
         ? { type: "text" }
@@ -713,12 +585,12 @@ function projectSessionEnvironment(value: unknown): AgentSession["environment"] 
     return invalidSessionResource();
   }
   if (value.type === "none") {
-    if (!exactFields(value, new Set(["type"]))) return invalidSessionResource();
+    if (!exactFields(value, environmentResourceNoneFields)) return invalidSessionResource();
     return { type: "none" };
   }
   if (value.type === "self_hosted") {
     if (
-      !exactFields(value, new Set(["type", "id", "remote_url", "workspace_directory", "capability_directories"])) ||
+      !exactFields(value, environmentResourceSelfHostedFields) ||
       typeof value.id !== "string" || value.id.trim() === "" ||
       typeof value.remote_url !== "string" || value.remote_url.trim() === "" ||
       typeof value.workspace_directory !== "string" || value.workspace_directory.trim() === "" ||
@@ -756,15 +628,14 @@ function normalizeCreationEnvironment(value: AgentEnvironmentInput): ExpectedCre
     throw new TypeError("Session creation requires a supported Environment.");
   }
   if (value.type === "none") {
-    if (!exactFields(value, new Set(["type"]))) {
+    if (!exactFields(value, environmentParamNoneFields)) {
       throw new TypeError("The none Environment accepts no additional fields.");
     }
     return { type: "none" };
   }
   if (value.type === "self_hosted") {
     if (
-      !onlyFields(value, new Set(["type", "workspace_directory", "capability_directories"])) ||
-      !hasOwn(value, "workspace_directory") ||
+      !schemaFields(value, environmentParamSelfHostedFields, environmentParamSelfHostedRequired) ||
       typeof value.workspace_directory !== "string" || value.workspace_directory.trim() === "" ||
       !(value.capability_directories === undefined || value.capability_directories === null ||
         (Array.isArray(value.capability_directories) &&
@@ -781,6 +652,7 @@ function normalizeCreationEnvironment(value: AgentEnvironmentInput): ExpectedCre
     };
   }
   if (value.type === "openai_hosted") {
+    // The client supports only the network mode and Template reference of the schema's hosted fields.
     if (
       !onlyFields(value, new Set(["type", "network", "environment_template_id"])) ||
       !(value.network === undefined || value.network === null || (
@@ -871,10 +743,10 @@ function matchesImmutableSession(
 function projectRequiredActions(value: unknown): AgentSession["required_actions"] {
   if (!Array.isArray(value)) return invalidSessionResource();
   return value.map((entry) => {
-    if (!isRecord(entry) || typeof entry.type !== "string") return invalidSessionResource();
+    const fields = isRecord(entry) ? variantFields(sessionRequiredActionResourceFields, entry.type) : undefined;
+    if (!isRecord(entry) || !fields || !exactFields(entry, fields)) return invalidSessionResource();
     if (entry.type === "function_call") {
       if (
-        !exactFields(entry, new Set(["type", "call_id", "turn_id", "name", "arguments"])) ||
         typeof entry.call_id !== "string" || entry.call_id === "" ||
         typeof entry.turn_id !== "string" || entry.turn_id === "" ||
         typeof entry.name !== "string" || entry.name === ""
@@ -887,14 +759,8 @@ function projectRequiredActions(value: unknown): AgentSession["required_actions"
         arguments: entry.arguments,
       };
     }
-    if (entry.type === "environment_connection") {
-      if (
-        !exactFields(entry, new Set(["type", "environment_id"])) ||
-        typeof entry.environment_id !== "string" || entry.environment_id === ""
-      ) return invalidSessionResource();
-      return { type: "environment_connection" as const, environment_id: entry.environment_id };
-    }
-    return invalidSessionResource();
+    if (typeof entry.environment_id !== "string" || entry.environment_id === "") return invalidSessionResource();
+    return { type: "environment_connection" as const, environment_id: entry.environment_id };
   });
 }
 
@@ -905,18 +771,21 @@ export function projectAgentSession(
   expectedEnvironment?: ExpectedCreationEnvironment,
   expectedImmutable?: ImmutableSessionProjection,
 ): AgentSession {
-  if (!isRecord(value) || !exactFields(Object.fromEntries(Object.entries(value).filter(([key]) => key !== "x_agents_core")), sessionFields)) return invalidSessionResource();
+  if (!isRecord(value) || !schemaFields(value, sessionResourceFields, sessionResourceRequired)) return invalidSessionResource();
   let installation;
-  if (value.x_agents_core !== undefined) {
-    if (!isRecord(value.x_agents_core) || !exactFields(value.x_agents_core, new Set(["installation"]))) return invalidSessionResource();
-    installation = projectEnvironmentInstallation(value.x_agents_core.installation);
-    if (!installation) return invalidSessionResource();
+  const core = value.x_agents_core;
+  if (core !== undefined && core !== null) {
+    if (!isRecord(core) || !onlyFields(core, sessionCoreFields)) return invalidSessionResource();
+    if (hasOwn(core, "installation")) {
+      installation = projectEnvironmentInstallation(core.installation);
+      if (!installation) return invalidSessionResource();
+    }
   }
   if (
     typeof value.id !== "string" || value.id.trim() === "" ||
     (expectedSessionId !== undefined && !sameResourceId(value.id, expectedSessionId)) ||
     value.object !== "agent.session" ||
-    !sessionStatuses.has(String(value.status)) ||
+    !isOneOf(sessionStatusResourceValues, value.status) ||
     !(value.error === null || typeof value.error === "string") ||
     !validMetadata(value.metadata) ||
     !isNonnegativeInteger(value.created_at) ||
@@ -1009,15 +878,13 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     id === null || sessionId === null || id !== sessionId ||
     (expectedSessionId !== undefined && !sameUuid(sessionId, expectedSessionId)) ||
     value.object !== "agent.runtime_observation" ||
-    (value.mode !== "none" && value.mode !== "self_hosted" && value.mode !== "openai_hosted") ||
+    !isOneOf(runtimeObservationModeValues, value.mode) ||
     !(value.provider_type === null || (
       typeof value.provider_type === "string" && runtimeProviderTypePattern.test(value.provider_type)
     )) ||
     !isRecord(value.instance) || !exactFields(value.instance, runtimeInstanceFields) ||
-    (value.status !== "observed" && value.status !== "unsupported" && value.status !== "unavailable") ||
-    !(value.reason === null || (
-      typeof value.reason === "string" && runtimeObservationReasons.has(value.reason)
-    )) ||
+    !isOneOf(runtimeObservationStatusValues, value.status) ||
+    !(value.reason === null || isOneOf(runtimeObservationReasonValues, value.reason)) ||
     !isNonnegativeInteger(value.resolved_at)
   ) return invalidRuntimeObservation();
 
@@ -1050,7 +917,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     )) ||
     (isManaged && (
       value.instance.kind !== "managed_allocation" || environmentId === null || connectionGeneration !== null ||
-      !runtimeLifecycleStates.has(String(value.lifecycle_state)) ||
+      !isOneOf(runtimeObservationLifecycleStateValues, value.lifecycle_state) ||
       (allocationId === null && (deviceId !== null || allocationCreatedAt !== null))
     ))
   ) return invalidRuntimeObservation();
@@ -1076,7 +943,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
 
   let cpu: RuntimeObservation["cpu"] = null;
   if (value.cpu !== null) {
-    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUFields)) {
+    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUObservationFields)) {
       return invalidRuntimeObservation();
     }
     cpu = {
@@ -1093,7 +960,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
 
   let memory: RuntimeObservation["memory"] = null;
   if (value.memory !== null) {
-    if (!observed || !isRecord(value.memory) || !exactFields(value.memory, runtimeMemoryFields)) {
+    if (!observed || !isRecord(value.memory) || !exactFields(value.memory, runtimeMemoryObservationFields)) {
       return invalidRuntimeObservation();
     }
     memory = {
@@ -1121,18 +988,15 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
 
 function projectStreamError(value: unknown): StreamError {
   if (
-    !isRecord(value) || !onlyFields(value, sessionErrorFields) ||
-    typeof value.code !== "string" || value.code === "" ||
-    typeof value.type !== "string" || value.type === "" ||
-    typeof value.message !== "string" ||
-    !(value.param === undefined || value.param === null || typeof value.param === "string")
+    !isRecord(value) || !exactFields(value, sessionErrorResourceFields) ||
+    !(value.code === null || nonemptyString(value.code)) || !nonemptyString(value.type) ||
+    typeof value.message !== "string" || !(value.param === null || typeof value.param === "string")
   ) return invalidStreamEvent();
-  return {
-    code: value.code,
-    type: value.type,
-    message: value.message,
-    ...(value.param === undefined ? {} : { param: value.param as string | null }),
-  };
+  return { code: value.code, type: value.type, message: value.message, param: value.param };
+}
+
+function nonemptyString(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
 }
 
 function requiredEventString(event: Record<string, unknown>, field: string, allowEmpty = false): string {
@@ -1141,15 +1005,13 @@ function requiredEventString(event: Record<string, unknown>, field: string, allo
   return value;
 }
 
-function optionalEventIndex(event: Record<string, unknown>, field: string, required = false): number | undefined {
+function eventIndex(event: Record<string, unknown>, field: string): number {
   const value = event[field];
-  if (value === undefined && !required) return undefined;
   if (!isNonnegativeInteger(value)) return invalidStreamEvent();
   return value;
 }
 
-function eventSessionId(event: Record<string, unknown>, expectedSessionId: string, required: boolean): string | undefined {
-  if (event.session_id === undefined && !required) return undefined;
+function eventSessionId(event: Record<string, unknown>, expectedSessionId: string): string {
   if (typeof event.session_id !== "string" || !sameResourceId(event.session_id, expectedSessionId)) {
     return invalidStreamEvent("OpenAgentCore returned an event for a different Session.");
   }
@@ -1157,17 +1019,18 @@ function eventSessionId(event: Record<string, unknown>, expectedSessionId: strin
 }
 
 function projectEnvironmentState(value: unknown, status: string): AgentSessionEnvironmentEvent["environment"] {
+  const error = isRecord(value) ? value.error : undefined;
   if (
-    !isRecord(value) || !onlyFields(value, environmentStateFields) ||
-    typeof value.id !== "string" || value.id === "" ||
-    typeof value.type !== "string" || value.type === "" || value.status !== status ||
-    !(value.error === undefined || value.error === null || isRecord(value.error))
+    !isRecord(value) || !exactFields(value, sessionEnvironmentStateResourceFields) ||
+    !nonemptyString(value.id) || !nonemptyString(value.type) || value.status !== status ||
+    !(error === null || (isRecord(error) && exactFields(error, sessionEnvironmentErrorResourceFields) &&
+      nonemptyString(error.code) && nonemptyString(error.type) && typeof error.message === "string"))
   ) return invalidStreamEvent();
   return {
     id: value.id,
     type: value.type,
     status: value.status as AgentSessionEnvironmentEvent["environment"]["status"],
-    error: value.error === undefined || value.error === null ? null : projectStreamError(value.error),
+    error: error === null ? null : { code: error.code as string, type: error.type as string, message: error.message as string },
   };
 }
 
@@ -1206,21 +1069,30 @@ function projectCreatedSessionEvent(
   expectedEnvironment: ExpectedCreationEnvironment,
 ): { event: SessionEvent; session: AgentSession } {
   const value = event as unknown as Record<string, unknown>;
-  if (event.type !== "agent.session.created" || !onlyFields(value, snapshotEventFields) || event.session === undefined) {
+  if (event.type !== "agent.session.created" || !exactFields(value, sessionEventAgentSessionCreatedFields)) {
     return invalidStreamEvent("OpenAgentCore did not begin Session creation with a created Session snapshot.");
   }
-  const session = projectAgentSession(event.session, expectedVaultIds, undefined, expectedEnvironment);
-  const sessionId = eventSessionId(value, session.id, false);
-  return {
-    event: {
-      type: "agent.session.created",
-      event_id: event.event_id,
-      ...(sessionId === undefined ? {} : { session_id: sessionId }),
-      session,
-    },
-    session,
-  };
+  const session = projectAgentSession(value.session, expectedVaultIds, undefined, expectedEnvironment);
+  return { event: { type: "agent.session.created", event_id: event.event_id, session }, session };
 }
+
+// Subagent and reasoning summary events are not projected yet; they pass through as unknown events.
+const unprojectedEventPattern = /^agent\.session\.(subagent\.|turn\.reasoning_summary_)/;
+
+const sessionStatusesByEvent: Readonly<Record<string, AgentSession["status"]>> = {
+  "agent.session.in_progress": "in_progress",
+  "agent.session.requires_action": "requires_action",
+  "agent.session.idle": "idle",
+  "agent.session.failed": "failed",
+};
+
+const turnStatusByEvent: Readonly<Record<string, AgentTurn["status"]>> = {
+  "agent.session.turn.created": "queued",
+  "agent.session.turn.in_progress": "in_progress",
+  "agent.session.turn.completed": "completed",
+  "agent.session.turn.failed": "failed",
+  "agent.session.turn.cancelled": "cancelled",
+};
 
 function projectStreamEventSession(
   event: SessionEvent,
@@ -1228,143 +1100,76 @@ function projectStreamEventSession(
   immutable?: ImmutableSessionProjection,
 ): SessionEvent {
   const value = event as unknown as Record<string, unknown>;
+  const fields = variantFields(sessionEventFields, event.type);
   const base = { type: event.type, event_id: event.event_id };
-  const sessionStatusesByEvent: Record<string, AgentSession["status"]> = {
-    "agent.session.in_progress": "in_progress",
-    "agent.session.requires_action": "requires_action",
-    "agent.session.idle": "idle",
-    "agent.session.failed": "failed",
-  };
+  if (!fields || unprojectedEventPattern.test(event.type)) return projectUnknownStreamEvent(value, expectedSessionId);
+  if (!exactFields(value, fields)) return invalidStreamEvent();
+
   if (event.type === "agent.session.created" || hasOwn(sessionStatusesByEvent, event.type)) {
-    if (!onlyFields(value, snapshotEventFields) || event.session === undefined) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, false);
-    const session = projectAgentSession(event.session, undefined, expectedSessionId, undefined, immutable);
+    const session = projectAgentSession(value.session, undefined, expectedSessionId, undefined, immutable);
     if (event.type !== "agent.session.created" && session.status !== sessionStatusesByEvent[event.type]) {
       return invalidStreamEvent();
     }
-    return { ...base, ...(sessionId === undefined ? {} : { session_id: sessionId }), session } as SessionEvent;
+    return { ...base, session } as SessionEvent;
   }
 
-  const turnStatusByEvent: Record<string, AgentTurn["status"]> = {
-    "agent.session.turn.created": "queued",
-    "agent.session.turn.in_progress": "in_progress",
-    "agent.session.turn.waiting": "waiting",
-    "agent.session.turn.completed": "completed",
-    "agent.session.turn.failed": "failed",
-    "agent.session.turn.cancelled": "cancelled",
-  };
-  if (hasOwn(turnStatusByEvent, event.type)) {
-    // Older Core releases omit terminal usage; no other Turn event may carry it.
-    const withUsage = terminalTurnEventTypes.has(event.type) && hasOwn(value, "usage");
-    if (!exactFields(value, withUsage ? terminalTurnEventFields : turnEventFields) || event.turn === undefined) {
-      return invalidStreamEvent();
-    }
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    const turnId = requiredEventString(value, "turn_id");
-    const turn = projectAgentTurn(event.turn, expectedSessionId, invalidStreamEvent);
-    const usage = withUsage ? { usage: projectTokenUsage(value.usage, invalidStreamEvent) } : {};
+  // Core puts Environment events outside any Turn, so their turn_id is null.
+  if (event.type.startsWith("agent.session.environment.")) {
+    const environment = projectEnvironmentState(value.environment, event.type.slice("agent.session.environment.".length));
     if (
-      !sameResourceId(turn.id, turnId) ||
-      // Core no longer streams child Turns. Earlier releases did, and native child
-      // history could first appear there as a completed created snapshot.
-      (!(event.type === "agent.session.turn.created" && turn.subagent_id != null) && turn.status !== turnStatusByEvent[event.type]) ||
-      (immutable !== undefined && turn.subagent_id == null && !sameResourceId(turn.agent_id, immutable.agent.id))
+      value.turn_id !== null ||
+      (immutable !== undefined &&
+        (immutable.environment.type === "none" ||
+          immutable.environment.type !== environment.type ||
+          !("id" in immutable.environment) ||
+          typeof immutable.environment.id !== "string" ||
+          !sameResourceId(immutable.environment.id, environment.id)))
     ) return invalidStreamEvent();
-    return { ...base, session_id: sessionId, turn_id: turnId, turn, ...usage } as SessionEvent;
-  }
-
-  if (event.type === "agent.session.turn.item.added" || event.type === "agent.session.turn.item.done") {
-    if (!onlyFields(value, itemEventFields) || event.item === undefined) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    const turnId = requiredEventString(value, "turn_id");
-    const item = projectSessionItem(event.item, invalidStreamEvent);
-    if (!sameResourceId(item.turn_id, turnId)) return invalidStreamEvent();
-    const itemId = value.item_id === undefined ? undefined : requiredEventString(value, "item_id");
-    if (itemId !== undefined && !sameResourceId(item.id, itemId)) return invalidStreamEvent();
-    // Input Items carry a null output index; older Cores omit it.
-    const outputIndex = value.output_index === null ? null : optionalEventIndex(value, "output_index");
-    return {
-      ...base,
-      session_id: sessionId,
-      turn_id: turnId,
-      ...(itemId === undefined ? {} : { item_id: itemId }),
-      ...(outputIndex === undefined ? {} : { output_index: outputIndex }),
-      item,
-    } as SessionEvent;
-  }
-
-  if (event.type === "agent.session.turn.content_part.added" || event.type === "agent.session.turn.content_part.done") {
-    if (!exactFields(value, contentPartEventFields)) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    const turnId = requiredEventString(value, "turn_id");
-    const itemId = requiredEventString(value, "item_id");
-    const outputIndex = optionalEventIndex(value, "output_index", true)!;
-    const contentIndex = optionalEventIndex(value, "content_index", true)!;
-    const part = projectItemContent(value.part, invalidStreamEvent);
-    return { ...base, session_id: sessionId, turn_id: turnId, item_id: itemId, output_index: outputIndex, content_index: contentIndex, part } as SessionEvent;
-  }
-
-  if (event.type === "agent.session.turn.output_text.delta" || event.type === "agent.session.turn.output_text.done") {
-    const field = event.type.endsWith(".delta") ? "delta" : "text";
-    if (!exactFields(value, new Set([...outputTextEventBaseFields, field]))) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    const turnId = requiredEventString(value, "turn_id");
-    const itemId = requiredEventString(value, "item_id");
-    const outputIndex = optionalEventIndex(value, "output_index", true)!;
-    const contentIndex = optionalEventIndex(value, "content_index", true)!;
-    const text = requiredEventString(value, field, true);
-    return {
-      ...base,
-      session_id: sessionId,
-      turn_id: turnId,
-      item_id: itemId,
-      output_index: outputIndex,
-      content_index: contentIndex,
-      [field]: text,
-    } as SessionEvent;
-  }
-
-  if (event.type === "agent.output.command_execution_output.delta") {
-    if (!exactFields(value, commandDeltaEventFields)) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    return {
-      ...base,
-      session_id: sessionId,
-      turn_id: requiredEventString(value, "turn_id"),
-      item_id: requiredEventString(value, "item_id"),
-      output_index: optionalEventIndex(value, "output_index", true)!,
-      delta: requiredEventString(value, "delta", true),
-    } as SessionEvent;
+    return { ...base, session_id: eventSessionId(value, expectedSessionId), turn_id: null, environment } as SessionEvent;
   }
 
   // A Session failure, such as a hosted Environment that failed to provision.
   // Core's stream_interrupted error never reaches this projection.
-  if (event.type === "error") {
-    if (!exactFields(value, errorEventFields)) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    return { ...base, session_id: sessionId, error: projectStreamError(value.error) } as SessionEvent;
-  }
+  const sessionId = eventSessionId(value, expectedSessionId);
+  if (event.type === "error") return { ...base, session_id: sessionId, error: projectStreamError(value.error) } as SessionEvent;
 
-  if (event.type.startsWith("agent.session.environment.")) {
-    const status = event.type.slice("agent.session.environment.".length);
-    if (!new Set(["pending", "ready", "connected", "disconnected", "failed"]).has(status)) {
-      return projectUnknownStreamEvent(value, expectedSessionId);
-    }
-    if (!exactFields(value, environmentEventFields)) return invalidStreamEvent();
-    const sessionId = eventSessionId(value, expectedSessionId, true)!;
-    const environment = projectEnvironmentState(value.environment, status);
+  // Every other projected event belongs to a Turn. The schema allows a null turn_id here,
+  // but Core always names the Turn and the client binds it to the Turn or Item it carries.
+  const turnId = requiredEventString(value, "turn_id");
+  if (hasOwn(turnStatusByEvent, event.type)) {
+    const turn = projectAgentTurn(value.turn, expectedSessionId, invalidStreamEvent);
     if (
-      immutable !== undefined &&
-      (immutable.environment.type === "none" ||
-        immutable.environment.type !== environment.type ||
-        !("id" in immutable.environment) ||
-        typeof immutable.environment.id !== "string" ||
-        !sameResourceId(immutable.environment.id, environment.id))
+      !sameResourceId(turn.id, turnId) || turn.status !== turnStatusByEvent[event.type] ||
+      (immutable !== undefined && !sameResourceId(turn.agent_id, immutable.agent.id))
     ) return invalidStreamEvent();
-    return { ...base, session_id: sessionId, environment } as SessionEvent;
+    const usage = hasOwn(value, "usage") ? { usage: projectTokenUsage(value.usage, invalidStreamEvent) } : {};
+    return { ...base, session_id: sessionId, turn_id: turnId, turn, ...usage } as SessionEvent;
   }
 
-  return projectUnknownStreamEvent(value, expectedSessionId);
+  if (event.type.startsWith("agent.session.turn.item.")) {
+    const item = projectSessionItem(value.item, invalidStreamEvent);
+    if (!sameResourceId(item.turn_id, turnId)) return invalidStreamEvent();
+    const outputIndex = value.output_index === null ? null : eventIndex(value, "output_index");
+    return { ...base, session_id: sessionId, turn_id: turnId, output_index: outputIndex, item } as SessionEvent;
+  }
+
+  const projectedFields: Record<string, unknown> = {
+    ...base,
+    session_id: sessionId,
+    turn_id: turnId,
+    item_id: requiredEventString(value, "item_id"),
+    output_index: eventIndex(value, "output_index"),
+  };
+  if (hasOwn(value, "content_index")) projectedFields.content_index = eventIndex(value, "content_index");
+  if (hasOwn(value, "part")) {
+    const part = projectItemContent(value.part, invalidStreamEvent);
+    if (part.type !== "output_text") return invalidStreamEvent();
+    projectedFields.part = part;
+  }
+  for (const field of ["delta", "text"] as const) {
+    if (hasOwn(value, field)) projectedFields[field] = requiredEventString(value, field, true);
+  }
+  return projectedFields as unknown as SessionEvent;
 }
 
 function projectUnknownStreamEvent(
@@ -1375,8 +1180,7 @@ function projectUnknownStreamEvent(
     type: value.type,
     event_id: value.event_id,
   };
-  const sessionId = eventSessionId(value, expectedSessionId, false);
-  if (sessionId !== undefined) projected.session_id = sessionId;
+  if (value.session_id !== undefined) projected.session_id = eventSessionId(value, expectedSessionId);
   for (const [field, fieldValue] of Object.entries(value)) {
     if (
       field === "type" || field === "event_id" || field === "session_id" ||
@@ -1412,7 +1216,7 @@ async function consumeEventStream(
     sawEvent = true;
     if (event.type === "error") {
       const raw = event as unknown as Record<string, unknown>;
-      if (!exactFields(raw, errorEventFields) || event.error === undefined) return invalidStreamEvent();
+      if (!exactFields(raw, sessionEventErrorFields)) return invalidStreamEvent();
       const sessionId = requiredEventString(raw, "session_id");
       const expectedSessionId = options.expectedSessionId?.();
       if (expectedSessionId !== undefined && !sameResourceId(sessionId, expectedSessionId)) {
@@ -1462,10 +1266,6 @@ async function consumeEventStream(
   }
 }
 
-function isEnvironmentResourceStatus(value: unknown): value is EnvironmentResourceStatus {
-  return value === "pending" || value === "connected" || value === "disconnected" || value === "expired" || value === "failed";
-}
-
 function isExpectedEnvironmentId(value: unknown, expectedId: string): value is string {
   if (typeof value !== "string") return false;
   const canonicalExpectedId = expectedId.toLowerCase();
@@ -1478,14 +1278,12 @@ function projectEnvironmentResource(value: unknown, expectedId: string): AgentEn
     throw new AgentCoreError("OpenAgentCore returned an invalid Environment resource.", 502, "invalid_environment_resource");
   }
   const resource = value as Record<string, unknown>;
-  const fields = Object.keys(resource);
   if (
-    fields.length !== environmentResourceFields.size ||
-    fields.some((field) => !environmentResourceFields.has(field)) ||
+    !exactFields(resource, publicEnvironmentResourceFields) ||
     !isExpectedEnvironmentId(resource.id, expectedId) ||
     resource.object !== "agent.environment" ||
     (resource.type !== "self_hosted" && resource.type !== "openai_hosted") ||
-    !isEnvironmentResourceStatus(resource.status) ||
+    !isOneOf(environmentStatusResourceValues, resource.status) ||
     !Array.isArray(resource.files) ||
     !Array.isArray(resource.plugins) ||
     !Array.isArray(resource.skills) ||
@@ -1572,24 +1370,18 @@ function validSourceFileId(value: unknown): value is string {
 export function projectSourceFile(value: unknown, expectedId?: string): SourceFile {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return invalidSourceFile();
   const file = value as Record<string, unknown>;
-  const fields = Object.keys(file);
-  const filenameBytes = typeof file.filename === "string"
-    ? new TextEncoder().encode(file.filename).length
-    : 0;
+  // The pinned File schema types expires_at and status_details as optional integer and string; Core sends null.
   if (
-    fields.length !== sourceFileFields.size ||
-    fields.some((field) => !sourceFileFields.has(field)) ||
+    !exactFields(file, openAIFileFields) ||
     !validSourceFileId(file.id) ||
     (expectedId !== undefined && file.id !== expectedId) ||
     file.object !== "file" ||
     !Number.isSafeInteger(file.bytes) ||
     Number(file.bytes) < 0 ||
-    Number(file.bytes) > maxSourceFileBytes ||
     !Number.isSafeInteger(file.created_at) ||
     Number(file.created_at) < 0 ||
     typeof file.filename !== "string" ||
-    filenameBytes < 1 ||
-    filenameBytes > 1024 ||
+    file.filename === "" ||
     file.filename.includes("\0") ||
     file.purpose !== "user_data" ||
     file.status !== "processed" ||
@@ -1612,10 +1404,8 @@ export function projectSourceFile(value: unknown, expectedId?: string): SourceFi
 export function projectSourceFileDeleted(value: unknown, expectedId: string): SourceFileDeleted {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return invalidSourceFile();
   const deleted = value as Record<string, unknown>;
-  const fields = Object.keys(deleted);
   if (
-    fields.length !== sourceFileDeletedFields.size ||
-    fields.some((field) => !sourceFileDeletedFields.has(field)) ||
+    !exactFields(deleted, deleteFileResponseFields) ||
     deleted.id !== expectedId ||
     deleted.object !== "file" ||
     deleted.deleted !== true
@@ -1644,7 +1434,7 @@ function projectSourceFileListEntry(value: unknown): SourceFileListEntry {
 
 function projectSourceFileList(value: unknown, options?: SourceFileListOptions): SourceFileList {
   if (
-    !isRecord(value) || !exactFields(value, sourceFileListFields) || value.object !== "list" ||
+    !isRecord(value) || !exactFields(value, listFilesResponseFields) || value.object !== "list" ||
     !Array.isArray(value.data) || typeof value.has_more !== "boolean"
   ) return invalidSourceFileList();
   const limit = options?.limit ?? maxSourceFileListLimit;
@@ -1680,17 +1470,14 @@ function projectEnvironmentFile(
     throw new AgentCoreError("OpenAgentCore returned an invalid Environment file.", 502, "invalid_environment_file");
   }
   const file = value as Record<string, unknown>;
-  const fields = Object.keys(file);
   if (
-    fields.length !== environmentFileFields.size ||
-    fields.some((field) => !environmentFileFields.has(field)) ||
+    !exactFields(file, environmentFileResourceFields) ||
     !isExpectedEnvironmentId(file.environment_id, expectedEnvironmentId) ||
     file.object !== "agent.environment.file" ||
     file.path !== expectedPath ||
     !validEnvironmentFilePath(file.path) ||
     !Number.isSafeInteger(file.size_bytes) ||
     Number(file.size_bytes) < 0 ||
-    Number(file.size_bytes) > maxEnvironmentFileBytes ||
     (expectedSize !== undefined && file.size_bytes !== expectedSize)
   ) {
     throw new AgentCoreError("OpenAgentCore returned an invalid Environment file.", 502, "invalid_environment_file");
@@ -1722,7 +1509,6 @@ function canonicalAbsoluteDirectory(value: unknown): string | null {
   if (
     typeof value !== "string" ||
     !value.startsWith("/") ||
-    new TextEncoder().encode(value).length > 4096 ||
     value.includes("\\") ||
     value.includes("\0") ||
     value.includes("\r") ||
@@ -1765,28 +1551,17 @@ function projectEnvironmentFileList(
     return invalidEnvironmentFiles();
   }
   const page = value as Record<string, unknown>;
-  const fields = Object.keys(page);
   const limit = options?.limit ?? 20;
   const order = options?.order ?? "desc";
   const requestedDirectory = canonicalEnvironmentFilesDirectory(options.path ?? "/workspace");
   if (
-    fields.length !== environmentFileListFields.size ||
-    fields.some((field) => !environmentFileListFields.has(field)) ||
+    !exactFields(page, environmentFileListResourceFields) ||
     page.object !== "page" ||
     page.has_more !== (page.next !== null) ||
     !Array.isArray(page.data) ||
-    !Number.isSafeInteger(limit) ||
-    limit < 1 ||
-    limit > 100 ||
     page.data.length > limit ||
-    (order !== "asc" && order !== "desc") ||
     requestedDirectory === null ||
-    !(page.next === null || (
-      typeof page.next === "string" &&
-      page.next.length > 0 &&
-      new TextEncoder().encode(page.next).length <= 1024 &&
-      page.data.length === limit
-    ))
+    !(page.next === null || (typeof page.next === "string" && page.next.length > 0 && page.data.length === limit))
   ) {
     return invalidEnvironmentFiles();
   }
@@ -1798,7 +1573,6 @@ function projectEnvironmentFileList(
       return invalidEnvironmentFiles();
     }
     const file = entry as Record<string, unknown>;
-    const fileFields = Object.keys(file);
     const canonicalPath = canonicalAbsoluteDirectory(file.path);
     const sorted = previousPath === null || (
       order === "asc"
@@ -1806,8 +1580,7 @@ function projectEnvironmentFileList(
         : compareUtf8(previousPath, String(file.path)) > 0
     );
     if (
-      fileFields.length !== environmentFileFields.size ||
-      fileFields.some((field) => !environmentFileFields.has(field)) ||
+      !exactFields(file, environmentFileResourceFields) ||
       !isExpectedEnvironmentId(file.environment_id, expectedId) ||
       file.object !== "agent.environment.file" ||
       canonicalPath === null ||
@@ -1975,7 +1748,7 @@ export class OpenAIAgentsClient implements AgentCore {
 
   async deleteVault(vaultId: string): Promise<VaultDeleted> {
     const value = await this.request<unknown>(`/vaults/${encodeURIComponent(vaultId)}`, { method: "DELETE" }, 200);
-    return projectDeletedResource<VaultDeleted>(value, vaultId, "vault.deleted", vaultDeletedFields, "invalid_vault_deletion");
+    return projectDeletedResource<VaultDeleted>(value, vaultId, "vault.deleted", deletedVaultResourceFields, "invalid_vault_deletion");
   }
 
   async listVaultCredentials(vaultId: string, options?: VaultListOptions): Promise<VaultCredentialList> {
@@ -1990,12 +1763,9 @@ export class OpenAIAgentsClient implements AgentCore {
   }
 
   async createVaultCredential(vaultId: string, input: CreateVaultCredentialInput): Promise<VaultCredential> {
-    const fields = Object.keys(input);
-    const authFields = isRecord(input.auth) ? Object.keys(input.auth) : [];
     if (
-      fields.length !== 2 || fields.some((field) => field !== "name" && field !== "auth") ||
-      !isTrimmedName(input.name) || !isRecord(input.auth) ||
-      authFields.length !== 3 || authFields.some((field) => field !== "type" && field !== "mcp_server_url" && field !== "token") ||
+      !exactFields(input, createVaultCredentialParamsFields) || !isTrimmedName(input.name) ||
+      !isRecord(input.auth) || !exactFields(input.auth, createVaultCredentialAuthParamStaticBearerFields) ||
       input.auth.type !== "static_bearer" || !validCredentialURL(input.auth.mcp_server_url) || typeof input.auth.token !== "string"
     ) {
       throw new TypeError("Credential creation requires a name, an HTTPS MCP URL, and a write-only token.");
@@ -2031,11 +1801,9 @@ export class OpenAIAgentsClient implements AgentCore {
     credentialId: string,
     input: ReplaceVaultCredentialTokenInput,
   ): Promise<VaultCredential> {
-    const fields = Object.keys(input);
-    const authFields = isRecord(input.auth) ? Object.keys(input.auth) : [];
     if (
-      fields.length !== 1 || fields[0] !== "auth" || !isRecord(input.auth) ||
-      authFields.length !== 2 || authFields.some((field) => field !== "type" && field !== "token") ||
+      !exactFields(input, rotateVaultCredentialParamsFields) || !isRecord(input.auth) ||
+      !exactFields(input.auth, rotateVaultCredentialAuthParamStaticBearerFields) ||
       input.auth.type !== "static_bearer" || typeof input.auth.token !== "string"
     ) {
       throw new TypeError("Credential replacement accepts one write-only static bearer token.");
@@ -2072,7 +1840,7 @@ export class OpenAIAgentsClient implements AgentCore {
       value,
       credentialId,
       "vault.credential.deleted",
-      vaultCredentialDeletedFields,
+      deletedVaultCredentialResourceFields,
       "invalid_vault_credential_deletion",
     );
   }
@@ -2172,12 +1940,6 @@ export class OpenAIAgentsClient implements AgentCore {
   }
 
   async listEnvironmentTemplates(options?: PageOptions & ReadOptions): Promise<EnvironmentTemplateList> {
-    if (options?.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100)) {
-      throw new TypeError("Environment Template list limit must be an integer from 1 through 100.");
-    }
-    if (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") {
-      throw new TypeError("Environment Template list order must be asc or desc.");
-    }
     const params = new URLSearchParams();
     addPageOptions(params, options);
     const value = await this.request<unknown>(
@@ -2252,7 +2014,7 @@ export class OpenAIAgentsClient implements AgentCore {
       200,
     );
     if (
-      !isRecord(value) || !exactFields(value, environmentTemplateDeletedFields) ||
+      !isRecord(value) || !exactFields(value, deletedEnvironmentTemplateResourceFields) ||
       !sameUuid(value.id, templateId) ||
       value.object !== "agent.environment.template.deleted" || value.deleted !== true
     ) {
@@ -2290,24 +2052,16 @@ export class OpenAIAgentsClient implements AgentCore {
     if (!validEnvironmentFilePath(input.path)) {
       throw new TypeError("Environment file paths must be canonical absolute paths beneath /workspace.");
     }
-    const fields = Object.keys(input);
     let expectedSize: number | undefined;
     if (input.type === "inline") {
-      if (fields.length !== 3 || fields.some((field) => field !== "type" && field !== "data" && field !== "path")) {
+      if (!exactFields(input, hostedEnvironmentFileParamInlineFields)) {
         throw new TypeError("Inline Environment files accept only type, data, and path.");
       }
       const decodedBytes = strictBase64DecodedBytes(input.data);
       if (decodedBytes === null) throw new TypeError("Inline Environment file data must be strict standard Base64.");
-      if (decodedBytes > maxInlineEnvironmentFileBytes) {
-        throw new TypeError("Inline Environment file data must decode to at most 5 MiB.");
-      }
       expectedSize = decodedBytes;
     } else if (input.type === "file_id") {
-      if (
-        fields.length !== 3 ||
-        fields.some((field) => field !== "type" && field !== "file_id" && field !== "path") ||
-        !validSourceFileId(input.file_id)
-      ) {
+      if (!exactFields(input, hostedEnvironmentFileParamFileIdFields) || !validSourceFileId(input.file_id)) {
         throw new TypeError("Referenced Environment files require an exact Source File ID.");
       }
     } else {
@@ -2326,18 +2080,6 @@ export class OpenAIAgentsClient implements AgentCore {
     if (options?.after !== undefined && !validSourceFileId(options.after)) {
       throw new TypeError("A Files list cursor must be a File ID.");
     }
-    if (
-      options?.limit !== undefined &&
-      (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > maxSourceFileListLimit)
-    ) {
-      throw new TypeError("Files list limit must be an integer from 1 through 10000.");
-    }
-    if (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") {
-      throw new TypeError("Files list order must be asc or desc.");
-    }
-    if (options?.purpose !== undefined && options.purpose !== "user_data") {
-      throw new TypeError("Files list purpose must be user_data.");
-    }
     const params = new URLSearchParams();
     addPageOptions(params, options);
     if (options?.purpose !== undefined) params.set("purpose", options.purpose);
@@ -2346,17 +2088,8 @@ export class OpenAIAgentsClient implements AgentCore {
   }
 
   async uploadSourceFile(input: SourceFileUploadInput, options?: ReadOptions): Promise<SourceFile> {
-    const filenameBytes = new TextEncoder().encode(input.filename).length;
-    if (
-      !(input.file instanceof Blob) ||
-      !Number.isSafeInteger(input.file.size) ||
-      input.file.size < 0 ||
-      input.file.size > maxSourceFileBytes ||
-      filenameBytes < 1 ||
-      filenameBytes > 1024 ||
-      input.filename.includes("\0")
-    ) {
-      throw new TypeError("Source Files require a valid filename and at most 512 MiB of content.");
+    if (!(input.file instanceof Blob) || input.filename === "" || input.filename.includes("\0")) {
+      throw new TypeError("Source Files require a Blob and a nonempty filename without NUL characters.");
     }
     const body = new FormData();
     body.append("file", input.file, input.filename);
@@ -2590,7 +2323,6 @@ export class OpenAIAgentsClient implements AgentCore {
   }
 
   async listItems(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<SessionItem>> {
-    validateHistoryPageOptions(options);
     const params = new URLSearchParams();
     addPageOptions(params, options);
     const value = await this.request<unknown>(withQuery(`/agents/sessions/${encodeURIComponent(sessionId)}/items`, params), {
@@ -2600,7 +2332,6 @@ export class OpenAIAgentsClient implements AgentCore {
   }
 
   async listTurns(sessionId: string, options?: PageOptions & ReadOptions): Promise<ListPage<AgentTurn>> {
-    validateHistoryPageOptions(options);
     const params = new URLSearchParams();
     addPageOptions(params, options);
     const value = await this.request<unknown>(withQuery(`/agents/sessions/${encodeURIComponent(sessionId)}/turns`, params), {
@@ -2622,7 +2353,6 @@ export class OpenAIAgentsClient implements AgentCore {
     events: readonly SessionInputEvent[],
     idempotencyKey: string,
   ): Promise<void> {
-    requireIdempotencyKey(idempotencyKey);
     const body = encodeSessionInputBatch(events);
     return this.request<void>(
       `/agents/sessions/${encodeURIComponent(sessionId)}/events`,
@@ -2662,9 +2392,6 @@ export class OpenAIAgentsClient implements AgentCore {
    * such as one after cancellation or one that differs from the saved result,
    * with HTTP 409 `conflict_error`. A call that is unknown or belongs to another
    * Turn of the Session is HTTP 400 `invalid_request_error`; nothing changes.
-   * Cores before these codes used 409 `turn_conflict`/`idempotency_conflict`
-   * and 404 for unknown targets: treat any 409 as a conflict, and 400 (new) or
-   * 404 (older, within an owned Session) as an unknown target.
    */
   submitFunctionResult(sessionId: string, input: FunctionResultInput, idempotencyKey: string): Promise<void> {
     const event: SessionToolResultInputEvent = {

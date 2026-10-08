@@ -12,6 +12,11 @@ import type {
   UpdateEnvironmentTemplateInput,
 } from "./types";
 import { canonicalUuid, exactFields, hasOwn, isNonnegativeInteger, isRecord, onlyFields } from "./response-projection";
+import {
+  environmentPackagesResourceFields, environmentTemplateResourceFields, hostedPluginResourceInlineFields,
+  hostedTemplateFileResourceFileIdFields, hostedTemplateFileResourceInlineFields, hostedTemplateSkillResourceInlineFields,
+  hostedTemplateSkillResourceSkillReferenceFields, networkPolicyResourceFields,
+} from "./generated/public-api";
 
 type Invalid = (message?: string) => never;
 
@@ -19,26 +24,15 @@ const identityFields = ["id", "object", "name", "created_at", "updated_at"] as c
 const templateSections: readonly EnvironmentTemplateSection[] = [
   "network", "capability_directories", "packages", "files", "plugins", "skills",
 ];
-const knownTemplateFields = new Set<string>([...identityFields, ...templateSections]);
-const networkFields = new Set(["access", "allowed_domains"]);
-const packagesFields = new Set(["npm", "python", "system"]);
-const inlineFileFields = new Set(["type", "path", "size_bytes"]);
-const referencedFileFields = new Set(["type", "path", "file_id"]);
-const skillReferenceFields = new Set(["type", "skill_id", "version"]);
-const inlineCapabilityFields = new Set(["type", "name", "description"]);
 const canonicalUuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Skill IDs are `skill_` plus Core's resource identifier.
 const skillIdPattern = /^skill_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const skillVersionPattern = /^[1-9][0-9]{0,18}$/;
 const controlCharacterPattern = /[\u0000-\u001f\u007f]/;
-// Core accepts 1–100 exact hostnames for restricted access.
-const maxAllowedDomains = 100;
 
-/** Core preserves a Template name verbatim within a 1–256 Unicode character bound. */
+/** Core preserves a nonempty Template name verbatim and enforces its length bound. */
 export function isEnvironmentTemplateName(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  const characters = [...value].length;
-  return characters >= 1 && characters <= 256;
+  return typeof value === "string" && value !== "";
 }
 
 /** True when every configuration section of a Template was recognized. */
@@ -63,20 +57,20 @@ function stringList(value: unknown, valid: (entry: unknown) => entry is string =
 }
 
 function projectNetwork(value: unknown): EnvironmentNetworkPolicy | null {
-  if (!isRecord(value) || !exactFields(value, networkFields)) return null;
+  if (!isRecord(value) || !exactFields(value, networkPolicyResourceFields)) return null;
   const domains = stringList(value.allowed_domains, isText);
   if (domains === null) return null;
   if (value.access === "enabled" || value.access === "disabled") {
     return domains.length === 0 ? { access: value.access, allowed_domains: [] } : null;
   }
   if (value.access === "restricted") {
-    return domains.length >= 1 && domains.length <= maxAllowedDomains ? { access: "restricted", allowed_domains: domains } : null;
+    return domains.length > 0 ? { access: "restricted", allowed_domains: domains } : null;
   }
   return null;
 }
 
 function projectPackages(value: unknown): AgentEnvironmentPackages | null {
-  if (!isRecord(value) || !exactFields(value, packagesFields)) return null;
+  if (!isRecord(value) || !exactFields(value, environmentPackagesResourceFields)) return null;
   const npm = stringList(value.npm, isText);
   const python = stringList(value.python, isText);
   const system = stringList(value.system, isText);
@@ -95,12 +89,12 @@ function projectEntries<T>(value: unknown, project: (entry: Record<string, unkno
 }
 
 function projectFile(entry: Record<string, unknown>): EnvironmentTemplateFile | null {
-  if (entry.type === "inline" && exactFields(entry, inlineFileFields)) {
+  if (entry.type === "inline" && exactFields(entry, hostedTemplateFileResourceInlineFields)) {
     return isWorkspacePath(entry.path) && isNonnegativeInteger(entry.size_bytes)
       ? { type: "inline", path: entry.path, size_bytes: entry.size_bytes }
       : null;
   }
-  if (entry.type === "file_id" && exactFields(entry, referencedFileFields)) {
+  if (entry.type === "file_id" && exactFields(entry, hostedTemplateFileResourceFileIdFields)) {
     return isWorkspacePath(entry.path) && isText(entry.file_id)
       ? { type: "file_id", path: entry.path, file_id: entry.file_id }
       : null;
@@ -109,14 +103,14 @@ function projectFile(entry: Record<string, unknown>): EnvironmentTemplateFile | 
 }
 
 function projectSkill(entry: Record<string, unknown>): EnvironmentTemplateSkill | null {
-  if (entry.type === "skill_reference" && exactFields(entry, skillReferenceFields)) {
+  if (entry.type === "skill_reference" && exactFields(entry, hostedTemplateSkillResourceSkillReferenceFields)) {
     const version = entry.version;
     return typeof entry.skill_id === "string" && skillIdPattern.test(entry.skill_id) &&
       (version === null || version === "latest" || (typeof version === "string" && skillVersionPattern.test(version)))
       ? { type: "skill_reference", skill_id: entry.skill_id, version }
       : null;
   }
-  if (entry.type === "inline" && exactFields(entry, inlineCapabilityFields)) {
+  if (entry.type === "inline" && exactFields(entry, hostedTemplateSkillResourceInlineFields)) {
     return typeof entry.name === "string" && entry.name.length > 0 && typeof entry.description === "string" && entry.description.length > 0
       ? { type: "inline", name: entry.name, description: entry.description }
       : null;
@@ -125,7 +119,7 @@ function projectSkill(entry: Record<string, unknown>): EnvironmentTemplateSkill 
 }
 
 function projectPlugin(entry: Record<string, unknown>): EnvironmentTemplatePlugin | null {
-  return entry.type === "inline" && exactFields(entry, inlineCapabilityFields) &&
+  return entry.type === "inline" && exactFields(entry, hostedPluginResourceInlineFields) &&
     typeof entry.name === "string" && entry.name.length > 0 &&
     typeof entry.description === "string" && entry.description.length > 0
     ? { type: "inline", name: entry.name, description: entry.description }
@@ -171,7 +165,7 @@ export function projectEnvironmentTemplate(
     else (configuration as Record<string, unknown>)[section] = projected;
   }
   for (const field of Object.keys(value)) {
-    if (!knownTemplateFields.has(field)) unrecognized.push(field);
+    if (!(environmentTemplateResourceFields as readonly string[]).includes(field)) unrecognized.push(field);
   }
   const identity = {
     id: value.id,
@@ -184,7 +178,7 @@ export function projectEnvironmentTemplate(
   return { ...identity, ...configuration, unrecognized };
 }
 
-/** Validates a create or update body: only name and network are ever sent. */
+/** Validates a create or update body: the client supports only the name and network of the schema's Template fields. */
 export function environmentTemplateRequestBody(
   input: CreateEnvironmentTemplateInput | UpdateEnvironmentTemplateInput,
 ): string {
@@ -192,13 +186,13 @@ export function environmentTemplateRequestBody(
     throw new TypeError("Environment Template requests accept only name and network.");
   }
   if (hasOwn(input, "name") && !(input.name === null || isEnvironmentTemplateName(input.name))) {
-    throw new TypeError("An Environment Template name must be null or 1 through 256 characters.");
+    throw new TypeError("An Environment Template name must be null or a nonempty string.");
   }
   if (hasOwn(input, "network") && input.network !== null) {
     const network: unknown = input.network;
     const basic = isRecord(network) && exactFields(network, new Set(["access"])) &&
       (network.access === "enabled" || network.access === "disabled");
-    const restricted = isRecord(network) && exactFields(network, networkFields) && network.access === "restricted" &&
+    const restricted = isRecord(network) && exactFields(network, networkPolicyResourceFields) && network.access === "restricted" &&
       Array.isArray(network.allowed_domains) && network.allowed_domains.every((domain) => typeof domain === "string");
     if (!basic && !restricted) {
       throw new TypeError("An Environment Template network accepts enabled or disabled access, or restricted access with a domain list.");

@@ -106,7 +106,7 @@ func TestEnvironmentConnectionOrdersGenerationsAndImmutableEvents(t *testing.T) 
 		if err := json.Unmarshal(raw, &wire); err != nil {
 			t.Fatal(err)
 		}
-		if len(wire) != 4 {
+		if len(wire) != 5 || string(wire["turn_id"]) != "null" {
 			t.Fatal("private observation fields escaped", string(raw))
 		}
 		var state map[string]json.RawMessage
