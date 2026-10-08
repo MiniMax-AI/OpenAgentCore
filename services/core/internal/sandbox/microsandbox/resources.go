@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -14,7 +15,7 @@ import (
 // one-shot helper. The persisted compute receipt selects the exact generation;
 // browser input and provider display names never select a sandbox.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
-	if target.Mode != runtimeobs.ModeManaged || target.Instance.AllocationID == "" {
+	if target.Mode != v1.RuntimeModeManaged || target.Instance.AllocationID == "" {
 		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
 	if target.Instance.ProviderKey != p.config.InstallationID {

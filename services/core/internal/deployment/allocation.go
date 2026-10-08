@@ -12,7 +12,7 @@ type Allocation struct {
 	DeploymentGeneration uint64
 	// NodeID is empty for an allocation no node serves.
 	NodeID               string
-	ObservationError     string
+	ObservationError     AllocationDiagnostic
 	ComputePhase         string
 	ComputeRevision      int64
 	ComputeState         json.RawMessage
@@ -128,27 +128,33 @@ type LifecyclePlacement struct {
 
 // NodeAllocation is an unreleased allocation a node serves.
 type NodeAllocation struct {
-	DeploymentGeneration uint64 `json:"deployment_generation" binding:"required"`
-	Diagnostic           string `json:"diagnostic" enums:",node_unavailable,resource_missing,compute_unconfirmed,ownership_mismatch,provider_unavailable" binding:"required"`
-	ID                   string `json:"id" binding:"required"`
-	NodeID               string `json:"node_id" binding:"required"`
-	TenantID             string `json:"tenant_id" binding:"required"`
-	SessionID            string `json:"session_id" binding:"required"`
-	EnvironmentID        string `json:"environment_id" binding:"required"`
-	State                string `json:"state" binding:"required"`
-	ComputePhase         string `json:"compute_phase" binding:"required"`
+	DeploymentGeneration uint64               `json:"deployment_generation" binding:"required"`
+	Diagnostic           AllocationDiagnostic `json:"diagnostic" binding:"required"`
+	ID                   string               `json:"id" binding:"required"`
+	NodeID               string               `json:"node_id" binding:"required"`
+	TenantID             string               `json:"tenant_id" binding:"required"`
+	SessionID            string               `json:"session_id" binding:"required"`
+	EnvironmentID        string               `json:"environment_id" binding:"required"`
+	State                string               `json:"state" binding:"required"`
+	ComputePhase         string               `json:"compute_phase" binding:"required"`
 	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
 	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable" binding:"required"`
 	Initialization        string     `json:"initialization" binding:"required"`
 	CreatedAt             time.Time  `json:"created_at" binding:"required"`
 }
 
-// observationDiagnostics are the diagnostics an observation records; empty
-// clears the previous one.
-var observationDiagnostics = map[string]bool{
-	"": true, "node_unavailable": true, "resource_missing": true,
-	"compute_unconfirmed": true, "ownership_mismatch": true, "provider_unavailable": true,
-}
+// AllocationDiagnostic is the sanitized result of a node-backed observation.
+// The empty value clears the previous diagnostic.
+type AllocationDiagnostic string
+
+const (
+	AllocationObserved            AllocationDiagnostic = ""
+	AllocationNodeUnavailable     AllocationDiagnostic = "node_unavailable"
+	AllocationResourceMissing     AllocationDiagnostic = "resource_missing"
+	AllocationComputeUnconfirmed  AllocationDiagnostic = "compute_unconfirmed"
+	AllocationOwnershipMismatch   AllocationDiagnostic = "ownership_mismatch"
+	AllocationProviderUnavailable AllocationDiagnostic = "provider_unavailable"
+)
 
 // computeTransition reports whether managed compute may move from one phase
 // to another. Repeating a phase records a new state, except while disabled.

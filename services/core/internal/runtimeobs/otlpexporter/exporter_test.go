@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	collectorv1 "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
 	"google.golang.org/protobuf/proto"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
 
 type captureClient struct {
@@ -41,7 +41,7 @@ func observedRecord() runtimeobs.ExportRecord {
 	memoryUsage, memoryLimit := uint64(1024), uint64(2048)
 	return runtimeobs.ExportRecord{
 		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", AllocationID: "allocation",
-		Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved,
+		Mode: v1.RuntimeModeManaged, ProviderType: "docker", Status: v1.RuntimeStatusObserved,
 		CollectionSource: runtimeobs.CollectionSourceOnRead,
 		ResolvedAt:       observedAt, SourceDuration: 50 * time.Millisecond,
 		Sample: &runtimeobs.Sample{
@@ -110,7 +110,7 @@ func TestExporterPreservesUnavailableWithoutInventingResourceValues(t *testing.T
 	exporter := newWithClient(client)
 	record := runtimeobs.ExportRecord{
 		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", AllocationID: "allocation",
-		Mode: runtimeobs.ModeManaged, Status: runtimeobs.StatusUnavailable, Reason: "sample_timeout",
+		Mode: v1.RuntimeModeManaged, Status: v1.RuntimeStatusUnavailable, Reason: "sample_timeout",
 		CollectionSource: runtimeobs.CollectionSourcePeriodic,
 		ResolvedAt:       time.Date(2026, 9, 23, 3, 0, 0, 0, time.UTC),
 	}
@@ -128,7 +128,7 @@ func TestExporterEmitsCanonicalSessionTokenGaugesWithoutProviderValues(t *testin
 	exporter := newWithClient(client)
 	record := runtimeobs.ExportRecord{
 		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
-		Mode: runtimeobs.ModeManaged, Status: runtimeobs.StatusUnavailable, Reason: "sample_timeout",
+		Mode: v1.RuntimeModeManaged, Status: v1.RuntimeStatusUnavailable, Reason: "sample_timeout",
 		CollectionSource: runtimeobs.CollectionSourcePeriodic,
 		ResolvedAt:       time.Date(2026, 9, 23, 3, 0, 0, 0, time.UTC),
 		TokenUsage:       &runtimeobs.TokenUsage{InputTokens: 120, OutputTokens: 30},

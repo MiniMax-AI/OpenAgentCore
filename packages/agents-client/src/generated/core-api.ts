@@ -31,9 +31,9 @@ export interface AdminRuntimeObservationDetail {
   environment_id: string | null;
   id: string;
   instance: RuntimeInstance;
-  lifecycle_state: AdminRuntimeObservationDetailLifecycleState | null;
+  lifecycle_state: RuntimeObservationLifecycleState | null;
   memory: RuntimeMemoryObservation | null;
-  mode: AdminRuntimeObservationDetailMode;
+  mode: RuntimeObservationMode;
   object: "agent.runtime_observation";
   observed_at: number | null;
   provider_type: string | null;
@@ -41,15 +41,9 @@ export interface AdminRuntimeObservationDetail {
   resolved_at: number;
   session_id: string;
   started_at: number | null;
-  status: AdminRuntimeObservationDetailStatus;
+  status: RuntimeObservationStatus;
 }
 export const adminRuntimeObservationDetailFields = ["allocation_created_at", "cpu", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
-export const adminRuntimeObservationDetailLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
-export type AdminRuntimeObservationDetailLifecycleState = (typeof adminRuntimeObservationDetailLifecycleStateValues)[number];
-export const adminRuntimeObservationDetailModeValues = ["none", "self_hosted", "openai_hosted"] as const;
-export type AdminRuntimeObservationDetailMode = (typeof adminRuntimeObservationDetailModeValues)[number];
-export const adminRuntimeObservationDetailStatusValues = ["observed", "unsupported", "unavailable"] as const;
-export type AdminRuntimeObservationDetailStatus = (typeof adminRuntimeObservationDetailStatusValues)[number];
 export interface AdminRuntimeObservationList {
   data: AdminRuntimeObservation[];
   first_id: string | null;
@@ -112,6 +106,8 @@ export interface AdminauditPage {
   next_cursor: string;
 }
 export const adminauditPageFields = ["data", "has_more", "next_cursor"] as const;
+export const allocationDiagnosticValues = ["", "node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable"] as const;
+export type AllocationDiagnostic = (typeof allocationDiagnosticValues)[number];
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
@@ -429,7 +425,7 @@ export interface NodeAllocation {
   compute_phase_changed_at: string | null;
   created_at: string;
   deployment_generation: number;
-  diagnostic: NodeAllocationDiagnostic;
+  diagnostic: AllocationDiagnostic;
   environment_id: string;
   id: string;
   initialization: string;
@@ -439,8 +435,6 @@ export interface NodeAllocation {
   tenant_id: string;
 }
 export const nodeAllocationFields = ["compute_phase", "compute_phase_changed_at", "created_at", "deployment_generation", "diagnostic", "environment_id", "id", "initialization", "node_id", "session_id", "state", "tenant_id"] as const;
-export const nodeAllocationDiagnosticValues = ["", "node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable"] as const;
-export type NodeAllocationDiagnostic = (typeof nodeAllocationDiagnosticValues)[number];
 export interface NodeDetail {
   active: number;
   available_disk_bytes: number | null;

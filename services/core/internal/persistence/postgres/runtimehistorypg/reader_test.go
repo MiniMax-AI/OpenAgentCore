@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
@@ -21,7 +22,7 @@ const (
 func testCapabilities() runtimehistory.Capabilities {
 	return runtimehistory.Capabilities{
 		SampleInterval: 30 * time.Second,
-		Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour,
+		Retention:      7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour,
 		MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory},
 	}
@@ -76,7 +77,7 @@ func observedRecord(at, started time.Time, cpu float64) runtimeobs.ExportRecord 
 	capacity := 2.0
 	memory := uint64(123)
 	return runtimeobs.ExportRecord{TenantID: testTenant, SessionID: testSession, EnvironmentID: testEnvironment, AllocationID: testAllocation,
-		Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic,
+		Mode: v1.RuntimeModeManaged, ProviderType: "docker", Status: v1.RuntimeStatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic,
 		ResolvedAt: at, Sample: &runtimeobs.Sample{ObservedAt: at, StartedAt: &started, CPUUsageSecondsTotal: &cpu, CPUCapacityCores: &capacity, MemoryUsageBytes: &memory},
 		TokenUsage: &runtimeobs.TokenUsage{InputTokens: 12, OutputTokens: 3}}
 }
@@ -151,7 +152,7 @@ func TestExporterPersistsOnlyPeriodicAndPreservesUnknownMetrics(t *testing.T) {
 		t.Fatal(s.written)
 	}
 	record.Sample = nil
-	record.Status = runtimeobs.StatusUnavailable
+	record.Status = v1.RuntimeStatusUnavailable
 	if err := r.Export(t.Context(), record); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +200,7 @@ func TestUnavailableObservationBreaksCPUContinuity(t *testing.T) {
 	started := start.Add(-time.Hour)
 	unavailable := observedRecord(start.Add(20*time.Second), started, 0)
 	unavailable.Sample = nil
-	unavailable.Status = runtimeobs.StatusUnavailable
+	unavailable.Status = v1.RuntimeStatusUnavailable
 	s := &fakeStore{records: []runtimeobs.ExportRecord{observedRecord(start.Add(5*time.Second), started, 1), unavailable, observedRecord(start.Add(35*time.Second), started, 100)}}
 	r := testReader(t, s, start.Add(time.Minute))
 	result, err := r.Query(t.Context(), testQuery(start))

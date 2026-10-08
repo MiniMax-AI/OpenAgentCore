@@ -3,6 +3,8 @@ package runtimeobs
 import (
 	"encoding/json"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 // Instance is one provider-owned Runtime incarnation. AllocationID is present
@@ -24,7 +26,7 @@ type Instance struct {
 // process or sandbox, so callers must retain the complete binding.
 type Target struct {
 	TenantID, SessionID, EnvironmentID string
-	Mode                               Mode
+	Mode                               v1.RuntimeObservationMode
 	Instance                           Instance
 	// TokenUsage is the latest measured Core Session usage: every recorded
 	// root Turn snapshot, active Turns included. Unlike public Session usage it

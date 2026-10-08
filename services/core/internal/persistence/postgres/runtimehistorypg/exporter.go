@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/google/uuid"
 )
@@ -51,13 +52,13 @@ func validateRecord(record runtimeobs.ExportRecord) error {
 	if record.AllocationID != "" && !validID(record.AllocationID) {
 		return invalid
 	}
-	if record.Mode != runtimeobs.ModeManaged || record.CollectionSource != runtimeobs.CollectionSourcePeriodic || !validTime(record.ResolvedAt) || record.ProviderType != "" && !providerPattern.MatchString(record.ProviderType) {
+	if record.Mode != v1.RuntimeModeManaged || record.CollectionSource != runtimeobs.CollectionSourcePeriodic || !validTime(record.ResolvedAt) || record.ProviderType != "" && !providerPattern.MatchString(record.ProviderType) {
 		return invalid
 	}
-	if record.Status != runtimeobs.StatusObserved && record.Status != runtimeobs.StatusUnavailable && record.Status != runtimeobs.StatusUnsupported {
+	if record.Status != v1.RuntimeStatusObserved && record.Status != v1.RuntimeStatusUnavailable && record.Status != v1.RuntimeStatusUnsupported {
 		return invalid
 	}
-	if (record.Status == runtimeobs.StatusObserved) != (record.Sample != nil) {
+	if (record.Status == v1.RuntimeStatusObserved) != (record.Sample != nil) {
 		return invalid
 	}
 	if value := record.Sample; value != nil {

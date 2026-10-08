@@ -8,22 +8,6 @@ import (
 	"time"
 )
 
-type Mode string
-
-const (
-	ModeNone       Mode = "none"
-	ModeSelfHosted Mode = "self_hosted"
-	ModeManaged    Mode = "openai_hosted"
-)
-
-type Status string
-
-const (
-	StatusObserved    Status = "observed"
-	StatusUnsupported Status = "unsupported"
-	StatusUnavailable Status = "unavailable"
-)
-
 // Sample contains provider-neutral cumulative counters and current gauges.
 // Pointer fields distinguish an observed zero from an unavailable measurement.
 type Sample struct {

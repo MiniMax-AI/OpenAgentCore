@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -83,8 +84,8 @@ func (s samples) ListRuntimeHistorySamples(ctx context.Context, tenantID, sessio
 	for _, row := range rows {
 		record := runtimeobs.ExportRecord{
 			TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID,
-			Mode: runtimeobs.ModeManaged, CollectionSource: runtimeobs.CollectionSourcePeriodic,
-			ResolvedAt: time.Unix(0, row.ResolvedAtNs).UTC(), ProviderType: row.ProviderType, Status: runtimeobs.Status(row.Status),
+			Mode: v1.RuntimeModeManaged, CollectionSource: runtimeobs.CollectionSourcePeriodic,
+			ResolvedAt: time.Unix(0, row.ResolvedAtNs).UTC(), ProviderType: row.ProviderType, Status: v1.RuntimeObservationStatus(row.Status),
 		}
 		if row.AllocationID.Valid {
 			record.AllocationID = uuid.UUID(row.AllocationID.Bytes).String()

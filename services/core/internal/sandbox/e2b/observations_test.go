@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
 
@@ -16,7 +17,7 @@ func TestObserveMapsMetricsAndKeepsUnmeasuredValuesNull(t *testing.T) {
 	count, percent, memoryUsed, memoryTotal, diskUsed, diskTotal := 2.0, 19.55, uint64(183836672), uint64(2079141888), uint64(1593188352), uint64(23511863296)
 	caller.response.Observation = &Observation{Status: "observed", ObservedAt: &observed, StartedAt: &started, CPUCount: &count, CPUUsedPct: &percent,
 		MemUsed: &memoryUsed, MemTotal: &memoryTotal, DiskUsed: &diskUsed, DiskTotal: &diskTotal}
-	target := runtimeobs.Target{TenantID: running.TenantID, EnvironmentID: running.EnvironmentID, Mode: runtimeobs.ModeManaged,
+	target := runtimeobs.Target{TenantID: running.TenantID, EnvironmentID: running.EnvironmentID, Mode: v1.RuntimeModeManaged,
 		Instance: runtimeobs.Instance{AllocationID: running.AllocationID, ProviderKey: p.config.InstallationID}}
 	sample, err := p.Observe(bounded(t), target)
 	if err != nil || len(caller.requests) != 1 || caller.requests[0].Operation != "observe" ||

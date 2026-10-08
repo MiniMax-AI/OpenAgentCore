@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -65,8 +66,8 @@ func TestAdminRuntimeRoutesRejectHead(t *testing.T) {
 
 func unsupportedObservation(session string, at time.Time) runtimeobs.Observation {
 	return runtimeobs.Observation{
-		Target: runtimeobs.Target{SessionID: session, Mode: runtimeobs.ModeNone},
-		Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: at,
+		Target: runtimeobs.Target{SessionID: session, Mode: v1.RuntimeModeNone},
+		Status: v1.RuntimeStatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: at,
 	}
 }
 
@@ -130,7 +131,7 @@ func TestAdminRuntimeObservationListRejectsWholePageOnIntegrityFailure(t *testin
 	valid, invalid := uuid.NewString(), uuid.NewString()
 	service := runtimeObservationServiceFunc(func(_ context.Context, _, session string) (runtimeobs.Observation, error) {
 		if session == invalid {
-			return runtimeobs.Observation{Target: runtimeobs.Target{Mode: runtimeobs.ModeNone}, Status: runtimeobs.StatusUnsupported, ResolvedAt: now}, nil
+			return runtimeobs.Observation{Target: runtimeobs.Target{Mode: v1.RuntimeModeNone}, Status: v1.RuntimeStatusUnsupported, ResolvedAt: now}, nil
 		}
 		return unsupportedObservation(session, now), nil
 	})

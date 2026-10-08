@@ -119,7 +119,7 @@ type AllocationTx interface {
 	SetCompute(current Allocation, change ComputeChange) (Allocation, error)
 	// RecordObservation records the diagnostic for current's compute
 	// revision and state. It changes nothing once either moved on.
-	RecordObservation(current Allocation, diagnostic string) error
+	RecordObservation(current Allocation, diagnostic AllocationDiagnostic) error
 }
 
 // AllocationCleanupTx is one Session-locked allocation cleanup.

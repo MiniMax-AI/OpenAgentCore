@@ -5,6 +5,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 const (
@@ -22,9 +24,9 @@ type ExportRecord struct {
 	EnvironmentID string
 	AllocationID  string
 
-	Mode             Mode
+	Mode             v1.RuntimeObservationMode
 	ProviderType     string
-	Status           Status
+	Status           v1.RuntimeObservationStatus
 	Reason           string
 	CollectionSource CollectionSource
 

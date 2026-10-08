@@ -10,10 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 type fakeReservationTx struct {
@@ -108,7 +107,7 @@ func (f *fakeAllocationTx) SetCompute(Allocation, ComputeChange) (Allocation, er
 	return Allocation{}, nil
 }
 
-func (f *fakeAllocationTx) RecordObservation(Allocation, string) error {
+func (f *fakeAllocationTx) RecordObservation(Allocation, AllocationDiagnostic) error {
 	unexpected(f.t, "RecordObservation")
 	return nil
 }

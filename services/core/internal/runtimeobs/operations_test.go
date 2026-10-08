@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 )
 
@@ -17,13 +18,13 @@ func (*unsupportedObservation) ProviderOperations() providercontract.Operations 
 }
 func TestUnsupportedObservationIsNotUnavailable(t *testing.T) {
 	source := &unsupportedObservation{&fixedSource{}}
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
 	}
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusUnsupported || observation.Reason != "native_metrics_not_supported" || source.calls != 0 {
+	if err != nil || observation.Status != v1.RuntimeStatusUnsupported || observation.Reason != "native_metrics_not_supported" || source.calls != 0 {
 		t.Fatal(observation, err, source.calls)
 	}
 }
@@ -60,7 +61,7 @@ func TestUnavailableReasonsMatchSharedFixture(t *testing.T) {
 		{state: "running", observeErr: context.DeadlineExceeded},
 		{state: "running", observeErr: ErrUnavailable},
 	} {
-		target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: scenario.state}}
+		target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: scenario.state}}
 		if scenario.resolveErr != nil {
 			target.Instance = Instance{}
 		}
@@ -69,7 +70,7 @@ func TestUnavailableReasonsMatchSharedFixture(t *testing.T) {
 			t.Fatal(err)
 		}
 		observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-		if err != nil || observation.Status != StatusUnavailable {
+		if err != nil || observation.Status != v1.RuntimeStatusUnavailable {
 			t.Fatalf("classification = %+v, %v", observation, err)
 		}
 		actual[observation.Reason] = true

@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 type samplerLister struct {
@@ -145,7 +147,7 @@ func TestSamplerSweepsEveryPageAndIsolatesSessionFailures(t *testing.T) {
 
 func TestSamplerBoundsConcurrencyAndSourceDeadline(t *testing.T) {
 	source := &countingSource{}
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
@@ -239,7 +241,7 @@ func TestSamplerPreservesProviderTimeoutAndFinalFenceAfterSlowResolution(t *test
 		samplerLister: lister,
 		delay:         historyOwnershipCheckTimeout + 25*time.Millisecond,
 		target: Target{
-			EnvironmentID: "environment", Mode: ModeManaged,
+			EnvironmentID: "environment", Mode: v1.RuntimeModeManaged,
 			Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
 		},
 	}
@@ -265,7 +267,7 @@ func TestSamplerPreservesProviderTimeoutAndFinalFenceAfterSlowResolution(t *test
 	}
 	select {
 	case record := <-records:
-		if record.Status != StatusUnavailable || record.Reason != "sample_timeout" || record.CollectionSource != CollectionSourcePeriodic {
+		if record.Status != v1.RuntimeStatusUnavailable || record.Reason != "sample_timeout" || record.CollectionSource != CollectionSourcePeriodic {
 			t.Fatalf("slow-resolution timeout export mismatch: %+v", record)
 		}
 	case <-time.After(time.Second):

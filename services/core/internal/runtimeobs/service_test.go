@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 type fixedResolver struct {
@@ -109,10 +111,10 @@ func (e *gatedExporter) callCount() int {
 }
 
 func TestServiceDoesNotCallSourcesForUnsupportedModes(t *testing.T) {
-	for _, mode := range []Mode{ModeNone, ModeSelfHosted} {
+	for _, mode := range []v1.RuntimeObservationMode{v1.RuntimeModeNone, v1.RuntimeModeSelfHosted} {
 		source := &fixedSource{}
 		target := Target{Mode: mode}
-		if mode == ModeSelfHosted {
+		if mode == v1.RuntimeModeSelfHosted {
 			target.EnvironmentID = "environment"
 		}
 		service, err := NewService(fixedResolver{target: target}, sourceOf(source))
@@ -120,14 +122,14 @@ func TestServiceDoesNotCallSourcesForUnsupportedModes(t *testing.T) {
 			t.Fatal(err)
 		}
 		observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-		if err != nil || observation.Status != StatusUnsupported || observation.Reason != "runtime_mode_not_observable" || source.calls != 0 {
+		if err != nil || observation.Status != v1.RuntimeStatusUnsupported || observation.Reason != "runtime_mode_not_observable" || source.calls != 0 {
 			t.Fatalf("unsupported mode touched a source: %+v %v calls=%d", observation, err, source.calls)
 		}
 	}
 }
 
 func TestServicePreservesObservedZero(t *testing.T) {
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	zeroCPU := float64(0)
 	zeroMemory := uint64(0)
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
@@ -138,7 +140,7 @@ func TestServicePreservesObservedZero(t *testing.T) {
 	}
 	service.now = func() time.Time { return now }
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusObserved || observation.Sample == nil || observation.Sample.CPUUsageSecondsTotal == nil || observation.Sample.MemoryUsageBytes == nil {
+	if err != nil || observation.Status != v1.RuntimeStatusObserved || observation.Sample == nil || observation.Sample.CPUUsageSecondsTotal == nil || observation.Sample.MemoryUsageBytes == nil {
 		t.Fatalf("observed zero was lost: %+v %v", observation, err)
 	}
 }
@@ -151,7 +153,7 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 	memoryUsage := uint64(1024)
 	memoryLimit := uint64(2048)
 	target := Target{
-		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: v1.RuntimeModeManaged,
 		Instance: Instance{
 			AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running",
 			ProviderState: json.RawMessage(`{"native_id":"must-not-export"}`),
@@ -170,7 +172,7 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 	service.now = func() time.Time { return now }
 
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusObserved {
+	if err != nil || observation.Status != v1.RuntimeStatusObserved {
 		t.Fatalf("observation failed: %+v %v", observation, err)
 	}
 	cpuSeconds = 99
@@ -181,7 +183,7 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 		if record.TenantID != "tenant" || record.SessionID != "session" || record.EnvironmentID != "environment" || record.AllocationID != "allocation" {
 			t.Fatalf("exported identity mismatch: %+v", record)
 		}
-		if record.ProviderType != "docker" || record.Mode != ModeManaged || record.Status != StatusObserved || record.Reason != "" || record.CollectionSource != CollectionSourceOnRead {
+		if record.ProviderType != "docker" || record.Mode != v1.RuntimeModeManaged || record.Status != v1.RuntimeStatusObserved || record.Reason != "" || record.CollectionSource != CollectionSourceOnRead {
 			t.Fatalf("exported classification mismatch: %+v", record)
 		}
 		if record.Sample == nil || record.Sample.CPUUsageSecondsTotal == nil || *record.Sample.CPUUsageSecondsTotal != 12.5 || record.Sample.MemoryUsageBytes == nil || *record.Sample.MemoryUsageBytes != 1024 {
@@ -199,7 +201,7 @@ func TestServiceMarksPeriodicHistoryCollection(t *testing.T) {
 	now := time.Date(2026, 9, 23, 4, 0, 0, 0, time.UTC)
 	startedAt := now.Add(-time.Minute)
 	target := Target{
-		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: v1.RuntimeModeManaged,
 		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
 	}
 	records := make(chan ExportRecord, 1)
@@ -232,7 +234,7 @@ func TestServiceDoesNotExportPeriodicSampleAfterOwnershipLoss(t *testing.T) {
 	now := time.Date(2026, 9, 23, 4, 0, 0, 0, time.UTC)
 	startedAt := now.Add(-time.Minute)
 	target := Target{
-		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: v1.RuntimeModeManaged,
 		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
 	}
 	records := make(chan ExportRecord, 1)
@@ -261,7 +263,7 @@ func TestServiceDoesNotExportPeriodicSampleAfterOwnershipLoss(t *testing.T) {
 
 func TestServiceExportQueueNeverBlocksOrChangesObservation(t *testing.T) {
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	exporter := &gatedExporter{started: make(chan struct{}, 1), release: make(chan struct{})}
 	service, err := NewService(
 		fixedResolver{target: target},
@@ -273,7 +275,7 @@ func TestServiceExportQueueNeverBlocksOrChangesObservation(t *testing.T) {
 	}
 	service.now = func() time.Time { return now }
 
-	if observation, err := service.ObserveSession(t.Context(), "tenant", "session"); err != nil || observation.Status != StatusObserved {
+	if observation, err := service.ObserveSession(t.Context(), "tenant", "session"); err != nil || observation.Status != v1.RuntimeStatusObserved {
 		t.Fatalf("first observation failed: %+v %v", observation, err)
 	}
 	select {
@@ -285,7 +287,7 @@ func TestServiceExportQueueNeverBlocksOrChangesObservation(t *testing.T) {
 		completed := make(chan error, 1)
 		go func() {
 			observation, observeErr := service.ObserveSession(t.Context(), "tenant", "session")
-			if observeErr == nil && observation.Status != StatusObserved {
+			if observeErr == nil && observation.Status != v1.RuntimeStatusObserved {
 				observeErr = errors.New("unexpected observation status")
 			}
 			completed <- observeErr
@@ -324,7 +326,7 @@ func TestServiceIgnoresExporterFailureAndValidatesOptions(t *testing.T) {
 
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	records := make(chan ExportRecord, 1)
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(
 		fixedResolver{target: target},
 		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
@@ -335,7 +337,7 @@ func TestServiceIgnoresExporterFailureAndValidatesOptions(t *testing.T) {
 	}
 	service.now = func() time.Time { return now }
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusObserved {
+	if err != nil || observation.Status != v1.RuntimeStatusObserved {
 		t.Fatalf("exporter failure changed observation: %+v %v", observation, err)
 	}
 	if err := service.Close(t.Context()); err != nil {
@@ -346,7 +348,7 @@ func TestServiceIgnoresExporterFailureAndValidatesOptions(t *testing.T) {
 func TestServiceCloseHonorsItsDeadlineWhenExporterDoesNot(t *testing.T) {
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	exporter := stubbornExporter{started: make(chan struct{}), release: make(chan struct{})}
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(
 		fixedResolver{target: target},
 		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
@@ -376,7 +378,7 @@ func TestServiceCloseHonorsItsDeadlineWhenExporterDoesNot(t *testing.T) {
 func TestServiceIsolatesExporterPanics(t *testing.T) {
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	exporter := panicExporter{called: make(chan struct{}, 1)}
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(
 		fixedResolver{target: target},
 		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
@@ -387,7 +389,7 @@ func TestServiceIsolatesExporterPanics(t *testing.T) {
 	}
 	service.now = func() time.Time { return now }
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusObserved {
+	if err != nil || observation.Status != v1.RuntimeStatusObserved {
 		t.Fatalf("observation failed: %+v %v", observation, err)
 	}
 	if err := service.Close(t.Context()); err != nil {
@@ -401,7 +403,7 @@ func TestServiceIsolatesExporterPanics(t *testing.T) {
 }
 
 func TestServiceMapsOnlyDeclaredUnavailability(t *testing.T) {
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	for _, tc := range []struct {
 		err        error
 		wantReason string
@@ -420,7 +422,7 @@ func TestServiceMapsOnlyDeclaredUnavailability(t *testing.T) {
 		if (err != nil) != tc.wantError {
 			t.Fatalf("wrong error classification: %+v %v", observation, err)
 		}
-		if !tc.wantError && (observation.Status != StatusUnavailable || observation.Reason != tc.wantReason || observation.ProviderType != "docker") {
+		if !tc.wantError && (observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != tc.wantReason || observation.ProviderType != "docker") {
 			t.Fatalf("declared unavailability was not mapped: %+v", observation)
 		}
 	}
@@ -428,7 +430,7 @@ func TestServiceMapsOnlyDeclaredUnavailability(t *testing.T) {
 
 func TestServiceMapsAnActualSourceDeadlineWithoutLeakingIt(t *testing.T) {
 	target := Target{
-		EnvironmentID: "environment", Mode: ModeManaged,
+		EnvironmentID: "environment", Mode: v1.RuntimeModeManaged,
 		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
 	}
 	service, err := NewService(fixedResolver{target: target}, sourceOf(blockingSource{}))
@@ -438,14 +440,14 @@ func TestServiceMapsAnActualSourceDeadlineWithoutLeakingIt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 	observation, err := service.ObserveSession(ctx, "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_timeout" || observation.ProviderType != "docker" {
+	if err != nil || observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != "sample_timeout" || observation.ProviderType != "docker" {
 		t.Fatalf("source deadline was not safely classified: %+v %v", observation, err)
 	}
 }
 
 func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.T) {
 	target := Target{
-		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged,
+		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", Mode: v1.RuntimeModeManaged,
 		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
 	}
 	records := make(chan ExportRecord, 1)
@@ -459,7 +461,7 @@ func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.
 	}
 	owner := &sequenceOwner{}
 	observation, err := service.ObserveSessionForHistory(t.Context(), "tenant", "session", owner, 10*time.Millisecond)
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_timeout" {
+	if err != nil || observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != "sample_timeout" {
 		t.Fatalf("periodic source timeout was not safely classified: %+v %v", observation, err)
 	}
 	if calls := owner.calls.Load(); calls != 2 {
@@ -467,7 +469,7 @@ func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.
 	}
 	select {
 	case record := <-records:
-		if record.Status != StatusUnavailable || record.Reason != "sample_timeout" || record.CollectionSource != CollectionSourcePeriodic {
+		if record.Status != v1.RuntimeStatusUnavailable || record.Reason != "sample_timeout" || record.CollectionSource != CollectionSourcePeriodic {
 			t.Fatalf("periodic timeout export mismatch: %+v", record)
 		}
 	case <-time.After(time.Second):
@@ -480,39 +482,39 @@ func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.
 
 func TestServiceClassifiesResolverAndTerminalAllocationUnavailability(t *testing.T) {
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
-	service, err := NewService(fixedResolver{target: Target{SessionID: "session", EnvironmentID: "environment", Mode: ModeManaged}, err: ErrUnavailable}, sourceOf(&fixedSource{}))
+	service, err := NewService(fixedResolver{target: Target{SessionID: "session", EnvironmentID: "environment", Mode: v1.RuntimeModeManaged}, err: ErrUnavailable}, sourceOf(&fixedSource{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	service.now = func() time.Time { return now }
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "allocation_pending" || !observation.ResolvedAt.Equal(now) {
+	if err != nil || observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != "allocation_pending" || !observation.ResolvedAt.Equal(now) {
 		t.Fatalf("pending allocation was not classified: %+v %v", observation, err)
 	}
 
 	source := &fixedSource{}
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "creating"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "creating"}}
 	service, err = NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
 	}
 	observation, err = service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "allocation_pending" || source.calls != 0 {
+	if err != nil || observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != "allocation_pending" || source.calls != 0 {
 		t.Fatalf("creating allocation reached its provider: %+v %v calls=%d", observation, err, source.calls)
 	}
 
-	target = Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "released"}}
+	target = Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "released"}}
 	service, err = NewService(fixedResolver{target: target}, sourceOf(&fixedSource{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	observation, err = service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "runtime_not_running" {
+	if err != nil || observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != "runtime_not_running" {
 		t.Fatalf("released allocation was not classified: %+v %v", observation, err)
 	}
 
 	source = &fixedSource{}
-	target = Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{
+	target = Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{
 		AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running", AllocationCreatedAt: time.Now().Add(time.Hour),
 	}}
 	service, err = NewService(fixedResolver{target: target}, sourceOf(source))
@@ -525,7 +527,7 @@ func TestServiceClassifiesResolverAndTerminalAllocationUnavailability(t *testing
 }
 
 func TestServiceRejectsUnsafeProviderSamples(t *testing.T) {
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
+	target := Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	preEpoch := time.Unix(-1, 0).UTC()
 	tooLarge := uint64(1 << 53)
@@ -552,10 +554,10 @@ func TestServiceRejectsUnsafeProviderSamples(t *testing.T) {
 
 func TestServiceRejectsMismatchedResolvedOwnership(t *testing.T) {
 	for _, target := range []Target{
-		{TenantID: "other", SessionID: "session", Mode: ModeNone},
-		{TenantID: "tenant", SessionID: "other", Mode: ModeNone},
-		{TenantID: "tenant", SessionID: "session", EnvironmentID: "unexpected", Mode: ModeNone},
-		{TenantID: "tenant", SessionID: "session", Mode: ModeSelfHosted},
+		{TenantID: "other", SessionID: "session", Mode: v1.RuntimeModeNone},
+		{TenantID: "tenant", SessionID: "other", Mode: v1.RuntimeModeNone},
+		{TenantID: "tenant", SessionID: "session", EnvironmentID: "unexpected", Mode: v1.RuntimeModeNone},
+		{TenantID: "tenant", SessionID: "session", Mode: v1.RuntimeModeSelfHosted},
 	} {
 		service, err := NewService(fixedResolver{target: target}, sourceOf(&fixedSource{}))
 		if err != nil {

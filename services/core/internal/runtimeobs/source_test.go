@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 )
 
@@ -22,7 +23,7 @@ func (s *selectingSource) load(context.Context) (Source, string, error) {
 }
 
 func observableTarget() fixedResolver {
-	return fixedResolver{target: Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}}
+	return fixedResolver{target: Target{EnvironmentID: "environment", Mode: v1.RuntimeModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}}
 }
 
 func TestUnavailableAndNilSourceSelection(t *testing.T) {
@@ -32,7 +33,7 @@ func TestUnavailableAndNilSourceSelection(t *testing.T) {
 		t.Fatal("registration resolved unconfigured provider", err)
 	}
 	observation, err := service.ObserveSession(t.Context(), "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_unavailable" || observation.ProviderType != "" {
+	if err != nil || observation.Status != v1.RuntimeStatusUnavailable || observation.Reason != "sample_unavailable" || observation.ProviderType != "" {
 		t.Fatal(observation, err)
 	}
 	resolver.err = nil
@@ -68,7 +69,7 @@ func TestSourceSelectionStaysBoundForWholePage(t *testing.T) {
 	}
 	observations, errs := service.ObserveSessions(t.Context(), sessions, PageOptions{Concurrency: 1})
 	for index, observation := range observations {
-		if errs[index] != nil || observation.ProviderType != "previous" || observation.Status != StatusObserved {
+		if errs[index] != nil || observation.ProviderType != "previous" || observation.Status != v1.RuntimeStatusObserved {
 			t.Fatal(index, observation, errs[index])
 		}
 	}

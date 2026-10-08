@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
@@ -42,7 +43,7 @@ func historyOwner(t *testing.T, pool *pgxpool.Pool) runtimehistory.Scope {
 func historyRecord(scope runtimehistory.Scope, allocation string, started, at time.Time, cpu float64, input uint64) runtimeobs.ExportRecord {
 	capacity := 2.0
 	memory := uint64(512)
-	return runtimeobs.ExportRecord{TenantID: scope.TenantID, SessionID: scope.SessionID, EnvironmentID: scope.EnvironmentID, AllocationID: allocation, Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic, ResolvedAt: at,
+	return runtimeobs.ExportRecord{TenantID: scope.TenantID, SessionID: scope.SessionID, EnvironmentID: scope.EnvironmentID, AllocationID: allocation, Mode: v1.RuntimeModeManaged, ProviderType: "docker", Status: v1.RuntimeStatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic, ResolvedAt: at,
 		Sample: &runtimeobs.Sample{ObservedAt: at, StartedAt: &started, CPUUsageSecondsTotal: &cpu, CPUCapacityCores: &capacity, MemoryUsageBytes: &memory}, TokenUsage: &runtimeobs.TokenUsage{InputTokens: input, OutputTokens: input / 2}}
 }
 func historyQuery(scope runtimehistory.Scope, start, end time.Time, points int) runtimehistory.Query {
@@ -68,7 +69,7 @@ func TestPostgresRuntimeHistoryAcceptance(t *testing.T) {
 		historyRecord(scope, allocation, started, start.Add(95*time.Second), 90, 40),
 	}
 	unavailable := historyRecord(scope, allocation, started, start.Add(155*time.Second), 100, 50)
-	unavailable.Status = runtimeobs.StatusUnavailable
+	unavailable.Status = v1.RuntimeStatusUnavailable
 	unavailable.Sample = nil
 	records = append(records, unavailable)
 	for _, record := range records {

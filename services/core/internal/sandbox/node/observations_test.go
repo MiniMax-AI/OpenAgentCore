@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/google/uuid"
 )
 
@@ -36,7 +36,7 @@ func (p *observationProvider) Observe(_ context.Context, target runtimeobs.Targe
 	return p.sample, p.err
 }
 func observationTarget(r sandbox.Reference, installation string) runtimeobs.Target {
-	return runtimeobs.Target{TenantID: r.TenantID, SessionID: uuid.NewString(), EnvironmentID: r.EnvironmentID, Mode: runtimeobs.ModeManaged,
+	return runtimeobs.Target{TenantID: r.TenantID, SessionID: uuid.NewString(), EnvironmentID: r.EnvironmentID, Mode: v1.RuntimeModeManaged,
 		Instance:   runtimeobs.Instance{AllocationID: r.AllocationID, ProviderKey: installation, AllocationState: "running", ComputePhase: "running", ProviderState: json.RawMessage(`{"current":{"id":"exact-incarnation","generation":3}}`)},
 		TokenUsage: &runtimeobs.TokenUsage{InputTokens: 123, OutputTokens: 456}}
 }
@@ -157,7 +157,7 @@ func TestObservationWirePreservesUnavailableAndRejectsMismatchedIdentity(t *test
 		})
 	}
 	p := &observationProvider{fakeProvider: &fakeProvider{}}
-	for _, mutate := range []func(*runtimeobs.Target){func(t *runtimeobs.Target) { t.EnvironmentID = uuid.NewString() }, func(t *runtimeobs.Target) { t.Instance.AllocationID = uuid.NewString() }, func(t *runtimeobs.Target) { t.TenantID = uuid.NewString() }, func(t *runtimeobs.Target) { t.TokenUsage = &runtimeobs.TokenUsage{} }, func(t *runtimeobs.Target) { t.Mode = runtimeobs.ModeSelfHosted }} {
+	for _, mutate := range []func(*runtimeobs.Target){func(t *runtimeobs.Target) { t.EnvironmentID = uuid.NewString() }, func(t *runtimeobs.Target) { t.Instance.AllocationID = uuid.NewString() }, func(t *runtimeobs.Target) { t.TenantID = uuid.NewString() }, func(t *runtimeobs.Target) { t.TokenUsage = &runtimeobs.TokenUsage{} }, func(t *runtimeobs.Target) { t.Mode = v1.RuntimeModeSelfHosted }} {
 		invalid := target
 		mutate(&invalid)
 		q.Observation = &invalid

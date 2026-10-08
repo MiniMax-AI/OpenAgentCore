@@ -79,7 +79,7 @@ func TestRuntimeObservationRoutesUseSessionIdentityAndExactNullability(t *testin
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
 	sessionID := uuid.NewString()
 	service := runtimeObservationFixture{values: map[string]runtimeobs.Observation{
-		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: runtimeobs.ModeNone}, Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
+		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: v1.RuntimeModeNone}, Status: v1.RuntimeStatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
 	}}
 	handler, _, _ := adminTestHandler(t, observeWith(service))
 
@@ -97,7 +97,7 @@ func TestRuntimeObservationRoutesRejectQueries(t *testing.T) {
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
 	service := runtimeObservationFixture{values: map[string]runtimeobs.Observation{
-		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: runtimeobs.ModeNone}, Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
+		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: v1.RuntimeModeNone}, Status: v1.RuntimeStatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
 	}}
 	handler, _, _ := adminTestHandler(t, observeWith(service))
 	invalid := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-observation?provider=docker")
@@ -112,8 +112,8 @@ func TestRuntimeObservationResponsePreservesObservedZero(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
 	sessionID, environmentID := uuid.NewString(), uuid.NewString()
 	value, err := runtimeObservationResponse(runtimeobs.Observation{
-		Target: runtimeobs.Target{SessionID: sessionID, EnvironmentID: environmentID, Mode: runtimeobs.ModeManaged, Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationState: "running", ComputePhase: "running", AllocationCreatedAt: now.Add(-time.Hour)}},
-		Status: runtimeobs.StatusObserved, ProviderType: "docker", ResolvedAt: now,
+		Target: runtimeobs.Target{SessionID: sessionID, EnvironmentID: environmentID, Mode: v1.RuntimeModeManaged, Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationState: "running", ComputePhase: "running", AllocationCreatedAt: now.Add(-time.Hour)}},
+		Status: v1.RuntimeStatusObserved, ProviderType: "docker", ResolvedAt: now,
 		Sample: &runtimeobs.Sample{ObservedAt: now, CPUUsageSecondsTotal: &zeroCPU, MemoryUsageBytes: &zeroMemory},
 	})
 	if err != nil || value.LifecycleState == nil || *value.LifecycleState != "active" || value.CPU == nil || value.CPU.UsageSecondsTotal == nil || *value.CPU.UsageSecondsTotal != 0 || value.Memory == nil || value.Memory.UsageBytes == nil || *value.Memory.UsageBytes != 0 {
@@ -123,7 +123,8 @@ func TestRuntimeObservationResponsePreservesObservedZero(t *testing.T) {
 
 func TestRuntimeLifecycleStateProjectsProviderNeutralPhases(t *testing.T) {
 	for _, item := range []struct {
-		state, phase, want string
+		state, phase string
+		want         v1.RuntimeObservationLifecycleState
 	}{
 		{state: "", phase: "", want: "pending"},
 		{state: "creating", phase: "disabled", want: "pending"},
@@ -149,10 +150,10 @@ func TestRuntimeObservationResponseRejectsTimesOutsidePublicContract(t *testing.
 	preEpoch := time.Unix(-1, 0).UTC()
 	base := runtimeobs.Observation{
 		Target: runtimeobs.Target{
-			SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
+			SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: v1.RuntimeModeManaged,
 			Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationCreatedAt: now.Add(-time.Hour)},
 		},
-		Status: runtimeobs.StatusObserved, ResolvedAt: now,
+		Status: v1.RuntimeStatusObserved, ResolvedAt: now,
 		Sample: &runtimeobs.Sample{ObservedAt: now, StartedAt: timePointer(now.Add(-time.Minute))},
 	}
 	for _, mutate := range []func(*runtimeobs.Observation){
@@ -178,9 +179,9 @@ func TestAdminRuntimeObservationProjectsReportedUtilizationAndDisk(t *testing.T)
 	ratio, cores := .1955, 2.0
 	memoryUsed, memoryTotal, diskUsed, diskTotal := uint64(183836672), uint64(2079141888), uint64(1593188352), uint64(23511863296)
 	observation := runtimeobs.Observation{
-		Target: runtimeobs.Target{SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
+		Target: runtimeobs.Target{SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: v1.RuntimeModeManaged,
 			Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationState: "running", ComputePhase: "disabled", AllocationCreatedAt: now.Add(-time.Minute)}},
-		Status: runtimeobs.StatusObserved, ProviderType: "e2b", ResolvedAt: now,
+		Status: v1.RuntimeStatusObserved, ProviderType: "e2b", ResolvedAt: now,
 		Sample: &runtimeobs.Sample{ObservedAt: now, StartedAt: timePointer(now.Add(-time.Minute)), CPUUtilizationRatio: &ratio, CPUCapacityCores: &cores,
 			MemoryUsageBytes: &memoryUsed, MemoryLimitBytes: &memoryTotal, DiskUsageBytes: &diskUsed, DiskLimitBytes: &diskTotal},
 	}
@@ -223,7 +224,7 @@ func (s declaredObservationSource) Observe(context.Context, runtimeobs.Target) (
 
 func (s declaredObservationSource) Resolve(_ context.Context, tenant, session string) (runtimeobs.Target, error) {
 	return runtimeobs.Target{
-		TenantID: tenant, SessionID: session, EnvironmentID: "22222222-2222-4222-8222-222222222222", Mode: runtimeobs.ModeManaged,
+		TenantID: tenant, SessionID: session, EnvironmentID: "22222222-2222-4222-8222-222222222222", Mode: v1.RuntimeModeManaged,
 		Instance: runtimeobs.Instance{AllocationID: "33333333-3333-4333-8333-333333333333", ProviderKey: "provider", AllocationState: "running", ComputePhase: "running"},
 	}, nil
 }

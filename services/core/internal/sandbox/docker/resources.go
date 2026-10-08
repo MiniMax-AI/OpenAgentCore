@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/moby/moby/api/types/container"
@@ -16,7 +17,7 @@ import (
 // Observe is read-only. Inspect verifies allocation ownership before Docker
 // statistics are requested; it never renews or changes the container.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
-	if target.Mode != runtimeobs.ModeManaged || target.Instance.AllocationID == "" {
+	if target.Mode != v1.RuntimeModeManaged || target.Instance.AllocationID == "" {
 		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
 	if target.Instance.ProviderKey != p.config.InstallationID {
