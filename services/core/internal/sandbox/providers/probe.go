@@ -19,11 +19,12 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// Probes report the first failed check. Precedence runs from the provider
-// platform (Docker daemon or KVM), through Docker limit support and host
-// capacity for one sandbox of the deployment specification, to the installed
-// Runtime content (image or microsandbox artifacts). Unclassified failures stay
-// provider_unavailable. The returned text is local; only its code is reported.
+// Probes report the first failed check as its readiness class. Precedence runs
+// from the provider platform (Docker daemon or KVM), through Docker limit
+// support and host capacity for one sandbox of the deployment specification, to
+// the installed Runtime content (image or microsandbox artifacts). Unclassified
+// failures stay provider_unavailable. The returned text is local; only its class
+// is reported.
 
 // kvmDevice is replaceable only by tests.
 var kvmDevice = "/dev/kvm"
@@ -31,14 +32,14 @@ var kvmDevice = "/dev/kvm"
 func dockerProbe(c *client.Client, image string, resources sandbox.Resources) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if _, err := c.Ping(ctx, client.PingOptions{}); err != nil {
-			return sandbox.ErrDockerUnavailable
+			return fmt.Errorf("%w: Docker daemon is unreachable", sandbox.ErrProviderUnavailable)
 		}
 		host, err := c.Info(ctx, client.InfoOptions{})
 		if err != nil {
-			return fmt.Errorf("%w: cannot inspect Docker host resource support", sandbox.ErrDockerUnavailable)
+			return fmt.Errorf("%w: cannot inspect Docker host resource support", sandbox.ErrProviderUnavailable)
 		}
 		if !host.Info.MemoryLimit || !host.Info.CPUCfsQuota {
-			return sandbox.ErrDockerLimitsUnsupported
+			return fmt.Errorf("%w: Docker does not enforce CPU and memory limits", sandbox.ErrHostUnsupported)
 		}
 		if host.Info.MemTotal <= 0 {
 			return errors.New("Docker host memory capacity is unavailable")
@@ -50,7 +51,7 @@ func dockerProbe(c *client.Client, image string, resources sandbox.Resources) fu
 			return sandbox.ErrRuntimeImageUnavailable
 		} else if err != nil {
 			// The daemon did not answer; the image may still be present.
-			return fmt.Errorf("%w: cannot inspect the pinned Runtime image", sandbox.ErrDockerUnavailable)
+			return fmt.Errorf("%w: cannot inspect the pinned Runtime image", sandbox.ErrProviderUnavailable)
 		}
 		return nil
 	}
@@ -68,11 +69,11 @@ func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(con
 			return err
 		}
 		if runtime.GOOS != "linux" {
-			return fmt.Errorf("%w: microsandbox requires a Linux KVM node", sandbox.ErrKVMUnavailable)
+			return fmt.Errorf("%w: microsandbox requires a Linux KVM node", sandbox.ErrHostUnsupported)
 		}
 		kvm, err := os.OpenFile(kvmDevice, os.O_RDWR, 0)
 		if err != nil {
-			return sandbox.ErrKVMUnavailable
+			return fmt.Errorf("%w: KVM is unavailable to sandbox node", sandbox.ErrHostUnsupported)
 		}
 		_ = kvm.Close()
 		if err := hostCapacity(resources); err != nil {
@@ -89,7 +90,7 @@ func microsandboxProbe(entry Microsandbox, resources sandbox.Resources) func(con
 		integrity.Unlock()
 		helper, err := os.Stat(entry.HelperPath)
 		if err != nil || !helper.Mode().IsRegular() || helper.Mode().Perm()&0111 == 0 {
-			return fmt.Errorf("%w: microsandbox helper is unavailable", sandbox.ErrMicrosandboxArtifactsUnavailable)
+			return fmt.Errorf("%w: microsandbox helper is unavailable", sandbox.ErrArtifactsUnavailable)
 		}
 		home, err := os.Lstat(entry.RuntimeHome)
 		if err != nil || !home.IsDir() || home.Mode().Perm() != 0700 {
@@ -103,13 +104,13 @@ func verifyMicrosandboxArtifacts(entry Microsandbox) error {
 	for _, artifact := range []struct{ path, hash string }{{entry.RuntimePath, entry.RuntimeSHA256}, {entry.FirmwarePath, entry.FirmwareSHA256}} {
 		f, err := os.Open(artifact.path)
 		if err != nil {
-			return sandbox.ErrMicrosandboxArtifactsUnavailable
+			return fmt.Errorf("%w: microsandbox Runtime or firmware is missing", sandbox.ErrArtifactsUnavailable)
 		}
 		h := sha256.New()
 		_, err = io.Copy(h, f)
 		_ = f.Close()
 		if err != nil || hex.EncodeToString(h.Sum(nil)) != artifact.hash {
-			return fmt.Errorf("%w: artifact integrity check failed", sandbox.ErrMicrosandboxArtifactsUnavailable)
+			return fmt.Errorf("%w: microsandbox artifact integrity check failed", sandbox.ErrArtifactsUnavailable)
 		}
 	}
 	return nil

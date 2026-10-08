@@ -364,7 +364,7 @@ func TestInterruptedCollectionNeverPreparesOrServesAfterRestart(t *testing.T) {
 }
 
 func TestPreparationDiagnosticPreservesTypedCause(t *testing.T) {
-	for _, cause := range []error{sandbox.ErrRuntimeDownloadFailed, sandbox.ErrDockerUnavailable, sandbox.ErrKVMUnavailable, sandbox.ErrOwnership, context.Canceled, errors.New("raw secret provider text")} {
+	for _, cause := range []error{sandbox.ErrRuntimeDownloadFailed, sandbox.ErrProviderUnavailable, sandbox.ErrHostUnsupported, sandbox.ErrOwnership, context.Canceled, errors.New("raw secret provider text")} {
 		t.Run(sandbox.NodeDiagnostic(cause)+cause.Error(), func(t *testing.T) {
 			m, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
 				Prepare: func(context.Context, uint64, string) (GenerationProvider, error) { return GenerationProvider{}, cause },

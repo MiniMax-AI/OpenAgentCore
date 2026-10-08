@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 68aabafdb8983280a3bb29e7398042f9e843310d1784acd4a9a94e9647fd3919
+source_hash: 2a6b114b7b4f324b2a68ee1f5bde5e9f229a2d44c06aa7c0dd4560bb4ed60166
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness；部署可以保持未配置状态，既无节点，也不接受托管准入。
@@ -179,7 +179,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 `GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、`diagnostic`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`enrollment_id` 和 `core_url`。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
 
-不具备代次管理的节点会自行报告其提供商的就绪状态：`provider_ready`，未就绪时则报告一个固定的 `diagnostic` 代码。通过 Web 的命令添加的节点会管理代次，因此其就绪状态取决于服务代次，而目标代次的固定代码会出现在 `rollout.diagnostic` 中。节点会对首次失败的就绪检查进行分类，并且只发送代码；Core 会将任何其他值存储为 `provider_unavailable`，且绝不存储或返回探测文本或主机路径。代码包括 `docker_unavailable`、`docker_limits_unsupported`、`runtime_download_failed`、`runtime_image_unavailable`、`kvm_unavailable`、`microsandbox_artifacts_unavailable`、`capacity_insufficient` 和 `provider_unavailable`。`runtime_download_failed` 表示无法传输或验证精确的 Runtime 制品；它绝不会包含制品 URL、凭据或传输输出。[就绪代码](../../../docs/zh/getting-started/nodes.md#readiness-codes)给出了原因和操作员应采取的措施。Core 和节点必须来自同一发行包。
+不具备代次管理的节点会自行报告其提供商的就绪状态：`provider_ready`，未就绪时则报告一个固定的 `diagnostic` 代码。通过 Web 的命令添加的节点会管理代次，因此其就绪状态取决于服务代次，而目标代次的固定代码会出现在 `rollout.diagnostic` 中。节点会对首次失败的就绪检查进行分类，并且只发送代码；携带任何其他值的帧均无效，且 Core 绝不存储或返回探测文本或主机路径。这些代码是与 Provider 无关的类别：`provider_unavailable`、`host_unsupported`、`artifacts_unavailable`、`runtime_download_failed`、`runtime_image_unavailable` 和 `capacity_insufficient`。`runtime_download_failed` 表示无法传输或验证精确的 Runtime 制品；它绝不会包含制品 URL、凭据或传输输出。[就绪代码](../../../docs/zh/getting-started/nodes.md#readiness-codes)给出了原因和操作员应采取的措施。Core 和节点必须来自同一发行包。
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` 接受 `{name, max_active, max_retained}`；降低限制不会停止任何正在运行的沙箱。当节点仍持有分配、快照、预留或待处理清理时，包括节点离线期间，`DELETE /core/v1/sandbox/nodes/{node_id}` 会拒绝操作并返回 409 `runtime_node_in_use`。移除操作不会删除任何计算资源，并且会停用该节点的身份；该主机只能作为新节点重新加入。不存在节点排空过程。
 
@@ -199,7 +199,6 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 | 注册令牌 `max_active`、`max_retained` | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` | 两个限制均适用 |
 | 节点列表和详情 | 空列表；详情返回 404 | 已注册节点 | 已注册节点 |
 | 节点 `retained`、`snapshots`、`max_retained` | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` | 已暂停沙箱数为 `retained` 减去 `active` |
-| 节点 `diagnostic` 代码 | 不适用 | `docker_unavailable`、`docker_limits_unsupported`、`runtime_download_failed`、`runtime_image_unavailable`、`capacity_insufficient` 或 `provider_unavailable` | `kvm_unavailable`、`microsandbox_artifacts_unavailable`、`runtime_download_failed`、`capacity_insufficient` 或 `provider_unavailable` |
 | 节点 `host.available_disk_bytes` | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 |
 | 分配 `compute_phase`、`compute_phase_changed_at` | 不适用：没有节点分配 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 | 包含 `suspended`；该时间加上 `suspension.retention_seconds` 可大致确定 Core 回收快照的时间 |
 | Runtime 观测 `cpu`、`memory` | 来自 E2B 指标：`cpu.utilization_ratio` 和 `capacity_cores`、内存使用量和限制；无累计 CPU 时间 | 来自 Docker stats：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 来自 VM：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 |

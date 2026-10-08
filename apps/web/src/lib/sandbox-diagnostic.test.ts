@@ -17,11 +17,11 @@ describe("sandbox diagnostics", () => {
     expect(sandboxDiagnosticMessage("provider_unavailable")?.label).toBe("Sandbox provider unavailable");
   });
   it("names why a node's provider is not ready, reading an unknown code as provider_unavailable", () => {
-    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "kvm_unavailable" }))?.label).toBe("KVM unavailable");
+    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "host_unsupported" }))?.label).toBe("Host unsupported");
     expect(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "future_code" as SandboxNodeDiagnostic })).toBe("provider_unavailable");
     expect(nodeProviderDiagnostic({ online: true, provider_ready: true, diagnostic: "" })).toBe("");
     // An offline node's last code may no longer apply.
-    expect(nodeProviderDiagnostic({ online: false, provider_ready: false, diagnostic: "docker_unavailable" })).toBe("");
+    expect(nodeProviderDiagnostic({ online: false, provider_ready: false, diagnostic: "host_unsupported" })).toBe("");
   });
   it("does not expose an unknown raw error or turn it into a healthy state", () => {
     const message = sandboxDiagnosticMessage("private-provider-error-with-secret");

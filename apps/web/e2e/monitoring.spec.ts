@@ -24,7 +24,7 @@ test("shows the deployment's health on Overview and each monitor page", async ({
   await page.getByRole("button", { name: "Sandbox metrics" }).click();
   await expect(page.getByRole("table").first()).toContainText("core-01");
   // A degraded node names why its provider is not ready.
-  await expect(page.locator(".status-with-help").filter({ hasText: /^Provider not ready/ }).getByRole("button", { name: "Docker limits unsupported", exact: true })).toBeVisible();
+  await expect(page.locator(".status-with-help").filter({ hasText: /^Provider not ready/ }).getByRole("button", { name: "Host unsupported", exact: true })).toBeVisible();
 });
 
 test("opens a Session's conversation from the Session log, read-only", async ({ page, request }) => {
