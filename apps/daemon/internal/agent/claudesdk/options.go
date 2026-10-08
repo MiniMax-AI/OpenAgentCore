@@ -57,8 +57,8 @@ func prepareConfiguration(config Config, req agent.PrepareRequest) (startRequest
 		start.Cwd = workspaceCwd(config.Workspace)
 		return start, env, nil
 	}
-	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
-		return startRequest{}, nil, fmt.Errorf("claudesdk: local execution and history recovery require a dedicated workspace")
+	if req.LocalEnvironment != nil {
+		return startRequest{}, nil, fmt.Errorf("claudesdk: local execution requires a dedicated workspace")
 	}
 	root, err := paths.Root()
 	if err != nil {

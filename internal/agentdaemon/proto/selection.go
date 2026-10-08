@@ -34,6 +34,8 @@ type Selection struct {
 	// selected.
 	Environment           string
 	InstalledCapabilities bool
+	// NativeSessionRecovery requires the Session's existing native history.
+	NativeSessionRecovery bool
 	MultiAgent            bool
 	Functions             bool
 	DeferredFunctions     bool
@@ -100,6 +102,8 @@ func ValidateSelection(d Declaration, s Selection) error {
 		return reject("environment", "The harness does not support environment none.")
 	case s.Environment == "local" && !c.LocalEnvironment.IsSupported():
 		return reject("environment", "The harness does not support this execution environment.")
+	case s.NativeSessionRecovery && !c.NativeSessionRecovery.IsSupported():
+		return reject("", "The harness does not support native session recovery.")
 	case s.MultiAgent && !c.SubagentObservations.IsSupported():
 		return reject("agent.multi_agent", "The harness does not support multi-agent execution.")
 	case s.MultiAgent && (s.Functions || selectedMCP):
@@ -219,7 +223,7 @@ func blankTextRune(r rune) bool {
 // without the Turn's messages and the Environment's installed MCP servers,
 // which its owner resolves only when it prepares an Executor.
 func (r PromptRequestPayload) Selection() Selection {
-	s := Selection{MultiAgent: r.ObserveSubagentIdentities, Functions: len(r.FunctionTools) > 0, ToolSearch: r.ToolSearch}
+	s := Selection{NativeSessionRecovery: r.RequireExistingNativeSession, MultiAgent: r.ObserveSubagentIdentities, Functions: len(r.FunctionTools) > 0, ToolSearch: r.ToolSearch}
 	for _, tool := range r.FunctionTools {
 		s.DeferredFunctions = s.DeferredFunctions || tool.DeferLoading
 	}

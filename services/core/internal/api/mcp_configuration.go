@@ -3,10 +3,10 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"net/url"
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 )
 
 const mcpHTTPOnly = "MCP currently supports HTTP transport only."
@@ -43,8 +43,7 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 	if len(input.RequestMetadata) != 0 {
 		return nil, errors.New("Nonempty MCP request_metadata is not supported yet.")
 	}
-	u, err := url.Parse(transport.ServerURL)
-	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || strings.Contains(transport.ServerURL, "#") || u.RawQuery != "" || u.ForceQuery {
+	if !execution.ValidMCPServerURL(transport.ServerURL) {
 		return nil, errors.New("MCP server_url must be an absolute HTTP(S) URL without credentials, query or fragment.")
 	}
 	if transport.Authorization != nil {

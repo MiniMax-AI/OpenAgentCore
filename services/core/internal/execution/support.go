@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -59,7 +59,7 @@ func ValidateSessionConfiguration(engine string, configuration json.RawMessage) 
 // harnessSelection projects the frozen Session configuration. A server with a
 // frozen credential binding is authenticated.
 func harnessSelection(snapshot Snapshot) (proto.Selection, error) {
-	selection := v1.HarnessSelection(snapshot.Agent, snapshot.Environment)
+	selection := agents.HarnessSelection(snapshot.Agent, snapshot.Environment)
 	selected, err := selectedMCPCredentials(snapshot)
 	if err != nil {
 		return proto.Selection{}, err

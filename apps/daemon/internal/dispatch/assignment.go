@@ -11,7 +11,8 @@ import (
 )
 
 // assignmentState is the Router's record of one Session's assignment. Router.mu
-// protects it. A released assignment stays recorded, so its frames stay fenced.
+// protects it. A released assignment stays recorded, so its frames stay fenced;
+// a confirmed release drops its owner, grant and resource.
 type assignmentState struct {
 	ref           proto.AssignmentRef
 	environmentID string
@@ -60,7 +61,7 @@ func (r *Router) trackWorkLocked(ref proto.AssignmentRef) func() {
 
 // admittedEnvironment admits ref for the Session and returns the owner that
 // its assignment resolved, or nil, or the assignment rejection code. A
-// Session's assignment, and so its owner, never changes on a Router.
+// superseding bind replaces both once the earlier epoch's work has settled.
 func (r *Router) admittedEnvironment(ref proto.AssignmentRef, sessionID string) (Environment, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -96,7 +97,7 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 	r.mu.Lock()
 	if r.suspensions[input.EnvironmentID] != nil {
 		r.mu.Unlock()
-		return ErrRouterQuiesced
+		return r.rejectQuiesced(ctx, env)
 	}
 	a := r.assignments[ref.SessionID]
 	switch {
@@ -259,6 +260,10 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		if err != nil {
 			r.log.Warn("assignment release cleanup unconfirmed", "session_id", ref.SessionID, "err", err)
 			code = proto.CleanupUnconfirmed
+		} else {
+			r.mu.Lock()
+			a.environment, a.grant, a.resource = nil, nil, sandboxbootstrap.Resource{}
+			r.mu.Unlock()
 		}
 		_ = r.reply(cleanupCtx, env, proto.TypeAssignmentStatus, assignmentStatus(state, code))
 	}()

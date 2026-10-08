@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -15,8 +16,9 @@ func TestExistingSessionRecoveryRequiresVerifiedCapability(t *testing.T) {
 					wantRecovery := started && nativeID == ""
 					req, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}}).executionRequest(t.Context(), sessions.Session{ID: "session", Engine: engine}, Snapshot{}, proto.Declaration{Capabilities: proto.AgentKindCapabilities{NativeSessionRecovery: proto.CapabilityFromBool(capable)}}, sessions.ExecutionBinding{HasStartedTurn: started, NativeSessionID: nativeID})
 					if wantRecovery && !capable {
-						if err == nil {
-							t.Fatal("unverified recovery admitted", engine)
+						var rejected *proto.SelectionError
+						if !errors.As(err, &rejected) {
+							t.Fatal("unverified recovery admitted", engine, err)
 						}
 						continue
 					}

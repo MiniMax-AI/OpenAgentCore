@@ -18,15 +18,14 @@ const runtimePreparationTimeout = 120 * time.Second
 // installation data belongs to the bound Environment and is never removed by
 // transfer cleanup.
 type runtimePreparationTransfer struct {
-	id        uuid.UUID // the envelope's ID
-	envelope  proto.Envelope
-	request   proto.RuntimePreparePayload
-	data      []byte
-	ready     chan struct{}
-	cancel    context.CancelFunc
-	finished  bool
-	apply     bool
-	uncertain bool
+	id       uuid.UUID // the envelope's ID
+	envelope proto.Envelope
+	request  proto.RuntimePreparePayload
+	data     []byte
+	ready    chan struct{}
+	cancel   context.CancelFunc
+	finished bool
+	apply    bool
 }
 
 func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) error {
@@ -204,10 +203,8 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 	data = nil
 	r.mu.Lock()
 	r.transferBytes -= u.request.SizeBytes
-	u.uncertain = result.Outcome == "unknown"
-	if !u.uncertain {
-		delete(r.runtimePreparations, u.request.SessionID)
-	}
+	// An unknown outcome stays with the Environment owner, which quarantines it.
+	delete(r.runtimePreparations, u.request.SessionID)
 	r.mu.Unlock()
 	// The result has a separate send budget, independent of an installation timeout.
 	_ = r.sendRuntimePrepareResult(context.WithoutCancel(ctx), u.envelope, result)

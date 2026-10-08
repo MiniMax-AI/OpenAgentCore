@@ -2,7 +2,6 @@ package execution
 
 import (
 	"context"
-	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -11,8 +10,8 @@ import (
 
 func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, declaration proto.Declaration, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
-	if recoverNativeSession && !declaration.Capabilities.NativeSessionRecovery.IsSupported() {
-		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
+	if err := proto.ValidateSelection(declaration, proto.Selection{NativeSessionRecovery: recoverNativeSession}); err != nil {
+		return proto.PromptRequestPayload{}, err
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {

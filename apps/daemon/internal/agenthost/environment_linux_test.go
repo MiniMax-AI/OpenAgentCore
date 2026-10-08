@@ -169,30 +169,22 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	second.release(t, b, id, status.Handle)
 
 	// An uncertain File mutation quarantines the owner: no later write or
-	// runtime_prepare on any Router opens an attachment to send one again.
+	// runtime_prepare, on this Router or another, sends one again. The
+	// Router keeps nothing of it and shuts down.
 	h.probe(t, b, sandboxfs.OpLink)
 	if r := second.write(t, b, "notes/uncertain.txt", []byte("uncertain")); r.Outcome != "unknown" {
 		t.Fatalf("the interrupted write is %+v, want unknown", r)
 	}
-	// The Router reports the uncertain write as it shuts down and still
-	// drains the owner.
-	second.shutdown()
-	if !h.drained(t, b) {
-		t.Fatal("the owner kept its attachment after the Router shut down")
+	if r := second.write(t, b, "notes/uncertain.txt", []byte("uncertain")); r.Outcome != "unknown" {
+		t.Fatalf("the write after an uncertain one is %+v, want unknown", r)
+	}
+	if err := second.shutdown(); err != nil || !h.drained(t, b) {
+		t.Fatalf("the Router's shutdown is %v, want a drained owner", err)
 	}
 	third := &daemon{host: h}
 	third.route(t, reg)
 	third.assign(t, b)
-	if r := third.write(t, b, "notes/uncertain.txt", []byte("uncertain")); r.Outcome != "unknown" || !h.drained(t, b) {
-		t.Fatalf("the write after an uncertain one is %+v, want unknown without an attachment", r)
-	}
-	// An unknown outcome fences the Router's transfers, so the next one runs
-	// on another.
-	third.shutdown()
-	fourth := &daemon{host: h}
-	fourth.route(t, reg)
-	fourth.assign(t, b)
-	if r := fourth.runtimePrepare(t, b, proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/file.txt"}}, []byte("file")); r.Outcome != "unknown" || !h.drained(t, b) {
+	if r := third.runtimePrepare(t, b, proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/notes/file.txt"}}, []byte("file")); r.Outcome != "unknown" || !h.drained(t, b) {
 		t.Fatalf("the runtime_prepare after an uncertain write is %+v, want unknown without an attachment", r)
 	}
 	for _, name := range []string{"uncertain.txt", "file.txt"} {

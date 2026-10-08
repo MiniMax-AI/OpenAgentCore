@@ -90,7 +90,7 @@ func serveAgentHost(parent context.Context, rc *runContext, args []string, decla
 	origin, err := url.Parse(*coreURL)
 	if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Host == "" || origin.User != nil ||
 		origin.Path != "" || origin.RawQuery != "" || origin.ForceQuery || origin.Fragment != "" || origin.String() != *coreURL {
-		return fmt.Errorf("agent-host: --core-url %q is not an http or https origin", *coreURL)
+		return errors.New("agent-host: --core-url is not an http or https origin")
 	}
 	wsOrigin := "ws" + strings.TrimPrefix(*coreURL, "http")
 

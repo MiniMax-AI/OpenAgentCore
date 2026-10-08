@@ -96,7 +96,7 @@ func validateModelExecution(configuration json.RawMessage, provider *v1.ModelPro
 	if !ok || json.Unmarshal(configuration, &agent) != nil {
 		return ErrInvalidInput
 	}
-	err := proto.ValidateSelection(declared.Declaration, v1.HarnessSelection(v1.Agent{MultiAgent: agent.MultiAgent, Text: agent.Text, Tools: agent.Tools}, nil))
+	err := proto.ValidateSelection(declared.Declaration, HarnessSelection(v1.Agent{MultiAgent: agent.MultiAgent, Text: agent.Text, Tools: agent.Tools}, nil))
 	var invalid *proto.SelectionError
 	if errors.As(err, &invalid) {
 		// A saved Agent's fields are top-level request fields.

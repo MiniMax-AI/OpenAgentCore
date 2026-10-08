@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -84,8 +85,8 @@ func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 }
 
 func TestQuiesceDrainsPendingReceiptAndFencesConcurrentAdmission(t *testing.T) {
-	entered, release := make(chan struct{}), make(chan struct{})
-	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { close(entered); <-release; return nil }))
+	entered, release, once := make(chan struct{}), make(chan struct{}), sync.Once{}
+	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { once.Do(func() { close(entered); <-release }); return nil }))
 	// Rejection receipts run independently of the preparation resource map.
 	_ = r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "invalid"})
 	<-entered
@@ -202,6 +203,10 @@ func TestQuiescingOneEnvironmentLeavesAnotherRunning(t *testing.T) {
 	}
 	if err := prepare(suspendRef); !errors.Is(err, ErrRouterQuiesced) {
 		t.Fatalf("the quiesced Environment admitted %v", err)
+	}
+	var rejected proto.ProtocolErrorPayload
+	if frame := <-frames; frame.Type != proto.TypeProtocolError || frame.DecodePayload(&rejected) != nil || rejected.ErrorCode != "resource_unavailable" {
+		t.Fatalf("quiesced rejection = %+v %+v", frame, rejected)
 	}
 	if err := prepare(other); errors.Is(err, ErrRouterQuiesced) {
 		t.Fatal("the other Environment stopped admitting work")

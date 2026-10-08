@@ -86,7 +86,7 @@ func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}, func(context.Context, agent.PrepareRequest) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})
@@ -311,6 +311,13 @@ func TestExecutorRejectsMissingEnvironmentBeforeFactory(t *testing.T) {
 	}
 	if status := waitPreparationStatus(t, s, "request", "rejected", ""); status.ErrorCode != "unsupported_configuration" || calls.Load() != 0 {
 		t.Fatalf("status=%+v factory calls=%d", status, calls.Load())
+	}
+}
+
+func TestExecutorRejectsUnsupportedRecoveryBeforeFactory(t *testing.T) {
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})
+	if !rejectsBeforeFactory(t, caps, proto.PromptRequestPayload{AgentKind: "unrecoverable", RequireExistingNativeSession: true}) {
+		t.Fatal("a kind without native session recovery prepared one")
 	}
 }
 

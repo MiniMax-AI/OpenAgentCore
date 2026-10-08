@@ -77,8 +77,7 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 		if decoder.Decode(&tool) != nil || strings.TrimSpace(tool.ServerLabel) == "" || names[tool.ServerLabel] || (tool.ConnectionOrigin != "service" && tool.ConnectionOrigin != "environment") || len(tool.RequestMetadata) != 0 || tool.Transport.Type != "http" || tool.Transport.Headers != nil {
 			return executionToolSet{}, errors.New("unsupported execution MCP configuration")
 		}
-		u, err := url.Parse(tool.Transport.ServerURL)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || strings.Contains(tool.Transport.ServerURL, "#") || u.RawQuery != "" || u.ForceQuery {
+		if !ValidMCPServerURL(tool.Transport.ServerURL) {
 			return executionToolSet{}, errors.New("unsupported execution MCP URL")
 		}
 		if tool.AllowedTools != nil {
@@ -94,4 +93,10 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 	}
 	resolved, err := functionTools(functions)
 	return executionToolSet{Functions: resolved, MCP: servers, Search: search, DisableProgrammatic: disableProgrammatic}, err
+}
+
+// ValidMCPServerURL is Core's one rule for an MCP server_url.
+func ValidMCPServerURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Hostname() != "" && (u.Scheme == "http" || u.Scheme == "https") && u.User == nil && !strings.Contains(raw, "#") && u.RawQuery == "" && !u.ForceQuery
 }
