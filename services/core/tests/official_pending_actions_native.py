@@ -155,7 +155,7 @@ def verify_pending_actions(client, foreign, http, agent_options, session_options
             outputs = [i for i in durable if i["type"] == "function_call_output" and i["call_id"] == action["call_id"]]
             assert len(outputs) == (0 if mode == "cancel" else 1)
             if outputs:
-                assert {k: outputs[0][k] for k in ("output", "error") if k in outputs[0]} == {k: event[k] for k in ("output", "error") if k in event}
+                assert {k: outputs[0][k] for k in ("output", "error")} == {k: event.get(k) for k in ("output", "error")}
             if mode == "success":
                 answers = [i for i in durable if i["type"] == "message" and i["role"] == "assistant"]
                 assert marker in "\n".join(p.get("text", "") for p in answers[-1]["content"])
