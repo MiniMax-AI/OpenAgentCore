@@ -127,7 +127,7 @@ The node installer writes Docker’s host settings into the `native` object of t
 | Field | Installer value | Meaning |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
-| `image` | The sandbox image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
+| `image` | The sandbox image’s local ID after loading | The release’s `artifacts.image_id` or `artifacts.image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
 | `network` | `oac-node-<installation-id>` | Sandbox container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
 

@@ -16,27 +16,30 @@ PUBLIC_URL_CHANGED = ("Core's public URL changed after this command was generate
                       "Nodes page and run it on this host.")
 
 
-def release(manifest):
-    return {"source_commit": manifest["source_commit"],
-            "image_id": manifest["images"]["runtime"],
-            "image_manifest_digest": manifest["image_manifest_digests"]["runtime"],
-            "microsandbox_ref": manifest["runtime_ref"],
-            "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
-            "firmware_sha256": manifest["microsandbox"]["firmware_sha256"]}
+def release(provider, manifest):
+    rules = _CONTRACT["providers"][provider]
+    artifacts = {}
+    for name, rule in rules["artifacts"].items():
+        value = manifest
+        for key in rule["manifest_path"]:
+            value = value[key]
+        artifacts[name] = value
+    runtime = {"source_commit": manifest["source_commit"], "artifacts": artifacts}
+    return canonical_release(provider, runtime)
 
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"source_commit_pattern\":\"[0-9a-f]{40}\",\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"artifacts\":{\"image_id\":{\"pattern\":\"sha256:[0-9a-f]{64}\",\"manifest_path\":[\"images\",\"runtime\"]},\"image_manifest_digest\":{\"pattern\":\"sha256:[0-9a-f]{64}\",\"manifest_path\":[\"image_manifest_digests\",\"runtime\"]}},\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"artifacts\":{},\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"disk\":true,\"artifacts\":{\"firmware_sha256\":{\"pattern\":\"[0-9a-f]{64}\",\"manifest_path\":[\"microsandbox\",\"firmware_sha256\"]},\"microsandbox_ref\":{\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\",\"manifest_path\":[\"runtime_ref\"]},\"runtime_sha256\":{\"pattern\":\"[0-9a-f]{64}\",\"manifest_path\":[\"microsandbox\",\"runtime_sha256\"]}},\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
-def canonical_spec(provider, specification, validate=True):
+def canonical_spec(provider, specification):
     rules = _CONTRACT["providers"][provider]
-    if validate and (not isinstance(specification, dict) or set(specification) != ({"resources", "runtime"} if rules["runtime"] else {"resources"})):
+    if (not isinstance(specification, dict) or set(specification) != ({"resources", "runtime"} if rules["artifacts"] else {"resources"})):
         raise ValueError("Invalid specification fields")
     resources = specification["resources"]
-    if validate and (not isinstance(resources, dict) or set(resources) - {rule["name"] for rule in _CONTRACT["resources"]}):
+    if (not isinstance(resources, dict) or set(resources) - {rule["name"] for rule in _CONTRACT["resources"]}):
         raise ValueError("Invalid resource fields")
     ordered = {}
     for rule in _CONTRACT["resources"]:
@@ -45,27 +48,39 @@ def canonical_spec(provider, specification, validate=True):
         minimum, maximum = rule["min"], rule["max"]
         if rule["omit_zero"]:
             minimum, maximum = (_CONTRACT["minimum_disk"], maximum) if rules["disk"] else (0, 0)
-        if validate and (type(value) is not int or not minimum <= value <= maximum):
+        if (type(value) is not int or not minimum <= value <= maximum):
             raise ValueError("Invalid resource value")
         if value or not rule["omit_zero"]:
             ordered[name] = value
     result = {"provider": provider, "resources": ordered}
-    if rules["runtime"]:
-        runtime = specification["runtime"]
-        if validate and (not isinstance(runtime, dict) or set(runtime) != {rule["name"] for rule in _CONTRACT["runtime"]}):
-            raise ValueError("Invalid release fields")
-        ordered_runtime = {}
-        for rule in _CONTRACT["runtime"]:
-            value = runtime[rule["name"]]
-            if validate and (not isinstance(value, str) or not re.fullmatch(rule["pattern"], value)):
-                raise ValueError("Invalid release identity")
-            ordered_runtime[rule["name"]] = value
-        result["runtime"] = ordered_runtime
+    if rules["artifacts"]:
+        result["runtime"] = canonical_release(provider, specification["runtime"])
     return result
 
 
+def canonical_release(provider, runtime):
+    rules = _CONTRACT["providers"][provider]
+    if not rules["artifacts"]:
+        raise ValueError("Provider does not accept a Runtime release")
+    if (not isinstance(runtime, dict) or set(runtime) != {"source_commit", "artifacts"}):
+        raise ValueError("Invalid release fields")
+    source = runtime["source_commit"]
+    if (not isinstance(source, str) or not re.fullmatch(_CONTRACT["source_commit_pattern"], source)):
+        raise ValueError("Invalid release source commit")
+    artifacts = runtime["artifacts"]
+    if (not isinstance(artifacts, dict) or set(artifacts) != set(rules["artifacts"])):
+        raise ValueError("Invalid release artifact fields")
+    ordered_artifacts = {}
+    for name in sorted(rules["artifacts"]):
+        value = artifacts[name]
+        if (not isinstance(value, str) or not re.fullmatch(rules["artifacts"][name]["pattern"], value)):
+            raise ValueError("Invalid release artifact identity")
+        ordered_artifacts[name] = value
+    return {"source_commit": source, "artifacts": ordered_artifacts}
+
+
 def digest(provider, specification):
-    raw = json.dumps(canonical_spec(provider, specification, validate=False), separators=(",", ":"), ensure_ascii=False).encode()
+    raw = json.dumps(canonical_spec(provider, specification), separators=(",", ":"), ensure_ascii=False).encode()
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -81,7 +96,6 @@ def validate(data, args):
                 or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
                 or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
             raise ValueError()
-        canonical_spec(provider, spec)
         if data["specification_digest"] != digest(provider, spec):
             raise ValueError()
     except (KeyError, ValueError, TypeError, AttributeError):
@@ -147,7 +161,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
 
 
 def verify_release(configuration, manifest):
-    if configuration["specification"]["runtime"] != release(manifest):
+    if configuration["specification"]["runtime"] != release(configuration["provider"], manifest):
         raise SpecificationError("Core Runtime release differs from this distribution; use the matched installation artifacts")
 
 

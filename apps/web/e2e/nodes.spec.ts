@@ -236,6 +236,12 @@ test("preselects microsandbox and asks once before switching to Docker", async (
   await docker.click();
   await expect(sizeStep).toBeVisible();
   await expect(confirm).toHaveCount(0);
+  await page.getByRole("button", { name: /^Standard/ }).click();
+  await page.getByRole("button", { name: "Advanced settings", exact: true }).click();
+  await expect(page.getByLabel("Image ID", { exact: true })).toHaveValue(`sha256:${"1".repeat(64)}`);
+  await expect(page.getByLabel("Image manifest digest", { exact: true })).toHaveValue(`sha256:${"2".repeat(64)}`);
+  await expect(page.getByLabel("Firmware SHA-256", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("microsandbox reference", { exact: true })).toHaveCount(0);
 });
 
 test("saves E2B without opening Add node, as it has no machines", async ({ page, request }) => {
@@ -300,8 +306,7 @@ test("shows the retained E2B build while a replacement key is checked", async ({
 });
 
 test("edits only the saved backend, preserving a custom size and Runtime", async ({ page, request }) => {
-  const runtime = { source_commit: "0".repeat(40), image_id: `sha256:${"a".repeat(64)}`, image_manifest_digest: `sha256:${"b".repeat(64)}`,
-    microsandbox_ref: `oac-runtime@sha256:${"b".repeat(64)}`, runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) };
+  const runtime = { source_commit: "0".repeat(40), artifacts: { image_id: `sha256:${"a".repeat(64)}`, image_manifest_digest: `sha256:${"b".repeat(64)}` } };
   const current = { resources: { cpus: 7, memory_mib: 8192 }, runtime };
   let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, update_required: 0, unknown: 0 } },
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),

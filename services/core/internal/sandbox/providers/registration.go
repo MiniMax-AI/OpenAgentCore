@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -41,8 +42,19 @@ func ValidateRegistration(a Adapter) error {
 	if err := validateConfigurationAdapter(a.Configuration); err != nil {
 		return err
 	}
-	if a.Policy.Runtime == (a.Policy.RuntimeError != "") {
+	if (len(a.Policy.Artifacts) != 0) == (a.Policy.RuntimeError != "") {
 		return invalid("Runtime input policy")
+	}
+	for name, rule := range a.Policy.Artifacts {
+		pattern, err := regexp.Compile("^(?:" + rule.Pattern + ")$")
+		if !regexp.MustCompile(`^[a-z][a-z0-9_]*$`).MatchString(name) || err != nil || pattern.MatchString("") || len(rule.ManifestPath) == 0 {
+			return invalid("Runtime artifact declaration")
+		}
+		for _, key := range rule.ManifestPath {
+			if key == "" {
+				return invalid("Runtime artifact manifest path")
+			}
+		}
 	}
 	if a.Operations == nil {
 		return invalid("operation declaration")

@@ -95,6 +95,8 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	adapter.Configuration = regionalCodec{}
+	adapter.Policy.Artifacts = map[string]sandbox.ArtifactRule{"regional_image": {Pattern: "sha256:[0-9a-f]{64}", ManifestPath: []string{"regional", "image"}}}
+	adapter.ValidateSpecification = func(s sandbox.DeploymentSpec) error { return s.ValidatePolicy(kind, adapter.Policy) }
 	registry := providers.FixtureRegistry(t, kind, adapter)
 	// The deployment reaches the registered configuration only through the
 	// registry it is built with.
@@ -166,18 +168,21 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
+	runtime := sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), Artifacts: map[string]string{"regional_image": "sha256:" + strings.Repeat("b", 64)}}
 	body, _ := json.Marshal(map[string]any{"provider": kind, "expected_generation": 0, "resources": sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, "runtime": runtime, "configuration": map[string]string{"zone": "west"}})
 	request := httptest.NewRequest("POST", "/core/v1/sandbox/deployment", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer fixture-admin")
 	response := httptest.NewRecorder()
 	h.ServeHTTP(response, request)
-	if response.Code != 200 || !strings.Contains(response.Body.String(), `"zone":"west"`) {
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `"zone":"west"`) || !strings.Contains(response.Body.String(), `"artifacts":{"regional_image":"`+runtime.Artifacts["regional_image"]+`"}`) {
 		t.Fatal(response.Code, response.Body.String())
 	}
 	saved, err := deployments().Setup(t.Context())
 	if err != nil || saved.Configuration.(regionalConfiguration).Zone != "west" {
 		t.Fatal("configuration did not roundtrip", err)
+	}
+	if saved.Specification.Runtime.SourceCommit != runtime.SourceCommit || len(saved.Specification.Runtime.Artifacts) != 1 || saved.Specification.Runtime.Artifacts["regional_image"] != runtime.Artifacts["regional_image"] {
+		t.Fatal("adapter artifact did not roundtrip", saved.Specification.Runtime)
 	}
 	var raw []byte
 	if err = pool.QueryRow(t.Context(), "SELECT provider_config FROM runtime_deployment").Scan(&raw); err != nil || !strings.Contains(string(raw), `"zone": "west"`) {
