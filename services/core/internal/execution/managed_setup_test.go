@@ -1,4 +1,4 @@
-package main
+package execution
 
 import (
 	"context"
@@ -11,30 +11,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/google/uuid"
 )
-
-func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
-	origin, err := deployment.NewPublicOrigin("https://core.example")
-	if err != nil {
-		t.Fatal(err)
-	}
-	m := configureManagedNodes(nil, nil, providers.Builtin(), processconfig.Config{InstallationID: uuid.NewString(), PublicOrigin: origin}, func(context.Context) error { return nil })
-	defer m.hub.Close()
-	if m.setup == nil || m.hub == nil || m.runtime == nil || m.runtime.Provider != nil || m.setup.sandboxLink != "wss://core.example/api/v1/sandbox-link" {
-		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
-	}
-}
 
 // fakeDeploymentSetups is a strict deploymentSetups: a call without a set
 // function fails the test.
@@ -78,19 +64,6 @@ func (f *fakeDeploymentSetups) AllocationGeneration(ctx context.Context, ref san
 	return f.allocationGeneration(ctx, ref)
 }
 
-// fakeGenerationAllocations is a strict generationAllocations.
-type fakeGenerationAllocations struct {
-	t                     testing.TB
-	credentialAllocations func(context.Context, string) ([]deployment.Allocation, error)
-}
-
-func (f *fakeGenerationAllocations) CredentialAllocations(ctx context.Context, after string) ([]deployment.Allocation, error) {
-	if f.credentialAllocations == nil {
-		return nil, unexpectedCall(f.t, "CredentialAllocations")
-	}
-	return f.credentialAllocations(ctx, after)
-}
-
 // unexpectedCall fails the test from any goroutine and returns the error the
 // caller propagates.
 func unexpectedCall(t testing.TB, method string) error {
@@ -122,29 +95,29 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 	value := deployment.Setup{InstallationID: "installation", Provider: "docker", Mode: "nodes", Generation: 1}
 	var loadErr error
 	setups := &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) { return value, loadErr }}
-	s := &managedSetup{registry: providers.Builtin(), deployment: setups, allocations: &fakeGenerationAllocations{t: t}, installationID: "installation"}
-	cached := &execution.RuntimeProvider{InstallationID: "installation", ProviderKind: "docker", Generation: 1}
-	s.publish(cached)
-	if got, err := s.load(t.Context()); err != nil || got != cached {
+	s := &runtimeManager{providers: providers.Builtin(), setups: setups, deploymentReader: &strictDeploymentReader{t: t}, setupInstallationID: "installation"}
+	cached := &RuntimeProvider{InstallationID: "installation", ProviderKind: "docker", Generation: 1}
+	s.publishSelection(cached.Generation, cached)
+	if got, err := s.loadDeployment(t.Context()); err != nil || got != cached {
 		t.Fatal("matching immutable selection was not reused")
 	}
 	loadErr = errors.New("database unavailable")
-	if _, err := s.load(t.Context()); err == nil || errors.Is(err, execution.ErrExecutionUnavailable) {
+	if _, err := s.loadDeployment(t.Context()); err == nil || errors.Is(err, ErrExecutionUnavailable) {
 		t.Fatal("stale cached selection hid storage failure", err)
 	}
 	loadErr = deployment.ErrCredentialUnreadable
-	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) || !errors.Is(err, deployment.ErrCredentialUnreadable) {
+	if _, err := s.loadDeployment(t.Context()); !errors.Is(err, ErrExecutionUnavailable) || !errors.Is(err, deployment.ErrCredentialUnreadable) {
 		t.Fatal("an unreadable credential must block execution without stopping Core", err)
 	}
 	loadErr = nil
 	value.Generation = 2
 	// No Hub is installed; a changed generation must construct again and fail.
-	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
+	if _, err := s.loadDeployment(t.Context()); !errors.Is(err, ErrExecutionUnavailable) {
 		t.Fatal("changed provider availability must block execution without losing recovery", err)
 	}
 	value.InstallationID = "other-installation"
 	value.Generation = 1
-	if _, err := s.load(t.Context()); err == nil {
+	if _, err := s.loadDeployment(t.Context()); err == nil {
 		t.Fatal("cache ignored installation identity")
 	}
 }
@@ -153,9 +126,9 @@ func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	id := uuid.NewString()
 	committed := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}}
-	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id,
-		deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&committed)}}
-	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
+	s := &runtimeManager{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, providers: providers.Builtin(), setupInstallationID: id,
+		setups: &fakeDeploymentSetups{t: t, setup: committedSetup(&committed)}}
+	if _, err := s.loadDeployment(t.Context()); !errors.Is(err, ErrExecutionUnavailable) {
 		t.Fatal("missing local helper must leave administrative recovery available", err)
 	}
 	if s.selected.Load() != nil {
@@ -167,10 +140,10 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	id := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, sandboxLink: "wss://core.example/api/v1/sandbox-link"}
-	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
-	s.publish(previous)
-	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
+	s := &runtimeManager{providers: providers.Builtin(), setupInstallationID: id, nodeProviders: hub, setups: &fakeDeploymentSetups{t: t}, deploymentReader: &strictDeploymentReader{t: t}, sandboxLink: "wss://core.example/api/v1/sandbox-link"}
+	previous := &RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
+	s.publishSelection(previous.Generation, previous)
+	candidate, err := s.prepareDeployment(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +152,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	}
 	committed := *candidate.Config
 	committed.Generation = 2
-	candidate.Publish(&committed)
+	s.publishSelection(committed.Generation, &committed)
 	if got := s.selected.Load(); got.Generation != 2 || got.Config.ProviderKind != "microsandbox" {
 		t.Fatal("commit did not publish the validated selection")
 	}
@@ -187,12 +160,12 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id}
-	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
-	s.publish(previous)
-	_, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true,
+	s := &runtimeManager{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, providers: providers.Builtin(), setupInstallationID: id}
+	previous := &RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
+	s.publishSelection(previous.Generation, previous)
+	_, err := s.prepareDeployment(t.Context(), deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
-	if !errors.Is(err, execution.ErrExecutionUnavailable) || s.selected.Load().Config != previous {
+	if !errors.Is(err, ErrExecutionUnavailable) || s.selected.Load().Config != previous {
 		t.Fatal("rejected candidate lost the previous selection", err)
 	}
 }
@@ -210,17 +183,17 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 			return deployment.Setup{}, ctx.Err()
 		}
 	}
-	s := &managedSetup{registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t, setup: delayed}}
+	s := &runtimeManager{providers: providers.Builtin(), setupInstallationID: id, setups: &fakeDeploymentSetups{t: t, setup: delayed}}
 	done := make(chan error, 1)
 	go func() {
-		provider, err := s.load(t.Context())
+		provider, err := s.loadDeployment(t.Context())
 		if err == nil && provider != nil {
 			err = errors.New("old provider survived reset")
 		}
 		done <- err
 	}()
 	<-entered
-	s.publishUnconfigured(2)
+	s.publishSelection(2, nil)
 	close(release)
 	if err := <-done; err != nil {
 		t.Fatal(err)
@@ -228,12 +201,12 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	if s.selected.Load().Generation != 2 || s.selected.Load().Config != nil {
 		t.Fatal("empty publication lost its generation")
 	}
-	s.publish(&execution.RuntimeProvider{Generation: 1, ProviderKind: "docker"})
+	s.publishSelection(1, &RuntimeProvider{Generation: 1, ProviderKind: "docker"})
 	if s.selected.Load().Config != nil {
 		t.Fatal("late old publication resurrected provider")
 	}
-	next := &execution.RuntimeProvider{Generation: 3, ProviderKind: "microsandbox"}
-	s.publish(next)
+	next := &RuntimeProvider{Generation: 3, ProviderKind: "microsandbox"}
+	s.publishSelection(next.Generation, next)
 	if s.selected.Load().Config != next {
 		t.Fatal("reset blocked subsequent configuration")
 	}
@@ -261,21 +234,21 @@ func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths 
 
 func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.T) {
 	value := deployment.Setup{InstallationID: "installation", Generation: 1}
-	setup := &managedSetup{registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&value)}, installationID: "installation"}
-	if source, kind, err := setup.observationSource(t.Context()); source != nil || kind != "" || !errors.Is(err, runtimeobs.ErrUnavailable) {
+	setup := &runtimeManager{providers: providers.Builtin(), setups: &fakeDeploymentSetups{t: t, setup: committedSetup(&value)}, setupInstallationID: "installation"}
+	if source, kind, err := (&Worker{runtimes: setup}).ObservationSource(t.Context()); source != nil || kind != "" || !errors.Is(err, runtimeobs.ErrUnavailable) {
 		t.Fatal("unconfigured setup did not return typed unavailability", source, err)
 	}
 	first := &docker.Provider{}
 	value.Provider, value.Mode, value.Generation = "docker", "nodes", 2
-	setup.publish(&execution.RuntimeProvider{Generation: 2, ProviderKind: "docker", Provider: first})
-	source, kind, err := setup.observationSource(t.Context())
+	setup.publishSelection(2, &RuntimeProvider{Generation: 2, ProviderKind: "docker", Provider: first})
+	source, kind, err := (&Worker{runtimes: setup}).ObservationSource(t.Context())
 	if err != nil || source != first || kind != "docker" {
 		t.Fatal(source, kind, err)
 	}
 	next := &microsandbox.Provider{}
 	value.Provider, value.Mode, value.Generation = "microsandbox", "nodes", 3
-	setup.publish(&execution.RuntimeProvider{Generation: 3, ProviderKind: "microsandbox", Provider: next})
-	selected, kind, err := setup.observationSource(t.Context())
+	setup.publishSelection(3, &RuntimeProvider{Generation: 3, ProviderKind: "microsandbox", Provider: next})
+	selected, kind, err := (&Worker{runtimes: setup}).ObservationSource(t.Context())
 	if err != nil || selected != next || kind != "microsandbox" {
 		t.Fatal(selected, kind, err)
 	}

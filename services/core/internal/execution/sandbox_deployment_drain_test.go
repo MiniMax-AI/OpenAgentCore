@@ -10,11 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/google/uuid"
@@ -94,11 +92,12 @@ func testLifecycleCancellationPreservesLease(t *testing.T, mode string) {
 	defer hub.Close()
 	id := uuid.NewString()
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }, unusedPreparation(t)))
+	m, err := testManager(t, owner, deployments, reader, id, configuration.Provider)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { unblock(); m.stop(); m.drain() }()
+	selectTestProvider(t, m, configuration)
 	if _, err := m.ensureDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -232,11 +231,12 @@ func TestSandboxDeploymentDrainFailureCannotReactivate(t *testing.T) {
 	defer hub.Close()
 	id := uuid.NewString()
 	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }, unusedPreparation(t)))
+	m, err := testManager(t, owner, deployments, reader, id, configuration.Provider)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { m.stop(); m.drain() }()
+	selectTestProvider(t, m, configuration)
 	if _, err := m.ensureDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}

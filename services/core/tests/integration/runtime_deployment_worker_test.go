@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -22,7 +21,7 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	}
 	stop()
 	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	_, err = startNextWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: webRuntimes(t, s, uuid.NewString(), replacement, nil)})
+	_, err = startNextWorker(t, t.Context(), s, webDispatcher(t, uuid.NewString(), replacement, runtimegateway.NewRegistry(), nil))
 	if !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("startup switched the claimed installation", err)
 	}

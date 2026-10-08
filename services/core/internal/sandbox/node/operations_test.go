@@ -37,10 +37,10 @@ func TestUnsupportedWireIsExplicitAndDoesNotInvokeProvider(t *testing.T) {
 	}
 }
 func TestUnsupportedProxyRejectsBeforeNodeResolution(t *testing.T) {
-	p := (&Hub{}).GenerationProvider(docker.Operations(), func(context.Context, sandbox.Reference) (string, uint64, error) {
+	p := sandbox.NewGenerationRouter(docker.Operations(), func(context.Context, sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
 		t.Fatal("unsupported call resolved a node")
-		return "", 0, nil
-	}).(*provider)
+		return nil, nil, nil
+	})
 	if err := sandbox.ValidateProvider(p); err != nil {
 		t.Fatal(err)
 	}

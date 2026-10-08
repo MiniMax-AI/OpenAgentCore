@@ -51,15 +51,6 @@ func unitDeploymentService(t *testing.T) *deployment.Service {
 	return service
 }
 
-// unusedPreparation is the preparer of a test that submits no sandbox
-// selection; preparing one fails the test.
-func unusedPreparation(t *testing.T) RuntimeDeploymentPreparer {
-	return func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error) {
-		t.Error("the test prepared a sandbox selection it did not submit")
-		return PreparedRuntimeDeployment{}, errors.New("unexpected sandbox selection preparation")
-	}
-}
-
 // deploymentOperations builds the deployment service on storage and reader and
 // the execution operations on execution.
 func deploymentOperations(t *testing.T, storage deployment.Storage, reader deployment.Reader, execution deployment.ExecutionStorage) (*deployment.Service, *deployment.ExecutionOperations) {

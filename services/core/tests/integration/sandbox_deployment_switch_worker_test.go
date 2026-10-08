@@ -13,9 +13,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/google/uuid"
 )
 
@@ -26,20 +26,16 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	var fail atomic.Bool
 	var preparations atomic.Int32
-	configuration := execution.NewDeferredRuntimeProvider(id, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &execution.RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p}, nil
-	}, func(ctx context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
+	registry := &fixtureProviderRegistry{t: t, provider: p, lookup: func(kind string) (providers.Adapter, error) {
 		preparations.Add(1)
 		if fail.Load() {
-			return execution.PreparedRuntimeDeployment{}, errors.New("fixture provider unavailable")
+			return providers.Adapter{}, errors.New("fixture provider unavailable")
 		}
-		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
-	})
-	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
+		return providers.Builtin().Lookup(kind)
+	}}
+	dispatcher := webDispatcher(t, id, p, runtimegateway.NewRegistry(), nil)
+	dispatcher.Providers = registry
+	w := startWorker(t, t.Context(), s, dispatcher)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()

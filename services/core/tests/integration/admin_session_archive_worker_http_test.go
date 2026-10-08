@@ -17,7 +17,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -32,19 +31,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	s, pool := newManagedTestStore(t)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	deployments := deploymentService(t, s)
-	providerConfig := func(setup deployment.Setup) *execution.RuntimeProvider {
-		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
-	}
-	configuration := execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return providerConfig(setup), nil
-	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
-		return execution.PreparedRuntimeDeployment{Config: providerConfig(setup)}, nil
-	})
+
 	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +40,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(errors.Join(err, lease.Close(t.Context())))
 	}
-	worker := startOwnedWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration}, owner)
+	worker := startOwnedWorker(t, t.Context(), s, webDispatcher(t, installation, provider, runtimegateway.NewRegistry(), nil), owner)
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {

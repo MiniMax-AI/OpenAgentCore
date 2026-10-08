@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -15,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -80,18 +78,14 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	loads := 0
-	config := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
+	m, err := testManager(t, owner, deployments, reader, id, hub.Proxy(uuid.NewString(), docker.Operations(), 1))
+	m.setups = &fakeDeploymentSetups{t: t, setup: func(ctx context.Context) (deployment.Setup, error) {
 		if ctx.Err() != nil {
 			t.Error("recovery inherited cancelled page")
 		}
 		loads++
-		setup, err := deployments.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}, nil
-	}, unusedPreparation(t))
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, config)
+		return deployments.Setup(ctx)
+	}}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,21 +192,8 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 	deployments, _ := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	config := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
-		setup, err := pooled.Setup(ctx)
-		if err != nil || setup.Provider == "" {
-			return nil, err
-		}
-		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}, nil
-	}, unusedPreparation(t))
-	var published []uint64
-	config.PublishUnconfigured = func(generation uint64) {
-		if committedReads != 0 {
-			t.Error("a deployment read stood between the reset commit and its publication")
-		}
-		published = append(published, generation)
-	}
-	m, err := newRuntimeManager(owner, deployments, adapter, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, config)
+	m, err := testManager(t, owner, deployments, adapter, id, hub.Proxy(uuid.NewString(), docker.Operations(), 1))
+	m.setups = pooled
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,8 +208,8 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 	if err := m.resetStep(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if len(published) != 1 || published[0] != 2 {
-		t.Fatal("reset did not publish its committed generation", published)
+	if published := m.selected.Load(); published == nil || published.Generation != 2 || published.Config != nil || committedReads != 0 {
+		t.Fatal("reset did not publish its committed generation without reading", published, committedReads)
 	}
 	m.mu.Lock()
 	current := m.config
@@ -247,7 +228,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 		return deployment.Snapshot{Record: deployment.Record{InstallationID: id, Generation: 1}}, nil
 	}}
 	deployments, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
-	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t)))
+	m, err := testManager(t, Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +250,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 func TestSandboxResetChangesReturnViewReadAfterCommit(t *testing.T) {
 	owner, deployments, reader := resetManager(t)
 	id := initializeE2BDeployment(t, owner)
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t)))
+	m, err := testManager(t, owner, deployments, reader, id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

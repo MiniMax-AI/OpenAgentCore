@@ -2,11 +2,10 @@ package execution
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -19,16 +18,17 @@ func TestSandboxProviderRegistrationDoesNotRequireAnExecutionVendorBranch(t *tes
 			id := uuid.NewString()
 			config := &RuntimeProvider{InstallationID: id, ProviderKind: "contract-fixture", Mode: mode,
 				SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: &lifecycleOnlySandbox{}}
-			m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }, unusedPreparation(t)))
+			m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, config.Provider)
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { m.stop(); m.drain() })
+			selectTestProvider(t, m, config)
 			ready, err := m.ensureDeployment(t.Context())
 			if err != nil || !ready {
 				t.Fatalf("registered provider cannot enter common lifecycle: %v", err)
 			}
-			if m.config.Provider != config.Provider || m.config.ProviderKind != config.ProviderKind || m.config.Mode != mode {
+			if m.config.ProviderKind != config.ProviderKind || m.config.Mode != mode || !reflect.DeepEqual(m.config.Provider.ProviderOperations(), config.Provider.ProviderOperations()) {
 				t.Fatal("registration identity changed")
 			}
 		})

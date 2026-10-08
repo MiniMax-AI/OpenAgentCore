@@ -433,7 +433,7 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 	tenant, session, environment := managedSession(t, s)
 	srv := startLinkRoute(t, s)
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: srv.Relay, ManagedRuntimes: webRuntimes(t, s, key, provider, nil)})
+	w := startWorker(t, t.Context(), s, webDispatcher(t, key, provider, runtimegateway.NewRegistry(), srv.Relay))
 	t.Cleanup(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {

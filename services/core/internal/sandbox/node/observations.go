@@ -17,7 +17,7 @@ func validObservation(target runtimeobs.Target, reference sandbox.Reference) boo
 		validID(target.Instance.ProviderKey) && observationReference(target) == reference && target.TokenUsage == nil
 }
 
-// Observe uses the allocation's existing node resolver and never changes its
+// Observe reads the bound node and generation and never changes their
 // compute state. Session token counters stay in Core, outside provider telemetry.
 func (p *provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
 	target.TokenUsage = nil

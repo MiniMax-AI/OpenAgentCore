@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/google/uuid"
@@ -20,11 +18,12 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 	defer hub.Close()
 	id := uuid.NewString()
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }, unusedPreparation(t)))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, config.Provider)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { m.stop(); m.drain() }()
+	selectTestProvider(t, m, config)
 	if _, err := m.ensureDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +63,7 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 		t.Fatal("switch drain blocked")
 	}
 	config = &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: 2, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	selectTestProvider(t, m, config)
 	if err := m.activateDeployment(t.Context(), deployment.View{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b"}); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 
 func TestSandboxManagerFailedActivationStaysPaused(t *testing.T) {
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, errors.New("provider unavailable") }, unusedPreparation(t)))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,6 +89,9 @@ func TestSandboxManagerFailedActivationStaysPaused(t *testing.T) {
 	if err := m.pauseDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	m.setups = &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) {
+		return deployment.Setup{}, errors.New("provider unavailable")
+	}}
 	if err := m.activateDeployment(t.Context(), deployment.View{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b"}); err == nil {
 		t.Fatal("failed provider activated")
 	}
@@ -102,10 +105,11 @@ func TestSandboxManagerCancelledSwitchCannotResumeBeforeDrain(t *testing.T) {
 	defer hub.Close()
 	id := uuid.NewString()
 	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }, unusedPreparation(t)))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, config.Provider)
 	if err != nil {
 		t.Fatal(err)
 	}
+	selectTestProvider(t, m, config)
 	if _, err := m.ensureDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +151,7 @@ func TestSandboxManagerCancelledSwitchCannotResumeBeforeDrain(t *testing.T) {
 	}
 	finish()
 	released = true
+	selectTestProvider(t, m, config)
 	if err := m.activateDeployment(t.Context(), expected); err != nil {
 		t.Fatal("drained generation did not resume", err)
 	}
@@ -156,11 +161,7 @@ func TestSandboxActivationCannotBypassOutstandingDrain(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), relay.New(nil), nil, NewDeferredRuntimeProvider(id,
-		func(context.Context) (*RuntimeProvider, error) { return nil, nil },
-		func(_ context.Context, setup deployment.Setup) (PreparedRuntimeDeployment, error) {
-			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, SandboxLink: "wss://core.example/api/v1/sandbox-link", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}}, nil
-		}))
+	m, err := testManager(t, Owner{Lease: heldLease{}}, nil, nil, id, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
