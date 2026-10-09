@@ -1375,3 +1375,98 @@ func build(out, pkg string) error {
 	}
 	return nil
 }
+
+// Once shim loss or an input failure decides to cancel, a later leader exit
+// must not withdraw cancellation of descendants still in the remote scope.
+func TestCancellationSurvivesConcurrentLeaderExit(t *testing.T) {
+	for _, cause := range []string{"shim_loss", "stdin_lost"} {
+		t.Run(cause, func(t *testing.T) {
+			for _, order := range []string{"cancel_first", "exit_first", "leader_running"} {
+				t.Run(order, func(t *testing.T) {
+					p := newPeer()
+					rw, err := p.dial(0)(t.Context())
+					if err != nil {
+						t.Fatal(err)
+					}
+					client := sp.NewClient(rw)
+					t.Cleanup(func() { client.Close() })
+					description, err := client.Describe(t.Context())
+					if err != nil {
+						t.Fatal(err)
+					}
+					op, _, err := client.Start(t.Context(), description.ServerInstanceID, sandboxwire.NewID(), sp.ProcessSpec{
+						Executable: []byte("/bin/sh"), Argv: [][]byte{[]byte("sh")}, Cwd: []byte("/"), Scope: sp.ScopePOSIXSession, IOMode: sp.IOPipes,
+					})
+					if err != nil {
+						t.Fatal(err)
+					}
+					// A connected relay sink lets StopInput use its real send path.
+					sockets, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+					if err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(func() { unix.Close(sockets[1]) })
+					file := os.NewFile(uintptr(sockets[0]), "broker")
+					conn, err := net.FileConn(file)
+					file.Close()
+					if err != nil {
+						t.Fatal(err)
+					}
+					t.Cleanup(func() { conn.Close() })
+					b := &Broker{ctx: t.Context(), log: slog.New(slog.NewTextHandler(io.Discard, nil)), conn: conn.(*net.UnixConn)}
+					inv := b.newInvocation(processshim.Open{ID: 1})
+					inv.cur = handle{op: op, s: &stream{client: client}, relinked: make(chan struct{})}
+					close(inv.started)
+					cancel := inv.shimGone
+					if cause == "stdin_lost" {
+						cancel = func() { inv.stdinLost("input transport failed") }
+					}
+					leaderExit := func() {
+						p.mu.Lock()
+						p.st.State, p.background = sp.StateExited, true
+						p.mu.Unlock()
+						inv.decideExit()
+					}
+					if order == "cancel_first" {
+						// StopInput closes stopIn after the caller selects cancellation, then
+						// waits for sendMu. Exited records its decision before joining StopInput.
+						canceled, exited := make(chan struct{}), make(chan struct{})
+						func() {
+							inv.sendMu.Lock()
+							defer inv.sendMu.Unlock()
+							go func() { cancel(); close(canceled) }()
+							select {
+							case <-inv.stopIn:
+							case <-time.After(3 * time.Second):
+								t.Fatal("cancellation did not reach StopInput")
+							}
+							go func() { leaderExit(); close(exited) }()
+							await(t, "leader exit decision", inv.exitDecided)
+						}()
+						for _, done := range []chan struct{}{canceled, exited} {
+							select {
+							case <-done:
+							case <-time.After(3 * time.Second):
+								t.Fatal("cancellation did not return")
+							}
+						}
+					} else {
+						if order == "exit_first" {
+							leaderExit()
+						}
+						cancel()
+					}
+					got := p.counts()
+					want := 1
+					scope := sp.ScopeStateClosed
+					if order == "exit_first" {
+						want, scope = 0, sp.ScopeStateActive
+					}
+					if got.cancels != want || got.st.Scope != scope {
+						t.Fatalf("remote cancellations=%d scope=%v; want %d, %v", got.cancels, got.st.Scope, want, scope)
+					}
+				})
+			}
+		})
+	}
+}
