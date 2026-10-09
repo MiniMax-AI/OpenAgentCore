@@ -63,7 +63,7 @@ test "$(node "$native/cli.js" --version)" = "$version"
 )
 (
   cd "$context/upstream"
-  MCODE_SOURCE="$context/upstream" node --test "$context/native-prompt.test.mjs" "$context/native-mcp-lifecycle.test.mjs"
+  MCODE_SOURCE="$context/upstream" node --test "$context/native-prompt.test.mjs" "$context/native-mcp-lifecycle.test.mjs" "$context/native-skills.test.mjs"
   node scripts/build.mjs
 )
 artifact="$context/artifact"
