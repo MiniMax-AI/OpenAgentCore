@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -252,14 +254,23 @@ func (w *world) readEntry(ctx context.Context, e sandboxfs.Entry, limit int64) (
 	}
 	// Release also joins an Open whose reply was lost to cancellation. The
 	// server orders release after acquisition of this handle.
+	return b.Bytes(), errors.Join(err, w.closeHandle(ctx, h, false))
+}
+
+// closeHandle settles an acquired or uncertain handle despite caller cancellation.
+func (w *world) closeHandle(ctx context.Context, h sandboxfs.HandleID, directory bool) error {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeBound)
 	defer cancel()
-	_, releaseErr := w.c.Release(cleanup, &sandboxfs.ReleaseRequest{Handle: h})
-	if releaseErr != nil {
-		// The next owner operation drains this attachment before reusing it.
+	var err error
+	if directory {
+		_, err = w.c.ReleaseDir(cleanup, &sandboxfs.ReleaseDirRequest{Handle: h})
+	} else {
+		_, err = w.c.Release(cleanup, &sandboxfs.ReleaseRequest{Handle: h})
+	}
+	if err != nil {
 		w.c.Close()
 	}
-	return b.Bytes(), errors.Join(err, releaseErr)
+	return err
 }
 
 // create makes name in dir, exclusively, with mode, writes data to it and
@@ -268,13 +279,30 @@ func (w *world) create(ctx context.Context, dir sandboxfs.NodeRef, name string, 
 	if err := w.mutable(); err != nil {
 		return sandboxfs.Entry{}, err
 	}
+	e, h, err := w.createFile(ctx, dir, name, mode, data)
+	if e.Node.ID != 0 {
+		w.track(e)
+	}
+	err = w.mutation(err)
+	if h != 0 {
+		err = errors.Join(err, w.mutation(w.closeHandle(ctx, h, false)))
+	}
+	return e, err
+}
+
+// createFile returns its acquired or uncertain handle to the caller for release.
+// It does not change the owner's references or quarantine.
+func (w *world) createFile(ctx context.Context, dir sandboxfs.NodeRef, name string, mode uint32, data []byte) (sandboxfs.Entry, sandboxfs.HandleID, error) {
 	h := w.handles.Next()
 	r, err := w.c.Create(ctx, &sandboxfs.CreateRequest{Handle: h, Parent: dir, Name: []byte(name), Mode: mode, Access: sandboxfs.AccessWrite, Exclusive: true})
 	if err != nil {
-		return sandboxfs.Entry{}, w.mutation(err)
+		var f *sandboxfs.Failure
+		if errors.As(err, &f) && f.Effect == sandboxwire.EffectNone {
+			h = 0
+		}
+		return sandboxfs.Entry{}, h, err
 	}
-	e := w.track(r.Entry)
-	defer w.release(ctx, h)
+	e := r.Entry
 	for off := 0; off < len(data); {
 		chunk := data[off:min(len(data), off+int(w.caps.MaxWriteBytes))]
 		r, err := w.c.Write(ctx, &sandboxfs.WriteRequest{Handle: h, Offset: uint64(off), Data: chunk})
@@ -285,14 +313,12 @@ func (w *world) create(ctx context.Context, dir sandboxfs.NodeRef, name string, 
 			err = io.ErrShortWrite
 		}
 		if err != nil {
-			return e, w.mutation(err)
+			return e, h, err
 		}
 		off += int(r.Written)
 	}
-	if _, err := w.c.Fsync(ctx, &sandboxfs.FsyncRequest{Handle: h}); err != nil {
-		return e, w.mutation(err)
-	}
-	return e, nil
+	_, err = w.c.Fsync(ctx, &sandboxfs.FsyncRequest{Handle: h})
+	return e, h, err
 }
 
 func (w *world) link(ctx context.Context, node, dir sandboxfs.NodeRef, name string) error {
@@ -322,13 +348,26 @@ func (w *world) remove(ctx context.Context, dir sandboxfs.NodeRef, name string) 
 }
 
 func (w *world) syncDir(ctx context.Context, dir sandboxfs.NodeRef) error {
+	h, err := w.syncDirectory(ctx, dir)
+	err = w.mutation(err)
+	if h != 0 {
+		err = errors.Join(err, w.mutation(w.closeHandle(ctx, h, true)))
+	}
+	return err
+}
+
+// syncDirectory leaves handle release and quarantine with its caller.
+func (w *world) syncDirectory(ctx context.Context, dir sandboxfs.NodeRef) (sandboxfs.HandleID, error) {
 	h := w.handles.Next()
 	if _, err := w.c.OpenDir(ctx, &sandboxfs.OpenDirRequest{Handle: h, Node: dir}); err != nil {
-		return err
+		var f *sandboxfs.Failure
+		if errors.As(err, &f) && f.Effect == sandboxwire.EffectNone {
+			h = 0
+		}
+		return h, err
 	}
-	defer w.c.ReleaseDir(ctx, &sandboxfs.ReleaseDirRequest{Handle: h})
 	_, err := w.c.Fsync(ctx, &sandboxfs.FsyncRequest{Handle: h})
-	return w.mutation(err)
+	return h, err
 }
 
 // publish writes data as name in dir with mode through a temporary file, so
@@ -481,7 +520,8 @@ func (w *world) writeTree(ctx context.Context, dir sandboxfs.NodeRef, name strin
 	}
 	dirs := map[string]sandboxfs.NodeRef{"": e.Node}
 	order := []string{""}
-	for _, file := range files {
+	parents := make([]sandboxfs.NodeRef, len(files))
+	for i, file := range files {
 		parts, err := components(file.Path)
 		if err != nil || len(parts) == 0 {
 			return fs.ErrInvalid
@@ -499,18 +539,65 @@ func (w *world) writeTree(ctx context.Context, dir sandboxfs.NodeRef, name strin
 			}
 			at = next
 		}
+		parents[i] = dirs[at]
+	}
+	// Each phase admits at most the declared number of handles. A failed
+	// task stops new admissions; already admitted work settles before the
+	// owner tracks every acquired reference and classifies every failure.
+	run := func(n int, directory bool, work func(int) (sandboxfs.Entry, sandboxfs.HandleID, error)) error {
+		results := make([]struct {
+			entry       sandboxfs.Entry
+			err, closed error
+		}, n)
+		var jobs errgroup.Group
+		jobs.SetLimit(int(min(uint32(4), w.caps.MaxOpenHandles)))
+		var stopped atomic.Bool
+		for i := range n {
+			jobs.Go(func() error {
+				if stopped.Load() {
+					return nil
+				}
+				var h sandboxfs.HandleID
+				results[i].entry, h, results[i].err = work(i)
+				if results[i].err != nil {
+					stopped.Store(true)
+				}
+				if h != 0 {
+					results[i].closed = w.closeHandle(ctx, h, directory)
+					if results[i].closed != nil {
+						stopped.Store(true)
+					}
+				}
+				return nil
+			})
+		}
+		jobs.Wait()
+		var errs []error
+		for _, r := range results {
+			if r.entry.Node.ID != 0 {
+				w.track(r.entry)
+			}
+			errs = append(errs, w.mutation(r.err), w.mutation(r.closed))
+		}
+		return errors.Join(errs...)
+	}
+	if err := run(len(files), false, func(i int) (sandboxfs.Entry, sandboxfs.HandleID, error) {
+		file := files[i]
 		mode := uint32(0o400)
 		if file.Executable {
 			mode = 0o500
 		}
-		if _, err := w.create(ctx, dirs[at], parts[len(parts)-1], mode, file.Data); err != nil {
-			return err
-		}
+		return w.createFile(ctx, parents[i], path.Base(file.Path), mode, file.Data)
+	}); err != nil {
+		return err
 	}
+	syncs := make([]sandboxfs.NodeRef, 0, len(order)+1)
 	for _, d := range order {
-		if err := w.syncDir(ctx, dirs[d]); err != nil {
-			return err
-		}
+		syncs = append(syncs, dirs[d])
 	}
-	return w.syncDir(ctx, parent)
+	syncs = append(syncs, parent)
+	return run(len(syncs), true, func(i int) (sandboxfs.Entry, sandboxfs.HandleID, error) {
+		h, err := w.syncDirectory(ctx, syncs[i])
+		return sandboxfs.Entry{}, h, err
+	})
 }

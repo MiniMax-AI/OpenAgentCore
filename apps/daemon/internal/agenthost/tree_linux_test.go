@@ -21,6 +21,7 @@ import (
 
 type treeService struct {
 	sandboxfs.Service
+	intercept                     func(sandboxfs.Service) sandboxfs.Service
 	opens, releases, active, peak atomic.Int32
 	read                          func(context.Context) error
 	opened                        func(context.Context)
@@ -113,7 +114,13 @@ func treeWorld(t *testing.T, s *treeService, files map[string]string) (*world, s
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { server.Close() })
-	server.Intercept(func(real sandboxfs.Service) sandboxfs.Service { s.Service = real; return s })
+	server.Intercept(func(real sandboxfs.Service) sandboxfs.Service {
+		s.Service = real
+		if s.intercept != nil {
+			return s.intercept(s)
+		}
+		return s
+	})
 	stream, err := server.Dial(t.Context())
 	if err != nil {
 		t.Fatal(err)
