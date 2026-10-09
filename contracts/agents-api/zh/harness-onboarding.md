@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a18a2221b28aa01596574a1db63e1bf643dc43fb73c15261fb8932dd447f499b
+source_hash: e69944fa75e85c1154c8ef5921195a84a065c95f2d2d99c91fcf6024651c3634
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -296,12 +296,14 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 
 - 视图路径和主机路径都是干净的绝对路径；
 - closure 名称是单个路径分量，且不是 `bin`、`home` 和 `run`，这三个由 agent host 用于 shim、Session home 和进程 relay；
-- shim 路径、overlay 和 mask 互不重叠，也不与 `/` 重叠，并且不进入视图自己构建的树：`/.oac`、`/proc` 和 `/dev`（`ViewReserved`）；
+- shim 路径、overlay 和 mask 互不重叠，也不与 `/` 重叠，并且不进入视图自己构建的树：`/.oac`、`/proc`、`/sys` 和 `/dev`（`ViewReserved`）；
 - 每个 `LocalExec` 条目都位于某个 closure 目录或某个 `Exec` overlay 中；
 - shim 名称和 `ForwardEnv` 名称各自唯一，没有 shim 名为 `oac-process-shim`（该名称属于进程 relay）或以 `oac-mcp-` 开头（该前缀属于 [stdio 别名](#stdio-mcp)），变量名不含 `=`，且 `ForwardEnv` 不指定视图或 broker 设置的变量（[环境](#environment)）；
 - `Proxy` 是两个取值之一，且 `Executor` 非 nil。
 
 `harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。工作区必须完整地位于沙箱世界中：绑定会在任何 Environment 副作用之前拒绝与公共保留树或 agent-host overlay 的重叠；Harness 准入会在任何原生副作用之前拒绝与其声明的 overlay、mask 或 shim 路径的重叠。这两种操作都不会改用私有 home 或其他目录。带沙箱世界的初次启动中，launcher 会在该世界内打开工作目录，不跟随符号链接也不跨越挂载点，然后在 fork 前进入已打开的目录；路径被修改也不能将启动重定向到视图所属挂载点。空根启动和 `Spawn` 保留各自的目录规则，包括在私有 home 中运行原生历史 helper。此启动检查不会限制原生进程随后切换目录的位置。
+
+视图拥有原生进程的内核接口：新挂载的 `/proc`、只读 `/sys` 和最小 `/dev`。`/sys/fs/cgroup` 上新挂载的只读 cgroup2 以视图的 cgroup 命名空间为根，因此 `/proc/self/cgroup` 与可见层级描述相同的进程组，不暴露祖先或兄弟 cgroup。视图在自己的网络命名空间中挂载 sysfs，绝不绑定宿主的 `/sys` 树。原生文件工具在本地读取这些保留的内核路径。通过 Process 协议转发的命令和公共 File 操作仍使用沙箱文件系统，包括沙箱的 `/sys`；工作区文件仍位于沙箱世界中。这些挂载也存在于空根视图中。
 
 ### 能力 {#capabilities}
 
@@ -309,7 +311,7 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 
 ### Environment none {#environment-none}
 
-设置了 `DisableExecutionEnvironment` 的请求在空根视图中运行：`/` 是只读、noexec 的 tmpfs，只包含 closure、Session home、agent host 运行时文件、`/proc`、`/dev` 和 overlay 的挂载点。它没有沙箱文件、没有 shim、没有 Link 附着，也没有沙箱网络，因此通用代理拒绝每个请求；cgroup、隔离和网关保持不变。请求不携带 `LocalEnvironment`，Harness 在 `/.oac/home/work`（`ViewWorkName`）中运行。请求本身已经表达了这一配置，因此线协议没有对应字段。既没有 `LocalEnvironment` 也没有 `DisableExecutionEnvironment` 的请求是不完整的绑定，agent host 会拒绝它。
+设置了 `DisableExecutionEnvironment` 的请求在空根视图中运行：`/` 是只读、noexec 的 tmpfs，只包含 closure、Session home、agent host 运行时文件、`/proc`、`/sys`、`/dev` 和 overlay 的挂载点。它没有沙箱文件、没有 shim、没有 Link 附着，也没有沙箱网络，因此通用代理拒绝每个请求；cgroup、隔离和网关保持不变。请求不携带 `LocalEnvironment`，Harness 在 `/.oac/home/work`（`ViewWorkName`）中运行。请求本身已经表达了这一配置，因此线协议没有对应字段。既没有 `LocalEnvironment` 也没有 `DisableExecutionEnvironment` 的请求是不完整的绑定，agent host 会拒绝它。
 
 ### 可执行文件 {#executables}
 

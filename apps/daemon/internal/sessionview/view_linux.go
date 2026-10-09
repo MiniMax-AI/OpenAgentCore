@@ -122,6 +122,11 @@ func (v *View) launch(spec *Spec) error {
 	if v.cgroup, err = os.MkdirTemp(spec.CgroupParent, "view-*"); err != nil {
 		return &Error{Kind: ErrCgroup, Op: "create", Path: spec.CgroupParent, Err: err}
 	}
+	// The view reads its own kernel accounting through a read-only mount.
+	// Keep root ownership and grant no cgroup management permissions.
+	if err := os.Chmod(v.cgroup, 0o555); err != nil {
+		return &Error{Kind: ErrCgroup, Op: "chmod", Path: v.cgroup, Err: err}
+	}
 	cgroup, err := os.Open(v.cgroup)
 	if err != nil {
 		return &Error{Kind: ErrCgroup, Op: "open", Path: v.cgroup, Err: err}
@@ -164,7 +169,7 @@ func (v *View) launch(spec *Spec) error {
 		ExtraFiles: files,
 		// Cloning into the namespaces, rather than unsharing later, puts every runtime thread of the launcher in them and makes it PID 1 of the view. Cloning into the cgroup, rather than moving the launcher there, means that no process of the view ever runs outside it.
 		SysProcAttr: &syscall.SysProcAttr{
-			Cloneflags:  syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID,
+			Cloneflags:  syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID | syscall.CLONE_NEWCGROUP,
 			Setsid:      true,
 			UseCgroupFD: true,
 			CgroupFD:    int(cgroup.Fd()),
@@ -703,6 +708,7 @@ func (s *Spec) mountpoints() []Mountpoint {
 	}
 	m = append(m,
 		Mountpoint{Path: agent.ViewProcRoot, Dir: true},
+		Mountpoint{Path: agent.ViewSysRoot, Dir: true},
 		Mountpoint{Path: agent.ViewDevRoot, Dir: true},
 	)
 	for _, o := range s.Overlays {

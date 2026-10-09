@@ -69,6 +69,11 @@ func TestMain(m *testing.M) {
 func TestViewIsolation(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
+	sibling := filepath.Join(f.cgroups, "other-view")
+	if err := unix.Mkdir(sibling, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Rmdir(sibling)
 	w := &loopbackWorld{dir: f.world}
 	spec := f.spec(w, "probe", "OAC_VIEW_HOST_PATH="+f.self)
 	spec.Network.Setup = serveBroker(t)
@@ -803,6 +808,7 @@ func TestWorldInitialDirectoryStaysInWorld(t *testing.T) {
 		{"private mount", "/.oac/home", unix.EXDEV},
 		{"overlay mount", "/etc/oac-overlay", unix.EXDEV},
 		{"proc mount", "/proc", unix.EXDEV},
+		{"sys mount", "/sys", unix.EXDEV},
 		{"custom workspace", "/data/project", nil},
 		{"world root", "/", nil},
 	} {
@@ -920,7 +926,7 @@ func newFixture(t *testing.T) *fixture {
 		staging: filepath.Join(base, "staging"),
 		cgroups: sessionviewtest.CgroupParent(t),
 	}
-	for _, d := range []string{".oac/harness", ".oac/home", ".oac/run", ".oac/bin", "proc", "dev", "bin", "usr/bin", "data", "etc/oac-overlay"} {
+	for _, d := range []string{".oac/harness", ".oac/home", ".oac/run", ".oac/bin", "proc", "sys", "dev", "bin", "usr/bin", "data", "etc/oac-overlay"} {
 		mkdir(t, filepath.Join(f.world, d))
 	}
 	writeFile(t, filepath.Join(f.world, "bin", "sh"), "")
@@ -1363,7 +1369,11 @@ func runHelper(mode string) int {
 		if err := unix.Statfs("/", &st); err != nil || st.Type != unix.TMPFS_MAGIC || st.Flags&(unix.ST_RDONLY|unix.ST_NOEXEC) != unix.ST_RDONLY|unix.ST_NOEXEC {
 			errs = append(errs, fmt.Errorf("root: type %#x flags %#x, %v", st.Type, st.Flags, err))
 		}
-		for dir, want := range map[string][]string{"/": {".oac", "dev", "etc", "proc"}, "/.oac": {"bin", "harness", "home"}, "/.oac/bin": nil, "/etc": {"oac-overlay"}} {
+		if err := systemFilesystems(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		for dir, want := range map[string][]string{"/": {".oac", "dev", "etc", "proc", "sys"}, "/.oac": {"bin", "harness", "home"}, "/.oac/bin": nil, "/etc": {"oac-overlay"}} {
 			entries, err := os.ReadDir(dir)
 			var names []string
 			for _, e := range entries {
@@ -1516,6 +1526,7 @@ var viewChecks = []struct {
 		}
 		return nil
 	}},
+	{"system filesystems belong to the view", systemFilesystems},
 	{"the relay runs as the view user without privileges", func() error {
 		pid := relayPID()
 		if pid == 0 {
@@ -1583,6 +1594,54 @@ func relayPID() int {
 		}
 	}
 	return 0
+}
+
+func systemFilesystems() error {
+	for path, kind := range map[string]int64{"/sys": unix.SYSFS_MAGIC, "/sys/fs/cgroup": unix.CGROUP2_SUPER_MAGIC} {
+		var stat unix.Statfs_t
+		if err := unix.Statfs(path, &stat); err != nil {
+			return err
+		}
+		if stat.Type != kind || stat.Flags&unix.ST_RDONLY == 0 || stat.Flags&unix.ST_NOEXEC == 0 {
+			return fmt.Errorf("%s is not the read-only, noexec kernel filesystem: type=%x flags=%x", path, stat.Type, stat.Flags)
+		}
+	}
+	if err := fileHas("/proc/self/cgroup", "0::/\n"); err != nil {
+		return err
+	}
+	procs, err := os.ReadFile("/sys/fs/cgroup/cgroup.procs")
+	if err != nil || !slices.Contains(strings.Fields(string(procs)), strconv.Itoa(os.Getpid())) {
+		return fmt.Errorf("current cgroup omits self: %q, %v", procs, err)
+	}
+	entries, err := os.ReadDir("/sys/fs/cgroup")
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			return fmt.Errorf("another cgroup is visible: %s", entry.Name())
+		}
+	}
+	devices, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return err
+	}
+	for _, device := range devices {
+		if device.Type()&os.ModeSymlink != 0 && device.Name() != "lo" {
+			return fmt.Errorf("another network namespace's device is visible: %s", device.Name())
+		}
+	}
+	for _, path := range []string{"/sys/fs/cgroup/cgroup.procs", "/sys/devices/system/cpu/online"} {
+		f, err := os.OpenFile(path, os.O_WRONLY, 0)
+		if f != nil {
+			f.Close()
+			return fmt.Errorf("system file is writable: %s", path)
+		}
+		if !errors.Is(err, syscall.EROFS) && !errors.Is(err, syscall.EACCES) {
+			return fmt.Errorf("write system file %s: %v", path, err)
+		}
+	}
+	return nil
 }
 
 func onlyStdio() error {

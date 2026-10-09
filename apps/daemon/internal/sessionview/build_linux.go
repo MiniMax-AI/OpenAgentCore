@@ -107,6 +107,27 @@ func (b *builder) build(spec *launchSpec) error {
 	if err := b.attach(b.proc, b.root, at, true); err != nil {
 		return err
 	}
+	at, err = b.at(agent.ViewSysRoot)
+	if err != nil {
+		return err
+	}
+	sys, err := newFS("sysfs", nil, unix.MOUNT_ATTR_RDONLY|attrNoSuid|attrNoDev|attrNoExec)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(sys)
+	if err := b.attach(sys, b.root, at, true); err != nil {
+		return err
+	}
+	// Mount in the view's cgroup namespace, never bind the host hierarchy.
+	cgroup, err := newFS("cgroup2", nil, unix.MOUNT_ATTR_RDONLY|attrNoSuid|attrNoDev|attrNoExec)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(cgroup)
+	if err := b.attachAt(cgroup, sys, "fs/cgroup", agent.ViewSysRoot+"/fs/cgroup", true); err != nil {
+		return err
+	}
 	return b.dev()
 }
 
