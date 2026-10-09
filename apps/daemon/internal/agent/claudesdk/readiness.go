@@ -132,7 +132,7 @@ func CheckRuntime(ctx context.Context, config Config) (RuntimeInfo, error) {
 		return RuntimeInfo{}, fmt.Errorf("claudesdk: runtime check failed")
 	}
 	var info RuntimeInfo
-	if json.Unmarshal(raw, &info) != nil || info.Type != "runtime_ready" || info.Protocol != 3 ||
+	if json.Unmarshal(raw, &info) != nil || info.Type != "runtime_ready" || info.Protocol != 4 ||
 		info.Node == "" || info.SDK == "" || info.MCP == "" || info.Native == "" {
 		return RuntimeInfo{}, fmt.Errorf("claudesdk: invalid runtime readiness report")
 	}

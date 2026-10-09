@@ -83,10 +83,22 @@ type InitializeParams struct {
 }
 
 type InitializeResult struct {
-	UserAgent      string `json:"userAgent"`
-	CodexHome      string `json:"codexHome"`
-	PlatformFamily string `json:"platformFamily,omitempty"`
-	PlatformOs     string `json:"platformOs,omitempty"`
+	MCPServerInvalidation bool   `json:"mcpServerInvalidation"`
+	UserAgent             string `json:"userAgent"`
+	CodexHome             string `json:"codexHome"`
+	PlatformFamily        string `json:"platformFamily,omitempty"`
+	PlatformOs            string `json:"platformOs,omitempty"`
+}
+
+// The selected stdio clients are invalidated in the entire owned thread subtree.
+// The response confirms local invalidation, not remote completion or readiness.
+type McpServerInvalidateParams struct {
+	ThreadID    string   `json:"threadId"`
+	ServerNames []string `json:"serverNames"`
+}
+
+type McpServerInvalidateResponse struct {
+	ServerNames []string `json:"serverNames"`
 }
 
 type SkillsExtraRootsSetParams struct {

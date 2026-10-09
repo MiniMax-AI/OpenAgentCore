@@ -105,7 +105,7 @@ test("the SDK accepts delayed initialization on both adapter startup paths", {ti
   else if(mode!=="required-mcp") {assert.ok(budget.remaining>0);assert.ok(Math.abs(budget.now+budget.remaining-deadline)<20);}
 
   if (!["short","expired","cancel"].includes(mode)) assert.deepEqual(observations.filter(event=>event.kind!=="budget").map(event=>event.kind),mode==="executor"?["native_spawned","initialized"]:["native_spawned","initialized","required_status","input"]);
-  if(mode==="executor")assert.deepEqual(events,[{type:"executor_ready",protocol:3}]);
+  if(mode==="executor")assert.deepEqual(events,[{type:"executor_ready",protocol:4}]);
   child.stdin.end();
   assert.deepEqual(await closed,{code:0,signal:null},stderr);
   assert.equal(observations.filter(event=>event.kind==="native_closed").length,mode==="expired"?0:1);

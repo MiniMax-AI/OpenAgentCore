@@ -24,6 +24,7 @@ func (s *Session) onAgentDelta(raw json.RawMessage) {
 }
 
 func (s *Session) onItemStarted(raw json.RawMessage) {
+	s.observeRootMCP(raw, true)
 	var p ItemStartedNotification
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return
@@ -41,6 +42,7 @@ func (s *Session) onItemStarted(raw json.RawMessage) {
 }
 
 func (s *Session) onItemCompleted(raw json.RawMessage) {
+	s.observeRootMCP(raw, false)
 	s.observeSubagentIdentity(raw)
 	var p ItemCompletedNotification
 	if err := json.Unmarshal(raw, &p); err != nil {

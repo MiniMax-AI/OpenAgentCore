@@ -38,7 +38,7 @@ func runPersistentExecutorHelper() {
 			_ = file.Close()
 		}
 		printlnReport := json.NewEncoder(os.Stdout)
-		_ = printlnReport.Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 3, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture"})
+		_ = printlnReport.Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 4, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture"})
 		return
 	}
 	scanner := bufio.NewScanner(os.Stdin)
@@ -51,7 +51,7 @@ func runPersistentExecutorHelper() {
 	}
 	_ = os.WriteFile(filepath.Join(root, "prepared"), []byte(strconv.Itoa(os.Getpid())), 0600)
 	encode := func(event bridgeEvent) { _ = json.NewEncoder(os.Stdout).Encode(event) }
-	encode(bridgeEvent{Type: "executor_ready", Protocol: 3})
+	encode(bridgeEvent{Type: "executor_ready", Protocol: 4})
 	if os.Getenv("SDK_EXECUTOR_MODE") == "block" {
 		time.Sleep(time.Hour)
 		return
@@ -117,8 +117,27 @@ func runPersistentExecutorHelper() {
 			encode(bridgeEvent{Type: "delta", TurnID: active, ItemID: "message", Delta: "steer-written"})
 		case "turn_cancel":
 			if active == command.TurnID {
+				if strings.HasPrefix(os.Getenv("SDK_EXECUTOR_MODE"), "mcp_") {
+					label := "target"
+					if os.Getenv("SDK_EXECUTOR_MODE") == "mcp_http" {
+						label = "http"
+					}
+					encode(bridgeEvent{Type: "mcp_stop", TurnID: active, Servers: []string{label}})
+					continue
+				}
 				settle(true)
 			}
+		case "mcp_stopped":
+			var response struct {
+				Confirmed bool `json:"confirmed"`
+			}
+			if command.TurnID != active || json.Unmarshal(scanner.Bytes(), &response) != nil {
+				os.Exit(6)
+			}
+			if !response.Confirmed {
+				_ = os.Setenv("SDK_EXECUTOR_MODE", "unknown_cancel")
+			}
+			settle(true)
 		}
 	}
 }

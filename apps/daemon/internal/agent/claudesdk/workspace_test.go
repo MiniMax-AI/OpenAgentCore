@@ -45,7 +45,7 @@ func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
 	if strings.Contains(string(raw)+strings.Join(env, "\n"), token) {
 		t.Fatal("bearer reached the bridge")
 	}
-	info := RuntimeInfo{Protocol: 3, Features: []string{"workspace_tools", "workspace_prepare", "workspace_command_observations", "local_runtime_v2", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"}}
+	info := RuntimeInfo{Protocol: 4, Features: []string{"workspace_tools", "workspace_prepare", "workspace_command_observations", "local_runtime_v2", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"}}
 	if validateExecutorFeatures(info, start) == nil {
 		t.Fatal("unqualified workspace bridge admitted")
 	}

@@ -22,23 +22,28 @@ import (
 // invocation is one shim invocation: the operation it started and the
 // streams the broker forwards for it through the relay.
 type invocation struct {
-	b    *Broker
-	rid  uint64 // the relay's invocation ID
-	open processshim.Open
-	log  *slog.Logger
-	spec sp.ProcessSpec
-	id   sandboxwire.ID
-	term *processshim.Terminal // nil for pipes
+	b         *Broker
+	rid       uint64 // the relay's invocation ID
+	open      processshim.Open
+	log       *slog.Logger
+	spec      sp.ProcessSpec
+	id        sandboxwire.ID
+	term      *processshim.Terminal // nil for pipes
+	alias     string                // frozen alias, assigned before admission
+	unsettled bool                  // broker.mu: observation ended without scope proof
 
 	// halt ends every wait of the invocation; stopIn ends stdin forwarding.
-	halt     chan struct{}
-	haltOnce sync.Once
-	stopIn   chan struct{}
-	stopOnce sync.Once
+	halt       chan struct{}
+	haltOnce   sync.Once
+	stopIn     chan struct{}
+	stopOnce   sync.Once
+	cancelOnce sync.Once // shim loss and targeted MCP stop share one Cancel
 
-	writing sync.WaitGroup // the output writers
-	helpers sync.WaitGroup // everything else but the stdin pump
-	started chan struct{}  // closed once the operation exists or never will
+	writing   sync.WaitGroup // the output writers
+	helpers   sync.WaitGroup // everything else but the stdin pump
+	started   chan struct{}  // closed once the operation exists or never will
+	finished  chan struct{}  // closed after teardown
+	scopeDone chan struct{}  // closed only by StartFailed or ScopeClosed
 	// gone ends when the shim is lost.
 	gone     context.Context
 	loseShim context.CancelFunc
@@ -56,13 +61,15 @@ type invocation struct {
 	sendMu sync.Mutex
 	ended  bool
 
-	mu       sync.Mutex
-	inst     sandboxwire.ID
-	cur      handle
-	exited   bool // the exit is decided: Exited, StartFailed or exit lost
-	shimLost bool
-	replied  bool
-	credit   uint32 // the outstanding Read's Max; 0 for none
+	mu             sync.Mutex
+	inst           sandboxwire.ID
+	cur            handle
+	exited         bool // the exit is decided: Exited, StartFailed or exit lost
+	shimLost       bool
+	stopping       bool // selected before the alias admission fence can reopen
+	possibleEffect bool // a Start may have created an operation
+	replied        bool
+	credit         uint32 // the outstanding Read's Max; 0 for none
 	// settlement, from delivered events
 	startFailed, outputClosed, scopeClosed bool
 }
@@ -86,6 +93,7 @@ func (b *Broker) newInvocation(open processshim.Open) *invocation {
 		b: b, rid: open.ID, open: open, log: b.log.With("invocation", open.ID),
 		id: sandboxwire.NewID(), term: open.Terminal,
 		halt: make(chan struct{}), stopIn: make(chan struct{}), started: make(chan struct{}),
+		finished: make(chan struct{}), scopeDone: make(chan struct{}),
 		sigs: make(chan processshim.Signaled, 64), input: make(chan processshim.RelayMessage, 1),
 		writers: map[sp.Stream]*writer{},
 	}
@@ -109,6 +117,10 @@ func (b *Broker) newInvocation(open processshim.Open) *invocation {
 func (inv *invocation) serve() {
 	defer inv.b.wg.Done()
 	defer inv.teardown()
+	if inv.lost() {
+		inv.reply(*refuse(processshim.ExitCannotRun, "the MCP service is stopping"), nil)
+		return
+	}
 	if refusal := inv.prepare(); refusal != nil {
 		inv.reply(*refusal, nil)
 		return
@@ -317,6 +329,9 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sta
 		ctx, cancelStart = context.WithDeadline(inv.b.ctx, began.Add(resolveWindow))
 		defer cancelStart()
 	}
+	inv.mu.Lock()
+	inv.possibleEffect = true
+	inv.mu.Unlock()
 	op, disp, err := s.client.Start(ctx, inv.inst, inv.id, inv.spec)
 	if err == nil {
 		h := handle{op: op, s: s, relinked: make(chan struct{})}
@@ -337,6 +352,9 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sta
 		*deadline = began.Add(resolveWindow)
 	}
 	if deadline.IsZero() { // nothing has started
+		inv.mu.Lock()
+		inv.possibleEffect = false
+		inv.mu.Unlock()
 		switch {
 		case s.ended():
 			return handle{}, startNow
@@ -354,6 +372,9 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sta
 		inv.fail(fmt.Sprintf("the program's start could not be resolved: %s", f.Message))
 		return handle{}, startEnded
 	case !*exists && f.Effect == sandboxwire.EffectNone && provesAbsence(f.Code):
+		inv.mu.Lock()
+		inv.possibleEffect = false
+		inv.mu.Unlock()
 		inv.reply(*refuse(processshim.ExitCannotRun, "%s: %s", inv.spec.Executable, f.Message), nil)
 		return handle{}, startEnded
 	}
@@ -553,8 +574,18 @@ func exitResult(s sp.ExitStatus) processshim.Result {
 
 func (inv *invocation) setSettlement(set func()) {
 	inv.mu.Lock()
+	closed := inv.startFailed || inv.scopeClosed
 	set()
+	if !closed && (inv.startFailed || inv.scopeClosed) {
+		close(inv.scopeDone)
+	}
 	inv.mu.Unlock()
+}
+
+func (inv *invocation) scopeSettled() bool {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+	return !inv.possibleEffect || inv.startFailed || inv.scopeClosed
 }
 
 // isSettled mirrors the service's settlement: Release succeeds once it holds.
@@ -609,7 +640,7 @@ func (inv *invocation) decideExit() {
 func (inv *invocation) lost() bool {
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
-	return inv.shimLost
+	return inv.shimLost || inv.stopping
 }
 
 func (inv *invocation) current() handle {
@@ -689,6 +720,10 @@ func (inv *invocation) shimGone() {
 }
 
 func (inv *invocation) cancelRemote() {
+	inv.cancelOnce.Do(inv.sendCancel)
+}
+
+func (inv *invocation) sendCancel() {
 	select {
 	case <-inv.started:
 	case <-inv.halt:
@@ -865,6 +900,7 @@ func (inv *invocation) stopInput() {
 // pump is not waited for, so teardown never waits for a stdin request still
 // on the stream; it sends nothing after End.
 func (inv *invocation) teardown() {
+	defer close(inv.finished)
 	inv.halted()
 	inv.b.unregister(inv.rid)
 	inv.writing.Wait()

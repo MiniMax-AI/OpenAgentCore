@@ -83,6 +83,8 @@ var (
 	// relay message that breaks the IPC. The broker then serves nothing
 	// more, and the Session fails.
 	ErrRelayLost = errors.New("processbroker: process relay lost")
+	// ErrUnsettled means a selected alias may still own sandbox effects.
+	ErrUnsettled = errors.New("processbroker: process scope settlement is unconfirmed")
 )
 
 func (c *Config) validate() error {
@@ -168,11 +170,7 @@ func underPrivate(p string) bool {
 // cwd; resolution is lexical, because the view's symlinks are not the
 // broker's to follow.
 func (x Executables) resolve(execPath, cwd string) (string, *Command, bool) {
-	p := execPath
-	if !path.IsAbs(p) {
-		p = path.Join(cwd, p)
-	}
-	p = path.Clean(p)
+	p := resolvePath(execPath, cwd)
 	if name, ok := strings.CutPrefix(p, agent.ViewPrivateRoot+"/"+agent.ViewShimName+"/"); ok {
 		if cmd, ok := x.Aliases[name]; ok {
 			return cmd.Executable, &cmd, true
@@ -182,6 +180,13 @@ func (x Executables) resolve(execPath, cwd string) (string, *Command, bool) {
 	}
 	remote, ok := x.Paths[p]
 	return remote, nil, ok
+}
+
+func resolvePath(execPath, cwd string) string {
+	if !path.IsAbs(execPath) {
+		execPath = path.Join(cwd, execPath)
+	}
+	return path.Clean(execPath)
 }
 
 // privateMarker is the view prefix no value may carry into the sandbox.

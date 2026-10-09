@@ -1,6 +1,7 @@
 package mcode
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ type launchOptions struct {
 	// bindings are the effective MCP bindings rendered into MCP; native MCP
 	// tool calls are observed against them.
 	bindings []agent.MCPBinding
+	stopMCP  func(context.Context, []string) error
 	// start runs node with script, the CLI entry, as the native process.
 	start  func(clirunner.StartOptions) (*clirunner.Process, error)
 	script string

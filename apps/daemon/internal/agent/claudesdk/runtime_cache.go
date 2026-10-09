@@ -41,7 +41,7 @@ func (c *runtimeCheckCache) check(ctx context.Context, config Config) (RuntimeIn
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.stamp == stamp && c.info.Protocol == 3 {
+	if c.stamp == stamp && c.info.Protocol == 4 {
 		return c.info, nil
 	}
 	info, err := CheckRuntime(ctx, config)

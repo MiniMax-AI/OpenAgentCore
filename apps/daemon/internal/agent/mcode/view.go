@@ -213,7 +213,7 @@ func (i viewInstall) prepare(req agent.PrepareRequest, session agent.ViewSession
 	}
 	defer data.Close()
 	opts := launchOptions{Dir: dir, DataDir: filepath.Join(session.Home.Host, viewDataName), bindings: session.MCP,
-		start: session.Launch, script: i.cli, home: session.Home.Host}
+		start: session.Launch, script: i.cli, home: session.Home.Host, stopMCP: session.StopMCP}
 	dataDir, tempDir := path.Join(session.Home.View, viewDataName), path.Join(session.Home.View, viewTempName)
 	var tools *workspaceTools
 	opts.MCP = []map[string]any{}

@@ -23,11 +23,12 @@ type executor struct {
 	done     chan struct{}
 	invalid  bool
 	nativeID string
+	stopMCP  func(context.Context, []string) error
 }
 
 // startExecutor checks the installed bridge against probe, starts it through
 // run and waits until it is ready for Turns.
-func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config, start startRequest, run func() (*session, error)) (agent.Executor, error) {
+func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config, start startRequest, stopMCP func(context.Context, []string) error, run func() (*session, error)) (agent.Executor, error) {
 	info, err := checked.check(ctx, probe)
 	if err != nil {
 		return nil, err
@@ -39,7 +40,7 @@ func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config
 	if err != nil {
 		return nil, err
 	}
-	e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume}
+	e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume, stopMCP: stopMCP}
 	go e.read()
 	if err = e.write(start); err == nil {
 		select {
@@ -60,7 +61,7 @@ func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config
 }
 
 func validateExecutorFeatures(info RuntimeInfo, start startRequest) error {
-	if info.Protocol != 3 {
+	if info.Protocol != 4 {
 		return errors.New("claudesdk: Executor bridge protocol is unavailable")
 	}
 	if start.Workspace != nil && !info.supportsWorkspacePreparation() {
@@ -114,7 +115,7 @@ func (e *executor) read() {
 			break
 		}
 		if !ready {
-			if event.Type != "executor_ready" || event.Protocol != 3 || event.TurnID != "" {
+			if event.Type != "executor_ready" || event.Protocol != 4 || event.TurnID != "" {
 				if event.Type == "error" {
 					readyFailure = bridgeFailure(event.Code)
 				}

@@ -203,7 +203,21 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 		var result any = map[string]any{}
 		switch frame.Method {
 		case "initialize":
-			result = map[string]string{"userAgent": "fixture-codex"}
+			result = map[string]any{"userAgent": "fixture-codex", "mcpServerInvalidation": os.Getenv("OAC_TEST_MCP_UNSUPPORTED") != "1"}
+		case "mcpServer/invalidate":
+			var params McpServerInvalidateParams
+			if json.Unmarshal(frame.Params, &params) != nil {
+				os.Exit(8)
+			}
+			result = McpServerInvalidateResponse{ServerNames: params.ServerNames}
+			if executorMode == "mcp-invalidate-unconfirmed" {
+				result = McpServerInvalidateResponse{}
+			}
+		case "config/mcpServer/reload":
+			if executorMode == "mcp-reload-failed" {
+				_ = output.Encode(map[string]any{"id": frame.ID, "error": map[string]any{"code": -32603, "message": "reload rejected"}})
+				continue
+			}
 		case "environment/status":
 			if os.Getenv("OAC_TEST_PREPARATION_BLOCK") == "1" {
 				for {
@@ -316,10 +330,21 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			if frame.Method == "turn/start" {
 				_ = output.Encode(map[string]any{"method": "turn/started", "params": map[string]any{"threadId": "fixture-native-thread", "turn": map[string]string{"id": currentTurn}}})
 				if held {
+					if strings.HasPrefix(executorMode, "mcp-") {
+						_ = output.Encode(map[string]any{"method": "item/started", "params": map[string]any{"threadId": "fixture-native-thread", "turnId": currentTurn, "item": map[string]any{"id": "active", "type": "mcpToolCall", "server": "active", "tool": "wait", "status": "inProgress"}}})
+					}
 					_ = output.Encode(map[string]any{"method": "item/agentMessage/delta", "params": map[string]any{"threadId": "fixture-native-thread", "turnId": currentTurn, "itemId": "held-message", "delta": "holding"}})
 				}
 			}
 			if frame.Method == "turn/interrupt" || !held {
+				if frame.Method == "turn/interrupt" && strings.HasPrefix(executorMode, "mcp-") {
+					for _, label := range []string{"active", "late"} {
+						if label == "late" {
+							_ = output.Encode(map[string]any{"method": "item/started", "params": map[string]any{"threadId": "fixture-native-thread", "turnId": currentTurn, "item": map[string]any{"id": label, "type": "mcpToolCall", "server": label, "tool": "wait", "status": "inProgress"}}})
+						}
+						_ = output.Encode(map[string]any{"method": "item/completed", "params": map[string]any{"threadId": "fixture-native-thread", "turnId": currentTurn, "item": map[string]any{"id": label, "type": "mcpToolCall", "server": label, "tool": "wait", "status": "failed", "error": map[string]any{"message": "cancelled"}}}})
+					}
+				}
 				status := "completed"
 				if frame.Method == "turn/interrupt" {
 					status = "interrupted"

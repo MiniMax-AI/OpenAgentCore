@@ -125,6 +125,7 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
+	session.StopMCP = func(context.Context, []string) error { return nil }
 	req.LocalEnvironment, req.DisableExecutionEnvironment = nil, true
 	if _, err := view.Executor(t.Context(), req, session); err == nil || len(launched) != 2 {
 		t.Fatalf("environment none: launches %d, err %v", len(launched), err)
@@ -149,6 +150,7 @@ func TestViewHandsCodexTheInstalledSkillAndMCP(t *testing.T) {
 		Proxy: "http://127.0.0.1:17100",
 		MCP: []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 			Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}},
+		StopMCP: func(context.Context, []string) error { return nil },
 		// The fake Codex runs on the host, outside the view.
 		Launch: func(opts clirunner.StartOptions) (*clirunner.Process, error) {
 			opts.Binary, opts.Dir, opts.Env = cfg.codexBinary, "", os.Environ()

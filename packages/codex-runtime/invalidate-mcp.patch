@@ -1,0 +1,398 @@
+diff --git a/codex-rs/app-server-protocol/src/protocol/common.rs b/codex-rs/app-server-protocol/src/protocol/common.rs
+index 6c00f88..3d064b4 100644
+--- a/codex-rs/app-server-protocol/src/protocol/common.rs
++++ b/codex-rs/app-server-protocol/src/protocol/common.rs
+@@ -1149,6 +1149,13 @@ client_request_definitions! {
+         response: v2::McpServerOauthLoginResponse,
+     },
+ 
++    /// Invalidates selected stdio clients in a loaded thread and its agent subtree.
++    McpServerInvalidate => "mcpServer/invalidate" {
++        params: v2::McpServerInvalidateParams,
++        serialization: global("mcp-registry"),
++        response: v2::McpServerInvalidateResponse,
++    },
++
+     McpServerRefresh => "config/mcpServer/reload" {
+         params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+         serialization: global("mcp-registry"),
+diff --git a/codex-rs/app-server-protocol/src/protocol/v1.rs b/codex-rs/app-server-protocol/src/protocol/v1.rs
+index 17013b5..57f3991 100644
+--- a/codex-rs/app-server-protocol/src/protocol/v1.rs
++++ b/codex-rs/app-server-protocol/src/protocol/v1.rs
+@@ -68,6 +68,8 @@ pub struct InitializeCapabilities {
+ #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+ #[serde(rename_all = "camelCase")]
+ pub struct InitializeResponse {
++    /// Supports mcpServer/invalidate for the complete owned agent subtree.
++    pub mcp_server_invalidation: bool,
+     pub user_agent: String,
+     /// Absolute path to the server's $CODEX_HOME directory.
+     pub codex_home: AbsolutePathBuf,
+diff --git a/codex-rs/app-server-protocol/src/protocol/v2/mcp.rs b/codex-rs/app-server-protocol/src/protocol/v2/mcp.rs
+index 7ab179c..cc4ef6b 100644
+--- a/codex-rs/app-server-protocol/src/protocol/v2/mcp.rs
++++ b/codex-rs/app-server-protocol/src/protocol/v2/mcp.rs
+@@ -865,3 +865,21 @@ impl From<rmcp::model::ElicitResult> for McpServerElicitationRequestResponse {
+         }
+     }
+ }
++
++/// The caller must first settle native work and close the selected server scopes.
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
++#[serde(rename_all = "camelCase")]
++#[ts(export_to = "v2/")]
++pub struct McpServerInvalidateParams {
++    /// Root of the owned agent subtree, including previously loaded descendants.
++    pub thread_id: String,
++    pub server_names: Vec<String>,
++}
++
++/// Acknowledges local invalidation, not remote tool completion or readiness.
++#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
++#[serde(rename_all = "camelCase")]
++#[ts(export_to = "v2/")]
++pub struct McpServerInvalidateResponse {
++    pub server_names: Vec<String>,
++}
+diff --git a/codex-rs/app-server-transport/src/transport/mod.rs b/codex-rs/app-server-transport/src/transport/mod.rs
+index c8b0e57..c6e707d 100644
+--- a/codex-rs/app-server-transport/src/transport/mod.rs
++++ b/codex-rs/app-server-transport/src/transport/mod.rs
+@@ -370,6 +370,7 @@ mod tests {
+             id: RequestId::Integer(7),
+             result: Box::new(ClientResponsePayload::Initialize(
+                 codex_app_server_protocol::InitializeResponse {
++                    mcp_server_invalidation: true,
+                     user_agent: "codex-test-agent".to_string(),
+                     codex_home,
+                     platform_family: "unix".to_string(),
+diff --git a/codex-rs/app-server-transport/src/transport/remote_control/segment_tests.rs b/codex-rs/app-server-transport/src/transport/remote_control/segment_tests.rs
+index 3b2406b..dd59f41 100644
+--- a/codex-rs/app-server-transport/src/transport/remote_control/segment_tests.rs
++++ b/codex-rs/app-server-transport/src/transport/remote_control/segment_tests.rs
+@@ -136,6 +136,7 @@ fn invalid_response_becomes_remote_control_jsonrpc_error() {
+             message: Box::new(OutgoingMessage::Response(OutgoingResponse {
+                 id: RequestId::Integer(7),
+                 result: Box::new(ClientResponsePayload::Initialize(InitializeResponse {
++                    mcp_server_invalidation: true,
+                     user_agent: "codex-test-agent".to_string(),
+                     codex_home,
+                     platform_family: "unix".to_string(),
+diff --git a/codex-rs/app-server-transport/src/transport/remote_control/tests.rs b/codex-rs/app-server-transport/src/transport/remote_control/tests.rs
+index 0114a0b..222b05a 100644
+--- a/codex-rs/app-server-transport/src/transport/remote_control/tests.rs
++++ b/codex-rs/app-server-transport/src/transport/remote_control/tests.rs
+@@ -1623,6 +1623,7 @@ async fn remote_control_http_mode_enrolls_before_connecting() {
+                 result: Box::new(
+                     codex_app_server_protocol::ClientResponsePayload::Initialize(
+                         codex_app_server_protocol::InitializeResponse {
++                            mcp_server_invalidation: true,
+                             user_agent: "codex-test-agent".to_string(),
+                             codex_home: codex_home.path().abs(),
+                             platform_family: "test-family".to_string(),
+diff --git a/codex-rs/app-server/src/message_processor.rs b/codex-rs/app-server/src/message_processor.rs
+index 8e78c92..c43d850 100644
+--- a/codex-rs/app-server/src/message_processor.rs
++++ b/codex-rs/app-server/src/message_processor.rs
+@@ -1523,6 +1523,9 @@ impl MessageProcessor {
+             ClientRequest::McpServerOauthLogin { params, .. } => {
+                 self.mcp_processor.mcp_server_oauth_login(params).await
+             }
++            ClientRequest::McpServerInvalidate { params, .. } => {
++                self.mcp_processor.mcp_server_invalidate(params).await
++            }
+             ClientRequest::McpServerRefresh { params, .. } => {
+                 self.mcp_processor.mcp_server_refresh(params).await
+             }
+diff --git a/codex-rs/app-server/src/request_processors/initialize_processor.rs b/codex-rs/app-server/src/request_processors/initialize_processor.rs
+index 442b71f..3d58c7a 100644
+--- a/codex-rs/app-server/src/request_processors/initialize_processor.rs
++++ b/codex-rs/app-server/src/request_processors/initialize_processor.rs
+@@ -140,6 +140,7 @@ impl InitializeRequestProcessor {
+ 
+         let user_agent = get_codex_user_agent();
+         let response = InitializeResponse {
++            mcp_server_invalidation: true,
+             user_agent,
+             codex_home,
+             platform_family: std::env::consts::FAMILY.to_string(),
+diff --git a/codex-rs/app-server/src/request_processors/mcp_processor.rs b/codex-rs/app-server/src/request_processors/mcp_processor.rs
+index 405a1fe..a98bc1a 100644
+--- a/codex-rs/app-server/src/request_processors/mcp_processor.rs
++++ b/codex-rs/app-server/src/request_processors/mcp_processor.rs
+@@ -1,5 +1,7 @@
+ use super::thread_input::ensure_direct_input_allowed;
+ use super::*;
++use codex_app_server_protocol::McpServerInvalidateParams;
++use codex_app_server_protocol::McpServerInvalidateResponse;
+ use codex_core::McpManager;
+ use codex_mcp::McpServerSource;
+ use codex_mcp::ReadResourceRequestParams;
+@@ -44,6 +46,82 @@ impl McpRequestProcessor {
+             .map(|response| Some(response.into()))
+     }
+ 
++    pub(crate) async fn mcp_server_invalidate(
++        &self,
++        params: McpServerInvalidateParams,
++    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
++        let (root_id, root) = self.load_thread(&params.thread_id).await?;
++        let mut names = params.server_names;
++        names.sort();
++        names.dedup();
++        if names.is_empty() || names.iter().any(String::is_empty) {
++            return Err(invalid_request("serverNames must contain nonempty names"));
++        }
++        let (config, _) = root.current_mcp_config_and_runtime_context().await;
++        let auth = self.auth_manager.auth().await;
++        let servers = codex_mcp::effective_mcp_servers(&config, auth.as_ref());
++        for name in &names {
++            if !servers.get(name).is_some_and(|server| {
++                matches!(
++                    server.config().transport,
++                    McpServerTransportConfig::Stdio { .. }
++                )
++            }) {
++                return Err(invalid_request(format!("unknown stdio MCP server: {name}")));
++            }
++        }
++        let manager = Arc::clone(&self.thread_manager);
++        // This task owns the complete operation if the requesting connection disappears.
++        // No eager discovery or Turn is created by invalidation.
++        let task = tokio::spawn(async move {
++            let ids = manager
++                .list_agent_subtree_thread_ids(root_id)
++                .await
++                .map_err(|err| {
++                    internal_error(format!("failed to resolve MCP owner subtree: {err}"))
++                })?;
++            let loaded = manager.list_thread_ids().await;
++            let mut threads = vec![root];
++            for id in ids {
++                if id != root_id && loaded.contains(&id) {
++                    threads.push(manager.get_thread(id).await.map_err(|err| {
++                        internal_error(format!("MCP owner changed during invalidation: {err}"))
++                    })?);
++                }
++            }
++            // Validate the entire captured family before closing any client.
++            // A descendant can omit a binding but cannot change its transport.
++            for thread in &threads {
++                let (config, _) = thread.current_mcp_config_and_runtime_context().await;
++                let servers = codex_mcp::effective_mcp_servers(&config, auth.as_ref());
++                for name in &names {
++                    if servers.get(name).is_some_and(|server| {
++                        !matches!(
++                            server.config().transport,
++                            McpServerTransportConfig::Stdio { .. }
++                        )
++                    }) {
++                        return Err(invalid_request(format!(
++                            "non-stdio MCP binding in owner subtree: {name}"
++                        )));
++                    }
++                }
++            }
++            for thread in threads {
++                thread.invalidate_mcp_servers(&names).await.map_err(|err| {
++                    internal_error(format!("failed to invalidate MCP clients: {err}"))
++                })?;
++            }
++            Ok::<_, JSONRPCErrorError>(McpServerInvalidateResponse {
++                server_names: names,
++            })
++        });
++        let response = task
++            .await
++            .map_err(|err| internal_error(format!("MCP invalidation task failed: {err}")))??;
++        Ok(Some(response.into()))
++    }
++
+     pub(crate) async fn mcp_server_refresh(
+         &self,
+         params: Option<()>,
+diff --git a/codex-rs/app-server/tests/suite/v2/initialize.rs b/codex-rs/app-server/tests/suite/v2/initialize.rs
+index 923bb41..2fb1ffc 100644
+--- a/codex-rs/app-server/tests/suite/v2/initialize.rs
++++ b/codex-rs/app-server/tests/suite/v2/initialize.rs
+@@ -59,12 +59,14 @@ async fn initialize_uses_client_info_name_as_originator() -> Result<()> {
+         codex_home: response_codex_home,
+         platform_family,
+         platform_os,
++        mcp_server_invalidation,
+     } = to_response::<InitializeResponse>(response)?;
+ 
+     assert!(user_agent.starts_with("codex_vscode/"));
+     assert_eq!(response_codex_home, expected_codex_home);
+     assert_eq!(platform_family, std::env::consts::FAMILY);
+     assert_eq!(platform_os, std::env::consts::OS);
++    assert!(mcp_server_invalidation);
+     Ok(())
+ }
+ 
+@@ -171,12 +173,14 @@ async fn initialize_respects_originator_override_env_var() -> Result<()> {
+         codex_home: response_codex_home,
+         platform_family,
+         platform_os,
++        mcp_server_invalidation,
+     } = to_response::<InitializeResponse>(response)?;
+ 
+     assert!(user_agent.starts_with("codex_originator_via_env_var/"));
+     assert_eq!(response_codex_home, expected_codex_home);
+     assert_eq!(platform_family, std::env::consts::FAMILY);
+     assert_eq!(platform_os, std::env::consts::OS);
++    assert!(mcp_server_invalidation);
+     Ok(())
+ }
+ 
+diff --git a/codex-rs/codex-mcp/src/connection_manager.rs b/codex-rs/codex-mcp/src/connection_manager.rs
+index f6d0c7e..4cd9fb8 100644
+--- a/codex-rs/codex-mcp/src/connection_manager.rs
++++ b/codex-rs/codex-mcp/src/connection_manager.rs
+@@ -853,6 +853,17 @@ impl McpConnectionSet {
+         view.connection.client.ready_transport().is_some() || view.connection.client().await.is_ok()
+     }
+ 
++    /// Cancel startup and close selected published clients. Prepared calls retain
++    /// their old client; reconciliation cannot reuse a closed transport.
++    /// Absent names are allowed because descendants can have a smaller catalog.
++    pub(crate) async fn invalidate_servers(&self, server_names: &[String]) {
++        for name in server_names {
++            if let Some(view) = self.servers.get(name) {
++                view.connection.shutdown().await;
++            }
++        }
++    }
++
+     /// Stop all MCP clients owned by this manager and terminate stdio server processes.
+     pub async fn shutdown(&self) {
+         let connections = self
+diff --git a/codex-rs/codex-mcp/src/connection_manager_tests.rs b/codex-rs/codex-mcp/src/connection_manager_tests.rs
+index 9c974ac..f1db362 100644
+--- a/codex-rs/codex-mcp/src/connection_manager_tests.rs
++++ b/codex-rs/codex-mcp/src/connection_manager_tests.rs
+@@ -5724,3 +5724,55 @@ async fn view_only_changes_reuse_connection_and_preserve_the_old_step() {
+     );
+     assert_eq!(new_call.tool_approval_mode(), AppToolApproval::Approve);
+ }
++
++#[tokio::test]
++async fn targeted_invalidation_retains_unaffected_connection_across_reconciliation()
++-> anyhow::Result<()> {
++    let context = reusable_server_runtime_context();
++    let config = reusable_server_config("http://127.0.0.1:1");
++    let mut previous = manager_with_reusable_ready_server(
++        &config,
++        &context,
++        vec![create_test_tool("docs", "search")],
++    )
++    .await;
++    let mut target = manager_with_reusable_ready_server(
++        &config,
++        &context,
++        vec![create_test_tool("blocked", "wait")],
++    )
++    .await;
++    let target_view = target.servers.remove("docs").expect("target client");
++    let old_target = target_view.connection.client().await?.client;
++    let old_healthy = previous.servers["docs"].connection.client().await?.client;
++    previous.servers.insert("blocked".to_string(), target_view);
++
++    previous.invalidate_servers(&["blocked".to_string()]).await;
++
++    assert!(old_target.is_closed().await);
++    assert!(!old_healthy.is_closed().await);
++    let reconciled = reconcile_reusable_server(&previous, config, context).await;
++    assert!(previous.shares_test_connection_with(&reconciled, "docs"));
++    // A captured handle remains closed; invalidation never routes it to a successor.
++    assert!(old_target.list_tools(None, None).await.is_err());
++    Ok(())
++}
++
++#[tokio::test]
++async fn targeted_invalidation_forces_replacement_without_waiting_for_eof() -> anyhow::Result<()> {
++    let context = reusable_server_runtime_context();
++    let config = reusable_server_config("http://127.0.0.1:1");
++    let previous = manager_with_reusable_ready_server(
++        &config,
++        &context,
++        vec![create_test_tool("docs", "search")],
++    )
++    .await;
++    let old = previous.servers["docs"].connection.client().await?.client;
++    assert!(!old.is_closed().await);
++    previous.invalidate_servers(&["docs".to_string()]).await;
++    assert!(old.is_closed().await);
++    let reconciled = reconcile_reusable_server(&previous, config, context).await;
++    assert!(!previous.shares_test_connection_with(&reconciled, "docs"));
++    Ok(())
++}
+diff --git a/codex-rs/codex-mcp/src/runtime.rs b/codex-rs/codex-mcp/src/runtime.rs
+index dc30070..6c33119 100644
+--- a/codex-rs/codex-mcp/src/runtime.rs
++++ b/codex-rs/codex-mcp/src/runtime.rs
+@@ -649,6 +649,13 @@ impl McpRuntime {
+         cancellation.retained_subscription_cancellation = Some(retained);
+     }
+ 
++    /// Does not publish a replacement or modify unaffected connection identities.
++    pub async fn invalidate_servers(&self, server_names: &[String]) {
++        self.latest_connections()
++            .invalidate_servers(server_names)
++            .await;
++    }
++
+     pub async fn shutdown(&self) {
+         self.latest_connections().shutdown().await;
+     }
+diff --git a/codex-rs/core/src/codex_thread.rs b/codex-rs/core/src/codex_thread.rs
+index 172726f..803470e 100644
+--- a/codex-rs/core/src/codex_thread.rs
++++ b/codex-rs/core/src/codex_thread.rs
+@@ -780,6 +780,11 @@ impl CodexThread {
+         self.session.get_config().await
+     }
+ 
++    /// Invalidates only the selected clients without changing native history.
++    pub async fn invalidate_mcp_servers(&self, server_names: &[String]) -> anyhow::Result<()> {
++        self.session.invalidate_mcp_servers(server_names).await
++    }
++
+     /// Observes this thread's published MCP connections that match the requested config.
+     pub async fn mcp_connection_statuses(
+         &self,
+diff --git a/codex-rs/core/src/session/mcp.rs b/codex-rs/core/src/session/mcp.rs
+index 46af2d3..9753960 100644
+--- a/codex-rs/core/src/session/mcp.rs
++++ b/codex-rs/core/src/session/mcp.rs
+@@ -89,6 +89,29 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
+ }
+ 
+ impl Session {
++    pub(crate) async fn invalidate_mcp_servers(
++        self: &Arc<Self>,
++        server_names: &[String],
++    ) -> anyhow::Result<()> {
++        let session = Arc::clone(self);
++        let names = server_names.to_vec();
++        // The owned task retains the refresh gate until old clients are invalidated.
++        tokio::spawn(async move {
++            let _refresh = session
++                .mcp_refresh
++                .acquire()
++                .await
++                .map_err(|_| anyhow::anyhow!("MCP runtime refresh semaphore closed"))?;
++            session
++                .services
++                .mcp_runtime
++                .invalidate_servers(&names)
++                .await;
++            Ok::<_, anyhow::Error>(())
++        })
++        .await?
++    }
++
+     pub(crate) async fn runtime_mcp_config(&self, config: &Config) -> McpConfig {
+         self.runtime_mcp_config_and_context(config).await.0
+     }

@@ -135,6 +135,9 @@ func (s *Session) publishSubagentHistory(ctx context.Context, h subagentHistory,
 	}
 	for _, turn := range h.Turns {
 		status := turn.Status
+		if status == "inProgress" || s.subagents.interrupted[h.ID+":"+turn.ID] || s.hasPendingMCP(h.ID, turn.ID) {
+			s.observeChildMCP(h.ID, turn.ID, turn.Items)
+		}
 		switch status {
 		case "inProgress":
 			if nativeStatus.Type == "notLoaded" {

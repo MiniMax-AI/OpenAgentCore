@@ -9,9 +9,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"path"
+	"slices"
 	"sync"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
+	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
@@ -33,6 +36,7 @@ type Broker struct {
 	lastID  uint64
 	closing bool
 	err     error
+	blocked map[string]bool
 
 	closeOnce sync.Once
 }
@@ -59,6 +63,7 @@ func Start(cfg Config) (*Broker, error) {
 	b := &Broker{
 		cfg: cfg, log: log, conn: uc, link: newLink(cfg.Dial, log),
 		ctx: ctx, cancel: cancel, done: make(chan struct{}), invs: map[uint64]*invocation{},
+		blocked: map[string]bool{},
 	}
 	b.wg.Add(1)
 	go b.read()
@@ -92,6 +97,77 @@ func (b *Broker) Err() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.err
+}
+
+// StopAliases stops only the selected frozen commands and waits for their
+// sandbox scopes. The caller has drained native call admission and must not
+// reconnect until success. Failed settlement leaves their admission closed.
+func (b *Broker) StopAliases(ctx context.Context, aliases []string) error {
+	if len(aliases) == 0 {
+		return nil
+	}
+	if b.cfg.Scope != sp.ScopeCgroupV2 {
+		return sp.Fail(sp.CodeUnsupported, sandboxwire.EffectNone, "stdio MCP requires cgroup v2 scopes")
+	}
+	b.mu.Lock()
+	if b.closing || b.err != nil {
+		b.mu.Unlock()
+		return fmt.Errorf("%w: broker is ending", ErrUnsettled)
+	}
+	for _, alias := range aliases {
+		if _, ok := b.cfg.Executables.Aliases[alias]; !ok {
+			b.mu.Unlock()
+			return sp.Fail(sp.CodeInvalidArgument, sandboxwire.EffectNone, "unknown process alias")
+		}
+		if b.blocked[alias] {
+			b.mu.Unlock()
+			return ErrUnsettled
+		}
+	}
+	for _, alias := range aliases {
+		b.blocked[alias] = true
+	}
+	var selected []*invocation
+	for _, inv := range b.invs {
+		if slices.Contains(aliases, inv.alias) {
+			// Open already carries its complete Request. Mark it while the
+			// same lock excludes new admissions, even if prepare has not run.
+			inv.mu.Lock()
+			inv.stopping = true
+			inv.mu.Unlock()
+			inv.loseShim()
+			inv.helpers.Add(1) // unregister precedes teardown's Wait
+			selected = append(selected, inv)
+		}
+	}
+	b.mu.Unlock()
+	for _, inv := range selected {
+		go func() {
+			defer inv.helpers.Done()
+			inv.stopInput()
+			inv.cancelRemote()
+		}()
+	}
+	for _, inv := range selected {
+		select {
+		case <-inv.scopeDone:
+		case <-inv.finished:
+			if !inv.scopeSettled() {
+				return ErrUnsettled
+			}
+		case <-ctx.Done():
+			return fmt.Errorf("%w: %w", ErrUnsettled, ctx.Err())
+		}
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closing || b.err != nil {
+		return ErrUnsettled
+	}
+	for _, alias := range aliases {
+		delete(b.blocked, alias)
+	}
+	return nil
 }
 
 // read dispatches the relay's messages until the connection ends or breaks
@@ -135,6 +211,10 @@ func (b *Broker) dispatch(m processshim.RelayMessage) error {
 		}
 		b.lastID = id
 		inv := b.newInvocation(open)
+		if _, command, ok := b.cfg.Executables.resolve(string(open.Request.ExecPath), string(open.Request.Cwd)); ok && command != nil {
+			inv.alias = path.Base(resolvePath(string(open.Request.ExecPath), string(open.Request.Cwd)))
+			inv.stopping = b.blocked[inv.alias]
+		}
 		b.invs[id] = inv
 		b.wg.Add(1)
 		go inv.serve()
@@ -142,6 +222,8 @@ func (b *Broker) dispatch(m processshim.RelayMessage) error {
 	}
 	inv := b.invs[id]
 	switch {
+	case inv != nil && inv.unsettled:
+		return nil
 	case inv != nil:
 		return inv.receive(m)
 	case id > b.lastID:
@@ -154,6 +236,13 @@ func (b *Broker) dispatch(m processshim.RelayMessage) error {
 func (b *Broker) unregister(id uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if inv := b.invs[id]; inv != nil && inv.alias != "" && !inv.scopeSettled() {
+		// Keep the exact operation identity after observation ended. Neither
+		// an empty map nor a new incarnation can repair an unknown effect.
+		inv.unsettled = true
+		b.blocked[inv.alias] = true
+		return
+	}
 	delete(b.invs, id)
 }
 

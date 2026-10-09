@@ -113,6 +113,7 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 	docs := session.MCP
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &agent.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
+	session.StopMCP = func(context.Context, []string) error { return nil }
 	installed := req
 	installed.CapabilityRoot, installed.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
 		Metadata: agentskill.Metadata{Type: "inline", Name: "review", Description: "Review."}, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
@@ -210,7 +211,7 @@ func startViewBridge(options clirunner.StartOptions, requests chan<- []byte) (*c
 	go func() {
 		line, _ := bufio.NewReader(stdinReader).ReadBytes('\n')
 		requests <- line
-		_, _ = fmt.Fprintln(stdoutWriter, `{"type":"executor_ready","protocol":3}`)
+		_, _ = fmt.Fprintln(stdoutWriter, `{"type":"executor_ready","protocol":4}`)
 		<-bridge.ended
 		_ = stdoutWriter.Close()
 		_ = stdinReader.Close()

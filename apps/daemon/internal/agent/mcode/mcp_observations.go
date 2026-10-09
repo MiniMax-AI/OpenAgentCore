@@ -1,11 +1,14 @@
 package mcode
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -127,4 +130,75 @@ func (s *Session) finishEnvironmentMCP() {
 		delete(s.tools, id)
 		s.completedTools[id] = true
 	}
+}
+
+// trackMCPCancellation runs before output delivery, which can block. Cancel
+// and late native callbacks therefore agree on the same in-flight identities.
+func (s *Session) trackMCPCancellation(call toolUpdate) {
+	if call.mcp == nil {
+		return
+	}
+	stdio := slices.ContainsFunc(s.opts.bindings, func(binding agent.MCPBinding) bool {
+		return binding.ServerLabel == call.mcp.server && binding.Transport == "stdio"
+	})
+	if !stdio {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.mcpCalls == nil {
+		s.mcpCalls = map[string]string{}
+	}
+	if s.cancelled {
+		if s.cancelledMCP == nil {
+			s.cancelledMCP = map[string]bool{}
+		}
+		s.cancelledMCP[call.mcp.server] = true
+	}
+	if call.Status == "completed" || call.Status == "failed" {
+		delete(s.mcpCalls, call.ID)
+	} else {
+		s.mcpCalls[call.ID] = call.mcp.server
+	}
+}
+
+// captureMCPCancellation is called with mu held before session/cancel is sent.
+func (s *Session) captureMCPCancellation() {
+	if s.cancelledMCP == nil {
+		s.cancelledMCP = map[string]bool{}
+	}
+	for _, server := range s.mcpCalls {
+		s.cancelledMCP[server] = true
+	}
+}
+
+func (s *Session) settleCancelledMCP() (map[string]bool, error) {
+	s.mu.Lock()
+	servers := make([]string, 0, len(s.cancelledMCP))
+	for server := range s.cancelledMCP {
+		servers = append(servers, server)
+	}
+	s.mu.Unlock()
+	if len(servers) == 0 {
+		return nil, nil
+	}
+	slices.Sort(servers)
+	if s.opts.stopMCP == nil {
+		return nil, fmt.Errorf("mcode: MCP scope settlement is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(s.process.Context(), 60*time.Second)
+	defer cancel()
+	if err := s.opts.stopMCP(ctx, servers); err != nil {
+		return nil, fmt.Errorf("mcode: MCP scope settlement: %w", err)
+	}
+	// The sandbox scope closes first. Native then fences the old transport while
+	// retaining its configuration, so the next call can reconnect lazily.
+	if err := s.call("oac/session/mcp/disconnect", map[string]any{"sessionId": s.sessionID, "servers": servers}, nil, false); err != nil {
+		return nil, err
+	}
+	stopped := make(map[string]bool, len(servers))
+	for _, server := range servers {
+		stopped[server] = true
+	}
+	return stopped, nil
 }

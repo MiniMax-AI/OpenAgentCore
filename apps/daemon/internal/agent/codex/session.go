@@ -49,6 +49,7 @@ func defaultSessionConfig() sessionConfig {
 //  5. turn/completed emits TypeDone and closes out. Cancel interrupts the
 //     native turn; settlement decides whether the Executor stays reusable.
 type Session struct {
+	mcpCancellation           mcpCancellation
 	retiredTurns              map[string]bool
 	outputDone                chan struct{}
 	nativeSettled             atomic.Bool

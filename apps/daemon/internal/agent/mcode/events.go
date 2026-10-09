@@ -105,6 +105,7 @@ func (s *Session) emitTool(update toolUpdate) error {
 			return err
 		}
 	}
+	s.trackMCPCancellation(update)
 	if previous.mcp == nil && workspaceToolObservation(previous, "before") == nil {
 		if err := s.emitToolStage(update, "before"); err != nil {
 			return err

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 const fixture = `
@@ -20,17 +23,33 @@ globalThis.startupFixture=async({options})=>{
   await Promise.all([client.connect(a),options.mcpServers.functions.instance.connect(b)]);
  }
  let queried=false,interrupt,number=0;
+ const mcp=process.argv[1].startsWith('mcp-');
+ const statuses=['target','healthy'].map(name=>({name,status:'connected',tools:[{name:'hold'}]}));
  const close=()=>{child.stdin.end();interrupt?.()};
  options.abortController.signal.addEventListener('abort',close);
  return {close,query(prompt){assert.equal(queried,false);queried=true;process.send({type:'query'});return {
   close,async initializationResult(){if(process.argv[1]==="late-ready"){const expired=Date.now()+120000;Date.now=()=>expired;}return process.argv[1]==="no-hook-report" ? {} : process.argv[1]==="false-hook-report" ? {hooks_applied:false} : {hooks_applied:true}},
   async interrupt(){process.send({type:'interrupt'});interrupt?.();if(process.argv[1]==='rejected')throw new Error('interrupt failed');return ['unknown','pending-function-unknown'].includes(process.argv[1]) ? undefined : {still_queued:process.argv[1]==='queued' ? ['not-consumed'] : []}},
+  async mcpServerStatus(){return statuses},
+  async reconnectMcpServer(name){
+   process.send({type:'reconnect',name});
+   await new Promise(resolve=>process.once('message',resolve));
+   if(process.argv[1]==='mcp-reconnect-failed')throw new Error('reconnect failed');
+  },
   async *[Symbol.asyncIterator](){
    for await(const user of prompt){
     number++;
     const text=user.message.content[0].text;
     process.send({type:'input',text});
-    yield {type:'system',subtype:'init',session_id:'native',tools:client ? ['mcp__functions__lookup'] : options.outputFormat ? ['StructuredOutput'] : [],mcp_servers:client ? [{name:'functions',status:'connected'}] : []};
+    yield {type:'system',subtype:'init',session_id:'native',tools:mcp ? ['Bash','Read','Edit','mcp__target__hold','mcp__healthy__hold'] : client ? ['mcp__functions__lookup'] : options.outputFormat ? ['StructuredOutput'] : [],mcp_servers:client ? [{name:'functions',status:'connected'}] : []};
+    if(mcp && text==='hold'){
+     assert.deepEqual(await options.hooks.PreToolUse[0].hooks[0]({hook_event_name:'PreToolUse',session_id:'native',tool_use_id:'held',tool_name:'mcp__target__hold',tool_input:{}},'held',{signal:new AbortController().signal}),{});
+     const stopped=new Promise(resolve=>{interrupt=resolve});
+     process.send({type:'call_admitted'});
+     await Promise.race([stopped,exited]);
+     yield {type:'assistant',session_id:'native',parent_tool_use_id:null,message:{content:[{type:'tool_use',id:'held',name:'mcp__target__hold',input:{}}]}};
+     yield {type:'user',session_id:'native',parent_tool_use_id:null,message:{content:[{type:'tool_result',tool_use_id:'held',content:'Interrupted',is_error:true}]}};
+    }
     if(client){
      if(text==='pending-function'){
       void client.callTool({name:'lookup',arguments:{text},_meta:{'claudecode/toolUseId':'pending-call'}}).catch(()=>{});
@@ -70,7 +89,7 @@ globalThis.startupFixture=async({options})=>{
      yield {type:'result',uuid:'error-result',session_id:'native',user_message_uuids:[user.uuid],subtype:'error_during_execution',is_error:true,usage:{input_tokens:1,output_tokens:1},modelUsage:{},total_cost_usd:0};
      continue;
     }
-    if(text==='hold' && !options.outputFormat) await Promise.race([new Promise(resolve=>{interrupt=resolve}),exited]);
+    if(text==='hold' && !options.outputFormat && !mcp) await Promise.race([new Promise(resolve=>{interrupt=resolve}),exited]);
     if(options.abortController.signal.aborted)return;
     yield {type:'result',uuid:'result-'+number,session_id:'native',user_message_uuids:[user.uuid],subtype:'success',is_error:false,result:'answer-'+number,...(options.outputFormat ? {structured_output:{number:9007199254740992}} : {}),usage:{input_tokens:1,output_tokens:1},modelUsage:{fixture:{inputTokens:number,outputTokens:number,costUSD:number/100}},total_cost_usd:number/100};
     interrupt=undefined;
@@ -85,7 +104,14 @@ process.disconnect();
 `;
 
 async function launch(t,mode="normal") {
- const child=spawn(process.execPath,["--input-type=module","-e",fixture,mode],{stdio:["pipe","pipe","pipe","ipc"]});
+ let workspace;
+ if(mode.startsWith("mcp-")) {
+  const root=mkdtempSync(join(tmpdir(),"claude-mcp-cancel-"));
+  t.after(()=>rmSync(root,{recursive:true,force:true}));
+  for(const dir of ["home","state","scratch"])mkdirSync(join(root,dir));
+  workspace={home:join(root,"home"),state:join(root,"state"),scratch:join(root,"scratch"),env_names:[],network_access:"enabled",mcp:["target","healthy"].map(server_label=>({server_label,command:"/.oac/bin/"+server_label,allowed_tools:null}))};
+ }
+ const child=spawn(process.execPath,["--input-type=module","-e",fixture,mode],{stdio:["pipe","pipe","pipe","ipc"],env:{...process.env,...(workspace?{HOME:workspace.home,CLAUDE_CONFIG_DIR:workspace.state}:{})}});
  const events=[],observations=[];let buffer="",stderr="";
  child.stdout.setEncoding("utf8");child.stderr.setEncoding("utf8");
  child.stdout.on("data",data=>{buffer+=data;while(buffer.includes("\n")){const end=buffer.indexOf("\n");events.push(JSON.parse(buffer.slice(0,end)));buffer=buffer.slice(end+1)}});
@@ -96,6 +122,7 @@ async function launch(t,mode="normal") {
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
  const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
  send({type:"executor_prepare",preparation_deadline:Date.now()+60000,cwd:"/tmp",model:"fixture",system_prompt:"",
+ ...(workspace?{workspace}:{}),
  ...(mode==="structured" ? {output_format:{type:"json_schema",schema:{type:"object",properties:{number:{type:"integer"}}}}} : {}),
  ...(mode==="features" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
  await wait(()=>events.some(event=>event.type===(mode==="late-ready"?"error":"executor_ready")));
@@ -117,6 +144,46 @@ test("executor retains one native process and one Query over two settled Turns",
  for(const event of usage) assert.deepEqual(event.usage.scopes,{usage:"native_turn_main_loop",modelUsage:"query_cumulative",total_cost_usd:"query_cumulative_estimate"});
  child.stdin.end();assert.deepEqual(await closed,{code:0,signal:null});
  assert.equal(observations.filter(event=>event.type==="native_closed").length,1);
+});
+
+for (const mode of ["mcp-stop", "mcp-reconnect-failed", "mcp-stop-unconfirmed", "mcp-wrong-receipt"]) test(`stdio cancellation ${mode} awaits remote scope and named reconnect before settlement`, {timeout:10000}, async t => {
+ const {child,events,observations,closed,wait,send,start}=await launch(t,mode);
+ start("first","hold");
+ await wait(()=>observations.some(event=>event.type==="call_admitted"));
+ send({type:"turn_cancel",turn_id:"first"});
+ send({type:"turn_cancel",turn_id:"first"});
+ await wait(()=>events.some(event=>event.type==="mcp_stop"));
+ assert.deepEqual(events.find(event=>event.type==="mcp_stop"),{type:"mcp_stop",servers:["target"],turn_id:"first"});
+ assert.equal(events.some(event=>event.type==="turn_settled"),false);
+ assert.equal(observations.some(event=>event.type==="reconnect"),false);
+ send({type:"mcp_stopped",turn_id:mode==="mcp-wrong-receipt"?"other":"first",confirmed:mode!=="mcp-stop-unconfirmed"});
+ if(mode==="mcp-stop-unconfirmed" || mode==="mcp-wrong-receipt") {
+  await wait(()=>events.some(event=>event.type==="turn_settled"));
+  assert.equal(events.find(event=>event.type==="turn_settled").confirmed,false);
+  assert.equal(events.find(event=>event.type==="turn_settled").reusable,false);
+  assert.equal(observations.some(event=>event.type==="reconnect"),false);
+  assert.deepEqual(await closed,{code:0,signal:null});
+  return;
+ }
+ await wait(()=>observations.some(event=>event.type==="reconnect"));
+ assert.equal(events.some(event=>event.type==="turn_settled"),false);
+ assert.deepEqual(observations.filter(event=>event.type==="reconnect"),[{type:"reconnect",name:"target"}]);
+ child.send("release-reconnect");
+ await wait(()=>events.some(event=>event.type==="turn_settled"));
+ const confirmed=mode==="mcp-stop";
+ assert.equal(events.find(event=>event.type==="turn_settled").confirmed,confirmed);
+ assert.equal(events.find(event=>event.type==="turn_settled").reusable,confirmed);
+ assert.equal(observations.filter(event=>event.type==="interrupt").length,1);
+ if(confirmed){
+  start("second","answer");
+  send({type:"turn_cancel",turn_id:"first"});
+  await wait(()=>events.some(event=>event.type==="turn_settled"&&event.turn_id==="second"));
+  assert.equal(events.find(event=>event.type==="turn_settled"&&event.turn_id==="second").confirmed,true);
+  assert.equal(events.filter(event=>event.type==="mcp_stop").length,1);
+  assert.equal(observations.filter(event=>event.type==="native").length,1);
+  child.stdin.end();
+ }
+ assert.deepEqual(await closed,{code:0,signal:null});
 });
 
 test("public interrupt settles cancellation and stale cancellation cannot stop the next Turn",{timeout:10000},async t=>{

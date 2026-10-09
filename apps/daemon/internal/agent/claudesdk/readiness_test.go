@@ -15,7 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-const readyReport = `{"type":"runtime_ready","protocol":3,"node":"22.22.2","sdk":"0.3.269","mcp":"1.30.0","native":"2.1.269 (Claude Code)"}`
+const readyReport = `{"type":"runtime_ready","protocol":4,"node":"22.22.2","sdk":"0.3.269","mcp":"1.30.0","native":"2.1.269 (Claude Code)"}`
 
 func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	root := t.TempDir()
@@ -107,11 +107,11 @@ func runReadinessHelper() {
 	case "ready":
 		_, _ = fmt.Fprintln(os.Stdout, readyReport)
 	case "ready-http-mcp":
-		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":3`, `"protocol":3,"features":["mcp_http_tools"]`, 1))
+		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":4`, `"protocol":4,"features":["mcp_http_tools"]`, 1))
 	case "malformed":
 		_, _ = fmt.Fprintln(os.Stdout, "not-json")
 	case "wrong-protocol":
-		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":3`, `"protocol":1`, 1))
+		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"protocol":4`, `"protocol":3`, 1))
 	case "missing-version":
 		_, _ = fmt.Fprintln(os.Stdout, strings.Replace(readyReport, `"mcp":"1.30.0"`, `"mcp":""`, 1))
 	case "multiple":

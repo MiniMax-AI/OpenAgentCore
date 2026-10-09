@@ -98,7 +98,7 @@ func newViewExecutorFactory(probe Config, layout viewLayout) agent.ViewExecutorF
 		if err != nil {
 			return nil, err
 		}
-		return startExecutor(ctx, checked, probe, start, func() (*session, error) {
+		return startExecutor(ctx, checked, probe, start, view.StopMCP, func() (*session, error) {
 			return startSession(view.Launch, clirunner.StartOptions{Parent: ctx, Binary: layout.node, Args: []string{layout.bridge}, Dir: start.Cwd, Env: env, NeedStdin: true})
 		})
 	}

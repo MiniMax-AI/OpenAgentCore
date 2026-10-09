@@ -51,6 +51,10 @@ type Session struct {
 	previousNativeTurns  map[string]bool
 	rootCompletedAtMS    *int64
 	subagentHistoryReady bool
+	// These cancellation identities are protected by mu; tool projection stays
+	// on the reader. A local failure does not remove a captured remote owner.
+	mcpCalls     map[string]string
+	cancelledMCP map[string]bool
 }
 
 func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*Session, error) {
@@ -73,7 +77,8 @@ func (s *Session) prepareNative() error {
 	var initialized struct {
 		ProtocolVersion int `json:"protocolVersion"`
 		Meta            struct {
-			Subagents struct {
+			MCPLifecycle struct{ Version int } `json:"oac/mcp-lifecycle"`
+			Subagents    struct {
 				Version, MaxConcurrent int
 				WorkspaceTools         string
 			} `json:"oac/subagents"`
@@ -84,6 +89,11 @@ func (s *Session) prepareNative() error {
 	}
 	if initialized.ProtocolVersion != 1 {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
+	}
+	for _, binding := range s.opts.bindings {
+		if binding.Transport == "stdio" && initialized.Meta.MCPLifecycle.Version != 1 {
+			return fmt.Errorf("mcode: native MCP lifecycle is unavailable")
+		}
 	}
 	if !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
 		return fmt.Errorf("mcode: native Subagent admission is unavailable")

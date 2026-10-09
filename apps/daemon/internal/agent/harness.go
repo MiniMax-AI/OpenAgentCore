@@ -300,6 +300,16 @@ type ViewSession struct {
 	// runs a shim's process and with nothing from the Harness's argv, working
 	// directory or environment. A view Executor takes MCP only from here.
 	MCP []MCPBinding
+	// StopMCP stops the named stdio bindings and all their descendants, including
+	// earlier background work owned by those same services. The adapter captures
+	// the affected labels before cancelling native calls and keeps same-Turn
+	// starts admitted during cancellation. It calls this once after native drain,
+	// before reconnecting those services or reporting successful settlement.
+	// Success confirms ScopeClosed for their old sandbox operations; it does not
+	// confirm native cancellation or reconnect the native clients. Other bindings
+	// and the workspace remain. Unknown or non-stdio labels are unsupported.
+	// Failure keeps ownership and the selected aliases closed to new starts.
+	StopMCP func(context.Context, []string) error
 	// Launch replaces clirunner.Start. Each call builds one view and runs
 	// Binary, which must be a LocalExec path, in it. Dir is a world path, or
 	// the work directory in an empty-root view, and Env is the complete
@@ -340,6 +350,9 @@ func checkViewHandoff(req PrepareRequest, session ViewSession) error {
 		return fmt.Errorf("%w: MCP outside ViewSession.MCP", ErrViewHandoff)
 	}
 	for i, binding := range session.MCP {
+		if binding.Transport == "stdio" && session.StopMCP == nil {
+			return fmt.Errorf("%w: stdio MCP requires confirmed scope termination", ErrViewHandoff)
+		}
 		alias := EnvironmentMCP{Server: agentplugin.MCPServer{Name: binding.ServerLabel, Type: "stdio", Command: ViewAlias(i)}}
 		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL, true)) ||
 			(binding.Transport == "stdio" && (binding.Stdio == nil || !reflect.DeepEqual(*binding.Stdio, alias))) {

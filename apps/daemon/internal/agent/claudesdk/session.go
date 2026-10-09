@@ -37,6 +37,7 @@ type bridgeEvent struct {
 	Confirmed       *bool           `json:"confirmed"`
 	Reason          string          `json:"reason"`
 	Protocol        int             `json:"protocol"`
+	Servers         []string        `json:"servers"`
 
 	Fact        json.RawMessage             `json:"fact"`
 	InputID     string                      `json:"input_id"`

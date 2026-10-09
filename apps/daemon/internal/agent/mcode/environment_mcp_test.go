@@ -124,11 +124,11 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 		t.Fatal("MCP start was not observed")
 	}
 	if err := session.Cancel(ctx); err != nil {
-		t.Fatal("stopped nonreusable MCP owner reported cancellation failure", err)
+		t.Fatal("MCP cancellation failed", err)
 	}
 	settlement, err := session.(*Session).AwaitSettlement(ctx)
-	if err != nil || settlement.Reusable {
-		t.Fatal("pending MCP work retained a reusable owner", settlement, err)
+	if err != nil || !settlement.Reusable {
+		t.Fatal("settled MCP scopes did not retain the owner", settlement, err)
 	}
 	closed, done := false, false
 	for event := range out {
