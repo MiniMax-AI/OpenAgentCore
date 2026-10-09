@@ -119,7 +119,7 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime, environmen
 // Environment none. A request with DisableExecutionEnvironment runs in an
 // empty-root view: a read-only, noexec tmpfs root that holds only the
 // mountpoints for the closure, the home, the agent host's runtime files,
-// ViewProcRoot, ViewDevRoot and the overlays. It has no world, no shims, no
+// ViewProcRoot, ViewSysRoot, ViewDevRoot and the overlays. It has no world, no shims, no
 // Link attachment and no sandbox network, so the generic proxy refuses every
 // request; the cgroup, the isolation and the gateway stay. The Harness runs in
 // ViewPrivateRoot/ViewHomeName/ViewWorkName. A request with neither
@@ -152,8 +152,11 @@ const (
 	// ViewWorkName is the working directory under the home in an empty-root
 	// view.
 	ViewWorkName = "work"
-	// ViewProcRoot and ViewDevRoot are the view's own /proc and minimal /dev.
+	// ViewProcRoot, ViewSysRoot and ViewDevRoot are the view's own kernel
+	// filesystems and minimal /dev. The read-only /sys/fs/cgroup exposes only
+	// the view's cgroup subtree, rooted in its cgroup namespace.
 	ViewProcRoot = "/proc"
+	ViewSysRoot  = "/sys"
 	ViewDevRoot  = "/dev"
 )
 
@@ -167,9 +170,9 @@ func ViewAlias(i int) string {
 }
 
 // ViewReserved reports whether the view path p is at or beneath a tree the
-// view builds itself: ViewPrivateRoot, ViewProcRoot or ViewDevRoot.
+// view builds itself: ViewPrivateRoot, ViewProcRoot, ViewSysRoot or ViewDevRoot.
 func ViewReserved(p string) bool {
-	for _, root := range [...]string{ViewPrivateRoot, ViewProcRoot, ViewDevRoot} {
+	for _, root := range [...]string{ViewPrivateRoot, ViewProcRoot, ViewSysRoot, ViewDevRoot} {
 		if p == root || isWithin(p, root) {
 			return true
 		}

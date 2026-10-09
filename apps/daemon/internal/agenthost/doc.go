@@ -88,7 +88,8 @@
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
 // hosts, resolv.conf and nsswitch.conf, the agent host's CA directory at its
 // host path, then the adapter's overlays and masks and the process shim with
-// its relay. Everything else is the world, or nothing in an empty-root view.
+// its relay. The view owns /proc, /sys and /dev. Everything else is the
+// world, or nothing in an empty-root view.
 //
 // The Session directory, StateDir/sessions/<Session ID>, stays root-owned
 // and private. Its home holds the Harness's native history and persists

@@ -556,7 +556,7 @@ func TestEnvironmentOwnerKeepsWorkspaceAcrossRouters(t *testing.T) {
 			t.Fatalf("owner lost at epoch %d", epoch)
 		}
 	}
-	for _, workspace := range []string{"", "relative", "/projects/../two", "C:/project", "/", "/.oac", "/.oac/home", "/proc/1", "/dev/shm", "/etc", "/etc/passwd", "/trust", "/trust/roots"} {
+	for _, workspace := range []string{"", "relative", "/projects/../two", "C:/project", "/", "/.oac", "/.oac/home", "/proc/1", "/sys", "/sys/project", "/dev/shm", "/etc", "/etc/passwd", "/trust", "/trust/roots"} {
 		fresh := newBinding(newResource())
 		invalid := bindPayload(fresh)
 		invalid.WorkspaceDirectory = workspace

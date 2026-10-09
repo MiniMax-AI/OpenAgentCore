@@ -294,12 +294,14 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 
 - view and host paths are absolute and clean;
 - closure names are single path components other than `bin`, `home` and `run`, which the agent host uses for the shims, the Session home and the process relay;
-- shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc` and `/dev` (`ViewReserved`);
+- shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc`, `/sys` and `/dev` (`ViewReserved`);
 - each `LocalExec` entry lies in a closure directory or an `Exec` overlay;
 - shim names and `ForwardEnv` names are unique, no shim is named `oac-process-shim`, which is the process relay's, or starts with `oac-mcp-`, which [stdio aliases](#stdio-mcp) use, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
 - `Proxy` is one of the two values and `Executor` is non-nil.
 
 `harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view. A workspace must remain entirely in the sandbox world: binding rejects overlap with the common reserved trees or agent-host overlays before any Environment effect, and Harness admission rejects overlap with its declared overlays, masks or shim paths before any native effect. Neither operation substitutes a private home or another directory. At initial launch with a sandbox world, the launcher opens the working directory beneath that world without following symlinks or crossing mounts, then enters the opened directory before forking; changing the path cannot redirect startup into a view-owned mount. An empty-root launch and `Spawn` retain their own directory rules, including native-history helpers in the private home. This startup check does not restrict where the native process may later change directory.
+
+The view owns the native process's kernel interfaces: a fresh `/proc`, read-only `/sys` and minimal `/dev`. A fresh read-only cgroup2 mount at `/sys/fs/cgroup` is rooted in the view's cgroup namespace, so `/proc/self/cgroup` and the visible hierarchy describe the same process group without exposing ancestor or sibling cgroups. The view mounts sysfs in its own network namespace; it never binds the host's `/sys` tree. Native file tools see these reserved kernel paths locally. Commands forwarded through the Process protocol and public File operations continue to use the sandbox's filesystem, including its `/sys`; workspace files remain in the sandbox world. These mounts also exist in an empty-root view.
 
 ### Capabilities
 
@@ -307,7 +309,7 @@ A view runs every request that the kind's declaration admits, so the adapter dec
 
 ### Environment none
 
-A request with `DisableExecutionEnvironment` runs in an empty-root view: a read-only, noexec tmpfs at `/` that holds only the mountpoints for the closure, the Session home, the agent host's runtime files, `/proc`, `/dev` and the overlays. It has no sandbox files, no shims, no Link attachment and no sandbox network, so the generic proxy refuses every request; the cgroup, the isolation and the gateway stay. The request carries no `LocalEnvironment`, and the Harness runs in `/.oac/home/work` (`ViewWorkName`). The request already expresses the profile, so the wire has no field for it. A request with neither `LocalEnvironment` nor `DisableExecutionEnvironment` is an incomplete binding, and the agent host rejects it.
+A request with `DisableExecutionEnvironment` runs in an empty-root view: a read-only, noexec tmpfs at `/` that holds only the mountpoints for the closure, the Session home, the agent host's runtime files, `/proc`, `/sys`, `/dev` and the overlays. It has no sandbox files, no shims, no Link attachment and no sandbox network, so the generic proxy refuses every request; the cgroup, the isolation and the gateway stay. The request carries no `LocalEnvironment`, and the Harness runs in `/.oac/home/work` (`ViewWorkName`). The request already expresses the profile, so the wire has no field for it. A request with neither `LocalEnvironment` nor `DisableExecutionEnvironment` is an incomplete binding, and the agent host rejects it.
 
 ### Executables
 
