@@ -31,10 +31,8 @@ for (const operation of ['cancel', 'close']) {
       if(name==='parent') spawn(process.execPath,['ticks.mjs','child'],{stdio:'inherit'});
       setInterval(()=>appendFileSync(name+'.ticks','tick\\n'),20);
     `);
-    const profile = join(root, 'profile.json');
-    await writeFile(profile, JSON.stringify({ workspace: root, scratch }));
     const { ToolExecutor } = await import(pathToFileURL(join(artifact, 'tool-executor.mjs')));
-    const executor = new ToolExecutor(profile);
+    const executor = new ToolExecutor({ workspace: root, scratch });
     t.after(() => executor.close());
     const abort = new AbortController();
     const finished = executor.execute('bash', { command: `${quote(process.execPath)} ticks.mjs parent` }, abort.signal);
