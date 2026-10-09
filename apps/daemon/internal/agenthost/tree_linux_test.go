@@ -25,7 +25,8 @@ type treeService struct {
 	opens, releases, active, peak atomic.Int32
 	read                          func(context.Context) error
 	opened                        func(context.Context)
-	listed                        func(*sandboxfs.ReadDirResponse)
+	shortRead                     bool
+	caps                          func(*sandboxfs.Capabilities)
 	readDone                      chan struct{}
 	releaseError                  bool
 	maxHandles                    uint32
@@ -36,6 +37,9 @@ func (s *treeService) Describe(ctx context.Context, a sandboxfs.Attachment, q *s
 	r, err := s.Service.Describe(ctx, a, q)
 	if err == nil && s.maxHandles != 0 {
 		r.Capabilities.MaxOpenHandles = s.maxHandles
+	}
+	if err == nil && s.caps != nil {
+		s.caps(&r.Capabilities)
 	}
 	return r, err
 }
@@ -75,12 +79,27 @@ func (s *treeService) Read(ctx context.Context, a sandboxfs.Attachment, q *sandb
 			return nil, err
 		}
 	}
-	return s.Service.Read(ctx, a, q)
+	r, err := s.Service.Read(ctx, a, q)
+	if err == nil && s.shortRead && len(r.Data) != 0 {
+		r.Data = r.Data[:len(r.Data)-1]
+	}
+	return r, err
 }
-func (s *treeService) ReadDir(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.ReadDirRequest) (*sandboxfs.ReadDirResponse, error) {
-	r, err := s.Service.ReadDir(ctx, a, q)
-	if err == nil && s.listed != nil {
-		s.listed(r)
+func (s *treeService) OpenTree(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.OpenTreeRequest) (*sandboxfs.OpenTreeResponse, error) {
+	if s.maxHandles != 0 && s.held.Add(1) > int32(s.maxHandles) {
+		s.held.Add(-1)
+		s.refused.Add(1)
+		return nil, sandboxfs.NewFailure(sandboxfs.CodeResourceExhausted, sandboxwire.EffectNone, "declared handle limit reached")
+	}
+	r, err := s.Service.OpenTree(ctx, a, q)
+	if err != nil && s.maxHandles != 0 {
+		s.held.Add(-1)
+	}
+	if err == nil {
+		s.opens.Add(1)
+		if s.opened != nil {
+			s.opened(ctx)
+		}
 	}
 	return r, err
 }
@@ -154,117 +173,72 @@ func treeReleased(t *testing.T, w *world, s *treeService) {
 	}
 }
 
-func TestReadTreeConcurrent(t *testing.T) {
-	for _, tc := range []struct {
-		mode  string
-		limit int
-	}{
-		{"success", 4}, {"read_error", 4}, {"parent_cancel", 4}, {"open_cancel", 4},
-		{"success", 1}, {"success", 2}, {"success", 3},
-	} {
-		mode, limit := tc.mode, tc.limit
-		t.Run(fmt.Sprintf("%s/handles_%d", mode, limit), func(t *testing.T) {
-			s := &treeService{readDone: make(chan struct{}, 8), maxHandles: uint32(limit)}
-			files := map[string]string{}
-			for i := range 8 {
-				files[fmt.Sprintf("dir/%02d", i)] = fmt.Sprint(i)
-			}
-			w, _ := treeWorld(t, s, files)
+func TestReadTreeResultOwnership(t *testing.T) {
+	for _, mode := range []string{"success", "read_error", "parent_cancel", "acquire_cancel", "short_read"} {
+		t.Run(mode, func(t *testing.T) {
+			s := &treeService{maxHandles: 1, readDone: make(chan struct{}, 1)}
+			contents := map[string]string{"a": "one", "dir/b": "two", "dir/nested/c": "three", "z": "four"}
+			w, _ := treeWorld(t, s, contents)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			entered := make(chan struct{}, 8)
-			gate := make(chan struct{})
-			gateClosed := false
-			defer func() {
-				if !gateClosed {
-					close(gate)
-				}
-			}()
-			if mode == "open_cancel" {
+			entered := make(chan struct{}, 1)
+			if mode == "acquire_cancel" {
 				s.opened = func(ctx context.Context) { entered <- struct{}{}; <-ctx.Done() }
-			} else {
-				var first atomic.Bool
-				s.read = func(ctx context.Context) error {
-					entered <- struct{}{}
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-gate:
-					}
-					if mode == "read_error" && first.CompareAndSwap(false, true) {
-						return sandboxfs.NewErrnoFailure(sandboxfs.ErrnoIO, sandboxwire.EffectNone, "read refused")
-					}
-					return nil
+			}
+			if mode == "parent_cancel" {
+				s.read = func(ctx context.Context) error { entered <- struct{}{}; <-ctx.Done(); return ctx.Err() }
+			}
+			if mode == "read_error" {
+				s.read = func(context.Context) error {
+					return sandboxfs.NewErrnoFailure(sandboxfs.ErrnoIO, sandboxwire.EffectNone, "read refused")
 				}
 			}
+			s.shortRead = mode == "short_read"
 			type result struct {
 				files []agentbundle.File
 				err   error
 			}
 			done := make(chan result, 1)
 			go func() { f, e := w.readTree(ctx, w.root, true); done <- result{f, e} }()
-			for range limit {
+			if mode == "acquire_cancel" || mode == "parent_cancel" {
 				select {
 				case <-entered:
 				case <-time.After(5 * time.Second):
-					t.Fatal("declared number of reads did not start")
+					t.Fatal("operation did not enter")
 				}
-			}
-			if s.opens.Load() != int32(limit) {
-				t.Fatalf("opened %d files before releasing bound", s.opens.Load())
-			}
-			if mode == "parent_cancel" || mode == "open_cancel" {
-				// A completed call fences the preceding request writes: this
-				// case exercises cancellation after dispatch, not a torn frame.
 				if _, err := w.c.Describe(t.Context(), &sandboxfs.DescribeRequest{}); err != nil {
 					t.Fatal(err)
 				}
 				cancel()
-			} else {
-				close(gate)
-				gateClosed = true
 			}
-			var r result
+			var got result
 			select {
-			case r = <-done:
+			case got = <-done:
 			case <-time.After(5 * time.Second):
-				t.Fatal("read did not join")
+				t.Fatal("read did not settle")
 			}
 			if mode == "success" {
-				if r.err != nil || len(r.files) != len(files) {
-					t.Fatalf("tree result: %v %v", r.files, r.err)
+				if got.err != nil || len(got.files) != len(contents) {
+					t.Fatalf("read tree: %v %v", got.files, got.err)
 				}
-				names := make([]string, 0, len(files))
-				for name := range files {
-					names = append(names, name)
-				}
-				slices.Sort(names)
-				for i, f := range r.files {
-					if f.Path != names[i] || string(f.Data) != files[f.Path] || !f.Executable {
-						t.Fatalf("incorrect ordered file: %+v", f)
+				names := []string{"a", "dir/b", "dir/nested/c", "z"}
+				for i, f := range got.files {
+					if f.Path != names[i] || string(f.Data) != contents[f.Path] || !f.Executable {
+						t.Fatalf("file: %+v", f)
 					}
 				}
-			} else if r.err == nil || r.files != nil {
-				t.Fatalf("failure returned tree: %v %v", r.files, r.err)
+			} else if got.err == nil || got.files != nil {
+				t.Fatalf("failed read returned files: %v %v", got.files, got.err)
 			}
-			if mode != "open_cancel" && s.peak.Load() != int32(limit) {
-				t.Fatalf("read concurrency %d, want %d", s.peak.Load(), limit)
-			}
-			if mode != "open_cancel" {
-				n := 8
-				if mode == "parent_cancel" {
-					n = limit
-				}
-				for range n {
-					select {
-					case <-s.readDone:
-					case <-time.After(5 * time.Second):
-						t.Fatal("File read handler did not finish")
-					}
+			if mode != "acquire_cancel" {
+				select {
+				case <-s.readDone:
+				case <-time.After(5 * time.Second):
+					t.Fatal("read handler not finished")
 				}
 			}
-			if s.held.Load() != 0 || s.refused.Load() != 0 {
-				t.Fatalf("handle bound exceeded or leaked: held=%d refused=%d", s.held.Load(), s.refused.Load())
+			if s.opens.Load() != 1 || s.held.Load() != 0 || s.refused.Load() != 0 {
+				t.Fatalf("handle ownership: opens=%d held=%d refused=%d", s.opens.Load(), s.held.Load(), s.refused.Load())
 			}
 			treeReleased(t, w, s)
 		})
@@ -272,7 +246,7 @@ func TestReadTreeConcurrent(t *testing.T) {
 }
 
 func TestReadTreeValidation(t *testing.T) {
-	for _, mode := range []string{"writable", "symlink", "size_sum", "entry_count", "grow", "shrink", "readback_tamper", "release_error"} {
+	for _, mode := range []string{"writable", "symlink", "size_sum", "entry_count", "readback_tamper", "release_error"} {
 		t.Run(mode, func(t *testing.T) {
 			s := &treeService{}
 			w, dir := treeWorld(t, s, map[string]string{"a": "original", "b": "second"})
@@ -286,27 +260,22 @@ func TestReadTreeValidation(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "size_sum":
-				s.listed = func(r *sandboxfs.ReadDirResponse) {
-					for i := range r.Entries {
-						r.Entries[i].Entry.Attr.Size = uint64(agentbundle.MaxExpandedBytes)
+				for _, name := range []string{"a", "b"} {
+					p := filepath.Join(dir, name)
+					if err := os.Chmod(p, 0600); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Truncate(p, agentbundle.MaxExpandedBytes); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Chmod(p, 0400); err != nil {
+						t.Fatal(err)
 					}
 				}
 			case "entry_count":
 				for i := range agentbundle.MaxFiles {
 					if err := os.WriteFile(filepath.Join(dir, fmt.Sprint(i)), nil, 0400); err != nil {
 						t.Fatal(err)
-					}
-				}
-			case "grow", "shrink":
-				s.listed = func(r *sandboxfs.ReadDirResponse) {
-					for i := range r.Entries {
-						if string(r.Entries[i].Name) == "a" {
-							if mode == "grow" {
-								r.Entries[i].Entry.Attr.Size--
-							} else {
-								r.Entries[i].Entry.Attr.Size++
-							}
-						}
 					}
 				}
 			case "readback_tamper":
@@ -333,9 +302,95 @@ func TestReadTreeValidation(t *testing.T) {
 				return
 			}
 			if slices.Contains([]string{"writable", "symlink", "size_sum", "entry_count"}, mode) && s.opens.Load() != 0 {
-				t.Fatalf("opened files before validating metadata: %d", s.opens.Load())
+				t.Fatalf("published invalid result: %d", s.opens.Load())
 			}
 			treeReleased(t, w, s)
 		})
 	}
+}
+
+func TestReadTreeCapabilitiesRequired(t *testing.T) {
+	for _, mode := range []string{"unsupported", "entries", "bytes"} {
+		t.Run(mode, func(t *testing.T) {
+			server, err := fileservicetest.New(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer server.Close()
+			s := &treeService{caps: func(c *sandboxfs.Capabilities) {
+				switch mode {
+				case "unsupported":
+					c.MaxTreeEntries = 0
+					c.MaxTreeDataBytes = 0
+				case "entries":
+					c.MaxTreeEntries = agentbundle.MaxFiles - 1
+				case "bytes":
+					c.MaxTreeDataBytes = agentbundle.MaxExpandedBytes - 1
+				}
+			}}
+			server.Intercept(func(real sandboxfs.Service) sandboxfs.Service { s.Service = real; return s })
+			stream, err := server.Dial(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			uncertain := false
+			w, err := attachWorld(t.Context(), stream, &uncertain)
+			var failure *sandboxfs.Failure
+			if w != nil || !errors.As(err, &failure) || failure.Code != sandboxfs.CodeUnsupported {
+				t.Fatalf("unsupported trees: world=%v err=%v", w, err)
+			}
+		})
+	}
+}
+
+func TestReadTreeLargeFileAndFreshRead(t *testing.T) {
+	s := &treeService{maxHandles: 1}
+	w, dir := treeWorld(t, s, nil)
+	name := filepath.Join(dir, "large")
+	f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY, 0400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunk := make([]byte, 64<<10)
+	for i := range chunk {
+		chunk[i] = byte(i % 251)
+	}
+	for range agentbundle.MaxExpandedBytes / len(chunk) {
+		if _, err = f.Write(chunk); err != nil {
+			f.Close()
+			t.Fatal(err)
+		}
+	}
+	if err = f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := w.readTree(t.Context(), w.root, true)
+	if err != nil || len(got) != 1 || len(got[0].Data) != agentbundle.MaxExpandedBytes {
+		t.Fatalf("large tree: files=%d err=%v", len(got), err)
+	}
+	if got[0].Path != "large" || got[0].Executable {
+		t.Fatal("large file attributes changed")
+	}
+	for i, b := range got[0].Data {
+		if b != chunk[i%len(chunk)] {
+			t.Fatalf("byte %d changed", i)
+		}
+	}
+	if err = os.Chmod(name, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(name, []byte("replacement"), 0400); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(name, 0400); err != nil {
+		t.Fatal(err)
+	}
+	next, err := w.readTree(t.Context(), w.root, true)
+	if err != nil || len(next) != 1 || string(next[0].Data) != "replacement" {
+		t.Fatalf("fresh read: %v %v", next, err)
+	}
+	if len(got[0].Data) != agentbundle.MaxExpandedBytes || got[0].Data[0] != 0 {
+		t.Fatal("later read mutated caller-owned bytes")
+	}
+	treeReleased(t, w, s)
 }

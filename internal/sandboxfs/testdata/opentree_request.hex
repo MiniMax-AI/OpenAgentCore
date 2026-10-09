@@ -1,0 +1,7 @@
+# OpenTree request with immutable regular files and business limits.
+00000025 001f 0000 0000000000000009 # payload 37, tag 31, RequestID 9
+0000000000000007 # Handle
+0000000000000001 0000000000000007 # NodeRef
+000003e8 # MaxEntries 1000 including root
+0000000001400000 # MaxDataBytes 20 MiB
+01 # RequireReadOnlyFiles

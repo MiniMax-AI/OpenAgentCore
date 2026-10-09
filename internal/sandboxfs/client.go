@@ -31,7 +31,7 @@ type Client struct {
 	afterWrite func() // test seam: runs once a frame is written
 }
 
-// HandleIDs allocates the handle IDs a client chooses for Open, Create and
+// HandleIDs allocates the handle IDs a client chooses for Open, Create, OpenTree and
 // OpenDir: 1, 2, 3 and so on. An attachment keeps one allocator across all of
 // its streams, so it never uses an ID twice. Its methods are safe for
 // concurrent use.
@@ -344,6 +344,10 @@ func (c *Client) Access(ctx context.Context, r *AccessRequest) (*AccessResponse,
 
 func (c *Client) Open(ctx context.Context, r *OpenRequest) (*OpenResponse, error) {
 	return roundTrip[*OpenResponse](ctx, c, r)
+}
+
+func (c *Client) OpenTree(ctx context.Context, r *OpenTreeRequest) (*OpenTreeResponse, error) {
+	return roundTrip[*OpenTreeResponse](ctx, c, r)
 }
 
 func (c *Client) Create(ctx context.Context, r *CreateRequest) (*CreateResponse, error) {

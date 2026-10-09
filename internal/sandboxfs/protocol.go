@@ -6,9 +6,12 @@
 package sandboxfs
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -17,7 +20,7 @@ import (
 
 // Version is the protocol version. Link matches it exactly when it opens a
 // file stream.
-const Version uint16 = 2
+const Version uint16 = 3
 
 // Op is a request tag. Each response carries its request's tag with
 // sandboxwire.ResponseType. The protocol has no events.
@@ -54,6 +57,7 @@ const (
 	OpGetLock
 	OpSetLock
 	OpCancelRequest
+	OpOpenTree
 )
 
 var opNames = [...]string{
@@ -62,7 +66,7 @@ var opNames = [...]string{
 	OpOpen: "Open", OpCreate: "Create", OpRead: "Read", OpWrite: "Write", OpFlush: "Flush", OpFsync: "Fsync", OpRelease: "Release",
 	OpOpenDir: "OpenDir", OpReadDir: "ReadDir", OpReleaseDir: "ReleaseDir",
 	OpMkdir: "Mkdir", OpUnlink: "Unlink", OpRmdir: "Rmdir", OpRename: "Rename", OpLink: "Link", OpSymlink: "Symlink", OpReadlink: "Readlink",
-	OpStatFS: "StatFS", OpForget: "Forget", OpGetLock: "GetLock", OpSetLock: "SetLock", OpCancelRequest: "CancelRequest",
+	OpStatFS: "StatFS", OpForget: "Forget", OpGetLock: "GetLock", OpSetLock: "SetLock", OpCancelRequest: "CancelRequest", OpOpenTree: "OpenTree",
 }
 
 func (o Op) String() string {
@@ -72,7 +76,7 @@ func (o Op) String() string {
 	return fmt.Sprintf("Op(%d)", uint16(o))
 }
 
-var tags = sandboxwire.Tags{Requests: uint16(OpCancelRequest)}
+var tags = sandboxwire.Tags{Requests: uint16(OpOpenTree)}
 
 // Hard limits. Capabilities may advertise smaller ones; nothing on the wire
 // exceeds these.
@@ -139,7 +143,7 @@ type Lease interface {
 // target's context. A method returns a *Failure for a typed failure; the server
 // reports any other error as Unknown with EffectPossible. A method publishes
 // every state it creates before it returns. The server never runs two
-// acquisitions (Open, Create, OpenDir) of one handle ID of an attachment at
+// acquisitions (Open, Create, OpenDir, OpenTree) of one handle ID of an attachment at
 // once, nor a Release or ReleaseDir while the acquisition of its ID runs.
 type Service interface {
 	Describe(context.Context, Attachment, *DescribeRequest) (*DescribeResponse, error)
@@ -151,6 +155,7 @@ type Service interface {
 	SetAttr(context.Context, Attachment, *SetAttrRequest) (*SetAttrResponse, error)
 	Access(context.Context, Attachment, *AccessRequest) (*AccessResponse, error)
 	Open(context.Context, Attachment, *OpenRequest) (*OpenResponse, error)
+	OpenTree(context.Context, Attachment, *OpenTreeRequest) (*OpenTreeResponse, error)
 	Create(context.Context, Attachment, *CreateRequest) (*CreateResponse, error)
 	Read(context.Context, Attachment, *ReadRequest) (*ReadResponse, error)
 	Write(context.Context, Attachment, *WriteRequest) (*WriteResponse, error)
@@ -459,6 +464,8 @@ type Capabilities struct {
 	MaxWalkComponents uint32
 	MaxReadDirBytes   uint32
 	MaxOpenHandles    uint32 // per attachment
+	MaxTreeEntries    uint32 // zero together with MaxTreeDataBytes means unsupported
+	MaxTreeDataBytes  uint64
 	ReadOnly          bool
 	AtomicAppend      bool
 	AtomicRename      bool
@@ -666,6 +673,18 @@ type OpenRequest struct {
 }
 
 type OpenResponse struct{}
+
+// OpenTreeRequest acquires a bounded, immutable encoding of a directory tree.
+// MaxEntries includes the root; MaxDataBytes sums regular-file content only.
+type OpenTreeRequest struct {
+	Handle               HandleID
+	Node                 NodeRef
+	MaxEntries           uint32
+	MaxDataBytes         uint64
+	RequireReadOnlyFiles bool
+}
+
+type OpenTreeResponse struct{ Size uint64 }
 
 // CreateRequest creates and opens a regular file as Handle, an ID the client
 // chose and never used before in the attachment.
@@ -888,6 +907,7 @@ func (*GetAttrRequest) Op() Op       { return OpGetAttr }
 func (*SetAttrRequest) Op() Op       { return OpSetAttr }
 func (*AccessRequest) Op() Op        { return OpAccess }
 func (*OpenRequest) Op() Op          { return OpOpen }
+func (*OpenTreeRequest) Op() Op      { return OpOpenTree }
 func (*CreateRequest) Op() Op        { return OpCreate }
 func (*ReadRequest) Op() Op          { return OpRead }
 func (*WriteRequest) Op() Op         { return OpWrite }
@@ -955,11 +975,11 @@ func bind[QT, RT any, Q interface {
 }
 
 // opSpecs is indexed by Op; each request type's Op method places its entry.
-var opSpecs = func() (t [OpCancelRequest + 1]opSpec) {
+var opSpecs = func() (t [OpOpenTree + 1]opSpec) {
 	for _, s := range []opSpec{
 		bind(Service.Describe), bind(Service.Attach), bind(Service.Detach),
 		bind(Service.Lookup), bind(Service.Walk), bind(Service.GetAttr), bind(Service.SetAttr), bind(Service.Access),
-		bind(Service.Open), bind(Service.Create), bind(Service.Read), bind(Service.Write),
+		bind(Service.Open), bind(Service.OpenTree), bind(Service.Create), bind(Service.Read), bind(Service.Write),
 		bind(Service.Flush), bind(Service.Fsync), bind(Service.Release),
 		bind(Service.OpenDir), bind(Service.ReadDir), bind(Service.ReleaseDir),
 		bind(Service.Mkdir), bind(Service.Unlink), bind(Service.Rmdir), bind(Service.Rename),
@@ -991,6 +1011,8 @@ func sideEffectFree(r Request) bool {
 func acquires(r Request) (HandleID, bool) {
 	switch r := r.(type) {
 	case *OpenRequest:
+		return r.Handle, true
+	case *OpenTreeRequest:
 		return r.Handle, true
 	case *CreateRequest:
 		return r.Handle, true
@@ -1041,6 +1063,10 @@ func (c *Capabilities) Admit(r Request, readOnly bool) *Failure {
 	case *AttachRequest:
 		if !r.ReadOnly && c.ReadOnly {
 			return unsupported("a writable attachment")
+		}
+	case *OpenTreeRequest:
+		if c.MaxTreeEntries == 0 || c.MaxTreeDataBytes == 0 || r.MaxEntries > c.MaxTreeEntries || r.MaxDataBytes > c.MaxTreeDataBytes {
+			return unsupported("OpenTree limits")
 		}
 	case *LookupRequest:
 		if tooLong(r.Name, c.MaxNameBytes) {
@@ -1170,7 +1196,7 @@ func encodeRequest(r Request) ([]byte, error) {
 }
 
 func decodeRequest(op Op, payload []byte) (Request, error) {
-	if op < 1 || op > OpCancelRequest {
+	if op < 1 || op > OpOpenTree {
 		return nil, malformed("unknown request %d", uint16(op))
 	}
 	r := opSpecs[op].newRequest()
@@ -1198,7 +1224,7 @@ func encodeResponse(r message, f *Failure) ([]byte, error) {
 }
 
 func decodeResponse(op Op, payload []byte) (message, *Failure, error) {
-	if op < 1 || op > OpCancelRequest {
+	if op < 1 || op > OpOpenTree {
 		return nil, nil, malformed("unknown request %d", uint16(op))
 	}
 	d := sandboxwire.NewDecoder(payload)
@@ -1454,6 +1480,8 @@ func (c *Capabilities) encode(e *sandboxwire.Encoder) {
 	for _, v := range []uint32{c.MaxNameBytes, c.MaxPathBytes, c.MaxReadBytes, c.MaxWriteBytes, c.MaxWalkComponents, c.MaxReadDirBytes, c.MaxOpenHandles} {
 		e.U32(v)
 	}
+	e.U32(c.MaxTreeEntries)
+	e.U64(c.MaxTreeDataBytes)
 	for _, v := range c.flags() {
 		e.Bool(*v)
 	}
@@ -1466,6 +1494,8 @@ func (c *Capabilities) decode(d *sandboxwire.Decoder) {
 	for _, v := range []*uint32{&c.MaxNameBytes, &c.MaxPathBytes, &c.MaxReadBytes, &c.MaxWriteBytes, &c.MaxWalkComponents, &c.MaxReadDirBytes, &c.MaxOpenHandles} {
 		*v = d.U32()
 	}
+	c.MaxTreeEntries = d.U32()
+	c.MaxTreeDataBytes = d.U64()
 	for _, v := range c.flags() {
 		*v = d.Bool()
 	}
@@ -1492,6 +1522,8 @@ func (c *Capabilities) validate() error {
 		!within(c.MaxWalkComponents, maxWalkNames), !within(c.MaxReadDirBytes, maxReadDirBytes),
 		c.MaxOpenHandles == 0:
 		return malformed("capability limit out of range")
+	case (c.MaxTreeEntries == 0) != (c.MaxTreeDataBytes == 0) || c.MaxTreeDataBytes > maxOffset-12-uint64(c.MaxTreeEntries)*(8+attrWireSize+uint64(c.MaxNameBytes)):
+		return malformed("tree capability limit out of range")
 	case !c.ReadOnly && !(c.AtomicAppend && c.AtomicRename && c.HardLinks && c.Symlinks):
 		return malformed("a writable service requires AtomicAppend, AtomicRename, HardLinks and Symlinks")
 	}
@@ -2242,3 +2274,338 @@ func (r *CancelRequestRequest) validate() error {
 func (*CancelRequestResponse) encode(*sandboxwire.Encoder) {}
 func (*CancelRequestResponse) decode(*sandboxwire.Decoder) {}
 func (*CancelRequestResponse) validate() error             { return nil }
+
+func (r *OpenTreeRequest) encode(e *sandboxwire.Encoder) {
+	e.U64(uint64(r.Handle))
+	r.Node.encode(e)
+	e.U32(r.MaxEntries)
+	e.U64(r.MaxDataBytes)
+	e.Bool(r.RequireReadOnlyFiles)
+}
+func (r *OpenTreeRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Node.decode(d)
+	r.MaxEntries = d.U32()
+	r.MaxDataBytes = d.U64()
+	r.RequireReadOnlyFiles = d.Bool()
+}
+func (r *OpenTreeRequest) validate() error {
+	if r.MaxEntries == 0 || r.MaxDataBytes > maxOffset {
+		return malformed("tree request limits")
+	}
+	return errors.Join(r.Handle.validate(), r.Node.validate())
+}
+func (r *OpenTreeResponse) encode(e *sandboxwire.Encoder) { e.U64(r.Size) }
+func (r *OpenTreeResponse) decode(d *sandboxwire.Decoder) { r.Size = d.U64() }
+func (r *OpenTreeResponse) validate() error {
+	if r.Size < 12+8+attrWireSize || r.Size > maxOffset {
+		return malformed("tree result size %d", r.Size)
+	}
+	return nil
+}
+
+// TreeSizeBound is the maximum encoded length for an admitted OpenTree request.
+// It includes the header, bounded names and attributes, and regular-file bytes.
+func TreeSizeBound(req OpenTreeRequest, caps Capabilities) (uint64, error) {
+	if err := req.validate(); err != nil {
+		return 0, err
+	}
+	if err := caps.validate(); err != nil {
+		return 0, err
+	}
+	if fail := caps.Admit(&req, false); fail != nil {
+		return 0, fail
+	}
+	return 12 + uint64(req.MaxEntries)*(8+attrWireSize+uint64(caps.MaxNameBytes)) + req.MaxDataBytes, nil
+}
+
+// TreeRecord describes one captured object. Parent is its parent's record index.
+// The first record is the root directory, with Parent zero and an empty Name.
+type TreeRecord struct {
+	Parent uint32
+	Name   []byte
+	Attr   Attr
+}
+
+// ValidateTreeEntry checks the per-entry rules before a service retains an
+// object's descriptor. Root entries have an empty name and must be directories.
+// Aggregate counts, data limits and traversal order are checked by the codec.
+func ValidateTreeEntry(record TreeRecord, root bool, req OpenTreeRequest, caps Capabilities) error {
+	if err := record.Attr.validate(); err != nil {
+		return err
+	}
+	kind := record.Attr.Mode & ModeType
+	if root {
+		if record.Parent != 0 || len(record.Name) != 0 || kind != ModeDirectory {
+			return malformed("invalid tree root")
+		}
+	} else if err := validName(record.Name); err != nil {
+		return err
+	} else if uint64(len(record.Name)) > uint64(caps.MaxNameBytes) {
+		return malformed("tree name exceeds MaxNameBytes")
+	}
+	if kind != ModeDirectory && kind != ModeRegular {
+		return malformed("unsupported tree file type")
+	}
+	if kind == ModeRegular && req.RequireReadOnlyFiles && record.Attr.Mode&0o222 != 0 {
+		return malformed("writable tree file")
+	}
+	return nil
+}
+
+type treeDirectory struct {
+	index    uint32
+	lastName []byte
+}
+type treeState struct {
+	req                  OpenTreeRequest
+	caps                 Capabilities
+	count, index         uint32
+	dataBytes, seenBytes uint64
+	stack                []treeDirectory
+}
+
+func newTreeState(req OpenTreeRequest, caps Capabilities, count uint32, dataBytes uint64) (treeState, error) {
+	s := treeState{req: req, caps: caps, count: count, dataBytes: dataBytes}
+	if _, err := TreeSizeBound(req, caps); err != nil {
+		return s, err
+	}
+	if count == 0 || count > req.MaxEntries || dataBytes > req.MaxDataBytes {
+		return s, malformed("tree header exceeds request")
+	}
+	return s, nil
+}
+
+func (s *treeState) accept(r TreeRecord) error {
+	if s.index >= s.count {
+		return malformed("extra tree record")
+	}
+	if err := ValidateTreeEntry(r, s.index == 0, s.req, s.caps); err != nil {
+		return err
+	}
+	if s.index != 0 {
+		// A parent must remain on the active ancestor stack. Once a subtree was
+		// left, returning to it would violate depth-first order.
+		for len(s.stack) > 0 && s.stack[len(s.stack)-1].index != r.Parent {
+			s.stack = s.stack[:len(s.stack)-1]
+		}
+		if len(s.stack) == 0 {
+			return malformed("tree parent is not an active ancestor")
+		}
+		p := &s.stack[len(s.stack)-1]
+		if bytes.Compare(p.lastName, r.Name) >= 0 {
+			return malformed("tree siblings are not strictly ordered")
+		}
+		p.lastName = bytes.Clone(r.Name)
+	}
+	if r.Attr.Mode&ModeType == ModeDirectory {
+		s.stack = append(s.stack, treeDirectory{index: s.index})
+	} else {
+		if r.Attr.Size > s.dataBytes-s.seenBytes {
+			return malformed("tree data exceeds header")
+		}
+		s.seenBytes += r.Attr.Size
+	}
+	s.index++
+	return nil
+}
+func (s *treeState) finish() error {
+	if s.index != s.count || s.seenBytes != s.dataBytes {
+		return malformed("tree totals do not match header")
+	}
+	return nil
+}
+
+// TreeEncoder writes the sole OpenTree result encoding incrementally. An error
+// is terminal; discard the result. Close validates totals but never closes w.
+type TreeEncoder struct {
+	w       io.Writer
+	state   treeState
+	scratch [sandboxwire.MaxChunk]byte
+	err     error
+	closed  bool
+}
+
+func NewTreeEncoder(w io.Writer, req OpenTreeRequest, caps Capabilities, count uint32, dataBytes uint64) (*TreeEncoder, error) {
+	state, err := newTreeState(req, caps, count, dataBytes)
+	if err != nil {
+		return nil, err
+	}
+	e := &TreeEncoder{w: w, state: state}
+	var h sandboxwire.Encoder
+	h.U32(count)
+	h.U64(dataBytes)
+	e.err = writeTreeBytes(w, h.Payload())
+	if e.err != nil {
+		return nil, e.err
+	}
+	return e, nil
+}
+func writeTreeBytes(w io.Writer, data []byte) error {
+	n, err := w.Write(data)
+	if err == nil && n != len(data) {
+		err = io.ErrShortWrite
+	}
+	return err
+}
+
+// Write emits a record and exactly Attr.Size bytes for a regular file. Its
+// reader must end there; an additional byte rejects a file that grew. Directory
+// bodies must be nil. Memory use does not grow with the file's size.
+func (e *TreeEncoder) Write(record TreeRecord, body io.Reader) error {
+	if e.err != nil {
+		return e.err
+	}
+	if e.closed {
+		return malformed("tree encoder closed")
+	}
+	e.err = e.write(record, body)
+	return e.err
+}
+func (e *TreeEncoder) write(record TreeRecord, body io.Reader) error {
+	if err := e.state.accept(record); err != nil {
+		return err
+	}
+	regular := record.Attr.Mode&ModeType == ModeRegular
+	if regular && body == nil || !regular && body != nil {
+		return malformed("tree body does not match file type")
+	}
+	var h sandboxwire.Encoder
+	h.U32(record.Parent)
+	h.Bytes(record.Name)
+	record.Attr.encode(&h)
+	if err := writeTreeBytes(e.w, h.Payload()); err != nil {
+		return err
+	}
+	if !regular {
+		return nil
+	}
+	remaining := record.Attr.Size
+	for remaining > 0 {
+		size := min(remaining, uint64(len(e.scratch)))
+		if _, err := io.ReadFull(body, e.scratch[:size]); err != nil {
+			return err
+		}
+		if err := writeTreeBytes(e.w, e.scratch[:size]); err != nil {
+			return err
+		}
+		remaining -= size
+	}
+	var extra [1]byte
+	n, err := io.ReadFull(body, extra[:])
+	if n != 0 {
+		return malformed("tree file grew")
+	}
+	if err != io.EOF {
+		return err
+	}
+	return nil
+}
+func (e *TreeEncoder) Close() error {
+	if e.err == nil {
+		e.err = e.state.finish()
+	}
+	e.closed = true
+	return e.err
+}
+
+// TreeDecoder validates a result while exposing each file body as a bounded
+// reader. Consume it completely before Next; Next returning EOF validates the
+// totals, exact response Size and absence of trailing data. It never closes r.
+type TreeDecoder struct {
+	r      *io.LimitedReader
+	source io.Reader
+	state  treeState
+	body   *io.LimitedReader
+	err    error
+	done   bool
+}
+
+func NewTreeDecoder(r io.Reader, req OpenTreeRequest, caps Capabilities, size uint64) (*TreeDecoder, error) {
+	bound, err := TreeSizeBound(req, caps)
+	if err != nil {
+		return nil, err
+	}
+	if size < 12+8+attrWireSize || size > bound {
+		return nil, malformed("tree response exceeds size bound")
+	}
+	d := &TreeDecoder{source: r, r: &io.LimitedReader{R: r, N: int64(size)}}
+	var header [12]byte
+	if _, err = io.ReadFull(d.r, header[:]); err != nil {
+		return nil, fmt.Errorf("tree header: %w", err)
+	}
+	d.state, err = newTreeState(req, caps, binary.BigEndian.Uint32(header[:4]), binary.BigEndian.Uint64(header[4:]))
+	if err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+func (d *TreeDecoder) Next() (TreeRecord, io.Reader, error) {
+	if d.err != nil {
+		return TreeRecord{}, nil, d.err
+	}
+	if d.done {
+		return TreeRecord{}, nil, io.EOF
+	}
+	record, body, err := d.next()
+	if err == io.EOF {
+		d.done = true
+	} else if err != nil {
+		d.err = err
+	}
+	return record, body, err
+}
+func (d *TreeDecoder) next() (TreeRecord, io.Reader, error) {
+	var record TreeRecord
+	if d.body != nil && d.body.N != 0 {
+		return record, nil, malformed("tree body not consumed")
+	}
+	if d.state.index == d.state.count {
+		if err := d.state.finish(); err != nil {
+			return record, nil, err
+		}
+		if d.r.N != 0 {
+			return record, nil, malformed("tree encoded length differs from response")
+		}
+		var extra [1]byte
+		n, err := io.ReadFull(d.source, extra[:])
+		if n != 0 {
+			return record, nil, malformed("trailing tree bytes")
+		}
+		if err != io.EOF {
+			return record, nil, err
+		}
+		return record, nil, io.EOF
+	}
+	var prefix [8]byte
+	if _, err := io.ReadFull(d.r, prefix[:]); err != nil {
+		return record, nil, fmt.Errorf("tree record: %w", err)
+	}
+	record.Parent = binary.BigEndian.Uint32(prefix[:4])
+	size := binary.BigEndian.Uint32(prefix[4:])
+	if size > d.state.caps.MaxNameBytes {
+		return record, nil, malformed("tree name exceeds MaxNameBytes")
+	}
+	data := make([]byte, int(size)+attrWireSize)
+	if _, err := io.ReadFull(d.r, data); err != nil {
+		return record, nil, fmt.Errorf("tree record attributes: %w", err)
+	}
+	record.Name = data[:size:size]
+	attr := sandboxwire.NewDecoder(data[size:])
+	record.Attr.decode(attr)
+	if err := attr.Finish(); err != nil {
+		return record, nil, err
+	}
+	if err := d.state.accept(record); err != nil {
+		return record, nil, err
+	}
+	var bodySize uint64
+	if record.Attr.Mode&ModeType == ModeRegular {
+		bodySize = record.Attr.Size
+	}
+	if bodySize > uint64(d.r.N) {
+		return record, nil, malformed("tree body exceeds result size")
+	}
+	d.body = &io.LimitedReader{R: d.r, N: int64(bodySize)}
+	return record, d.body, nil
+}

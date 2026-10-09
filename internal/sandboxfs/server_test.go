@@ -138,6 +138,14 @@ func (o *ordered) Open(_ context.Context, _ Attachment, r *OpenRequest) (*OpenRe
 	return &OpenResponse{}, nil
 }
 
+func (o *ordered) OpenTree(_ context.Context, _ Attachment, r *OpenTreeRequest) (*OpenTreeResponse, error) {
+	o.hold()
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.handles[r.Handle] = true
+	return &OpenTreeResponse{Size: 108}, nil
+}
+
 func (o *ordered) Release(_ context.Context, _ Attachment, r *ReleaseRequest) (*ReleaseResponse, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -179,6 +187,12 @@ func TestSuccessorWaitsForPredecessor(t *testing.T) {
 		{"Open then Release",
 			func(c *Client) error {
 				_, err := c.Open(ctx, &OpenRequest{Handle: 7, Node: testNode, Access: AccessRead})
+				return err
+			},
+			func(c *Client) error { _, err := c.Release(ctx, &ReleaseRequest{Handle: 7}); return err }},
+		{"OpenTree then Release",
+			func(c *Client) error {
+				_, err := c.OpenTree(ctx, &OpenTreeRequest{Handle: 7, Node: testNode, MaxEntries: 1000, MaxDataBytes: 20 << 20})
 				return err
 			},
 			func(c *Client) error { _, err := c.Release(ctx, &ReleaseRequest{Handle: 7}); return err }},
@@ -368,6 +382,11 @@ func TestEndedLeaseIsRefused(t *testing.T) {
 // the client cancelled the Open, waits and releases what the Open created. A
 // second acquisition of the pending ID is refused without effect.
 func TestReleaseFollowsPendingAcquisition(t *testing.T) {
+	for _, open := range []Request{&OpenRequest{Handle: 7, Node: testNode, Access: AccessRead}, &OpenTreeRequest{Handle: 7, Node: testNode, MaxEntries: 1000, MaxDataBytes: 20 << 20}} {
+		t.Run(open.Op().String(), func(t *testing.T) { testReleaseFollowsPendingAcquisition(t, open) })
+	}
+}
+func testReleaseFollowsPendingAcquisition(t *testing.T, open Request) {
 	svc := newOrdered()
 	cc, sc := net.Pipe()
 	defer cc.Close()
@@ -402,7 +421,6 @@ func TestReleaseFollowsPendingAcquisition(t *testing.T) {
 		return f.RequestID
 	}
 
-	open := &OpenRequest{Handle: 7, Node: testNode, Access: AccessRead}
 	send(1, open)
 	<-svc.entered
 	send(2, &CancelRequestRequest{Target: 1})

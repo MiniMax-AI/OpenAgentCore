@@ -1,5 +1,5 @@
 # Describe response. Hex bytes; text after # is a comment.
-00000057                          # PayloadLength 87
+00000063                          # PayloadLength 99
 8001                              # MessageType: response to Describe (1)
 0000                              # Flags
 0000000000000001                  # RequestID 1
@@ -17,6 +17,8 @@
 00000100                          # MaxWalkComponents 256
 00010000                          # MaxReadDirBytes 65536
 00001000                          # MaxOpenHandles 4096
+00001000                          # MaxTreeEntries 4096
+0000000002000000                  # MaxTreeDataBytes 32 MiB
 00                                # ReadOnly
 01 01                             # AtomicAppend, AtomicRename
 01 01                             # RenameNoReplace, RenameExchange

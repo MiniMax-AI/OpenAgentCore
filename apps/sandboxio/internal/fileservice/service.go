@@ -33,9 +33,15 @@ type Service struct {
 	proc     *os.File // /proc/self/fd, for reopening a held descriptor
 	fdinfo   *os.File // /proc/self/fdinfo, for mount IDs statx does not report
 
-	mu     sync.Mutex
-	atts   map[sandboxwire.ID]*state
-	closed bool
+	mu          sync.Mutex
+	atts        map[sandboxwire.ID]*state
+	closed      bool
+	closeDone   chan struct{}
+	attachments sync.WaitGroup
+
+	treeMu    sync.Mutex
+	treeCount int
+	treeBytes uint64
 }
 
 // New serves the absolute directory root as the export world. oac-sandbox-io
@@ -50,9 +56,10 @@ func New(root string) (*Service, error) {
 	}
 	unix.Umask(0)
 	s := &Service{
-		instance: sandboxwire.NewID(),
-		identity: sandboxfs.Identity{UID: uint32(unix.Geteuid()), GID: uint32(unix.Getegid())},
-		atts:     map[sandboxwire.ID]*state{},
+		instance:  sandboxwire.NewID(),
+		identity:  sandboxfs.Identity{UID: uint32(unix.Geteuid()), GID: uint32(unix.Getegid())},
+		atts:      map[sandboxwire.ID]*state{},
+		closeDone: make(chan struct{}),
 	}
 	for _, d := range []struct {
 		f    **os.File
@@ -83,6 +90,8 @@ func New(root string) (*Service, error) {
 		MaxWalkComponents: 256,
 		MaxReadDirBytes:   64 << 10,
 		MaxOpenHandles:    4096,
+		MaxTreeEntries:    4096,
+		MaxTreeDataBytes:  32 << 20,
 		AtomicAppend:      true,
 		AtomicRename:      true,
 		RenameNoReplace:   noReplace,
@@ -124,18 +133,33 @@ func (s *Service) InstanceID() sandboxwire.ID { return s.instance }
 // running fail as stale.
 func (s *Service) Close() error {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		<-s.closeDone
+		return nil
+	}
 	s.closed = true
 	atts := s.atts
 	s.atts = map[sandboxwire.ID]*state{}
 	s.mu.Unlock()
+	closing := make(map[*state]bool, len(atts))
 	for _, st := range atts {
-		st.close()
+		closing[st] = st.stop()
 	}
+	for st, ownsClose := range closing {
+		if ownsClose {
+			st.closeResources()
+		} else {
+			<-st.closeDone
+		}
+	}
+	s.attachments.Wait() // also joins Detach calls that removed their state
 	for _, f := range []*os.File{s.root, s.proc, s.fdinfo} {
 		if f != nil {
 			f.Close()
 		}
 	}
+	close(s.closeDone)
 	return nil
 }
 
@@ -238,9 +262,12 @@ func (s *Service) Attach(_ context.Context, a sandboxfs.Attachment, r *sandboxfs
 		return nil, sandboxfs.NewFailure(sandboxfs.CodeInvalidArgument, sandboxwire.EffectNone, "attachment is already attached")
 	}
 	s.atts[a.ID] = st
+	s.attachments.Add(1)
+	st.pending.Add(1) // Attach root acquisition
 	s.mu.Unlock()
 	go s.watch(a, st)
 	root, err := st.addNode(fd, &sb)
+	st.pending.Done()
 	if err != nil {
 		s.detach(a.ID, st)
 		return nil, failure(err, sandboxwire.EffectNone)
@@ -277,9 +304,13 @@ func (s *Service) Detach(_ context.Context, a sandboxfs.Attachment, r *sandboxfs
 
 // state is one attachment: its node and handle tables.
 type state struct {
-	svc      *Service
-	readOnly bool
-	done     chan struct{}
+	svc          *Service
+	readOnly     bool
+	done         chan struct{}
+	closeDone    chan struct{}
+	pending      sync.WaitGroup
+	trees        sync.WaitGroup
+	treeReserved bool
 
 	mu         sync.Mutex
 	closed     bool
@@ -346,8 +377,13 @@ type node struct {
 }
 
 type handle struct {
-	f   *os.File
-	dir *cursor // set for directory handles
+	f          *os.File
+	dir        *cursor // set for directory handles
+	tree       bool    // sealed OpenTree result
+	closeOnce  sync.Once
+	closeErr   error
+	afterClose func()
+	useMu      sync.RWMutex // joins descriptor users before closing and returning budget
 
 	writeMu sync.Mutex // holds a write and the O_APPEND mode it sets on f
 
@@ -359,23 +395,41 @@ func newState(s *Service, readOnly bool) *state {
 	// A random generation base makes a NodeRef from another attachment or
 	// incarnation miss instead of naming a live object.
 	return &state{
-		svc: s, readOnly: readOnly, done: make(chan struct{}),
+		svc: s, readOnly: readOnly, done: make(chan struct{}), closeDone: make(chan struct{}),
 		inodes: map[inodeKey]*node{}, handles: map[sandboxfs.HandleID]*handle{},
 		generation: rand.Uint64() >> 2,
 	}
 }
 
-// close releases every node and handle; closing a handle releases its locks.
-func (st *state) close() {
+// stop closes admission and signals running acquisitions before any join.
+func (st *state) stop() bool {
 	st.mu.Lock()
+	defer st.mu.Unlock()
 	if st.closed {
-		st.mu.Unlock()
-		return
+		return false
 	}
 	st.closed = true
+	close(st.done)
+	return true
+}
+
+// close releases every node and handle; closing a handle releases its locks.
+func (st *state) close() {
+	if st.stop() {
+		st.closeResources()
+	} else {
+		<-st.closeDone
+	}
+}
+
+func (st *state) closeResources() {
+	defer st.svc.attachments.Done()
+	// Acquisitions observe done and dispose of private descriptors before
+	// joining. Never wait while holding the state or service mutex.
+	st.pending.Wait()
+	st.mu.Lock()
 	nodes, handles := st.nodes, st.handles
 	st.nodes, st.inodes, st.handles = nil, nil, nil
-	close(st.done)
 	st.mu.Unlock()
 	for _, n := range nodes {
 		if n != nil {
@@ -384,9 +438,34 @@ func (st *state) close() {
 	}
 	for _, h := range handles {
 		if h != nil {
-			h.f.Close()
+			h.close()
 		}
 	}
+	// A concurrent Release may already have removed its handle from the map.
+	st.trees.Wait()
+	close(st.closeDone)
+}
+
+// close waits for descriptor users, including Read, before returning the
+// result's reservation. sync.Once also joins concurrent close callers.
+func (h *handle) close() error {
+	h.closeOnce.Do(func() {
+		h.useMu.Lock()
+		defer h.useMu.Unlock()
+		h.closeErr = h.f.Close()
+		if h.afterClose != nil {
+			h.afterClose()
+		}
+	})
+	return h.closeErr
+}
+
+// use participates in the handle's close fence. os.File.Close alone does
+// not wait for RawConn users of blocking descriptors such as regular files.
+func (h *handle) use(fn func(int) error) error {
+	h.useMu.RLock()
+	defer h.useMu.RUnlock()
+	return use(h.f, errStaleHandle, fn)
 }
 
 // addNode takes ownership of fd and acquires one reference on its node.
@@ -488,11 +567,13 @@ func (st *state) reserve(id sandboxfs.HandleID) error {
 		return sandboxfs.NewFailure(sandboxfs.CodeResourceExhausted, sandboxwire.EffectNone, "too many open handles")
 	}
 	st.handles[id] = nil
+	st.pending.Add(1)
 	return nil
 }
 
 // unreserve drops the reservation of an acquisition that failed.
 func (st *state) unreserve(id sandboxfs.HandleID) {
+	defer st.pending.Done()
 	st.mu.Lock()
 	if !st.closed && st.handles[id] == nil {
 		delete(st.handles, id)
@@ -502,13 +583,15 @@ func (st *state) unreserve(id sandboxfs.HandleID) {
 
 // publish installs h under its reserved ID.
 func (st *state) publish(id sandboxfs.HandleID, h *handle) error {
+	defer st.pending.Done()
 	st.mu.Lock()
-	defer st.mu.Unlock()
 	if st.closed {
-		h.f.Close()
+		st.mu.Unlock()
+		h.close()
 		return errStaleAttachment()
 	}
 	st.handles[id] = h
+	st.mu.Unlock()
 	return nil
 }
 
@@ -542,7 +625,7 @@ func (st *state) release(id sandboxfs.HandleID, dir bool) error {
 	}
 	delete(st.handles, id)
 	st.mu.Unlock()
-	return h.f.Close()
+	return h.close()
 }
 
 // attr converts a stat. Ino combines the device with the inode number, as

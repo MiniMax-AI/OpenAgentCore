@@ -1,7 +1,7 @@
 ---
 title: "文件访问协议"
 source: docs/file-access-protocol.md
-source_hash: 848d891def538f4a4dc78448089348f470c45a7e55ab07eb96f07a9f727e6fb4
+source_hash: 8588b9605eb829b158958a61aaeabb93f583563889d92ad27b9257b946de90ce
 ---
 
 文件访问协议定义 Runtime 如何读取和修改沙箱中的文件。沙箱内的 Sandbox I/O 服务提供该协议，Runtime 是其客户端。它是一个 node 与 handle 协议，形态仿照 FUSE 低层操作：lookup 获取 node 引用，open 在客户端选择的 ID 下创建 handle，读写携带偏移量，目录读取从 cookie 处继续，锁与沙箱自身的进程协同生效。第 1 阶段仅提供 [Uncached](#uncached-profile) profile，没有变更 stream。
@@ -17,13 +17,13 @@ source_hash: 848d891def538f4a4dc78448089348f470c45a7e55ab07eb96f07a9f727e6fb4
 
 ## 实现客户端 {#implement-a-client}
 
-Go 客户端为 `sandboxfs.NewClient(stream)`。它为每个操作提供一个方法，可安全并发使用，并对每次失败返回 `*sandboxfs.Failure`。其方法与 go-fuse node 操作一一对应，因此 FUSE 前端将每个内核请求转换为一次调用。
+Go 客户端为 `sandboxfs.NewClient(stream)`。它为每个操作提供一个方法，可安全并发使用，并对每次失败返回 `*sandboxfs.Failure`。其 node 方法与 go-fuse 操作一一对应。`OpenTree` 还让 Environment 验证通过单个获取的 handle 读取有界目录树。
 
 1. 调用 `Describe`。保存 `ServerInstanceID`，并在发送每个请求前对照 `Capabilities` 检查；服务拒绝 capabilities 未声明的任何内容。
 2. `Attach` 一个 export，并保存根 `NodeRef`。
 3. `Lookup`、`Walk`、`Create`、`Mkdir`、`Symlink`、`Link` 以及带 `WithAttrs` 的 `ReadDir` 各自对返回的每个 node 获取一个引用。内核 forget 引用时，用 `Forget` 释放它们。
 4. `Walk` 在 symlink 之后停止。客户端自行相对于视图解析链接：使用 `Readlink` 和后续 walk。
-5. `Open`、`Create` 和 `OpenDir` 在客户端选择的 [handle ID](#handles) 下打开 handle。每个 attachment 在其所有 stream 间共用一个 `sandboxfs.HandleIDs`，并从中获取每个 ID。handle 的每个描述符关闭时发送 `Flush`，最后一个描述符关闭时发送 `Release` 或 `ReleaseDir`。
+5. `Open`、`Create`、`OpenDir` 和 `OpenTree` 在客户端选择的 [handle ID](#handles) 下打开 handle。每个 attachment 在其所有 stream 间共用一个 `sandboxfs.HandleIDs`，并从中获取每个 ID。handle 的每个描述符关闭时发送 `Flush`，最后一个描述符关闭时发送 `Release` 或 `ReleaseDir`。
 6. 描述符处于 append 模式时，在每次 `Write` 上设置 `Append`。Append 是写入的属性，不是 handle 的属性。
 7. 读取每次失败的 `Effect`。出现 `EffectPossible` 后，请求可能已经生效：绝不自动重放 mutation。报告失败，或先用 `GetAttr` 或 `Lookup` 检查状态。带[可重试](#failures) code 和 `EffectNone` 的失败可以原样重发。
 8. 回复丢失或调用被取消而导致结果未知的获取操作，用对其 ID 的 `Release` 或 `ReleaseDir` 清理。stream 失败后，在同一 attachment 的新 stream 上恢复（服务仅在失败 stream 的请求结束后才为其提供服务），并在那里清理：不确定的 `Attach` 用 `Detach`，每个不确定的获取操作用 `Release` 或 `ReleaseDir`。[Handle](#handles) 说明清理能证明什么。
@@ -44,7 +44,7 @@ stream 失败时，每个进行中的请求以 `Unknown` 和 `EffectPossible` �
 - 遇到分帧违规时结束 stream：未知 tag、不是请求的 frame，或不递增的 RequestID；
 - 最多持有 `sandboxfs.MaxInFlight`（256）个请求，每个从准入起持有到其响应写出，超出的请求回复 `ResourceExhausted` 和 `EffectNone`，因此客户端读取响应期间 `CancelRequest` 仍能送达；
 - 自行处理 `CancelRequest`，取消目标请求的 context；
-- 拒绝 handle ID 仍被该 stream 上另一获取操作使用的 `Open`、`Create` 或 `OpenDir`，回复 `InvalidArgument` 和 `EffectNone`；对某 ID 的 `Release` 或 `ReleaseDir` 仅在该 ID 正在运行的获取操作结束后才运行。结合接替 fence，服务绝不会同时运行同一 ID 的两个获取操作，也不会在某 ID 的获取操作进行时并发运行其释放；
+- 拒绝 handle ID 仍被该 stream 上另一获取操作使用的 `Open`、`Create`、`OpenDir` 或 `OpenTree`，回复 `InvalidArgument` 和 `EffectNone`；对某 ID 的 `Release` 或 `ReleaseDir` 仅在该 ID 正在运行的获取操作结束后才运行。结合接替 fence，服务绝不会同时运行同一 ID 的两个获取操作，也不会在某 ID 的获取操作进行时并发运行其释放；
 - 将方法返回的 `*Failure` 作为类型化失败返回，并把其他任何错误或未通过验证的响应报告为 `Unknown` 加 `EffectPossible`；
 - stream 结束时取消每个请求的 context。
 
@@ -52,7 +52,7 @@ stream 失败时，每个进行中的请求以 `Unknown` 和 `EffectPossible` �
 
 - 每当丢失 node 表和 handle 表时生成新的 `ServerInstanceID`，并对 `Attachment.ServerInstanceID` 不是自身的请求回复 `InstanceChanged`；
 - attachment 未挂接或其 lease 结束后回复 `StaleAttachment`，对 attachment 未持有的引用或 handle 回复 `StaleNode` 或 `StaleHandle`。node ID 仅在使用新 generation 时复用；
-- 按 [Handle](#handles) 所述，在产生任何文件系统作用之前原子地预留 `Open`、`Create` 或 `OpenDir` 的 handle ID，并在方法返回前发布请求创建的所有状态；
+- 按 [Handle](#handles) 所述，在产生任何文件系统作用之前原子地预留 `Open`、`Create`、`OpenDir` 或 `OpenTree` 的 handle ID，并在方法返回前发布请求创建的所有状态；
 - 运行请求前调用 `Capabilities.Admit(request, readOnly)`，并返回其报告的失败。依赖服务状态的限制（如 `MaxOpenHandles`）由服务负责；
 - 只声明自己强制执行的内容，并且只在锁与沙箱内原生进程互通时声明锁；
 - 以自身的进程身份运行，绝不使用请求提供的身份，并精确应用请求的权限位；
@@ -70,13 +70,13 @@ stream 失败时，每个进行中的请求以 `Unknown` 和 `EffectPossible` �
 - `Rename` 使用 `renameat2`。仅当启动时的探测成功，服务才声明 `RenameNoReplace` 和 `RenameExchange`。
 - `LockFlock` 锁定 handle 的描述符，因此与原生 `flock` 互通。`POSIXLocks` 为 false，`GetLock` 和 `LockPOSIX` 返回 `Unsupported`。
 - `ReadDir` cookie 是内核的目录偏移。`Attr.Ino` 按 go-fuse loopback 的方式组合设备号和 inode 号。
-- 它声明 `MaxNameBytes` 255、`MaxPathBytes` 4095、`MaxReadBytes` 和 `MaxWriteBytes` 64 KiB、`MaxWalkComponents` 256、`MaxReadDirBytes` 64 KiB 和 `MaxOpenHandles` 4096，以及除 `ReadOnly` 和 `POSIXLocks` 外的所有标志，rename 模式按探测结果声明。
+- 它声明 `MaxNameBytes` 255、`MaxPathBytes` 4095、`MaxReadBytes` 和 `MaxWriteBytes` 64 KiB、`MaxWalkComponents` 256、`MaxReadDirBytes` 64 KiB、`MaxOpenHandles` 4096、`MaxTreeEntries` 4096 和 `MaxTreeDataBytes` 32 MiB，以及除 `ReadOnly` 和 `POSIXLocks` 外的所有标志，rename 模式按探测结果声明。
 
 ## 参考 {#reference}
 
 ### 消息 {#messages}
 
-请求使用 tag 1 到 30；tag `t` 的响应使用 `t | 0x8000`。
+File 版本 3 在 Link 绑定时精确匹配。请求使用 tag 1 到 31；tag `t` 的响应使用 `t | 0x8000`。
 
 | Tag | 请求 | 字段 | 响应 | 含义 |
 | --- | --- | --- | --- | --- |
@@ -110,6 +110,7 @@ stream 失败时，每个进行中的请求以 `Unknown` 和 `EffectPossible` �
 | 28 | `GetLock` | `Handle`, `Owner`, `Lock` | 可选 `Conflict` | 会产生冲突的 POSIX 锁 |
 | 29 | `SetLock` | `Handle`, `Kind`, `Owner`, `Lock`, `Wait` | – | 获取、转换或释放锁 |
 | 30 | `CancelRequest` | `Target`（一个 RequestID） | – | 请求取消一个未完成的请求 |
+| 31 | `OpenTree` | `Handle`、`Node`、`MaxEntries`、`MaxDataBytes`、`RequireReadOnlyFiles` | `Size` | 获取有界目录树结果 |
 
 响应 payload 以一个 uint16 结果开头：1 表示成功，后跟响应的字段；2 表示失败，后跟一个 [`Failure`](#failures)。payload 按以下顺序列出字段：
 
@@ -159,9 +160,11 @@ GetLock             Handle u64, Owner u64, Lock
 GetLockResponse     Conflict optional Lock
 SetLock             Handle u64, Kind enum, Owner u64, Lock, Wait bool; response (no fields)
 CancelRequest       Target u64; response (no fields)
+OpenTree            Handle u64, Node NodeRef, MaxEntries u32, MaxDataBytes u64, RequireReadOnlyFiles bool
+OpenTreeResponse    Size u64
 ```
 
-[`testdata`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/sandboxfs/testdata) 保存带注释的 golden frame，涵盖 `Describe`、`Walk`、`Create`、一次追加 `Write`、一次短 `Write`、带 cookie 的 `ReadDir`、`Rename` 和一次失败。
+[`testdata`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/sandboxfs/testdata) 保存带注释的 golden frame，涵盖 `Describe`、`OpenTree` 及其树结果、`Walk`、`Create`、一次追加 `Write`、一次短 `Write`、带 cookie 的 `ReadDir`、`Rename` 和一次失败。
 
 ### 共享类型 {#shared-types}
 
@@ -198,6 +201,8 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 | `MaxWalkComponents` | u32 | `Walk` 名称数上限，1 到 1024 |
 | `MaxReadDirBytes` | u32 | 最大 `ReadDir` limit，1 到 256 KiB |
 | `MaxOpenHandles` | u32 | 每个 attachment 的打开 handle 数上限，至少为 1 |
+| `MaxTreeEntries` | u32 | `OpenTree` 条目数上限（包含根）；与 `MaxTreeDataBytes` 同为零表示不支持 |
+| `MaxTreeDataBytes` | u64 | `OpenTree` 普通文件总字节数上限；最大编码结果不得超过 2^63−1 字节 |
 | `ReadOnly` | bool | 服务仅接受只读 attachment |
 | `AtomicAppend` | bool | `Write` 支持 `Append`，且来自多个 handle 的追加在单次写入内绝不交错 |
 | `AtomicRename` | bool | `RenameReplace` 原子替换目标 |
@@ -209,7 +214,7 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 | `Flock` | bool | `SetLock` 支持 `LockFlock` |
 | `POSIXLocks` | bool | `GetLock` 和 `SetLock` 支持 `LockPOSIX` |
 
-可写服务（即未声明 `ReadOnly` 的服务）声明 `AtomicAppend`、`AtomicRename`、`HardLinks` 和 `Symlinks`。超出声明限制的请求以 `InvalidArgument` 失败，名称或目标超限则以 `Errno` `NameTooLong` 失败；请求未声明的功能以 `Unsupported` 失败。
+可写服务（即未声明 `ReadOnly` 的服务）声明 `AtomicAppend`、`AtomicRename`、`HardLinks` 和 `Symlinks`。`OpenTree` 超出声明组合时以 `Unsupported` 失败。其他超出声明限制的请求以 `InvalidArgument` 失败，名称或目标超限则以 `Errno` `NameTooLong` 失败；请求未声明的功能以 `Unsupported` 失败。
 
 ### Attach {#attach}
 
@@ -257,7 +262,7 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 
 ### Handle {#handles}
 
-- 客户端为每个 `Open`、`Create` 和 `OpenDir` 选择 `HandleID`：非零，且从未在该 attachment 的任何 stream 上使用过。`sandboxfs.HandleIDs` 按递增顺序分配 ID。
+- 客户端为每个 `Open`、`Create`、`OpenDir` 和 `OpenTree` 选择 `HandleID`：非零，且从未在该 attachment 的任何 stream 上使用过。`sandboxfs.HandleIDs` 按递增顺序分配 ID。
 - 服务在请求产生任何文件系统作用前预留 ID。获取操作运行期间，预留的 ID 计入 `MaxOpenHandles`。ID 已被预留或已打开的获取操作以 `InvalidArgument` 和 `EffectNone` 失败。
 - 其他指定预留 ID 的请求以 `StaleHandle` 失败，`Release` 和 `ReleaseDir` 除外：server 仅在该 ID 的获取操作结束后运行它们，因此它们关闭该操作打开的 handle。
 - 对某 ID 的 `Release` 或 `ReleaseDir` 可以结算结果未知的获取操作，无论其回复随 stream 丢失，还是其调用被取消。成功或 `StaleHandle` 证明不再有该 ID 的 handle。它不证明获取操作没有改变任何东西：`Create` 可能已创建文件，带截断的 `Open` 可能已截断文件。
@@ -275,6 +280,20 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 - `Limit` 限制返回条目编码大小的总和：每个条目 25 字节加名称长度，携带 `Entry` 时再加 104。limit 小到容不下第一个条目时以 `Errno` `InvalidArgument` 失败。
 - 带 `WithAttrs` 时，每个返回的条目携带一个 `Entry`，附带一个 lookup 引用。
 - 没有剩余条目时 `End` 为 true，没有条目的页始终设置它。同一页内名称和 cookie 都不重复。对于读取过程中发生变化的目录，`ReadDir` 不保证快照。
+
+### 有界树读取 {#bounded-tree-reads}
+
+`OpenTree` 读取已授权 `NodeRef` 指定的目录。`MaxEntries` 非零且包含根；`MaxDataBytes` 累计普通文件字节数，可以为零。两者必须符合声明的 capabilities。`RequireReadOnlyFiles` 拒绝存在任何写权限位的普通文件。服务应用与其他读取相同的 attachment、lease、export 和 OS 权限检查。它仅接受目录与普通文件，不跟随 symlink，也不返回新的 node 引用。调用方保留原有验证及业务限额。
+
+服务先枚举并保留每个对象的身份和属性，再从同一批对象读取内容。路径重命名、解除链接或被替换，都不会把已捕获对象重定向到另一 inode。每个文件必须恰好读出捕获的大小，且没有额外字节。目录枚举可观察到并发变化；此操作不是原子文件系统快照，也不检测同大小的并发写入。失败不会发布部分结果。超过条目或数据限额返回 `Errno` `Overflow`；不合法类型、`RequireReadOnlyFiles` 下的写权限位、重名或文件长度变化返回 `Errno` `InvalidArgument`。其他 OS 失败保持原有类型映射。
+
+不可变结果通过现有基于偏移量的 `Read` 读取，并以 `Release` 关闭。`OpenTreeResponse.Size` 是其精确编码长度。结果由 `Count u32, DataBytes u64` 开头，之后恰好有 `Count` 个记录，格式为 `ParentIndex u32, Name bytes, Attr`；仅普通文件后跟 `Attr.Size` 个原始内容字节。记录 0 是目录，parent 为 0、name 为空。其他名称必须是合法的单个组件，其 parent 必须是之前出现且仍在活动祖先栈中的目录。记录按深度优先排列，每个目录的子项名称按字节严格递增。返回已离开的子树无效。目录保留真实属性但不带内容。所有普通文件大小之和等于 `DataBytes`。最大编码长度为 `12 + MaxEntries × (96 + MaxNameBytes) + MaxDataBytes`，计算不得溢出；不允许尾随数据。此流可以大于 frame 限额，任何基本字段都可以跨 `Read` chunk 切分。权威协议中的 `NewTreeEncoder` 与 `NewTreeDecoder` 增量验证相同规则，不再积累一份完整编码内容；解码器必须在读取下一个记录前消费完当前内容。
+
+结果 handle 支持 `Read`、`Release` 和 `GetAttr(TargetHandle)`；后者描述普通文件、mode 为 0400 的编码结果，而非源目录。`Flush` 成功且不改变状态。`Write` 和 `SetAttr(TargetHandle)` 返回 `Errno` `ReadOnlyFilesystem`；`Fsync`、`GetLock` 和 `SetLock` 返回 `Unsupported`；`ReadDir` 和 `ReleaseDir` 返回 `Errno` `BadDescriptor`。结果不具有可寻址的 `NodeRef`。
+
+`OpenTree` 是获取操作，与 `Open` 共享 ID 预留、取消及 release fence。取消已发送请求可能留下 handle，因此报告 `EffectPossible`；使用独立清理 context 调用 `Release` 结算。构建期间在枚举及读取过程中检查取消。失败清理先关闭源及结果描述符，再归还资源；成功发布前先关闭源描述符。Detach、lease 结束和服务关闭会停止准入、取消并等待未结束的获取操作，然后关闭结果。slot 和字节预留一直保留到 backing 描述符实际关闭，包括仍在使用它的读取。
+
+Linux 服务为每个结果使用一个 sealed 匿名内存文件（`memfd`）。在枚举之前预留最大编码大小：每个服务至多四个正在构建或仍保留的结果，每个 attachment 至多一个，结果 backing 总预留不超过 128 MiB，同时遵守原有 `MaxOpenHandles` 限额。超过任一预算的准入返回 `ResourceExhausted` 和 `EffectNone`，不等待或重放请求。内存文件发布前禁止写入、增长和缩短；创建或 sealing 不受支持时直接失败，不切换存储路径。这些限额约束结果 backing，而非整个进程 RSS。增量枚举以 `MaxEntries` 限制保留对象和名称并拒绝重名，在下钻前关闭每个枚举描述符。内容传输只需一个 chunk 缓冲区。不使用命名临时文件、持久缓存或应用专有格式。
 
 ### Rename {#rename}
 
@@ -306,7 +325,7 @@ Failure
 | 5 | `InstanceChanged` | stream 绑定到另一个服务 incarnation |
 | 6 | `StaleNode` | attachment 未持有该 `NodeRef` |
 | 7 | `StaleHandle` | attachment 没有该打开的 handle |
-| 8 | `ResourceExhausted` | stream 已持有 `MaxInFlight` 个请求，或 attachment 已有 `MaxOpenHandles` 个 handle（含预留 ID） |
+| 8 | `ResourceExhausted` | stream 已持有 `MaxInFlight` 个请求、attachment 已有 `MaxOpenHandles` 个 handle（含预留 ID），或有界树结果预算耗尽 |
 | 9 | `Cancelled` | 请求已被取消 |
 | 10 | `DeadlineExceeded` | 调用方的截止时间已过 |
 | 11 | `Errno` | 文件系统调用失败；`Errno` 说明原因 |
