@@ -3,6 +3,7 @@ package mcode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 type Session struct {
@@ -73,7 +75,21 @@ func newTurnSession(ctx context.Context, req proto.PromptRequestPayload, opts la
 	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, completedMessages: map[string]bool{}}
 }
 
-func (s *Session) prepareNative() error {
+func (s *Session) prepareNative() (err error) {
+	started := time.Now()
+	phase := "initialize"
+	defer func() {
+		// Native errors and configuration may contain credentials. Log only
+		// static stages and the owner context, before preparation cleanup.
+		contextOutcome := "active"
+		switch {
+		case errors.Is(s.ctx.Err(), context.DeadlineExceeded):
+			contextOutcome = "deadline_exceeded"
+		case errors.Is(s.ctx.Err(), context.Canceled):
+			contextOutcome = "cancelled"
+		}
+		obslog.Ctx(s.ctx).Info("mcode preparation", "phase", phase, "duration_ms", time.Since(started).Milliseconds(), "success", err == nil, "context_outcome", contextOutcome)
+	}()
 	var initialized struct {
 		ProtocolVersion int `json:"protocolVersion"`
 		Meta            struct {
@@ -105,6 +121,7 @@ func (s *Session) prepareNative() error {
 		method = "session/load"
 		params["sessionId"] = s.req.AgentSessionID
 	}
+	phase = method
 	var session sessionResult
 	if err := s.call(method, params, &session, false); err != nil {
 		return err
@@ -118,6 +135,7 @@ func (s *Session) prepareNative() error {
 	s.mu.Lock()
 	s.sessionID = session.SessionID
 	s.mu.Unlock()
+	phase = "model_selection"
 	model, err := advertisedModel(session.ConfigOptions, s.opts.Model)
 	if err != nil && s.req.AgentSessionID != "" && !slices.ContainsFunc(session.ConfigOptions, func(option configOption) bool { return option.ID == "model" }) {
 		// Native load omits the selector when its persisted model was removed; selection still validates against the current catalog.
@@ -128,6 +146,7 @@ func (s *Session) prepareNative() error {
 		return err
 	}
 	s.nativeModel = model
+	phase = "model_configuration"
 	if err := s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "model", "value": model}, nil, false); err != nil {
 		return err
 	}

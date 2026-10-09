@@ -4,10 +4,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import { pathToFileURL } from 'node:url';
 
 const root = process.env.MCODE_SOURCE;
-test('native MCP shutdown fences the old scoped transport and reconnects lazily', { skip: !root }, async t => {
+test('native MCP shutdown fences the old scoped transport and reconnects lazily', { skip: !root, timeout: 10_000 }, async t => {
   const require = createRequire(join(root, 'package.json'));
   const { build } = require('esbuild');
   const paths = JSON.parse(readFileSync(join(root, 'tsconfig.standalone.json'))).compilerOptions.paths;
@@ -17,6 +18,8 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
     export const transports = [];
     let workspaceListed;
     export const workspaceDiscovery = new Promise(resolve => { workspaceListed = resolve; });
+    let workspaceClosing;
+    export const workspaceClosingDiscovery = new Promise(resolve => { workspaceClosing = resolve; });
     export function createTransport(config) {
       const previous = transports.filter(t => t.name === config.command).length;
       const transport = {
@@ -29,6 +32,11 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
           if (message.method === 'tools/call' && message.params.name === 'hold') return;
           if (message.method === 'initialize' && this.name === 'connecting' && previous === 0) return;
           if (message.method === 'initialize' && this.name === 'workspace-timeout') return;
+          if (message.method === 'tools/list' && this.name === 'optional-fast') return;
+          if (message.method === 'initialize' && this.name === 'workspace-closing') {
+            workspaceClosing();
+            return;
+          }
           if (message.method === 'tools/list' && this.name === 'workspace-held') {
             await new Promise(resolve => workspaceListed(resolve));
           }
@@ -60,7 +68,7 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
     stdin: { contents: `export { McpConnectionPool } from '@mavis/mcp/runtime/connection-pool';
       export { SessionMcpServers } from ${JSON.stringify(join(root, 'packages/local-runtime-v2/src/service/mcp/runtime/session-servers.ts'))};
       export { LocalMcpService } from ${JSON.stringify(join(root, 'packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts'))};
-      export { transports, workspaceDiscovery } from 'lifecycle-transport';`, resolveDir: root },
+      export { transports, workspaceDiscovery, workspaceClosingDiscovery } from 'lifecycle-transport';`, resolveDir: root },
     bundle: true, write: false, platform: 'node', format: 'esm', target: 'node22',
     tsconfig: join(root, 'tsconfig.standalone.json'), nodePaths: [join(root, 'node_modules')],
     banner: { js: `import { createRequire as lifecycleCreateRequire } from 'node:module'; const require = lifecycleCreateRequire(${JSON.stringify(join(root, 'package.json'))});` },
@@ -77,10 +85,10 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const bundle = join(directory, 'lifecycle.mjs');
   writeFileSync(bundle, result.outputFiles[0].text);
-  const { McpConnectionPool, SessionMcpServers, LocalMcpService, transports, workspaceDiscovery } = await import(pathToFileURL(bundle).href);
+  const { McpConnectionPool, SessionMcpServers, LocalMcpService, transports, workspaceDiscovery, workspaceClosingDiscovery } = await import(pathToFileURL(bundle).href);
   const pool = new McpConnectionPool({ getResolvedServer() { throw new Error('Session overrides were lost'); } });
   const sessions = new SessionMcpServers(pool);
-  const service = new LocalMcpService(() => directory, { connectionPool: pool });
+  const service = new LocalMcpService(() => directory, { connectionPool: pool, turnStdioDiscoveryTimeoutMs: 20 });
   const stdio = name => ({ name, config: { type: 'stdio', command: name, args: [] } });
   await sessions.configure('root', [stdio('target'), stdio('untouched'), stdio('oac_workspace'), stdio('connecting'),
     { name: 'remote', config: { type: 'http', url: 'https://example.test/mcp' } }]);
@@ -161,19 +169,36 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
       let prepared = false;
       const preparation = service.configureSessionServers('workspace', [workspace('workspace-held')])
         .then(() => { prepared = true; });
+      const failedPreparation = preparation.catch(() => {});
       const releaseList = await workspaceDiscovery;
       assert.equal(prepared, false, 'preparation must wait for the actual tool inventory');
+      await delay(40);
+      assert.equal(prepared, false);
+      assert.equal(transports.at(-1).closeRequested, false, 'startup must outlive the Turn discovery budget');
       releaseList();
       await preparation;
+      await failedPreparation;
       const connected = transports.length;
       const inventory = await service.listNativeToolsForTurn({ sessionId: 'workspace' });
       assert.deepEqual(inventory.map(tool => tool.toolName).sort(),
         ['bash', 'edit', 'glob', 'grep', 'read', 'write'].map(name => 'workspace_' + name));
       assert.equal(transports.length, connected, 'Turn discovery must reuse the prepared connection');
       for (const command of ['workspace-empty', 'workspace-incomplete', 'workspace-failed', 'workspace-timeout']) {
-        await assert.rejects(service.configureSessionServers(command, [workspace(command)]), /Required workspace MCP tools/);
+        await assert.rejects(service.configureSessionServers(command, [workspace(command)]), /Required workspace MCP tools|Failed to connect|timed out/i);
         assert.deepEqual(await service.listNativeToolsForTurn({ sessionId: command }), [], 'failed preparation must remove its configuration');
       }
+      await service.configureSessionServers('optional-fast', [stdio('optional-fast')]);
+      assert.deepEqual(await service.listNativeToolsForTurn({ sessionId: 'optional-fast' }), [],
+        'optional Turn discovery retains its short timeout');
+      const closingPreparation = service.configureSessionServers('closing', [workspace('workspace-closing')]);
+      const rejectedClose = assert.rejects(closingPreparation, /abort|closed|Connection|connect/i);
+      await workspaceClosingDiscovery;
+      // Service shutdown joins its mutation and clears configuration; the outer
+      // Executor/View owner confirms final process exit after preparation fails.
+      const close = service.close();
+      await Promise.all([close, rejectedClose]);
+      assert.equal(transports.at(-1).closeRequested, true);
+      assert.equal(service.sessionServers.get('closing'), undefined);
     } finally {
       if (previousPolicy === undefined) delete process.env.OAC_RUNTIME_MCODE_TOOL_POLICY;
       else process.env.OAC_RUNTIME_MCODE_TOOL_POLICY = previousPolicy;

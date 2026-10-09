@@ -294,6 +294,10 @@ func TestMCodeProcess(t *testing.T) {
 				}
 			}
 		}
+		if scenario == "prepare-reject-"+frame.Method {
+			send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32603, Message: "PRIVATE_NATIVE_ERROR private-token"}})
+			continue
+		}
 		result := any(map[string]any{})
 		switch frame.Method {
 		case "initialize":

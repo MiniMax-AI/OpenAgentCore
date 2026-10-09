@@ -155,7 +155,13 @@ replaceNative(mcpServiceFile,
       const workspace = this.sessionServers.get(sessionId)?.oac_workspace;
       if (process.env.OAC_RUNTIME_MCODE_TOOL_POLICY !== 'protected-mcp-v1' || !workspace) return;
       try {
-        const tools = await this.listToolsForTurn('oac_workspace', workspace, { sessionId });
+        const pool = this.options.connectionPool;
+        if (!pool) throw new Error('Required workspace MCP connection pool is unavailable.');
+        const overrides = await this.resolveConnectionOverrides('oac_workspace', workspace, { sessionId });
+        this.assertOpen();
+        const tools = await pool.listTools('oac_workspace', overrides, {
+          signal: this.connectionSignal(workspace),
+        });
         const names = new Set(tools.map((tool) => tool.name));
         if (names.size !== requiredWorkspaceTools.length ||
             !requiredWorkspaceTools.every((name) => names.has(name)))
