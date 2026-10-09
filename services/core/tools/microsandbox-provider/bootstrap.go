@@ -18,6 +18,7 @@ import (
 // as the sandbox user.
 const bootstrapScript = `
 import ctypes,os,stat,subprocess,sys
+from pathlib import Path
 data=sys.stdin.buffer.read()
 for p in ['/home/runtime','/environment','/environment/workspace','/environment/initialization','/environment/packages']:
     os.makedirs(p,mode=0o700,exist_ok=True)
@@ -31,7 +32,26 @@ if not stat.S_ISDIR(os.lstat('/workspace').st_mode): raise RuntimeError('invalid
 libc=ctypes.CDLL(None,use_errno=True)
 if libc.mount(b'/environment/workspace',b'/workspace',None,4096,None)!=0:
     raise OSError(ctypes.get_errno(),'workspace bind mount failed')
+mounts=Path('/proc/self/mountinfo').read_text().splitlines()
+if not any(line.split(' - ')[0].split()[4]=='/sys/fs/cgroup'
+           and line.split(' - ')[1].split()[0]=='cgroup2' for line in mounts):
+    raise RuntimeError('Sandbox process containment requires cgroup v2')
+membership=[line[3:] for line in Path('/proc/self/cgroup').read_text().splitlines() if line.startswith('0::/')]
+if len(membership)!=1 or '..' in Path(membership[0]).parts:
+    raise RuntimeError('Invalid sandbox cgroup membership')
+parent=Path('/sys/fs/cgroup')/membership[0].lstrip('/')
+if str(os.getpid()) not in (parent/'cgroup.procs').read_text().splitlines():
+    raise RuntimeError('Sandbox cgroup mount does not match membership')
+group=parent/'oac-sandbox-io'
+# Keep the VM's resource ancestors; never reuse an uncertain startup's group.
+group.mkdir(mode=0o700)
+if (group/'cgroup.subtree_control').read_text().strip():
+    raise RuntimeError('Sandbox process group has active controllers')
+(group/'cgroup.kill').write_text('1')
+group.chmod(0o700);os.chown(group,1000,1000)
+os.chown(group/'cgroup.procs',1000,1000);(group/'cgroup.procs').chmod(0o600)
 def sandbox_user():
+    (group/'cgroup.procs').write_text(str(os.getpid()))
     os.setgroups([]);os.setgid(1000);os.setuid(1000)
 subprocess.Popen(['/usr/local/bin/oac-sandbox-io','--bootstrap-file',s],env={},start_new_session=True,
                  stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,

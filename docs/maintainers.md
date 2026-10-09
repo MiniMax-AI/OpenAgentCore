@@ -89,6 +89,8 @@ The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-pr
 
 **microsandbox runtime.** The distribution uses the official [v0.7.2 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.2) archive `microsandbox-linux-x86_64.tar.gz`, SHA256 `47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b` (`RUNTIME_ARCHIVE_SHA256` in `scripts/core-distribution-manifest.py`). The build verifies the checksum before extracting `msb` and `libkrunfw.so.5.6.1` and records both files' hashes. The helper checks those hashes on every call and never installs or upgrades them.
 
+Native guest qualification must exercise the [microsandbox bootstrap](../services/core/tools/microsandbox-provider/README.md) and [E2B startup](../services/core/tools/e2b-provider/README.md#create) delegation as UID/GID 1000, including cancellation of descendants that start new sessions and cessation of their side effects. A container-only check does not qualify a guest kernel or its mount layout.
+
 ### Standalone Core builds
 
 `make build-core` builds `oac-core`, `oac-core-environment-key`, `oac-node` and `oac` into `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core` (`OAC_DEV_CORE_BUILD_DIR` selects another absolute directory). The build copies only the source set listed in `scripts/build-core.sh` (the Core service, its contracts, the shared packages it needs and the root Go module files) into a temporary context and builds with CGO disabled, read-only modules and trimmed paths. It needs no Node, Docker or other application. When Core gains a shared dependency, add that package to the list; never copy the whole repository to make it compile.

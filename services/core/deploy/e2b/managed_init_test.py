@@ -51,11 +51,17 @@ class ManagedStartupTest(unittest.TestCase):
             source = root / 'managed-bootstrap.json'
             data = payload()
             source.write_text(json.dumps(data))
-            process = Mock(return_value=Mock(pid=456))
-            if failed:
-                process.side_effect = RuntimeError('private process diagnostic')
+
+            def launch(*args, **kwargs):
+                delegate.assert_called_once_with()
+                if failed:
+                    raise RuntimeError('private process diagnostic')
+                return Mock(pid=456)
+
+            process = Mock(side_effect=launch)
             with patch.object(managed_init, 'ROOT', root), patch.object(managed_init, 'HOME', home), \
                     patch.object(managed_init, 'prepare_sandbox'), \
+                    patch.object(managed_init, 'delegate_process_group') as delegate, \
                     patch.object(managed_init.os, 'fchown'), patch.object(managed_init.subprocess, 'Popen', process):
                 if failed:
                     with self.assertRaises(RuntimeError):
@@ -89,6 +95,41 @@ class ManagedStartupTest(unittest.TestCase):
 
     def test_unknown_start_preserves_claim_and_never_replays(self):
         self.exercise(failed=True)
+
+    def test_failed_delegation_never_starts_service_or_replays(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary, 'receipt')
+            root.mkdir()
+            home = Path(temporary, 'home')
+            home.mkdir()
+            (root / 'managed-bootstrap.json').write_text(json.dumps(payload()))
+            with patch.object(managed_init, 'ROOT', root), patch.object(managed_init, 'HOME', home), \
+                    patch.object(managed_init, 'prepare_sandbox'), patch.object(managed_init.os, 'fchown'), \
+                    patch.object(managed_init, 'delegate_process_group', side_effect=OSError('delegation unavailable')), \
+                    patch.object(managed_init.subprocess, 'Popen') as process:
+                with self.assertRaises(OSError):
+                    managed_init.initialize()
+                self.assertTrue((root / 'managed-launch.json').exists())
+                self.assertFalse((root / 'managed-ready.json').exists())
+                with self.assertRaisesRegex(RuntimeError, 'cannot be replayed'):
+                    managed_init.initialize()
+                process.assert_not_called()
+
+    def test_delegation_rejects_unmapped_membership_before_creating_group(self):
+        mount = '1 0 0:1 / /sys/fs/cgroup rw - cgroup2 cgroup2 rw'
+        for name, mounts, membership, processes in [
+                ('wrong_filesystem', mount.replace('cgroup2', 'tmpfs'), '0::/', '123'),
+                ('missing_membership', mount, '', '123'),
+                ('outside_namespace', mount, '0::/../outside', '123'),
+                ('unmapped_membership', mount, '0::/workload', '456')]:
+            with self.subTest(name=name):
+                files = {'/proc/self/mountinfo': mounts, '/proc/self/cgroup': membership,
+                         '/sys/fs/cgroup/workload/cgroup.procs': processes}
+                with patch.object(Path, 'read_text', lambda path: files[str(path)]), \
+                        patch.object(Path, 'mkdir') as mkdir, patch.object(managed_init.os, 'getpid', return_value=123):
+                    with self.assertRaises(RuntimeError):
+                        managed_init.delegate_process_group()
+                    mkdir.assert_not_called()
 
 
 if __name__ == '__main__':
