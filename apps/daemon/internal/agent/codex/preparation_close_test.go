@@ -1,9 +1,12 @@
 package codex
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -11,6 +14,8 @@ import (
 func TestPreparationCancellationDuringReadiness(t *testing.T) {
 	req, cfg, root := preparationFixture(t)
 	t.Setenv("OAC_TEST_PREPARATION_BLOCK", "1")
+	var logs bytes.Buffer
+	cfg.logger = slog.New(slog.NewJSONHandler(&logs, nil))
 	owner, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	result := make(chan error, 1)
@@ -35,6 +40,10 @@ func TestPreparationCancellationDuringReadiness(t *testing.T) {
 		t.Fatal("failed readiness leaked model catalog")
 	}
 	assertPreparationOnly(t, root)
+	want := []string{"execution_environment_configuration"}
+	if got := preparationLogStages(t, &logs, "execution_environment_configuration", "cancelled"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("stages %v, want %v", got, want)
+	}
 }
 
 func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
