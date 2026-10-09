@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 480884468c15159c84b123978c1d8d5fdac89bd3833556100be1ef4d31fb8829
+source_hash: 4bbbd2097e76481ec50fc7bc41de7855e88fb8346e65f389ec0230f5654f15ce
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -112,6 +112,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 显式指定推理强度或摘要、使用 `auto` 之外的服务层级、启用 `web_search` 或启用程序化工具调用，这些设置都会被保存，但在 Session 准入时会被拒绝。
 - 各 Harness 的支持差异以其[声明](harness-onboarding.md#declare-support)为准。Codex 不支持结构化输出或 `tool_search`。Claude Code 不接受仅含空白的文本，只支持 `medium` 详细程度，函数结果图像只能内联且只能出现在成功结果中；它拒绝子智能体与 MCP（包括 Environment Plugins 安装的 MCP server）同时使用，拒绝结构化输出与子智能体、MCP、已安装能力或 `tool_search` 同时使用，也拒绝 `tool_search` 与 MCP 或已安装能力同时使用。MiniMax Code 不提供公共 functions，没有服务源 MCP，不支持图像输入、仅含空白的文本和必需 MCP，只支持 `medium` 详细程度，且只接受值为 null 的 `allowed_tools`。每个 Harness 都保留一个 MCP `server_label`：Codex 保留 `codex_apps`，Claude Code 保留 `functions`，MiniMax Code 保留 `oac_workspace`。Claude Code 还要求标签匹配 `^[a-zA-Z0-9_-]+$`，`allowed_tools` 中的名称匹配 `^[a-zA-Z0-9_.-]+$`。
+- Claude 结构化输出保留[已确认的原始工具输入](./execution-tools.md#structured-output)，但原生验证和解析值关联使用 binary64。不同的原始数字在解析后可能相等，因此即使 schema 的所有数值字面量都通过准入，也不能据此确认精确数值的 schema 符合性。精确数值输出验证仍未经资格验证。 原生从流式到非流式的 fallback 可能只产生 assistant 工具 snapshot，而没有原始工具输入事件。由于原始 JSON 文本不可用，适配器会拒绝此类输出；解析后的输入和通用结果文本不能替代它。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
