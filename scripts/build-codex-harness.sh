@@ -21,6 +21,9 @@ git -C "$source" archive "$revision" | tar -x -C "$context/upstream"
 git -C "$context/upstream" apply "$package/invalidate-mcp.patch"
 target=x86_64-unknown-linux-musl
 export CODEX_REPO_ROOT="$context/upstream"
+# musl-gcc specs can inject an interpreter into Rust's static PIE. Keep the
+# self-contained startup code authoritative instead of loading it twice.
+export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,--no-dynamic-linker"
 (
   cd "$context/upstream/codex-rs"
   # The release tag updates workspace versions but leaves local lock entries at
@@ -49,11 +52,18 @@ PY
 )
 mkdir "$context/artifact"
 cp "$context/canonical/bin/codex" "$context/canonical/bin/codex-code-mode-host" "$context/artifact/"
+strip --strip-debug --strip-unneeded "$context/artifact/codex" "$context/artifact/codex-code-mode-host"
 python3 - "$context" <<'PY'
 import hashlib, json, pathlib, subprocess, sys
 context = pathlib.Path(sys.argv[1])
 artifact = context / "artifact"
 pin = json.loads((context / "source.json").read_text())
+for name in ("codex", "codex-code-mode-host"):
+    executable = str(artifact / name)
+    headers = subprocess.check_output(["readelf", "-lW", executable], text=True)
+    dynamic = subprocess.check_output(["readelf", "-dW", executable], text=True)
+    assert not any(line.split()[0] == "INTERP" for line in headers.splitlines() if line.split()), "Codex payload requires an ELF interpreter: " + name
+    assert "(NEEDED)" not in dynamic, "Codex payload requires a shared library: " + name
 assert subprocess.check_output([str(artifact / "codex"), "--version"], text=True).strip() == "codex-cli " + pin["version"]
 pin["target"] = "x86_64-unknown-linux-musl"
 pin["cargo_lock_sha256"] = hashlib.sha256((context / "upstream/codex-rs/Cargo.lock").read_bytes()).hexdigest()
