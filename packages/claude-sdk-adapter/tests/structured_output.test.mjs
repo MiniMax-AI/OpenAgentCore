@@ -8,12 +8,12 @@ const receipt = (id, error=false) => ({type:"user", uuid:`receipt-${id}`, sessio
   message:{role:"user", content:[{type:"tool_result", tool_use_id:id, is_error:error, content:"Structured output provided successfully"}]}});
 const result = (raw, extra={}) => ({type:"result", uuid:"result", session_id:"session", subtype:"success", is_error:false,
   structured_output:JSON.parse(raw), result:'{"memory":"unrelated summary"}', ...extra});
-const candidate = (id, raw, error=false) => [
+const candidate = (id, raw, error=false, input=JSON.parse(raw)) => [
   stream({type:"message_start", message:{id:`message-${id}`}}),
   stream({type:"content_block_start", index:1, content_block:{type:"tool_use", id, name:"StructuredOutput", input:{}}}),
   ...[raw.slice(0, -2), raw.slice(-2)].map(partial_json => stream({type:"content_block_delta", index:1, delta:{type:"input_json_delta", partial_json}})),
   {type:"assistant", uuid:`snapshot-${id}`, session_id:"session", parent_tool_use_id:null,
-    message:{id:`message-${id}`, role:"assistant", content:[{type:"tool_use", id, name:"StructuredOutput", input:JSON.parse(raw)}]}},
+    message:{id:`message-${id}`, role:"assistant", content:[{type:"tool_use", id, name:"StructuredOutput", input}]}},
   stream({type:"content_block_stop", index:1}),
   stream({type:"message_stop"}), receipt(id, error),
 ];
@@ -47,6 +47,29 @@ test("streamed tool execution may acknowledge a snapshot before its block and me
   assert.throws(() => observer.complete(result(raw)));
   consume(observer, events.slice(5, 7));
   assert.equal(observer.complete(result(raw)).message.text, raw);
+});
+
+test("native malformed-input failure settles before a valid retry publishes", () => {
+  const raw = '{"number":';
+  const input = {__unparsedToolInput:{raw, len:raw.length}};
+  const observer = new StructuredOutput();
+  consume(observer, candidate("malformed", raw, true, input));
+  consume(observer, candidate("final", '{"number":7}'));
+  assert.equal(observer.complete(result('{"number":7}')).message.text, '{"number":7}');
+  const invalid = new StructuredOutput();
+  assert.throws(() => consume(invalid, candidate("malformed", raw, false, input)));
+});
+
+test("JSON transport normalizes negative zero without changing acknowledged raw text", () => {
+  const raw = '{"number":-0,"nested":[-0,{"zero":-0}]}';
+  const transported = JSON.parse(JSON.stringify(JSON.parse(raw)));
+  const observer = new StructuredOutput();
+  consume(observer, candidate("final", raw, false, transported));
+  assert.equal(observer.complete(result(raw, {structured_output:transported})).message.text, raw);
+  // JSON transport turns infinity into null; it must not be treated like zero.
+  const overflowing = '{"number":1e999}';
+  const invalid = new StructuredOutput();
+  assert.throws(() => consume(invalid, candidate("overflow", overflowing, false, JSON.parse(JSON.stringify(JSON.parse(overflowing))))));
 });
 
 test("only live root events can confirm a candidate", () => {

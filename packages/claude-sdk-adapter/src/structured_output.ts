@@ -2,7 +2,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { isDeepStrictEqual } from "node:util";
 import type { MessageEvent } from "./messages.js";
 
-type Candidate = { id: string; text: string; snapshot?: string; receipt?: string; stopped: boolean; status?: "failed" | "accepted" | "published" };
+type Candidate = { id: string; text: string; snapshot?: string; input?: unknown; receipt?: string; stopped: boolean; status?: "failed" | "accepted" | "published" };
 
 // StructuredOutput is the native terminal tool. Its acknowledged tool-use identity
 // owns the final JSON message; the parent assistant may already own ordinary prose.
@@ -59,9 +59,9 @@ export class StructuredOutput {
         if (block.type !== "tool_use" || block.name !== "StructuredOutput") continue;
         const call = this.calls.get(block.id);
         if (!call || !this.active || message.message.id !== this.active.id ||
-            ![...this.active.blocks.values()].includes(call) || call.snapshot || !message.uuid || message.error || message.aborted ||
-            !isDeepStrictEqual(JSON.parse(call.text), block.input)) throw new Error("unmatched structured output snapshot");
+            ![...this.active.blocks.values()].includes(call) || call.snapshot || !message.uuid || message.error || message.aborted) throw new Error("unmatched structured output snapshot");
         call.snapshot = message.uuid;
+        call.input = block.input;
       }
     } else if (message.type === "user" && Array.isArray(message.message.content)) {
       for (const block of message.message.content) {
@@ -69,6 +69,11 @@ export class StructuredOutput {
         const call = this.calls.get(block.tool_use_id);
         if (!call) continue;
         if (!call.snapshot || call.receipt || !message.uuid) throw new Error("invalid structured output receipt");
+        // Failed native attempts may contain malformed JSON and must reach the
+        // SDK retry loop. Successful inputs must match JSON transport's zero semantics.
+        if (!block.is_error && !isDeepStrictEqual(JSON.parse(call.text, (_, value) => value === 0 ? 0 : value), call.input)) {
+          throw new Error("unmatched structured output input");
+        }
         call.receipt = message.uuid;
         call.status = block.is_error ? "failed" : "accepted";
       }
@@ -81,7 +86,7 @@ export class StructuredOutput {
     if (message.type !== "result" || message.subtype !== "success" || message.is_error ||
         message.session_id !== this.session || message.structured_output === undefined || this.active?.blocks.size ||
         calls.some(call => !call.stopped || !call.receipt) || accepted.length !== 1 ||
-        !isDeepStrictEqual(JSON.parse(accepted[0]!.text), message.structured_output)) throw new Error("unconfirmed structured output");
+        !isDeepStrictEqual(accepted[0]!.input, message.structured_output)) throw new Error("unconfirmed structured output");
     // Native validation compares binary64 values. Publish only the attributed raw
     // tool input: reserializing the validated object would lose original digits.
     const { id, text } = accepted[0]!;
