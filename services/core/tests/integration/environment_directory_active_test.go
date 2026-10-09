@@ -7,7 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
+func TestEnvironmentDirectoryActiveRunUsesReadOnlyPreparation(t *testing.T) {
 	h, w, environment := directoryWorker(t)
 	awaitFixtureCapabilities(t, h, workerEnvironmentCapabilities())
 	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []sessions.Input{messageInput("work")})
@@ -24,13 +24,8 @@ func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	}
 	h.write(prepare.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
 	result := startDirectoryRead(t.Context(), w, environment)
-	read := h.read(proto.TypeWorkspaceRead)
-	var request proto.WorkspaceReadPayload
-	if read.DecodePayload(&request) != nil || request.RunID != start.RunID || request.Handle != "" || request.EnvironmentID != environment.ID {
-		t.Fatal("active read selected another execution owner")
-	}
-	size := int64(3)
-	h.write(read.ID, proto.TypeWorkspaceReadResult, proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{{Name: "active.txt", Kind: "file", SizeBytes: &size}}}})
+	readPrepare, read := prepareDirectoryRead(t, h, environment)
+	completeDirectoryRead(t, h, readPrepare, read, false, false)
 	if got := awaitDirectoryResult(t, result); got.err != nil || len(got.value.Entries) != 1 {
 		t.Fatal("active read", got.err)
 	}

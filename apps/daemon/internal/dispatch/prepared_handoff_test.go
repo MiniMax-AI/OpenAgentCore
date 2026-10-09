@@ -180,15 +180,29 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	if ack := lastSteeringAck(t, sender.recSender, "run", "publication-steering"); ack.ErrorCode != "not_ready" {
 		t.Fatalf("pre-publication steering = %+v", ack)
 	}
-	read := proto.WorkspaceReadPayload{RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: 1}
+	read := map[string]any{"run_id": "run", "environment_id": preparationEnvironmentID, "max_entries": 1}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "publication-read", read)); err != nil {
 		t.Fatal(err)
 	}
 	var readResult proto.WorkspaceReadResultPayload
 	frames := sender.snapshot()
-	if len(frames) == 0 || frames[len(frames)-1].Type != proto.TypeWorkspaceReadResult || frames[len(frames)-1].DecodePayload(&readResult) != nil || readResult.ErrorCode != "resource_unavailable" {
+	if len(frames) == 0 || frames[len(frames)-1].Type != proto.TypeWorkspaceReadResult || frames[len(frames)-1].DecodePayload(&readResult) != nil || readResult.ErrorCode != "invalid_request" {
 		t.Fatalf("pre-publication workspace read = %+v", frames)
 	}
+	readPreparation := preparationRequest()
+	readPreparation.Configuration = proto.PromptRequestPayload{AgentKind: "prepared", LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID}, WorkspaceReadOnly: true}
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "publication-read-prepare", readPreparation)); err != nil {
+		t.Fatal(err)
+	}
+	readReady := waitPreparationStatus(t, sender.recSender, "publication-read-prepare", "ready", "")
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "publication-independent-read", proto.WorkspaceReadPayload{Handle: readReady.Handle, EnvironmentID: preparationEnvironmentID, MaxEntries: 1})); err != nil {
+		t.Fatal(err)
+	}
+	if got := waitWorkspaceRead(t, sender.recSender, "publication-independent-read"); got.Outcome != "completed" || !got.CloseAcknowledged || got.Directory == nil {
+		t.Fatal("read-only preparation depends on started publication", got)
+	}
+	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionRelease, "publication-read-prepare", proto.ExecutionReleasePayload{Handle: readReady.Handle}))
+	waitPreparationStatus(t, sender.recSender, "publication-read-prepare", "released", "")
 	if session.functions.Load() != 0 || session.steers.Load() != 0 {
 		t.Fatal("private Session accepted work before started publication")
 	}

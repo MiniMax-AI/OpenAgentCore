@@ -10,10 +10,9 @@ const (
 	WorkspaceReadNotDirectory = "not_directory"
 )
 
-// WorkspaceReadPayload lists one directory of an existing resource on the current daemon connection.
+// WorkspaceReadPayload lists one directory through a read-only preparation on the current daemon connection.
 type WorkspaceReadPayload struct {
 	Handle        string `json:"handle,omitempty"`
-	RunID         string `json:"run_id,omitempty"`
 	EnvironmentID string `json:"environment_id"`
 	Path          string `json:"path"`
 	MaxEntries    int    `json:"max_entries,omitempty"`

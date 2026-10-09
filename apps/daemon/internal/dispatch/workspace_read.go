@@ -61,7 +61,7 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 }
 
 // workspaceResourceLocked returns the Environment owner of ref's Session once
-// ref admits the read's ready preparation handle or open Run.
+// ref admits the read-only preparation's ready handle.
 func (r *Router) workspaceResourceLocked(ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (Environment, string) {
 	if code := r.admitLocked(ref, ref.SessionID, request.EnvironmentID); code != "" {
 		return nil, code
@@ -70,17 +70,9 @@ func (r *Router) workspaceResourceLocked(ref proto.AssignmentRef, request proto.
 	if environment == nil {
 		return nil, "read_unsupported"
 	}
-	if request.Handle != "" {
-		p := r.preparations[request.Handle]
-		if p == nil || p.request.Assignment != ref || p.environmentID != request.EnvironmentID || p.status.State != "ready" ||
-			!p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) {
-			return nil, "resource_unavailable"
-		}
-		return environment, ""
-	}
-	s := r.sessions[request.RunID]
-	if s == nil || s.assignment != ref || s.environmentID != request.EnvironmentID || s.session == nil ||
-		!r.runRouteOpenLocked(s) {
+	p := r.preparations[request.Handle]
+	if p == nil || p.request.Assignment != ref || p.environmentID != request.EnvironmentID || p.status.State != "ready" ||
+		p.executor != nil || !p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) {
 		return nil, "resource_unavailable"
 	}
 	return environment, ""

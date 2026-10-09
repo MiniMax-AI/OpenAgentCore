@@ -49,7 +49,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	}
 	environment, code := r.workspaceResourceLocked(env.Assignment, proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
 	p := r.preparations[request.Handle]
-	if code == "" && (u != nil || r.workspaceWrites[env.Assignment.SessionID] != nil || p.executor != nil) {
+	if code == "" && (u != nil || r.workspaceWrites[env.Assignment.SessionID] != nil) {
 		code = "resource_unavailable"
 	}
 	if code != "" {

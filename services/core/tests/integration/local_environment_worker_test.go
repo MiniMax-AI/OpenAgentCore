@@ -70,7 +70,7 @@ func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testin
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	read := h.read(proto.TypeWorkspaceRead)
 	var input proto.WorkspaceReadPayload
-	if read.DecodePayload(&input) != nil || input.EnvironmentID != environment.ID || input.Handle != handle || input.RunID != "" {
+	if read.DecodePayload(&input) != nil || input.EnvironmentID != environment.ID || input.Handle != handle {
 		t.Fatal("local directory owner changed")
 	}
 	completeDirectoryRead(t, h, frame.ID, read.ID, false, false)

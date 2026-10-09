@@ -87,21 +87,12 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		result.err = err
 		return
 	}
-	run := ""
-	if session.LastTurn != nil && (session.LastTurn.Status == sessions.TurnInProgress || session.LastTurn.Status == sessions.TurnWaiting) {
-		run = session.LastTurn.ID
-	}
-	if (run == "") != reserved {
-		return
-	}
 	if reserved {
 		ready, err := w.bindSessionDevice(check, session, func(id string) bool { return w.directoryDeviceReady(check, id, session.Engine) })
 		if err != nil || !ready {
 			return
 		}
 	}
-	// Capture retains the public Turn after its native Run has been released.
-	prepare := reserved || session.LastTurn != nil && session.LastTurn.ArtifactCaptureStarted
 	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(check, session.TenantID, session.ID)
 	if err != nil || bound.SessionEnvironmentID != environment.ID || !w.directoryDeviceReady(check, bound.ID, session.Engine) {
 		return
@@ -114,11 +105,6 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		return
 	}
 	read := proto.WorkspaceReadPayload{EnvironmentID: environment.ID, Path: request.path, MaxEntries: proto.WorkspaceDirectoryMaxEntries}
-	if !prepare {
-		read.RunID = run
-		result = readEnvironmentDirectory(owner, peer, bound.Assignment, read)
-		return
-	}
 	result = w.dispatcher.readPreparedDirectory(owner, peer, session, environment, bound, read)
 	return
 }

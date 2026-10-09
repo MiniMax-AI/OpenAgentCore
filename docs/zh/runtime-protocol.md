@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: ad72e725702ce94ae55ccae0f26f0df9ba43bf5fbd960998bc764bc808aac882
+source_hash: 5003cac2a7dd5d1926c8004a400a12cb947070581351dc45b9f2f7b7323dd726
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -196,13 +196,13 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 ## 工作区操作 {#workspace-operations}
 
-无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `local_environment` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Session 的 Environment owner 提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
+工作区读取使用独立于原生 preparation 或运行中 Turn 的只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `local_environment` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Session 的 Environment owner 提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
-`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份，列出一个 workspace 相对目录（空路径选择根目录）；调用方不能提供 socket、凭据或 workspace root。结果最多携带 `max_entries`（1 到 1024）个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。
+`workspace_read` 在同一已认证设备连接上，通过 ready 状态的只读 preparation handle，使用精确冻结的 Environment 身份，列出一个 workspace 相对目录（空路径选择根目录）；execution preparation handle 会被拒绝，调用方不能提供 Run 身份、socket、凭据或 workspace root。结果最多携带 `max_entries`（1 到 1024）个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。
 
 准入前，请求 payload 限制为 8 KiB，correlation ID 限制为 128 字节；过长 ID 不回显，过大的 trace metadata 不进入回复。这些是私有 transport 限制，不是公开 Files 参数。安全的原生拒绝不携带目录；中断或有歧义的读取保持未知，并停止该 owner 的后续读取。已 dispatch 的读取在 observer 取消以及资源转移或释放后仍保留有限时等待方，资源关闭阻止新准入。gateway 限制订阅，不在重连后重试或重放读取；重复的 pending operation ID 不能启动另一次读取。
 
-Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执行时针对精确 Run。它在有限时 read 与 release 期间保留预约，仅在确认 close 后返回数据（不完整读取或不确定清理返回 unavailable，不包含数据），在交付结果前释放预约，并在完成或失败后撤销限定作用域的读取凭据。Runtime 保留不确定清理的所有权和容量。[Environment Files 契约](../../contracts/agents-api/zh/environment-files.md)负责公开授权、路径和分页。
+Core 对每次目录读取都使用独立的只读 preparation，并在 Session 空闲时预约 Worker 的 Session 调度槽位。它在有限时 read 与 release 期间保留该预约，仅在确认 close 后返回数据（不完整读取或不确定清理返回 unavailable，不包含数据），在交付结果前释放预约，并在完成或失败后撤销限定作用域的读取凭据。Runtime 保留不确定清理的所有权和容量。[Environment Files 契约](../../contracts/agents-api/zh/environment-files.md)负责公开授权、路径和分页。
 
 `workspace_write` 在原生 writer 运行前，通过已确认的 64 KiB frame 传输完整且有界的 body，验证声明的 digest，不运行模型。私有 transfer 限制为 50 MiB，与公开 API 在任何 Runtime 工作前检查的 5 MiB decoded inline 限制独立。Runtime 在接收或应用写入时排除该 Session 的执行；格式错误、不完整或到期的 transfer 不会到达 installer。精确的 commit 或拒绝回执结算该写入。缺失或有歧义的回执把不确定性留给 [Environment owner](#session-assignments)：observer 取消和本地进程退出不能证明没有改变任何内容。公开准入前，Core 在 Session lock 下持久预约写入，跨重启阻止后继 mutation，直到精确结算；请求不重放。agent host 的 owner 在其 Link attachment 上通过 [File access](./file-access-protocol.md) 列举目录、创建文件和导出输出。
 

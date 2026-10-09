@@ -66,13 +66,18 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	if _, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "concurrent", []sessions.Input{messageInput("work")}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("upload admitted concurrent execution", err)
 	}
+	if got := awaitDirectoryResult(t, startDirectoryRead(t.Context(), w, environment)); !errors.Is(got.err, execution.ErrExecutionUnavailable) {
+		t.Fatal("write reservation admitted a directory reader", got.err)
+	}
 	cancel()
 	if got := awaitLocalWrite(t, done); !errors.Is(got.err, execution.ErrExecutionUnavailable) {
 		t.Fatal("detached observer", got.err)
 	}
 	h.write(begin.ID, proto.TypeWorkspaceWriteResult, proto.WorkspaceWriteResultPayload{Outcome: "ready"})
-	chunk := h.read(proto.TypeWorkspaceWrite)
-	if chunk.ID != begin.ID || chunk.DecodePayload(&request) != nil || request.Step != "chunk" || string(request.Data) != "abc" {
+	// The rejected read cannot send a preparation ahead of the write's chunk.
+	_ = h.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var chunk proto.Envelope
+	if h.conn.ReadJSON(&chunk) != nil || chunk.Type != proto.TypeWorkspaceWrite || chunk.ID != begin.ID || chunk.DecodePayload(&request) != nil || request.Step != "chunk" || string(request.Data) != "abc" {
 		t.Fatal("body changed")
 	}
 	h.write(begin.ID, proto.TypeWorkspaceWriteResult, proto.WorkspaceWriteResultPayload{Outcome: "received", Offset: 3})

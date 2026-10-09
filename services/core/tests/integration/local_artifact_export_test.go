@@ -70,7 +70,7 @@ func completeCaptureDirectoryRead(t *testing.T, h *dispatchHarness, worker *exec
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	read := h.read(proto.TypeWorkspaceRead)
 	var request proto.WorkspaceReadPayload
-	if read.DecodePayload(&request) != nil || request.Handle != handle || request.RunID != "" || request.EnvironmentID != environment.ID {
+	if read.DecodePayload(&request) != nil || request.Handle != handle || request.EnvironmentID != environment.ID {
 		t.Fatal("directory read during capture used a finished native Run")
 	}
 	completeDirectoryRead(t, h, frame.ID, read.ID, false, false)

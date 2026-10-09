@@ -89,10 +89,6 @@ func (r *Router) preparedOperationLocked(state *sessionState) (agent.Turn, func(
 	return state.session, handoff.operations.RUnlock, true
 }
 
-func (r *Router) runRouteOpenLocked(state *sessionState) bool {
-	return state != nil && !r.closed && state.ctx.Err() == nil && !state.steeringClosed && state.preparedHandoff.release == nil
-}
-
 // claimPreparedReleaseLocked closes admission permanently and returns the
 // current native attempt. retry starts a new serialized attempt only after the
 // previous one failed. Router.mu must be held.

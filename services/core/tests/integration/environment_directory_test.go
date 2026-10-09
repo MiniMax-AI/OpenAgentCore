@@ -80,7 +80,7 @@ func prepareDirectoryRead(t *testing.T, h *dispatchHarness, environment sessions
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	read := h.read(proto.TypeWorkspaceRead)
 	var input proto.WorkspaceReadPayload
-	if read.DecodePayload(&input) != nil || input.Handle != handle || input.RunID != "" || input.EnvironmentID != environment.ID || input.Path != "reports" {
+	if read.DecodePayload(&input) != nil || input.Handle != handle || input.EnvironmentID != environment.ID || input.Path != "reports" {
 		t.Fatal("directory request changed binding or path")
 	}
 	return frame.ID, read.ID
@@ -251,12 +251,24 @@ func TestEnvironmentDirectoryObserverCancellationRetainsReadOwner(t *testing.T) 
 	ctx, cancel := context.WithCancel(t.Context())
 	result := startDirectoryRead(ctx, w, environment)
 	request, read := prepareDirectoryRead(t, h, environment)
+	if got := awaitDirectoryResult(t, startDirectoryRead(t.Context(), w, environment)); !errors.Is(got.err, execution.ErrExecutionUnavailable) {
+		t.Fatal("idle read reservation admitted another reader", got.err)
+	}
 	cancel()
 	if got := awaitDirectoryResult(t, result); !errors.Is(got.err, execution.ErrExecutionUnavailable) {
 		t.Fatal("cancelled observer result", got.err)
 	}
-	if _, err := w.ReadEnvironmentDirectory(t.Context(), environment, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
-		t.Fatal("cancelled observer freed Session owner")
+	if got := awaitDirectoryResult(t, startDirectoryRead(t.Context(), w, environment)); !errors.Is(got.err, execution.ErrExecutionUnavailable) {
+		t.Fatal("cancelled observer freed Session owner", got.err)
 	}
-	completeDirectoryRead(t, h, request, read, false, false)
+	h.write(read, proto.TypeWorkspaceReadResult, proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}})
+	// Read the very next frame instead of filtering by type: neither rejected
+	// reader may have sent another preparation while the first owner was held.
+	_ = h.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var frame proto.Envelope
+	var release proto.ExecutionReleasePayload
+	if h.conn.ReadJSON(&frame) != nil || frame.Type != proto.TypeExecutionRelease || frame.ID != request || frame.DecodePayload(&release) != nil || release.Handle == "" {
+		t.Fatal("rejected read dispatched work before releasing the original owner", frame.Type)
+	}
+	h.write(request, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: release.Handle, Revision: 3, State: "released"})
 }
