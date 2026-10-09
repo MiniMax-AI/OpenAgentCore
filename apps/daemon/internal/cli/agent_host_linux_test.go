@@ -40,8 +40,8 @@ func TestAgentHostReportsItsDeclarations(t *testing.T) {
 	issuer := httptest.NewTLSServer(nil)
 	issuer.Close()
 	for path, content := range map[string][]byte{
-		agentHostManifest:                       []byte(`{"node": "/usr/local/bin/node", "harnesses": {}}`),
-		filepath.Join(agentHostCADir, "ca.crt"): pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: issuer.Certificate().Raw}),
+		agentHostManifest: []byte(`{"node": "/usr/local/bin/node", "harnesses": {}}`),
+		agentHostCAFile:   pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: issuer.Certificate().Raw}),
 	} {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)

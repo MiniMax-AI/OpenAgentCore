@@ -39,10 +39,10 @@ type Config struct {
 	Harnesses *agent.Registry
 	// Shim is the absolute host path of the static oac-process-shim binary.
 	Shim string
-	// CADir is an absolute host directory of regular PEM files: the roots the
-	// agent host trusts. The gateway trusts exactly these for upstream TLS,
-	// and the view presents the directory read-only at the same path.
-	CADir string
+	// CAFile is an absolute host path to a regular PEM CA bundle. The gateway
+	// trusts these roots for upstream TLS, and the view presents the same file
+	// read-only at the same path.
+	CAFile string
 	// Log receives each view's presentation report and each failure of a
 	// Session, which no Turn reports. Nil discards it.
 	Log *slog.Logger

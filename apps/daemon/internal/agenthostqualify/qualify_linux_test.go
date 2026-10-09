@@ -65,8 +65,8 @@ const (
 	keyEnv  = "OAC_QUALIFY_KEY_FILE"
 	runDir  = "/run/qualify"
 	shim    = "/opt/oac/bin/oac-process-shim"
-	// caDir holds the agent-host image's roots, one regular PEM file each.
-	caDir = "/usr/share/ca-certificates/mozilla"
+	// caFile holds the agent-host image's system CA bundle.
+	caFile = "/etc/ssl/certs/ca-certificates.crt"
 	// workspace is the sandbox directory every Session works in.
 	workspace = "/workspace/custom-project"
 	turnLimit = 10 * time.Minute
@@ -95,7 +95,7 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 	sb := startSandbox(t)
 	reg := agent.NewRegistry()
 	cfg := agenthost.Config{StateDir: t.TempDir(), ViewCgroups: sessionviewtest.CgroupParent(t), UIDs: agenthost.UIDRange{First: 70000, Count: 8}, RelayURL: sb.url, TLS: sb.tls,
-		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: reg, Shim: shim, CADir: caDir,
+		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: reg, Shim: shim, CAFile: caFile,
 		Log: slog.New(slog.NewTextHandler(os.Stderr, nil))}
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
 	sb.ready(t, cfg)

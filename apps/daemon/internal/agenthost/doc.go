@@ -86,7 +86,7 @@
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
-// hosts, resolv.conf and nsswitch.conf, the agent host's CA directory at its
+// hosts, resolv.conf and nsswitch.conf, the agent host's CA bundle read-only at its
 // host path, then the adapter's overlays and masks and the process shim with
 // its relay. The view owns /proc, /sys and /dev. Everything else is the
 // world, or nothing in an empty-root view.

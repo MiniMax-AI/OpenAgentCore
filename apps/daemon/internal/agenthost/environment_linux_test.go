@@ -536,7 +536,7 @@ func (s *probed) Write(b []byte) (int, error) {
 
 func TestEnvironmentOwnerKeepsWorkspaceAcrossRouters(t *testing.T) {
 	var dials atomic.Int32
-	h := &Host{cfg: Config{CADir: "/trust"}, owners: owners{d: deps{dial: countingDial(&dials)}}}
+	h := &Host{cfg: Config{CAFile: "/trust"}, owners: owners{d: deps{dial: countingDial(&dials)}}}
 	b := newBinding(newResource())
 	payload := bindPayload(b)
 	payload.WorkspaceDirectory = "/projects/one"

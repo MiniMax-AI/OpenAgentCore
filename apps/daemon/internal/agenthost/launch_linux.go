@@ -411,7 +411,7 @@ func (h *ownedView) end(waitErr error) {
 }
 
 // spec builds the view over world: the closure and home directories, the
-// agent host's /etc files and CA directory, the adapter's overlays and masks,
+// agent host's /etc files and CA bundle, the adapter's overlays and masks,
 // and the shim under each name and path of the process broker's table.
 func (s *session) spec(world sessionview.World, opts clirunner.StartOptions, stdio [3]*os.File) sessionview.Spec {
 	view, x := s.plan.view, s.plan.executables
@@ -424,7 +424,7 @@ func (s *session) spec(world sessionview.World, opts clirunner.StartOptions, std
 	for _, name := range etcFiles {
 		overlays = append(overlays, sessionview.Overlay{Path: "/etc/" + name, Source: s.dir.entry(etcEntry, name)})
 	}
-	overlays = append(overlays, sessionview.Overlay{Path: s.cfg.CADir, Source: s.cfg.CADir})
+	overlays = append(overlays, sessionview.Overlay{Path: s.cfg.CAFile, Source: s.cfg.CAFile})
 	for _, o := range view.Overlays {
 		overlays = append(overlays, sessionview.Overlay{Path: o.Path, Source: o.Source, Exec: o.Exec})
 	}
