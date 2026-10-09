@@ -41,9 +41,17 @@ export function HelpTip({ children, label, id: fixedId }: { children: ReactNode;
   useEffect(() => {
     if (!position) return;
     const close = () => hide();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      hide();
+    };
+    // A hovered tip can be open while focus remains in a dialog's input.
+    document.addEventListener("keydown", handleKeyDown, true);
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
+      document.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
@@ -63,7 +71,6 @@ export function HelpTip({ children, label, id: fixedId }: { children: ReactNode;
         onFocus={show}
         onBlur={hide}
         onClick={() => { if (position && pinned) hide(); else { show(); setPinned(true); } }}
-        onKeyDown={(event) => { if (event.key === "Escape") hide(); }}
       >
         <CircleHelp size={13} strokeWidth={1.75} aria-hidden="true" />
       </button>
