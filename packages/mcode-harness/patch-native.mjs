@@ -84,7 +84,7 @@ copyFileSync(join(here, 'native-subagent-admission.mjs'), join(root, 'packages/l
 function replaceNative(file, before, after) {
   const path = join(root, file);
   const source = readFileSync(path, 'utf8');
-  if (source.split(before).length !== 2) throw new Error('Pinned native MCP lifecycle source changed: ' + file);
+  if (source.split(before).length !== 2) throw new Error('Pinned native source changed: ' + file);
   writeFileSync(path, source.replace(before, after));
 }
 const poolFile = 'packages/agent-modules/mcp/src/runtime/connection-pool.ts';
@@ -234,6 +234,70 @@ replaceNative('packages/tui/src/acp/agent.ts',
   });
 
   app.onNotification(acp.methods.agent.session.cancel, async ({ params }) => {`);
+// Read independent Skills concurrently while committing the existing snapshot
+// and cache in candidate order. All stable-file checks stay in the native reader.
+replaceNative('packages/agent-modules/skills/src/registry.ts',
+  `      for (const candidate of candidates) {
+        const cacheLocation = \`\${root.id}:\${candidate.entryDir}\`;
+        seenCacheLocations.add(cacheLocation);
+        metrics.filesSeen += 1;
+        const stat = await statSkillFile(root, candidate, diagnostics);
+        if (!stat) {
+          this.cache.delete(cacheLocation);
+          continue;
+        }
+        const cacheKey = \`\${candidate.fileLocation}:\${stat.dev}:\${stat.ino}:\${stat.size}:\${stat.mtimeMs}\`;
+        const cached = this.cache.get(cacheLocation);
+        let parsed: CachedSkillFile;
+
+        if (cached?.key === cacheKey) {
+          metrics.filesReused += 1;
+          parsed = cached;
+        } else {
+          metrics.filesRead += 1;
+          parsed = await parseSkillFile(root, candidate, stat, cacheKey);
+          this.cache.set(cacheLocation, parsed);
+        }
+
+        diagnostics.push(...parsed.diagnostics);
+        if (parsed.entry) {
+          entries.push(parsed.entry);
+        }
+      }`,
+  `      for (let offset = 0; offset < candidates.length; offset += 4) {
+        const results = await Promise.allSettled(
+          candidates.slice(offset, offset + 4).map(async (candidate) => {
+            const cacheLocation = \`\${root.id}:\${candidate.entryDir}\`;
+            const diagnostics: SkillDiagnostic[] = [];
+            const stat = await statSkillFile(root, candidate, diagnostics);
+            if (!stat) return { cacheLocation, diagnostics };
+            const cacheKey = \`\${candidate.fileLocation}:\${stat.dev}:\${stat.ino}:\${stat.size}:\${stat.mtimeMs}\`;
+            const cached = this.cache.get(cacheLocation);
+            const reused = cached?.key === cacheKey;
+            const parsed = reused ? cached : await parseSkillFile(root, candidate, stat, cacheKey);
+            return { cacheLocation, diagnostics, parsed, reused };
+          }),
+        );
+        for (const result of results) {
+          if (result.status === 'rejected') throw result.reason;
+          const value = result.value;
+          seenCacheLocations.add(value.cacheLocation);
+          metrics.filesSeen += 1;
+          diagnostics.push(...value.diagnostics);
+          if (!value.parsed) {
+            this.cache.delete(value.cacheLocation);
+            continue;
+          }
+          if (value.reused) {
+            metrics.filesReused += 1;
+          } else {
+            metrics.filesRead += 1;
+            this.cache.set(value.cacheLocation, value.parsed);
+          }
+          diagnostics.push(...value.parsed.diagnostics);
+          if (value.parsed.entry) entries.push(value.parsed.entry);
+        }
+      }`);
 const digest = name => createHash('sha256').update(readFileSync(join(here, name))).digest('hex');
 writeFileSync(join(root, '.oac-native-patch.json'), JSON.stringify({ revision: pin.revision,
   files: { 'patch-native.mjs':digest('patch-native.mjs'), 'native-subagent-admission.mjs':digest('native-subagent-admission.mjs') } }, null, 2)+'\n');
