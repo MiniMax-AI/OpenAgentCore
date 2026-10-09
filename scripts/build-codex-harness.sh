@@ -40,8 +40,9 @@ def local(lock):
             for entry in lock["package"] if "source" not in entry}
 assert local(before) == local(after), "Codex workspace dependencies changed"
 PY
-  cargo test --locked --target "$target" --release -p codex-mcp --lib targeted_invalidation_
-  cargo test --locked --target "$target" --release -p codex-mcp --lib prepared_call_does_not_reroute_after_captured_connection_closes
+  # Match the CLI release feature union, including its vendored OpenSSL.
+  cargo test --locked --target "$target" --release -p codex-mcp -p codex-cli --lib targeted_invalidation_
+  cargo test --locked --target "$target" --release -p codex-mcp -p codex-cli --lib prepared_call_does_not_reroute_after_captured_connection_closes
   cargo build --locked --target "$target" --release --bin bwrap
   output="${CARGO_TARGET_DIR:-$PWD/target}/$target/release"
   strip --strip-debug --strip-unneeded "$output/bwrap"
