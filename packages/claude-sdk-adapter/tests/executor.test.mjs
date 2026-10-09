@@ -30,7 +30,7 @@ globalThis.startupFixture=async({options})=>{
     number++;
     const text=user.message.content[0].text;
     process.send({type:'input',text});
-    yield {type:'system',subtype:'init',session_id:'native',tools:client ? ['mcp__functions__lookup'] : [],mcp_servers:client ? [{name:'functions',status:'connected'}] : []};
+    yield {type:'system',subtype:'init',session_id:'native',tools:client ? ['mcp__functions__lookup'] : options.outputFormat ? ['StructuredOutput'] : [],mcp_servers:client ? [{name:'functions',status:'connected'}] : []};
     if(client){
      if(text==='pending-function'){
       void client.callTool({name:'lookup',arguments:{text},_meta:{'claudecode/toolUseId':'pending-call'}}).catch(()=>{});
@@ -47,14 +47,32 @@ globalThis.startupFixture=async({options})=>{
       {type:'content_block_stop',index:0},{type:'message_stop'}
      ])yield {type:'stream_event',parent_tool_use_id:null,session_id:'native',event};
     }
+    if(options.outputFormat){
+     const raw='{"number":9007199254740993}';
+     for(const event of [
+      {type:'message_start',message:{id:'structured-message'}},
+      {type:'content_block_start',index:0,content_block:{type:'text',text:'ordinary prose'}},
+      {type:'content_block_stop',index:0},
+      {type:'content_block_start',index:1,content_block:{type:'tool_use',id:'structured-call',name:'StructuredOutput',input:{}}},
+      {type:'content_block_delta',index:1,delta:{type:'input_json_delta',partial_json:raw}}
+     ])yield {type:'stream_event',uuid:crypto.randomUUID(),parent_tool_use_id:null,session_id:'native',event};
+     yield {type:'assistant',uuid:'structured-snapshot',session_id:'native',parent_tool_use_id:null,message:{id:'structured-message',content:[{type:'tool_use',id:'structured-call',name:'StructuredOutput',input:JSON.parse(raw)}]}};
+     for(const event of [{type:'content_block_stop',index:1},{type:'message_stop'}])yield {type:'stream_event',uuid:crypto.randomUUID(),parent_tool_use_id:null,session_id:'native',event};
+     yield {type:'user',uuid:'structured-receipt',session_id:'native',parent_tool_use_id:null,message:{content:[{type:'tool_result',tool_use_id:'structured-call',content:'Structured output provided successfully'}]}};
+     if(text==='hold'){
+      const interrupted=new Promise(resolve=>{interrupt=resolve});
+      process.send({type:'candidate_ready'});
+      await Promise.race([interrupted,exited]);
+     }
+    }
     if(process.argv[1]==='classified'){
      yield {type:'assistant',uuid:'assistant-error',session_id:'native',user_message_uuids:[user.uuid],parent_tool_use_id:null,error:'authentication_failed',message:{content:[]}};
      yield {type:'result',uuid:'error-result',session_id:'native',user_message_uuids:[user.uuid],subtype:'error_during_execution',is_error:true,usage:{input_tokens:1,output_tokens:1},modelUsage:{},total_cost_usd:0};
      continue;
     }
-    if(text==='hold') await Promise.race([new Promise(resolve=>{interrupt=resolve}),exited]);
+    if(text==='hold' && !options.outputFormat) await Promise.race([new Promise(resolve=>{interrupt=resolve}),exited]);
     if(options.abortController.signal.aborted)return;
-    yield {type:'result',uuid:'result-'+number,session_id:'native',user_message_uuids:[user.uuid],subtype:'success',is_error:false,result:'answer-'+number,usage:{input_tokens:1,output_tokens:1},modelUsage:{fixture:{inputTokens:number,outputTokens:number,costUSD:number/100}},total_cost_usd:number/100};
+    yield {type:'result',uuid:'result-'+number,session_id:'native',user_message_uuids:[user.uuid],subtype:'success',is_error:false,result:'answer-'+number,...(options.outputFormat ? {structured_output:{number:9007199254740992}} : {}),usage:{input_tokens:1,output_tokens:1},modelUsage:{fixture:{inputTokens:number,outputTokens:number,costUSD:number/100}},total_cost_usd:number/100};
     interrupt=undefined;
     yield {type:'command_lifecycle',uuid:user.uuid,state:'completed'};
    }
@@ -78,6 +96,7 @@ async function launch(t,mode="normal") {
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
  const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
  send({type:"executor_prepare",preparation_deadline:Date.now()+60000,cwd:"/tmp",model:"fixture",system_prompt:"",
+ ...(mode==="structured" ? {output_format:{type:"json_schema",schema:{type:"object",properties:{number:{type:"integer"}}}}} : {}),
  ...(mode==="features" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
  await wait(()=>events.some(event=>event.type===(mode==="late-ready"?"error":"executor_ready")));
  assert.equal(observations.filter(event=>event.type==="input").length,0);
@@ -200,4 +219,28 @@ test("an initialization finishing past the original deadline never publishes rea
  assert.equal(events.some(event=>event.type==="executor_ready"),false);
  assert.equal(observations.some(event=>event.type==="input"),false);
  assert.equal(observations.filter(event=>event.type==="native_closed").length,1);
+});
+
+test("cancelled structured candidates stay private and a reused Turn preserves raw output and prose identities", {timeout:10000}, async t => {
+ const {child,events,observations,closed,wait,send,start}=await launch(t,"structured");
+ start("first","hold");
+ await wait(()=>observations.some(event=>event.type==="candidate_ready"));
+ send({type:"turn_cancel",turn_id:"first"});
+ await wait(()=>events.some(event=>event.type==="turn_settled"&&event.turn_id==="first"));
+ assert.equal(events.some(event=>event.turn_id==="first"&&event.message?.phase==="final_answer"),false);
+ assert.ok(events.some(event=>event.turn_id==="first"&&event.type==="error"&&event.code==="cancelled"));
+ start("second","answer");
+ await wait(()=>events.some(event=>event.type==="turn_settled"&&event.turn_id==="second"));
+ const own=events.filter(event=>event.turn_id==="second");
+ assert.deepEqual(own.filter(event=>event.type==="output_message"&&event.message.status==="completed").map(event=>event.message),[
+  {id:"structured-message",status:"completed",text:"ordinary prose"},
+  {id:"structured-call",status:"completed",phase:"final_answer",text:'{"number":9007199254740993}'}
+ ]);
+ assert.ok(own.findIndex(event=>event.message?.phase==="final_answer") < own.findIndex(event=>event.type==="result"));
+ for(const turn of ["first","second"]){
+  const settled=events.find(event=>event.turn_id===turn&&event.type==="turn_settled");
+  assert.equal(settled.confirmed,true);
+  assert.equal(settled.reusable,true);
+ }
+ child.stdin.end();assert.deepEqual(await closed,{code:0,signal:null});
 });

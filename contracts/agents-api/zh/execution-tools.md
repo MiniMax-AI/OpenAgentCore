@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 21ba998ee2697491899ab001367ab7dd2dea7ef86f4bfc015b95cbbf5beba558
+source_hash: fbd6a39ac815c0e3af66f72d3690c8ab7b705f45a8f5eedbdf6c00a33eebe355
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。每个 Harness 的[声明](harness-onboarding.md#declare-support)说明它支持其中哪些内容。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -43,7 +43,7 @@ SSE 仅提供实时事件。重启或流丢失后，读取 Session 的 `required
 
 Core 在 `ExecutionControls.OutputFormat` 中携带 schema，仅对使用该选项的请求要求 Harness 的声明和 Runtime 的心跳都支持 `structured_output`。冻结的 schema 在输入之前送达准备阶段，适用于初次和恢复执行；Start 不能替换它。
 
-Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。匹配的实时根工具结果和已归属的成功 SDK 结果确认输出。适配器将原生 `result.result` 字符串原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试和已取消候选不会成为答案，适配器不会把 `structured_output` 重新序列化为 JSON。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
+Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。适配器按实时根 Session、原生消息 ID、内容块索引和 tool-use ID 累积原始 `input_json_delta` 文本。只有匹配的完整 assistant 工具调用、成功回执，以及与已归属的成功 SDK `structured_output` 一致的唯一候选，才能确认该文本。适配器将其原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试、缺失或歧义身份、已撤回工作和已取消候选不会成为答案。通用 SDK `result` 文本不是结构化载荷，适配器不会把 `structured_output` 重新序列化为 JSON。原始数字文本会被保留；精确数值 schema 验证仍是[已知缺口](./index.md#known-gaps)。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
 
 ## 延迟函数发现 {#deferred-function-discovery}
 
