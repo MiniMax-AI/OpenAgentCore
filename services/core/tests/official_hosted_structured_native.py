@@ -241,32 +241,47 @@ def verify_hosted_structured(client, foreign, http, agent_options, session_optio
             proof["numeric"][-1]["raw_final_text"] = raw
             check(source + ("_exact_binary64_schema_constant" if selected_schema is exact_schema else "_large_integer_final_text_sse_and_storage"))
 
-        # This is the selected Claude adapter's schema admission policy, not
-        # a restriction on other Harnesses' numeric output or saved resources.
+        # A saved Agent with an explicit Harness validates that selection at
+        # update; inline Session configuration validates it at admission.
         if proof["engine"] == "claude_sdk":
             unsafe_format = {"type": "json_schema", "schema": {**numeric_schema,
                              "properties": {"n": {"type": "integer", "const": 9007199254740993}}}}
-            client.beta.agents.update(saved.id, tools=[], text={"format": unsafe_format})
-            assert client.beta.agents.retrieve(saved.id).text.format.to_dict() == unsafe_format
+            before = client.beta.agents.retrieve(saved.id).to_dict()
+            update = {"tools": [], "text": {"format": unsafe_format}}
+            update_error = {"type": "invalid_request_error", "code": "unsupported_or_invalid_configuration",
+                            "param": "text.format", "message": "This runtime requires an object schema with lossless JSON numbers."}
+            response = http.post(root + "/" + saved.id, headers=headers, json=update)
+            assert response.status_code == 400 and response.json() == {"error": update_error}, response.text
+            assert client.beta.agents.retrieve(saved.id).to_dict() == before
+            try:
+                client.beta.agents.update(saved.id, **update)
+            except BadRequestError as error:
+                assert error.status_code == 400 and error.body == update_error, error.body
+            else:
+                raise AssertionError("Lossy numeric schema update was admitted")
+            assert client.beta.agents.retrieve(saved.id).to_dict() == before
+            proof.setdefault("numeric_rejections", []).append({"source": "saved_agent_update", "format": unsafe_format,
+                                                                "error": response.json(), "saved_agent_unchanged": True})
+            check("saved_agent_lossy_numeric_schema_rejected_without_mutation")
             expected_error = {"type": "invalid_request_error", "code": "unsupported_or_invalid_configuration",
-                              "param": "agent.text.format", "message": "This runtime requires an object schema with lossless JSON numbers."}
-            for source, configuration in (("inline", {"agent": {**agent_options, "text": {"format": unsafe_format}}}),
-                                          ("saved", {"agent_id": saved.id})):
-                request = {**configuration, **session_options}
-                wire = {**{k: v for k, v in request.items() if k != "extra_body"}, **request.get("extra_body", {})}
-                response = http.post(root + "/sessions", headers=headers, json=wire)
-                if response.status_code == 201:
-                    owned.append(response.json()["id"])
-                assert response.status_code == 400 and response.json() == {"error": expected_error}, response.text
-                try:
-                    unexpected = sessions.create(**request)
-                except BadRequestError as error:
-                    assert error.status_code == 400 and error.body == expected_error, error.body
-                else:
-                    owned.append(unexpected.id)
-                    raise AssertionError("Lossy numeric schema was admitted")
-                proof.setdefault("numeric_rejections", []).append({"source": source, "format": unsafe_format, "error": response.json()})
-                check(source + "_lossy_numeric_schema_rejected_before_execution")
+                              "param": "agent.text.format", "message": "Harness claude_sdk does not support the requested Agent/environment configuration: This runtime requires an object schema with lossless JSON numbers."}
+            existing = {session.id for session in sessions.list()}
+            request = {"agent": {**agent_options, "text": {"format": unsafe_format}}, **session_options}
+            wire = {**{k: v for k, v in request.items() if k != "extra_body"}, **request.get("extra_body", {})}
+            response = http.post(root + "/sessions", headers=headers, json=wire)
+            if response.status_code == 201:
+                owned.append(response.json()["id"])
+            assert response.status_code == 400 and response.json() == {"error": expected_error}, response.text
+            try:
+                unexpected = sessions.create(**request)
+            except BadRequestError as error:
+                assert error.status_code == 400 and error.body == expected_error, error.body
+            else:
+                owned.append(unexpected.id)
+                raise AssertionError("Lossy numeric schema was admitted")
+            assert {session.id for session in sessions.list()} == existing
+            proof.setdefault("numeric_rejections", []).append({"source": "inline", "format": unsafe_format, "error": response.json()})
+            check("inline_lossy_numeric_schema_rejected_before_execution")
         proof.update(passed=True, items=items(sid), turns=[t.to_dict() for t in sessions.turns.list(sid, order="asc", limit=100).data])
         return proof["checks"]
     finally:
