@@ -80,6 +80,7 @@ type operation struct {
 	killTimer *time.Timer
 	killAt    time.Time
 	killing   bool
+	watching  bool
 }
 
 type stream struct {
@@ -580,6 +581,7 @@ func (op *operation) kill() {
 	op.killing = true
 	op.mu.Unlock()
 	op.signalScope(unix.SIGKILL)
+	go op.watchScope()
 }
 
 func (op *operation) release() error {

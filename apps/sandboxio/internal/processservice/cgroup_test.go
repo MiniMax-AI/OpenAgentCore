@@ -413,20 +413,24 @@ func TestCgroupEmptyDirectoryFailureDoesNotKeepScopeActive(t *testing.T) {
 func TestCgroupKillFailureKeepsNestedScopeActive(t *testing.T) {
 	h := cgroupHarness(t)
 	dir := t.TempDir()
-	script := `group=/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)
+	script := `trap '' TERM HUP
+group=/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup)
 mkdir "$group/nested"
 echo $$ > "$group/nested/cgroup.procs"
 (trap '' TERM HUP; printf a > "$0/ticks"; while [ ! -e "$0/gate" ]; do sleep .01; done; printf b >> "$0/ticks"; while :; do sleep 1; done) &
-exit 0`
+while :; do sleep 1; done`
 	op := h.start(h.connect(), cgroupSpec("sh", "-c", script, dir))
 	awaitFile(t, filepath.Join(dir, "ticks"), "a")
-	events(t, op, sp.EventExited)
+	events(t, op, sp.EventStarted)
 	group := cgroupRecord(t, h, op).cgroup.path
 	killFile := filepath.Join(group, "cgroup.kill")
 	if err := os.Chmod(killFile, 0); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(killFile, 0200) })
+	t.Cleanup(func() {
+		_ = os.Chmod(killFile, 0200)
+		_ = cgroupRecord(t, h, op).cgroup.signal(unix.SIGKILL)
+	})
 	wantCode(t, op.Signal(t.Context(), 9, sp.TargetScope), sp.CodeIO)
 	if err := op.Cancel(t.Context(), 0); err != nil {
 		t.Fatal(err)
@@ -447,4 +451,60 @@ exit 0`
 	if _, err := os.Stat(group); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("nested scope was not removed: %v", err)
 	}
+}
+
+func TestCgroupDelegationRequiresParentMigrationPermission(t *testing.T) {
+	h := cgroupHarness(t)
+	procs := filepath.Join(h.svc.cgroupParent, "cgroup.procs")
+	info, err := os.Stat(procs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(procs, 0400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(procs, info.Mode().Perm()) })
+	service, err := New(DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(service.caps.Scopes, sp.ScopeCgroupV2) {
+		t.Fatal("advertised cgroup scope without parent migration permission")
+	}
+}
+
+func TestCgroupKillEmptyReturnsNotRunning(t *testing.T) {
+	h := cgroupHarness(t)
+	group, err := newProcessCgroup(h.svc.cgroupParent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = group.observe(); _ = group.cleanup() })
+	wantCode(t, group.signal(unix.SIGKILL), sp.CodeNotRunning)
+}
+
+func TestCgroupKillWithUnknownMembershipStillStopsProcesses(t *testing.T) {
+	h := cgroupHarness(t)
+	dir := t.TempDir()
+	op := h.start(h.connect(), cgroupSpec("sh", "-c", `trap '' TERM HUP; printf ready > "$0/ready"; while :; do sleep 1; done`, dir))
+	awaitFile(t, filepath.Join(dir, "ready"), "ready")
+	group := cgroupRecord(t, h, op).cgroup.path
+	eventsFile := filepath.Join(group, "cgroup.events")
+	if err := os.Chmod(eventsFile, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(eventsFile, 0444) })
+	// Unknown membership cannot prove a successful Signal, but must not
+	// prevent the cgroup kill from stopping processes whose observation failed.
+	wantCode(t, op.Signal(t.Context(), 9, sp.TargetScope), sp.CodeIO)
+	awaitFile(t, filepath.Join(group, "cgroup.procs"), "")
+	events(t, op, sp.EventObservationLost)
+	if st, err := op.Inspect(t.Context()); err != nil || st.Scope != sp.ScopeStateUnknown {
+		t.Fatalf("unknown scope was falsely settled: %+v %v", st, err)
+	}
+	wantCode(t, op.Release(t.Context()), sp.CodeBusy)
+	if err := os.Chmod(eventsFile, 0444); err != nil {
+		t.Fatal(err)
+	}
+	events(t, op, sp.EventScopeClosed)
 }

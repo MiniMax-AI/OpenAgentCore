@@ -42,11 +42,31 @@ func delegatedCgroup() string {
 		if err != nil || !slices.Contains(strings.Fields(string(procs)), strconv.Itoa(os.Getpid())) {
 			return ""
 		}
+		// Migrating a child requires write access to the common ancestor's
+		// cgroup.procs as well as the destination. Opening changes no membership.
+		migration, err := os.OpenFile(filepath.Join(parent, "cgroup.procs"), os.O_WRONLY, 0)
+		if err != nil {
+			return ""
+		}
+		migration.Close()
 		g, err := newProcessCgroup(parent)
 		if err != nil {
 			return ""
 		}
-		err = g.signal(unix.SIGKILL) // the exclusive probe group is empty
+		kind, err := g.root.ReadFile("cgroup.type")
+		if err == nil && strings.TrimSpace(string(kind)) != "domain" {
+			err = errors.New("operation cgroup is not a domain")
+		}
+		if err == nil {
+			var destination *os.File
+			destination, err = g.root.OpenFile("cgroup.procs", os.O_WRONLY, 0)
+			if err == nil {
+				destination.Close()
+				// Probe the control file directly: Signal on an empty scope
+				// must instead report NotRunning.
+				err = g.root.WriteFile("cgroup.kill", []byte("1"), 0)
+			}
+		}
 		_, observation := g.observe()
 		// No process was ever placed in this exclusive probe group.
 		g.closed = true
@@ -95,8 +115,15 @@ func (g *processCgroup) signal(sig unix.Signal) error {
 		return notRunning("the cgroup is empty")
 	}
 	if sig == unix.SIGKILL {
+		live, observation := g.observeLocked()
+		if observation == nil && live == 0 {
+			return notRunning("the cgroup is empty")
+		}
 		if err := g.root.WriteFile("cgroup.kill", []byte("1"), 0); err != nil {
 			return sp.Fail(sp.CodeIO, sandboxwire.EffectPossible, "kill cgroup: %v", err)
+		}
+		if observation != nil {
+			return sp.Fail(sp.CodeIO, sandboxwire.EffectPossible, "kill cgroup with unknown membership: %v", observation)
 		}
 		return nil
 	}
@@ -149,6 +176,10 @@ func (g *processCgroup) signal(sig unix.Signal) error {
 func (g *processCgroup) observe() (int, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.observeLocked()
+}
+
+func (g *processCgroup) observeLocked() (int, error) {
 	if g.closed {
 		return 0, nil
 	}

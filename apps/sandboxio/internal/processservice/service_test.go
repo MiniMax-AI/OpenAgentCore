@@ -414,7 +414,17 @@ func TestCancelEscalatesToKill(t *testing.T) {
 	if err := op.Cancel(context.Background(), 200); err != nil {
 		t.Fatal(err)
 	}
-	evs := events(t, op, sp.EventScopeClosed)
+	var evs []sp.Event
+	for exited, closed := false, false; !exited || !closed; {
+		ev := next(t, op)
+		evs = append(evs, ev)
+		switch ev.(type) {
+		case sp.ExitedEvent:
+			exited = true
+		case sp.ScopeClosedEvent:
+			closed = true
+		}
+	}
 	if e, _ := find[sp.ExitedEvent](t, evs); e.Status.Signal != 9 {
 		t.Fatalf("exit %+v", e.Status)
 	}

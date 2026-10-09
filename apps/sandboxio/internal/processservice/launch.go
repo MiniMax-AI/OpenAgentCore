@@ -144,13 +144,21 @@ func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	}
 	reaping.RLock()
 	p, err := os.StartProcess("/proc/self/exe", []string{trampolineArg0}, attr)
-	var ferr error
+	var ferr, placementErr error
 	if err == nil {
 		// The reaper cannot reap the child while reaping is held, so its PID
 		// still names it.
 		var fd int
 		if fd, ferr = unix.PidfdOpen(p.Pid, 0); ferr == nil {
 			op.cu = newCustody(p.Pid, fd, op.s.stat)
+			if op.cgroup != nil {
+				// The trusted trampoline is blocked on launchFD. Keep reaping
+				// excluded until placement: a pidfd alone does not reserve its PID.
+				placementErr = op.cgroup.place(p.Pid)
+				if placementErr != nil {
+					unix.Kill(p.Pid, unix.SIGKILL)
+				}
+			}
 		} else {
 			unix.Kill(p.Pid, unix.SIGKILL) // it has not read the launch, so it never execs
 		}
@@ -165,6 +173,9 @@ func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	if ferr != nil {
 		return l, ioFail("open process descriptor", ferr)
 	}
+	if placementErr != nil {
+		return l, ioFail("place process in cgroup", placementErr)
+	}
 	l.pid = pid
 	op.mu.Lock()
 	op.pid = l.pid // for killPinned; the rest is published with Started
@@ -172,14 +183,6 @@ func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	closeAll(child)
 	child = nil
 
-	if op.cgroup != nil {
-		// The trusted trampoline is blocked reading launchFD. Place it before
-		// releasing the request, so the target never runs outside its scope.
-		if err := op.cgroup.place(pid); err != nil {
-			op.killPinned(true, unix.SIGKILL)
-			return l, ioFail("place process in cgroup", err)
-		}
-	}
 	_, werr := launchW.Write(sp.Encode(req))
 	launchW.Close()
 	status, rerr := io.ReadAll(statusR)

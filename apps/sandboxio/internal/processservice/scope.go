@@ -396,6 +396,13 @@ func (op *operation) signalScope(sig unix.Signal) error {
 // KILL escalation go on, and the operation settles only once a poll confirms
 // the scope empty.
 func (op *operation) watchScope() {
+	op.mu.Lock()
+	if op.watching {
+		op.mu.Unlock()
+		return
+	}
+	op.watching = true
+	op.mu.Unlock()
 	delay := scopePollFirst
 	for {
 		op.mu.Lock()
