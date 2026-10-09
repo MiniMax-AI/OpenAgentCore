@@ -121,6 +121,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - The stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
+- Under the current [POSIX process scope](../../docs/process-protocol.md#scope-and-signals), an Environment stdio MCP descendant that calls `setsid` can continue producing side effects after the Turn is cancelled and the Session is idle. Cancellation of these detached descendants is not qualified.
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Behind the [credential gateway](./model-execution.md#credential-gateway), pinned Codex compacts history locally and never calls `/responses/compact`.
 - Claude Code and MiniMax Code report no public usage.
