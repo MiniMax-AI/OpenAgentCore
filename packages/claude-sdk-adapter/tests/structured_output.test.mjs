@@ -130,6 +130,42 @@ test("an assistant-only native fallback cannot supply original tool-input text",
   assert.throws(() => consume(observer, candidate("fallback", raw).slice(4)));
 });
 
+test("child-scope retraction notices cannot revoke a root candidate", () => {
+  const raw = '{"number":7}';
+  for (const notice of [
+    {type:"assistant", parent_tool_use_id:"child", supersedes:["snapshot-final"], message:{content:[]}},
+    {type:"system", subtype:"model_refusal_fallback", scope:"local", retracted_message_uuids:["snapshot-final"]},
+  ]) {
+    const observer = new StructuredOutput();
+    consume(observer, candidate("final", raw));
+    observer.consume({...notice, session_id:"session"}, "session");
+    assert.equal(observer.complete(result(raw)).message.id, "final");
+  }
+});
+
+test("the final native value uniquely selects among successful tools in one message", () => {
+  for (const [firstRaw, finalRaw, ambiguous] of [
+    ['{"number":1}', '{"number":2}', false],
+    ['{"number":9007199254740992}', '{"number":9007199254740993}', true],
+  ]) {
+    const first = candidate("first", firstRaw);
+    const last = candidate("last", finalRaw);
+    last[4].message.id = first[4].message.id;
+    for (const frame of last) if (frame.event && "index" in frame.event) frame.event.index = 2;
+    const observer = new StructuredOutput();
+    consume(observer, [...first.slice(0, 6), ...last.slice(1, 7), first[7], last[7]]);
+    if (ambiguous) assert.throws(() => observer.complete(result(finalRaw)));
+    else {
+      assert.deepEqual(observer.complete(result(finalRaw)).message,
+        {id:"last", status:"completed", phase:"final_answer", text:finalRaw});
+      // Steering can yield another native result within this public Turn.
+      assert.throws(() => observer.complete(result(firstRaw)));
+      consume(observer, candidate("next", firstRaw));
+      assert.equal(observer.complete(result(firstRaw)).message.id, "next");
+    }
+  }
+});
+
 test("only live root events can confirm a candidate", () => {
   const raw = '{"memory":"value"}';
   for (const extra of [{isReplay:true}, {isSynthetic:true}, {parent_tool_use_id:"child"}, {session_id:"other"}]) {

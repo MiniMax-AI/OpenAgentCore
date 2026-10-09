@@ -2,7 +2,7 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { isDeepStrictEqual } from "node:util";
 import type { MessageEvent } from "./messages.js";
 
-type Candidate = { id: string; text: string; snapshot?: string; input?: unknown; receipt?: string; stopped: boolean; status?: "failed" | "accepted" | "published" | "discarded" };
+type Candidate = { id: string; text: string; snapshot?: string; input?: unknown; receipt?: string; stopped: boolean; status?: "failed" | "accepted" | "settled" | "discarded" };
 
 // StructuredOutput is the native terminal tool. Its acknowledged tool-use identity
 // owns the final JSON message; the parent assistant may already own ordinary prose.
@@ -15,8 +15,8 @@ export class StructuredOutput {
   consume(message: SDKMessage, session: string): void {
     if (!session || message.session_id !== session ||
         ("isReplay" in message && message.isReplay) || ("isSynthetic" in message && message.isSynthetic)) return;
-    const retracted = message.type === "assistant" ? message.supersedes :
-      message.type === "system" && message.subtype === "model_refusal_fallback" ? message.retracted_message_uuids : undefined;
+    const retracted = message.type === "assistant" && message.parent_tool_use_id === null ? message.supersedes :
+      message.type === "system" && message.subtype === "model_refusal_fallback" && message.scope !== "local" ? message.retracted_message_uuids : undefined;
     if (retracted) for (const call of this.calls.values()) {
       if (retracted.some(id => call.snapshot === id || call.receipt === id)) call.status = "discarded";
     }
@@ -83,16 +83,17 @@ export class StructuredOutput {
   }
 
   complete(message: SDKMessage): MessageEvent {
-    const calls = [...this.calls.values()];
-    const accepted = calls.filter(call => call.status === "accepted");
     if (message.type !== "result" || message.subtype !== "success" || message.is_error ||
-        message.session_id !== this.session || message.structured_output === undefined ||
-        calls.some(call => call.status !== "discarded" && (!call.stopped || !call.receipt)) || accepted.length !== 1 ||
-        !isDeepStrictEqual(accepted[0]!.input, message.structured_output)) throw new Error("unconfirmed structured output");
+        message.session_id !== this.session || message.structured_output === undefined) throw new Error("unconfirmed structured output");
+    const calls = [...this.calls.values()];
+    const accepted = calls.filter(call => call.status === "accepted" && isDeepStrictEqual(call.input, message.structured_output));
+    if (calls.some(call => call.status !== "discarded" && (!call.stopped || !call.receipt)) || accepted.length !== 1) {
+      throw new Error("unconfirmed structured output");
+    }
     // Native validation compares binary64 values. Publish only the attributed raw
     // tool input: reserializing the validated object would lose original digits.
     const { id, text } = accepted[0]!;
-    accepted[0]!.status = "published";
+    for (const call of calls) if (call.status === "accepted") call.status = "settled";
     return { type: "output_message", message: { id, status: "completed", phase: "final_answer", text } };
   }
 }
