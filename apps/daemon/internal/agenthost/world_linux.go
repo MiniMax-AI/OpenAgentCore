@@ -3,6 +3,7 @@
 package agenthost
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -240,12 +241,12 @@ func (w *world) readEntry(ctx context.Context, e sandboxfs.Entry, limit int64) (
 		return nil, err
 	}
 	defer w.release(ctx, h)
-	var b strings.Builder
-	n, err := w.read(ctx, h, limit, &b)
+	b := bytes.NewBuffer([]byte{})
+	n, err := w.read(ctx, h, limit, b)
 	if err == nil && uint64(n) != e.Attr.Size {
 		err = fs.ErrInvalid
 	}
-	return []byte(b.String()), err
+	return b.Bytes(), err
 }
 
 // create makes name in dir, exclusively, with mode, writes data to it and
