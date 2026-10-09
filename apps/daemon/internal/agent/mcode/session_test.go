@@ -300,14 +300,18 @@ func TestMCodeProcess(t *testing.T) {
 			if scenario == "unattended" && strings.Contains(string(frame.Params), "elicitation") {
 				os.Exit(7)
 			}
-			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 2}}}
+			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 3}}}
 			if scenario == "unpatched-mcp" {
 				result = map[string]any{"protocolVersion": 1}
 			}
 			if scenario == "old-mcp-lifecycle" {
-				result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 1}}}
+				result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 2}}}
 			}
 		case "session/new", "session/load":
+			if scenario == "workspace-not-ready" {
+				send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32603, Message: "Required workspace MCP tools are unavailable."}})
+				continue
+			}
 			if strings.HasPrefix(scenario, "prepared-mcp-") {
 				if writeMCPRegistry(os.Getenv("MINIMAX_DATA_DIR"), mcpRegistryEntry("proof.server", "proof_server", "read.status", "read_status"), mcpRegistryEntry("late.server", "late_server", "read.status", "read_status"), mcpRegistryEntry("remote", "remote", "read.status", "read_status")) != nil {
 					os.Exit(12)

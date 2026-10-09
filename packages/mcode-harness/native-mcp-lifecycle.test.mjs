@@ -15,6 +15,8 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
   // the transport is controlled, so close() can return before its close event.
   const fixture = `
     export const transports = [];
+    let workspaceListed;
+    export const workspaceDiscovery = new Promise(resolve => { workspaceListed = resolve; });
     export function createTransport(config) {
       const previous = transports.filter(t => t.name === config.command).length;
       const transport = {
@@ -26,10 +28,24 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
           if (!('id' in message)) return;
           if (message.method === 'tools/call' && message.params.name === 'hold') return;
           if (message.method === 'initialize' && this.name === 'connecting' && previous === 0) return;
+          if (message.method === 'initialize' && this.name === 'workspace-timeout') return;
+          if (message.method === 'tools/list' && this.name === 'workspace-held') {
+            await new Promise(resolve => workspaceListed(resolve));
+          }
+          const names = this.name.startsWith('workspace-')
+            ? ['read', 'write', 'edit', 'bash', 'grep', 'glob'].map(name => 'workspace_' + name)
+            : ['read', 'hold', 'server_error'];
+          if (this.name === 'workspace-incomplete') names.pop();
+          if (this.name === 'workspace-empty') names.length = 0;
+          if (this.name === 'workspace-failed' && message.method === 'initialize') {
+            queueMicrotask(() => this.onmessage?.({ jsonrpc: '2.0', id: message.id,
+              error: { code: -32603, message: 'fixture initialization failed' } }));
+            return;
+          }
           const result = message.method === 'initialize'
             ? { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: this.name, version: '1' } }
             : message.method === 'tools/list'
-              ? { tools: ['read', 'hold', 'server_error'].map(name => ({ name, inputSchema: { type: 'object' } })) }
+              ? { tools: names.map(name => ({ name, inputSchema: { type: 'object' } })) }
               : { content: [{ type: 'text', text: this.name }],
                   ...(message.params.name === 'server_error' ? { isError: true } : {}),
                   _meta: { oac_response_received: false }, details: { oac_response_received: false } };
@@ -44,7 +60,7 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
     stdin: { contents: `export { McpConnectionPool } from '@mavis/mcp/runtime/connection-pool';
       export { SessionMcpServers } from ${JSON.stringify(join(root, 'packages/local-runtime-v2/src/service/mcp/runtime/session-servers.ts'))};
       export { LocalMcpService } from ${JSON.stringify(join(root, 'packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts'))};
-      export { transports } from 'lifecycle-transport';`, resolveDir: root },
+      export { transports, workspaceDiscovery } from 'lifecycle-transport';`, resolveDir: root },
     bundle: true, write: false, platform: 'node', format: 'esm', target: 'node22',
     tsconfig: join(root, 'tsconfig.standalone.json'), nodePaths: [join(root, 'node_modules')],
     banner: { js: `import { createRequire as lifecycleCreateRequire } from 'node:module'; const require = lifecycleCreateRequire(${JSON.stringify(join(root, 'package.json'))});` },
@@ -61,7 +77,7 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const bundle = join(directory, 'lifecycle.mjs');
   writeFileSync(bundle, result.outputFiles[0].text);
-  const { McpConnectionPool, SessionMcpServers, LocalMcpService, transports } = await import(pathToFileURL(bundle).href);
+  const { McpConnectionPool, SessionMcpServers, LocalMcpService, transports, workspaceDiscovery } = await import(pathToFileURL(bundle).href);
   const pool = new McpConnectionPool({ getResolvedServer() { throw new Error('Session overrides were lost'); } });
   const sessions = new SessionMcpServers(pool);
   const service = new LocalMcpService(() => directory, { connectionPool: pool });
@@ -132,6 +148,35 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
         assert.equal(result.details.mcp._meta.oac_response_received, false, 'server metadata was changed');
       else
         assert.match(result.details.mcp.content[0].text, /timed out/i);
+    }
+
+    const previousPolicy = process.env.OAC_RUNTIME_MCODE_TOOL_POLICY;
+    process.env.OAC_RUNTIME_MCODE_TOOL_POLICY = 'protected-mcp-v1';
+    try {
+      const workspace = command => ({ name: 'oac_workspace', config: { type: 'stdio', command, args: [],
+        ...(command === 'workspace-timeout' ? { timeout: 20 } : {}) } });
+      const before = transports.length;
+      await service.configureSessionServers('optional', [stdio('optional-unused')]);
+      assert.equal(transports.length, before, 'optional MCP remains lazy');
+      let prepared = false;
+      const preparation = service.configureSessionServers('workspace', [workspace('workspace-held')])
+        .then(() => { prepared = true; });
+      const releaseList = await workspaceDiscovery;
+      assert.equal(prepared, false, 'preparation must wait for the actual tool inventory');
+      releaseList();
+      await preparation;
+      const connected = transports.length;
+      const inventory = await service.listNativeToolsForTurn({ sessionId: 'workspace' });
+      assert.deepEqual(inventory.map(tool => tool.toolName).sort(),
+        ['bash', 'edit', 'glob', 'grep', 'read', 'write'].map(name => 'workspace_' + name));
+      assert.equal(transports.length, connected, 'Turn discovery must reuse the prepared connection');
+      for (const command of ['workspace-empty', 'workspace-incomplete', 'workspace-failed', 'workspace-timeout']) {
+        await assert.rejects(service.configureSessionServers(command, [workspace(command)]), /Required workspace MCP tools/);
+        assert.deepEqual(await service.listNativeToolsForTurn({ sessionId: command }), [], 'failed preparation must remove its configuration');
+      }
+    } finally {
+      if (previousPolicy === undefined) delete process.env.OAC_RUNTIME_MCODE_TOOL_POLICY;
+      else process.env.OAC_RUNTIME_MCODE_TOOL_POLICY = previousPolicy;
     }
   } finally {
     for (const transport of transports) transport.finishClose();
