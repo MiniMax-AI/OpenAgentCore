@@ -226,12 +226,18 @@ func (w *world) readFile(ctx context.Context, dir sandboxfs.NodeRef, name string
 	if err != nil {
 		return nil, sandboxfs.Attr{}, err
 	}
+	body, err := w.readEntry(ctx, e, limit)
+	return body, e.Attr, err
+}
+
+// readEntry reads the referenced regular file, even if its name changes after lookup.
+func (w *world) readEntry(ctx context.Context, e sandboxfs.Entry, limit int64) ([]byte, error) {
 	if !isType(e.Attr, sandboxfs.ModeRegular) || int64(e.Attr.Size) > limit {
-		return nil, e.Attr, fs.ErrInvalid
+		return nil, fs.ErrInvalid
 	}
 	h, err := w.open(ctx, e)
 	if err != nil {
-		return nil, e.Attr, err
+		return nil, err
 	}
 	defer w.release(ctx, h)
 	var b strings.Builder
@@ -239,7 +245,7 @@ func (w *world) readFile(ctx context.Context, dir sandboxfs.NodeRef, name string
 	if err == nil && uint64(n) != e.Attr.Size {
 		err = fs.ErrInvalid
 	}
-	return []byte(b.String()), e.Attr, err
+	return []byte(b.String()), err
 }
 
 // create makes name in dir, exclusively, with mode, writes data to it and
