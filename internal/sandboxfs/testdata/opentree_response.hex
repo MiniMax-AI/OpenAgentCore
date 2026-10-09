@@ -1,0 +1,4 @@
+# OpenTree success with a root-only result (12-byte header + 96-byte record).
+0000000a 801f 0000 0000000000000009 # payload 10, response tag 31, RequestID 9
+0001 # ResultSuccess
+000000000000006c # Size 108

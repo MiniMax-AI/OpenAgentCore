@@ -15,13 +15,13 @@ The File access protocol is how a Runtime reads and changes the files of a sandb
 
 ## Implement a client
 
-The Go client is `sandboxfs.NewClient(stream)`. It has one method per operation, is safe for concurrent use, and returns a `*sandboxfs.Failure` for every failure. Its methods map one to one onto the go-fuse node operations, so a FUSE frontend turns each kernel request into one call.
+The Go client is `sandboxfs.NewClient(stream)`. It has one method per operation, is safe for concurrent use, and returns a `*sandboxfs.Failure` for every failure. Its node methods map one to one onto the go-fuse operations. `OpenTree` also lets Environment validation read bounded directory trees through a single acquired handle.
 
 1. Call `Describe`. Keep `ServerInstanceID`, and check each request against `Capabilities` before sending it; the service rejects anything the capabilities do not declare.
 2. `Attach` an export and keep the root `NodeRef`.
 3. `Lookup`, `Walk`, `Create`, `Mkdir`, `Symlink`, `Link` and `ReadDir` with `WithAttrs` each acquire one reference on every node they return. Release references with `Forget` when the kernel forgets them.
 4. `Walk` stops after a symlink. Resolve the link yourself, relative to the view, with `Readlink` and further walks.
-5. `Open`, `Create` and `OpenDir` open a handle under a [handle ID](#handles) the client chooses. Keep one `sandboxfs.HandleIDs` per attachment, across all of its streams, and take each ID from it. Send `Flush` on each close of a descriptor for the handle, and `Release` or `ReleaseDir` when the last one closes.
+5. `Open`, `Create`, `OpenDir` and `OpenTree` open a handle under a [handle ID](#handles) the client chooses. Keep one `sandboxfs.HandleIDs` per attachment, across all of its streams, and take each ID from it. Send `Flush` on each close of a descriptor for the handle, and `Release` or `ReleaseDir` when the last one closes.
 6. Set `Append` on each `Write` made while the descriptor is in append mode. Append is a property of the write, not of the handle.
 7. Read the `Effect` of every failure. After `EffectPossible`, the request may have taken effect: never replay a mutation automatically. Report the failure, or inspect the state with `GetAttr` or `Lookup` first. A failure with a [retryable](#failures) code and `EffectNone` may be resent unchanged.
 8. Clean up an acquisition whose outcome is unknown, because its reply was lost or its call was cancelled, with `Release` or `ReleaseDir` of its ID. After a stream fails, resume on a new stream of the same attachment, which the service serves only after the failed stream's requests have finished, and clean up there: an uncertain `Attach` with `Detach`, and each uncertain acquisition with `Release` or `ReleaseDir`. [Handles](#handles) says what the cleanup proves.
@@ -42,7 +42,7 @@ Implement `sandboxfs.Service`, create one `sandboxfs.NewServer(service)`, and se
 - ends the stream on a framing violation: an unknown tag, a frame that is not a request, or a RequestID that does not increase;
 - holds up to `sandboxfs.MaxInFlight` (256) requests, each from admission until its response is written, and answers any more with `ResourceExhausted` and `EffectNone`, so a `CancelRequest` arrives while the client reads responses;
 - answers `CancelRequest` itself by cancelling the target's context;
-- refuses an `Open`, `Create` or `OpenDir` whose handle ID another acquisition on the stream is still using, with `InvalidArgument` and `EffectNone`, and runs a `Release` or `ReleaseDir` of an ID only after the running acquisition of that ID has finished. Together with the succession fence, a service never runs two acquisitions of one ID at once, or a release concurrently with the acquisition of its ID;
+- refuses an `Open`, `Create`, `OpenDir` or `OpenTree` whose handle ID another acquisition on the stream is still using, with `InvalidArgument` and `EffectNone`, and runs a `Release` or `ReleaseDir` of an ID only after the running acquisition of that ID has finished. Together with the succession fence, a service never runs two acquisitions of one ID at once, or a release concurrently with the acquisition of its ID;
 - returns a method's `*Failure` as the typed failure, and reports any other error, or a response that fails validation, as `Unknown` with `EffectPossible`;
 - cancels every request's context when the stream ends.
 
@@ -50,7 +50,7 @@ A service must:
 
 - generate a new `ServerInstanceID` whenever it loses its node and handle tables, and answer a request whose `Attachment.ServerInstanceID` is not its own with `InstanceChanged`;
 - answer `StaleAttachment` while the attachment is not attached or after its lease ends, and `StaleNode` or `StaleHandle` for a reference or handle the attachment does not hold. A node ID is reused only with a new generation;
-- reserve the handle ID of an `Open`, `Create` or `OpenDir` atomically before any file-system effect, as [Handles](#handles) describes, and publish every state a request creates before its method returns;
+- reserve the handle ID of an `Open`, `Create`, `OpenDir` or `OpenTree` atomically before any file-system effect, as [Handles](#handles) describes, and publish every state a request creates before its method returns;
 - call `Capabilities.Admit(request, readOnly)` before running a request and return the failure it reports. Limits that depend on service state, such as `MaxOpenHandles`, stay with the service;
 - advertise only what it enforces, and advertise locks only when they interoperate with native processes in the sandbox;
 - act as its own process identity, never as an identity a request supplies, and apply requested permission bits exactly;
@@ -68,13 +68,13 @@ A service must:
 - `Rename` uses `renameat2`. The service declares `RenameNoReplace` and `RenameExchange` only when a probe at start succeeds.
 - `LockFlock` locks the handle's descriptor, so it interoperates with native `flock`. `POSIXLocks` is false, and `GetLock` and `LockPOSIX` return `Unsupported`.
 - `ReadDir` cookies are the kernel's directory offsets. `Attr.Ino` combines the device and the inode number as go-fuse's loopback does.
-- It declares `MaxNameBytes` 255, `MaxPathBytes` 4095, `MaxReadBytes` and `MaxWriteBytes` 64 KiB, `MaxWalkComponents` 256, `MaxReadDirBytes` 64 KiB and `MaxOpenHandles` 4096, and every flag except `ReadOnly` and `POSIXLocks`, with the rename modes as probed.
+- It declares `MaxNameBytes` 255, `MaxPathBytes` 4095, `MaxReadBytes` and `MaxWriteBytes` 64 KiB, `MaxWalkComponents` 256, `MaxReadDirBytes` 64 KiB, `MaxOpenHandles` 4096, `MaxTreeEntries` 4096 and `MaxTreeDataBytes` 32 MiB, and every flag except `ReadOnly` and `POSIXLocks`, with the rename modes as probed.
 
 ## Reference
 
 ### Messages
 
-Requests use tags 1 to 30; the response to tag `t` uses `t | 0x8000`.
+File version 3 is matched exactly at Link binding. Requests use tags 1 to 31; the response to tag `t` uses `t | 0x8000`.
 
 | Tag | Request | Fields | Response | Meaning |
 | --- | --- | --- | --- | --- |
@@ -108,6 +108,7 @@ Requests use tags 1 to 30; the response to tag `t` uses `t | 0x8000`.
 | 28 | `GetLock` | `Handle`, `Owner`, `Lock` | optional `Conflict` | A POSIX lock that would conflict |
 | 29 | `SetLock` | `Handle`, `Kind`, `Owner`, `Lock`, `Wait` | – | Acquire, convert or release a lock |
 | 30 | `CancelRequest` | `Target` (a RequestID) | – | Ask to cancel an outstanding request |
+| 31 | `OpenTree` | `Handle`, `Node`, `MaxEntries`, `MaxDataBytes`, `RequireReadOnlyFiles` | `Size` | Acquire a bounded directory-tree result |
 
 A response payload begins with a uint16 result: 1 for success, followed by the response's fields, or 2 for failure, followed by a [`Failure`](#failures). Payloads list their fields in this order:
 
@@ -157,9 +158,11 @@ GetLock             Handle u64, Owner u64, Lock
 GetLockResponse     Conflict optional Lock
 SetLock             Handle u64, Kind enum, Owner u64, Lock, Wait bool; response (no fields)
 CancelRequest       Target u64; response (no fields)
+OpenTree            Handle u64, Node NodeRef, MaxEntries u32, MaxDataBytes u64, RequireReadOnlyFiles bool
+OpenTreeResponse    Size u64
 ```
 
-[`testdata`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/sandboxfs/testdata) holds annotated golden frames of `Describe`, `Walk`, `Create`, an append `Write`, a short `Write`, `ReadDir` with a cookie, `Rename` and a failure.
+[`testdata`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/sandboxfs/testdata) holds annotated golden frames of `Describe`, `OpenTree`, its tree result, `Walk`, `Create`, an append `Write`, a short `Write`, `ReadDir` with a cookie, `Rename` and a failure.
 
 ### Shared types
 
@@ -196,6 +199,8 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 | `MaxWalkComponents` | u32 | Most `Walk` names, 1 to 1024 |
 | `MaxReadDirBytes` | u32 | Largest `ReadDir` limit, 1 to 256 KiB |
 | `MaxOpenHandles` | u32 | Most open handles per attachment, at least 1 |
+| `MaxTreeEntries` | u32 | Largest `OpenTree` entry limit, including the root; zero together with `MaxTreeDataBytes` means unsupported |
+| `MaxTreeDataBytes` | u64 | Largest `OpenTree` regular-file byte limit; the maximum encoded result must fit in 2^63−1 bytes |
 | `ReadOnly` | bool | The service accepts only read-only attachments |
 | `AtomicAppend` | bool | `Write` supports `Append`, and appends from several handles never interleave within a write |
 | `AtomicRename` | bool | `RenameReplace` replaces the destination atomically |
@@ -207,7 +212,7 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 | `Flock` | bool | `SetLock` supports `LockFlock` |
 | `POSIXLocks` | bool | `GetLock` and `SetLock` support `LockPOSIX` |
 
-A writable service, one without `ReadOnly`, declares `AtomicAppend`, `AtomicRename`, `HardLinks` and `Symlinks`. A request beyond a declared limit fails with `InvalidArgument`, or `Errno` `NameTooLong` for a name or target, and a request for an undeclared feature fails with `Unsupported`.
+A writable service, one without `ReadOnly`, declares `AtomicAppend`, `AtomicRename`, `HardLinks` and `Symlinks`. An `OpenTree` request beyond its declared combination fails with `Unsupported`. Other requests beyond a declared limit fail with `InvalidArgument`, or `Errno` `NameTooLong` for a name or target, and a request for an undeclared feature fails with `Unsupported`.
 
 ### Attach
 
@@ -255,7 +260,7 @@ Unknown bits are rejected, `AttrAtime` excludes `AttrAtimeNow` and `AttrMtime` e
 
 ### Handles
 
-- The client chooses the `HandleID` of each `Open`, `Create` and `OpenDir`: nonzero, and never used before in the attachment, on any of its streams. `sandboxfs.HandleIDs` allocates IDs in increasing order.
+- The client chooses the `HandleID` of each `Open`, `Create`, `OpenDir` and `OpenTree`: nonzero, and never used before in the attachment, on any of its streams. `sandboxfs.HandleIDs` allocates IDs in increasing order.
 - The service reserves the ID before the request has any file-system effect. A reserved ID counts toward `MaxOpenHandles` while its acquisition runs. An acquisition whose ID is reserved or open fails with `InvalidArgument` and `EffectNone`.
 - Other requests that name a reserved ID fail with `StaleHandle`, except `Release` and `ReleaseDir`: the server runs them only after the acquisition of that ID has finished, so they close the handle it opened.
 - `Release` or `ReleaseDir` of an ID settles an acquisition whose outcome is unknown, whether its reply was lost with the stream or its call was cancelled. Success or `StaleHandle` proves that no handle with that ID remains. It does not prove that the acquisition changed nothing: a `Create` may have created its file, and a truncating `Open` may have truncated it.
@@ -273,6 +278,20 @@ Succession follows Link's bind order, not the order in which streams reach the s
 - `Limit` bounds the sum of the returned entries' encoded sizes: 25 bytes plus the name for each entry, plus 104 when it carries an `Entry`. A limit too small for the first entry fails with `Errno` `InvalidArgument`.
 - With `WithAttrs`, each returned entry carries an `Entry` with one lookup reference.
 - `End` is true when no entries remain, and a page without entries always has it set. No name or cookie repeats within a page. `ReadDir` promises no snapshot of a directory that changes while it is read.
+
+### Bounded tree reads
+
+`OpenTree` reads a directory identified by an authorized `NodeRef`. `MaxEntries` is nonzero and includes the root; `MaxDataBytes` sums regular-file bytes and may be zero. Both must fit the declared capabilities. `RequireReadOnlyFiles` rejects regular files with any write permission bit. The service applies the same attachment, lease, export and OS permission checks as its other reads. It accepts only directories and regular files, never follows symlinks, and returns no new node references. The caller retains its own validation and business limits.
+
+The service enumerates and retains each object's identity and attributes before reading content from those same objects. Renaming, unlinking or replacing a path never redirects a captured object to another inode. Every file must yield exactly its captured size, with no extra byte. Directory enumeration can observe concurrent changes; this operation is not an atomic filesystem snapshot and does not detect same-size concurrent writes. A failure publishes no partial result. Exceeding the entry or data bound returns `Errno` `Overflow`; invalid types, write bits under `RequireReadOnlyFiles`, duplicate names or changed file lengths return `Errno` `InvalidArgument`. Other OS failures retain their normal typed mapping.
+
+The immutable result is read with existing offset-based `Read` calls and closed with `Release`. `OpenTreeResponse.Size` is its exact encoded length. The result consists of `Count u32, DataBytes u64`, followed by exactly `Count` records of `ParentIndex u32, Name bytes, Attr`, and `Attr.Size` raw body bytes only for regular files. Record 0 is a directory with parent 0 and empty name. Every other name is one valid component; its parent is an earlier directory still on the active ancestor stack. Records are depth first, with each directory's children in strictly increasing byte-name order. Returning to an already left subtree is invalid. Directories retain their actual attributes but have no body. The sum of all regular-file sizes equals `DataBytes`. The maximum encoded length is `12 + MaxEntries × (96 + MaxNameBytes) + MaxDataBytes`, calculated without overflow; no trailing data is permitted. This stream can exceed the frame limit and split any primitive across `Read` chunks. `NewTreeEncoder` and `NewTreeDecoder` in the authored protocol validate the same rules incrementally, without a second complete encoded-body buffer; a decoder body must be consumed before its next record.
+
+A result handle supports `Read`, `Release` and `GetAttr(TargetHandle)`; the latter describes the regular, mode-0400 encoded result file, not the source directory. `Flush` succeeds without changing state. `Write` and `SetAttr(TargetHandle)` return `Errno` `ReadOnlyFilesystem`; `Fsync`, `GetLock` and `SetLock` return `Unsupported`; `ReadDir` and `ReleaseDir` return `Errno` `BadDescriptor`. It has no addressable result `NodeRef`.
+
+`OpenTree` is an acquisition with the same ID reservation, cancellation and release fence as `Open`. Cancelling a sent request can leave a handle and therefore reports `EffectPossible`; settle it with `Release` using an independent cleanup context. Construction checks cancellation while enumerating and reading. Failure cleanup closes source and result descriptors before returning resources; successful publication first closes source descriptors. Detach, lease end and service shutdown stop admission, cancel and join pending acquisitions, and close their results. A slot or byte reservation remains held until the backing descriptor actually closes, including reads still using it.
+
+The Linux service uses one sealed anonymous memory file (`memfd`) per result. It reserves the maximum encoded size before enumeration: at most four pending or retained results per service, one per attachment, and 128 MiB of reserved result backing in total, as well as the existing `MaxOpenHandles` limit. Admission beyond any budget returns `ResourceExhausted` with `EffectNone`, without waiting or replaying the request. The memory file is sealed against writing, growing and shrinking before publication; unsupported creation or sealing fails without an alternate storage path. These bounds cover result backing, not total RSS. Incremental enumeration limits retained objects and names by `MaxEntries` and rejects duplicate names; it closes each enumeration descriptor before descending. A single chunk buffer suffices for content transfer. No named temporary files, persistent cache or application-specific format is involved.
 
 ### Rename
 
@@ -304,7 +323,7 @@ Failure
 | 5 | `InstanceChanged` | The stream is bound to another service incarnation |
 | 6 | `StaleNode` | The attachment holds no such `NodeRef` |
 | 7 | `StaleHandle` | The attachment has no such open handle |
-| 8 | `ResourceExhausted` | The stream holds `MaxInFlight` requests, or the attachment has `MaxOpenHandles` handles, counting reserved IDs |
+| 8 | `ResourceExhausted` | The stream holds `MaxInFlight` requests, the attachment has `MaxOpenHandles` handles including reserved IDs, or a bounded tree-result budget is exhausted |
 | 9 | `Cancelled` | The request was cancelled |
 | 10 | `DeadlineExceeded` | The caller's deadline passed |
 | 11 | `Errno` | A file-system call failed; `Errno` says how |

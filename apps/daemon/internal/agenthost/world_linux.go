@@ -61,6 +61,10 @@ func attachWorld(ctx context.Context, stream io.ReadWriteCloser, uncertain *bool
 		w.c.Close()
 		return nil, errors.New("agenthost: the File service does not serve a writable world")
 	}
+	if caps.MaxTreeEntries < agentbundle.MaxFiles || caps.MaxTreeDataBytes < agentbundle.MaxExpandedBytes {
+		w.c.Close()
+		return nil, sandboxfs.NewFailure(sandboxfs.CodeUnsupported, sandboxwire.EffectNone, "File service does not support bounded Environment trees")
+	}
 	w.caps = caps
 	a, err := w.c.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	if err != nil {
@@ -439,67 +443,89 @@ func (w *world) sorted(ctx context.Context, dir sandboxfs.NodeRef, limit int) ([
 	return entries, err
 }
 
-// readTree reads the tree at dir as agentcapabilities.ReadTree reads a local
-// one: at most agentbundle.MaxFiles entries and agentbundle.MaxExpandedBytes,
-// regular files and directories only, files without write bits when
-// immutable, in fs.WalkDir's order.
-func (w *world) readTree(ctx context.Context, dir sandboxfs.NodeRef, immutable bool) ([]agentbundle.File, error) {
-	t := treeReader{w: w, immutable: immutable, entries: 1}
-	if err := t.walk(ctx, dir, ""); err != nil {
+// readTree reads a bounded tree through one owned File result handle. The File
+// protocol validates its structure; capability interpretation stays with the owner.
+func (w *world) readTree(ctx context.Context, dir sandboxfs.NodeRef, immutable bool) (files []agentbundle.File, err error) {
+	q := sandboxfs.OpenTreeRequest{Handle: w.handles.Next(), Node: dir, MaxEntries: agentbundle.MaxFiles,
+		MaxDataBytes: agentbundle.MaxExpandedBytes, RequireReadOnlyFiles: immutable}
+	result, err := w.c.OpenTree(ctx, &q)
+	var failure *sandboxfs.Failure
+	if errors.As(err, &failure) && failure.Effect == sandboxwire.EffectNone {
 		return nil, err
 	}
-	// Enumeration owns node references; only reads of the retained entries
-	// run concurrently. Join every read before the owner can forget them.
-	var reads errgroup.Group
-	reads.SetLimit(int(min(uint32(4), w.caps.MaxOpenHandles)))
-	for i, entry := range t.nodes {
-		reads.Go(func() error {
-			body, err := w.readEntry(ctx, entry, int64(entry.Attr.Size))
-			if err == nil {
-				t.files[i].Data = body
-			}
-			return err
-		})
-	}
-	if err := reads.Wait(); err != nil {
-		return nil, err
-	}
-	return t.files, nil
-}
-
-type treeReader struct {
-	w         *world
-	immutable bool
-	files     []agentbundle.File
-	nodes     []sandboxfs.Entry
-	entries   int
-	total     int
-}
-
-func (t *treeReader) walk(ctx context.Context, dir sandboxfs.NodeRef, prefix string) error {
-	entries, err := t.w.sorted(ctx, dir, agentbundle.MaxFiles)
+	defer func() {
+		err = errors.Join(err, w.closeHandle(ctx, q.Handle, false))
+		if err != nil {
+			files = nil
+		}
+	}()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for _, e := range entries {
-		if t.entries++; t.entries > agentbundle.MaxFiles {
-			return fs.ErrInvalid
-		}
-		name, attr := prefix+string(e.Name), e.Entry.Attr
-		switch {
-		case isType(attr, sandboxfs.ModeDirectory):
-			if err := t.walk(ctx, e.Entry.Node, name+"/"); err != nil {
-				return err
-			}
-		case !isType(attr, sandboxfs.ModeRegular) || t.immutable && attr.Mode&0o222 != 0 || attr.Size > uint64(agentbundle.MaxExpandedBytes-t.total):
-			return fs.ErrInvalid
-		default:
-			t.total += int(attr.Size)
-			t.nodes = append(t.nodes, *e.Entry)
-			t.files = append(t.files, agentbundle.File{Path: name, Executable: attr.Mode&0o111 != 0})
-		}
+	reader := &treeResultReader{ctx: ctx, w: w, handle: q.Handle, remaining: result.Size}
+	decoder, err := sandboxfs.NewTreeDecoder(reader, q, w.caps, result.Size)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	paths := make([]string, 0)
+	files = []agentbundle.File{}
+	for {
+		record, body, readErr := decoder.Next()
+		if readErr == io.EOF {
+			return files, nil
+		}
+		if readErr != nil {
+			return nil, readErr
+		}
+		name := string(record.Name)
+		if len(paths) != 0 && paths[record.Parent] != "" {
+			name = paths[record.Parent] + "/" + name
+		}
+		paths = append(paths, name)
+		if !isType(record.Attr, sandboxfs.ModeRegular) {
+			continue
+		}
+		data := make([]byte, int(record.Attr.Size))
+		if _, err := io.ReadFull(body, data); err != nil {
+			return nil, err
+		}
+		files = append(files, agentbundle.File{Path: name, Data: data, Executable: record.Attr.Mode&0o111 != 0})
+	}
+}
+
+// treeResultReader fetches bounded chunks while the protocol decoder consumes
+// records directly into their final file buffers. It never buffers the whole tree.
+type treeResultReader struct {
+	ctx               context.Context
+	w                 *world
+	handle            sandboxfs.HandleID
+	remaining, offset uint64
+	buffer            []byte
+}
+
+func (r *treeResultReader) Read(dst []byte) (int, error) {
+	if len(dst) == 0 {
+		return 0, nil
+	}
+	if len(r.buffer) == 0 {
+		if r.remaining == 0 {
+			return 0, io.EOF
+		}
+		size := uint32(min(uint64(r.w.caps.MaxReadBytes), r.remaining))
+		reply, err := r.w.c.Read(r.ctx, &sandboxfs.ReadRequest{Handle: r.handle, Offset: r.offset, Size: size})
+		if err != nil {
+			return 0, err
+		}
+		if len(reply.Data) != int(size) {
+			return 0, io.ErrUnexpectedEOF
+		}
+		r.buffer = reply.Data
+		r.remaining -= uint64(size)
+		r.offset += uint64(size)
+	}
+	n := copy(dst, r.buffer)
+	r.buffer = r.buffer[n:]
+	return n, nil
 }
 
 // writeTree creates name below dir, which must not exist, with files: its

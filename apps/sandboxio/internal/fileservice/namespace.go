@@ -146,12 +146,22 @@ func (s *Service) GetAttr(_ context.Context, a sandboxfs.Attachment, r *sandboxf
 	if err != nil {
 		return nil, err
 	}
-	f, _, stale, err := st.target(r.Target)
-	if err != nil {
-		return nil, err
-	}
 	var sb unix.Stat_t
-	if err := use(f, stale, func(fd int) error { return unix.Fstat(fd, &sb) }); err != nil {
+	stat := func(fd int) error { return unix.Fstat(fd, &sb) }
+	if r.Target.Kind == sandboxfs.TargetHandle {
+		h, handleErr := st.handle(r.Target.Handle)
+		if handleErr != nil {
+			return nil, handleErr
+		}
+		err = h.use(stat)
+	} else {
+		f, _, stale, targetErr := st.target(r.Target)
+		if targetErr != nil {
+			return nil, targetErr
+		}
+		err = use(f, stale, stat)
+	}
+	if err != nil {
 		return nil, failure(err, none)
 	}
 	return &sandboxfs.GetAttrResponse{Attr: st.attr(&sb)}, nil
@@ -163,6 +173,15 @@ func (s *Service) SetAttr(_ context.Context, a sandboxfs.Attachment, r *sandboxf
 	st, err := s.enter(a, r)
 	if err != nil {
 		return nil, err
+	}
+	if r.Target.Kind == sandboxfs.TargetHandle {
+		h, err := st.handle(r.Target.Handle)
+		if err != nil {
+			return nil, err
+		}
+		if h.tree {
+			return nil, failure(unix.EROFS, none)
+		}
 	}
 	f, typ, stale, err := st.target(r.Target)
 	if err != nil {

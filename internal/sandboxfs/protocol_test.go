@@ -23,7 +23,7 @@ var (
 	testCaps    = Capabilities{
 		PathProfile: PathProfileLinuxBytes, CacheProfile: CacheProfileUncached, Durability: DurabilityFsyncRequired,
 		MaxNameBytes: 255, MaxPathBytes: 4095, MaxReadBytes: 65536, MaxWriteBytes: 65536, MaxWalkComponents: 256,
-		MaxReadDirBytes: 65536, MaxOpenHandles: 4096, AtomicAppend: true, AtomicRename: true, RenameNoReplace: true,
+		MaxReadDirBytes: 65536, MaxOpenHandles: 4096, MaxTreeEntries: 4096, MaxTreeDataBytes: 32 << 20, AtomicAppend: true, AtomicRename: true, RenameNoReplace: true,
 		RenameExchange: true, HardLinks: true, Symlinks: true, SetMode: true, SetOwner: true, SetTimes: true,
 		DirectoryFsync: true, ReadDirPlus: true, Flock: true,
 	}
@@ -43,6 +43,8 @@ func TestGoldenFixtures(t *testing.T) {
 	}{
 		{file: "describe_response.hex", op: OpDescribe, id: 1, resp: &DescribeResponse{
 			ServerInstanceID: testInstance, Identity: Identity{UID: 1000, GID: 1000}, Capabilities: testCaps, Exports: []sandboxlink.ExportID{WorldExport}}},
+		{file: "opentree_request.hex", op: OpOpenTree, id: 9, req: &OpenTreeRequest{Handle: 7, Node: testNode, MaxEntries: 1000, MaxDataBytes: 20 << 20, RequireReadOnlyFiles: true}},
+		{file: "opentree_response.hex", op: OpOpenTree, id: 9, resp: &OpenTreeResponse{Size: 108}},
 		{file: "walk_request.hex", op: OpWalk, id: 2, req: &WalkRequest{Parent: testNode, Names: [][]byte{[]byte("link"), []byte("x")}}},
 		{file: "walk_response.hex", op: OpWalk, id: 2, resp: &WalkResponse{Entries: []Entry{{Node: NodeRef{ID: 2, Generation: 7}, Attr: symlink}}}},
 		{file: "create_request.hex", op: OpCreate, id: 3, req: &CreateRequest{
@@ -141,13 +143,14 @@ func samples() []struct {
 		{&GetLockRequest{Handle: 4, Owner: 12, Lock: Lock{Mode: LockRead, Start: 0, End: 99}}, &GetLockResponse{Conflict: &Lock{Mode: LockWrite, Start: 50, End: 60}}},
 		{&SetLockRequest{Handle: 4, Kind: LockFlock, Owner: 12, Lock: flock, Wait: true}, &SetLockResponse{}},
 		{&CancelRequestRequest{Target: 9}, &CancelRequestResponse{}},
+		{&OpenTreeRequest{Handle: 7, Node: testNode, MaxEntries: 1000, MaxDataBytes: 20 << 20, RequireReadOnlyFiles: true}, &OpenTreeResponse{Size: 108}},
 	}
 }
 
 func TestRoundTripEveryMessage(t *testing.T) {
 	all := samples()
-	if len(all) != int(OpCancelRequest) {
-		t.Fatalf("%d samples for %d operations", len(all), OpCancelRequest)
+	if len(all) != int(OpOpenTree) {
+		t.Fatalf("%d samples for %d operations", len(all), OpOpenTree)
 	}
 	for i, s := range all {
 		op := Op(i + 1)

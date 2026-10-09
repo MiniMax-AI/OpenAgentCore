@@ -188,7 +188,7 @@ func (s *Service) Read(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.R
 	}
 	buf := make([]byte, r.Size)
 	total := 0
-	err = use(h.f, errStaleHandle, func(fd int) error {
+	err = h.use(func(fd int) error {
 		for total < len(buf) {
 			n, err := eintr(func() (int, error) { return unix.Pread(fd, buf[total:], int64(r.Offset)+int64(total)) })
 			if err != nil {
@@ -220,13 +220,16 @@ func (s *Service) Write(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.
 	if err != nil {
 		return nil, err
 	}
+	if h.tree {
+		return nil, failure(unix.EROFS, none)
+	}
 	if !r.Append && r.Offset > math.MaxInt64-uint64(len(r.Data)) {
 		return nil, sandboxfs.NewFailure(sandboxfs.CodeInvalidArgument, none, "write ends beyond 2^63-1")
 	}
 	h.writeMu.Lock()
 	defer h.writeMu.Unlock()
 	total := 0
-	err = use(h.f, errStaleHandle, func(fd int) error {
+	err = h.use(func(fd int) error {
 		if err := setAppend(fd, r.Append); err != nil {
 			return err
 		}
@@ -279,8 +282,11 @@ func (s *Service) Flush(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.
 	if err != nil {
 		return nil, err
 	}
+	if h.tree {
+		return &sandboxfs.FlushResponse{}, nil
+	}
 	effect := none
-	err = use(h.f, errStaleHandle, func(fd int) error {
+	err = h.use(func(fd int) error {
 		dup, err := unix.FcntlInt(uintptr(fd), unix.F_DUPFD_CLOEXEC, 0)
 		if err != nil {
 			return err
@@ -303,12 +309,15 @@ func (s *Service) Fsync(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.
 	if err != nil {
 		return nil, err
 	}
+	if h.tree {
+		return nil, unsupported("tree result operation")
+	}
 	sync := unix.Fsync
 	if r.DataOnly {
 		sync = unix.Fdatasync
 	}
 	effect := none
-	err = use(h.f, errStaleHandle, func(fd int) error {
+	err = h.use(func(fd int) error {
 		effect = possible
 		_, err := eintr(func() (struct{}, error) { return struct{}{}, sync(fd) })
 		return err
@@ -369,11 +378,14 @@ func (s *Service) ReadDir(_ context.Context, a sandboxfs.Attachment, r *sandboxf
 	if err != nil {
 		return nil, err
 	}
+	if h.tree {
+		return nil, failure(unix.EBADF, none)
+	}
 	if h.dir == nil {
 		return nil, failure(unix.ENOTDIR, none)
 	}
 	var resp *sandboxfs.ReadDirResponse
-	err = use(h.f, errStaleHandle, func(fd int) (err error) {
+	err = h.use(func(fd int) (err error) {
 		resp, err = h.dir.read(st, fd, r)
 		return err
 	})
@@ -415,6 +427,9 @@ func (s *Service) SetLock(ctx context.Context, a sandboxfs.Attachment, r *sandbo
 	if err != nil {
 		return nil, err
 	}
+	if h.tree {
+		return nil, unsupported("tree result operation")
+	}
 	effect := none
 	for delay := time.Millisecond; ; delay = min(2*delay, 50*time.Millisecond) {
 		if err := ctx.Err(); err != nil {
@@ -448,7 +463,7 @@ func (h *handle) tryLock(mode sandboxfs.LockMode) (dropped bool, err error) {
 	h.lockMu.Lock()
 	defer h.lockMu.Unlock()
 	converting := h.flock != 0 && h.flock != mode && mode != sandboxfs.LockUnlock
-	err = use(h.f, errStaleHandle, func(fd int) error { return unix.Flock(fd, flockOps[mode]|unix.LOCK_NB) })
+	err = h.use(func(fd int) error { return unix.Flock(fd, flockOps[mode]|unix.LOCK_NB) })
 	switch {
 	case err == nil && mode == sandboxfs.LockUnlock:
 		h.flock = 0
