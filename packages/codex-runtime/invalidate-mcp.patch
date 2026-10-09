@@ -366,7 +366,7 @@ diff --git a/codex-rs/core/src/session/mcp.rs b/codex-rs/core/src/session/mcp.rs
 index 46af2d3..9753960 100644
 --- a/codex-rs/core/src/session/mcp.rs
 +++ b/codex-rs/core/src/session/mcp.rs
-@@ -89,6 +89,29 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
+@@ -89,6 +89,30 @@ impl ElicitationReviewer for GuardianMcpElicitationReviewer {
  }
  
  impl Session {
@@ -388,6 +388,7 @@ index 46af2d3..9753960 100644
 +                .mcp_runtime
 +                .invalidate_servers(&names)
 +                .await;
++            session.mark_mcp_runtime_dirty();
 +            Ok::<_, anyhow::Error>(())
 +        })
 +        .await?

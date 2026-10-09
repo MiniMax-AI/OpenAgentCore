@@ -152,6 +152,5 @@ func (s *Session) cleanupCancelledMCP(ctx context.Context) error {
 	if json.Unmarshal(raw, &receipt) != nil || !slices.Equal(receipt.ServerNames, labels) {
 		return errors.New("codex: native MCP invalidation unconfirmed")
 	}
-	_, err = request("config/mcpServer/reload", nil)
-	return err
+	return nil
 }

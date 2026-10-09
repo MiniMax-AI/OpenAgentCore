@@ -213,11 +213,6 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 			if executorMode == "mcp-invalidate-unconfirmed" {
 				result = McpServerInvalidateResponse{}
 			}
-		case "config/mcpServer/reload":
-			if executorMode == "mcp-reload-failed" {
-				_ = output.Encode(map[string]any{"id": frame.ID, "error": map[string]any{"code": -32603, "message": "reload rejected"}})
-				continue
-			}
 		case "environment/status":
 			if os.Getenv("OAC_TEST_PREPARATION_BLOCK") == "1" {
 				for {

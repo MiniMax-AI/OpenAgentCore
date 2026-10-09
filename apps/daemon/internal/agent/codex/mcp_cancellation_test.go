@@ -107,8 +107,8 @@ func TestMCPChildFirstObservedTerminalUsesNativeRootAttribution(t *testing.T) {
 	}
 }
 
-func TestExecutorCancelledMCPRequiresScopeCloseThenInvalidationAndReload(t *testing.T) {
-	for _, mode := range []string{"mcp-confirmed", "mcp-caller-cancelled", "mcp-stop-failed", "mcp-invalidate-unconfirmed", "mcp-reload-failed"} {
+func TestExecutorCancelledMCPRequiresScopeCloseThenInvalidation(t *testing.T) {
+	for _, mode := range []string{"mcp-confirmed", "mcp-caller-cancelled", "mcp-stop-failed", "mcp-invalidate-unconfirmed"} {
 		t.Run(mode, func(t *testing.T) {
 			e, root := executorFixture(t, mode)
 			e.base.cfg.view.MCP = cancellationMCPBindings("active", "late", "healthy")
@@ -227,11 +227,7 @@ func TestExecutorCancelledMCPRequiresScopeCloseThenInvalidationAndReload(t *test
 			if mode == "mcp-stop-failed" {
 				wantInvalidate = 0
 			}
-			wantReload := 0
-			if confirmed || mode == "mcp-reload-failed" {
-				wantReload = 1
-			}
-			if counts["mcpServer/invalidate"] != wantInvalidate || counts["config/mcpServer/reload"] != wantReload || counts["turn/interrupt"] != 1 || counts["thread/start"] != 1 || counts["initialize"] != 1 || counts["mcpServerStatus/list"] != 0 || len(pids) != 1 {
+			if counts["mcpServer/invalidate"] != wantInvalidate || counts["config/mcpServer/reload"] != 0 || counts["turn/interrupt"] != 1 || counts["thread/start"] != 1 || counts["initialize"] != 1 || counts["mcpServerStatus/list"] != 0 || len(pids) != 1 {
 				t.Fatal(counts, pids)
 			}
 		})
