@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -184,14 +185,14 @@ func (w *world) mkdir(ctx context.Context, dir sandboxfs.NodeRef, name string) (
 	return w.track(r.Entry), nil
 }
 
-// open opens the regular file e for reading and returns its handle.
+// open returns the regular file's attempted handle even when its outcome is unknown.
 func (w *world) open(ctx context.Context, e sandboxfs.Entry) (sandboxfs.HandleID, error) {
 	if !isType(e.Attr, sandboxfs.ModeRegular) {
 		return 0, fs.ErrInvalid
 	}
 	h := w.handles.Next()
 	if _, err := w.c.Open(ctx, &sandboxfs.OpenRequest{Handle: h, Node: e.Node, Access: sandboxfs.AccessRead, Flags: sandboxfs.OpenNoFollow}); err != nil {
-		return 0, err
+		return h, err
 	}
 	return h, nil
 }
@@ -237,16 +238,28 @@ func (w *world) readEntry(ctx context.Context, e sandboxfs.Entry, limit int64) (
 		return nil, fs.ErrInvalid
 	}
 	h, err := w.open(ctx, e)
-	if err != nil {
+	var failure *sandboxfs.Failure
+	if errors.As(err, &failure) && failure.Effect == sandboxwire.EffectNone {
 		return nil, err
 	}
-	defer w.release(ctx, h)
 	b := bytes.NewBuffer([]byte{})
-	n, err := w.read(ctx, h, limit, b)
-	if err == nil && uint64(n) != e.Attr.Size {
-		err = fs.ErrInvalid
+	if err == nil {
+		var n int64
+		n, err = w.read(ctx, h, limit, b)
+		if err == nil && uint64(n) != e.Attr.Size {
+			err = fs.ErrInvalid
+		}
 	}
-	return b.Bytes(), err
+	// Release also joins an Open whose reply was lost to cancellation. The
+	// server orders release after acquisition of this handle.
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeBound)
+	defer cancel()
+	_, releaseErr := w.c.Release(cleanup, &sandboxfs.ReleaseRequest{Handle: h})
+	if releaseErr != nil {
+		// The next owner operation drains this attachment before reusing it.
+		w.c.Close()
+	}
+	return b.Bytes(), errors.Join(err, releaseErr)
 }
 
 // create makes name in dir, exclusively, with mode, writes data to it and
@@ -396,6 +409,22 @@ func (w *world) readTree(ctx context.Context, dir sandboxfs.NodeRef, immutable b
 	if err := t.walk(ctx, dir, ""); err != nil {
 		return nil, err
 	}
+	// Enumeration owns node references; only reads of the retained entries
+	// run concurrently. Join every read before the owner can forget them.
+	var reads errgroup.Group
+	reads.SetLimit(4)
+	for i, entry := range t.nodes {
+		reads.Go(func() error {
+			body, err := w.readEntry(ctx, entry, int64(entry.Attr.Size))
+			if err == nil {
+				t.files[i].Data = body
+			}
+			return err
+		})
+	}
+	if err := reads.Wait(); err != nil {
+		return nil, err
+	}
 	return t.files, nil
 }
 
@@ -403,6 +432,7 @@ type treeReader struct {
 	w         *world
 	immutable bool
 	files     []agentbundle.File
+	nodes     []sandboxfs.Entry
 	entries   int
 	total     int
 }
@@ -425,18 +455,9 @@ func (t *treeReader) walk(ctx context.Context, dir sandboxfs.NodeRef, prefix str
 		case !isType(attr, sandboxfs.ModeRegular) || t.immutable && attr.Mode&0o222 != 0 || attr.Size > uint64(agentbundle.MaxExpandedBytes-t.total):
 			return fs.ErrInvalid
 		default:
-			h, err := t.w.open(ctx, *e.Entry)
-			if err != nil {
-				return err
-			}
-			var b strings.Builder
-			n, err := t.w.read(ctx, h, int64(agentbundle.MaxExpandedBytes-t.total), &b)
-			t.w.release(ctx, h)
-			if err != nil || uint64(n) != attr.Size {
-				return fs.ErrInvalid
-			}
-			t.total += int(n)
-			t.files = append(t.files, agentbundle.File{Path: name, Data: []byte(b.String()), Executable: attr.Mode&0o111 != 0})
+			t.total += int(attr.Size)
+			t.nodes = append(t.nodes, *e.Entry)
+			t.files = append(t.files, agentbundle.File{Path: name, Executable: attr.Mode&0o111 != 0})
 		}
 	}
 	return nil
