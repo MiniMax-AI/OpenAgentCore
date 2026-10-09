@@ -72,10 +72,68 @@ test("JSON transport normalizes negative zero without changing acknowledged raw 
   assert.throws(() => consume(invalid, candidate("overflow", overflowing, false, JSON.parse(JSON.stringify(JSON.parse(overflowing))))));
 });
 
+test("native connection retry abandons a closed partial before a confirmed replacement", () => {
+  const raw = '{"number":7}';
+  const events = candidate("abandoned", raw);
+  // The native retry producer closes the partial without constructing a tool snapshot.
+  const partial = [...events.slice(0, 3), ...events.slice(5, 7)];
+  const observer = new StructuredOutput();
+  consume(observer, partial);
+  assert.throws(() => observer.complete(result(raw)));
+  // Providers may reuse IDs on retry; the discarded prefix never became a native call.
+  consume(observer, candidate("abandoned", raw));
+  assert.equal(observer.complete(result(raw)).message.id, "abandoned");
+  for (const late of [events[4], events[7]]) {
+    const invalid = new StructuredOutput();
+    consume(invalid, partial);
+    assert.throws(() => invalid.consume(late, "session"));
+  }
+});
+
+test("native retraction permits replacement raw input before its supersedes snapshot", () => {
+  const raw = '{"number":7}';
+  for (const lateReceipt of [false, true]) {
+    const observer = new StructuredOutput();
+    const old = candidate("retracted", raw);
+    consume(observer, lateReceipt ? old.slice(0, -1) : old);
+    const replacement = candidate("replacement", raw);
+    replacement[4].supersedes = ["snapshot-retracted"];
+    consume(observer, replacement);
+    if (lateReceipt) observer.consume(old[7], "session");
+    // The final banner repeats the earlier supersedes notice idempotently.
+    observer.consume({type:"system", subtype:"model_refusal_fallback", session_id:"session", retracted_message_uuids:["snapshot-retracted","receipt-retracted"]}, "session");
+    assert.equal(observer.complete(result(raw)).message.id, "replacement");
+  }
+});
+
+test("a completed tool block survives native partial finalization without message_stop", () => {
+  const raw = '{"number":7}';
+  const events = candidate("final", raw);
+  const observer = new StructuredOutput();
+  consume(observer, [...events.slice(0, 6), {type:"assistant", session_id:"session", parent_tool_use_id:null,
+    error:"server_error", message:{content:[{type:"text", text:"Connection lost mid-response."}]}}, events[7]]);
+  assert.equal(observer.complete(result(raw)).message.text, raw);
+});
+
+test("retracted materialized tool identities cannot be reused or revived", () => {
+  const raw = '{"number":7}';
+  const observer = new StructuredOutput();
+  consume(observer, candidate("retracted", raw));
+  observer.consume({type:"system", subtype:"model_refusal_fallback", session_id:"session", retracted_message_uuids:["snapshot-retracted"]}, "session");
+  assert.throws(() => observer.complete(result(raw)));
+  assert.throws(() => consume(observer, candidate("retracted", raw)));
+});
+
+test("an assistant-only native fallback cannot supply original tool-input text", () => {
+  const raw = '{"number":7}';
+  const observer = new StructuredOutput();
+  assert.throws(() => consume(observer, candidate("fallback", raw).slice(4)));
+});
+
 test("only live root events can confirm a candidate", () => {
   const raw = '{"memory":"value"}';
   for (const extra of [{isReplay:true}, {isSynthetic:true}, {parent_tool_use_id:"child"}, {session_id:"other"}]) {
-    for (const index of [0, 1, 2, 4, 5, 6, 7]) {
+    for (const index of [0, 1, 2, 4, 5, 7]) {
       const events = candidate("final", raw);
       events[index] = {...events[index], ...extra};
       const observer = new StructuredOutput();
@@ -91,7 +149,6 @@ test("incomplete, mismatched, duplicate and retracted native identities cannot p
     events => events.filter((_, i) => i !== 2),
     events => events.filter((_, i) => i !== 4),
     events => events.filter((_, i) => i !== 5),
-    events => events.filter((_, i) => i !== 6),
     events => events.filter((_, i) => i !== 7),
     events => { events[2].event.index = 2; return events; },
     events => { events[4].message.id = "other"; return events; },
@@ -118,10 +175,6 @@ test("failed, ambiguous and mismatched final results cannot publish", () => {
     const observer = new StructuredOutput();
     consume(observer, candidate("final", raw));
     assert.throws(() => observer.complete(result(raw, extra)));
-  }
-  for (const error of [false, true]) {
-    const observer = new StructuredOutput();
-    assert.throws(() => { consume(observer, [...candidate("first", raw), ...candidate("second", raw, error)]); observer.complete(result(raw)); });
   }
   const ambiguous = new StructuredOutput();
   consume(ambiguous, [...candidate("first", raw).slice(0, -1), ...candidate("second", raw).slice(0, -1), receipt("first"), receipt("second")]);
