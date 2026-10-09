@@ -33,7 +33,7 @@ import (
 const (
 	agentHostManifest = "/opt/oac/harnesses.json"
 	agentHostShim     = "/opt/oac/bin/oac-process-shim"
-	agentHostCADir    = "/usr/share/ca-certificates/mozilla"
+	agentHostCAFile   = "/etc/ssl/certs/ca-certificates.crt"
 	// agentHostState keeps each Session's home across restarts.
 	agentHostState = "/var/lib/oac/agent-host"
 	// agentHostCgroup is where the agent host mounts the container's own
@@ -127,7 +127,7 @@ func serveAgentHost(parent context.Context, rc *runContext, args []string, decla
 	}
 	host, err := agenthost.Open(agenthost.Config{StateDir: agentHostState, UIDs: agentHostUIDs, ViewCgroups: views,
 		RelayURL: wsOrigin + "/api/v1/sandbox-link", RuntimeID: sandboxwire.ID(runtimeID), Credential: []byte(identity.Credential),
-		Harnesses: harnesses, Shim: agentHostShim, CADir: agentHostCADir, Log: obslog.Bg()})
+		Harnesses: harnesses, Shim: agentHostShim, CAFile: agentHostCAFile, Log: obslog.Bg()})
 	if err != nil {
 		return fmt.Errorf("agent-host: %w", err)
 	}

@@ -39,7 +39,7 @@ type plan struct {
 	executables processbroker.Executables
 }
 
-// checkConfig validates cfg and loads the roots in its CA directory.
+// checkConfig validates cfg and loads the roots in its CA bundle.
 func checkConfig(cfg Config) (*x509.CertPool, error) {
 	switch {
 	case !isHostPath(cfg.StateDir):
@@ -56,34 +56,29 @@ func checkConfig(cfg Config) (*x509.CertPool, error) {
 		return nil, invalidConfig("no Harness declarations")
 	case !isHostPath(cfg.Shim):
 		return nil, invalidConfig("shim %q is not absolute and clean", cfg.Shim)
-	case !isHostPath(cfg.CADir) || cfg.CADir == "/" || agent.ViewReserved(cfg.CADir):
-		return nil, invalidConfig("CA directory %q", cfg.CADir)
+	case !isHostPath(cfg.CAFile) || cfg.CAFile == "/" || agent.ViewReserved(cfg.CAFile):
+		return nil, invalidConfig("CA file %q", cfg.CAFile)
 	}
-	return loadRoots(cfg.CADir)
+	return loadRoots(cfg.CAFile)
 }
 
-// loadRoots reads every certificate in dir. Each entry is a regular file of
-// PEM certificates, so the view presents exactly what the gateway trusts.
-func loadRoots(dir string) (*x509.CertPool, error) {
-	entries, err := os.ReadDir(dir)
+// loadRoots reads the bundle presented in the view, so the gateway uses the
+// same trust source without falling back to another root store.
+func loadRoots(name string) (*x509.CertPool, error) {
+	info, err := os.Lstat(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: CA directory: %w", ErrInvalidConfig, err)
+		return nil, fmt.Errorf("%w: CA file: %w", ErrInvalidConfig, err)
 	}
-	if len(entries) == 0 {
-		return nil, invalidConfig("CA directory %s is empty", dir)
+	if !info.Mode().IsRegular() {
+		return nil, invalidConfig("CA file %s is not a regular file", name)
+	}
+	data, err := os.ReadFile(name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: CA file: %w", ErrInvalidConfig, err)
 	}
 	roots := x509.NewCertPool()
-	for _, e := range entries {
-		if !e.Type().IsRegular() {
-			return nil, invalidConfig("CA entry %s is not a regular file", e.Name())
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("%w: CA directory: %w", ErrInvalidConfig, err)
-		}
-		if !roots.AppendCertsFromPEM(data) {
-			return nil, invalidConfig("CA entry %s holds no PEM certificate", e.Name())
-		}
+	if !roots.AppendCertsFromPEM(data) {
+		return nil, invalidConfig("CA file %s holds no PEM certificate", name)
 	}
 	return roots, nil
 }
@@ -178,7 +173,7 @@ func checkLayout(cfg Config, view agent.View, workspace string) error {
 	if workspace == "/" || agent.ViewReserved(workspace) {
 		return unsupported("workspace overlaps a reserved view tree")
 	}
-	own := []string{cfg.CADir}
+	own := []string{cfg.CAFile}
 	for _, name := range etcFiles {
 		own = append(own, "/etc/"+name)
 	}

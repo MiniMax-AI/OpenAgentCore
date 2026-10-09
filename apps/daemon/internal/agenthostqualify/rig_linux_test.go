@@ -55,7 +55,7 @@ func TestViewCgroupDelegation(t *testing.T) {
 		t.Skipf("set %s=1 and run the test with scripts/qualify-agent-host.sh", gateEnv)
 	}
 	cfg := agenthost.Config{StateDir: t.TempDir(), ViewCgroups: "/sys/fs/cgroup", UIDs: agenthost.UIDRange{First: 70000, Count: 8}, RelayURL: "ws://127.0.0.1:1",
-		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: agent.NewRegistry(), Shim: shim, CADir: caDir}
+		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: agent.NewRegistry(), Shim: shim, CAFile: caFile}
 	if h, err := agenthost.Open(cfg); err == nil {
 		h.Close()
 		t.Fatalf("Open accepted the undelegated %s", cfg.ViewCgroups)

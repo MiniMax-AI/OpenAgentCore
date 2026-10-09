@@ -4,6 +4,11 @@ package agenthost
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +19,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
@@ -85,7 +91,9 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"relative workspace":                 {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "workspace" }, []error{ErrInvalidSession}},
 		"private workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/.oac/home" }, unsupported},
 		"control workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/proc" }, unsupported},
-		"host CA workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = f.cfg.CADir }, unsupported},
+		"host CA workspace":                  {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = f.cfg.CAFile }, unsupported},
+		"host CA workspace ancestor":         {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = filepath.Dir(f.cfg.CAFile) }, unsupported},
+		"host CA workspace child":            {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = f.cfg.CAFile + "/project" }, unsupported},
 		"host overlay ancestor":              {"viewed", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/etc" }, unsupported},
 		"masked workspace":                   {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/masked" }, unsupported},
 		"masked workspace child":             {"covered", func(r *agent.PrepareRequest) { r.WorkspaceRoot = "/masked/project" }, unsupported},
@@ -245,5 +253,95 @@ func TestReleaseRemovesTheHome(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Dir(f.session.Home.Host)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the Session directory remains: %v", err)
+	}
+}
+
+func TestCABundleRejectsInvalidFiles(t *testing.T) {
+	cfg := newConfig(t, agent.NewRegistry(), testCA())
+	link := filepath.Join(t.TempDir(), "roots.pem")
+	if err := os.Symlink(cfg.CAFile, link); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"", "relative", "/", "/.oac/roots.pem", cfg.CAFile + ".missing", filepath.Dir(cfg.CAFile), link} {
+		bad := cfg
+		bad.CAFile = name
+		if _, err := checkConfig(bad); !errors.Is(err, ErrInvalidConfig) {
+			t.Errorf("CAFile %q: %v", name, err)
+		}
+	}
+	for _, data := range [][]byte{nil, []byte("not PEM"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("not DER")})} {
+		if err := os.WriteFile(cfg.CAFile, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := checkConfig(cfg); !errors.Is(err, ErrInvalidConfig) {
+			t.Errorf("invalid bundle: %v", err)
+		}
+	}
+}
+
+func TestGatewayUsesOnlyTheCABundleRoots(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.NotFoundHandler())
+	defer upstream.Close()
+	// A separate valid issuer must not fall back to the upstream's issuer.
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := x509.Certificate{
+		SerialNumber: upstream.Certificate().SerialNumber,
+		NotBefore:    upstream.Certificate().NotBefore, NotAfter: upstream.Certificate().NotAfter,
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &template, &template, pub, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name    string
+		ca      *x509.Certificate
+		trusted bool
+	}{
+		{"trusted", upstream.Certificate(), true}, {"untrusted", other, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newViewFixture(t)
+			cfg := newConfig(t, f.cfg.Harnesses, tc.ca)
+			roots, err := checkConfig(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, err := admit(cfg, roots, prepared(request("viewed", upstream.URL, "fixture-key")), Environment{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			transport := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: p.gateway.RootCAs}}
+			defer transport.CloseIdleConnections()
+			client := &http.Client{Transport: transport, Timeout: 5 * time.Second}
+			response, err := client.Get(upstream.URL)
+			if response != nil {
+				response.Body.Close()
+			}
+			if tc.trusted && err != nil {
+				t.Fatalf("trusted TLS: %v", err)
+			}
+			var unknown x509.UnknownAuthorityError
+			if !tc.trusted && !errors.As(err, &unknown) {
+				t.Fatalf("untrusted TLS: %v, want unknown authority", err)
+			}
+		})
+	}
+}
+
+func TestHarnessCannotCoverCABundle(t *testing.T) {
+	f := newViewFixture(t)
+	for _, target := range []string{f.cfg.CAFile, filepath.Dir(f.cfg.CAFile), f.cfg.CAFile + "/child"} {
+		view := agent.View{Overlays: []agent.ViewOverlay{{Path: target, Source: t.TempDir()}}}
+		if err := checkLayout(f.cfg, view, ""); !errors.Is(err, agent.ErrInvalidView) {
+			t.Errorf("overlay %s: %v", target, err)
+		}
 	}
 }

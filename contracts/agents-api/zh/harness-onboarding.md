@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 699a60a843ec11e87474212b661dd03231d660d7b3bca0b39d34b979be93db49
+source_hash: f98c9ba9ff366f46dc2cb567c4b5e6a4f3538f59b769c7554bac40a2fa1160e3
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -306,6 +306,8 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 `harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。工作区必须完整地位于沙箱世界中：绑定会在任何 Environment 副作用之前拒绝与公共保留树或 agent-host overlay 的重叠；Harness 准入会在任何原生副作用之前拒绝与其声明的 overlay、mask 或 shim 路径的重叠。这两种操作都不会改用私有 home 或其他目录。带沙箱世界的初次启动中，launcher 会在该世界内打开工作目录，不跟随符号链接也不跨越挂载点，然后在 fork 前进入已打开的目录；路径被修改也不能将启动重定向到视图所属挂载点。空根启动和 `Spawn` 保留各自的目录规则，包括在私有 home 中运行原生历史 helper。此启动检查不会限制原生进程随后切换目录的位置。
 
 视图拥有原生进程的内核接口：新挂载的 `/proc`、只读 `/sys` 和最小 `/dev`。`/sys/fs/cgroup` 上新挂载的只读 cgroup2 以视图的 cgroup 命名空间为根，因此 `/proc/self/cgroup` 与可见层级描述相同的进程组，不暴露祖先或兄弟 cgroup。视图在自己的网络命名空间中挂载 sysfs，绝不绑定宿主的 `/sys` 树。原生文件工具在本地读取这些保留的内核路径。通过 Process 协议转发的命令和公共 File 操作仍使用沙箱文件系统，包括沙箱的 `/sys`；工作区文件仍位于沙箱世界中。这些挂载也存在于空根视图中。
+
+agent host 使用镜像的系统 CA bundle `/etc/ssl/certs/ca-certificates.crt` 验证凭据网关的上游 TLS，并将同一文件以只读方式呈现在视图的同一路径。发现此 bundle 的原生库会在本地读取它。agent host 不会覆盖 Harness 自带的信任库，也不会改变沙箱中运行的工具使用的 CA 文件。
 
 ### 能力 {#capabilities}
 

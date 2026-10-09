@@ -109,7 +109,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		Proxy:      agent.ViewProxyEnv,
 		Executor: func(_ context.Context, req agent.PrepareRequest, s agent.ViewSession) (agent.Executor, error) {
 			e := &testExecutor{session: s, dir: workDir,
-				env: []string{harnessEnv + "=1", modelEnv + "=" + req.Prepared.Provider.BaseURL, caEnv + "=" + cfg.CADir, proxyEnv + "=" + s.Proxy}}
+				env: []string{harnessEnv + "=1", modelEnv + "=" + req.Prepared.Provider.BaseURL, caEnv + "=" + cfg.CAFile, proxyEnv + "=" + s.Proxy}}
 			if req.LocalEnvironment != nil {
 				e.dir = req.WorkspaceRoot
 			}
@@ -759,7 +759,7 @@ func (t *testTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, e
 	}
 }
 
-var harnessChecks = []string{"world rename", "model through the gateway", "no direct route", "world is noexec", "masks", "home", "passwd", "CA directory"}
+var harnessChecks = []string{"world rename", "model through the gateway", "no direct route", "world is noexec", "masks", "home", "passwd", "CA bundle"}
 
 // workDir is where the Harness of an empty-root view runs.
 const workDir = agent.ViewPrivateRoot + "/" + agent.ViewHomeName + "/" + agent.ViewWorkName
@@ -836,10 +836,13 @@ func runHarness(args []string) int {
 				}
 				return nil
 			},
-			"CA directory": func() error {
-				data, err := os.ReadFile(filepath.Join(os.Getenv(caEnv), "ca.pem"))
+			"CA bundle": func() error {
+				data, err := os.ReadFile(os.Getenv(caEnv))
 				if block, _ := pem.Decode(data); err != nil || block == nil {
 					return fmt.Errorf("no CA certificate: %v", err)
+				}
+				if err := os.WriteFile(os.Getenv(caEnv), data, 0o644); !errors.Is(err, syscall.EROFS) {
+					return fmt.Errorf("CA bundle write: %v, want read-only filesystem", err)
 				}
 				return nil
 			},

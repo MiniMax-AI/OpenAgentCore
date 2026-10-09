@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// newConfig returns a Config whose CA directory holds ca. Its ViewCgroups is
+// newConfig returns a Config whose CA bundle holds ca. Its ViewCgroups is
 // a plain directory, which Open rejects.
 func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 	t.Helper()
@@ -67,7 +67,7 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 		t.Fatal(err)
 	}
 	return Config{StateDir: t.TempDir(), UIDs: UIDRange{First: 70000, Count: 8}, ViewCgroups: t.TempDir(), RelayURL: "ws://127.0.0.1:9",
-		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: reg, Shim: exe, CADir: dir}
+		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: reg, Shim: exe, CAFile: filepath.Join(dir, "ca.pem")}
 }
 
 // register declares kind with view, or without one when view is nil, as
