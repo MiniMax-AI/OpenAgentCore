@@ -187,6 +187,12 @@ def verify_runtime(image, sandbox_io):
     actual = dict(reversed(line.split(None, 1)) for line in output.splitlines())
     if actual.get(guest_path) != sha256(sandbox_io):
         raise ValueError("Sandbox image does not match the committed build: " + guest_path)
+    tool_path = "/environment/packages/npm/bin:/environment/packages/python/bin:/usr/local/bin:/usr/bin:/bin"
+    subprocess.run(
+        ["docker", "run", "--rm", "--label", "io.oac.build=distribution-verify", "--network", "none",
+         "--user", "1000:1000", "--env", "PATH=" + tool_path, "--entrypoint", "/bin/bash", image,
+         "-lc", 'test "$PATH" = "$1"', "oac-login-check", tool_path], check=True
+    )
 
 
 def extract_runtime(archive, destination):

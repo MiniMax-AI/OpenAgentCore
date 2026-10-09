@@ -34,18 +34,18 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
     tree.mkdir()
     # These public ancestors are synthesized, not extracted from the sandbox.
     # Keep their archive modes independent of the caller's private umask.
-    for parent in ['usr', 'usr/local', 'usr/local/bin']:
+    for parent in ['usr', 'usr/local', 'usr/local/bin', 'etc']:
         directory = tree / parent
         directory.mkdir()
         directory.chmod(0o755)
     container = subprocess.check_output(['docker', 'create', '--label', 'io.oac.build=e2b-template', args.image], text=True).strip()
     try:
-        with tempfile.TemporaryFile() as copied:
-            path = '/usr/local/bin/oac-sandbox-io'
-            subprocess.run(['docker', 'cp', container + ':' + path, '-'], stdout=copied, check=True)
-            copied.seek(0)
-            with tarfile.open(fileobj=copied) as archive:
-                archive.extractall(tree / 'usr/local/bin', filter='tar')
+        for path in ['/usr/local/bin/oac-sandbox-io', '/etc/profile']:
+            with tempfile.TemporaryFile() as copied:
+                subprocess.run(['docker', 'cp', container + ':' + path, '-'], stdout=copied, check=True)
+                copied.seek(0)
+                with tarfile.open(fileobj=copied) as archive:
+                    archive.extractall(tree / Path(path).parent.relative_to('/'), filter='tar')
     finally:
         subprocess.run(['docker', 'rm', container], check=True, stdout=subprocess.DEVNULL)
     bundle = context / 'runtime.tar.gz'

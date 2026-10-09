@@ -5,9 +5,11 @@ USER root
 
 # Sandbox tools are served by oac-sandbox-io; the caller supplies its bootstrap.
 FROM base AS sandbox
+# Login shells keep the process environment's package search path.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
+    && sed -i 's|^if \[ "$(id -u)" -eq 0 \]; then$|if [ -n "${PATH:-}" ] \&\& /usr/bin/printenv PATH >/dev/null; then\n  :\nelif [ "$(/usr/bin/id -u)" -eq 0 ]; then|' /etc/profile \
     && mkdir -p /environment/workspace /environment/initialization /environment/packages /workspace /home/runtime \
     && chown 1000:1000 /environment/initialization /environment/packages
 COPY --chmod=0555 oac-sandbox-io /usr/local/bin/
