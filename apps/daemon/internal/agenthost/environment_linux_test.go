@@ -219,12 +219,17 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	if status.State != "ready" {
 		t.Fatalf("the resumed preparation is %s (%s), want ready", status.State, status.ErrorCode)
 	}
-	if r := second.read(t, b, status.Handle); r.Outcome != "completed" || !lists(r.Directory, "setup.txt") {
+	readID, readStatus := second.prepare(t, b, proto.PromptRequestPayload{AgentKind: req.AgentKind, LocalEnvironment: &proto.LocalEnvironment{}, WorkspaceReadOnly: true})
+	if readStatus.State != "ready" {
+		t.Fatalf("the resumed read preparation is %s (%s), want ready", readStatus.State, readStatus.ErrorCode)
+	}
+	if r := second.read(t, b, readStatus.Handle); r.Outcome != "completed" || !lists(r.Directory, "setup.txt") {
 		t.Fatalf("the resumed read is %+v", r)
 	}
 	if h.drained(t, b) {
 		t.Fatal("the resumed owner served the read without an attachment")
 	}
+	second.release(t, b, readID, readStatus.Handle)
 	second.release(t, b, id, status.Handle)
 
 	// An uncertain File mutation quarantines the owner: no later write or
