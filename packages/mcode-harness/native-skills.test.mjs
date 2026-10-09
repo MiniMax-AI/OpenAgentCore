@@ -82,6 +82,24 @@ test('native Skill refresh bounds independent reads and retains file identity an
     assert.ok(maximum > 1 && maximum <= 4, `concurrent opens: ${maximum}`);
   } finally { fs.open = open; }
 
+  // Candidate inspection failures finish in reverse order within a batch.
+  // Preserve the original diagnostic order, not completion order.
+  const completed = [];
+  fs.open = async (path, ...args) => {
+    const name = ['skill-6', 'skill-7'].find(name => String(path) === join(global, name, 'SKILL.md'));
+    if (!name) return open(path, ...args);
+    await new Promise(resolve => setTimeout(resolve, name === 'skill-6' ? 20 : 1));
+    completed.push(name);
+    throw Object.assign(new Error('Fixture permission denied'), { code: 'EACCES' });
+  };
+  try {
+    const failed = await new SkillRegistry(roots).refresh();
+    assert.deepEqual(completed, ['skill-7', 'skill-6']);
+    const failures = failed.diagnostics.filter(value => value.code === 'skill_stat_failed');
+    assert.deepEqual(failures.map(value => value.locationUri),
+      ['skill-6', 'skill-7'].map(name => changed.entries.find(entry => entry.name === name).locationUri));
+  } finally { fs.open = open; }
+
   // The same open-file identity check must still reject replacement between
   // inspection and content read, even when other files finish independently.
   let opens = 0;
