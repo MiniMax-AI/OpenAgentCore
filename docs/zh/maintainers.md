@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: b69ab5a1de19ef81942658187d93dfca14c325c3824e7379e88899f3e3cebf61
+source_hash: a6d2d1e9846b1f22a9566048fd3821eee601010aea572c6a402436800c44491b
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -70,7 +70,7 @@ export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute
 bash scripts/build-agent-host-images.sh
 ```
 
-脚本构建 `OAC_AGENT_HOST_IMAGE`（默认 `oac-agent-host:dev`）和 `OAC_SANDBOX_IMAGE`（默认 `oac-sandbox:dev`）。附加参数（例如 `--label`）传给两次 Docker 构建。agent-host 镜像包含 `oac-daemon`、`oac-process-shim`，以及 `/opt/oac/harnesses` 下的各 Harness；`/opt/oac/harnesses.json` 拥有其激活路径。沙箱镜像包含系统工具和以 UID/GID 1000 运行的 `oac-sandbox-io`，不含 Harness 或 daemon。分发包校验 Sandbox I/O 可执行文件，并通过节点构件已有的 `runtime` 槽位分发此镜像。E2B 模板从同一镜像提取 Sandbox I/O。[认定视图资格](../../contracts/agents-api/zh/harness-onboarding.md#qualify-the-view)运行两个镜像；[Agent-host 容器](configuration.md#agent-host-container)拥有宿主需求。
+脚本构建 `OAC_AGENT_HOST_IMAGE`（默认 `oac-agent-host:dev`）和 `OAC_SANDBOX_IMAGE`（默认 `oac-sandbox:dev`）。附加参数（例如 `--label`）传给两次 Docker 构建。agent-host 镜像包含 `oac-daemon`、`oac-process-shim`，以及 `/opt/oac/harnesses` 下的各 Harness；`/opt/oac/harnesses.json` 拥有其激活路径。沙箱镜像包含系统工具和以 UID/GID 1000 运行的 `oac-sandbox-io`，不含 Harness 或 daemon。分发包校验 Sandbox I/O 可执行文件，并通过节点构件已有的 `runtime` 槽位分发此镜像。沙箱的默认登录 profile 保留传入的非空 `PATH`，使[工具环境](../../contracts/agents-api/zh/environments.md#explicit-local-tool-environment)中的包命令仍然可用。路径为空或未设置时保留镜像的默认值；profile.d 脚本和用户启动文件仍可显式修改路径。第三方沙箱镜像自行负责其 shell 启动配置。E2B 模板从同一镜像提取 Sandbox I/O 和此 profile。[认定视图资格](../../contracts/agents-api/zh/harness-onboarding.md#qualify-the-view)运行两个镜像；[Agent-host 容器](configuration.md#agent-host-container)拥有宿主需求。
 
 **E2B 辅助程序。**
 

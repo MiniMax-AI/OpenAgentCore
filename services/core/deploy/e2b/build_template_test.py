@@ -23,7 +23,8 @@ class BundlePermissionsTest(unittest.TestCase):
                 key.write_text('fixture-only')
                 key.chmod(0o600)
                 output = root / 'private/result.json'
-                source_modes = {'oac-sandbox-io': 0o555}
+                sources = {'usr/local/bin/oac-sandbox-io': (0o555, b'fixture'),
+                           'etc/profile': (0o644, b'# qualified image profile\nexport PATH\n')}
                 image = {'Architecture': 'amd64', 'Os': 'linux', 'Id': 'sha256:fixture',
                          'Config': {'Env': ['HOME=/home/runtime']}}
 
@@ -38,15 +39,13 @@ class BundlePermissionsTest(unittest.TestCase):
                         return SimpleNamespace(returncode=0)
                     self.assertEqual(argv[:2], ['docker', 'cp'])
                     self.assertEqual(argv[-1], '-')
-                    name = argv[2].split(':', 1)[1].rsplit('/', 1)[-1]
+                    name = argv[2].split(':', 1)[1].lstrip('/')
+                    mode, data = sources[name]
                     with tarfile.open(fileobj=kwargs['stdout'], mode='w') as archive:
-                        for path, mode in source_modes.items():
-                            if path != name and not path.startswith(name + '/'):
-                                continue
-                            entry = tarfile.TarInfo(path)
-                            entry.mode = mode
-                            entry.size = 7
-                            archive.addfile(entry, io.BytesIO(b'fixture'))
+                        entry = tarfile.TarInfo(Path(name).name)
+                        entry.mode = mode
+                        entry.size = len(data)
+                        archive.addfile(entry, io.BytesIO(data))
                     return SimpleNamespace(returncode=0)
 
                 template = Mock()
@@ -59,11 +58,12 @@ class BundlePermissionsTest(unittest.TestCase):
                     self.assertEqual(stat.S_IMODE(context.stat().st_mode), 0o700)
                     with tarfile.open(context / 'runtime.tar.gz') as archive:
                         modes = {m.name: stat.S_IMODE(m.mode) for m in archive.getmembers()}
-                    for parent in ('usr', 'usr/local', 'usr/local/bin'):
+                        for path, (mode, data) in sources.items():
+                            self.assertEqual(modes[path], mode)
+                            self.assertEqual(archive.extractfile(path).read(), data)
+                    for parent in ('usr', 'usr/local', 'usr/local/bin', 'etc'):
                         self.assertEqual(modes[parent], 0o755)
-                    for path, mode in source_modes.items():
-                        self.assertEqual(modes['usr/local/bin/' + path], mode)
-                    self.assertEqual(set(modes), {'usr', 'usr/local', 'usr/local/bin', 'usr/local/bin/oac-sandbox-io'})
+                    self.assertEqual(set(modes), {'usr', 'usr/local', 'usr/local/bin', 'etc', *sources})
                     self.assertEqual(stat.S_IMODE((context / 'runtime.tar.gz').stat().st_mode), 0o666 & ~mask)
                     self.assertEqual(stat.S_IMODE(key.stat().st_mode), 0o600)
                     projection = 'helper_contract_generated.py'

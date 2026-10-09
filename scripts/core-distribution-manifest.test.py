@@ -104,12 +104,15 @@ class DistributionTests(unittest.TestCase):
         path = "/usr/local/bin/oac-sandbox-io"
         for digest in (distribution.sha256(executable), "0" * 64):
             with self.subTest(digest=digest), mock.patch.object(distribution, "verify_image"), \
-                    mock.patch.object(distribution.subprocess, "check_output", return_value=digest + "  " + path + "\n"):
+                    mock.patch.object(distribution.subprocess, "check_output", return_value=digest + "  " + path + "\n"), \
+                    mock.patch.object(distribution.subprocess, "run") as login:
                 if digest == "0" * 64:
                     with self.assertRaisesRegex(ValueError, "Sandbox image does not match"):
                         distribution.verify_runtime("sha256:" + "a" * 64, executable)
+                    login.assert_not_called()
                 else:
                     distribution.verify_runtime("sha256:" + "a" * 64, executable)
+                    login.assert_called_once()
 
     def test_mcode_payload_rejects_stale_companion_at_the_same_version(self):
         repository = pathlib.Path(__file__).resolve().parent.parent
