@@ -805,6 +805,9 @@ func (x *export) append(parent context.Context, files []exportFile) (err error) 
 		go func() {
 			defer workers.Done()
 			jobs[i].err = x.read(ctx, file.entry, jobs[i].size, writer)
+			if jobs[i].err != nil {
+				cancel()
+			}
 			close(jobs[i].size)
 			_ = writer.CloseWithError(jobs[i].err)
 		}()

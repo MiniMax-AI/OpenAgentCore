@@ -374,3 +374,62 @@ func TestExportOutputsWriterFailureCancelsBlockedReads(t *testing.T) {
 		t.Fatalf("active=%d open=%d release=%d held=%d", s.active.Load(), s.opens.Load(), s.releases.Load(), s.held.Load())
 	}
 }
+
+type exportLaterErrorService struct {
+	sandboxfs.Service
+	failed  chan struct{}
+	blocked chan struct{}
+}
+
+func (s *exportLaterErrorService) Read(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.ReadRequest) (*sandboxfs.ReadResponse, error) {
+	r, err := s.Service.Read(ctx, a, q)
+	if err != nil {
+		return r, err
+	}
+	switch string(r.Data) {
+	case "a":
+		close(s.blocked)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	case "b":
+		select {
+		case <-s.blocked:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		close(s.failed)
+		return nil, sandboxfs.NewErrnoFailure(sandboxfs.ErrnoIO, sandboxwire.EffectNone, "later worker read failed")
+	}
+	return r, nil
+}
+func TestExportOutputsLaterFailureCancelsEarlierRead(t *testing.T) {
+	proxy := &exportLaterErrorService{failed: make(chan struct{}), blocked: make(chan struct{})}
+	s := &treeService{intercept: func(real sandboxfs.Service) sandboxfs.Service { proxy.Service = real; return proxy }}
+	w, _ := treeWorld(t, s, map[string]string{"workspace/outputs/a": "a", "workspace/outputs/b": "b"})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- exportOwner(w).ExportOutputs(ctx, io.Discard) }()
+	select {
+	case <-proxy.failed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("later failure not reached")
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("export unexpectedly succeeded")
+		}
+	case <-time.After(500 * time.Millisecond):
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("external cancellation did not settle export")
+		}
+		t.Fatal("later worker failure failed to cancel earlier blocked Read; export only returned after external cancellation")
+	}
+	if s.opens.Load() != 2 || s.releases.Load() != 2 {
+		t.Fatalf("open=%d released=%d", s.opens.Load(), s.releases.Load())
+	}
+}
