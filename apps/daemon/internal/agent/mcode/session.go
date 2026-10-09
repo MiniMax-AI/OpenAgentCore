@@ -90,10 +90,11 @@ func (s *Session) prepareNative() error {
 	if initialized.ProtocolVersion != 1 {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
 	}
-	for _, binding := range s.opts.bindings {
-		if binding.Transport == "stdio" && initialized.Meta.MCPLifecycle.Version != 2 {
-			return fmt.Errorf("mcode: native MCP lifecycle is unavailable")
-		}
+	requiresMCP := !s.req.DisableExecutionEnvironment || slices.ContainsFunc(s.opts.bindings, func(binding agent.MCPBinding) bool {
+		return binding.Transport == "stdio"
+	})
+	if requiresMCP && initialized.Meta.MCPLifecycle.Version != 3 {
+		return fmt.Errorf("mcode: native MCP lifecycle is unavailable")
 	}
 	if !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
 		return fmt.Errorf("mcode: native Subagent admission is unavailable")

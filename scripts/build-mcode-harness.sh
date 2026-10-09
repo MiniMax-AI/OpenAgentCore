@@ -47,15 +47,24 @@ test "$(node "$native/cli.js" --version)" = "$version"
   MCODE_SOURCE="$context/upstream" node patch-native.mjs
   cd upstream
   corepack pnpm install --frozen-lockfile
-  MCODE_SOURCE="$context/upstream" node --test "$context/native-prompt.test.mjs" "$context/native-mcp-lifecycle.test.mjs"
-  node scripts/build.mjs
 )
 (
   cd "$context"
   npm ci --no-audit --no-fund
   MCODE_SOURCE="$context/upstream" node build.mjs
   node dist/worker.mjs /workspace --describe > dist/tools.json
+  node --input-type=module -e '
+    import { readFileSync, writeFileSync } from "node:fs";
+    const tools = JSON.parse(readFileSync("dist/tools.json", "utf8"));
+    writeFileSync("upstream/packages/local-runtime-v2/src/service/mcp/runtime/oac-workspace-tools.ts",
+      "export const requiredWorkspaceTools = " + JSON.stringify(tools.map(tool => "workspace_" + tool.name)) + ";\n");
+  '
   npm prune --omit=dev --no-audit --no-fund
+)
+(
+  cd "$context/upstream"
+  MCODE_SOURCE="$context/upstream" node --test "$context/native-prompt.test.mjs" "$context/native-mcp-lifecycle.test.mjs"
+  node scripts/build.mjs
 )
 artifact="$context/artifact"
 mkdir "$artifact"

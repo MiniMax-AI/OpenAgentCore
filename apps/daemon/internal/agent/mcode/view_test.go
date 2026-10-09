@@ -123,6 +123,22 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 	}
 }
 
+func TestWorkspacePreparationRequiresNativeReadiness(t *testing.T) {
+	for _, scenario := range []string{"old-mcp-lifecycle", "workspace-not-ready"} {
+		t.Run(scenario, func(t *testing.T) {
+			record := filepath.Join(t.TempDir(), "calls")
+			e, err := hostExecutor(t, t.Context(), helperInstall(t, scenario, record), workspaceRequest(t), hostSession(t))
+			if err == nil || e != nil {
+				t.Fatal("workspace preparation accepted an unready native owner", e, err)
+			}
+			raw, err := os.ReadFile(record)
+			if err != nil || strings.Contains(string(raw), "session/prompt") || strings.Contains(string(raw), "session/set_config_option") {
+				t.Fatal("failed readiness proceeded to model selection or prompt", string(raw), err)
+			}
+		})
+	}
+}
+
 // With environment none the CLI runs in the work directory without the
 // workspace tools. In the workspace it runs each stdio binding's alias
 // without arguments and loads each installed Skill from its sandbox path.

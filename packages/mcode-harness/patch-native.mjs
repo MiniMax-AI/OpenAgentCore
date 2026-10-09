@@ -144,6 +144,27 @@ replaceNative('packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.servi
 
   async clearSessionServers(sessionId: string): Promise<void> {`);
 const mcpServiceFile = 'packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts';
+// The workspace bridge is required, unlike optional user-configured MCP. Use
+// the same scoped native connection that Turn assembly will subsequently read.
+replaceNative(mcpServiceFile, "import { dirname, join } from 'node:path';",
+  "import { dirname, join } from 'node:path';\nimport { requiredWorkspaceTools } from './oac-workspace-tools.js';");
+replaceNative(mcpServiceFile,
+  '    return this.enqueueMutation(() => this.sessionServers.configure(sessionId, servers));',
+  `    return this.enqueueMutation(async () => {
+      await this.sessionServers.configure(sessionId, servers);
+      const workspace = this.sessionServers.get(sessionId)?.oac_workspace;
+      if (process.env.OAC_RUNTIME_MCODE_TOOL_POLICY !== 'protected-mcp-v1' || !workspace) return;
+      try {
+        const tools = await this.listToolsForTurn('oac_workspace', workspace, { sessionId });
+        const names = new Set(tools.map((tool) => tool.name));
+        if (names.size !== requiredWorkspaceTools.length ||
+            !requiredWorkspaceTools.every((name) => names.has(name)))
+          throw new Error('Required workspace MCP tools are unavailable.');
+      } catch (error) {
+        await this.sessionServers.remove(sessionId);
+        throw error;
+      }
+    });`);
 // callLive preserves local failures as MCP-shaped error results. Remember only
 // SDK replies without changing those results or exposing a server-spoofable bit.
 replaceNative(mcpServiceFile, '  private closed = false;',
@@ -184,7 +205,7 @@ for (const [file, owner] of [
 
   clearSessionMcpServers(sessionId: string): Promise<void> {`);
 }
-replaceNative('packages/tui/src/acp/agent.ts', "        'oac/subagents': {", "        'oac/mcp-lifecycle': { version: 2 },\n        'oac/subagents': {");
+replaceNative('packages/tui/src/acp/agent.ts', "        'oac/subagents': {", "        'oac/mcp-lifecycle': { version: 3 },\n        'oac/subagents': {");
 replaceNative('packages/tui/src/acp/agent.ts',
   '  app.onNotification(acp.methods.agent.session.cancel, async ({ params }) => {',
   `  app.onRequest('oac/session/mcp/disconnect', (value: unknown) => {
