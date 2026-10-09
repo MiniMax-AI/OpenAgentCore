@@ -14,12 +14,15 @@ import (
 )
 
 type subagentFixture struct {
-	mu            sync.Mutex
-	home          string
-	childStatus   string
-	interrupted   int
-	interruptGate <-chan struct{}
-	childItems    []json.RawMessage
+	mu              sync.Mutex
+	home            string
+	childStatus     string
+	interrupted     int
+	interruptGate   <-chan struct{}
+	childItems      []json.RawMessage
+	rootTurnID      string
+	childRootTurnID string
+	rootSendInput   bool
 }
 
 func (f *subagentFixture) history(id string) subagentHistory {
@@ -27,6 +30,9 @@ func (f *subagentFixture) history(id string) subagentHistory {
 	start, finish := int64(101), int64(103)
 	turn := subagentNativeTurn{ID: id + "-turn", Status: "completed", StartedAt: &start, CompletedAt: &finish, ItemsView: "full"}
 	if id == "root" {
+		if f.rootTurnID != "" {
+			turn.ID = f.rootTurnID
+		}
 		turn.Items = []json.RawMessage{json.RawMessage(`{"type":"collabAgentToolCall","id":"spawn","tool":"spawnAgent","status":"completed","senderThreadId":"root","receiverThreadIds":["child"],"prompt":"real child prompt"}`)}
 	} else {
 		h.Parent = "root"
@@ -38,6 +44,10 @@ func (f *subagentFixture) history(id string) subagentHistory {
 		}
 	}
 	h.Turns = []subagentNativeTurn{turn}
+	if id == "root" && f.rootSendInput {
+		h.Turns = append(h.Turns, subagentNativeTurn{ID: "root-turn", Status: "completed", StartedAt: &start, CompletedAt: &finish, ItemsView: "full",
+			Items: []json.RawMessage{json.RawMessage(`{"type":"collabAgentToolCall","id":"send","tool":"sendInput","status":"completed","senderThreadId":"root","receiverThreadIds":["child"],"prompt":"next child input"}`)}})
+	}
 	return h
 }
 
@@ -46,10 +56,15 @@ func (f *subagentFixture) persist(t *testing.T) {
 	for _, id := range []string{"root", "child"} {
 		h := f.history(id)
 		rows := []any{map[string]any{"type": "session_meta", "payload": map[string]any{"id": id, "cwd": h.Cwd}}}
-		for _, item := range h.Turns[0].Items {
-			var v map[string]any
-			_ = json.Unmarshal(item, &v)
-			rows = append(rows, map[string]any{"type": "event_msg", "payload": map[string]any{"type": "item_completed", "thread_id": id, "turn_id": id + "-turn", "completed_at_ms": 102000, "item": map[string]any{"id": v["id"], "type": "AgentMessage"}}})
+		if id == "child" && f.childRootTurnID != "" {
+			rows = append(rows, map[string]any{"type": "turn_context", "payload": map[string]any{"turn_id": h.Turns[0].ID, "root_turn_id": f.childRootTurnID}})
+		}
+		for _, turn := range h.Turns {
+			for _, item := range turn.Items {
+				var v map[string]any
+				_ = json.Unmarshal(item, &v)
+				rows = append(rows, map[string]any{"type": "event_msg", "payload": map[string]any{"type": "item_completed", "thread_id": id, "turn_id": turn.ID, "completed_at_ms": 102000, "item": map[string]any{"id": v["id"], "type": "AgentMessage"}}})
+			}
 		}
 		var body []byte
 		for _, row := range rows {

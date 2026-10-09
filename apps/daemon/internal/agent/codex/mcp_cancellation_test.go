@@ -58,6 +58,55 @@ func TestMCPChildRealReplyBeforeCancellationReleasesOnlyItsCall(t *testing.T) {
 	}
 }
 
+func TestMCPChildFirstObservedTerminalUsesNativeRootAttribution(t *testing.T) {
+	for _, test := range []struct {
+		name, status, spawnTurn, rootTurn, result string
+		captured                                  bool
+	}{
+		{"new-child-local-failure", "failed", "root-turn", "root-turn", `null`, true},
+		{"reused-child-send-input-local-failure", "completed", "older-root-turn", "root-turn", `null`, true},
+		{"current-child-interrupted", "interrupted", "root-turn", "root-turn", `null`, true},
+		{"older-root-terminal", "failed", "older-root-turn", "older-root-turn", `null`, false},
+		{"unknown-root-terminal", "failed", "older-root-turn", "", `null`, false},
+		{"current-child-remote-reply", "completed", "root-turn", "root-turn", `{"content":[]}`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			s, fixture, out := observationSession(t, test.status)
+			s.cfg.view = &viewLaunch{ViewSession: agent.ViewSession{MCP: cancellationMCPBindings("child")}}
+			fixture.mu.Lock()
+			fixture.rootTurnID = test.spawnTurn
+			fixture.childRootTurnID = test.rootTurn
+			fixture.rootSendInput = test.spawnTurn != "root-turn" && test.rootTurn == "root-turn"
+			fixture.childItems = []json.RawMessage{json.RawMessage(`{"type":"mcpToolCall","id":"child-call","server":"child","tool":"wait","arguments":{},"status":"failed","error":{"message":"local wait failed"},"result":` + test.result + `}`)}
+			fixture.persist(t)
+			fixture.mu.Unlock()
+			// No prior history sample has observed the child's running Turn. The
+			// ordinary terminal drain reads paginated native history and rollout.
+			s.latchMCPCancellation()
+			s.onTurnCompleted(rootCompleted)
+			collectObserved(t, out)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			if _, err := s.AwaitSettlement(ctx); err != nil {
+				t.Fatal(err)
+			}
+			var want []string
+			if test.captured {
+				want = []string{"child"}
+			}
+			if got := s.cancelledMCPLabels(); !slices.Equal(got, want) {
+				t.Fatalf("captured %v, want %v", got, want)
+			}
+			fixture.mu.Lock()
+			interrupts := fixture.interrupted
+			fixture.mu.Unlock()
+			if interrupts != 0 {
+				t.Fatal("terminal child incorrectly interrupted", interrupts)
+			}
+		})
+	}
+}
+
 func TestExecutorCancelledMCPRequiresScopeCloseThenInvalidationAndReload(t *testing.T) {
 	for _, mode := range []string{"mcp-confirmed", "mcp-caller-cancelled", "mcp-stop-failed", "mcp-invalidate-unconfirmed", "mcp-reload-failed"} {
 		t.Run(mode, func(t *testing.T) {

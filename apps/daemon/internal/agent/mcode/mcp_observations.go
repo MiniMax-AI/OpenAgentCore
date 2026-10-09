@@ -61,56 +61,57 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 	return found, nil
 }
 
-func environmentMCPObservation(update toolUpdate, stage string) (*proto.ToolObservation, error) {
+func environmentMCPObservation(update toolUpdate, stage string) (*proto.ToolObservation, bool, error) {
 	if update.mcp == nil {
-		return nil, nil
+		return nil, false, nil
 	}
 	arguments, err := json.Marshal(update.RawInput)
 	if err != nil {
-		return nil, fmt.Errorf("mcode: invalid native MCP arguments")
+		return nil, false, fmt.Errorf("mcode: invalid native MCP arguments")
 	}
 	n := &proto.ToolObservation{Kind: "mcp", Status: "in_progress", Server: update.mcp.server, Name: update.mcp.tool,
 		Arguments: arguments, Output: json.RawMessage("null"), Error: json.RawMessage("null")}
 	if stage == "before" {
-		return n, nil
+		return n, false, nil
 	}
 	n.Status = update.Status
 	if update.Status == "incomplete" {
-		return n, nil
+		return n, false, nil
 	}
 	raw, err := json.Marshal(update.RawOutput)
 	var output struct {
 		Details *struct {
-			Server  string          `json:"server"`
-			Tool    string          `json:"tool"`
-			MCP     json.RawMessage `json:"mcp"`
-			IsError bool            `json:"is_error"`
+			Server           string          `json:"server"`
+			Tool             string          `json:"tool"`
+			MCP              json.RawMessage `json:"mcp"`
+			IsError          bool            `json:"is_error"`
+			ResponseReceived bool            `json:"oac_response_received"`
 		} `json:"details"`
 	}
 	if err != nil || json.Unmarshal(raw, &output) != nil {
-		return nil, fmt.Errorf("mcode: invalid native MCP result")
+		return nil, false, fmt.Errorf("mcode: invalid native MCP result")
 	}
 	if output.Details == nil && update.Status == "failed" {
 		// Transport failures may have no MCP response. The start registry still
 		// identifies the real call, so retain the native failure without guessing.
 		n.Error = raw
-		return n, nil
+		return n, false, nil
 	}
 	if output.Details == nil || output.Details.Server != n.Server || output.Details.Tool != n.Name ||
 		len(output.Details.MCP) == 0 || string(output.Details.MCP) == "null" {
-		return nil, fmt.Errorf("mcode: native MCP result identity does not match its call")
+		return nil, false, fmt.Errorf("mcode: native MCP result identity does not match its call")
 	}
 	n.Output = output.Details.MCP
 	var result struct {
 		IsError bool `json:"isError"`
 	}
 	if json.Unmarshal(n.Output, &result) != nil {
-		return nil, fmt.Errorf("mcode: invalid native MCP content")
+		return nil, false, fmt.Errorf("mcode: invalid native MCP content")
 	}
 	if result.IsError || output.Details.IsError {
 		n.Status = "failed"
 	}
-	return n, nil
+	return n, output.Details.ResponseReceived, nil
 }
 
 // The existing Session owner calls this after native settlement. No pending
@@ -134,7 +135,7 @@ func (s *Session) finishEnvironmentMCP() {
 
 // trackMCPCancellation runs before output delivery, which can block. Cancel
 // and late native callbacks therefore agree on the same in-flight identities.
-func (s *Session) trackMCPCancellation(call toolUpdate) {
+func (s *Session) trackMCPCancellation(call toolUpdate, responseReceived bool) {
 	if call.mcp == nil {
 		return
 	}
@@ -155,7 +156,9 @@ func (s *Session) trackMCPCancellation(call toolUpdate) {
 		}
 		s.cancelledMCP[call.mcp.server] = true
 	}
-	if call.Status == "completed" || call.Status == "failed" {
+	// A local timeout is also projected as a terminal tool error. Only the
+	// native wrapper's verified SDK reply releases this Turn's remote owner.
+	if responseReceived {
 		delete(s.mcpCalls, call.ID)
 	} else {
 		s.mcpCalls[call.ID] = call.mcp.server

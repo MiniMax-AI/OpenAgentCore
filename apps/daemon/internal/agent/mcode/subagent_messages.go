@@ -79,7 +79,7 @@ func (s *Session) projectSubagentMessages(session nativeSubagentSession, turn na
 				if err != nil {
 					return err
 				}
-				observation, err = environmentMCPObservation(update, "after")
+				observation, _, err = environmentMCPObservation(update, "after")
 				if err != nil {
 					return err
 				}

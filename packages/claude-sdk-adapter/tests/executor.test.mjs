@@ -46,9 +46,18 @@ globalThis.startupFixture=async({options})=>{
      assert.deepEqual(await options.hooks.PreToolUse[0].hooks[0]({hook_event_name:'PreToolUse',session_id:'native',tool_use_id:'held',tool_name:'mcp__target__hold',tool_input:{}},'held',{signal:new AbortController().signal}),{});
      const stopped=new Promise(resolve=>{interrupt=resolve});
      process.send({type:'call_admitted'});
-     await Promise.race([stopped,exited]);
+     if(process.argv[1]!=='mcp-failed-before-cancel')await Promise.race([stopped,exited]);
      yield {type:'assistant',session_id:'native',parent_tool_use_id:null,message:{content:[{type:'tool_use',id:'held',name:'mcp__target__hold',input:{}}]}};
      yield {type:'user',session_id:'native',parent_tool_use_id:null,message:{content:[{type:'tool_result',tool_use_id:'held',content:'Interrupted',is_error:true}]}};
+     if(process.argv[1]==='mcp-failed-before-cancel'){
+      process.send({type:'local_call_failed'});
+      await Promise.race([stopped,exited]);
+     }
+    }
+    if(mcp && text==='wait'){
+     const stopped=new Promise(resolve=>{interrupt=resolve});
+     process.send({type:'empty_wait'});
+     await Promise.race([stopped,exited]);
     }
     if(client){
      if(text==='pending-function'){
@@ -146,10 +155,10 @@ test("executor retains one native process and one Query over two settled Turns",
  assert.equal(observations.filter(event=>event.type==="native_closed").length,1);
 });
 
-for (const mode of ["mcp-stop", "mcp-reconnect-failed", "mcp-stop-unconfirmed", "mcp-wrong-receipt"]) test(`stdio cancellation ${mode} awaits remote scope and named reconnect before settlement`, {timeout:10000}, async t => {
+for (const mode of ["mcp-stop", "mcp-failed-before-cancel", "mcp-reconnect-failed", "mcp-stop-unconfirmed", "mcp-wrong-receipt"]) test(`stdio cancellation ${mode} awaits remote scope and named reconnect before settlement`, {timeout:10000}, async t => {
  const {child,events,observations,closed,wait,send,start}=await launch(t,mode);
  start("first","hold");
- await wait(()=>observations.some(event=>event.type==="call_admitted"));
+ await wait(()=>observations.some(event=>event.type===(mode==="mcp-failed-before-cancel"?"local_call_failed":"call_admitted")));
  send({type:"turn_cancel",turn_id:"first"});
  send({type:"turn_cancel",turn_id:"first"});
  await wait(()=>events.some(event=>event.type==="mcp_stop"));
@@ -170,13 +179,17 @@ for (const mode of ["mcp-stop", "mcp-reconnect-failed", "mcp-stop-unconfirmed", 
  assert.deepEqual(observations.filter(event=>event.type==="reconnect"),[{type:"reconnect",name:"target"}]);
  child.send("release-reconnect");
  await wait(()=>events.some(event=>event.type==="turn_settled"));
- const confirmed=mode==="mcp-stop";
+ const confirmed=mode==="mcp-stop" || mode==="mcp-failed-before-cancel";
  assert.equal(events.find(event=>event.type==="turn_settled").confirmed,confirmed);
  assert.equal(events.find(event=>event.type==="turn_settled").reusable,confirmed);
  assert.equal(observations.filter(event=>event.type==="interrupt").length,1);
  if(confirmed){
-  start("second","answer");
+  start("second",mode==="mcp-failed-before-cancel"?"wait":"answer");
   send({type:"turn_cancel",turn_id:"first"});
+  if(mode==="mcp-failed-before-cancel"){
+   await wait(()=>observations.some(event=>event.type==="empty_wait"));
+   send({type:"turn_cancel",turn_id:"second"});
+  }
   await wait(()=>events.some(event=>event.type==="turn_settled"&&event.turn_id==="second"));
   assert.equal(events.find(event=>event.type==="turn_settled"&&event.turn_id==="second").confirmed,true);
   assert.equal(events.filter(event=>event.type==="mcp_stop").length,1);

@@ -151,3 +151,27 @@ test("cancellation retains admitted stdio calls across delayed observations and 
   profile.verifyReconnected(statuses);
   assert.throws(() => profile.verifyReconnected(statuses.map(s => s.name === "target" ? {...s, tools:[{name:"replacement"}]} : s)), /inventory/);
 });
+
+test("failed local terminals retain only the current Turn's uncertain stdio ownership", () => {
+  const labels = ["timeout", "server_error", "healthy", "http"];
+  const tools = new Map(labels.map(server => [`mcp__${server}__hold`, {server, name:"hold"}]));
+  const stdio = new Set(["timeout", "server_error", "healthy"]);
+  const current = new MCPObserver(tools, stdio);
+  for (const label of labels) {
+    const name = `mcp__${label}__hold`;
+    current.admit(label, name);
+    current.consume(assistant(label, name), "session");
+    const failed = label !== "healthy";
+    // The pinned CLI uses this same projection for local failures and a plain
+    // server isError reply, so neither string proves remote completion.
+    const result = {...user(label, failed ? "failed" : "finished", failed), tool_use_result:failed ? "Error: failed" : "finished"};
+    assert.equal(current.consume(result, "session")[0].observation.status, failed ? "failed" : "completed");
+  }
+  current.assertComplete();
+  current.cancel();
+  assert.deepEqual(current.cancelledServers, ["server_error", "timeout"]);
+  const successor = new MCPObserver(tools, stdio);
+  successor.cancel();
+  successor.assertComplete();
+  assert.deepEqual(successor.cancelledServers, []);
+});

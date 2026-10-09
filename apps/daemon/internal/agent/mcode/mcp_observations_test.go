@@ -43,7 +43,7 @@ func receiveMCPObservation(t *testing.T, out chan proto.Envelope, stage, status 
 }
 
 func mcpNativeResult(server, tool string, isError bool) map[string]any {
-	return map[string]any{"details": map[string]any{"server": server, "tool": tool, "mcp": map[string]any{
+	return map[string]any{"details": map[string]any{"server": server, "tool": tool, "oac_response_received": true, "mcp": map[string]any{
 		"content": []map[string]string{{"type": "text", "text": "native result"}}, "isError": isError,
 	}}}
 }
@@ -151,6 +151,9 @@ func TestEnvironmentMCPResultMustMatchStartAndUnsettledCallsCloseOnce(t *testing
 			if change != "cancel" {
 				if err := s.emitTool(update); err == nil || len(out) != 0 {
 					t.Fatal("inconsistent result was accepted")
+				}
+				if s.mcpCalls["native-call"] != "proof.server" {
+					t.Fatal("unverified result cleared remote completion ownership")
 				}
 			}
 			s.finishEnvironmentMCP()

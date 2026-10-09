@@ -300,9 +300,12 @@ func TestMCodeProcess(t *testing.T) {
 			if scenario == "unattended" && strings.Contains(string(frame.Params), "elicitation") {
 				os.Exit(7)
 			}
-			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 1}}}
+			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 2}}}
 			if scenario == "unpatched-mcp" {
 				result = map[string]any{"protocolVersion": 1}
+			}
+			if scenario == "old-mcp-lifecycle" {
+				result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 1}}}
 			}
 		case "session/new", "session/load":
 			if strings.HasPrefix(scenario, "prepared-mcp-") {
@@ -368,7 +371,21 @@ func TestMCodeProcess(t *testing.T) {
 			}
 			if strings.HasPrefix(scenario, "prepared-mcp-") && input.Prompt[0]["text"] != "next" {
 				promptID = frame.ID
+				if input.Prompt[0]["text"] == "next-wait" {
+					update("agent_message_chunk", map[string]any{"messageId": "next-ready", "content": map[string]string{"type": "text", "text": "next turn ready"}})
+					continue
+				}
 				update("tool_call", map[string]any{"toolCallId": "native-call", "name": "mcp__proof_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
+				if strings.HasPrefix(scenario, "prepared-mcp-prior-") {
+					output := mcpNativeResult("proof.server", "read.status", true)
+					output["details"].(map[string]any)["oac_response_received"] = scenario == "prepared-mcp-prior-server-error"
+					output["details"].(map[string]any)["mcp"].(map[string]any)["_meta"] = map[string]any{"oac_response_received": true}
+					update("tool_call_update", map[string]any{"toolCallId": "native-call", "status": "completed", "rawOutput": output})
+					// Another call's genuine reply must not clear the first call's owner.
+					update("tool_call", map[string]any{"toolCallId": "other-call", "name": "mcp__proof_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
+					update("tool_call_update", map[string]any{"toolCallId": "other-call", "status": "completed", "rawOutput": mcpNativeResult("proof.server", "read.status", false)})
+					update("agent_message_chunk", map[string]any{"messageId": "ready", "content": map[string]string{"type": "text", "text": "failures projected"}})
+				}
 				continue
 			}
 			if scenario == "steering" || scenario == "steer-rejected" || scenario == "steer-lost" || scenario == "cancel-wait" {

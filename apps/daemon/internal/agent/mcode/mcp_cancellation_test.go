@@ -15,9 +15,90 @@ import (
 )
 
 func TestEnvironmentMCPCancellationRequiresNativeLifecycle(t *testing.T) {
-	_, err := hostExecutor(t, t.Context(), helperInstall(t, "unpatched-mcp", ""), workspaceRequest(t), hostSession(t, stdioBinding()))
-	if err == nil || !strings.Contains(err.Error(), "native MCP lifecycle is unavailable") {
-		t.Fatal("stdio MCP accepted a native owner without lifecycle support", err)
+	for _, scenario := range []string{"unpatched-mcp", "old-mcp-lifecycle"} {
+		_, err := hostExecutor(t, t.Context(), helperInstall(t, scenario, ""), workspaceRequest(t), hostSession(t, stdioBinding()))
+		if err == nil || !strings.Contains(err.Error(), "native MCP lifecycle is unavailable") {
+			t.Fatal("stdio MCP accepted a native owner without lifecycle support", scenario, err)
+		}
+	}
+}
+
+func TestEnvironmentMCPCancellationRetainsLocalFailureBeforeCancel(t *testing.T) {
+	for _, outcome := range []string{"local-failure", "server-error"} {
+		t.Run(outcome, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			untouched := stdioBinding()
+			untouched.ServerLabel = "untouched"
+			host := hostSession(t, stdioBinding(), untouched, httpBinding())
+			var stopped []string
+			stops := 0
+			host.StopMCP = func(_ context.Context, names []string) error { stops++; stopped = slices.Clone(names); return nil }
+			record := filepath.Join(t.TempDir(), "calls")
+			e, err := hostExecutor(t, ctx, helperInstall(t, "prepared-mcp-prior-"+outcome, record), workspaceRequest(t), host)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := make(chan proto.Envelope, 32)
+			turn, err := e.StartTurn(ctx, "cancelled", proto.TextInput("wait"), out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			failed := false
+			for ready := false; !ready; {
+				select {
+				case event := <-out:
+					if event.Type == proto.TypeToolCall {
+						var call proto.ToolCallPayload
+						if json.Unmarshal(event.Payload, &call) != nil {
+							t.Fatal("invalid tool observation")
+						}
+						if call.ID == "native-call" && call.Stage == "after" {
+							failed = call.Observation != nil && call.Observation.Status == "failed" && strings.Contains(string(call.Observation.Output), "native result")
+						}
+					}
+					ready = event.Type == proto.TypeDelta
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+			if !failed {
+				t.Fatal("failure projection changed")
+			}
+			if err := turn.Cancel(ctx); err != nil {
+				t.Fatal(err)
+			}
+			settlement, err := turn.AwaitSettlement(ctx)
+			if err != nil || !settlement.Reusable {
+				t.Fatal("cancelled owner was not reusable", settlement, err)
+			}
+			want := []string(nil)
+			if outcome == "local-failure" {
+				want = []string{"proof.server"}
+			}
+			if !slices.Equal(stopped, want) {
+				t.Fatal("local failure and genuine MCP reply shared a settlement outcome", stopped, want)
+			}
+			raw, _ := os.ReadFile(record)
+			if strings.Contains(string(raw), "oac/session/mcp/disconnect\n") != (len(want) > 0) {
+				t.Fatalf("native disconnect did not follow the selected scope: %s", raw)
+			}
+			runExecutorFixtureTurn(t, e, "next", "next")
+			nextOut := make(chan proto.Envelope, 8)
+			next, err := e.StartTurn(ctx, "next-wait", proto.TextInput("next-wait"), nextOut)
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-nextOut:
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			previousStops := stops
+			if err := next.Cancel(ctx); err != nil || stops != previousStops {
+				t.Fatal("old unconfirmed call crossed the Turn boundary", stops, previousStops, err)
+			}
+		})
 	}
 }
 

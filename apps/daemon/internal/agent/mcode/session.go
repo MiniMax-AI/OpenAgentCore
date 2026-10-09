@@ -91,7 +91,7 @@ func (s *Session) prepareNative() error {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
 	}
 	for _, binding := range s.opts.bindings {
-		if binding.Transport == "stdio" && initialized.Meta.MCPLifecycle.Version != 1 {
+		if binding.Transport == "stdio" && initialized.Meta.MCPLifecycle.Version != 2 {
 			return fmt.Errorf("mcode: native MCP lifecycle is unavailable")
 		}
 	}

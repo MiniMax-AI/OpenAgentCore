@@ -13,7 +13,7 @@ export type MCPEvent = { type: "mcp_observation"; id: string; stage: "before" | 
 
 export class MCPObserver {
   private readonly calls = new Map<string, Observation>();
-  private readonly admitted = new Map<string, ToolIdentity>();
+  private readonly admitted = new Map<string, ToolIdentity & { pending: boolean }>();
   private readonly interrupted = new Set<string>();
   private cancelling = false;
   constructor(private readonly tools: Map<string, ToolIdentity>, private readonly stdio = new Set<string>()) {}
@@ -21,7 +21,7 @@ export class MCPObserver {
   admit(id: string, name: string): void {
     const identity = this.tools.get(name);
     if (!id || !identity || this.admitted.has(id)) throw new Error("invalid MCP admission identity");
-    this.admitted.set(id, identity);
+    this.admitted.set(id, { ...identity, pending: true });
     if (this.cancelling && this.stdio.has(identity.server)) this.interrupted.add(identity.server);
   }
 
@@ -59,7 +59,13 @@ export class MCPObserver {
     } else {
       const results = content.filter(block => block.type === "tool_result");
       for (const block of results) {
-        this.admitted.delete(block.tool_use_id);
+        const admission = this.admitted.get(block.tool_use_id);
+        if (admission) {
+          admission.pending = false;
+          // Native failures include local timeouts and indistinguishable server
+          // errors. Keep their remote ownership until this Turn ends.
+          if (!block.is_error || !this.stdio.has(admission.server)) this.admitted.delete(block.tool_use_id);
+        }
         const observation = this.calls.get(block.tool_use_id);
         if (!observation) continue;
         if (observation.status !== "in_progress") throw new Error("repeated MCP result");
@@ -76,7 +82,7 @@ export class MCPObserver {
   }
 
   assertComplete(): void {
-    if (this.admitted.size || [...this.calls.values()].some(call => call.status === "in_progress")) throw new Error("unconfirmed MCP result");
+    if ([...this.admitted.values()].some(call => call.pending) || [...this.calls.values()].some(call => call.status === "in_progress")) throw new Error("unconfirmed MCP result");
   }
 
   close(): MCPEvent[] {

@@ -143,6 +143,15 @@ replaceNative('packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.servi
   }
 
   async clearSessionServers(sessionId: string): Promise<void> {`);
+const mcpServiceFile = 'packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts';
+// callLive preserves local failures as MCP-shaped error results. Remember only
+// SDK replies without changing those results or exposing a server-spoofable bit.
+replaceNative(mcpServiceFile, '  private closed = false;',
+  '  private closed = false;\n  private receivedResponses = new WeakSet<LocalMcpCallResult>();');
+replaceNative(mcpServiceFile, '        this.recordPublicRuntimeSuccess(server, context, config);\n        return result;',
+  '        this.receivedResponses.add(result);\n        this.recordPublicRuntimeSuccess(server, context, config);\n        return result;');
+replaceNative(mcpServiceFile, '              details: { mcp: result, server: tool.server, tool: tool.toolName },',
+  '              details: { mcp: result, server: tool.server, tool: tool.toolName, oac_response_received: this.receivedResponses.has(result) },');
 const facadeFile = 'packages/local-runtime-v2/src/service/mcp/tools/public-facade.ts';
 replaceNative(facadeFile, "  | 'clearSessionServers'", "  | 'clearSessionServers'\n  | 'disconnectSessionServers'");
 replaceNative(facadeFile, '  clearSessionServers(sessionId: string): Promise<void> {',
@@ -175,7 +184,7 @@ for (const [file, owner] of [
 
   clearSessionMcpServers(sessionId: string): Promise<void> {`);
 }
-replaceNative('packages/tui/src/acp/agent.ts', "        'oac/subagents': {", "        'oac/mcp-lifecycle': { version: 1 },\n        'oac/subagents': {");
+replaceNative('packages/tui/src/acp/agent.ts', "        'oac/subagents': {", "        'oac/mcp-lifecycle': { version: 2 },\n        'oac/subagents': {");
 replaceNative('packages/tui/src/acp/agent.ts',
   '  app.onNotification(acp.methods.agent.session.cancel, async ({ params }) => {',
   `  app.onRequest('oac/session/mcp/disconnect', (value: unknown) => {

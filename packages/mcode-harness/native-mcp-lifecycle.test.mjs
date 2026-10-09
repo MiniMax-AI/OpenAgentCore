@@ -29,8 +29,10 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
           const result = message.method === 'initialize'
             ? { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: this.name, version: '1' } }
             : message.method === 'tools/list'
-              ? { tools: [{ name: 'read', inputSchema: { type: 'object' } }] }
-              : { content: [{ type: 'text', text: this.name }] };
+              ? { tools: ['read', 'hold', 'server_error'].map(name => ({ name, inputSchema: { type: 'object' } })) }
+              : { content: [{ type: 'text', text: this.name }],
+                  ...(message.params.name === 'server_error' ? { isError: true } : {}),
+                  _meta: { oac_response_received: false }, details: { oac_response_received: false } };
           queueMicrotask(() => this.onmessage?.({ jsonrpc: '2.0', id: message.id, result }));
         }
       };
@@ -41,6 +43,7 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
   const result = await build({
     stdin: { contents: `export { McpConnectionPool } from '@mavis/mcp/runtime/connection-pool';
       export { SessionMcpServers } from ${JSON.stringify(join(root, 'packages/local-runtime-v2/src/service/mcp/runtime/session-servers.ts'))};
+      export { LocalMcpService } from ${JSON.stringify(join(root, 'packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts'))};
       export { transports } from 'lifecycle-transport';`, resolveDir: root },
     bundle: true, write: false, platform: 'node', format: 'esm', target: 'node22',
     tsconfig: join(root, 'tsconfig.standalone.json'), nodePaths: [join(root, 'node_modules')],
@@ -58,9 +61,10 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const bundle = join(directory, 'lifecycle.mjs');
   writeFileSync(bundle, result.outputFiles[0].text);
-  const { McpConnectionPool, SessionMcpServers, transports } = await import(pathToFileURL(bundle).href);
+  const { McpConnectionPool, SessionMcpServers, LocalMcpService, transports } = await import(pathToFileURL(bundle).href);
   const pool = new McpConnectionPool({ getResolvedServer() { throw new Error('Session overrides were lost'); } });
   const sessions = new SessionMcpServers(pool);
+  const service = new LocalMcpService(() => directory, { connectionPool: pool });
   const stdio = name => ({ name, config: { type: 'stdio', command: name, args: [] } });
   await sessions.configure('root', [stdio('target'), stdio('untouched'), stdio('oac_workspace'), stdio('connecting'),
     { name: 'remote', config: { type: 'http', url: 'https://example.test/mcp' } }]);
@@ -105,8 +109,33 @@ test('native MCP shutdown fences the old scoped transport and reconnects lazily'
     await Promise.all([pendingStop, rejected]);
     await pool.listTools('connecting', overrides('root', 'connecting'));
     assert.notEqual(transports.at(-1), pendingTransport);
+
+    // Exercise the real service call -> callLive -> pool -> SDK -> tool wrapper.
+    // The service turns a timeout into an MCP-shaped error, so only the wrapper's
+    // native provenance can distinguish it from a server's isError reply.
+    await service.configureSessionServers('root', [{ name: 'response', config: {
+      type: 'stdio', command: 'response', args: [], timeout: 20,
+    } }]);
+    const context = { sessionId: 'root', workspaceRoot: directory };
+    const native = await service.listNativeTools(context);
+    const tools = service.runtimeToolsFromNative(native, context);
+    for (const [name, received, isError] of [['read', true, false], ['server_error', true, true], ['hold', false, true]]) {
+      const entry = native.find(entry => entry.toolName === name);
+      const tool = tools.find(tool => tool.def.name === entry.nativeName);
+      const result = await tool.impl.execute({}, {});
+      assert.equal(result.details.oac_response_received, received, name);
+      assert.equal(result.details.mcp.isError, isError, name);
+      assert.equal(result.isError, isError, 'native tool error projection changed');
+      assert.equal(result.details.server, 'response');
+      assert.equal(result.details.tool, name);
+      if (received)
+        assert.equal(result.details.mcp._meta.oac_response_received, false, 'server metadata was changed');
+      else
+        assert.match(result.details.mcp.content[0].text, /timed out/i);
+    }
   } finally {
     for (const transport of transports) transport.finishClose();
+    await service.close();
     await pool.shutdown();
   }
 });

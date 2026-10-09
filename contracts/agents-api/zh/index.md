@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: f9894c0c7b55a14d9e07ed311a99d23d49afc23779dfd512ee66f031ada26852
+source_hash: a99cbf206e87abf84c43ed803ac1a4b054dc26f4ba09bc9ed849af91af066a6f
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -123,8 +123,9 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 流不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
 - 除 [Turns and Items](sessions-events.md#turns-and-items) 中列出的变体外，其他原生 Item 变体不会被投影，而且 Items 无法修改。
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
-- MiniMax Code 的原生 MCP 观察无法区分已经结束本地调用的服务端错误与本地超时。在 Turn 取消之前已经报告失败的调用不在其服务终止目标集合中；终止这些调用可能遗留的副作用尚未通过资格验证。参见[取消与结算](./harness-onboarding.md#executor-and-turn-lifetimes)。
+- Claude Code 的原生 MCP 错误帧无法区分本地超时或传输失败与服务端的 `isError` 回复。失败的 stdio 调用会在其当前 Turn 内保留为取消目标，包括服务端可能已经返回错误的调用；成功的原生结果会将其调用从该集合移除。按照[取消与结算契约](./harness-onboarding.md#executor-and-turn-lifetimes)，取消此类服务也会终止该服务先前的后台工作。后继 Turn 不继承这个集合。
 - MiniMax Code 仅向 root ACP Session 提供已声明的 MCP。其原生 task 子代理只从生成的共享 MCP 配置中获得 `oac_workspace`，不继承 root Session 已声明的 MCP 绑定。
+- 当另一个 root Turn 向已活跃的子 Turn 追加引导，而观察器首次看到该子 Turn 时它已经结算，Codex 对其中 MCP 调用的取消尚未通过资格验证。原生归属仍指向最初的 root Turn，且引导回执不标识子 Turn；因此无法可靠地将其中本地失败的调用归属于正在取消的 root Turn。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - 在[凭据网关](./model-execution.md#credential-gateway)之后，固定版本的 Codex 在本地压缩历史，从不调用 `/responses/compact`。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
