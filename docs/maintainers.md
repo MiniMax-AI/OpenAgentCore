@@ -11,12 +11,12 @@ A distribution is a matched set of release assets built from one commit: the con
 Installation images and archives support Linux amd64. Host `oac` binaries remain available for Linux amd64/arm64, macOS amd64/arm64 and Windows amd64 to operate a Linux amd64 Docker engine; they do not enable arm64 execution or emulation. Each version index is checked against its platform archive before floating tags move.
 
 
-Build on Linux x86_64 with a glibc compatible with Debian 12, Docker, the Go version in `go.mod`, a C compiler (the microsandbox helper is a CGO build), Node, pnpm, Python 3.9 or newer, curl, tar, pigz and sha256sum. The source must be clean and committed. First prepare the pinned Codex package and MiniMax Code companion, then build:
+Build on Linux x86_64 with a glibc compatible with Debian 12, Docker, the Go version in `go.mod`, a C compiler (the microsandbox helper is a CGO build), Node, pnpm, Python 3.11 or newer, curl, tar, pigz and sha256sum. The source must be clean and committed. Install rustup and Zig 0.14.0 for the pinned Codex musl build. `prepare-release-runtimes.sh` uses the pinned upstream musl setup script to install its system dependencies, then builds the patched Codex and MiniMax Code companions:
 
 ```sh
 bash scripts/prepare-release-runtimes.sh
 inputs="$HOME/.oac/build/release-inputs/inputs.json"
-export CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+export CODEX_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
 export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
 export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v1.2.3
 make build-core-distribution
@@ -28,7 +28,7 @@ make build-core-distribution
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | Versioned HTTPS directory that will serve the generated asset file names (never `latest`). Required unless `CORE_DISTRIBUTION_OFFLINE=1` |
 | `CORE_DISTRIBUTION_OFFLINE` | `1` also builds the offline archive |
-| `CODEX_CLI_DIR`, `MCODE_HARNESS_BUILD_DIR` | Pinned Runtime inputs from `prepare-release-runtimes.sh` |
+| `CODEX_HARNESS_BUILD_DIR`, `MCODE_HARNESS_BUILD_DIR` | Pinned Runtime inputs from `prepare-release-runtimes.sh` |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | Native installer catalog directory; see [Native installers](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | Output directory under `~/.oac`. Default: `~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker build network: `default`, `host` or `none` |
@@ -60,11 +60,11 @@ The catalog records the commit, the Runtime protocol version, each archive's SHA
 
 [Harness version pins](../contracts/agents-api/harness-onboarding.md#native-version-pins) define the build inputs and generated package projections. Run `make check-harness-catalog` before preparing payloads.
 
-Prepare the official pinned Codex Linux x64 package and the MiniMax companion with `scripts/prepare-release-runtimes.sh`, or supply `CODEX_CLI_DIR` and `MCODE_HARNESS_BUILD_DIR` for existing prepared inputs. `scripts/build-{codex,claude,mcode}-runtime.sh` validate and stage Harness payloads for both image builders; they do not build guest Runtime images. The Claude payload is a checksummed export of the pinned SDK and adapter:
+Prepare the pinned, source-built Codex artifact and the MiniMax companion with `scripts/prepare-release-runtimes.sh`, or supply `CODEX_HARNESS_BUILD_DIR` and `MCODE_HARNESS_BUILD_DIR` for existing prepared inputs. `scripts/build-{codex,claude,mcode}-runtime.sh` validate and stage Harness payloads for both image builders; they do not build guest Runtime images. Codex is built by `scripts/build-codex-harness.sh` from the source and patch owned by [`packages/codex-runtime`](../packages/codex-runtime/README.md), using the upstream package builder, bwrap digest and verified V8 artifacts. Its public CLI version remains the catalog pin; staging verifies the source revision, patch and binary hashes in `provenance.json`. The maintained upstream musl toolchain environment must be set when building an individual Codex artifact, and `CODEX_NATIVE_SOURCE` points at the clean pinned checkout. Standard `CARGO_TARGET_DIR` controls reusable Rust build output. The Claude payload is a checksummed export of the pinned SDK and adapter:
 
 ```sh
 make build-claude-sdk-runtime
-export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
+export CODEX_HARNESS_BUILD_DIR=/absolute/codex-harness MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
 bash scripts/build-agent-host-images.sh
 ```
 

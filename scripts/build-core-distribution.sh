@@ -146,7 +146,7 @@ build_image web "$stage/web"
 
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/" \
   ./apps/daemon/cmd/oac-daemon ./apps/daemon/cmd/oac-process-shim ./apps/sandboxio/cmd/oac-sandbox-io
-: "${CODEX_CLI_DIR:?Set the extracted pinned Codex Linux x64 package directory}"
+: "${CODEX_HARNESS_BUILD_DIR:?Set the existing source-built pinned Codex artifact directory}"
 : "${MCODE_HARNESS_BUILD_DIR:?Set the existing built pinned MiniMax Code companion directory}"
 export CLAUDE_SDK_BUILD_DIR="$stage/claude-sdk"
 scripts/build-claude-sdk-runtime.sh

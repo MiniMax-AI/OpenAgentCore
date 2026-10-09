@@ -25,13 +25,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0555 oac-daemon oac-process-shim /opt/oac/bin/
 COPY --chmod=0555 codex/codex codex/codex-code-mode-host /opt/oac/harnesses/codex/bin/
-COPY codex/package.json /opt/oac/harnesses/codex/package.json
+COPY codex/provenance.json /opt/oac/harnesses/codex/provenance.json
 COPY claude/claude-sdk /opt/oac/harnesses/claude_sdk
 COPY mcode/mcode-harness /opt/oac/harnesses/mcode
 COPY <<EOF /opt/oac/harnesses.json
 {"node": "/usr/local/bin/node", "harnesses": {"claude_sdk": "/opt/oac/harnesses/claude_sdk", "codex": "/opt/oac/harnesses/codex", "mcode": "/opt/oac/harnesses/mcode"}}
 EOF
-RUN test "$(/opt/oac/harnesses/codex/bin/codex --version)" = "codex-cli $(node -p 'require("/opt/oac/harnesses/codex/package.json").version.replace(/-linux-x64$/, "")')" \
+RUN test "$(/opt/oac/harnesses/codex/bin/codex --version)" = "codex-cli $(node -p 'require("/opt/oac/harnesses/codex/provenance.json").version')" \
     && node /opt/oac/harnesses/claude_sdk/dist/runtime_check.js /opt/oac/harnesses/claude_sdk/dist/main.js \
     && /opt/oac/harnesses/mcode/native/cli.js --version
 ENTRYPOINT ["/opt/oac/bin/oac-daemon"]

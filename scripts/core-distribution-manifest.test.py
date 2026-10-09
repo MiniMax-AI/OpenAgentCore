@@ -141,7 +141,7 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual((output / "mcode-harness" / name).read_bytes(), current)
                 (companion / name).write_bytes(current)
 
-    def test_codex_payload_uses_catalog_pin_and_preserves_package_identity(self):
+    def test_codex_payload_requires_current_source_patch_and_binary_hashes(self):
         repository = self.stage / "repository"
         scripts = repository / "scripts"
         scripts.mkdir(parents=True)
@@ -150,29 +150,49 @@ class DistributionTests(unittest.TestCase):
         catalog = repository / "internal/harnessconfig/builtin/catalog.json"
         catalog.parent.mkdir(parents=True)
         catalog.write_text(json.dumps([{"kind": "codex", "version": "9.8.7"}]))
+        source = repository / "packages/codex-runtime"
+        source.mkdir(parents=True)
+        pin = {"repository": "https://github.com/openai/codex", "revision": "a" * 40}
+        (source / "source.json").write_text(json.dumps(pin))
+        (source / "invalidate-mcp.patch").write_text("current patch")
         package = self.stage / "package"
-        native = package / "vendor/x86_64-unknown-linux-musl/bin"
-        native.mkdir(parents=True)
+        package.mkdir()
+        files = {}
         for executable in ("codex", "codex-code-mode-host"):
-            (native / executable).write_text("#!/bin/sh\nexit 0\n")
-            (native / executable).chmod(0o755)
-        manifest = {"name": "@openai/codex", "version": "9.8.7-linux-x64"}
-        (package / "package.json").write_text(json.dumps(manifest))
+            path = package / executable
+            path.write_text("#!/bin/sh\nexit 0\n")
+            path.chmod(0o755)
+            files[executable] = hashlib.sha256(path.read_bytes()).hexdigest()
+        manifest = {**pin, "version": "9.8.7", "target": "x86_64-unknown-linux-musl",
+                    "patch_sha256": hashlib.sha256(b"current patch").hexdigest(), "files": files}
+        (package / "provenance.json").write_text(json.dumps(manifest))
         output = self.stage / "payload"
+        output.mkdir()
+        (output / "package.json").write_text('{"name":"@openai/codex"}')
+        (output / "unrelated").write_text("preserved")
         environment = {**os.environ, "OAC_DEV_HOME": str(self.stage / "dev"),
-                       "CODEX_CLI_DIR": str(package), "AGENTS_RUNTIME_BUILD_DIR": str(output)}
+                       "CODEX_HARNESS_BUILD_DIR": str(package), "AGENTS_RUNTIME_BUILD_DIR": str(output)}
         command = ["bash", str(scripts / builder.name)]
         result = subprocess.run(command, env=environment, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(json.loads((output / "package.json").read_text()), manifest)
-        for invalid in ({**manifest, "version": "9.8.6-linux-x64"},
-                        {**manifest, "name": "unofficial-codex"}):
-            with self.subTest(package=invalid):
-                (package / "package.json").write_text(json.dumps(invalid))
+        self.assertFalse((output / "package.json").exists())
+        self.assertEqual((output / "unrelated").read_text(), "preserved")
+        self.assertEqual(json.loads((output / "provenance.json").read_text()), manifest)
+        for key, value in (("version", "9.8.6"), ("revision", "b" * 40),
+                           ("patch_sha256", "0" * 64), ("target", "aarch64-unknown-linux-musl")):
+            with self.subTest(field=key):
+                (package / "provenance.json").write_text(json.dumps({**manifest, key: value}))
                 result = subprocess.run(command, env=environment, capture_output=True, text=True)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("Expected pinned official Linux x64 package", result.stderr)
-                self.assertEqual(json.loads((output / "package.json").read_text()), manifest)
+                self.assertIn("does not match the pinned patched source", result.stderr)
+                self.assertEqual(json.loads((output / "provenance.json").read_text()), manifest)
+        (package / "provenance.json").write_text(json.dumps(manifest))
+        original = (package / "codex").read_bytes()
+        (package / "codex").write_bytes(original + b"changed")
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Codex artifact checksum mismatch: codex", result.stderr)
+        self.assertEqual((output / "codex").read_bytes(), original)
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

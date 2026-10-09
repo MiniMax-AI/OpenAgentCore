@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 064af3f49e48941b31a82988190bc8ddbdabc02172e03cf9c991c95aead5169c
+source_hash: a3f0c6df3f42e3a71ab36134a92bb9523cdd1a2cfe268efbf6167a33d9ec4e8d
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -13,12 +13,12 @@ source_hash: 064af3f49e48941b31a82988190bc8ddbdabc02172e03cf9c991c95aead5169c
 安装镜像和归档支持 Linux amd64。宿主机 `oac` 二进制仍提供 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 版本，用于操作 Linux amd64 Docker 引擎；它们不启用 arm64 执行或模拟。每个版本索引校验其平台归档后才更新浮动标签。
 
 
-请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.9 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请先准备固定版本的 Codex 包和 MiniMax Code 配套程序，然后执行构建：
+请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.11 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请为固定版本的 Codex musl 构建安装 rustup 和 Zig 0.14.0。`prepare-release-runtimes.sh` 使用固定上游的 musl 设置脚本安装系统依赖，然后构建带补丁的 Codex 和 MiniMax Code 配套程序：
 
 ```sh
 bash scripts/prepare-release-runtimes.sh
 inputs="$HOME/.oac/build/release-inputs/inputs.json"
-export CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+export CODEX_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
 export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
 export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v1.2.3
 make build-core-distribution
@@ -30,7 +30,7 @@ make build-core-distribution
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | 用于提供生成的资源文件名的带版本 HTTPS 目录（绝不能使用 `latest`）。除非 `CORE_DISTRIBUTION_OFFLINE=1`，否则为必填项 |
 | `CORE_DISTRIBUTION_OFFLINE` | 设为 `1` 时还会构建离线归档 |
-| `CODEX_CLI_DIR`、`MCODE_HARNESS_BUILD_DIR` | `prepare-release-runtimes.sh` 固定的 Runtime 输入 |
+| `CODEX_HARNESS_BUILD_DIR`、`MCODE_HARNESS_BUILD_DIR` | `prepare-release-runtimes.sh` 固定的 Runtime 输入 |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | 原生安装器目录；请参阅[原生安装器](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | `~/.oac` 下的输出目录。默认值：`~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker 构建网络：`default`、`host` 或 `none` |
@@ -62,11 +62,11 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 
 [Harness 版本固定](../../contracts/agents-api/zh/harness-onboarding.md#native-version-pins)定义构建输入和生成的包投影。准备载荷前运行 `make check-harness-catalog`。
 
-使用 `scripts/prepare-release-runtimes.sh` 准备固定版本的官方 Codex Linux x64 包和 MiniMax 配套程序，或通过 `CODEX_CLI_DIR` 和 `MCODE_HARNESS_BUILD_DIR` 指向已有输入。`scripts/build-{codex,claude,mcode}-runtime.sh` 为两个镜像构建器校验并准备 Harness 载荷，不构建客体 Runtime 镜像。Claude 载荷是固定 SDK 和适配器的带校验和导出：
+使用 `scripts/prepare-release-runtimes.sh` 准备固定版本、从源码构建的 Codex 制品和 MiniMax 配套程序，或通过 `CODEX_HARNESS_BUILD_DIR` 和 `MCODE_HARNESS_BUILD_DIR` 指向已有输入。`scripts/build-{codex,claude,mcode}-runtime.sh` 为两个镜像构建器校验并准备 Harness 载荷，不构建客体 Runtime 镜像。Codex 由 `scripts/build-codex-harness.sh` 从 [`packages/codex-runtime`](../../packages/codex-runtime/README.md) 所拥有的源码和补丁构建，复用上游包构建器、bwrap 摘要和经过验证的 V8 制品。其公开 CLI 版本仍采用目录中的固定版本；准备载荷时会校验 `provenance.json` 中的源码提交、补丁和二进制哈希。单独构建 Codex 制品时，必须设置上游维护的 musl 工具链环境，并通过 `CODEX_NATIVE_SOURCE` 指向干净的固定源码 checkout。标准 `CARGO_TARGET_DIR` 控制可复用的 Rust 构建输出。Claude 载荷是固定 SDK 和适配器的带校验和导出：
 
 ```sh
 make build-claude-sdk-runtime
-export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
+export CODEX_HARNESS_BUILD_DIR=/absolute/codex-harness MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
 bash scripts/build-agent-host-images.sh
 ```
 
