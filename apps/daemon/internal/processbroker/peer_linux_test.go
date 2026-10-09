@@ -30,6 +30,9 @@ type peer struct {
 	// write. A background process it leaves copies the rest of stdin to
 	// stdout until end of file.
 	leaderExits bool
+	strongScope bool
+	holdScope   bool
+	cancelled   chan struct{}
 
 	instance sandboxwire.ID
 
@@ -49,7 +52,7 @@ type seen struct {
 }
 
 func newPeer() *peer {
-	return &peer{instance: sandboxwire.NewID(), attachedStarting: make(chan struct{}),
+	return &peer{instance: sandboxwire.NewID(), attachedStarting: make(chan struct{}), cancelled: make(chan struct{}),
 		seen: seen{st: sp.OperationStatus{State: sp.StateStarting, Scope: sp.ScopeStateActive, FirstRetained: 1}}}
 }
 
@@ -122,9 +125,13 @@ func send(c net.Conn, requestID uint64, m sp.Message) {
 func (p *peer) handle(m sp.Message) (sp.Message, *sp.Failure) {
 	switch m := m.(type) {
 	case sp.DescribeRequest:
+		scopes := []sp.Scope{sp.ScopePOSIXSession}
+		if p.strongScope {
+			scopes = append(scopes, sp.ScopeCgroupV2)
+		}
 		return sp.DescribeResponse{ServerInstanceID: p.instance, Capabilities: sp.Capabilities{
 			Platform:                   sp.PlatformLinux,
-			Scopes:                     []sp.Scope{sp.ScopePOSIXSession},
+			Scopes:                     scopes,
 			IOModes:                    []sp.IOMode{sp.IOPipes},
 			Signals:                    []sp.Signal{1, 2, 15},
 			SignalTargets:              []sp.SignalTarget{sp.TargetInitialProcessGroup},
@@ -191,6 +198,11 @@ func (p *peer) handle(m sp.Message) (sp.Message, *sp.Failure) {
 	case sp.CancelRequest:
 		p.cancels++
 		p.exit(sp.ExitStatus{Kind: sp.ExitSignal, Signal: 15})
+		select {
+		case <-p.cancelled:
+		default:
+			close(p.cancelled)
+		}
 		return sp.CancelResponse{}, nil
 	case sp.AckEventsRequest:
 		return sp.AckEventsResponse{}, nil
@@ -241,6 +253,9 @@ func (p *peer) run() {
 	default:
 		p.st.State = sp.StateRunning
 		p.emit(func(h sp.EventHeader) sp.Event { return sp.StartedEvent{EventHeader: h} })
+		if p.cancels > 0 {
+			p.exit(sp.ExitStatus{Kind: sp.ExitSignal, Signal: 15})
+		}
 	}
 }
 
@@ -265,8 +280,15 @@ func (p *peer) exit(status sp.ExitStatus) {
 		p.emit(func(h sp.EventHeader) sp.Event { return sp.ExitedEvent{EventHeader: h, Status: status} })
 	}
 	p.emit(func(h sp.EventHeader) sp.Event { return sp.OutputClosedEvent{EventHeader: h, Disposition: d} })
+	p.st.Output = &d
+	if !p.holdScope {
+		p.closeScope()
+	}
+}
+
+func (p *peer) closeScope() {
 	p.emit(func(h sp.EventHeader) sp.Event { return sp.ScopeClosedEvent{EventHeader: h} })
-	p.st.Output, p.st.Scope = &d, sp.ScopeStateClosed
+	p.st.Scope = sp.ScopeStateClosed
 }
 
 // emit records an event and sends it to the subscribed stream; p.mu is

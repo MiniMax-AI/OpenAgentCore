@@ -77,6 +77,15 @@ func (s *Session) settleExecutorTurn(startErr error) {
 	}
 	if s.cancelled.Load() && s.nativeSettled.Load() && s.cancelErr == nil && s.rpc.Alive() {
 		cleanupCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+		err := s.cleanupCancelledMCP(cleanupCtx)
+		stop()
+		if err != nil {
+			s.settlement = agent.TurnSettlement{Reason: "mcp_cleanup_unconfirmed"}
+			s.settlementErr = errors.Join(s.settlementErr, err)
+		}
+	}
+	if s.cancelled.Load() && s.nativeSettled.Load() && s.cancelErr == nil && s.rpc.Alive() {
+		cleanupCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
 		err := s.cleanupNativeTerminals(cleanupCtx)
 		stop()
 		if err != nil {
@@ -106,6 +115,7 @@ func (s *Session) Cancel(ctx context.Context) error {
 		return err
 	}
 	s.cancelOnce.Do(func() {
+		s.latchMCPCancellation()
 		s.cancelled.Store(true)
 		s.cancelReady = make(chan struct{})
 		go func() {

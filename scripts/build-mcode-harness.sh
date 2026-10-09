@@ -47,7 +47,7 @@ test "$(node "$native/cli.js" --version)" = "$version"
   MCODE_SOURCE="$context/upstream" node patch-native.mjs
   cd upstream
   corepack pnpm install --frozen-lockfile
-  MCODE_SOURCE="$context/upstream" node --test "$context/native-prompt.test.mjs"
+  MCODE_SOURCE="$context/upstream" node --test "$context/native-prompt.test.mjs" "$context/native-mcp-lifecycle.test.mjs"
   node scripts/build.mjs
 )
 (

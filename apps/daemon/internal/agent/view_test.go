@@ -102,6 +102,7 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 		mcp []agent.MCPBinding
 	}{
 		"gateway":            {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, alias}},
+		"missing scope stop": {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, alias}},
 		"stdio command":      {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, command}},
 		"another alias":      {req: gatewayRequest, mcp: []agent.MCPBinding{gateway, misplaced}},
 		"model key":          {req: request("http://127.0.0.1:4101", token)},
@@ -116,7 +117,11 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 		if name == "gateway" {
 			want = errReached
 		}
-		if _, err := view.Executor(context.Background(), c.req, agent.ViewSession{MCP: c.mcp}); !errors.Is(err, want) {
+		session := agent.ViewSession{MCP: c.mcp, StopMCP: func(context.Context, []string) error { return nil }}
+		if name == "missing scope stop" {
+			session.StopMCP = nil
+		}
+		if _, err := view.Executor(context.Background(), c.req, session); !errors.Is(err, want) {
 			t.Errorf("%s: Executor = %v, want %v", name, err, want)
 		}
 	}

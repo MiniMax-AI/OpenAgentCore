@@ -64,7 +64,8 @@ func hostSession(t *testing.T, mcp ...agent.MCPBinding) agent.ViewSession {
 	if err := os.Mkdir(filepath.Join(home, agent.ViewWorkName), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return agent.ViewSession{Home: agent.ViewDir{Host: home, View: home}, MCP: mcp, Launch: clirunner.Start, Spawn: clirunner.Start}
+	return agent.ViewSession{Home: agent.ViewDir{Host: home, View: home}, MCP: mcp, Launch: clirunner.Start, Spawn: clirunner.Start,
+		StopMCP: func(context.Context, []string) error { return nil }}
 }
 
 // hostExecutor prepares req through install's view Executor in session;
@@ -299,10 +300,16 @@ func TestMCodeProcess(t *testing.T) {
 			if scenario == "unattended" && strings.Contains(string(frame.Params), "elicitation") {
 				os.Exit(7)
 			}
-			result = map[string]int{"protocolVersion": 1}
+			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 2}}}
+			if scenario == "unpatched-mcp" {
+				result = map[string]any{"protocolVersion": 1}
+			}
+			if scenario == "old-mcp-lifecycle" {
+				result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/mcp-lifecycle": map[string]int{"version": 1}}}
+			}
 		case "session/new", "session/load":
-			if scenario == "prepared-mcp-cancel" {
-				if writeMCPRegistry(os.Getenv("MINIMAX_DATA_DIR"), mcpRegistryEntry("proof.server", "proof_server", "read.status", "read_status")) != nil {
+			if strings.HasPrefix(scenario, "prepared-mcp-") {
+				if writeMCPRegistry(os.Getenv("MINIMAX_DATA_DIR"), mcpRegistryEntry("proof.server", "proof_server", "read.status", "read_status"), mcpRegistryEntry("late.server", "late_server", "read.status", "read_status"), mcpRegistryEntry("remote", "remote", "read.status", "read_status")) != nil {
 					os.Exit(12)
 				}
 			}
@@ -362,9 +369,23 @@ func TestMCodeProcess(t *testing.T) {
 				}
 				continue
 			}
-			if scenario == "prepared-mcp-cancel" {
+			if strings.HasPrefix(scenario, "prepared-mcp-") && input.Prompt[0]["text"] != "next" {
 				promptID = frame.ID
+				if input.Prompt[0]["text"] == "next-wait" {
+					update("agent_message_chunk", map[string]any{"messageId": "next-ready", "content": map[string]string{"type": "text", "text": "next turn ready"}})
+					continue
+				}
 				update("tool_call", map[string]any{"toolCallId": "native-call", "name": "mcp__proof_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
+				if strings.HasPrefix(scenario, "prepared-mcp-prior-") {
+					output := mcpNativeResult("proof.server", "read.status", true)
+					output["details"].(map[string]any)["oac_response_received"] = scenario == "prepared-mcp-prior-server-error"
+					output["details"].(map[string]any)["mcp"].(map[string]any)["_meta"] = map[string]any{"oac_response_received": true}
+					update("tool_call_update", map[string]any{"toolCallId": "native-call", "status": "completed", "rawOutput": output})
+					// Another call's genuine reply must not clear the first call's owner.
+					update("tool_call", map[string]any{"toolCallId": "other-call", "name": "mcp__proof_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
+					update("tool_call_update", map[string]any{"toolCallId": "other-call", "status": "completed", "rawOutput": mcpNativeResult("proof.server", "read.status", false)})
+					update("agent_message_chunk", map[string]any{"messageId": "ready", "content": map[string]string{"type": "text", "text": "failures projected"}})
+				}
 				continue
 			}
 			if scenario == "steering" || scenario == "steer-rejected" || scenario == "steer-lost" || scenario == "cancel-wait" {
@@ -400,9 +421,21 @@ func TestMCodeProcess(t *testing.T) {
 		case "mcode/session/delegation/stop":
 			result = map[string]any{"receipt": map[string]any{"failedSessionIds": []string{}}}
 		case "session/cancel":
+			if scenario == "prepared-mcp-lifecycle" {
+				update("tool_call_update", map[string]any{"toolCallId": "native-call", "status": "failed", "rawOutput": mcpNativeResult("proof.server", "read.status", true)})
+				update("tool_call", map[string]any{"toolCallId": "late-call", "name": "mcp__late_server__read_status", "status": "in_progress", "rawInput": map[string]any{}})
+				update("tool_call_update", map[string]any{"toolCallId": "late-call", "status": "failed", "rawOutput": mcpNativeResult("late.server", "read.status", true)})
+				update("tool_call", map[string]any{"toolCallId": "http-call", "name": "mcp__remote__read_status", "status": "failed", "rawInput": map[string]any{}, "rawOutput": mcpNativeResult("remote", "read.status", true)})
+			}
 			raw, _ := json.Marshal(map[string]string{"stopReason": "cancelled"})
 			send(rpcFrame{JSONRPC: "2.0", ID: promptID, Result: raw})
 			continue
+		case "oac/session/mcp/disconnect":
+			if record := os.Getenv("OAC_TEST_MCODE_RECORD"); record != "" {
+				if os.WriteFile(record+".disconnect", frame.Params, 0600) != nil {
+					os.Exit(13)
+				}
+			}
 		case "mcode/session/steer":
 			if scenario == "executor-steer-unknown" {
 				send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32000, Message: "Unknown input outcome"}})

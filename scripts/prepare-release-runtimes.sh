@@ -4,16 +4,31 @@ set -euo pipefail
 # Prepare pinned upstream inputs once, then reuse the existing Runtime builders.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 catalog="$repo_root/internal/harnessconfig/builtin/catalog.json"
-codex_version="$(python3 -c 'import json,sys; print(next(entry["version"] for entry in json.load(open(sys.argv[1])) if entry["kind"] == "codex"))' "$catalog")"
 release_root="$HOME/.oac/build/release-inputs"
 if [[ -e "$release_root" ]]; then
   printf 'Release input directory already exists; use a fresh build host\n' >&2
   exit 1
 fi
-mkdir -p "$release_root/codex" "$release_root/mcode-native"
-cd "$release_root/codex"
-npm pack --ignore-scripts --silent "@openai/codex@$codex_version-linux-x64" > package-name.txt
-tar -xzf "$(cat package-name.txt)"
+mkdir -p "$release_root/mcode-native"
+pin="$repo_root/packages/codex-runtime/source.json"
+source_repository="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repository"])' "$pin")"
+source_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$pin")"
+git init --quiet "$release_root/codex-source"
+git -C "$release_root/codex-source" remote add origin "$source_repository"
+git -C "$release_root/codex-source" fetch --depth 1 origin "$source_revision"
+git -C "$release_root/codex-source" checkout --detach FETCH_HEAD
+(
+cd "$release_root/codex-source/codex-rs"
+# rustup reads the toolchain and components from the pinned upstream checkout.
+rustup show active-toolchain
+rustup target add x86_64-unknown-linux-musl
+TARGET=x86_64-unknown-linux-musl GITHUB_ENV="$release_root/codex-build.env" \
+  bash "$release_root/codex-source/.github/scripts/install-musl-build-tools.sh"
+while IFS= read -r assignment; do export "$assignment"; done < "$release_root/codex-build.env"
+export AWS_LC_SYS_NO_JITTER_ENTROPY=1 AWS_LC_SYS_NO_JITTER_ENTROPY_x86_64_unknown_linux_musl=1
+CODEX_NATIVE_SOURCE="$release_root/codex-source" CODEX_HARNESS_BUILD_DIR="$release_root/codex" \
+  bash "$repo_root/scripts/build-codex-harness.sh" | tee "$release_root/codex-build.log"
+)
 
 pin="$repo_root/packages/mcode-harness/source.json"
 source_repository="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repository"])' "$pin")"
@@ -34,7 +49,7 @@ python3 - "$release_root" "$companion" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 (root / "inputs.json").write_text(json.dumps({
-    "codex": str(root / "codex/package"),
+    "codex": str(root / "codex"),
     "mcode": sys.argv[2],
 }) + "\n")
 PY

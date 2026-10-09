@@ -42,3 +42,25 @@ func (start startRequest) declaredMCP() []mcpHTTPServer {
 	}
 	return servers
 }
+
+func (start startRequest) validStdioServers(labels []string) bool {
+	if start.Workspace == nil || len(labels) == 0 {
+		return false
+	}
+	seen := make(map[string]bool, len(labels))
+	for _, label := range labels {
+		if seen[label] {
+			return false
+		}
+		for _, server := range start.Workspace.MCP {
+			if server.ServerLabel == label && server.Command != "" {
+				seen[label] = true
+				break
+			}
+		}
+		if !seen[label] {
+			return false
+		}
+	}
+	return true
+}

@@ -122,3 +122,56 @@ test("batched results use per-call content, never duplicate a whole-message nati
   const events = o.consume(first, "session");
   assert.deepEqual(events.map(e => [e.id, e.observation.output, e.observation.error]), [["a", [], null], ["b", null, "failed"]]);
 });
+
+test("cancellation retains admitted stdio calls across delayed observations and local abort results", async () => {
+  let observer;
+  const labels = ["target", "late", "healthy", "http"];
+  const declarations = labels.map(server_label => server_label === "http" ? { ...declaration(null), server_label } : {server_label, command:"/.oac/bin/"+server_label, allowed_tools:null});
+  const profile = new MCPProfile(declarations, [], (id, name) => observer.admit(id, name));
+  const statuses = labels.map(name => ({name, status:"connected", tools:[{name:"hold"}]}));
+  profile.verify(labels.map(label => `mcp__${label}__hold`), statuses, "session");
+  observer = new MCPObserver(profile.identities, new Set(["target", "late", "healthy"]));
+  const admit = async label => {
+    const input = {hook_event_name:"PreToolUse", session_id:"session", tool_use_id:label, tool_name:`mcp__${label}__hold`, tool_input:{}};
+    assert.deepEqual(await profile.beforeTool(input, label, {signal:new AbortController().signal}), {});
+  };
+  await admit("healthy");
+  observer.consume(assistant("healthy", "mcp__healthy__hold"), "session");
+  observer.consume(user("healthy", "finished"), "session");
+  await admit("target"); await admit("http");
+  observer.cancel();
+  await admit("late");
+  for (const label of ["target", "late", "http"]) {
+    observer.consume(assistant(label, `mcp__${label}__hold`), "session");
+    observer.consume(user(label, "Interrupted", true), "session");
+  }
+  observer.assertComplete();
+  observer.cancel();
+  assert.deepEqual(observer.cancelledServers, ["late", "target"]);
+  profile.verifyReconnected(statuses);
+  assert.throws(() => profile.verifyReconnected(statuses.map(s => s.name === "target" ? {...s, tools:[{name:"replacement"}]} : s)), /inventory/);
+});
+
+test("failed local terminals retain only the current Turn's uncertain stdio ownership", () => {
+  const labels = ["timeout", "server_error", "healthy", "http"];
+  const tools = new Map(labels.map(server => [`mcp__${server}__hold`, {server, name:"hold"}]));
+  const stdio = new Set(["timeout", "server_error", "healthy"]);
+  const current = new MCPObserver(tools, stdio);
+  for (const label of labels) {
+    const name = `mcp__${label}__hold`;
+    current.admit(label, name);
+    current.consume(assistant(label, name), "session");
+    const failed = label !== "healthy";
+    // The pinned CLI uses this same projection for local failures and a plain
+    // server isError reply, so neither string proves remote completion.
+    const result = {...user(label, failed ? "failed" : "finished", failed), tool_use_result:failed ? "Error: failed" : "finished"};
+    assert.equal(current.consume(result, "session")[0].observation.status, failed ? "failed" : "completed");
+  }
+  current.assertComplete();
+  current.cancel();
+  assert.deepEqual(current.cancelledServers, ["server_error", "timeout"]);
+  const successor = new MCPObserver(tools, stdio);
+  successor.cancel();
+  successor.assertComplete();
+  assert.deepEqual(successor.cancelledServers, []);
+});

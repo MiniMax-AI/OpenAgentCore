@@ -79,6 +79,134 @@ const projectGate = '    if (!context?.workspaceRoot || !context.sessionId) retu
 if (project.split(projectGate).length !== 2) throw new Error('Pinned native project MCP source changed');
 writeFileSync(projectPath, project.replace(projectGate, "    if (process.env.OAC_RUNTIME_MCODE_TOOL_POLICY === 'protected-mcp-v1' || !context?.workspaceRoot || !context.sessionId) return {};"));
 copyFileSync(join(here, 'native-subagent-admission.mjs'), join(root, 'packages/local-runtime/src/background-task/oac-subagent-admission.mjs'));
+// Preserve the native owner and its connection keys. This control request is
+// called only after the Runtime has closed the selected sandbox process scopes.
+function replaceNative(file, before, after) {
+  const path = join(root, file);
+  const source = readFileSync(path, 'utf8');
+  if (source.split(before).length !== 2) throw new Error('Pinned native MCP lifecycle source changed: ' + file);
+  writeFileSync(path, source.replace(before, after));
+}
+const poolFile = 'packages/agent-modules/mcp/src/runtime/connection-pool.ts';
+replaceNative(poolFile, '  private connectionServerNames = new Map<McpConnectionKey, string>();',
+  `  private connectionServerNames = new Map<McpConnectionKey, string>();
+  private transportClosures = new Map<McpConnectionKey, Set<Promise<void>>>();`);
+replaceNative(poolFile, '    const client = new Client(', `    // SDK close() may return after sending SIGKILL, before the child closes.
+    // Retain each old transport until its actual close event, including connects
+    // invalidated before they could enter the pool.
+    const closures = this.transportClosures.get(connectionKey) ?? new Set<Promise<void>>();
+    this.transportClosures.set(connectionKey, closures);
+    const closed = new Promise<void>((resolve) => {
+      const previous = transport.onclose;
+      transport.onclose = () => { try { previous?.(); } finally { resolve(); } };
+    });
+    closures.add(closed);
+    void closed.then(() => {
+      closures.delete(closed);
+      if (closures.size === 0 && this.transportClosures.get(connectionKey) === closures)
+        this.transportClosures.delete(connectionKey);
+    });
+    const client = new Client(`);
+replaceNative(poolFile, '  async reconnect(\n', `  async disconnectAndWait(serverName: string, overrides: McpConnectionTokenOverrides): Promise<void> {
+    if (!overrides.connectionKey || overrides.serverOverride?.transport.type !== 'stdio')
+      throw new Error('A scoped stdio MCP connection is required.');
+    const key = this.resolveConnectionKey(serverName, overrides);
+    const closed = [...(this.transportClosures.get(key) ?? [])];
+    await this.disconnect(serverName, overrides);
+    await Promise.all(closed);
+  }
+
+  async reconnect(
+`);
+const sessionServersFile = 'packages/local-runtime-v2/src/service/mcp/runtime/session-servers.ts';
+replaceNative(sessionServersFile, '  async remove(sessionId: string): Promise<void> {', `  async disconnect(sessionId: string, names: readonly string[]): Promise<void> {
+    const id = requireSessionId(sessionId);
+    const current = this.servers.get(id);
+    if (names.length === 0 || new Set(names).size !== names.length || !this.pool)
+      throw new Error('Invalid MCP disconnect request.');
+    const selected = names.map((name) => {
+      const config = current?.[name];
+      if (name === 'oac_workspace' || !config || config.type !== 'stdio')
+        throw new Error('Only declared Session stdio MCP servers can be disconnected.');
+      return { name, overrides: this.overrides(id, name, config)! };
+    });
+    for (const { name, overrides } of selected)
+      await this.pool.disconnectAndWait(name, overrides);
+  }
+
+  async remove(sessionId: string): Promise<void> {`);
+replaceNative('packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts',
+  '  async clearSessionServers(sessionId: string): Promise<void> {',
+  `  disconnectSessionServers(sessionId: string, names: readonly string[]): Promise<void> {
+    this.assertOpen();
+    return this.enqueueMutation(() => this.sessionServers.disconnect(sessionId, names));
+  }
+
+  async clearSessionServers(sessionId: string): Promise<void> {`);
+const mcpServiceFile = 'packages/local-runtime-v2/src/service/mcp/runtime/local-mcp.service.ts';
+// callLive preserves local failures as MCP-shaped error results. Remember only
+// SDK replies without changing those results or exposing a server-spoofable bit.
+replaceNative(mcpServiceFile, '  private closed = false;',
+  '  private closed = false;\n  private receivedResponses = new WeakSet<LocalMcpCallResult>();');
+replaceNative(mcpServiceFile, '        this.recordPublicRuntimeSuccess(server, context, config);\n        return result;',
+  '        this.receivedResponses.add(result);\n        this.recordPublicRuntimeSuccess(server, context, config);\n        return result;');
+replaceNative(mcpServiceFile, '              details: { mcp: result, server: tool.server, tool: tool.toolName },',
+  '              details: { mcp: result, server: tool.server, tool: tool.toolName, oac_response_received: this.receivedResponses.has(result) },');
+const facadeFile = 'packages/local-runtime-v2/src/service/mcp/tools/public-facade.ts';
+replaceNative(facadeFile, "  | 'clearSessionServers'", "  | 'clearSessionServers'\n  | 'disconnectSessionServers'");
+replaceNative(facadeFile, '  clearSessionServers(sessionId: string): Promise<void> {',
+  `  disconnectSessionServers(input: { sessionId: string; servers: readonly string[] }): Promise<void> {
+    return this.owner.disconnectSessionServers(input.sessionId, input.servers);
+  }
+
+  clearSessionServers(sessionId: string): Promise<void> {`);
+replaceNative('packages/local-runtime-v2/src/application/session/process-local-application-contract.ts',
+  '    | "clearSessionServers"', '    | "clearSessionServers"\n    | "disconnectSessionServers"');
+replaceNative('packages/local-runtime-v2/src/local/cli-service.ts',
+  '  configureSessionMcpServers(\n',
+  `  disconnectSessionMcpServers(sessionId: string, servers: readonly string[]): Promise<void> {
+    return this.requireCapability("mcp", "MCP").disconnectSessionServers({ sessionId, servers });
+  }
+
+  configureSessionMcpServers(
+`);
+replaceNative('packages/tui/src/runtime/port.ts',
+  '  clearSessionMcpServers(sessionId: string): Promise<void>;',
+  '  clearSessionMcpServers(sessionId: string): Promise<void>;\n  disconnectSessionMcpServers(sessionId: string, servers: readonly string[]): Promise<void>;');
+for (const [file, owner] of [
+  ['packages/tui/src/runtime/adapter.ts', 'sessionAccess'],
+  ['packages/tui/src/runtime/adapters/session-access.ts', 'cliService'],
+]) {
+  replaceNative(file, '  clearSessionMcpServers(sessionId: string): Promise<void> {',
+    `  disconnectSessionMcpServers(sessionId: string, servers: readonly string[]): Promise<void> {
+    return this.${owner}.disconnectSessionMcpServers(sessionId, servers);
+  }
+
+  clearSessionMcpServers(sessionId: string): Promise<void> {`);
+}
+replaceNative('packages/tui/src/acp/agent.ts', "        'oac/subagents': {", "        'oac/mcp-lifecycle': { version: 2 },\n        'oac/subagents': {");
+replaceNative('packages/tui/src/acp/agent.ts',
+  '  app.onNotification(acp.methods.agent.session.cancel, async ({ params }) => {',
+  `  app.onRequest('oac/session/mcp/disconnect', (value: unknown) => {
+    const request = value as { sessionId?: unknown; servers?: unknown } | null;
+    if (!request || typeof request.sessionId !== 'string' || !request.sessionId ||
+        !Array.isArray(request.servers) || request.servers.length === 0 ||
+        request.servers.some((name: unknown) => typeof name !== 'string' || !name || name.trim() !== name))
+      throw acp.RequestError.invalidParams(undefined, 'Invalid MCP disconnect request.');
+    return { sessionId: request.sessionId, servers: request.servers as string[] };
+  }, async ({ params }) => {
+    await runSessionMcpMutation(params.sessionId, async (signal) => {
+      assertLifecycleActive(signal);
+      const active = requireAttachedSession(sessions, params.sessionId);
+      if (active.activePrompt)
+        throw acp.RequestError.invalidParams(undefined, 'MCP disconnect requires a settled prompt.');
+      await options.runtime.disconnectSessionMcpServers(params.sessionId, params.servers);
+      assertLifecycleActive(signal);
+    });
+    return {};
+  });
+
+  app.onNotification(acp.methods.agent.session.cancel, async ({ params }) => {`);
 const digest = name => createHash('sha256').update(readFileSync(join(here, name))).digest('hex');
 writeFileSync(join(root, '.oac-native-patch.json'), JSON.stringify({ revision: pin.revision,
   files: { 'patch-native.mjs':digest('patch-native.mjs'), 'native-subagent-admission.mjs':digest('native-subagent-admission.mjs') } }, null, 2)+'\n');

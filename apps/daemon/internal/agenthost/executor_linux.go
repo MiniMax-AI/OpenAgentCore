@@ -136,11 +136,12 @@ func open(ctx context.Context, cfg Config, req agent.PrepareRequest, bind func(a
 	s.ctx, s.cancel = context.WithCancel(ctx)
 	context.AfterFunc(s.ctx, s.closeLive)
 	s.exec, err = s.plan.view.Executor(s.ctx, s.plan.request, agent.ViewSession{
-		Home:   agent.ViewDir{Host: s.dir.entry(homeEntry), View: agent.ViewPrivateRoot + "/" + agent.ViewHomeName},
-		Proxy:  s.plan.proxy,
-		MCP:    s.plan.mcp,
-		Launch: s.launch,
-		Spawn:  s.spawn,
+		Home:    agent.ViewDir{Host: s.dir.entry(homeEntry), View: agent.ViewPrivateRoot + "/" + agent.ViewHomeName},
+		Proxy:   s.plan.proxy,
+		MCP:     s.plan.mcp,
+		StopMCP: s.stopMCP,
+		Launch:  s.launch,
+		Spawn:   s.spawn,
 	})
 	if err != nil {
 		if errors.Is(err, agent.ErrUnsupportedOperation) || errors.Is(err, agent.ErrViewHandoff) {

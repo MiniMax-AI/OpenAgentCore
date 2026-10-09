@@ -71,6 +71,7 @@ func readSubagentEffects(home agent.ViewDir, h *subagentHistory) ([]subagentEffe
 	done := map[string]rolloutCompletion{}
 	verified := false
 	owners := map[string]string{}
+	rootTurns := map[string]string{}
 	ownedItems := map[string]map[string]bool{}
 	for _, line := range bytes.Split(body, []byte{'\n'}) {
 		if len(line) == 0 {
@@ -90,6 +91,20 @@ func readSubagentEffects(home agent.ViewDir, h *subagentHistory) ([]subagentEffe
 			return nil, errors.New("codex: invalid subagent rollout payload")
 		}
 		switch row.Type {
+		case "turn_context":
+			var attribution struct {
+				Turn string `json:"turn_id"`
+				Root string `json:"root_turn_id"`
+			}
+			if json.Unmarshal(row.Payload, &attribution) != nil {
+				return nil, errors.New("codex: invalid native Turn attribution")
+			}
+			if attribution.Turn != "" && attribution.Root != "" {
+				if previous := rootTurns[attribution.Turn]; previous != "" && previous != attribution.Root {
+					return nil, errors.New("codex: conflicting native Turn attribution")
+				}
+				rootTurns[attribution.Turn] = attribution.Root
+			}
 		case "session_meta":
 			if verified {
 				continue
@@ -173,6 +188,7 @@ func readSubagentEffects(home agent.ViewDir, h *subagentHistory) ([]subagentEffe
 		}
 		if owner == h.ID {
 			turn.CompletedItems = ownedItems[turn.ID]
+			turn.RootTurnID = rootTurns[turn.ID]
 			owned = append(owned, turn)
 		}
 	}

@@ -126,6 +126,9 @@ func (s *Session) snapshotSubagents(ctx context.Context) (bool, error) {
 
 func (s *Session) publishSubagentHistory(ctx context.Context, h subagentHistory, known map[string]bool) (bool, error) {
 	busy := false
+	s.steering.mu.Lock()
+	rootTurn := s.steering.id
+	s.steering.mu.Unlock()
 	var nativeStatus struct {
 		Type string `json:"type"`
 	}
@@ -135,6 +138,12 @@ func (s *Session) publishSubagentHistory(ctx context.Context, h subagentHistory,
 	}
 	for _, turn := range h.Turns {
 		status := turn.Status
+		// A child can start and fail locally between history samples. Its durable
+		// native root attribution admits that Turn without admitting older history.
+		currentRoot := rootTurn != "" && turn.RootTurnID == rootTurn
+		if currentRoot || status == "inProgress" || s.subagents.interrupted[h.ID+":"+turn.ID] || s.hasPendingMCP(h.ID, turn.ID) {
+			s.observeChildMCP(h.ID, turn.ID, turn.Items)
+		}
 		switch status {
 		case "inProgress":
 			if nativeStatus.Type == "notLoaded" {

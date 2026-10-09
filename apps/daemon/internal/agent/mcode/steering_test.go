@@ -88,7 +88,7 @@ func TestTerminalFollowsAllNativeFrames(t *testing.T) {
 	}
 }
 
-func TestExecutionCancellationWaitsForOutputAndProcess(t *testing.T) {
+func TestExecutionCancellationWaitsForOutputAndKeepsProcess(t *testing.T) {
 	s, out := helperSession(t, "cancel-wait", false)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -108,8 +108,8 @@ func TestExecutionCancellationWaitsForOutputAndProcess(t *testing.T) {
 	}
 	select {
 	case <-s.exited:
+		t.Fatal("settled cancellation killed native owner")
 	default:
-		t.Fatal("cancel returned before process exit")
 	}
 	select {
 	case <-s.finished:

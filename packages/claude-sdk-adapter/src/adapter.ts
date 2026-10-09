@@ -42,7 +42,9 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   const names = definitions.map(tool => `mcp__functions__${tool.name}`);
   const allowed = [...names, ...(request.tool_search ? ["ToolSearch"] : [])];
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
-  const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
+  let mcp: MCPObserver | undefined;
+  const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names, (id, name) => mcp!.admit(id, name));
+  const stdio = new Set(declarations?.filter(server => "command" in server).map(server => server.server_label));
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
   const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format, !!request.tool_search);
   let commands = workspace ? new CommandObserver() : undefined;
@@ -63,7 +65,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   subagents?.expectSession(request.resume);
   const mcpServers: Record<string, McpServerConfig> = Object.create(null);
   if (definitions.length) mcpServers.functions = createFunctionServer(definitions, (call,signal) => { const target=functions; return turns ? turns.track(()=>target.invoke(call,signal)) : target.invoke(call,signal); });
-  let mcp = profile ? new MCPObserver(profile.identities) : undefined;
+  mcp = profile ? new MCPObserver(profile.identities, stdio) : undefined;
   if (profile) Object.assign(mcpServers, profile.servers);
   const children: Promise<number | null>[] = [];
   let result: Extract<Event, { type: "result" }> | undefined;
@@ -142,15 +144,15 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           messages=new MessageObserver();
           structured=request.output_format ? new StructuredOutput() : undefined;
           commands=workspace ? new CommandObserver() : undefined;
-          mcp=profile ? new MCPObserver(profile.identities) : undefined;
+          mcp=profile ? new MCPObserver(profile.identities, stdio) : undefined;
           subagents?.beginTurn();
           return inputs;
         },async value=>{
           if(value.type==="steer") for(const event of inputs.submit(value)) await emit(event);
           else functions.submit(JSON.stringify(value));
-        });
+        }, () => mcp?.cancel());
         if (request.type !== "executor_prepare" || Date.now() >= request.preparation_deadline) throw new Error("preparation expired");
-        await ownerEmit({type:"executor_ready",protocol:3});
+        await ownerEmit({type:"executor_ready",protocol:4});
       } else await emit({ type: "prepared" });
     } else if (profile) {
       if (inputs.hasInput) throw new Error("MCP input released before initialization");
@@ -204,6 +206,12 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         if (turns.cancelled) functions.cancelUnanswered();
         if(!await turns.quiescent() || abort.signal.aborted) throw new Error("unconfirmed interrupt");
         functions.assertComplete(); mcp?.assertComplete(); commands?.assertComplete();
+        const stopped = mcp?.cancelledServers ?? [];
+        if (stopped.length) {
+          await turns.stopMCP(stopped);
+          for (const server of stopped) await stream.reconnectMcpServer(server);
+          profile!.verifyReconnected(await stream.mcpServerStatus());
+        }
         if(subagents) for(const event of await subagents.facts()) await emit(event);
         await emit(turns.cancelled ? {type:"error",code:"cancelled"} : result);
         functions.close();

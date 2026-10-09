@@ -3,11 +3,12 @@ import { Inputs } from "./inputs.js";
 import { parseMessageInput, type MessageInput } from "./message_input.js";
 
 export type ExecutorEvent =
-  | { type: "executor_ready"; protocol: 3 }
+  | { type: "executor_ready"; protocol: 4 }
   | { type: "turn_started"; turn_id: string }
+  | { type: "mcp_stop"; turn_id: string; servers: string[] }
   | { type: "turn_settled"; turn_id: string; confirmed: boolean; reusable: boolean; reason: string };
 type WireEvent = { type: string; [key: string]: unknown };
-type Turn = { id: string; inputs: Inputs; cancelled: boolean; interrupt?: Promise<boolean>; callbacks: Set<Promise<unknown>> };
+type Turn = { id: string; inputs: Inputs; cancelled: boolean; interrupt?: Promise<boolean>; callbacks: Set<Promise<unknown>>; stoppedMCP?: (confirmed: boolean) => void };
 
 // The SDK sees one iterator for the Executor lifetime. Each yielded batch belongs
 // to a fresh receipt ledger; finishing a Turn never closes this outer iterator.
@@ -20,10 +21,11 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
   private stream?: Query;
   private begin?: (input: MessageInput, emit: (event: WireEvent) => Promise<void>) => Inputs;
   private submitInput?: (value: Record<string,unknown>) => Promise<void>;
+  private cancelCalls?: () => void;
   private nativeID = "";
   constructor(private readonly output: (event: WireEvent) => Promise<void>, private readonly abort: AbortController) {}
 
-  configure(stream: Query, begin: NonNullable<ExecutorTurns["begin"]>, submit: (value: Record<string,unknown>)=>Promise<void>): void { this.stream = stream; this.begin = begin; this.submitInput=submit; }
+  configure(stream: Query, begin: NonNullable<ExecutorTurns["begin"]>, submit: (value: Record<string,unknown>)=>Promise<void>, cancelCalls: () => void = () => {}): void { this.stream = stream; this.begin = begin; this.submitInput=submit; this.cancelCalls=cancelCalls; }
   async submit(value: Record<string,unknown>): Promise<void> {
     const payload=this.assertCurrent(value);
     if(!this.submitInput || (payload.type!=="steer" && payload.type!=="function_result")) throw new Error("invalid turn input");
@@ -65,6 +67,7 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
     }
     if (turn.interrupt) return;
     turn.cancelled = true;
+    this.cancelCalls?.();
     const discarded=turn.inputs.cancelQueued();
     turn.interrupt = this.stream!.interrupt().then(receipt => {
       const confirmed = !discarded && receipt !== undefined && Array.isArray(receipt.still_queued) && receipt.still_queued.length === 0;
@@ -72,6 +75,29 @@ export class ExecutorTurns implements AsyncIterable<SDKUserMessage> {
       return confirmed;
     }, () => { this.abort.abort(); return false; });
     await turn.interrupt;
+  }
+
+  async stopMCP(servers: string[]): Promise<void> {
+    const turn = this.active;
+    if (!turn?.cancelled || turn.stoppedMCP || this.abort.signal.aborted) throw new Error("invalid MCP stop");
+    let confirm!: (confirmed: boolean) => void;
+    const receipt = new Promise<boolean>(resolve => { confirm = resolve; });
+    turn.stoppedMCP = confirm;
+    const abort = () => confirm(false);
+    this.abort.signal.addEventListener("abort", abort, { once: true });
+    try {
+      await this.emit({ type: "mcp_stop", servers });
+      if (!await receipt) throw new Error("MCP stop unconfirmed");
+    } finally { this.abort.signal.removeEventListener("abort", abort); }
+  }
+
+  mcpStopped(value: Record<string, unknown>): void {
+    const turn = this.active;
+    if (!turn?.cancelled || turn.id !== value.turn_id || !turn.stoppedMCP || typeof value.confirmed !== "boolean" ||
+        Object.keys(value).some(key => !["type", "turn_id", "confirmed"].includes(key))) throw new Error("invalid MCP stop receipt");
+    const complete = turn.stoppedMCP;
+    turn.stoppedMCP = undefined;
+    complete(value.confirmed);
   }
 
   assertCurrent(value: Record<string, unknown>): Record<string, unknown> {

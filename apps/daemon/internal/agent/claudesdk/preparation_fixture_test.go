@@ -72,7 +72,7 @@ func runPreparationHelper() {
 				features = append(features, "workspace_structured_output")
 			}
 		}
-		_ = json.NewEncoder(os.Stdout).Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 3, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture", Features: features})
+		_ = json.NewEncoder(os.Stdout).Encode(RuntimeInfo{Type: "runtime_ready", Protocol: 4, Node: "fixture", SDK: "fixture", MCP: "fixture", Native: "fixture", Features: features})
 		return
 	}
 	state := os.Getenv("CLAUDE_CONFIG_DIR")
@@ -106,7 +106,7 @@ func runPreparationHelper() {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	emit(bridgeEvent{Type: "executor_ready", Protocol: 3})
+	emit(bridgeEvent{Type: "executor_ready", Protocol: 4})
 	if !scanner.Scan() {
 		return
 	}

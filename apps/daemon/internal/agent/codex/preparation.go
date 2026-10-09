@@ -86,8 +86,14 @@ func newExecutor(parent context.Context, req agent.PrepareRequest, cfg sessionCo
 		Capabilities: &InitializeCapabilities{ExperimentalAPI: true},
 	}
 	phase = "initialize"
-	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
+	initialized, err := rpc.Start(cancelCtx, initParams)
+	if err != nil {
 		return e.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
+	}
+	for _, binding := range cfg.view.MCP {
+		if binding.Transport == "stdio" && !initialized.MCPServerInvalidation {
+			return e.preparationFailed(fmt.Errorf("%w: codex native runtime lacks MCP client invalidation", agent.ErrUnsupportedOperation))
+		}
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
 		phase = "programmatic_tools_configuration"

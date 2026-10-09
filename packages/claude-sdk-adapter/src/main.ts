@@ -38,6 +38,7 @@ try {
           const control=value as Record<string,unknown>;
           if(control.type==="turn_start") await turns.start(control);
           else if(control.type==="turn_cancel") await turns.cancel(control);
+          else if(control.type==="mcp_stopped") turns.mcpStopped(control);
           else await turns.submit(control);
         } else if (request.type === "prepare" && phase !== "running") {
           if (phase !== "prepared" || abort.signal.aborted) throw new Error("invalid_request");

@@ -60,6 +60,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 	cancelled := false
 	reusable := false
 	reason := "bridge_interrupted"
+	mcpStopRequested := false
 	for raw := range s.frames {
 		var event bridgeEvent
 		if err := json.Unmarshal(raw, &event); err != nil || event.TurnID != s.runID {
@@ -85,6 +86,34 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 			break
 		}
 		switch event.Type {
+		case "mcp_stop":
+			if mcpStopRequested || s.owner.stopMCP == nil || !start.validStdioServers(event.Servers) {
+				failure = fmt.Errorf("claudesdk: invalid MCP stop request")
+				s.invalidate()
+				break
+			}
+			select {
+			case <-s.cancelOutput:
+			default:
+				failure = fmt.Errorf("claudesdk: unsolicited MCP stop request")
+				s.invalidate()
+			}
+			if failure != nil {
+				break
+			}
+			mcpStopRequested = true
+			stopErr := s.owner.stopMCP(s.process.Context(), event.Servers)
+			if stopErr != nil {
+				s.settlementErr = fmt.Errorf("claudesdk: MCP process-scope settlement is unconfirmed")
+			}
+			if err := s.owner.write(struct {
+				Type      string `json:"type"`
+				TurnID    string `json:"turn_id"`
+				Confirmed bool   `json:"confirmed"`
+			}{"mcp_stopped", s.runID, stopErr == nil}); err != nil {
+				failure = fmt.Errorf("claudesdk: MCP stop receipt delivery failed")
+				s.invalidate()
+			}
 		case "command_observation":
 			if err := commands.receive(event, start, s.inputSessionID(), emit); err != nil {
 				failure = err

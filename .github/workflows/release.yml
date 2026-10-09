@@ -74,6 +74,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: actions/cache@v6
         with:
           path: |
@@ -94,6 +97,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev pigz
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29
+        with:
+          version: 0.14.0
       - name: Cache pinned release downloads
         uses: actions/cache@v6
         with:
@@ -123,9 +129,9 @@ jobs:
           CORE_DISTRIBUTION_OFFLINE: ${{ (github.event_name == 'push' || inputs.offline) && '1' || '0' }}
         run: |
           inputs="$HOME/.oac/build/release-inputs/inputs.json"
-          CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+          CODEX_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
           MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
-          export CODEX_CLI_DIR MCODE_HARNESS_BUILD_DIR
+          export CODEX_HARNESS_BUILD_DIR MCODE_HARNESS_BUILD_DIR
           export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG"
           bash scripts/build-core-distribution.sh
           mkdir -p "$HOME/.oac/build/release-upload"

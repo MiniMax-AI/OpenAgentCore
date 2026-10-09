@@ -15,6 +15,7 @@ type subagentHistory struct {
 
 type subagentNativeTurn struct {
 	CompletedItems map[string]bool   `json:"-"`
+	RootTurnID     string            `json:"-"`
 	ID             string            `json:"id"`
 	Status         string            `json:"status"`
 	StartedAt      *int64            `json:"startedAt"`

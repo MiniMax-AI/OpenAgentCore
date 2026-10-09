@@ -58,7 +58,10 @@ export class MCPProfile {
       if (!signal.aborted && await Promise.race([this.ready, interrupted]) && !signal.aborted && this.admitted &&
           input.hook_event_name === "PreToolUse" && input.agent_id === undefined && input.session_id === this.sessionID &&
           (id === undefined || id === input.tool_use_id) &&
-          (this.identities.has(input.tool_name) || this.functions.includes(input.tool_name) || this.localTools.has(input.tool_name))) return {};
+          (this.identities.has(input.tool_name) || this.functions.includes(input.tool_name) || this.localTools.has(input.tool_name))) {
+        if (this.identities.has(input.tool_name)) this.admitCall(input.tool_use_id, input.tool_name);
+        return {};
+      }
       return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
         permissionDecisionReason: "Tool is outside the verified execution profile." } };
     } finally {
@@ -66,7 +69,7 @@ export class MCPProfile {
     }
   };
 
-  constructor(private readonly declarations: (HTTPServer | StdioServer)[], private readonly functions: string[]) {
+  constructor(private readonly declarations: (HTTPServer | StdioServer)[], private readonly functions: string[], private readonly admitCall: (id: string, name: string) => void = () => {}) {
     this.allowed = [...functions];
     for (const server of declarations) {
       const prefix = `mcp__${server.server_label}__`;
@@ -129,6 +132,16 @@ export class MCPProfile {
       if (matches.length !== 1 || matches[0].status !== "connected") {
         throw new Error("required native MCP server unavailable");
       }
+    }
+  }
+
+  verifyReconnected(statuses: McpServerStatus[]): void {
+    const identities = new Map(this.identities);
+    const inventory = [...this.functions, ...this.localTools, ...this.identities.keys()];
+    this.verify(inventory, statuses, this.sessionID, [...this.localTools]);
+    for (const [name, identity] of identities) {
+      const current = this.identities.get(name);
+      if (current?.server !== identity.server || current.name !== identity.name) throw new Error("changed native MCP identity");
     }
   }
 

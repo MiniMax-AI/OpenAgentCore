@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path"
 	"slices"
 	"sync"
 	"syscall"
@@ -25,7 +26,8 @@ import (
 // liveView is the Session's one live view slot.
 type liveView struct {
 	view   runningView // nil while the view is being built
-	closed bool        // the Session ended while the view was being built
+	broker *processbroker.Broker
+	closed bool // the Session ended while the view was being built
 }
 
 // runningView is the part of *sessionview.View the Session owns.
@@ -157,6 +159,9 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		var err error
 		if scope, err = s.processScope(startCtx); err != nil {
 			s.release(lv)
+			if errors.Is(err, agent.ErrUnsupportedOperation) {
+				return nil, err
+			}
 			if startCtx.Err() != nil {
 				return nil, fmt.Errorf("%w: describe: %w", ErrLaunch, err)
 			}
@@ -227,7 +232,43 @@ func (s *session) processScope(ctx context.Context) (sandboxprocess.Scope, error
 	if err != nil {
 		return 0, err
 	}
-	return strongestScope(d.Capabilities)
+	scope, err := strongestScope(d.Capabilities)
+	if err == nil && len(s.plan.executables.Aliases) > 0 && scope != sandboxprocess.ScopeCgroupV2 {
+		return 0, unsupported("stdio MCP requires delegated cgroup v2 process scopes")
+	}
+	return scope, err
+}
+
+// stopMCP joins the exact services selected by a cancelled Turn. Native client
+// recovery belongs to the adapter and happens only after this returns.
+func (s *session) stopMCP(ctx context.Context, labels []string) error {
+	aliases := make([]string, 0, len(labels))
+	for _, label := range labels {
+		index := slices.IndexFunc(s.plan.mcp, func(binding agent.MCPBinding) bool { return binding.ServerLabel == label })
+		if index < 0 || s.plan.mcp[index].Transport != "stdio" {
+			return unsupported("MCP scope termination requires a declared stdio binding")
+		}
+		alias := path.Base(agent.ViewAlias(index))
+		if !slices.Contains(aliases, alias) {
+			aliases = append(aliases, alias)
+		}
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	var broker *processbroker.Broker
+	if s.live != nil && !s.live.closed {
+		broker = s.live.broker
+	}
+	s.mu.Unlock()
+	if broker == nil {
+		return fmt.Errorf("%w: stop MCP: %w", ErrProcessBroker, agent.ErrNoLiveView)
+	}
+	if err := broker.StopAliases(ctx, aliases); err != nil {
+		return fmt.Errorf("%w: stop MCP: %w", ErrProcessBroker, err)
+	}
+	return nil
 }
 
 // brokerFailed fails the Session with a process broker failure.
@@ -257,6 +298,7 @@ func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway 
 	go h.watch()
 	s.mu.Lock()
 	lv.view = v
+	lv.broker = h.broker
 	closed := lv.closed
 	s.mu.Unlock()
 	var err error

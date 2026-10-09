@@ -109,14 +109,14 @@ func TestExecutorReusesNativeOwnerWithFreshTurnsAndIdleDrain(t *testing.T) {
 	}
 }
 
-func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.T) {
+func TestExecutorCancellationPreservesOwnerAndLateCancelCannotRetarget(t *testing.T) {
 	for _, disabled := range []bool{true, false} {
 		t.Run(map[bool]string{true: "single-agent", false: "subagents"}[disabled], func(t *testing.T) {
 			e, record := executorFixture(t, "executor-cancel", true)
 			first, _ := runExecutorFixtureTurn(t, e, "first", "one")
 			e.req.DisableSubagents = disabled
 			if !disabled {
-				// A terminal native history record still cannot prove Bash cleanup.
+				// This Turn contains no unconfirmed workspace or MCP calls.
 				reader := filepath.Join(t.TempDir(), "reader")
 				body := "#!/bin/sh\nprintf '%s\\n' '{\"version\":1,\"complete\":true,\"rootSessionId\":\"native-1\",\"sessions\":[{\"id\":\"native-1\",\"turns\":[{\"id\":\"root-turn\",\"status\":\"aborted\"}]}]}'\n"
 				if err := os.WriteFile(reader, []byte(body), 0700); err != nil {
@@ -150,28 +150,24 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 			defer cancel()
 			if err = second.Cancel(ctx); err != nil {
-				t.Fatal("stopped nonreusable owner reported cancellation failure", err)
+				t.Fatal("cancellation failed", err)
 			}
 			settlement, err := second.AwaitSettlement(ctx)
-			if err != nil || settlement.Reusable {
+			if err != nil || !settlement.Reusable {
 				t.Fatal(settlement, err)
 			}
 			select {
 			case <-e.connection.exited:
+				t.Fatal("settled cancellation killed native owner")
 			default:
-				t.Fatal("nonreusable settlement preceded native process exit")
 			}
 			if got := second.CancellationOutcome(); got.Metadata[proto.DoneMetaAgentSessionID] != "native-1" {
 				t.Fatal("cancel lost settled outcome", got)
 			}
 			for range out {
 			}
-			thirdOut := make(chan proto.Envelope, 1)
-			third, err := e.StartTurn(t.Context(), "third", proto.TextInput("three"), thirdOut)
-			if third != nil || err == nil {
-				t.Fatal("unproven native owner admitted a successor")
-			}
-			close(thirdOut)
+			e.req.DisableSubagents = true
+			runExecutorFixtureTurn(t, e, "third", "three")
 			raw, _ = os.ReadFile(record)
 			if strings.Count(string(raw), "session/cancel\n") != 1 || strings.Count(string(raw), "initialize\n") != 1 {
 				t.Fatalf("cancellation replaced owner: %s", raw)

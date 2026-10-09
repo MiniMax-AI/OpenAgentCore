@@ -30,15 +30,19 @@ func (s *Session) runExecutorTurn(prompt string) {
 			err = childErr
 		}
 	}
+	stopped, stopErr := s.settleCancelledMCP()
+	if stopErr != nil {
+		err = stopErr
+	}
 	reusable := err == nil && s.process.Context().Err() == nil
-	if len(s.tools) > 0 {
-		reusable = false
+	for _, call := range s.tools {
+		if call.mcp == nil || !stopped[call.mcp.server] {
+			reusable = false
+		}
 	}
 	s.finishEnvironmentMCP()
 	s.mu.Lock()
-	// ACP and native history cancellation do not prove detached tool cleanup.
-	// Retire the owner and settle its workers before acknowledging cancellation.
-	if s.cancelled || s.inputUncertain {
+	if s.inputUncertain {
 		reusable = false
 	}
 	if s.inputUncertain && err == nil {
@@ -112,13 +116,14 @@ func (s *Session) Cancel(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	first := !s.cancelled && !s.closing
-	s.cancelled = true
 	if first {
+		s.cancelled = true
+		s.captureMCPCancellation()
 		s.operations.Add(1)
 	}
 	s.mu.Unlock()
 	// Cancellation releases event backpressure but does not cancel native owner
-	// context. After native settlement, cancellation retires and drains the owner.
+	// context. Settlement closes only the captured MCP service owners.
 	s.outputCancel()
 	e.mu.Unlock()
 	var err error

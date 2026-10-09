@@ -14,10 +14,12 @@ func (s *Session) emitToolStage(update toolUpdate, stage string) error {
 	payload.Observation = workspaceToolObservation(update, stage)
 	if payload.Observation == nil {
 		var err error
-		payload.Observation, err = environmentMCPObservation(update, stage)
+		var responseReceived bool
+		payload.Observation, responseReceived, err = environmentMCPObservation(update, stage)
 		if err != nil {
 			return err
 		}
+		s.trackMCPCancellation(update, responseReceived)
 	}
 	// Native task/skill bookkeeping has no qualified public item mapping.
 	if payload.Observation == nil {
