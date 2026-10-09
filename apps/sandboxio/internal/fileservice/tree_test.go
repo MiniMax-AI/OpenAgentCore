@@ -409,20 +409,7 @@ func TestOpenTreeCloseWaitsForDescriptorRead(t *testing.T) {
 					closed <- f.svc.Close()
 				}
 			}()
-			// Wait until close admission is observable, without relying on sleeps.
-			deadline := time.Now().Add(5 * time.Second)
-			for {
-				st.mu.Lock()
-				_, present := st.handles[req.Handle]
-				st.mu.Unlock()
-				if !present {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatal("close not entered")
-				}
-				time.Sleep(time.Millisecond)
-			}
+			waitTreeClose(t, h)
 			bound, _ := sandboxfs.TreeSizeBound(req, f.svc.caps)
 			treeBudget(t, f.svc, 1, bound)
 			select {
@@ -622,4 +609,92 @@ func TestOpenTreeEnforcesProcessPermissions(t *testing.T) {
 			t.Fatal("OS read differs")
 		}
 	})
+}
+
+// A pending close writer prevents new descriptor readers from entering.
+func waitTreeClose(t *testing.T, h *handle) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for h.useMu.TryRLock() {
+		h.useMu.RUnlock()
+		if time.Now().After(deadline) {
+			t.Fatal("close not entered")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestOpenTreeRepeatedReleaseJoinsClosingHandle(t *testing.T) {
+	for _, next := range []string{"release", "detach"} {
+		t.Run(next, func(t *testing.T) {
+			f := newFixture(t)
+			q := treeRequest(f)
+			if _, err := f.svc.OpenTree(t.Context(), f.att, &q); err != nil {
+				t.Fatal(err)
+			}
+			st := f.svc.atts[f.att.ID]
+			h, err := st.handle(q.Handle)
+			if err != nil {
+				t.Fatal(err)
+			}
+			entered, resume := make(chan struct{}), make(chan struct{})
+			unblock := sync.OnceFunc(func() { close(resume) })
+			defer unblock()
+			reading := make(chan error, 1)
+			go func() {
+				reading <- h.use(func(fd int) error {
+					close(entered)
+					<-resume
+					var b [1]byte
+					_, err := unix.Pread(fd, b[:], 0)
+					return err
+				})
+			}()
+			<-entered
+			first := make(chan error, 1)
+			go func() {
+				_, err := f.svc.Release(t.Context(), f.att, &sandboxfs.ReleaseRequest{Handle: q.Handle})
+				first <- err
+			}()
+			waitTreeClose(t, h)
+			second := make(chan error, 1)
+			secondStarted := make(chan struct{})
+			go func() {
+				close(secondStarted)
+				if next == "release" {
+					_, err := f.svc.Release(t.Context(), f.att, &sandboxfs.ReleaseRequest{Handle: q.Handle})
+					second <- err
+				} else {
+					_, err := f.svc.Detach(t.Context(), f.att, &sandboxfs.DetachRequest{})
+					second <- err
+				}
+			}()
+			<-secondStarted
+			select {
+			case err := <-second:
+				t.Fatalf("second %s returned before backing released: %v", next, err)
+			case <-time.After(20 * time.Millisecond):
+			}
+			bound, _ := sandboxfs.TreeSizeBound(q, f.svc.caps)
+			treeBudget(t, f.svc, 1, bound)
+			unblock()
+			if err := <-reading; err != nil {
+				t.Fatal(err)
+			}
+			if err := <-first; err != nil {
+				t.Fatal(err)
+			}
+			if err := <-second; err != nil {
+				if next != "release" {
+					t.Fatal(err)
+				}
+				wantFailure(t, err, sandboxfs.CodeStaleHandle, 0, none)
+			}
+			treeBudget(t, f.svc, 0, 0)
+			if next == "release" {
+				_, err := f.svc.Release(t.Context(), f.att, &sandboxfs.ReleaseRequest{Handle: q.Handle})
+				wantFailure(t, err, sandboxfs.CodeStaleHandle, 0, none)
+			}
+		})
+	}
 }

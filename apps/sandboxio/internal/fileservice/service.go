@@ -623,9 +623,16 @@ func (st *state) release(id sandboxfs.HandleID, dir bool) error {
 		st.mu.Unlock()
 		return sandboxfs.NewErrnoFailure(sandboxfs.ErrnoBadDescriptor, sandboxwire.EffectNone, "wrong handle kind")
 	}
-	delete(st.handles, id)
 	st.mu.Unlock()
-	return h.close()
+	// Keep the handle addressable until close joins its descriptor users.
+	// Concurrent releases must join that same close before proving absence.
+	err := h.close()
+	st.mu.Lock()
+	if st.handles[id] == h {
+		delete(st.handles, id)
+	}
+	st.mu.Unlock()
+	return err
 }
 
 // attr converts a stat. Ino combines the device with the inode number, as
