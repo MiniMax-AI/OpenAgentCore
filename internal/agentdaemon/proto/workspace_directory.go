@@ -36,7 +36,7 @@ func (result *WorkspaceDirectoryResult) UnmarshalJSON(data []byte) error {
 }
 
 func ValidWorkspaceReadRequest(request WorkspaceReadPayload) bool {
-	return (request.Handle == "") != (request.RunID == "") && request.EnvironmentID != "" &&
+	return request.Handle != "" && request.EnvironmentID != "" &&
 		request.MaxEntries >= 1 && request.MaxEntries <= WorkspaceDirectoryMaxEntries
 }
 

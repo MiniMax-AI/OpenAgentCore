@@ -20,7 +20,14 @@ type scheduledWork struct {
 	reservationID string
 }
 
-func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool) ([]scheduledWork, error) {
+type workerReservation uint8
+
+const (
+	executionReservation workerReservation = iota + 1
+	workspaceReservation
+)
+
+func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]workerReservation) ([]scheduledWork, error) {
 	turns, err := w.dispatcher.SessionsReader.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
 	if err != nil {
 		return nil, err
@@ -64,7 +71,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			s.turnCursor = item.TurnID
 			s.environmentFirst = true
 		}
-		if active[item.SessionID] {
+		if active[item.SessionID] != 0 {
 			continue
 		}
 		var ready bool
@@ -82,7 +89,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 		if !ready {
 			continue
 		}
-		active[item.SessionID] = true
+		active[item.SessionID] = executionReservation
 		selected = append(selected, item)
 	}
 	return selected, nil

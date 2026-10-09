@@ -158,7 +158,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		w.runtimes.drain()
 		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
-	active := make(map[string]bool)
+	active := make(map[string]workerReservation)
 	w.observeSlots(len(active))
 	type completion struct {
 		id  string
@@ -208,11 +208,11 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:
-			if request.ctx.Err() != nil || active[request.environment.SessionID] || len(active) == w.executionConcurrency() {
+			if request.ctx.Err() != nil || active[request.environment.SessionID] != 0 || len(active) == w.executionConcurrency() {
 				request.result <- fileWriteResult{err: ErrExecutionUnavailable}
 				continue
 			}
-			active[request.environment.SessionID] = true
+			active[request.environment.SessionID] = workspaceReservation
 			w.observeSlots(len(active))
 			running.Add(1)
 			go func() {
@@ -229,13 +229,14 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			}
 			rescanOnCompletion = false
 		case request := <-w.directoryReads:
-			if request.ctx.Err() != nil || reads == w.executionConcurrency() || (!active[request.environment.SessionID] && len(active) == w.executionConcurrency()) {
+			reservation := active[request.environment.SessionID]
+			if request.ctx.Err() != nil || reservation == workspaceReservation || reads == w.executionConcurrency() || (reservation == 0 && len(active) == w.executionConcurrency()) {
 				request.reply(directoryReadResult{err: ErrExecutionUnavailable})
 				continue
 			}
-			reserved := !active[request.environment.SessionID]
+			reserved := reservation == 0
 			if reserved {
-				active[request.environment.SessionID] = true
+				active[request.environment.SessionID] = workspaceReservation
 				w.observeSlots(len(active))
 			}
 			reads++
