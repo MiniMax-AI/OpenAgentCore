@@ -1,7 +1,7 @@
 ---
 title: "进程协议"
 source: docs/process-protocol.md
-source_hash: c2658d8462e8699b9ab5c5122c2f36ee19e30b5890bed69d54c545d60d596ff9
+source_hash: 5111fa281a69270ee6301648134a3266003c055256d164574b9b9a5941a73564
 ---
 
 进程协议定义 agent host 如何在沙箱中启动和控制进程。沙箱内的 Sandbox I/O 服务提供该协议，agent host 的 broker 是其客户端。协议依据明确的 spec 启动进程，以有序事件流式传输其输出，在精确 offset 处接受 stdin，并将 leader 退出、输出结束和进程 scope 结束作为独立事实报告。
@@ -38,7 +38,9 @@ Go 客户端为 `sandboxprocess.NewClient(stream)`。`Start` 和 `Attach` 返回
 - 绝不丢弃未被告知已交付的事件，见[输出、重放与流量控制](#output-replay-and-flow-control)；
 - 将 stream 丢失仅视为 observer 丢失，见[所有权](#ownership)。
 
-Linux 服务在二进制的 `main` 中首先调用 `processservice.Init()`。Go 无法设置子进程的 umask，因此每次启动都会将服务二进制作为 trampoline 重新执行：它从继承的描述符读取启动信息，将所有大于 2 的继承描述符标记为 close-on-exec，应用 umask 和工作目录，然后 exec 目标。`Init` 负责运行该 trampoline，正常启动时立即返回。Linux 服务用 `setsid` 在新会话中启动每个 operation，通过 `/proc` 观测会话，并且只声明 `ScopePOSIXSession`。它要求 `pidfd_open` 和 `pidfd_send_signal`（Linux 5.3 或更高版本）：缺少它们时 `processservice.New` 以 `ErrPidfdUnsupported` 失败。
+Linux 服务在二进制的 `main` 中首先调用 `processservice.Init()`。Go 无法设置子进程的 umask，因此每次启动都会将服务二进制作为 trampoline 重新执行：它从继承的描述符读取启动信息，将所有大于 2 的继承描述符标记为 close-on-exec，应用 umask 和工作目录，然后 exec 目标。`Init` 负责运行该 trampoline，正常启动时立即返回。Linux 服务用 `setsid` 在新会话中启动每个 operation，并声明 `ScopePOSIXSession`。它要求 `pidfd_open` 和 `pidfd_send_signal`（Linux 5.3 或更高版本）：缺少它们时 `processservice.New` 以 `ErrPidfdUnsupported` 失败。
+
+Linux 实现从 `/proc/self/cgroup` 读取当前 cgroup，并映射到 `/sys/fs/cgroup`；当该组允许创建和删除 operation 子组、写入 `cgroup.kill` 及观测 `cgroup.events` 时，还会声明 `ScopeCgroupV2`。Provider 必须在启动 SandboxIO 前将该当前 cgroup 委派给服务账号；这需要可写的 cgroup v2 挂载和 `cgroup.kill`（Linux 5.14 或更高版本）。无需启用资源 controller。每个选择 cgroup scope 的 operation 独占一个新子组。服务先将阻塞中的 trampoline 放入该组，再发送 launch spec，保证目标及其后代从启动起就在 scope 内。放置失败时绝不执行目标。委派提供进程生命周期控制，不提供针对同账号其他进程的隔离；隔离由 Provider 负责。
 
 开始服务前，`main` 将进程设为 child subreaper（`prctl(PR_SET_CHILD_SUBREAPER)`），并在进程整个生命周期内运行 `processservice.Reap(ctx)`。`Reap` 是进程中唯一的 `wait`：它回收每个子进程，将每个 leader 的退出交付给对应 operation，并回收 subreaper 继承的孤儿后代进程。二进制中其他任何代码都不得等待子进程；`Reap` 未运行时，任何 operation 都观测不到退出。二进制停止时，在其 stream 结束后调用 `Shutdown(ctx)`：`Shutdown` 像撤销[所有权](#ownership)时一样，取消每个存活的 operation 并放弃其输出，在每个 scope 关闭或 `ctx` 结束后返回。
 
@@ -141,6 +143,8 @@ stdin offset 从 0 开始，计算服务已接受的字节数。`WriteStdin` 和
 
 两种 scope 都在新的 POSIX 会话中启动进程。`ScopeCgroupV2` 还会将进程放入新的 cgroup，且仅在服务强制执行这一点时才声明。后代进程可以调用 `setsid` 离开 `ScopePOSIXSession` scope；这是该 scope 的局限。Linux 服务通过轮询 `/proc` 中的存活成员来观测会话 scope，因此 `ScopeClosed` 在此局限内尽力而为。
 
+对于 Linux 实现的 `ScopeCgroupV2`，`TargetScope` 信号作用于 operation 的 cgroup 子树：KILL 写入 `cgroup.kill`；其他信号在再次核对子组成员后通过 pidfd 发送。fork、double-fork 和 `setsid` 都不会离开该 scope。`ScopeClosed` 要求 `cgroup.events` 确认整棵子树为空，与 leader 退出和输出排空相互独立。观测失败时 scope 保持 `Unknown`，服务继续重试。后台进程可在 leader 正常退出后继续运行，直到它们完成或 scope 被取消。
+
 请求从不指定进程 ID。`Signal` 接受 `Capabilities.Signals` 中的信号编号和以下目标之一：
 
 | 目标 | 接收信号的进程 |
@@ -152,7 +156,7 @@ stdin offset 从 0 开始，计算服务已接受的字节数。`WriteStdin` 和
 
 没有进程的目标返回 `NotRunning`；`ScopeClosed` 之后的任何目标，以及终端没有前台进程组的 `TargetPTYForegroundGroup`，同样返回 `NotRunning`。
 
-信号只送达服务能证明属于该 operation 会话的进程，绝不送达复用了 PID 或会话 ID 的进程。leader 尚未被回收时，其 PID 固定住会话 ID 和初始进程组 ID，Linux 服务按 ID 向 leader 或该进程组发送信号。否则，它通过为会话进程持有的 pidfd 发送信号，并且只发给同一请求内刷新证明仍在会话中的进程；刷新失败时，不再发送任何信号，请求以 `IO` 失败。只有当它已持有的某个进程在该次读取期间始终留在会话中时，它才为显示该会话 ID 的进程获取 pidfd；回收任何已持有进程之前，它会先更新持有集合。当它未持有任何进程，但仍有存活进程显示该会话 ID 时，它无法区分该会话与具有相同 ID 的新会话：它不发送任何信号，目标返回 `NotRunning`，scope 随 `ObservationLost` 变为 `Unknown`。
+对于 `ScopePOSIXSession` 及基于会话的信号目标，信号只送达服务能证明属于该 operation 会话的进程，绝不送达复用了 PID 或会话 ID 的进程。leader 尚未被回收时，其 PID 固定住会话 ID 和初始进程组 ID，Linux 服务按 ID 向 leader 或该进程组发送信号。否则，它通过为会话进程持有的 pidfd 发送信号，并且只发给同一请求内刷新证明仍在会话中的进程；刷新失败时，不再发送任何信号，请求以 `IO` 失败。只有当它已持有的某个进程在该次读取期间始终留在会话中时，它才为显示该会话 ID 的进程获取 pidfd；回收任何已持有进程之前，它会先更新持有集合。当它未持有任何进程，但仍有存活进程显示该会话 ID 时，它无法区分该会话与具有相同 ID 的新会话：它不发送任何信号，目标返回 `NotRunning`，scope 随 `ObservationLost` 变为 `Unknown`。
 
 ### 所有权 {#ownership}
 
@@ -202,3 +206,5 @@ stdin offset 从 0 开始，计算服务已接受的字节数。`WriteStdin` 和
 ## 验证 {#verification}
 
 `go test ./internal/sandboxprocess` 检查 `internal/sandboxprocess/testdata` 中的 golden frame，`go test -fuzz FuzzDecode ./internal/sandboxprocess` 对解码器进行 fuzz 测试。`go test ./apps/sandboxio/internal/processservice` 使用真实进程，在内存 stream 上运行 Linux 服务。
+
+backend runtime CI job 在 systemd 委派单元内以 `OAC_TEST_PROCESS_CGROUP=1` 运行 `TestCgroup`；缺少委派时该门禁失败。本地可用 `go test -race -c -o "$HOME/.oac/processservice.test" ./apps/sandboxio/internal/processservice` 编译测试二进制，再用 `systemd-run --user --collect --wait --pipe --property=Delegate=yes --setenv=OAC_TEST_PROCESS_CGROUP=1 "$HOME/.oac/processservice.test" -test.run TestCgroup` 运行。这些测试使用真实内核 cgroup 验证脱离会话的后代、取消、重连、输出排空、scope 观测失败及有界关闭。

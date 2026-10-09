@@ -129,6 +129,11 @@ jobs:
       - name: Test Runtime and shared Go contracts
         if: matrix.part == 'runtime'
         run: make check-go
+      - name: Test delegated process scopes
+        if: matrix.part == 'runtime'
+        run: |
+          go test -race -c -o "$RUNNER_TEMP/process-scope.test" ./apps/sandboxio/internal/processservice
+          sudo systemd-run --quiet --collect --wait --pipe --unit="oac-process-scope-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --property=Delegate=yes --uid="$(id -u)" --gid="$(id -g)" /usr/bin/env OAC_TEST_PROCESS_CGROUP=1 "$RUNNER_TEMP/process-scope.test" -test.run '^TestCgroup' -test.v
       - name: Test microsandbox provider and Linux helper
         if: matrix.part == 'runtime'
         run: make check-microsandbox-provider

@@ -69,7 +69,8 @@ type operation struct {
 	leaderGone bool
 	status     unix.WaitStatus
 	// cu holds the processes proven to be in the session; the spawn sets it.
-	cu *custody
+	cu     *custody
+	cgroup *processCgroup
 
 	// A Cancel that arrives while the operation is starting waits for the
 	// launch.
@@ -135,10 +136,14 @@ func (op *operation) settleLocked() {
 }
 
 func (op *operation) statusLocked() sp.OperationStatus {
+	var failure *sp.Failure
+	if op.state == sp.StateStartFailed {
+		failure = op.startFailure
+	}
 	return sp.OperationStatus{
 		State:         op.state,
 		Exit:          op.exit,
-		StartFailure:  op.startFailure,
+		StartFailure:  failure,
 		StdinOffset:   op.stdinOffset,
 		StdinClosed:   op.stdinClosed,
 		Output:        op.output,
@@ -413,7 +418,7 @@ func (op *operation) closeOutput(name sp.Stream) error {
 // has published them.
 func (op *operation) abandonOutput() {
 	op.mu.Lock()
-	for op.state == sp.StateStarting {
+	for op.state == sp.StateStarting && op.startFailure == nil {
 		op.cond.Wait()
 	}
 	streams := op.streams
