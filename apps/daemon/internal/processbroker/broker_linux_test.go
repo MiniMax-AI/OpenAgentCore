@@ -220,16 +220,21 @@ func TestTerminalSizeAndMode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := f.command("bash", "-c", `stty size; while [ "$(stty size)" = "30 100" ]; do sleep 0.1; done; stty size`)
+	cmd := f.command("bash", "-c", `stty -echo; stty size; while [ "$(stty size)" = "30 100" ]; do sleep 0.1; done; stty size; read -r`)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = pts, pts, pts
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		cmd.Process.Kill()
+		cmd.Wait()
+	}()
 	var (
 		mu  sync.Mutex
 		out bytes.Buffer
 	)
+	changed := make(chan struct{}, 1)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -239,6 +244,10 @@ func TestTerminalSizeAndMode(t *testing.T) {
 			mu.Lock()
 			out.Write(buf[:n])
 			mu.Unlock()
+			select {
+			case changed <- struct{}{}:
+			default:
+			}
 			if err != nil {
 				return
 			}
@@ -249,13 +258,27 @@ func TestTerminalSizeAndMode(t *testing.T) {
 		defer mu.Unlock()
 		return out.String()
 	}
-	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(output(), "30 100\r\n"); time.Sleep(10 * time.Millisecond) {
-		if time.Now().After(deadline) {
-			t.Fatalf("no initial size; output %q", output())
+	waitOutput := func(want string) {
+		t.Helper()
+		timeout := time.NewTimer(10 * time.Second)
+		defer timeout.Stop()
+		for !strings.Contains(output(), want) {
+			select {
+			case <-changed:
+			case <-timeout.C:
+				t.Fatalf("waiting for %q; output %q", want, output())
+			}
 		}
 	}
+	waitOutput("30 100\r\n")
 	// The kernel sends SIGWINCH to the shim, the terminal's foreground group.
 	if err := pty.Setsize(ptm, &pty.Winsize{Rows: 40, Cols: 120}); err != nil {
+		t.Fatal(err)
+	}
+	// Observe the resized output before allowing the child to exit: PTY
+	// bytes delivered after Exit are processed in the restored local mode.
+	waitOutput("40 120\r\n")
+	if _, err := ptm.Write([]byte("\n")); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.Wait(); err != nil {
