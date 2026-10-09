@@ -700,9 +700,6 @@ func (inv *invocation) cancelRemote() {
 	}
 	grace := uint32(inv.b.cfg.CancelGrace.Milliseconds())
 	err := inv.request(h, false, func(h handle) error {
-		if inv.exitDecided() {
-			return nil
-		}
 		return h.op.Cancel(inv.b.ctx, grace)
 	})
 	switch {
