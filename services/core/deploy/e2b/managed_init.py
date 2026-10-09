@@ -67,6 +67,34 @@ def prepare_sandbox():
         directory.chmod(0o700)
 
 
+def delegate_process_group():
+    """Let the unprivileged service contain its own operation descendants."""
+    mounts = Path('/proc/self/mountinfo').read_text().splitlines()
+    if not any(line.split(' - ')[0].split()[4] == '/sys/fs/cgroup'
+               and line.split(' - ')[1].split()[0] == 'cgroup2' for line in mounts):
+        raise RuntimeError('Sandbox process containment requires cgroup v2')
+    membership = [line[3:] for line in Path('/proc/self/cgroup').read_text().splitlines()
+                  if line.startswith('0::/')]
+    if len(membership) != 1 or '..' in Path(membership[0]).parts:
+        raise RuntimeError('Invalid sandbox cgroup membership')
+    parent = Path('/sys/fs/cgroup') / membership[0].lstrip('/')
+    if str(os.getpid()) not in (parent / 'cgroup.procs').read_text().splitlines():
+        raise RuntimeError('Sandbox cgroup mount does not match membership')
+    group = parent / 'oac-sandbox-io'
+    # Never reuse an existing group: an uncertain startup owns the whole VM.
+    group.mkdir(mode=0o700)
+    if (group / 'cgroup.subtree_control').read_text().strip():
+        raise RuntimeError('Sandbox process group has active controllers')
+    (group / 'cgroup.kill').write_text('1')
+    group.chmod(0o700)
+    os.chown(group, 1000, 1000)
+    os.chown(group / 'cgroup.procs', 1000, 1000)
+    (group / 'cgroup.procs').chmod(0o600)
+    # This one-shot initializer has no other live children. Its child inherits
+    # the group before Popen drops privileges; the initializer then exits.
+    (group / 'cgroup.procs').write_text(str(os.getpid()))
+
+
 def initialize():
     ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
     ROOT.chmod(0o700)
@@ -83,6 +111,7 @@ def initialize():
     bootstrap = HOME / 'sandbox-io-bootstrap.json'
     write_private(bootstrap, payload['SandboxIO'], owner=1000)
     source.unlink()
+    delegate_process_group()
     # Sandbox I/O is the only process started in the sandbox; its file is its
     # only input.
     with (HOME / 'sandbox-io.log').open('xb') as stream:

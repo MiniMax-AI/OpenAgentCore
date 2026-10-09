@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: a6d2d1e9846b1f22a9566048fd3821eee601010aea572c6a402436800c44491b
+source_hash: 064af3f49e48941b31a82988190bc8ddbdabc02172e03cf9c991c95aead5169c
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -90,6 +90,8 @@ make check-microsandbox-provider
 该辅助程序会写入 `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`。其独立的 Go 模块固定 microsandbox Go SDK v0.7.2，并嵌入匹配的 FFI 库；构建生产版本时，绝不能使用该 SDK 的 `microsandbox_ffi_path` 标签。Core 本身仍采用禁用 CGO 的构建。该辅助程序需要 glibc，并且只能在节点上运行。
 
 **microsandbox 运行时。** 分发包使用官方的 [v0.7.2 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.2) 归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
+
+原生 guest 资格验证必须以 UID/GID 1000 检验 [microsandbox bootstrap](../../services/core/tools/microsandbox-provider/README.md) 和 [E2B 启动](../../services/core/tools/e2b-provider/README.md#create)的委派，包括取消创建新会话的后代进程并确认其副作用停止。仅在容器中检查不能证明 guest 内核及其挂载布局合格。
 
 ### 独立 Core 构建 {#standalone-core-builds}
 

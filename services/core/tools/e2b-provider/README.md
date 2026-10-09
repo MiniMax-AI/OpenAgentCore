@@ -47,6 +47,8 @@ A helper holds its allocation's lock until the SDK operation returns, even after
 
 An unknown Create is never repeated. A Create whose connection material was lost can be discovered and destroyed but cannot resume bootstrap, and an unconfirmed startup requires reclaiming the whole allocation.
 
+The guest must have cgroup v2 mounted read-write at `/sys/fs/cgroup` and support `cgroup.kill`. The root initializer validates its current membership, exclusively creates an `oac-sandbox-io` child group beneath it, delegates only that directory and its `cgroup.procs` to UID 1000, and enters it before spawning Sandbox I/O. This preserves the ancestors' resource limits and enables no resource controllers. The service inherits this membership; the [Process protocol](../../../../docs/process-protocol.md#scope-and-signals) defines cancellation scopes. File and Net operations still run as UID 1000. Existing groups and unavailable delegation fail startup without reuse or killing unknown processes. Allocation destruction reclaims the group with the VM.
+
 ## Inspection and cleanup
 
 Inspection accepts the SDK's nullable sandbox-information domain and checks any reported domain against the configured sandbox domain. This information field never supplies connection material: Create's connection domain must match before any envd request, and restoring saved connection material repeats that check. SDK `connect` is never used because it can resume paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.

@@ -24,6 +24,8 @@ VM creation does not run the image's entry point. The bootstrap runs as root wit
 
 A helper response carries `CreateSettled` with a configuration rejection only after native Create has completed, the first inspection has verified the exact compute ID and ownership, and the resource check has rejected the VM before bootstrap started. The adapter keeps the original error and validates the compute identity before passing the proof to Core. Ordinary inspection, uncertain Create outcomes, timeouts and ownership failures never produce it, and missing compute alone never proves that Create settled.
 
+The guest must have cgroup v2 mounted read-write at `/sys/fs/cgroup` and support `cgroup.kill`. Root bootstrap validates its current membership and exclusively creates an `oac-sandbox-io` child group beneath it, preserving the VM's ancestor resource limits. It delegates only that directory and its `cgroup.procs` to UID 1000 without enabling resource controllers. The service child enters this group before dropping to UID/GID 1000 and retains the membership across exec; the [Process protocol](../../../../docs/process-protocol.md#scope-and-signals) defines cancellation scopes. File and Net operations remain unprivileged. Existing groups or unavailable delegation fail bootstrap; unknown groups are never reused or killed. Restore uses the full VM snapshot without repeating bootstrap; destroying the VM reclaims the group.
+
 ## Checkpoint lifecycle
 
 Core persists operation IDs, source and target generations, exact identities and snapshot evidence before it depends on them. `Initial` and `NewCompute` only construct references and allocate nothing.
