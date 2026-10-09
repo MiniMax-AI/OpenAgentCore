@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"golang.org/x/sys/unix"
 
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
@@ -374,9 +375,12 @@ func (op *operation) signalGroup(pgrp int, sig unix.Signal) error {
 	return signalResult(sent, lost, failed, "the process group is empty")
 }
 
-// signalScope signals the initial process group by ID while its leader pins
-// it, then every other member in custody.
+// signalScope uses the selected scope. A POSIX scope signals the initial
+// process group while its leader pins it, then every other member in custody.
 func (op *operation) signalScope(sig unix.Signal) error {
+	if op.cgroup != nil {
+		return op.cgroup.signal(sig)
+	}
 	sid := op.sid()
 	grouped, gerr := op.killPinned(true, sig)
 	sent, _, lost, failed := op.cu.sweep(func(st procStat) bool { return !grouped || st.pgrp != sid }, sig)
@@ -386,12 +390,19 @@ func (op *operation) signalScope(sig unix.Signal) error {
 	return signalResult(sent, lost, errors.Join(gerr, failed), "the scope is empty")
 }
 
-// watchScope polls until the session is confirmed empty, repeating KILL once
+// watchScope polls until the scope is confirmed empty, repeating KILL once
 // Cancel's grace has passed so members forked meanwhile die too. A failed
 // poll makes the scope Unknown and reports ObservationLost; polling and the
 // KILL escalation go on, and the operation settles only once a poll confirms
-// the session empty.
+// the scope empty.
 func (op *operation) watchScope() {
+	op.mu.Lock()
+	if op.watching {
+		op.mu.Unlock()
+		return
+	}
+	op.watching = true
+	op.mu.Unlock()
 	delay := scopePollFirst
 	for {
 		op.mu.Lock()
@@ -400,16 +411,36 @@ func (op *operation) watchScope() {
 			sig = unix.SIGKILL
 		}
 		op.mu.Unlock()
-		_, live, lost, _ := op.cu.sweep(func(procStat) bool { return true }, sig)
+		var live int
+		var lost error
+		if op.cgroup != nil {
+			if sig != 0 {
+				op.cgroup.signal(sig)
+			}
+			live, lost = op.cgroup.observe()
+		} else {
+			_, live, lost, _ = op.cu.sweep(func(procStat) bool { return true }, sig)
+		}
 		if lost == nil && live == 0 {
-			op.cu.close()
+			if op.cgroup != nil {
+				if err := op.cgroup.cleanup(); err != nil {
+					log.Bg().Warn("empty process cgroup cleanup failed", "operation", op.key.operation, "error", err)
+				}
+			}
+			if op.cu != nil {
+				op.cu.close()
+			}
 			op.scopeClosed()
 			return
 		}
 		op.mu.Lock()
 		if lost != nil && op.scope == sp.ScopeStateActive {
 			op.scope = sp.ScopeStateUnknown
-			op.push(sp.ObservationLostEvent{EventHeader: op.header(), Observation: sp.ObservationScope, Failure: *sp.Fail(sp.CodeIO, sandboxwire.EffectPossible, "observe session: %v", lost)})
+			// Started or StartFailed must be the first event. A failed launch
+			// being drained is still inspectable as Starting with Unknown scope.
+			if op.state != sp.StateStarting {
+				op.push(sp.ObservationLostEvent{EventHeader: op.header(), Observation: sp.ObservationScope, Failure: *sp.Fail(sp.CodeIO, sandboxwire.EffectPossible, "observe process scope: %v", lost)})
+			}
 		}
 		op.mu.Unlock()
 		time.Sleep(delay)
@@ -440,6 +471,11 @@ func (op *operation) scopeClosed() {
 		op.killTimer.Stop()
 	}
 	op.scope = sp.ScopeStateClosed
-	op.push(sp.ScopeClosedEvent{EventHeader: op.header()})
+	if op.state == sp.StateStarting && op.startFailure != nil {
+		op.state, op.stdinClosed = sp.StateStartFailed, true
+		op.push(sp.StartFailedEvent{EventHeader: op.header(), Failure: *op.startFailure})
+	} else {
+		op.push(sp.ScopeClosedEvent{EventHeader: op.header()})
+	}
 	op.settleLocked()
 }

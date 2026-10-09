@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"golang.org/x/sys/unix"
 
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
@@ -49,9 +50,10 @@ var signals = []sp.Signal{1, 2, 3, 9, 10, 12, 14, 15, 18, 19, 20, 21, 22, 28} //
 // Service is one incarnation of the process service. Its operation records
 // live in memory; a new Service has a new ServerInstanceID.
 type Service struct {
-	instance sandboxwire.ID
-	caps     sp.Capabilities
-	cfg      Config
+	instance     sandboxwire.ID
+	caps         sp.Capabilities
+	cfg          Config
+	cgroupParent string // the service's verified writable cgroup, or empty
 	// stat reads a process's /proc stat; tests replace it.
 	stat func(pid int) (procStat, error)
 	// onExpire runs after an expired owner-loss grace has decided the
@@ -104,8 +106,13 @@ func New(cfg Config) (*Service, error) {
 	if err := probePidfd(); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrPidfdUnsupported, err)
 	}
+	parent := delegatedCgroup()
+	if parent != "" {
+		caps.Scopes = append(caps.Scopes, sp.ScopeCgroupV2)
+	}
 	return &Service{
-		instance: sandboxwire.NewID(), caps: caps, cfg: cfg, stat: readStat,
+		cgroupParent: parent,
+		instance:     sandboxwire.NewID(), caps: caps, cfg: cfg, stat: readStat,
 		ops: map[opKey]*operation{}, owners: map[sandboxwire.ID]*time.Timer{}, stale: map[sandboxwire.ID]bool{},
 	}, nil
 }
@@ -361,6 +368,11 @@ func (s *Service) Shutdown(ctx context.Context) {
 	s.endAll(ops)
 	for _, op := range ops {
 		op.awaitScope(ctx)
+		if ctx.Err() == nil && op.cgroup != nil {
+			if err := op.cgroup.cleanup(); err != nil {
+				log.Warn(ctx, "empty process cgroup cleanup failed at shutdown", "operation", op.key.operation, "error", err)
+			}
+		}
 	}
 }
 

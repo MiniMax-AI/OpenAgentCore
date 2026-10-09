@@ -25,11 +25,19 @@ func (op *operation) launch(req sp.StartRequest) {
 	l, f := op.spawn(req)
 	op.mu.Lock()
 	if f != nil {
-		op.state, op.startFailure = sp.StateStartFailed, f
-		op.scope, op.stdinClosed = sp.ScopeStateClosed, true
-		op.push(sp.StartFailedEvent{EventHeader: op.header(), Failure: *f})
-		op.settleLocked()
+		op.startFailure = f
+		op.cond.Broadcast()
+		if op.cgroup != nil {
+			// A possibly-executed target must be gone before StartFailed
+			// establishes settlement. Observe asynchronously, so a damaged
+			// scope cannot block the stream or the service's bounded shutdown.
+			op.killing = true
+			op.mu.Unlock()
+			go op.watchScope()
+			return
+		}
 		op.mu.Unlock()
+		op.scopeClosed()
 		if op.cu != nil {
 			op.cu.close()
 		}
@@ -64,6 +72,13 @@ type launched struct {
 func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	ioFail := func(what string, err error) *sp.Failure {
 		return sp.Fail(sp.CodeIO, sandboxwire.EffectNone, "%s: %v", what, err)
+	}
+	if req.Spec.Scope == sp.ScopeCgroupV2 {
+		var err error
+		op.cgroup, err = newProcessCgroup(op.s.cgroupParent)
+		if err != nil {
+			return l, ioFail("create process cgroup", err)
+		}
 	}
 	// Descriptors the child inherits close after the start; the parent's
 	// close only when the launch fails. Each is listed as soon as it exists.
@@ -129,13 +144,21 @@ func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	}
 	reaping.RLock()
 	p, err := os.StartProcess("/proc/self/exe", []string{trampolineArg0}, attr)
-	var ferr error
+	var ferr, placementErr error
 	if err == nil {
 		// The reaper cannot reap the child while reaping is held, so its PID
 		// still names it.
 		var fd int
 		if fd, ferr = unix.PidfdOpen(p.Pid, 0); ferr == nil {
 			op.cu = newCustody(p.Pid, fd, op.s.stat)
+			if op.cgroup != nil {
+				// The trusted trampoline is blocked on launchFD. Keep reaping
+				// excluded until placement: a pidfd alone does not reserve its PID.
+				placementErr = op.cgroup.place(p.Pid)
+				if placementErr != nil {
+					unix.Kill(p.Pid, unix.SIGKILL)
+				}
+			}
 		} else {
 			unix.Kill(p.Pid, unix.SIGKILL) // it has not read the launch, so it never execs
 		}
@@ -149,6 +172,9 @@ func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	p.Release() // the reaper waits; signals go through killPinned and the custody
 	if ferr != nil {
 		return l, ioFail("open process descriptor", ferr)
+	}
+	if placementErr != nil {
+		return l, ioFail("place process in cgroup", placementErr)
 	}
 	l.pid = pid
 	op.mu.Lock()
