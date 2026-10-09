@@ -27,10 +27,27 @@ type treeService struct {
 	listed                        func(*sandboxfs.ReadDirResponse)
 	readDone                      chan struct{}
 	releaseError                  bool
+	maxHandles                    uint32
+	held, refused                 atomic.Int32
 }
 
+func (s *treeService) Describe(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.DescribeRequest) (*sandboxfs.DescribeResponse, error) {
+	r, err := s.Service.Describe(ctx, a, q)
+	if err == nil && s.maxHandles != 0 {
+		r.Capabilities.MaxOpenHandles = s.maxHandles
+	}
+	return r, err
+}
 func (s *treeService) Open(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.OpenRequest) (*sandboxfs.OpenResponse, error) {
+	if s.maxHandles != 0 && s.held.Add(1) > int32(s.maxHandles) {
+		s.held.Add(-1)
+		s.refused.Add(1)
+		return nil, sandboxfs.NewFailure(sandboxfs.CodeResourceExhausted, sandboxwire.EffectNone, "declared handle limit reached")
+	}
 	r, err := s.Service.Open(ctx, a, q)
+	if err != nil && s.maxHandles != 0 {
+		s.held.Add(-1)
+	}
 	if err == nil {
 		s.opens.Add(1)
 		if s.opened != nil {
@@ -73,6 +90,9 @@ func (s *treeService) Release(ctx context.Context, a sandboxfs.Attachment, q *sa
 	r, err := s.Service.Release(ctx, a, q)
 	if err == nil {
 		s.releases.Add(1)
+		if s.maxHandles != 0 {
+			s.held.Add(-1)
+		}
 	}
 	return r, err
 }
@@ -128,9 +148,16 @@ func treeReleased(t *testing.T, w *world, s *treeService) {
 }
 
 func TestReadTreeConcurrent(t *testing.T) {
-	for _, mode := range []string{"success", "read_error", "parent_cancel", "open_cancel"} {
-		t.Run(mode, func(t *testing.T) {
-			s := &treeService{readDone: make(chan struct{}, 8)}
+	for _, tc := range []struct {
+		mode  string
+		limit int
+	}{
+		{"success", 4}, {"read_error", 4}, {"parent_cancel", 4}, {"open_cancel", 4},
+		{"success", 1}, {"success", 2}, {"success", 3},
+	} {
+		mode, limit := tc.mode, tc.limit
+		t.Run(fmt.Sprintf("%s/handles_%d", mode, limit), func(t *testing.T) {
+			s := &treeService{readDone: make(chan struct{}, 8), maxHandles: uint32(limit)}
 			files := map[string]string{}
 			for i := range 8 {
 				files[fmt.Sprintf("dir/%02d", i)] = fmt.Sprint(i)
@@ -169,14 +196,14 @@ func TestReadTreeConcurrent(t *testing.T) {
 			}
 			done := make(chan result, 1)
 			go func() { f, e := w.readTree(ctx, w.root, true); done <- result{f, e} }()
-			for range 4 {
+			for range limit {
 				select {
 				case <-entered:
 				case <-time.After(5 * time.Second):
-					t.Fatal("four reads did not start")
+					t.Fatal("declared number of reads did not start")
 				}
 			}
-			if s.opens.Load() != 4 {
+			if s.opens.Load() != int32(limit) {
 				t.Fatalf("opened %d files before releasing bound", s.opens.Load())
 			}
 			if mode == "parent_cancel" || mode == "open_cancel" {
@@ -213,13 +240,13 @@ func TestReadTreeConcurrent(t *testing.T) {
 			} else if r.err == nil || r.files != nil {
 				t.Fatalf("failure returned tree: %v %v", r.files, r.err)
 			}
-			if mode != "open_cancel" && s.peak.Load() != 4 {
-				t.Fatalf("read concurrency %d, want 4", s.peak.Load())
+			if mode != "open_cancel" && s.peak.Load() != int32(limit) {
+				t.Fatalf("read concurrency %d, want %d", s.peak.Load(), limit)
 			}
 			if mode != "open_cancel" {
 				n := 8
 				if mode == "parent_cancel" {
-					n = 4
+					n = limit
 				}
 				for range n {
 					select {
@@ -228,6 +255,9 @@ func TestReadTreeConcurrent(t *testing.T) {
 						t.Fatal("File read handler did not finish")
 					}
 				}
+			}
+			if s.held.Load() != 0 || s.refused.Load() != 0 {
+				t.Fatalf("handle bound exceeded or leaked: held=%d refused=%d", s.held.Load(), s.refused.Load())
 			}
 			treeReleased(t, w, s)
 		})

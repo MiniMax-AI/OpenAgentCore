@@ -412,7 +412,7 @@ func (w *world) readTree(ctx context.Context, dir sandboxfs.NodeRef, immutable b
 	// Enumeration owns node references; only reads of the retained entries
 	// run concurrently. Join every read before the owner can forget them.
 	var reads errgroup.Group
-	reads.SetLimit(4)
+	reads.SetLimit(int(min(uint32(4), w.caps.MaxOpenHandles)))
 	for i, entry := range t.nodes {
 		reads.Go(func() error {
 			body, err := w.readEntry(ctx, entry, int64(entry.Attr.Size))
