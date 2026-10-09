@@ -550,17 +550,18 @@ func (o *environment) toolEnvironment(ctx context.Context, w *world, initializat
 // snapshot returns the installation's checked manifest, finalizing the
 // installation first when it has none and is not complete.
 func (o *environment) snapshot(ctx context.Context, w *world, root sandboxfs.NodeRef, input agentcapabilities.Input, identity agentcapabilities.Identity, completed bool) (agentcapabilities.Manifest, error) {
-	_, err := w.lookup(ctx, root, agentcapabilities.ManifestName)
-	switch {
-	case isErrno(err, sandboxfs.ErrnoNotFound) && !completed:
+	entry, err := w.lookup(ctx, root, agentcapabilities.ManifestName)
+	if isErrno(err, sandboxfs.ErrnoNotFound) && !completed {
 		if err := w.finalize(ctx, root, input, identity); err != nil {
 			return agentcapabilities.Manifest{}, failed(err)
 		}
-	case err != nil:
+		entry, err = w.lookup(ctx, root, agentcapabilities.ManifestName)
+	}
+	if err != nil {
 		return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
 	}
-	body, attr, err := w.readFile(ctx, root, agentcapabilities.ManifestName, agentcapabilities.MaxManifestBytes)
-	if err != nil || attr.Mode&0o222 != 0 {
+	body, err := w.readEntry(ctx, entry, agentcapabilities.MaxManifestBytes)
+	if err != nil || entry.Attr.Mode&0o222 != 0 {
 		return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
 	}
 	manifest, err := agentcapabilities.Check(body, func(name string) ([]agentbundle.File, error) { return w.readTreeAt(ctx, root, name, true) })
