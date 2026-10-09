@@ -116,6 +116,9 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
+- On microsandbox, Codex and MiniMax Code have passed execution, cancellation, agent-host restart, idle suspension, snapshot restoration, workspace access, history continuation and resource cleanup. All three Harnesses have passed focused installed stdio MCP cancellation and reconnection, including stopping descendants while preserving unrelated services and workspace files. Claude Code’s complete microsandbox lifecycle remains unqualified: ordinary Bash cancellation can exceed the native settlement deadline. Remote process closure alone does not establish native Turn settlement.
+- Claude Code’s native filesystem checks amplify remote metadata round trips. Tool and preparation latency can remain substantial even when the sandbox command itself is fast; latency parity with an in-sandbox loop is not qualified.
+
 - `self_hosted` installation supports Linux amd64 only. `oac-daemon install` and `start` return `UnsupportedPlatformError` on other platforms, before any installation credential claim. macOS, Windows and Linux arm64 Sandbox I/O execution are not qualified; see [self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms).
 
 - The stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
