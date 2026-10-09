@@ -14,7 +14,7 @@ test('packaged native tools use writable scratch and retain large output', {
   assert.ok(isAbsolute(profile) && isAbsolute(artifact));
   const config = JSON.parse(await readFile(profile, 'utf8'));
   const { ToolExecutor } = await import(pathToFileURL(join(artifact, 'tool-executor.mjs')));
-  const executor = new ToolExecutor(profile);
+  const executor = new ToolExecutor(config);
   t.after(() => executor.close());
   const temporary = await executor.execute('bash', {
     command: 'node -p "require(\'os\').tmpdir()"; f=$(mktemp) && printf TEMP_OK > "$f" && cat "$f" && rm "$f"',

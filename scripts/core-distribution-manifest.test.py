@@ -121,7 +121,7 @@ class DistributionTests(unittest.TestCase):
         (companion / "native/cli.js").write_text('console.log("0.4.12");\n')
         for receipt in ("provenance.json", "native-patch.json"):
             (companion / receipt).write_text("{}")
-        files = ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json")
+        files = ("bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json")
         for name in files:
             (companion / name).write_bytes((repository / "packages/mcode-harness" / name).read_bytes())
         output = self.stage / "payload"

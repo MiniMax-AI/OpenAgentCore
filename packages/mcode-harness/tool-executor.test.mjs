@@ -11,9 +11,9 @@ async function fixture(t, body) {
   await mkdir(root, { recursive: true });
   const dir = await mkdtemp(join(root, 'mcode-worker-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  const script = join(dir, 'launcher.mjs');
+  const script = join(dir, 'worker.mjs');
   await writeFile(script, body);
-  const executor = new ToolExecutor(dir, script);
+  const executor = new ToolExecutor({ workspace: dir, scratch: join(dir, 'scratch') }, script);
   t.after(() => executor.close());
   return { dir, executor };
 }
@@ -62,3 +62,24 @@ for (const shutdown of ['cancel', 'transport close']) {
     await assert.rejects(executor.execute('read', {}), /transport is closed/);
   });
 }
+
+test('input limit and prior cancellation reject before worker start', async t => {
+  const { dir, executor } = await fixture(t, `
+    import { writeFileSync } from 'node:fs';
+    writeFileSync(process.argv[2]+'/started','1');`);
+  await assert.rejects(executor.execute('read', { path: 'x'.repeat(16 * 1024 * 1024) }), /input exceeds limit/);
+  const abort = new AbortController();
+  abort.abort();
+  await assert.rejects(executor.execute('read', {}, abort.signal), { name: 'AbortError' });
+  await assert.rejects(access(join(dir, 'started')), { code: 'ENOENT' });
+});
+
+test('output limit stops and joins the worker', async t => {
+  const { executor } = await fixture(t, `
+    process.stdin.resume();
+    process.stdin.on('end', () => {
+      process.stdout.write('x'.repeat(16 * 1024 * 1024 + 1));
+      setInterval(() => {}, 1000);
+    });`);
+  await assert.rejects(executor.execute('read', {}), /output exceeds limit/);
+});

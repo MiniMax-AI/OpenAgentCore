@@ -1,16 +1,21 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { isAbsolute, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const limit = 16 * 1024 * 1024;
-const launcher = fileURLToPath(new URL('./launch.mjs', import.meta.url));
+const worker = fileURLToPath(new URL('./dist/worker.mjs', import.meta.url));
 
-// One bridge owns every launcher until its stdio and native tools have settled.
+// One bridge owns every worker until its stdio and native tools have settled.
 export class ToolExecutor {
   #calls = new Set();
   #closed = false;
 
-  constructor(profile, entrypoint = launcher) {
-    this.profile = profile;
+  constructor({ workspace, scratch }, entrypoint = worker) {
+    if (!isAbsolute(workspace) || normalize(workspace) !== workspace)
+      throw new Error('Invalid workspace profile');
+    mkdirSync(scratch, { recursive: true });
+    this.workspace = workspace;
     this.entrypoint = entrypoint;
   }
 
@@ -19,7 +24,8 @@ export class ToolExecutor {
     signal?.throwIfAborted();
     const request = JSON.stringify({ tool, input });
     if (Buffer.byteLength(request) > limit) throw new Error('Workspace tool input exceeds limit');
-    const child = spawn(process.execPath, [this.entrypoint, this.profile], {
+    const child = spawn(process.execPath, [this.entrypoint, this.workspace], {
+      cwd: this.workspace,
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
     });

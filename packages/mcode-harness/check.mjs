@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 if (!['linux', 'darwin'].includes(process.platform)) throw new Error('MiniMax native execution requires Linux or macOS');
-for (const file of ['bridge.mjs', 'launch.mjs', 'tool-executor.mjs', 'dist/worker.mjs',
+for (const file of ['bridge.mjs', 'tool-executor.mjs', 'dist/worker.mjs',
   'subagent-snapshot.mjs',
   'native/cli.js', 'native-patch.json']) accessSync(new URL(file, import.meta.url));
 for (const command of ['bash', 'rg']) execFileSync('which', [command], { stdio: 'ignore' });

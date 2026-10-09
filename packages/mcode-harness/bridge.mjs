@@ -5,9 +5,10 @@ import { readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { ToolExecutor } from './tool-executor.mjs';
 
-const profile = process.argv[2];
-if (!profile || !isAbsolute(profile)) throw new Error('Private workspace profile is required');
-const workspace = JSON.parse(readFileSync(profile, 'utf8')).workspace;
+const profilePath = process.argv[2];
+if (!profilePath || !isAbsolute(profilePath)) throw new Error('Private workspace profile is required');
+const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
+const workspace = profile.workspace;
 const definitions = JSON.parse(readFileSync(new URL('./dist/tools.json', import.meta.url), 'utf8'));
 const tools = new Map(definitions.map(tool => ['workspace_' + tool.name, tool]));
 const executor = new ToolExecutor(profile);
