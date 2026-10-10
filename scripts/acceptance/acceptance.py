@@ -340,7 +340,10 @@ def cancellation(api, record, timeout):
     prefix = directory + "/release-cancel-" + record["nonce"]
     command = ("printf start >> " + shlex.quote(prefix + "-starts")
                + "; while true; do printf x >> " + shlex.quote(prefix + "-ticks") + "; sleep 1; done")
-    submit(api, record, "Run this command exactly once with your native shell tool in the foreground: "
+    submit(api, record, "This is a user-authorized cancellation acceptance test in a test sandbox. "
+           "An external test runner will observe at least three tick writes, request cancellation, "
+           "and clean up the test resources. "
+           "Run this command exactly once with your native shell tool in the foreground: "
            + command + ". Wait for it; it runs until cancelled. Do not background, delegate or retry.")
     deadline, observed = time.monotonic() + timeout, 0
     while time.monotonic() < deadline:
