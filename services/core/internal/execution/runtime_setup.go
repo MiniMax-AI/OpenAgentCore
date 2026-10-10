@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -85,7 +86,13 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentca
 	if peer == nil {
 		return errors.New("environment initialization request unavailable")
 	}
+	deadline, bounded := ctx.Deadline()
+	budget := time.Until(deadline).Milliseconds()
+	if !bounded || budget <= 0 || budget > proto.RuntimePrepareMaxBudgetMS || ctx.Err() != nil {
+		return errors.New("environment initialization budget unavailable")
+	}
 	request := operation.Request
+	request.BudgetMS = budget
 	request.EnvironmentID, request.SessionID = identity.EnvironmentID, identity.SessionID
 	result, err := peer.PrepareRuntime(ctx, uuid.NewString(), request, operation.Data)
 	if err == nil && result.Outcome == "completed" {

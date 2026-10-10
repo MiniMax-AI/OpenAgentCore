@@ -348,7 +348,7 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(nil)
-	input := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
+	input := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
 		Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/file"}, SHA256: hex.EncodeToString(digest[:])}
 	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted file", err)
@@ -359,5 +359,27 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 	input.Initialization = &proto.RuntimeInitialization{Action: "configure", Env: map[string]string{}}
 	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted initialize", err)
+	}
+}
+
+func TestRuntimeInitializationDeadlineStopsDescendants(t *testing.T) {
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	env := append(initializationEnvironment(nil), "OAC_INITIALIZATION_FIXTURE=parent", "OAC_INITIALIZATION_FIXTURE_DIR="+directory)
+	err = runInitializationProcess(ctx, binary, []string{"-test.run=^TestRuntimeInitializationChild$"}, directory, env)
+	if !errors.Is(err, ErrInitializationUnconfirmed) || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatal("deadline outcome", err, ctx.Err())
+	}
+	if _, err := os.Stat(filepath.Join(directory, "started")); err != nil {
+		t.Fatal("fixture did not start", err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(directory, "late")); !os.IsNotExist(err) {
+		t.Fatal("descendant survived deadline")
 	}
 }

@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 59633fbfa54d9071ed6a5ef510328d9216f4d8572a0cc068de65c93ecabefc59
+source_hash: 142a3d2a3dc5b790bcc80dff2364d094857f835e0e0687f91373251a4f4d9b3b
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -112,7 +112,7 @@ Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替�
 
 ## 准备与执行顺序 {#preparation-and-execution-order}
 
-无论托管还是用户自有环境，每条连接都通过 `runtime_prepare` 初始化 Environment；[Environment 契约](../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)负责准备内容和时机。传输文件或 archive 时，发送 `begin`，等待 `ready`，发送有序 chunk 并等待每个匹配的 `received` offset，再发送 `commit` 并等待 `completed`。初始化和终结阶段使用不含文件数据的类型化 header。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
+无论托管还是用户自有环境，每条连接都通过 `runtime_prepare` 初始化 Environment；[Environment 契约](../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)负责准备内容和时机。传输文件或 archive 时，发送 `begin`，等待 `ready`，发送有序 chunk 并等待每个匹配的 `received` offset，再发送 `commit` 并等待 `completed`。初始化和终结阶段使用不含文件数据的类型化 header。每个 `begin` 必须携带 `budget_ms`，取值为 1 至 1800000 的整数，表示 Core 所拥有的初始化预算剩余毫秒数；chunk 和 commit 不携带该字段。Runtime 从收到 `begin` 起执行此相对预算，Core 的等待不超过原操作期限。完整的 `begin`–`commit` 暂存阶段另有两分钟限制；应用已提交操作及等待 `completed` 使用剩余初始化预算，不受暂存期限限制。应用前到期会拒绝传输；应用中到期则在本地变更停止后报告 `unknown`，绝不授权重放。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
 
 执行 Turn 分为五步：
 

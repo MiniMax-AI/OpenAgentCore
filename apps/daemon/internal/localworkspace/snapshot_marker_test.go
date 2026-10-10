@@ -186,7 +186,7 @@ func TestSnapshotMarkerRefusesDamagedState(t *testing.T) {
 func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T) {
 	b, _ := markerBinding(t)
 	identity := b.capabilityIdentity()
-	finalize := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "finalize", Sources: &agentcapabilities.Input{}}
+	finalize := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "finalize", Sources: &agentcapabilities.Input{}}
 	if err := b.ApplyRuntimePreparation(t.Context(), finalize, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T)
 	if err := os.RemoveAll(b.capabilityRoot); err != nil {
 		t.Fatal(err)
 	}
-	skill := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "skill", Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	skill := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "skill", Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 	if err := b.ApplyRuntimePreparation(t.Context(), skill, []byte("x")); err == nil {
 		t.Fatal("completed identity accepted import")
 	}

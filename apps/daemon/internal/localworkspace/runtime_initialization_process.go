@@ -101,15 +101,13 @@ func initializationEnvironment(configured map[string]string) []string {
 // The shared process owner settles the leader and descendants. Readers finish
 // before return; output is discarded with constant memory, never put in errors.
 func runInitializationProcess(ctx context.Context, binary string, args []string, directory string, env []string) error {
-	operation, cancel := context.WithTimeout(ctx, 30*time.Minute)
-	defer cancel()
-	if operation.Err() != nil {
+	if ctx.Err() != nil {
 		return ErrInitializationUnconfirmed
 	}
 	if info, err := os.Stat(directory); err != nil || !info.IsDir() {
 		return &InitializationFailure{}
 	}
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: operation, Binary: binary, Args: args,
+	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args,
 		Dir: directory, Env: env, KillTimeout: 250 * time.Millisecond})
 	if err != nil {
 		return ErrInitializationUnconfirmed
@@ -127,7 +125,7 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 	}
 	first, second := <-finished, <-finished
 	_ = process.Wait()
-	if operation.Err() != nil || first != nil || second != nil || process.Cmd.ProcessState == nil {
+	if ctx.Err() != nil || first != nil || second != nil || process.Cmd.ProcessState == nil {
 		return ErrInitializationUnconfirmed
 	}
 	code := process.Cmd.ProcessState.ExitCode()
