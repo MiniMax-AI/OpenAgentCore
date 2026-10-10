@@ -234,8 +234,7 @@ node 使用 [provider 配置](configuration.md#docker-node-configuration)中的�
 
 [`seccomp.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/seccomp.json) 是 [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) 的 Moby default profile（Apache-2.0，参见 [seccomp.LICENSE](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/seccomp.LICENSE)；上游文件 SHA-256 为 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`），追加一条允许 `clone`、`unshare`、`setns`、`mount`、`umount2` 和 `pivot_root` 的规则。发行包将此文件作为 `runtime/seccomp.json` 交付每个 Docker node。
 
-<a id="independent-workspace-attachment"></a>
-## 独立工作区挂载
+## 独立工作区挂载 {#independent-workspace-attachment}
 
 `Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带[工作区文件系统绑定](workspace-provider.md)。未提供时使用 Provider 自有的 Environment 磁盘；提供时选择精确的外部对象，不得回退到自有磁盘。Provider 在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；Sandbox Provider 不解释文件系统适配器参数或原生回执。
 

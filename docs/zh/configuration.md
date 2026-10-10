@@ -91,8 +91,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 哪些 Harness 已启用以及默认 Harness 属于进程设置（`core.harnesses`、`core.default_harness`）；System 会以只读方式显示它们。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
 
-<a id="independent-workspace-storage"></a>
-### 独立工作区存储
+### 独立工作区存储 {#independent-workspace-storage}
 
 首个支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出；不要启用 `no_root_squash` 或放宽权限来使检查通过。按照适配器的[所有权要求](./workspace-provider.md#kernel-nfs-adapter)准备命名空间和服务身份。
 

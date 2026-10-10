@@ -14,7 +14,7 @@ from e2b.exceptions import AuthenticationException, FileNotFoundException, Sandb
 from sdk import connection_material, definitely_rejected, list_builds, list_templates, read_metrics, restore, run, sdk_options, validate_deployment, verify_team_template
 from state import Failure, Receipt, private_root, read_receipt
 from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIELDS, REFERENCE_FIELDS,
-    MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS)
+    MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS, MANAGED_BOOTSTRAP_REQUIRED_FIELDS)
 
 PREFIX = 'oac_'
 FIELDS = ('InstallationID', *REFERENCE_FIELDS)
@@ -87,6 +87,9 @@ class Provider:
                   not all(valid_reference(r) for r in self.references))) or
                 (request['Operation'] not in ('list_templates', 'list_builds') and
                  not valid_id(self.config.get('InstallationID')))):
+            raise Failure('invalid')
+        bootstrap = request.get('Bootstrap')
+        if bootstrap is not None and (not isinstance(bootstrap, dict) or bootstrap.get('Workspace') is not None):
             raise Failure('invalid')
         deadline = datetime.fromisoformat(request['Deadline'].replace('Z', '+00:00'))
         self.deadline = time.monotonic() + (deadline - datetime.now(timezone.utc)).total_seconds()
@@ -239,7 +242,8 @@ class Provider:
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
         del payload['CoreURL'], payload['Credential']
-        if set(payload) != set(MANAGED_BOOTSTRAP_FIELDS):
+        if (set(payload) - set(MANAGED_BOOTSTRAP_FIELDS) or
+                not set(MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload)):
             raise Failure('invalid')
         cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())

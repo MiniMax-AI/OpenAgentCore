@@ -20,7 +20,9 @@ _contract_spec.loader.exec_module(contract)
 
 def identity(payload):
     fields = contract.MANAGED_IDENTITY_FIELDS
-    if not isinstance(payload, dict) or set(payload) != set(contract.MANAGED_BOOTSTRAP_FIELDS):
+    if (not isinstance(payload, dict) or set(payload) - set(contract.MANAGED_BOOTSTRAP_FIELDS) or
+            not set(contract.MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload) or
+            payload.get("Workspace") is not None):
         raise ValueError('Invalid managed bootstrap fields')
     for field in fields:
         value = payload[field]

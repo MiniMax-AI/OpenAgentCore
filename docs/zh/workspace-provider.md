@@ -6,8 +6,7 @@ source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
 
 独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有 Sandbox Provider 或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[Sandbox Provider](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
 
-<a id="identity-and-configuration"></a>
-## 标识与配置
+## 标识与配置 {#identity-and-configuration}
 
 `Reference` 包含 `TenantID`、`EnvironmentID` 和 `ObjectID`，均为不可变、规范小写且非零的 UUID。Core 在创建前持久化引用。对象标识永不复用，包括删除后或变更结果尚未确认时。适配器必须在暴露或删除对象前验证完整的归属元组。
 
@@ -17,8 +16,7 @@ source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
 
 `Binding` 临时携带配置和挂载凭证至节点解析器，不引入第二份持久化节点配置。`Resolver.Resolve` 验证绑定后返回用于本地计算挂载的 `Directory{Path}`。仅适配器负责将原生存储解析为规范绝对路径；Core 不构造路径。结构有效的目录本身不是归属凭证。
 
-<a id="operations-and-outcomes"></a>
-## 操作与结果
+## 操作与结果 {#operations-and-outcomes}
 
 每个控制适配器实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`；每个节点挂载适配器实现 `Resolve`。不得使用可选旁路接口、隐式替换适配器或 nil 实现回退。
 
@@ -35,8 +33,7 @@ source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
 
 同一引用的重试与并发收敛是适配器必须提供的保证。`Create` 保留现有对象数据并返回该归属对象的挂载凭证，绝不重新初始化存活对象。重复或并发的 `Delete` 调用收敛到同一终态删除。一旦记录终态删除，并发、延迟或重试的 `Create` 均不得使对象复活，`Resolve` 也不得暴露该对象。允许保留删除元数据，并在先前进行中的操作结束后继续清理。这些保证适用于存储生命周期操作，不表示超时时变更已结束，也不提供分布式计算隔离。
 
-<a id="capability-validation"></a>
-## 能力验证
+## 能力验证 {#capability-validation}
 
 `Requirements` 声明计算位置的挂载类型及 `user_xattr` 需求。`Declaration` 报告文件系统适配器的挂载类型、`UserXAttr` 支持和 `CapacityQuota` 强制执行能力。`ValidateCombination` 是共享的分配前准入检查。当前挂载类型为 `host_directory`；未知类型会被拒绝。用户扩展属性能力表示挂载后的文件系统支持 Environment 准备流程使用的用户扩展属性。
 
@@ -44,15 +41,13 @@ source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
 
 工作区仅允许单写入方访问。Core 必须串行管理计算资源归属，并在挂载替代计算资源前确认先前写入方已停止。本协议没有跨虚拟机锁能力：客户机内的 `flock` 不证明主机锁或对其他客户机的互斥。执行位置不得基于客户机本地锁宣称并发挂载安全。
 
-<a id="lifetime-and-filesystem-scope"></a>
-## 生命周期与文件系统范围
+## 生命周期与文件系统范围 {#lifetime-and-filesystem-scope}
 
 对象包含整个 `/environment` 目录树，包括工作区、暂存文件、初始化状态和包内容。它们位于同一文件系统，以保留 Environment 准备期间文件系统操作的语义。Harness 的私有原生历史和配置仍属于检查点状态，不重定向到工作区对象。
 
 工作区存储随 Session 保留，直至显式删除 Session。归档、过期、重置和删除计算检查点均不授权删除工作区。Core 仅在显式删除 Session 且确认计算资源停止后调用 `Delete`；未解决的计算或存储变更须保留归属。Session 仍被保留时，创建失败不授权删除其存储。本契约不定义快照过期恢复。
 
-<a id="kernel-nfs-adapter"></a>
-## 内核 NFS 适配器
+## 内核 NFS 适配器 {#kernel-nfs-adapter}
 
 `nfs` 适配器使用由运维人员预挂载的 Linux 内核 NFS 文件系统。支持的配置是受信任 AUTH_SYS 客户端上的 NFSv4.2，启用 `root_squash`，Core 和节点使用相同导出和绝对挂载路径。适配器不挂载导出，也不管理 NFS 凭据或服务账户。其他操作系统返回 `ErrUnsupported`。[配置文档](./configuration.md#independent-workspace-storage)负责安装步骤和选择方式。
 

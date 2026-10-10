@@ -124,3 +124,34 @@ func TestCreateDoesNotReplaceUnownedLive(t *testing.T) {
 		t.Fatalf("unowned live: %v", err)
 	}
 }
+
+func TestObserveAbsentObjectsDoesNotPrepareNamespace(t *testing.T) {
+	a, r, ref := local(t)
+	if err := r.Remove("objects"); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if _, err := a.observe(r, ref); !errors.Is(err, workspacefs.ErrNotFound) {
+			t.Fatalf("absent object: %v", err)
+		}
+		dir, err := r.Open(".")
+		if err != nil {
+			t.Fatal(err)
+		}
+		entries, err := dir.ReadDir(-1)
+		dir.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 0 {
+			t.Fatalf("Observe created namespace entries: %v", entries)
+		}
+	}
+	// Delete of a never-created reference still persists terminal ownership.
+	if err := a.delete(r, ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.create(r, ref); !errors.Is(err, workspacefs.ErrNotFound) {
+		t.Fatalf("deleted identity reused: %v", err)
+	}
+}

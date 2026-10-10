@@ -59,10 +59,7 @@ func (a *Adapter) open() (*os.Root, error) {
 	if !bytes.Equal(raw, []byte(a.parameters.NamespaceID+"\n")) {
 		return fail(errors.New("namespace marker mismatch"))
 	}
-	if err = mkdir(r, "objects", a.parameters.UID); err != nil {
-		return fail(err)
-	}
-	if err = syncDir(r, "."); err != nil {
+	if err = private(r, "objects", true, a.parameters.UID); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fail(err)
 	}
 	return r, nil
@@ -174,6 +171,12 @@ func identity(r *os.Root, name string, ref workspacefs.Reference) error {
 
 // claim publishes an immutable synced identity with a no-replace hard link.
 func (a *Adapter) claim(r *os.Root, ref workspacefs.Reference) error {
+	if err := mkdir(r, "objects", a.parameters.UID); err != nil {
+		return err
+	}
+	if err := syncDir(r, "."); err != nil {
+		return err
+	}
 	obj := object(ref)
 	if err := mkdir(r, obj, a.parameters.UID); err != nil {
 		return err
@@ -255,21 +258,25 @@ func (a *Adapter) Observe(ctx context.Context, ref workspacefs.Reference) (works
 			return workspacefs.Attachment{}, err
 		}
 		defer r.Close()
-		if err = live(r, ref); err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				err = workspacefs.ErrNotFound
-			}
-			if !errors.Is(err, workspacefs.ErrNotFound) && !errors.Is(err, workspacefs.ErrOwnership) {
-				err = unavailable(err)
-			}
-			return workspacefs.Attachment{}, err
-		}
-		if err = private(r, path.Join(object(ref), "live", "data"), true, a.parameters.UID); err != nil {
-			return workspacefs.Attachment{}, unavailable(err)
-		}
-		return a.attachment(ref), nil
+		return a.observe(r, ref)
 	})
 }
+func (a *Adapter) observe(r *os.Root, ref workspacefs.Reference) (workspacefs.Attachment, error) {
+	if err := live(r, ref); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			err = workspacefs.ErrNotFound
+		}
+		if !errors.Is(err, workspacefs.ErrNotFound) && !errors.Is(err, workspacefs.ErrOwnership) {
+			err = unavailable(err)
+		}
+		return workspacefs.Attachment{}, err
+	}
+	if err := private(r, path.Join(object(ref), "live", "data"), true, a.parameters.UID); err != nil {
+		return workspacefs.Attachment{}, unavailable(err)
+	}
+	return a.attachment(ref), nil
+}
+
 func (a *Adapter) Create(ctx context.Context, ref workspacefs.Reference) (workspacefs.Attachment, error) {
 	if err := ref.Validate(); err != nil {
 		return workspacefs.Attachment{}, err
