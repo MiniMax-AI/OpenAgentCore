@@ -14,6 +14,8 @@ You add a node by generating a command in Web and running it on the host. The [s
 
 For microsandbox checkpoint recovery across nodes, add `--checkpoint-root /absolute/private/shared-store` to the installer command on each participating node. Mount the same private store at those paths before installation and grant only the node service account access. The default is a private node-local store and supports recovery on that node. The checkpoint store is separate from workspace storage and must never be guest-accessible; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns compatibility and retention requirements.
 
+Microsandbox includes the host kernel and CPU profile in its checkpoint execution compatibility. An OS or CPU-profile change can therefore make retained checkpoints incompatible even on their original node. Before maintenance, keep a node with the matching execution class and the same ready generation available for those checkpoints; otherwise their requests wait under the [checkpoint retention policy](../sandbox-provider.md#checkpoint-transfer).
+
 For microsandbox with independent workspace storage, complete the [NFS mount and service-account setup](../configuration.md#independent-workspace-storage) on this host before enrollment. The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.

@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: a31edf7908ecd0a848b562bbceda3fd872436473d5ec1f2bedfba8719ac9e2a1
+source_hash: 0c62518cc740387ed03035ea4870108edeaaa82331a7509b573fb2b775ae3aba
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -17,6 +17,8 @@ source_hash: a31edf7908ecd0a848b562bbceda3fd872436473d5ec1f2bedfba8719ac9e2a1
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
 
 microsandbox 跨节点检查点恢复要求在每个参与节点的安装命令加入 `--checkpoint-root /absolute/private/shared-store`。安装前将同一个私有 store 挂载到这些路径，并只允许 node 服务账户访问。默认使用节点本地私有 store，只支持在该节点恢复。检查点 store 独立于 workspace 存储，绝不能允许 guest 访问；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer) 定义兼容性和保留要求。
+
+Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因此，操作系统或 CPU profile 变化可能使保留的检查点不再兼容，甚至无法在原节点恢复。维护前，应为这些检查点保留具有匹配 execution class 且已就绪同一 generation 的节点；否则，相关请求会按[检查点保留策略](../sandbox-provider.md#checkpoint-transfer)等待。
 
 对于使用独立工作区存储的 microsandbox，应在注册前完成此主机上的 [NFS 挂载和服务账户配置](../configuration.md#independent-workspace-storage)。节点随每次 binding 接收所选不可变文件系统配置；不要单独编写节点存储设置。
 
