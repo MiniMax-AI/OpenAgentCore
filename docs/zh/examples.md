@@ -1,13 +1,14 @@
 ---
 title: "示例"
 source: docs/examples.md
-source_hash: 3c10e50ae47479688cdfac708e82efd73bd5b5f77a2e8b16497a4e02cb14573d
+source_hash: 73bcc951df6b966cf868149a0da214abdf54c6f5e585c3d0c2eced1f76b68d54
 ---
 
-基于 [Agents API](api/public-agent-api.md)构建的完整应用。每个示例都使用 Project API 密钥连接真实的 Core 安装。
+基于 [Agents API](api/public-agent-api.md)构建的应用和可运行配置。每个示例都使用 Project API 密钥连接真实的 Core 安装。
 
 | 示例 | 展示内容 |
 | --- | --- |
+| [Parallel Search MCP](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parallel-search/README.md) | 在自托管 Codex Session 中匿名搜索网页并获取页面内容 |
 | [Parsar Agent 工作台](#parsar-agent-workbench) | 产品 UI：模型、Skills、MCP、可复用 Agent，以及在任意 Runtime 上运行的 Session |
 
 ## Parsar Agent 工作台 {#parsar-agent-workbench}

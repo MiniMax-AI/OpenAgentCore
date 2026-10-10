@@ -2,10 +2,11 @@
 title: "Examples"
 ---
 
-Complete applications built on the [Agents API](./api/public-agent-api.md). Each one runs against a real Core installation with a Project API key.
+Applications and runnable configurations built on the [Agents API](./api/public-agent-api.md). Each one runs against a real Core installation with a Project API key.
 
 | Example | What it shows |
 | --- | --- |
+| [Parallel Search MCP](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parallel-search/README.md) | Anonymous web search and page fetch in a self-hosted Codex Session |
 | [Parsar Agent workbench](#parsar-agent-workbench) | A product UI: models, Skills, MCP, reusable Agents, and Sessions on any runtime |
 
 ## Parsar Agent workbench

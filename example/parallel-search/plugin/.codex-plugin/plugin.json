@@ -1,0 +1,5 @@
+{
+  "name": "parallel-search",
+  "description": "Anonymous web search and page fetch through Parallel Search MCP.",
+  "mcpServers": "./.mcp.json"
+}
