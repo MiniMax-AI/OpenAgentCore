@@ -1,7 +1,7 @@
 ---
 title: "Environment 文件与 Artifact"
 source: contracts/agents-api/environment-files.md
-source_hash: 1b58aa02aaccddb9675ef41ebfe2506a6fba0bb12139efb67e0da378d879aee7
+source_hash: f87f06138789666b91140c15ffd104cffba4566580921b94b094bf31591d201d
 ---
 
 Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/environments/{environment_id}/files` 列出一个工作区目录，并在其中创建文件。Turn 完成时，Core 将工作区 `outputs/` 目录中的文件复制为不可变 Artifact，通过 `/agents/sessions/{session_id}/artifacts` 读取。Artifact 的生命周期长于 Environment；工作区文件则不是。
@@ -79,7 +79,7 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 
 - 发送任何字节之前，Core 在 Session 锁下记录写入。输入待处理、Turn 运行或较早写入未结算时，新写入返回 409 `turn_conflict`。未结算写入也使 Session 新消息返回 409。
 - Runtime 在创建任何内容前根据摘要检查完整正文，因此不完整输入不创建内容。后续失败的写入可能留下新建空父目录。
-- 仅 Runtime 的确定回执将写入结算为已提交或已拒绝。被拒绝写入不改变内容并释放 Session。连接断开、请求超时或无回执时，返回 503，写入持续未结算，Core 重启后仍如此。Core 不重发，也无自动恢复，因此 Session 不再接受写入或消息。读取仍可用。
+- 仅 Runtime 的确定回执将写入结算为已提交或已拒绝。被拒绝写入不会发布目标文件，并释放 Session；新建的空父目录可能保留。确认在发布前发生的存储或配额耗尽返回 503，格式错误的输入和目标冲突仍保持原有错误。连接断开、请求超时或无回执时，返回 503，写入持续未结算，Core 重启后仍如此。Core 不重发，也无自动恢复，因此 Session 不再接受写入或消息。读取仍可用。
 - 源 File 字节读取后，删除该 File 不影响副本。
 
 ## Artifact {#artifacts}
