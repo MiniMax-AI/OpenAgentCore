@@ -37,37 +37,41 @@ def identity(payload):
 
 
 def initialize():
-    root = shared.ROOT
-    root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    root.chmod(0o700)
-    source = root / 'managed-bootstrap.json'
-    if any((root / name).exists() for name in ['launch.json', 'ready.json', 'managed-launch.json', 'managed-ready.json']):
-        raise RuntimeError('Runtime bootstrap cannot be replayed')
-    if source.stat().st_size > 65536:
-        raise ValueError('Managed bootstrap input too large')
-    payload = json.loads(source.read_text())
-    binding = identity(payload)
-    shared.write_private(root / 'managed-launch.json', binding)
+    with shared.bootstrap_stage('bootstrap_claim'):
+        root = shared.ROOT
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        root.chmod(0o700)
+        source = root / 'managed-bootstrap.json'
+        if any((root / name).exists() for name in ['launch.json', 'ready.json', 'managed-launch.json', 'managed-ready.json']):
+            raise RuntimeError('Runtime bootstrap cannot be replayed')
+        if source.stat().st_size > 65536:
+            raise ValueError('Managed bootstrap input too large')
+        payload = json.loads(source.read_text())
+        binding = identity(payload)
+        shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
-    environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
-                       OAC_RUNTIME_SESSION_ID=payload['SessionID'],
-                       OAC_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],
-                       OAC_RUNTIME_ALLOWED_DOMAINS=json.dumps(payload['AllowedDomains'] or []))
-    connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
-    shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
-    source.unlink()
-    with (shared.PROFILE / 'daemon.log').open('xb') as stream:
-        os.fchmod(stream.fileno(), 0o600)
-        os.fchown(stream.fileno(), 1000, 1000)
-        child = subprocess.Popen(['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default',
-                                  '--bootstrap-file', str(connection)],
-                                 cwd='/environment/workspace', env=environment, user=1000, group=1000,
-                                 extra_groups=[], start_new_session=True, stdin=subprocess.DEVNULL,
-                                 stdout=stream, stderr=subprocess.STDOUT, umask=0o077)
-    shared.write_private(root / 'managed-ready.tmp',
-                         {'identity': binding, 'status': 'daemon_started', 'daemon_pid': child.pid})
-    os.replace(root / 'managed-ready.tmp', root / 'managed-ready.json')
-    shared.sync_directory(root)
+    with shared.bootstrap_stage('bootstrap_credentials'):
+        environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
+                           OAC_RUNTIME_SESSION_ID=payload['SessionID'],
+                           OAC_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],
+                           OAC_RUNTIME_ALLOWED_DOMAINS=json.dumps(payload['AllowedDomains'] or []))
+        connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
+        shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
+        source.unlink()
+    with shared.bootstrap_stage('bootstrap_spawn'):
+        with (shared.PROFILE / 'daemon.log').open('xb') as stream:
+            os.fchmod(stream.fileno(), 0o600)
+            os.fchown(stream.fileno(), 1000, 1000)
+            child = subprocess.Popen(['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default',
+                                      '--bootstrap-file', str(connection)],
+                                     cwd='/environment/workspace', env=environment, user=1000, group=1000,
+                                     extra_groups=[], start_new_session=True, stdin=subprocess.DEVNULL,
+                                     stdout=stream, stderr=subprocess.STDOUT, umask=0o077)
+    with shared.bootstrap_stage('bootstrap_receipt'):
+        shared.write_private(root / 'managed-ready.tmp',
+                             {'identity': binding, 'status': 'daemon_started', 'daemon_pid': child.pid})
+        os.replace(root / 'managed-ready.tmp', root / 'managed-ready.json')
+        shared.sync_directory(root)
 
 
 if __name__ == '__main__':

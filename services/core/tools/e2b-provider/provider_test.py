@@ -19,13 +19,55 @@ from e2b.sandbox_sync.filesystem.filesystem import Filesystem
 from packaging.version import Version
 from e2b.exceptions import AuthenticationException, FileNotFoundException, SandboxNotFoundException
 
-from provider import BOOTSTRAP_SCRIPT, Provider
+from provider import BOOTSTRAP_SCRIPT, Provider, create_stage, observe_bootstrap
 from helper_contract_generated import PROTOCOL_VERSION
 from sdk import restore, run
 from state import Failure, Receipt
 
 
 class BootstrapScriptTest(unittest.TestCase):
+    def test_sdk_timings_preserve_single_start_and_wait(self):
+        for failure in (None, 'start', 'wait'):
+            with self.subTest(failure=failure):
+                sandbox = Mock()
+                process = sandbox.commands.run.return_value
+                process.wait.return_value = SimpleNamespace(stdout='receipt', stderr='', exit_code=0)
+                if failure == 'start':
+                    sandbox.commands.run.side_effect = TimeoutError('private error')
+                if failure == 'wait':
+                    process.wait.side_effect = TimeoutError('private error')
+                stream = io.StringIO()
+                with patch('provider.sys.stderr', stream):
+                    if failure:
+                        with self.assertRaises(Failure):
+                            run(sandbox, {'Args': ['python3']}, lambda: 30, observe_stage=create_stage)
+                    else:
+                        self.assertEqual(run(sandbox, {'Args': ['python3']}, lambda: 30, observe_stage=create_stage)['Stdout'], 'receipt')
+                rows = [json.loads(line) for line in stream.getvalue().splitlines()]
+                self.assertEqual([row['stage'] for row in rows], ['bootstrap_stream_open'] + ([] if failure == 'start' else ['bootstrap_stream_completion']))
+                self.assertEqual(rows[-1]['completed'], failure is None)
+                sandbox.commands.run.assert_called_once()
+                self.assertEqual(process.wait.call_count, 0 if failure == 'start' else 1)
+                self.assertNotIn('private', stream.getvalue())
+
+    def test_guest_observations_are_bounded_and_secret_safe(self):
+        valid = dict(event='e2b_bootstrap_stage', stage='bootstrap_claim', duration_us=42, completed=True)
+        bad = [dict(valid, stage='private-secret'), dict(valid, credential='private-secret'),
+               dict(valid, duration_us=True), dict(valid, duration_us=-1), dict(valid, duration_us=1.5),
+               dict(valid, duration_us=1_800_000_001), dict(valid, completed='true'),
+               dict(valid, stage=[]), None, []]
+        raw = '\n'.join(['private stderr'] + [json.dumps(row) for row in bad] + [json.dumps(valid)] * 2)
+        stream = io.StringIO()
+        with patch('provider.sys.stderr', stream):
+            observe_bootstrap(raw)
+            observe_bootstrap('x' * 8193)
+            observe_bootstrap(None)
+        self.assertEqual([json.loads(line) for line in stream.getvalue().splitlines()],
+                         [dict(valid, event='e2b_create_stage')])
+        with patch('provider.sys.stderr') as stream:
+            stream.write.side_effect = RuntimeError('sink failure')
+            observe_bootstrap(json.dumps(valid))
+
     def execute(self, startup, receipt=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -107,6 +149,58 @@ class ProviderTest(unittest.TestCase):
 
     def record(self):
         return json.loads(next(Path(self.temporary.name).glob('*.json')).read_text())
+
+    def test_create_stages_preserve_order_and_exclude_secrets(self):
+        stream = io.StringIO()
+        with patch('provider.sys.stderr', stream):
+            result = self.call('create')
+        self.assertEqual(result['ErrorCode'], '')
+        rows = [json.loads(line) for line in stream.getvalue().splitlines()]
+        self.assertEqual([row['stage'] for row in rows], [
+            'sandbox_create', 'ownership_check', 'template_check',
+            'bootstrap_write', 'bootstrap_run', 'ready_inspect'])
+        for row in rows:
+            self.assertEqual(set(row), {'event', 'stage', 'duration_us', 'completed'})
+            self.assertTrue(row['completed'])
+            self.assertGreaterEqual(row['duration_us'], 0)
+        self.assertNotIn('private', stream.getvalue())
+
+    def test_failed_create_stage_does_not_expose_exception_or_replay(self):
+        stream = io.StringIO()
+        self.api.create.side_effect = TimeoutError('private SDK secret')
+        with patch('provider.sys.stderr', stream):
+            self.assertEqual(self.call('create')['ErrorCode'], 'unconfirmed')
+            self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+        rows = [json.loads(line) for line in stream.getvalue().splitlines()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['stage'], 'sandbox_create')
+        self.assertFalse(rows[0]['completed'])
+        self.assertNotIn('private', stream.getvalue())
+        self.api.create.assert_called_once()
+
+    def test_failed_guest_stage_is_forwarded_without_receipt_replay(self):
+        stream = io.StringIO()
+        stage = dict(event='e2b_bootstrap_stage', stage='bootstrap_spawn', duration_us=123, completed=False)
+        with patch('provider.run', return_value={'Stdout': '', 'Stderr': json.dumps(stage) + '\nprivate error', 'ExitCode': 1}) as command, \
+                patch('provider.sys.stderr', stream):
+            self.assertEqual(self.call('create')['ErrorCode'], 'unconfirmed')
+            self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+        rows = [json.loads(line) for line in stream.getvalue().splitlines()]
+        self.assertIn(dict(stage, event='e2b_create_stage'), rows)
+        self.assertNotIn('private', stream.getvalue())
+        command.assert_called_once()
+
+    def test_broken_diagnostic_sink_does_not_change_create(self):
+        with patch('provider.sys.stderr') as stream:
+            stream.write.side_effect = OSError('sink closed')
+            self.assertEqual(self.call('create')['ErrorCode'], '')
+
+    def test_stage_uses_monotonic_duration(self):
+        stream = io.StringIO()
+        with patch('provider.sys.stderr', stream), patch('provider.time.monotonic_ns', side_effect=[1000, 2501000]):
+            with create_stage('sandbox_create'):
+                pass
+        self.assertEqual(json.loads(stream.getvalue())['duration_us'], 2500)
 
     def test_create_recover_and_never_replay(self):
         result = self.call('create')

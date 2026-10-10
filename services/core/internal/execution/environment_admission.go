@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
@@ -75,11 +77,17 @@ func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSess
 	return nil
 }
 
-func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.Session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
-	if err := w.validateEnvironmentAdmission(ctx, session.Engine, session.Configuration); err != nil {
+func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.Session, key string, inputs []sessions.Input) (receipts []sessions.InputReceipt, err error) {
+	checkAt := time.Now()
+	err = w.validateEnvironmentAdmission(ctx, session.Engine, session.Configuration)
+	observeExecutionStage(ctx, "input_validate", checkAt, err, "session_id", session.ID)
+	if err != nil {
 		return nil, err
 	}
-	if err := w.checkAdmissionOwnership(ctx); err != nil {
+	checkAt = time.Now()
+	err = w.checkAdmissionOwnership(ctx)
+	observeExecutionStage(ctx, "input_ownership", checkAt, err, "session_id", session.ID)
+	if err != nil {
 		return nil, err
 	}
 	kind := ""
@@ -92,12 +100,21 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.S
 	}
 	changed, unsubscribe := w.dispatcher.notifications.subscribe(session.TenantID, session.ID)
 	defer unsubscribe()
+	reservedAt := time.Now()
 	reserve, cancel := context.WithTimeout(ctx, 5*time.Second)
 	reservation, err := w.dispatcher.Sessions.ReserveEnvironmentInput(reserve, session.TenantID, session.ID, key, inputs)
 	cancel()
+	observeExecutionStage(ctx, "input_reserve", reservedAt, err, "session_id", session.ID)
 	if err != nil {
 		return nil, err
 	}
+	obslog.Ctx(ctx).Info("environment input reserved", "session_id", session.ID,
+		"reservation_id", reservation.ID, "execution_trace_id", reservationTraceID(reservation.ID).String(), "state", reservation.State)
+	admittedAt := time.Now()
+	defer func() {
+		observeExecutionStage(ctx, "input_admission_wait", admittedAt, err,
+			"session_id", session.ID, "reservation_id", reservation.ID, "state", reservation.State)
+	}()
 	w.wakeScheduler()
 	if reservation.State == sessions.EnvironmentInputPending {
 		w.hintRuntimeWake(ctx, session)

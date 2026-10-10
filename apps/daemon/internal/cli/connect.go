@@ -98,6 +98,7 @@ func runConnect(ctx *runContext, args []string) error {
 		return spawnBackground(context.Background(), ctx, *profile, os.Args)
 	}
 
+	initializeRuntimeObservations(ctx)
 	var prof auth.Profile
 	if bootstrapped != nil {
 		prof = *bootstrapped
@@ -203,7 +204,9 @@ func mainLoopRemoteWithDiscovery(parent context.Context, rc *runContext, profile
 	rootCtx, cancel := daemonize.NotifyContext(parent)
 	defer cancel()
 
-	boot, agentCLIs, err := prepareConnection(rootCtx, discover, func(ctx context.Context) (*transport.BootstrapResponse, error) {
+	boot, agentCLIs, err := prepareConnection(rootCtx, discover, func(ctx context.Context) (boot *transport.BootstrapResponse, err error) {
+		started := time.Now()
+		defer func() { observeRuntimeStartup(ctx, "bootstrap", started, err) }()
 		bootCtx, stop := context.WithTimeout(ctx, bootstrapTimeout)
 		defer stop()
 		if remote != "" {
@@ -232,6 +235,7 @@ func mainLoopRemoteWithDiscovery(parent context.Context, rc *runContext, profile
 		defer control.Close()
 	}
 	dial := func(ctx context.Context) (*transport.Conn, error) {
+		dialStarted := time.Now()
 		conn, err := transport.Dial(ctx, transport.DialOptions{
 			WSURL:      wsURL,
 			DeviceID:   boot.DeviceID,
@@ -242,6 +246,7 @@ func mainLoopRemoteWithDiscovery(parent context.Context, rc *runContext, profile
 			// in heartbeat's DaemonVersion field.
 			DaemonVersion: proto.Version,
 		})
+		observeRuntimeStartup(ctx, "transport_dial", dialStarted, err)
 		if remote != "" && err != nil {
 			if errors.Is(err, transport.ErrIncompatibleVersion) {
 				return nil, fmt.Errorf("Environment connection rejected: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion)

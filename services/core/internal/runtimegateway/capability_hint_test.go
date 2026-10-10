@@ -1,12 +1,15 @@
 package runtimegateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 )
@@ -134,5 +137,42 @@ func TestCapabilityConfirmationRetriesWithoutObservingRejectedAuthority(t *testi
 				expectCapabilityHint(t, reg, false)
 			}
 		})
+	}
+}
+
+func TestCapabilityObservationsExcludeRejectedAndStalePeers(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	reg := NewRegistry()
+	old := NewSession(newFakeConn(), "device", "tenant", "version", reg, nil)
+	reg.Register(old)
+	kinds := []runtimedevice.SupportedAgentKind{{Kind: "fake", Available: true}}
+	publishCapabilityHeartbeat(t, old, kinds)
+	if !strings.Contains(logs.String(), "runtime capability snapshot observed") {
+		t.Fatal("valid declaration was not observed")
+	}
+	logs.Reset()
+	old.handleHeartbeat(proto.Envelope{Type: proto.TypeHeartbeat, Payload: json.RawMessage(`{"supported_agent_kinds":[{"kind":"fake","available":true,"capabilities":{"streaming":"invented"}}]}`)})
+	if logs.Len() != 0 {
+		t.Fatal("invalid declaration logged as an accepted snapshot")
+	}
+	newer := NewSession(newFakeConn(), "device", "tenant", "version", reg, nil)
+	reg.Register(newer)
+	publishCapabilityHeartbeat(t, old, kinds)
+	if logs.Len() != 0 {
+		t.Fatal("superseded connection logged as an accepted snapshot")
+	}
+	publishCapabilityHeartbeat(t, newer, kinds)
+	if !strings.Contains(logs.String(), "runtime capability snapshot observed") {
+		t.Fatal("replacement declaration was not observed")
+	}
+	logs.Reset()
+	reg.Deregister(newer)
+	kinds[0].Version = "changed"
+	publishCapabilityHeartbeat(t, newer, kinds)
+	if logs.Len() != 0 {
+		t.Fatal("disconnected connection logged as an accepted snapshot")
 	}
 }

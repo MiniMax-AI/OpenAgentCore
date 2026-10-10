@@ -138,6 +138,7 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 		w.hintRuntimeWake(ctx, creation.Session)
 	}
 	if err == nil && len(input.InitialInputs) > 0 {
+		recordInitialInputOrigin(ctx, creation.Session.ID)
 		w.wakeScheduler()
 	}
 	return creation, err

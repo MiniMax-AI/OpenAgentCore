@@ -10,6 +10,7 @@ package runtimegateway
 import (
 	"context"
 	"errors"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"sync"
 	"time"
 
@@ -258,6 +259,7 @@ func (r *Registry) observeCapabilitySnapshot(sess *Session, kinds []runtimedevic
 			available++
 		}
 	}
+	obslog.Ctx(context.Background()).Info("runtime capability snapshot observed", "device_id", sess.DeviceID, "kind_count", len(kinds), "available_kind_count", available)
 	if available == 0 {
 		return true
 	}

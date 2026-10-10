@@ -22,7 +22,9 @@ func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
 		r.pendingCursor = environment.ID
 		provider := r.config.InstallationID
 		operation, cancel := context.WithTimeout(ctx, 30*time.Second)
+		provisionAt := time.Now()
 		_, err := r.provision(operation, environment.TenantID, environment.ID, provider)
+		observeExecutionStage(ctx, "runtime_provision", provisionAt, err, "environment_id", environment.ID, "node_id", r.nodeID)
 		cancel()
 		if err != nil {
 			if ownership := r.lease.CheckOwnership(ctx); ownership != nil {

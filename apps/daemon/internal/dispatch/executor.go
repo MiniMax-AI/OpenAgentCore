@@ -180,7 +180,9 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	var native agent.Executor
 	var err error
 	if owner.ctx.Err() == nil {
+		workspaceStarted := time.Now()
 		req, err = r.localWorkspace.Prepare(owner.ctx, req)
+		r.log.InfoContext(owner.ctx, "executor preparation stage", "stage", "workspace", "executor_id", owner.id, "session_id", owner.sessionID, "duration_ms", float64(time.Since(workspaceStarted))/float64(time.Millisecond), "success", err == nil)
 		if err == nil && owner.ctx.Err() == nil {
 			native, err = factory(owner.ctx, req)
 		}

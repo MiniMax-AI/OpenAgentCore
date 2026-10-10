@@ -1,8 +1,10 @@
 """Five bounded SDK operations for an already authorized Core allocation, plus
 read-only deployment validation and observation."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import json
 import math
+import sys
 import time
 from datetime import datetime, timezone
 from uuid import UUID
@@ -32,6 +34,50 @@ try:
 except OSError:
     pass
 """
+
+
+@contextmanager
+def create_stage(stage):
+    """Emit bounded numeric diagnostics, never SDK output or request contents."""
+    started = time.monotonic_ns()
+    completed = False
+    try:
+        yield
+        completed = True
+    finally:
+        try:
+            sys.stderr.write(json.dumps({'event': 'e2b_create_stage', 'stage': stage,
+                                         'duration_us': (time.monotonic_ns() - started) // 1000,
+                                         'completed': completed}) + '\n')
+        except Exception:
+            # Observation must not change allocation or bootstrap outcomes.
+            pass
+
+
+def observe_bootstrap(raw):
+    """Forward only bounded guest timings; never expose guest stderr itself."""
+    if not isinstance(raw, str) or len(raw) > 8192:
+        return
+    seen = set()
+    for line in raw.splitlines():
+        if len(line) > 256:
+            continue
+        try:
+            value = json.loads(line)
+            if (not isinstance(value, dict) or
+                    set(value) != {'event', 'stage', 'duration_us', 'completed'} or
+                    value['event'] != 'e2b_bootstrap_stage' or
+                    value['stage'] not in ('bootstrap_claim', 'bootstrap_protection', 'bootstrap_layout',
+                                           'bootstrap_credentials', 'bootstrap_spawn', 'bootstrap_receipt') or
+                    value['stage'] in seen or type(value['duration_us']) is not int or
+                    not 0 <= value['duration_us'] <= 1_800_000_000 or type(value['completed']) is not bool):
+                continue
+            seen.add(value['stage'])
+            value['event'] = 'e2b_create_stage'
+            sys.stderr.write(json.dumps(value) + '\n')
+        except Exception:
+            # A malformed record or unavailable sink never changes startup.
+            pass
 
 
 def valid_id(value):
@@ -230,62 +276,69 @@ class Provider:
         identity = dict(self.reference, InstallationID=self.config['InstallationID'],
                         SessionID=bootstrap['SessionID'], DeviceID=bootstrap['DeviceID'])
         self.receipt.save(status='create_pending', bootstrap_identity=identity)
-        try:
-            cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
-                                   metadata=self.metadata, lifecycle={'on_timeout': 'kill', 'auto_resume': False},
-                                   **self.options())
-        except Exception as error:
-            if definitely_rejected(error):
-                self.receipt.save(status='rejected', settled=True)
-            raise Failure('unconfirmed') from None
+        with create_stage('sandbox_create'):
+            try:
+                cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
+                                       metadata=self.metadata, lifecycle={'on_timeout': 'kill', 'auto_resume': False},
+                                       **self.options())
+            except Exception as error:
+                if definitely_rejected(error):
+                    self.receipt.save(status='rejected', settled=True)
+                raise Failure('unconfirmed') from None
         self.receipt.save(status='created', ids=[cloud.sandbox_id], connection=connection_material(cloud))
         # A create response must not steer envd traffic to an unrelated host.
         self.check_domain(cloud)
         # SDK Create returns connection material, but no metadata or resources.
         # Read its exact ID before writing credentials, even when Core adopts the
         # template's resources and does not supply explicit limits.
-        try:
-            detail = self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options()))
-            self.qualified(detail)
-        except Failure:
-            self.receipt.save(status='configuration_rejected', settled=True)
-            raise
+        with create_stage('ownership_check'):
+            try:
+                detail = self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options()))
+                self.qualified(detail)
+            except Failure:
+                self.receipt.save(status='configuration_rejected', settled=True)
+                raise
         # Validate the current template entry point before writing any credential.
-        try:
-            entry = cloud.files.get_info('/opt/oac-e2b/managed_init.py',
-                                         user='root', request_timeout=self.remaining())
-            if entry.type != FileType.FILE:
+        with create_stage('template_check'):
+            try:
+                entry = cloud.files.get_info('/opt/oac-e2b/managed_init.py',
+                                             user='root', request_timeout=self.remaining())
+                if entry.type != FileType.FILE:
+                    self.receipt.save(status='bootstrap_failed', settled=True)
+                    raise Failure('template_invalid')
+                # A successful download can also refer to a special file. Check
+                # the type first, then verify readability without a probe process.
+                with cloud.files.read('/opt/oac-e2b/managed_init.py', format='stream',
+                                      user='root', request_timeout=self.remaining()):
+                    pass
+            except FileNotFoundException:
                 self.receipt.save(status='bootstrap_failed', settled=True)
-                raise Failure('template_invalid')
-            # A successful download can also refer to a special file. Check
-            # the type first, then verify readability without a probe process.
-            with cloud.files.read('/opt/oac-e2b/managed_init.py', format='stream',
-                                  user='root', request_timeout=self.remaining()):
-                pass
-        except FileNotFoundException:
-            self.receipt.save(status='bootstrap_failed', settled=True)
-            raise Failure('template_invalid') from None
+                raise Failure('template_invalid') from None
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
         del payload['CoreURL'], payload['Credential'], payload['Harness']
         if (set(payload) - set(MANAGED_BOOTSTRAP_FIELDS) or
                 not set(MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload)):
             raise Failure('invalid')
-        cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
-                          user='root', request_timeout=self.remaining())
+        with create_stage('bootstrap_write'):
+            cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
+                              user='root', request_timeout=self.remaining())
         self.receipt.save(status='bootstrap_pending')
-        result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c', BOOTSTRAP_SCRIPT]},
-                     self.remaining, user='root')
-        if result['ExitCode'] != 0:
-            self.receipt.save(status='bootstrap_failed', settled=True)
-            raise Failure('unconfirmed')
+        with create_stage('bootstrap_run'):
+            result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c', BOOTSTRAP_SCRIPT]},
+                         self.remaining, user='root', observe_stage=create_stage)
+            observe_bootstrap(result.get('Stderr'))
+            if result['ExitCode'] != 0:
+                self.receipt.save(status='bootstrap_failed', settled=True)
+                raise Failure('unconfirmed')
         self.receipt.save(status='bootstrap_exited', settled=True)
-        try:
-            receipt = json.loads(result['Stdout'])
-        except (ValueError, KeyError):
-            raise Failure('unconfirmed') from None
-        self.accept_bootstrap_receipt(receipt)
-        return self.inspect()
+        with create_stage('ready_inspect'):
+            try:
+                receipt = json.loads(result['Stdout'])
+            except (ValueError, KeyError):
+                raise Failure('unconfirmed') from None
+            self.accept_bootstrap_receipt(receipt)
+            return self.inspect()
 
     def renew(self):
         cloud = self.inspect()

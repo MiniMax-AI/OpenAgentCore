@@ -125,6 +125,7 @@ func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string)
 }
 
 func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background bool, remote, environment, credentialFile string) error {
+	initializeRuntimeObservations(rc)
 	base, err := environmentBase(remote)
 	if err != nil {
 		return err

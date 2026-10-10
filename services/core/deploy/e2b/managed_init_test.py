@@ -1,5 +1,6 @@
 """Managed bootstrap reuses image protection without changing self-hosted enrollment."""
 import copy
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -64,7 +65,9 @@ class ManagedStartupTest(unittest.TestCase):
                 process.side_effect = RuntimeError('private process diagnostic')
             image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'OAC_RUNTIME_HOME': str(Path(temporary) / '.oac'),
                          'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}
-            with patch.object(managed_init.shared, 'ROOT', root), patch.object(managed_init.shared, 'PROFILE', profile), \
+            diagnostics = io.StringIO()
+            with patch.object(managed_init.shared.sys, 'stderr', diagnostics), \
+                    patch.object(managed_init.shared, 'ROOT', root), patch.object(managed_init.shared, 'PROFILE', profile), \
                     patch.object(managed_init.shared, 'prepare_runtime', return_value=image_env), \
                     patch.object(managed_init.os, 'fchown'), patch.object(managed_init.subprocess, 'Popen', process):
                 if failed:
@@ -72,6 +75,16 @@ class ManagedStartupTest(unittest.TestCase):
                         managed_init.initialize()
                 else:
                     managed_init.initialize()
+                rows = [json.loads(line) for line in diagnostics.getvalue().splitlines()]
+                self.assertEqual([row['stage'] for row in rows], [
+                    'bootstrap_claim', 'bootstrap_credentials', 'bootstrap_spawn'] +
+                    ([] if failed else ['bootstrap_receipt']))
+                self.assertEqual(rows[-1]['completed'], not failed)
+                for row in rows:
+                    self.assertEqual(set(row), {'event', 'stage', 'duration_us', 'completed'})
+                    self.assertGreaterEqual(row['duration_us'], 0)
+                self.assertNotIn('private', diagnostics.getvalue())
+                self.assertNotIn(str(root), diagnostics.getvalue())
                 self.assertTrue((root / 'managed-launch.json').exists())
                 connection_file = Path(temporary) / 'runtime-bootstrap.json'
                 self.assertEqual(json.loads(connection_file.read_text()), data['RuntimeBootstrap'])
@@ -93,6 +106,21 @@ class ManagedStartupTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     managed_init.initialize()
                 process.assert_called_once()
+
+    def test_observation_sink_failure_preserves_business_error(self):
+        with patch.object(managed_init.shared.sys, 'stderr') as stream:
+            stream.write.side_effect = OSError('private sink failure')
+            with self.assertRaisesRegex(RuntimeError, 'business failure'):
+                with managed_init.shared.bootstrap_stage('bootstrap_claim'):
+                    raise RuntimeError('business failure')
+
+    def test_observation_uses_monotonic_elapsed_time(self):
+        stream = io.StringIO()
+        with patch.object(managed_init.shared.sys, 'stderr', stream), \
+                patch.object(managed_init.shared.time, 'monotonic_ns', side_effect=[1000, 2501000]):
+            with managed_init.shared.bootstrap_stage('bootstrap_claim'):
+                pass
+        self.assertEqual(json.loads(stream.getvalue())['duration_us'], 2500)
 
     def test_managed_credentials_and_environment(self):
         self.exercise()
