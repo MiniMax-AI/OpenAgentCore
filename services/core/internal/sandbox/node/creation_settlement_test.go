@@ -76,7 +76,7 @@ func TestNodeCarriesCreationSettlementWithoutConvertingFailureToSuccess(t *testi
 			proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
 			for _, operation := range []func(context.Context) (sandbox.Info, error){
 				func(ctx context.Context) (sandbox.Info, error) {
-					return proxy.Create(ctx, sandbox.Bootstrap{Reference: ref})
+					return proxy.Create(ctx, sandbox.Bootstrap{Reference: ref, Harness: "codex"})
 				},
 				func(ctx context.Context) (sandbox.Info, error) { return proxy.GetInfo(ctx, ref) },
 			} {

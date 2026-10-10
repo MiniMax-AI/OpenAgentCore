@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/placementpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -251,6 +252,7 @@ func (t *reservationTx) InsertAllocation(a deployment.NewAllocation) (deployment
 	row, err := t.q.CreateRuntimeAllocation(t.ctx, sqlc.CreateRuntimeAllocationParams{
 		ID: id, EnvironmentID: t.environment, DeviceID: device, ProviderKey: provider, NodeID: node,
 		DeploymentGeneration: pgtype.Int8{Int64: int64(a.Generation), Valid: true},
+		ProtocolVersion:      sandbox.SuspensionStateVersion,
 	})
 	if err != nil {
 		return deployment.Allocation{}, err
@@ -607,6 +609,22 @@ func (s *Store) Activity(ctx context.Context, allocationID string) (deployment.A
 		return deployment.Activity{}, err
 	}
 	return loadActivity(ctx, s.pool.Queries(), id)
+}
+
+func (s *Store) CountComputeReservations(ctx context.Context, installationID string) (int64, error) {
+	id, err := parseID(installationID)
+	if err != nil {
+		return 0, err
+	}
+	return s.pool.Queries().CountRuntimeComputeReservations(ctx, id)
+}
+
+func (s *Store) CountRetainedAllocations(ctx context.Context, installationID string) (int64, error) {
+	id, err := parseID(installationID)
+	if err != nil {
+		return 0, err
+	}
+	return s.pool.Queries().CountRuntimeRetainedAllocations(ctx, id)
 }
 
 func (t *reservationTx) LoadGenerationSpecification(generation uint64) (deployment.GenerationSpecification, error) {

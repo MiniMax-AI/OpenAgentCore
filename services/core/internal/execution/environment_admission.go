@@ -99,7 +99,7 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.S
 		return nil, err
 	}
 	w.wakeScheduler()
-	if reservation.State == sessions.EnvironmentInputPending && !reservation.IsInitial {
+	if reservation.State == sessions.EnvironmentInputPending {
 		w.hintRuntimeWake(ctx, session)
 	}
 	ticker := time.NewTicker(250 * time.Millisecond)

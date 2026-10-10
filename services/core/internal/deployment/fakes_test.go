@@ -76,27 +76,29 @@ func (f *fakeExecutionStorage) WithDeployment(ctx context.Context, apply func(De
 }
 
 type fakeReader struct {
-	t                       testing.TB
-	deployment              func(context.Context) (Record, error)
-	snapshot                func(context.Context) (Snapshot, error)
-	ownerEpoch              func(context.Context) (uint64, error)
-	allocation              func(context.Context, sandbox.Reference) (AllocationRecord, error)
-	generations             func(context.Context, int64) ([]GenerationRecord, error)
-	nodes                   func(context.Context) ([]NodeRecord, error)
-	nodeHistory             func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
-	readNodes               func(context.Context, func(NodeReads) error) error
-	resetSessions           func(context.Context, string, bool) ([]ResetSession, error)
-	addressBindings         func(context.Context, string) (AddressBindings, error)
-	environmentAllocation   func(context.Context, AllocationKey) (Allocation, error)
-	credentialAllocations   func(context.Context, string) ([]Allocation, error)
-	observationSessions     func(context.Context, string, int) (ObservationSessionPage, error)
-	nodeAllocations         func(context.Context, string) ([]NodeAllocation, error)
-	nodeOnline              func(context.Context, string) (bool, error)
-	lifecycleNodes          func(context.Context) ([]string, error)
-	lifecycleAllocations    func(context.Context, string, string) ([]Allocation, error)
-	unallocatedEnvironments func(context.Context, string, string) ([]UnallocatedEnvironment, error)
-	lifecyclePlacement      func(context.Context, AllocationKey) (LifecyclePlacement, error)
-	activity                func(context.Context, string) (Activity, error)
+	countRetainedAllocations func(context.Context, string) (int64, error)
+	countComputeReservations func(context.Context, string) (int64, error)
+	t                        testing.TB
+	deployment               func(context.Context) (Record, error)
+	snapshot                 func(context.Context) (Snapshot, error)
+	ownerEpoch               func(context.Context) (uint64, error)
+	allocation               func(context.Context, sandbox.Reference) (AllocationRecord, error)
+	generations              func(context.Context, int64) ([]GenerationRecord, error)
+	nodes                    func(context.Context) ([]NodeRecord, error)
+	nodeHistory              func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
+	readNodes                func(context.Context, func(NodeReads) error) error
+	resetSessions            func(context.Context, string, bool) ([]ResetSession, error)
+	addressBindings          func(context.Context, string) (AddressBindings, error)
+	environmentAllocation    func(context.Context, AllocationKey) (Allocation, error)
+	credentialAllocations    func(context.Context, string) ([]Allocation, error)
+	observationSessions      func(context.Context, string, int) (ObservationSessionPage, error)
+	nodeAllocations          func(context.Context, string) ([]NodeAllocation, error)
+	nodeOnline               func(context.Context, string) (bool, error)
+	lifecycleNodes           func(context.Context) ([]string, error)
+	lifecycleAllocations     func(context.Context, string, string) ([]Allocation, error)
+	unallocatedEnvironments  func(context.Context, string, string) ([]UnallocatedEnvironment, error)
+	lifecyclePlacement       func(context.Context, AllocationKey) (LifecyclePlacement, error)
+	activity                 func(context.Context, string) (Activity, error)
 }
 
 func (f *fakeReader) Deployment(ctx context.Context) (Record, error) {
@@ -346,6 +348,7 @@ func (f *fakeNodeTx) RefreshServingReadiness(nodeID string, protocol int) error 
 }
 
 type fakeDeploymentTx struct {
+	hasIncompatibleComputeState func(string) (bool, error)
 	t                           testing.TB
 	loadDeployment              func() (Record, error)
 	loadSnapshot                func() (Snapshot, error)
@@ -636,6 +639,28 @@ func (f *fakeSessionReader) GetSessionExecutionConfiguration(context.Context, st
 func (f *fakeSessionReader) GetManagedSessionArchive(context.Context, string, string) (sessions.ManagedArchive, error) {
 	unexpected(f.t, "GetManagedSessionArchive")
 	return sessions.ManagedArchive{}, nil
+}
+
+func (f *fakeDeploymentTx) HasIncompatibleComputeState(version string) (bool, error) {
+	if f.hasIncompatibleComputeState == nil {
+		f.t.Fatal("unexpected HasIncompatibleComputeState")
+		return false, nil
+	}
+	return f.hasIncompatibleComputeState(version)
+}
+
+func (f *fakeReader) CountComputeReservations(ctx context.Context, installationID string) (int64, error) {
+	if f.countComputeReservations == nil {
+		unexpected(f.t, "CountComputeReservations")
+	}
+	return f.countComputeReservations(ctx, installationID)
+}
+
+func (f *fakeReader) CountRetainedAllocations(ctx context.Context, installationID string) (int64, error) {
+	if f.countRetainedAllocations == nil {
+		unexpected(f.t, "CountRetainedAllocations")
+	}
+	return f.countRetainedAllocations(ctx, installationID)
 }
 
 func (f *fakeReader) ReplacementEnvironments(context.Context, string) ([]UnallocatedEnvironment, error) {

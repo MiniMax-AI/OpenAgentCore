@@ -42,17 +42,17 @@ func TestWorkspaceResolveBeforeRestoreAndRetainPartialTarget(t *testing.T) {
 		return workspacefs.Directory{Path: "/resolved/environment"}, nil
 	})
 	q := ResumeRequest{Reference: r, OperationID: "66666666-6666-4666-8666-666666666666", Snapshot: s, Target: Compute{Generation: 1, Name: Name(c, r, 1), RestoredFrom: &s}, Workspace: workspaceBinding()}
-	state, err := p.Resume(deadline(t), q)
+	state, err := p.nativeResume(deadline(t), q)
 	if !errors.Is(err, ErrUnconfirmed) || state.Compute.ID != "local:partial" || resolves != 1 || calls != 1 {
 		t.Fatal(state, err, resolves, calls)
 	}
 	q.ObserveOnly = true
-	_, _ = p.Resume(deadline(t), q)
+	_, _ = p.nativeResume(deadline(t), q)
 	if resolves != 2 {
 		t.Fatal("restore observation did not resolve original binding")
 	}
 	q.Workspace.Attachment.Reference.EnvironmentID = r.TenantID
-	_, err = p.Resume(deadline(t), q)
+	_, err = p.nativeResume(deadline(t), q)
 	if !errors.Is(err, workspacefs.ErrOwnership) || calls != 2 {
 		t.Fatal("foreign binding reached helper", err, calls)
 	}
@@ -62,7 +62,7 @@ func TestWorkspaceDoesNotFallbackWithoutResolver(t *testing.T) {
 	config := testConfig()
 	config.ExternalWorkspace = true
 	p, _ := NewWithCaller(config, callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
-	_, err := p.Create(deadline(t), sandbox.Bootstrap{Reference: testRef(), SessionID: testRef().TenantID, DeviceID: testRef().EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: workspaceBinding()})
+	_, err := p.Create(deadline(t), sandbox.Bootstrap{Reference: testRef(), SessionID: testRef().TenantID, DeviceID: testRef().EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", Harness: "codex", NetworkAccess: "disabled", Workspace: workspaceBinding()})
 	if !errors.Is(err, workspacefs.ErrUnsupported) || calls != 0 {
 		t.Fatal(err, calls)
 	}
@@ -81,7 +81,7 @@ func TestPreNativeWorkspaceFailureSettlesAbsentCreation(t *testing.T) {
 			provider.workspace = workspaceResolverFunc(func(context.Context, workspacefs.Binding) (workspacefs.Directory, error) {
 				return workspacefs.Directory{}, workspacefs.ErrUnavailable
 			})
-			bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: workspaceBinding()}
+			bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", Harness: "codex", NetworkAccess: "disabled", Workspace: workspaceBinding()}
 			ctx := deadline(t)
 			switch failure {
 			case "mode":

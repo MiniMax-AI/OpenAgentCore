@@ -24,6 +24,9 @@ docker compose -f ~/.oac/core/compose.yaml ps
 
 The examples use the default installation directory. On Windows, invoke the management command with `& "$HOME/.oac/core/oac.exe"` followed by the same arguments. For a custom installation directory, replace the path in each command.
 
+After local credentials and enrollment are resolved, Runtime Harness discovery and the authenticated bootstrap HTTP request run concurrently. Both must succeed before the Runtime opens its connection or publishes capabilities. Failure cancels the sibling operation and waits for cleanup. The executor remains owned by the connection lifetime. Runtime startup changes require a rebuilt, qualified Runtime template.
+
+
 ## Service health
 
 Use these observations for different questions:

@@ -17,7 +17,7 @@ func (p *generationRouter) Initial(ctx context.Context, r sandbox.Reference) (sa
 	defer done()
 	return v.Initial(ctx, r)
 }
-func (p *generationRouter) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, snapshot *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
+func (p *generationRouter) NewCompute(ctx context.Context, r sandbox.Reference, g uint64, snapshot *sandbox.RetainedState) (sandbox.Compute, error) {
 	if err := providercontract.Require(p, "NewCompute"); err != nil {
 		return sandbox.Compute{}, err
 	}
@@ -72,8 +72,8 @@ func (p *generationRouter) KillCompute(ctx context.Context, r sandbox.Reference,
 	defer done()
 	return v.KillCompute(ctx, r, c)
 }
-func (p *generationRouter) DeleteSnapshot(ctx context.Context, r sandbox.Reference, snapshot sandbox.SnapshotIdentity) error {
-	if err := providercontract.Require(p, "DeleteSnapshot"); err != nil {
+func (p *generationRouter) DeleteRetained(ctx context.Context, r sandbox.Reference, snapshot sandbox.RetainedState) error {
+	if err := providercontract.Require(p, "DeleteRetained"); err != nil {
 		return err
 	}
 	v, done, err := p.route(ctx, r)
@@ -81,7 +81,7 @@ func (p *generationRouter) DeleteSnapshot(ctx context.Context, r sandbox.Referen
 		return err
 	}
 	defer done()
-	return v.DeleteSnapshot(ctx, r, snapshot)
+	return v.DeleteRetained(ctx, r, snapshot)
 }
 func (p *generationRouter) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, command sandbox.Command) (sandbox.CommandResult, error) {
 	if err := providercontract.Require(p, "RunCommandCompute"); err != nil {
@@ -104,4 +104,16 @@ func (p *generationRouter) ResumeCompute(ctx context.Context, r sandbox.Referenc
 	}
 	defer done()
 	return v.ResumeCompute(ctx, r, c)
+}
+
+func (p *generationRouter) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	if err := providercontract.Require(p, "RenewCompute"); err != nil {
+		return sandbox.ComputeState{}, err
+	}
+	v, done, err := p.route(ctx, r)
+	if err != nil {
+		return sandbox.ComputeState{}, err
+	}
+	defer done()
+	return v.RenewCompute(ctx, r, c)
 }

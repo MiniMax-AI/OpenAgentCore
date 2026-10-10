@@ -28,6 +28,7 @@ type lifecycleProvider struct {
 	loseCreate, absent, unavailable bool
 	credentialHash                  string
 	credential                      string
+	harness                         string
 }
 
 func (p *lifecycleProvider) Create(_ context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
@@ -36,6 +37,7 @@ func (p *lifecycleProvider) Create(_ context.Context, b sandbox.Bootstrap) (sand
 	p.creates++
 	p.credentialHash = runtimedevice.HashCredential(b.Credential)
 	p.credential = b.Credential
+	p.harness = b.Harness
 	i := sandbox.Info{Reference: b.Reference, ProviderID: b.AllocationID, State: "running", BootstrapComplete: true}
 	if !p.absent {
 		p.resources[b.AllocationID] = i
@@ -243,5 +245,34 @@ func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
 		if err != nil || got.State != "running" || p.kills != 0 || p.creates != 1 {
 			t.Fatalf("compute interruption authorized replacement/cleanup: %+v %v", got, err)
 		}
+	}
+}
+
+func TestManagedRuntimeBootstrapUsesSessionHarness(t *testing.T) {
+	for _, kind := range []string{"codex", "mcode", "claude_sdk"} {
+		t.Run(kind, func(t *testing.T) {
+			s, key := configuredStore(t)
+			tenant := uuid.NewString()
+			session, err := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: kind, IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			env, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, session.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
+			w, _ := managedWorker(t, s, key, p)
+			for range 2 {
+				if _, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key); err != nil {
+					t.Fatal(err)
+				}
+			}
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if p.harness != kind || p.creates != 1 {
+				t.Fatalf("bootstrap selection=%s creates=%d", p.harness, p.creates)
+			}
+		})
 	}
 }

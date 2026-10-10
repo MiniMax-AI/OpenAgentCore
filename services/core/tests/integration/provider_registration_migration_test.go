@@ -29,6 +29,8 @@ func TestProviderRegistrationDowngradePreservesCustomEndpoints(t *testing.T) {
 	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
 		t.Fatal(err)
 	}
+	// Exercise the historical migration with the target schema's disabled
+	// suspension policy, independently of the current provider defaults.
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
 	defer db.Close()
 	migrations, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))

@@ -11,7 +11,7 @@ import (
 func TestCreateConfigurationRejectionSettlement(t *testing.T) {
 	config, ref := testConfig(), testRef()
 	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID,
-		CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled"}
+		CoreURL: "https://core.example/api/v1", Credential: "fixture", Harness: "codex", NetworkAccess: "disabled"}
 	for _, test := range []struct {
 		name    string
 		change  func(*Response)
@@ -150,7 +150,7 @@ func TestOrdinaryComputeInspectionDoesNotRequestInitialSettlement(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = provider.GetCompute(deadline(t), ref, Compute{Name: Name(config, ref, 0)})
+	_, err = provider.nativeGetCompute(deadline(t), ref, Compute{Name: Name(config, ref, 0)})
 	if !errors.Is(err, sandbox.ErrNotFound) {
 		t.Fatal(err)
 	}

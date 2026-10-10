@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: acd6e73b0bdf43f3bb5adfc375c8938d1b8169a326620076242c844ab8b4766b
+source_hash: 33fce4b40373b4f215544e228fbf5d576e69f73dbda6d51f377ff6a043b927a7
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -25,6 +25,9 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose down` | 移除容器。数据保留；要删除数据，请[卸载](#uninstall) |
 
 示例使用默认安装目录。Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用管理命令，后接相同参数。使用自定义安装目录时，替换各命令中的路径。
+
+本地凭据和注册解析完成后，Runtime 的 Harness 发现与已认证的引导 HTTP 请求并发执行。两者都成功后才建立连接并发布能力。失败会取消另一项操作并等待其清理。执行器仍由连接生命周期持有。Runtime 启动变更需要重新构建并验证 Runtime 模板。
+
 
 ## 服务健康状态 {#service-health}
 

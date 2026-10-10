@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -75,6 +76,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if owner.Deployment == nil {
 		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
+	if err := owner.Deployment.CheckRuntimeComputeProtocol(ctx, sandbox.SuspensionStateVersion); err != nil {
+		return nil, err
+	}
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.ManagedRuntimes)
@@ -139,6 +143,9 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 	}
 	input.SupportsRetainedNativeHistory = profile.RetainedNativeHistory.IsSupported()
 	creation, err := w.dispatcher.Sessions.CreateSession(ctx, tenant, input)
+	if err == nil {
+		w.hintRuntimeWake(ctx, creation.Session)
+	}
 	if err == nil && len(input.InitialInputs) > 0 {
 		w.wakeScheduler()
 	}
@@ -269,6 +276,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			rescanOnCompletion = false
 		case <-w.scheduleWake:
 			rescanOnCompletion = true
+		case <-w.dispatcher.Registry.CapabilityHints():
+			rescanOnCompletion = true
 		case <-ticker.C:
 			maintenance = true
 		}
@@ -298,10 +307,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			w.observeSchedulerPoll(0, nil)
 			continue
 		}
-		if !maintenance {
-			schedule.nextEnvironmentScan = time.Time{}
-		}
-		work, err := schedule.selectWork(ctx, w, devices, active)
+		work, err := schedule.selectWork(ctx, w, devices, active, !maintenance)
 		w.observeSlots(len(active))
 		if err != nil {
 			w.observeSchedulerPoll(0, err)

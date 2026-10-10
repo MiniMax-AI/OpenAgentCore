@@ -140,29 +140,31 @@ func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(
 
 // strictDeploymentReader runs each set func; any other call fails the test.
 type strictDeploymentReader struct {
-	replacementEnvironments func(context.Context, string) ([]deployment.UnallocatedEnvironment, error)
-	retainedNativeHistory   func(context.Context, deployment.AllocationKey) (bool, error)
-	t                       *testing.T
-	deployment              func(context.Context) (deployment.Record, error)
-	snapshot                func(context.Context) (deployment.Snapshot, error)
-	ownerEpoch              func(context.Context) (uint64, error)
-	allocation              func(context.Context, sandbox.Reference) (deployment.AllocationRecord, error)
-	generations             func(context.Context, int64) ([]deployment.GenerationRecord, error)
-	nodes                   func(context.Context) ([]deployment.NodeRecord, error)
-	nodeHistory             func(context.Context, string, coremetrics.Range) (deployment.NodeRecord, []deployment.HostHistoryPoint, error)
-	readNodes               func(context.Context, func(deployment.NodeReads) error) error
-	resetSessions           func(context.Context, string, bool) ([]deployment.ResetSession, error)
-	addressBindings         func(context.Context, string) (deployment.AddressBindings, error)
-	environmentAllocation   func(context.Context, deployment.AllocationKey) (deployment.Allocation, error)
-	credentialAllocations   func(context.Context, string) ([]deployment.Allocation, error)
-	observationSessions     func(context.Context, string, int) (deployment.ObservationSessionPage, error)
-	nodeAllocations         func(context.Context, string) ([]deployment.NodeAllocation, error)
-	nodeOnline              func(context.Context, string) (bool, error)
-	lifecycleNodes          func(context.Context) ([]string, error)
-	lifecycleAllocations    func(context.Context, string, string) ([]deployment.Allocation, error)
-	unallocatedEnvironments func(context.Context, string, string) ([]deployment.UnallocatedEnvironment, error)
-	lifecyclePlacement      func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error)
-	activity                func(context.Context, string) (deployment.Activity, error)
+	countRetainedAllocations func(context.Context, string) (int64, error)
+	countComputeReservations func(context.Context, string) (int64, error)
+	t                        *testing.T
+	deployment               func(context.Context) (deployment.Record, error)
+	snapshot                 func(context.Context) (deployment.Snapshot, error)
+	ownerEpoch               func(context.Context) (uint64, error)
+	allocation               func(context.Context, sandbox.Reference) (deployment.AllocationRecord, error)
+	generations              func(context.Context, int64) ([]deployment.GenerationRecord, error)
+	nodes                    func(context.Context) ([]deployment.NodeRecord, error)
+	nodeHistory              func(context.Context, string, coremetrics.Range) (deployment.NodeRecord, []deployment.HostHistoryPoint, error)
+	readNodes                func(context.Context, func(deployment.NodeReads) error) error
+	resetSessions            func(context.Context, string, bool) ([]deployment.ResetSession, error)
+	addressBindings          func(context.Context, string) (deployment.AddressBindings, error)
+	environmentAllocation    func(context.Context, deployment.AllocationKey) (deployment.Allocation, error)
+	credentialAllocations    func(context.Context, string) ([]deployment.Allocation, error)
+	observationSessions      func(context.Context, string, int) (deployment.ObservationSessionPage, error)
+	nodeAllocations          func(context.Context, string) ([]deployment.NodeAllocation, error)
+	nodeOnline               func(context.Context, string) (bool, error)
+	lifecycleNodes           func(context.Context) ([]string, error)
+	lifecycleAllocations     func(context.Context, string, string) ([]deployment.Allocation, error)
+	unallocatedEnvironments  func(context.Context, string, string) ([]deployment.UnallocatedEnvironment, error)
+	lifecyclePlacement       func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error)
+	activity                 func(context.Context, string) (deployment.Activity, error)
+	replacementEnvironments  func(context.Context, string) ([]deployment.UnallocatedEnvironment, error)
+	retainedNativeHistory    func(context.Context, deployment.AllocationKey) (bool, error)
 }
 
 func (r *strictDeploymentReader) Deployment(ctx context.Context) (deployment.Record, error) {
@@ -342,6 +344,20 @@ func (r *strictDeploymentReader) Activity(ctx context.Context, allocationID stri
 		return deployment.Activity{}, unexpectedDeploymentCall(r.t, "Activity")
 	}
 	return r.activity(ctx, allocationID)
+}
+
+func (r *strictDeploymentReader) CountComputeReservations(ctx context.Context, installationID string) (int64, error) {
+	if r.countComputeReservations == nil {
+		return 0, unexpectedDeploymentCall(r.t, "CountComputeReservations")
+	}
+	return r.countComputeReservations(ctx, installationID)
+}
+
+func (r *strictDeploymentReader) CountRetainedAllocations(ctx context.Context, installationID string) (int64, error) {
+	if r.countRetainedAllocations == nil {
+		return 0, unexpectedDeploymentCall(r.t, "CountRetainedAllocations")
+	}
+	return r.countRetainedAllocations(ctx, installationID)
 }
 
 func (r *strictDeploymentReader) ReplacementEnvironments(ctx context.Context, after string) ([]deployment.UnallocatedEnvironment, error) {

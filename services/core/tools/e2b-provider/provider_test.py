@@ -1,20 +1,61 @@
 """Controlled SDK boundary failures; live qualification remains separate."""
 import copy
+import io
+import httpx
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from uuid import uuid4
 
-from e2b import SandboxState
-from e2b.exceptions import AuthenticationException, SandboxNotFoundException
+from e2b import FileType, SandboxState
+from e2b.connection_config import ConnectionConfig
+from e2b.sandbox_sync.filesystem.filesystem import Filesystem
+from packaging.version import Version
+from e2b.exceptions import AuthenticationException, FileNotFoundException, SandboxNotFoundException
 
-from provider import Provider
+from provider import BOOTSTRAP_SCRIPT, Provider
+from helper_contract_generated import PROTOCOL_VERSION
 from sdk import restore, run
 from state import Failure, Receipt
+
+
+class BootstrapScriptTest(unittest.TestCase):
+    def execute(self, startup, receipt=None):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            entry = root / 'managed_init.py'
+            ready = root / 'managed-ready.json'
+            entry.write_text(startup.replace('READY_PATH', repr(str(ready))))
+            if receipt is not None:
+                ready.write_bytes(receipt)
+            script = BOOTSTRAP_SCRIPT.replace('/opt/oac-e2b/managed_init.py', str(entry)).replace(
+                '/root/.oac/e2b/managed-ready.json', str(ready))
+            return subprocess.run([sys.executable, '-I', '-c', script],
+                                  capture_output=True, timeout=5)
+
+    def test_success_reads_receipt_after_initialization(self):
+        result = self.execute("from pathlib import Path; Path(READY_PATH).write_bytes(b'new receipt')",
+                              receipt=b'stale receipt')
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, b'new receipt')
+
+    def test_failed_initialization_cannot_return_old_receipt(self):
+        result = self.execute('raise SystemExit(7)', receipt=b'stale receipt')
+        self.assertEqual(result.returncode, 7)
+        self.assertEqual(result.stdout, b'')
+
+    def test_missing_and_oversized_receipts_leave_startup_recoverable(self):
+        for receipt in (None, b'x' * 4097):
+            with self.subTest(size=len(receipt) if receipt else None):
+                result = self.execute('pass', receipt=receipt)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, b'')
 
 
 class ProviderTest(unittest.TestCase):
@@ -24,13 +65,13 @@ class ProviderTest(unittest.TestCase):
         self.reference = {key: str(uuid4()) for key in ['TenantID', 'EnvironmentID', 'AllocationID']}
         self.config = {'StateDir': self.temporary.name, 'InstallationID': str(uuid4()),
                        'APIKey': 'private-account-secret', 'Template': 'test:' + str(uuid4()), 'TimeoutSeconds': 120}
-        self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
+        self.request = {'Version': PROTOCOL_VERSION, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret',
-                                          NetworkAccess='enabled', AllowedDomains=[])}
+                                          Harness='codex', NetworkAccess='enabled', AllowedDomains=[])}
         self.request['RuntimeBootstrap'] = {
-            'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'version': 2, 'harness': 'codex', 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
             'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',
@@ -40,7 +81,12 @@ class ProviderTest(unittest.TestCase):
         self.identity = dict(self.reference, InstallationID=self.config['InstallationID'],
                              SessionID=self.request['Bootstrap']['SessionID'], DeviceID=self.request['Bootstrap']['DeviceID'])
         self.ready = json.dumps({'identity': self.identity, 'status': 'daemon_started', 'daemon_pid': 123})
+        self.cloud.files.get_info.return_value = SimpleNamespace(type=FileType.FILE)
+        self.template_stream = MagicMock()
         self.cloud.files.read.return_value = self.ready
+        self.cloud.files.read.side_effect = lambda path, **kwargs: (
+            self.template_stream if path == '/opt/oac-e2b/managed_init.py'
+            else self.cloud.files.read.return_value)
         self.api = Mock()
         self.api.create.return_value = self.cloud
         self.api.get_info.return_value = self.cloud
@@ -51,7 +97,8 @@ class ProviderTest(unittest.TestCase):
         self.runtime = patch('provider.restore', return_value=self.cloud)
         self.runtime.start()
         self.addCleanup(self.runtime.stop)
-        self.command = patch('provider.run', return_value={'Stdout': '', 'Stderr': '', 'ExitCode': 0})
+        self.command = patch('provider.run', side_effect=lambda *a, **k: {
+            'Stdout': self.cloud.files.read.return_value, 'Stderr': '', 'ExitCode': 0})
         self.command.start()
         self.addCleanup(self.command.stop)
 
@@ -108,6 +155,7 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
         self.api.get_info.assert_called_once()
         self.cloud.files.write.assert_not_called()
+        self.cloud.files.read.assert_not_called()
 
     def test_qualified_gateway_template_id_accepts_only_selected_build(self):
         self.config['Resources'] = {'cpus': 2, 'memory_mib': 2048}
@@ -145,7 +193,7 @@ class ProviderTest(unittest.TestCase):
         self.cloud.commands.run.assert_not_called()
 
     def test_template_invalid_refuses_before_credentials_and_retains_owned_cleanup(self):
-        with patch('provider.run', return_value={'ExitCode': 78, 'Stdout': '', 'Stderr': ''}):
+        with patch.object(self.cloud.files, 'read', side_effect=FileNotFoundException('missing')):
             result = self.call('create')
         self.assertEqual(result['ErrorCode'], 'template_invalid')
         self.assertTrue(result['Info']['CreateSettled'])
@@ -154,6 +202,75 @@ class ProviderTest(unittest.TestCase):
         self.cloud.files.write.assert_not_called()
         self.api.kill.assert_not_called()
         self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+
+    def test_template_non_regular_files_are_rejected_before_open_or_credentials(self):
+        for kind in (FileType.DIR, None):
+            with self.subTest(kind=kind):
+                self.reference['AllocationID'] = str(uuid4())
+                self.request['Bootstrap']['AllocationID'] = self.reference['AllocationID']
+                self.cloud.metadata = Provider(self.request).metadata
+                self.cloud.files.get_info.return_value = SimpleNamespace(type=kind)
+                self.assertEqual(self.call('create')['ErrorCode'], 'template_invalid')
+                self.cloud.files.read.assert_not_called()
+                self.cloud.files.write.assert_not_called()
+
+    def test_template_read_is_closed_and_does_not_launch_a_probe(self):
+        with patch('provider.run', return_value={'ExitCode': 0, 'Stdout': self.ready}) as command:
+            self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.template_stream.__enter__.assert_called_once()
+        self.template_stream.__exit__.assert_called_once()
+        self.template_stream.__iter__.assert_not_called()
+        command.assert_called_once()
+        self.assertEqual(command.call_args.args[1]['Args'],
+                         ['/usr/bin/python3', '-I', '-c', BOOTSTRAP_SCRIPT])
+        args, options = self.cloud.files.read.call_args_list[0]
+        self.assertEqual(args, ('/opt/oac-e2b/managed_init.py',))
+        self.assertEqual(options['format'], 'stream')
+        self.assertEqual(options['user'], 'root')
+        self.assertGreater(options['request_timeout'], 0)
+
+    def test_template_probe_uses_sdk_stream_and_closes_without_downloading(self):
+        class Body(httpx.SyncByteStream):
+            closed = False
+
+            def __iter__(self):
+                raise AssertionError('template contents must not be downloaded')
+                yield b''
+
+            def close(self):
+                self.closed = True
+
+        body = Body()
+        requests = []
+
+        def respond(request):
+            requests.append(request)
+            return httpx.Response(200, stream=body)
+
+        with httpx.Client(base_url='https://fixture.invalid',
+                          transport=httpx.MockTransport(respond)) as client:
+            with patch('e2b.sandbox_sync.filesystem.filesystem.get_envd_api', return_value=client), \
+                 patch('e2b.sandbox_sync.filesystem.filesystem.create_rpc_client'):
+                files = Filesystem('https://fixture.invalid', Version('0.5.0'),
+                                   ConnectionConfig(api_key='fixture'), client)
+            original_read = self.cloud.files.read.side_effect
+            self.cloud.files.read.side_effect = lambda path, **kwargs: (
+                files.read(path, **kwargs) if path == '/opt/oac-e2b/managed_init.py'
+                else original_read(path, **kwargs))
+            self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.assertTrue(body.closed)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].method, 'GET')
+        self.assertEqual(requests[0].url.params['path'], '/opt/oac-e2b/managed_init.py')
+        self.assertEqual(requests[0].url.params['username'], 'root')
+
+    def test_uncertain_template_read_never_writes_credentials_or_replays_create(self):
+        with patch.object(self.cloud.files, 'read', side_effect=TimeoutError('private secret')):
+            self.assertEqual(self.call('create')['ErrorCode'], 'unconfirmed')
+        self.cloud.files.write.assert_not_called()
+        self.assertFalse(self.record().get('bootstrap_complete', False))
+        self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+        self.api.create.assert_called_once()
 
     def test_unknown_create_empty_lookup_never_proves_cleanup(self):
         self.api.create.side_effect = TimeoutError('confidential SDK diagnostic')
@@ -238,6 +355,23 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
         self.assertTrue(self.record()['settled'])
         self.assertFalse(self.record()['bootstrap_complete'])
+
+    def test_successful_create_returns_receipt_without_remote_receipt_read(self):
+        self.assertTrue(self.call('create')['Info']['BootstrapComplete'])
+        self.assertEqual([call.args[0] for call in self.cloud.files.read.call_args_list],
+                         ['/opt/oac-e2b/managed_init.py'])
+        self.assertEqual(self.api.get_info.call_count, 2)
+
+    def test_lost_command_receipt_recovers_from_file_without_replaying_startup(self):
+        with patch('provider.run', return_value={'ExitCode': 0, 'Stdout': ''}) as command:
+            result = self.call('create')
+            self.assertEqual(result['ErrorCode'], 'unconfirmed')
+            self.assertTrue(result['Info']['CreateSettled'])
+            self.assertFalse(result['Info']['BootstrapComplete'])
+            self.assertTrue(self.call('inspect')['Info']['BootstrapComplete'])
+            self.assertEqual(self.call('create')['ErrorCode'], 'exists')
+            command.assert_called_once()
+        self.api.create.assert_called_once()
 
     def test_foreign_owner_prevents_renew_and_delete(self):
         self.call('create')
