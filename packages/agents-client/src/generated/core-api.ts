@@ -114,6 +114,14 @@ export interface AdminauditPage {
   next_cursor: string;
 }
 export const adminauditPageFields = ["data", "has_more", "next_cursor"] as const;
+export const attachmentKindValues = ["host_directory"] as const;
+export type AttachmentKind = (typeof attachmentKindValues)[number];
+export interface Configuration {
+  adapter: string;
+  id: string;
+  parameters: Record<string, unknown>;
+}
+export const configurationFields = ["adapter", "id", "parameters"] as const;
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
@@ -173,6 +181,12 @@ export interface DatabaseBucket {
   start: string;
 }
 export const databaseBucketFields = ["ping_p95_ms", "pool_in_use", "start"] as const;
+export interface Declaration {
+  attachment: AttachmentKind;
+  capacity_quota: boolean;
+  user_xattr: boolean;
+}
+export const declarationFields = ["attachment", "capacity_quota", "user_xattr"] as const;
 export const deploymentModeValues = ["", "nodes", "direct"] as const;
 export type DeploymentMode = (typeof deploymentModeValues)[number];
 export interface DeploymentResources {
@@ -183,8 +197,9 @@ export const deploymentResourcesFields = ["allocations", "pending"] as const;
 export interface DeploymentSpec {
   resources: SandboxResources;
   runtime?: RuntimeRelease;
+  workspace?: Declaration;
 }
-export const deploymentSpecFields = ["resources", "runtime"] as const;
+export const deploymentSpecFields = ["resources", "runtime", "workspace"] as const;
 export const deploymentSpecRequired = ["resources"] as const;
 export interface DeploymentView {
   configuration?: Record<string, unknown>;

@@ -54,16 +54,25 @@ func serve(input io.Reader) wire.Response {
 		out.ErrorCode = "unconfirmed"
 		return out
 	}
-	release, err := allocationLock(q)
+	lock, err := allocationLock(q)
 	if err != nil {
 		out.ErrorCode = "unconfirmed"
 		return out
 	}
-	defer release()
+	defer lock.Close()
 	// Lifecycle calls deliberately retain the flock until the SDK has settled.
 	// Cancelling an FFI wait does not prove the underlying operation stopped.
 	b := backend{q: q}
+	if q.Operation == "create" {
+		if err := lock.admitCreate(); err != nil {
+			out.ErrorCode = code(err)
+			return out
+		}
+	}
 	out, err = b.run(context.Background())
+	if q.Operation == "initial_info" && sdk.IsKind(err, sdk.ErrSandboxNotFound) {
+		out, err = lock.settleInitialAbsence(q, err)
+	}
 	out.Version = wire.ProtocolVersion
 	if err != nil {
 		out.ErrorCode = code(err)
@@ -88,7 +97,78 @@ func code(err error) string {
 		return "unconfirmed"
 	}
 }
-func allocationLock(q wire.Request) (func(), error) {
+
+type allocationGuard struct{ file *os.File }
+
+func (g *allocationGuard) Close() {
+	_ = syscall.Flock(int(g.file.Fd()), syscall.LOCK_UN)
+	_ = g.file.Close()
+}
+
+// Empty admits the initial Create. The terminal marker is never removed;
+// any other nonempty content also prevents creation after an incomplete write.
+func (g *allocationGuard) admissionClosed() (bool, error) {
+	if _, err := g.file.Seek(0, io.SeekStart); err != nil {
+		return false, err
+	}
+	data, err := io.ReadAll(io.LimitReader(g.file, 8))
+	if err != nil {
+		return false, err
+	}
+	switch string(data) {
+	case "":
+		return false, nil
+	case "closed\n":
+		return true, nil
+	default:
+		return false, sandbox.ErrOwnership
+	}
+}
+
+func (g *allocationGuard) admitCreate() error {
+	closed, err := g.admissionClosed()
+	if err != nil {
+		return err
+	}
+	if closed {
+		return sandbox.ErrInvalid
+	}
+	return nil
+}
+
+// Only the explicit initial observation can close admission. The caller holds
+// this allocation's flock and has just received typed native absence.
+func (g *allocationGuard) settleInitialAbsence(q wire.Request, nativeErr error) (wire.Response, error) {
+	if q.Operation != "initial_info" || wire.ValidateRequest(q) != nil || !sdk.IsKind(nativeErr, sdk.ErrSandboxNotFound) {
+		return wire.Response{}, sandbox.ErrInvalid
+	}
+	if _, err := g.admissionClosed(); err != nil {
+		return wire.Response{}, err
+	}
+	if _, err := g.file.WriteAt([]byte("closed\n"), 0); err != nil {
+		return wire.Response{}, err
+	}
+	if err := g.file.Sync(); err != nil {
+		return wire.Response{}, err
+	}
+	// The directory entry must survive restart even when this observation was
+	// the first helper to open the allocation lock.
+	lockDir := filepath.Dir(g.file.Name())
+	for _, path := range []string{lockDir, filepath.Dir(lockDir)} {
+		dir, err := os.Open(path)
+		if err != nil {
+			return wire.Response{}, err
+		}
+		err = dir.Sync()
+		_ = dir.Close()
+		if err != nil {
+			return wire.Response{}, err
+		}
+	}
+	return wire.Response{State: &wire.State{Compute: q.Compute, Status: "absent"}, CreateSettled: true}, nil
+}
+
+func allocationLock(q wire.Request) (*allocationGuard, error) {
 	dir := filepath.Join(q.Config.RuntimeHome, "oac-locks")
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return nil, e
@@ -113,7 +193,12 @@ func allocationLock(q wire.Request) (func(), error) {
 		}
 		e = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
 		if e == nil {
-			return func() { _ = syscall.Flock(fd, syscall.LOCK_UN); _ = f.Close() }, nil
+			guard := &allocationGuard{file: f}
+			if !time.Now().Before(q.Deadline) {
+				guard.Close()
+				return nil, context.DeadlineExceeded
+			}
+			return guard, nil
 		}
 		if e != syscall.EWOULDBLOCK && e != syscall.EAGAIN {
 			f.Close()

@@ -77,6 +77,11 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 
 | HTTP | Code | Meaning |
 | --- | --- | --- |
+| 400 | `invalid_workspace_configuration` | Invalid workspace storage configuration |
+| 400 | `workspace_operation_unsupported` | The selected workspace storage does not support the operation or sandbox combination |
+| 404 | `workspace_storage_not_found` | Workspace storage is not configured or the requested object does not exist |
+| 409 | `workspace_storage_conflict` | Workspace storage ownership or configuration conflicts with the current state |
+| 503 | `workspace_storage_unavailable` | Workspace storage is unavailable or an operation remains unconfirmed |
 | 400 | `sandbox_operation_unsupported` | The selected sandbox provider does not support the operation |
 | 401 | `invalid_admin_key` | The bearer credential is not a valid Core key |
 | 404 | `not_found` | The operation does not exist, the Harness is unknown, or the Harness has no deployment default model provider |

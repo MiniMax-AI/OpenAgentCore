@@ -1,5 +1,5 @@
 // Package microsandbox is the pure-Go client for the colocated SDK helper.
-// Core owns all durable state; the helper owns no database or background service.
+// Core owns lifecycle intent; the helper owns no database or background service.
 package microsandbox
 
 import (
@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-const ProtocolVersion = 2
+const ProtocolVersion = 4
 const SDKVersion = "v0.7.2"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
@@ -18,6 +18,8 @@ const MaxResponseBytes = 16 * 1024 * 1024
 // Config is trusted deployment configuration. Paths and hashes refer to one
 // immutable, qualified installation. Network is explicitly used on create and restore.
 type Config struct {
+	// ExternalWorkspace is derived from the immutable deployment specification.
+	ExternalWorkspace  bool
 	InstallationID     string
 	HelperPath         string
 	RuntimeHome        string
@@ -49,7 +51,14 @@ type ResumeRequest = sandbox.ResumeRequest
 
 // Request and Response are the finite, private helper boundary. Confidential
 // Bootstrap and Command bytes travel only through stdin and are never logged.
+// WorkspaceDirectory is the resolved private helper input, without filesystem adapter configuration.
+type WorkspaceDirectory struct {
+	Path     string
+	ObjectID string
+}
+
 type Request struct {
+	Workspace *WorkspaceDirectory `json:",omitempty"`
 	Version   int
 	Operation string
 	Config    Config
@@ -63,8 +72,8 @@ type Request struct {
 	Deadline  time.Time
 }
 type Response struct {
-	// CreateSettled accompanies a configuration rejection after native Create
-	// completed and before bootstrap began. State binds the exact created compute.
+	// CreateSettled binds State to a completed Create rejection or an initial_info
+	// absence whose allocation lock permanently prevents a later initial Create.
 	CreateSettled bool `json:",omitempty"`
 	Version       int
 	State         *State

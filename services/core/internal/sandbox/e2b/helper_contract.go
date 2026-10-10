@@ -37,6 +37,9 @@ func (q Request) Validate() error {
 	if q.Operation != "list_templates" && q.Operation != "list_builds" && !validID(q.Config.InstallationID) {
 		return sandbox.ErrInvalid
 	}
+	if q.Bootstrap != nil && q.Bootstrap.Workspace != nil {
+		return sandbox.ErrInvalid
+	}
 	switch q.Operation {
 	case "verify_credential":
 		if len(q.References) > MaxCredentialReferences {

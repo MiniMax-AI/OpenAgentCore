@@ -150,8 +150,13 @@ func (s *managedSetup) configuration(setup deployment.Setup) (execution.Prepared
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
+	adapter, err := s.registry.Lookup(setup.Provider)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode,
-		CoreURL: s.runtimeAPI, BackendFingerprint: setup.BackendFingerprint, Provider: provider}
+		CoreURL: s.runtimeAPI, BackendFingerprint: setup.BackendFingerprint, Provider: provider,
+		Resources: setup.Specification.Resources, WorkspaceRequirements: adapter.Policy.Workspace, Workspace: setup.Specification.Workspace}
 	if setup.Suspension != nil {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
 			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second}

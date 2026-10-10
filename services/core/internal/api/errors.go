@@ -87,7 +87,7 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 // meets the sandbox deployment: creation, input admission, archive and Runtime
 // observation.
 func writeOperationError(w http.ResponseWriter, r *http.Request, err error) {
-	if writeSandboxError(w, err) {
+	if writeWorkspaceError(w, err) || writeSandboxError(w, err) {
 		return
 	}
 	writeSessionsError(w, r, err)

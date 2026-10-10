@@ -119,6 +119,11 @@ definitions:
         $ref: '#/definitions/sandbox.Resources'
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
+      workspace:
+        allOf:
+          - $ref: '#/definitions/workspacefs.Declaration'
+        description: Workspace is a derived immutable capability receipt, never filesystem configuration.
+        readOnly: true
     required:
       - resources
     type: object
@@ -199,6 +204,25 @@ definitions:
         type: string
       workspace_directory:
         type: string
+    type: object
+  workspacefs.AttachmentKind:
+    enum:
+      - host_directory
+    type: string
+    x-enum-varnames:
+      - AttachmentHostDirectory
+  workspacefs.Declaration:
+    properties:
+      attachment:
+        $ref: '#/definitions/workspacefs.AttachmentKind'
+      capacity_quota:
+        type: boolean
+      user_xattr:
+        type: boolean
+    required:
+      - attachment
+      - capacity_quota
+      - user_xattr
     type: object
 info:
   contact: {}

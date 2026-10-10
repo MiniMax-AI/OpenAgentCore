@@ -118,6 +118,9 @@ func (p *provider) NewCompute(ctx context.Context, r sandbox.Reference, g uint64
 func (p *provider) state(ctx context.Context, q request) (sandbox.ComputeState, error) {
 	r, e := p.call(ctx, q)
 	if e != nil {
+		if resumePartial(q, r.State) {
+			return *r.State, e
+		}
 		return sandbox.ComputeState{}, e
 	}
 	if r.State == nil || r.State.Compute.ID == "" {

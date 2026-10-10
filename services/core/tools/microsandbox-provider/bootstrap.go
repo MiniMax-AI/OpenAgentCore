@@ -50,14 +50,21 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	domains, _ := json.Marshal(policy.Hosts())
 	labels := wire.Labels(b.q.Config, b.q.Reference)
 	labels[bootstrapLabel] = "pending"
+	for key, value := range workspaceLabels(b.q.Workspace) {
+		labels[key] = value
+	}
+	mount := sdk.Mount.Owned(sdk.OwnedVolumeOptions{Kind: sdk.VolumeKindDisk, SizeMiB: b.q.Config.EnvironmentDiskMiB})
+	if b.q.Workspace != nil {
+		mount = sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})
+	}
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		sdk.WithImage(b.q.Config.Image), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
 		sdk.WithMaxMemory(b.q.Config.MemoryMiB), sdk.WithMaxCPUs(b.q.Config.CPUs),
 		sdk.WithRootDisk(sdk.RootDisk.Managed(b.q.Config.RootDiskMiB)), sdk.WithUser("1000:1000"),
-		// A native owned disk keeps workspace and staging on one filesystem.
+		// The selected Environment mount keeps workspace and staging on one filesystem.
 		// Bootstrap creates their directories before starting the daemon.
 		sdk.WithWorkdir("/"), sdk.WithMounts(map[string]sdk.MountConfig{
-			"/environment": sdk.Mount.Owned(sdk.OwnedVolumeOptions{Kind: sdk.VolumeKindDisk, SizeMiB: b.q.Config.EnvironmentDiskMiB}),
+			"/environment": mount,
 		}),
 		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
 		sdk.WithEnv(map[string]string{
@@ -78,6 +85,13 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	qualified, e := qualifyCreatedConfiguration(b.q.Config, b.q.Reference, c, h.ID(), string(h.Status()), h.ConfigJSON())
 	if e != nil {
 		return qualified, e
+	}
+	var actual struct {
+		Labels map[string]string `json:"labels"`
+	}
+	if json.Unmarshal([]byte(h.ConfigJSON()), &actual) != nil || qualifyWorkspace(actual.Labels, b.q.Workspace) != nil || (b.q.Workspace != nil && actual.Labels[workspacePathLabel] != b.q.Workspace.Path) {
+		qualified.CreateSettled = true
+		return qualified, sandbox.ErrInvalid
 	}
 	data, e := bootstrap.RuntimeConnection().Marshal()
 	if e != nil {

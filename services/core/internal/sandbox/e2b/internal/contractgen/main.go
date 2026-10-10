@@ -70,6 +70,9 @@ func main() {
 	must(err)
 	write("services/core/internal/sandbox/e2b/helper_sdk_generated.go", goCode)
 	bootstrap := fields(reflect.TypeFor[sandbox.Bootstrap]())
+	requiredBootstrap := fieldNames(reflect.TypeFor[sandbox.Bootstrap](), true)
+	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" })
+	requiredBootstrap = append(requiredBootstrap, "InstallationID", "RuntimeBootstrap")
 	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" })
 	bootstrap = append(bootstrap, "InstallationID", "RuntimeBootstrap")
 	identity := fields(reflect.TypeFor[sandbox.Reference]())
@@ -87,7 +90,7 @@ func main() {
 		"OPERATIONS": e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
 		"REQUEST_FIELDS": fields(reflect.TypeFor[e2b.Request]()), "RESPONSE_FIELDS": fields(reflect.TypeFor[e2b.Response]()),
 		"REFERENCE_FIELDS":         fields(reflect.TypeFor[sandbox.Reference]()),
-		"MANAGED_BOOTSTRAP_FIELDS": bootstrap, "MANAGED_IDENTITY_FIELDS": identity,
+		"MANAGED_BOOTSTRAP_FIELDS": bootstrap, "MANAGED_BOOTSTRAP_REQUIRED_FIELDS": requiredBootstrap, "MANAGED_IDENTITY_FIELDS": identity,
 		"NETWORK_ACCESS": networkValues(filepath.Join(root, "internal/agentnetwork/policy.go")),
 	}
 	var python bytes.Buffer
@@ -147,6 +150,13 @@ func fixtures() []byte {
 		value[item.field] = item.value
 		add("request", item.name, false, value)
 	}
+	for _, workspace := range []any{nil, map[string]any{}} {
+		value := object(q)
+		bootstrapValue := object(b)
+		bootstrapValue["Workspace"] = workspace
+		value["Bootstrap"] = bootstrapValue
+		add("request", fmt.Sprintf("workspace-%v", workspace), workspace == nil, value)
+	}
 	for _, count := range []int{0, e2b.MaxCredentialReferences, e2b.MaxCredentialReferences + 1} {
 		copy := q
 		copy.Operation = "verify_credential"
@@ -193,6 +203,11 @@ func fixtures() []byte {
 		value[item.field] = item.value
 		add("managed", "invalid-"+item.field, false, value)
 	}
+	for _, workspace := range []any{nil, map[string]any{}} {
+		value := object(managed)
+		value["Workspace"] = workspace
+		add("managed", fmt.Sprintf("workspace-%v", workspace), workspace == nil, value)
+	}
 	for key := range managed {
 		value := object(managed)
 		delete(value, key)
@@ -217,15 +232,21 @@ func fixtures() []byte {
 	return result.Bytes()
 }
 
-func fields(t reflect.Type) []string {
+func fields(t reflect.Type) []string { return fieldNames(t, false) }
+
+func fieldNames(t reflect.Type, required bool) []string {
 	var result []string
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
 		if f.Anonymous {
-			result = append(result, fields(f.Type)...)
+			result = append(result, fieldNames(f.Type, required)...)
 			continue
 		}
-		name := strings.Split(f.Tag.Get("json"), ",")[0]
+		tag := strings.Split(f.Tag.Get("json"), ",")
+		if required && slices.Contains(tag[1:], "omitempty") {
+			continue
+		}
+		name := tag[0]
 		if name == "-" {
 			continue
 		}

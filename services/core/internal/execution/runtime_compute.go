@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
 
@@ -230,7 +231,21 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	if state.Target == nil || state.Snapshot == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
-	result, err := p.Resume(ctx, sandbox.ResumeRequest{Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
+	var workspace *workspacefs.Binding
+	if r.config.Workspace != nil {
+		if r.workspaces == nil {
+			return workspacefs.ErrUnavailable
+		}
+		var err error
+		workspace, err = r.workspaces.GetReady(ctx, owner.TenantID, owner.EnvironmentID, r.config.WorkspaceRequirements, r.config.Resources.EnvironmentDiskMiB)
+		if err == nil && workspace == nil {
+			err = workspacefs.ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+	}
+	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
 	if err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	providerconfig "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	workspaceproviders "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs/providers"
 )
 
 func runGenerations(ctx context.Context, registry *providerconfig.Registry, configFile, stateDir string) error {
@@ -167,7 +168,7 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 }
 
 func buildGeneration(registry *providerconfig.Registry, config sandbox.NodeConfig, stateDir string) (node.GenerationProvider, error) {
-	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: stateDir})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: stateDir, Workspace: workspaceproviders.New()})
 	if err != nil {
 		return node.GenerationProvider{}, err
 	}

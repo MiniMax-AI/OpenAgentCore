@@ -63,7 +63,7 @@ func TestGenerationHealthRejectsUnboundedOrAmbiguousNumbers(t *testing.T) {
 }
 
 func TestNodeProtocolRejectsHistoricalVersions(t *testing.T) {
-	for _, version := range []int{1, 2} {
+	for _, version := range []int{1, 2, 3, 4} {
 		raw, _ := json.Marshal(frame{Version: version, Type: "hello", Identity: new(Identity), Health: &Health{ObservedAt: time.Now().UTC()}})
 		if _, err := decodeFrame(raw); err == nil {
 			t.Fatalf("accepted historical protocol %d", version)

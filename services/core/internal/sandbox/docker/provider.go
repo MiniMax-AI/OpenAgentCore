@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
@@ -110,6 +111,9 @@ func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info
 }
 
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
+	if b.Workspace != nil {
+		return sandbox.Info{Reference: b.Reference}, &providercontract.UnsupportedError{Operation: "Create", Reason: "external_workspace_unsupported"}
+	}
 	info := sandbox.Info{Reference: b.Reference}
 	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
 	if policy.Validate() != nil || !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {

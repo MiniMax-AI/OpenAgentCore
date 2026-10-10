@@ -17,6 +17,8 @@ func (h *Handler) registerCoreRoutes(router chi.Router) {
 			writeError(w, http.StatusNotFound, "not_found", "This Core operation does not exist.")
 		})
 		r.Get("/installation", h.getInstallation)
+		r.Get("/workspace-storage", h.getWorkspaceStorage)
+		r.Put("/workspace-storage", h.putWorkspaceStorage)
 		h.registerProjectAPIKeyRoutes(r)
 		h.registerAdminResourceRoutes(r)
 		h.registerExecutorCredentialRoutes(r)

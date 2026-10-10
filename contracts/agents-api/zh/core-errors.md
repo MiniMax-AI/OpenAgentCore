@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 6e917cd9928dfdeb0f5f4742b3e61d3197da5d599ba9f2b8934dd85ef23454d3
+source_hash: 71088f9154793bd72bdccb199f1ac6da6da4097da05bed828299011eb5dfe12d
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -79,6 +79,11 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 | HTTP | 代码 | 含义 |
 | --- | --- | --- |
+| 400 | `invalid_workspace_configuration` | 工作区存储配置无效 |
+| 400 | `workspace_operation_unsupported` | 所选工作区存储不支持该操作或沙箱组合 |
+| 404 | `workspace_storage_not_found` | 尚未配置工作区存储或请求的对象不存在 |
+| 409 | `workspace_storage_conflict` | 工作区存储归属或配置与当前状态冲突 |
+| 503 | `workspace_storage_unavailable` | 工作区存储不可用或操作尚未确认 |
 | 400 | `sandbox_operation_unsupported` | 所选沙箱提供商不支持该操作 |
 | 401 | `invalid_admin_key` | Bearer 凭据不是有效的 Core Key |
 | 404 | `not_found` | 操作不存在、Harness 未知，或该 Harness 没有部署默认模型服务 |

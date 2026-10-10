@@ -5,6 +5,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 // ValidateRegistration checks wiring before configuration parsing or construction.
@@ -40,6 +41,9 @@ func ValidateRegistration(a Adapter) error {
 	}
 	if err := validateConfigurationAdapter(a.Configuration); err != nil {
 		return err
+	}
+	if a.Policy.Workspace != nil && a.Policy.Workspace.Attachment != workspacefs.AttachmentHostDirectory {
+		return invalid("workspace attachment requirements")
 	}
 	if a.Policy.Runtime == (a.Policy.RuntimeError != "") {
 		return invalid("Runtime input policy")

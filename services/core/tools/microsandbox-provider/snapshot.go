@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -95,9 +96,19 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 		if err = source.PauseWithGuestFlush(ctx, sdk.GuestFlushSkip); err != nil {
 			return wire.State{}, err
 		}
+		labels := b.snapshotLabels(q.OperationID, q.Source)
+		var captured struct {
+			Labels map[string]string `json:"labels"`
+		}
+		if json.Unmarshal([]byte(source.ConfigJSON()), &captured) != nil {
+			return wire.State{}, sandbox.ErrOwnership
+		}
+		for _, key := range []string{workspaceModeLabel, workspaceObjectLabel, workspacePathLabel} {
+			labels[key] = captured.Labels[key]
+		}
 		_, err = sdk.Snapshot.Create(ctx, sdk.SnapshotCreateOptions{
 			Name: "s-" + q.OperationID, Group: wire.Name(b.q.Config, b.q.Reference, 0), FromSandbox: q.Source.Name,
-			Full: true, RecordIntegrity: true, GuestFlush: sdk.GuestFlushSkip, Labels: b.snapshotLabels(q.OperationID, q.Source)})
+			Full: true, RecordIntegrity: true, GuestFlush: sdk.GuestFlushSkip, Labels: labels})
 		if err != nil {
 			return wire.State{}, err
 		}
@@ -148,6 +159,9 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
 		return wire.State{}, e
 	}
+	if err := qualifyWorkspace(artifact.Labels(), b.q.Workspace); err != nil {
+		return wire.State{}, err
+	}
 	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {
 		return b.finishRestore(ctx, q.Target)
@@ -169,7 +183,11 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	} else if !sdk.IsKind(err, sdk.ErrSandboxNotFound) {
 		return wire.State{}, err
 	}
-	live, e := sdk.RestoreSandbox(ctx, artifact, q.Target.Name, sdk.WithRestoreNetworkPolicy(b.network()))
+	restore := sdk.RestoreConfig{NetworkPolicy: b.network(), ExternalMountPolicy: sdk.ExternalMountStrict}
+	if b.q.Workspace != nil {
+		restore.Volumes = map[string]sdk.MountConfig{"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})}
+	}
+	live, e := sdk.RestoreSandbox(ctx, artifact, q.Target.Name, sdk.WithRestoreConfig(restore))
 	if e != nil {
 		return wire.State{}, e
 	}
@@ -180,10 +198,10 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	state, err := b.finishRestore(ctx, target)
 	detachErr := live.Detach(context.Background())
 	if err != nil {
-		return wire.State{}, err
+		return state, err
 	}
 	if detachErr != nil {
-		return wire.State{}, detachErr
+		return state, detachErr
 	}
 	return state, nil
 }

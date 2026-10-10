@@ -48,13 +48,17 @@ The request has no Core address. Core derives the deployment's `core_url` from t
 | `cpus` | Integer, 1 through 255 |
 | `memory_mib` | Integer, 512 through 1048576 MiB |
 | `root_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
-| `environment_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
+| `environment_disk_mib` | microsandbox owned disk: at least 1024 MiB; external filesystem: zero requests no quota; a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
 
 These limits describe each sandbox. A node's `max_active` and `max_retained` are separate reservation limits, and host measurements never permit exceeding either. Native providers may reject values that pass these bounds.
 
 Docker applies the CPU and memory limits and checks the running container's limits and exact image; it has no hard root or workspace disk quota. E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. Neither provider accepts a disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
 
 microsandbox configures the CPUs, memory, a managed root disk and a separate owned disk at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
+
+The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. Missing `workspace` preserves owned disk mode, including its existing disk bounds. Create and Resume must provide a binding exactly when the frozen generation selects external storage.
+
+To enable external storage for an existing owned deployment, select the filesystem configuration first, then update the sandbox deployment with compatible resources (`environment_disk_mib: 0` for a filesystem without quotas). Selecting the filesystem does not alter existing generations or allocations. The next sandbox update derives the external receipt; old owned allocations keep their owned disks. A filesystem selection must support the provider's declared requirements, and an already external deployment requires an equivalent declaration with compatible quota semantics.
 
 ### Runtime release
 
@@ -90,7 +94,7 @@ GET and successful writes return `installation_id`, `provider`, `core_url` (read
 - Request `resources` and response `specification.resources` are per-sandbox limits. Response `resources.allocations` and `resources.pending` count unreleased allocations and pending hosted Environments without an allocation.
 - An unconfigured deployment has an empty provider and no specification. Docker and microsandbox use `mode: nodes`; E2B uses `mode: direct`, without a synthetic node.
 - `generation` identifies the saved selection. `owner_epoch` fences the execution owner and node connections; it does not replace `expected_generation`.
-- `specification_digest` is the server's identity of the provider, limits and Runtime release; enrollment echoes it unchanged.
+- `specification_digest` is the server's identity of the provider, limits, Runtime release and derived workspace capability receipt; enrollment echoes it unchanged.
 
 The typed `SandboxAdminClient` in `packages/agents-client` checks the deployment, node list, node detail and allocation responses against exactly these shapes. An unknown or missing member, or a wrong type, rejects the whole response with a 502 `invalid_admin_response` error. A node's `diagnostic` is absent or a code, never empty, and the client reads an unknown code as `provider_unavailable`.
 
@@ -224,4 +228,4 @@ Storage and credential failures stay errors: an empty or failed read never prove
 
 `sandbox/deployment_contract.go` owns the resource bounds, release patterns and canonical field order, and each registered Provider's `sandbox.DeploymentPolicy` declares its requirements; `sandbox/deployment.go` applies them in Core. The installer consumes the generated declaration in `deploy/node/node_spec.py`, and the TypeScript client and Web the generated bounds, patterns and Provider declarations in `packages/agents-client/src/deployment-contract.ts`, so there is no second set of limits, patterns or providers. Regenerate both from the repository root with `go run ./services/core/cmd/specification-contract -write`; the sandbox Go tests, part of `make check`, reject a stale projection.
 
-The specification digest is the SHA-256 of compact UTF-8 JSON with `provider` first, then `resources`, then `runtime` when the provider requires it. Resource and Runtime fields follow the contract's declaration order; zero optional disk fields are omitted and required fields stay present. Release identities are lowercase ASCII, and the digest never depends on the incoming field order or whitespace. `services/core/internal/sandbox/testdata/deployment-contract.json` holds shared acceptance cases, exact canonical bytes and digests that both the Go and Python tests consume.
+The specification digest is the SHA-256 of compact UTF-8 JSON with `provider` first, then `resources`, then `runtime` when the provider requires it, then `workspace` when external storage is selected. Workspace fields follow the filesystem declaration order (`attachment`, `user_xattr`, `capacity_quota`); its Boolean fields remain present. Resource and Runtime fields follow the contract's declaration order; zero optional disk fields are omitted and required fields stay present. Release identities are lowercase ASCII, and the digest never depends on the incoming field order or whitespace. `services/core/internal/sandbox/testdata/deployment-contract.json` holds shared acceptance cases, exact canonical bytes and digests that both the Go and Python tests consume.

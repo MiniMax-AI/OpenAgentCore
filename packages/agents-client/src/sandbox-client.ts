@@ -3,6 +3,7 @@ import { CoreRequester, type CoreClientOptions } from "./core-request";
 import { deploymentContract } from "./deployment-contract";
 import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId, schemaFields } from "./response-projection";
 import {
+  attachmentKindValues,
   deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
   hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields, nodeDetailRequired,
   nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRequired, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
@@ -100,10 +101,18 @@ function projectSpecification(value: unknown): SandboxSpecification {
   const specification = members(value, deploymentSpecFields, deploymentSpecRequired);
   const resources = members(specification.resources, sandboxResourcesFields, sandboxResourcesRequired);
   valid(Object.values(resources).every(isNonnegativeInteger));
-  if (!hasOwn(specification, "runtime")) return { resources: { ...resources } as unknown as SandboxResources };
-  const runtime = members(specification.runtime, runtimeReleaseFields);
-  valid(strings(runtime, runtimeReleaseFields));
-  return { resources: { ...resources } as unknown as SandboxResources, runtime: { ...runtime } as unknown as SandboxRuntimeRelease };
+  const result: SandboxSpecification = { resources: { ...resources } as unknown as SandboxResources };
+  if (hasOwn(specification, "workspace")) {
+    const workspace = members(specification.workspace, deploymentContract.workspace_fields);
+    if (!isOneOf(attachmentKindValues, workspace.attachment) || typeof workspace.user_xattr !== "boolean" || typeof workspace.capacity_quota !== "boolean") return invalidSandboxResponse();
+    result.workspace = { attachment: workspace.attachment, user_xattr: workspace.user_xattr, capacity_quota: workspace.capacity_quota };
+  }
+  if (hasOwn(specification, "runtime")) {
+    const runtime = members(specification.runtime, runtimeReleaseFields);
+    valid(strings(runtime, runtimeReleaseFields));
+    result.runtime = { ...runtime } as unknown as SandboxRuntimeRelease;
+  }
+  return result;
 }
 /** The adapter's public projection has no credential member. */
 function projectE2B(configuration: unknown, metadata: unknown): Pick<SandboxDeployment, "configuration" | "metadata"> {

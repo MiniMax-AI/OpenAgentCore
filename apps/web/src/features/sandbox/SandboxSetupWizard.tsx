@@ -70,8 +70,8 @@ export function validEndpoint(apiURL: string, domain: string): boolean {
  * double of it, disks included where the default declares them. A Provider
  * whose configuration selects the size declares none and has no presets.
  */
-function presets(provider: SandboxProvider): Record<Preset, SandboxResources> | null {
-  const standard = defaultSandboxResources(provider);
+function presets(provider: SandboxProvider, workspace?: SandboxSpecification["workspace"]): Record<Preset, SandboxResources> | null {
+  const standard = defaultSandboxResources(provider, workspace);
   if (!standard) return null;
   const scale = (factor: number): SandboxResources => ({
     cpus: Math.max(1, standard.cpus * factor),
@@ -90,10 +90,10 @@ const releaseLabels: Record<keyof SandboxRuntimeRelease, ParseKeys<"sandbox">> =
   firmware_sha256: "Firmware SHA-256",
 };
 
-function presetOf(provider: SandboxProvider, resources: SandboxResources): Preset | null {
+function presetOf(provider: SandboxProvider, resources: SandboxResources, workspace?: SandboxSpecification["workspace"]): Preset | null {
   const same = (a: SandboxResources, b: SandboxResources) => a.cpus === b.cpus && a.memory_mib === b.memory_mib
     && (a.root_disk_mib ?? 0) === (b.root_disk_mib ?? 0) && (a.environment_disk_mib ?? 0) === (b.environment_disk_mib ?? 0);
-  const all = presets(provider);
+  const all = presets(provider, workspace);
   return all ? (Object.keys(all) as Preset[]).find((key) => same(all[key], resources)) ?? null : null;
 }
 
@@ -134,7 +134,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const saved = provider && current ? savedSpecification(provider, current.provider, current.specification) : null;
   // Choosing a Provider that declares a default size replaces this placeholder.
   const [resources, setResources] = useState<SandboxResources>(current?.specification?.resources ?? { cpus: 0, memory_mib: 0 });
-  const [size, setSize] = useState<Size>(current?.specification ? presetOf(current.provider, current.specification.resources) ?? "current" : "standard");
+  const [size, setSize] = useState<Size>(current?.specification ? presetOf(current.provider, current.specification.resources, current.specification.workspace) ?? "current" : "standard");
   const [apiKey, setApiKey] = useState("");
   const [replacementRequested, setReplacementRequested] = useState(false);
   const [template, setTemplate] = useState(current?.e2bTemplate ?? "");
@@ -206,7 +206,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const e2bReady = provider !== "e2b" || (keyReady && validTemplate(template.trim()) && validEndpoint(apiURL.trim(), domain.trim()) && (!editing || !connectionChanged || apiKey.trim().length > 0));
   // A Provider without a declared default size takes it from its configuration, so the selection sends no resources.
   const sized = Boolean(policy?.default_resources);
-  const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources));
+  const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources, saved?.workspace));
   const ready = provider !== null && runtimeReady && e2bReady && sizeReady && !disabled && !busy;
 
   const order: Step[] = editing ? where === "direct" ? ["e2b", "review"] : ["size", "review"] : where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
@@ -220,7 +220,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       const kept = current ? savedSpecification(next, current.provider, current.specification) : null;
       const proposed = kept?.resources ?? defaultSandboxResources(next);
       if (proposed) setResources(proposed);
-      setSize(kept ? presetOf(next, kept.resources) ?? "current" : "standard");
+      setSize(kept ? presetOf(next, kept.resources, kept.workspace) ?? "current" : "standard");
       setRuntime({});
     }
     setProvider(next);
@@ -264,7 +264,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   }
 
   const sizeLabel = (value: SandboxResources) => t("{{cpus}} CPU · {{memory}}", { cpus: value.cpus, memory: formatBytes(value.memory_mib * MIB) });
-  const diskLabel = (value: SandboxResources) => t("Root disk {{root}} · data disk {{data}}", { root: formatBytes((value.root_disk_mib ?? 0) * MIB), data: formatBytes((value.environment_disk_mib ?? 0) * MIB) });
+  const diskLabel = (value: SandboxResources) => saved?.workspace ? t("Root disk {{root}} · external workspace", { root: formatBytes((value.root_disk_mib ?? 0) * MIB) }) : t("Root disk {{root}} · data disk {{data}}", { root: formatBytes((value.root_disk_mib ?? 0) * MIB), data: formatBytes((value.environment_disk_mib ?? 0) * MIB) });
 
   let page: ReactNode;
   if (step === "where") {
@@ -342,9 +342,9 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       </Question>
     );
   } else if (step === "size") {
-    const options = provider ? presets(provider) : null;
+    const options = provider ? presets(provider, saved?.workspace) : null;
     // A saved size outside the presets stays on offer as the current one.
-    const kept = saved && provider && presetOf(provider, saved.resources) === null ? saved.resources : null;
+    const kept = saved && provider && presetOf(provider, saved.resources, saved.workspace) === null ? saved.resources : null;
     const disks = (value: SandboxResources) => (policy?.disk ? diskLabel(value) : undefined);
     page = (
       <Question title={t("How big is each sandbox?")} help={t("These limits apply to the selected configuration generation. Existing sandboxes keep their limits. Concurrency is set per node.")}>
@@ -429,7 +429,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
               <NumberField error={fieldError("resources.memory_mib")} id={`${id}-memory`} label={t("Memory (MiB)")} value={resources.memory_mib} onChange={(memory_mib) => { setSize("custom"); setResources({ ...resources, memory_mib }); setFieldRejection(null); }} />
               {policy?.disk ? <>
                 <NumberField error={fieldError("resources.root_disk_mib")} id={`${id}-root`} label={t("Root disk (MiB)")} value={resources.root_disk_mib ?? 0} onChange={(root_disk_mib) => { setResources({ ...resources, root_disk_mib }); setFieldRejection(null); }} />
-                <NumberField error={fieldError("resources.environment_disk_mib")} id={`${id}-data`} label={t("Data disk at /environment (MiB)")} value={resources.environment_disk_mib ?? 0} onChange={(environment_disk_mib) => { setResources({ ...resources, environment_disk_mib }); setFieldRejection(null); }} />
+                {saved?.workspace && !saved.workspace.capacity_quota ? <p>{t("Workspace storage is configured by the operator; no capacity quota is enforced.")}</p> : <NumberField error={fieldError("resources.environment_disk_mib")} id={`${id}-data`} label={t("Data disk at /environment (MiB)")} value={resources.environment_disk_mib ?? 0} onChange={(environment_disk_mib) => { setResources({ ...resources, environment_disk_mib }); setFieldRejection(null); }} />}
               </> : null}
             </div>
           </fieldset> : null}

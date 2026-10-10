@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, sandboxNodeDiagnostics, type SandboxNode } from "./sandbox-client";
 
+import { deploymentContract } from "./deployment-contract";
 import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testdata/node-diagnostics.json";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
@@ -52,6 +53,9 @@ const microsandbox = {
   ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 }, runtime },
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
+const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
+const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification,
+  resources: { ...microsandbox.specification.resources, environment_disk_mib: 0 }, workspace: externalWorkspace } };
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
   ...docker, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },
@@ -73,11 +77,15 @@ const { specification_digest: _digest, ...undigested } = docker;
 const { compute_phase_changed_at: _changed, ...unphased } = allocation;
 
 describe("strict sandbox administration projections", () => {
+  it.each([null, {}, { ...externalWorkspace, capacity_quota: "false" }, { ...externalWorkspace, attachment: "arbitrary_path" }, { ...externalWorkspace, path: "/host" }])("rejects an invalid workspace receipt %j", async (workspace) => {
+    await expect(read("deployment", { ...externalDeployment, specification: { ...externalDeployment.specification, workspace } })).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
   it.each([
     ["nodes", "ready and unready", { data: [node, unready] }], ["nodes", "empty", { data: [] }],
     ["detail", "observed", detail], ["unobserved", "never observed", unobserved],
     ["allocations", "known and unknown phase times", { data: [allocation, { ...allocation, compute_phase: "suspended", compute_phase_changed_at: created, diagnostic: "node_unavailable" }] }],
-    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "E2B", e2bDeployment],
+    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
   ])("accepts %s as Core serializes it: %s", async (name, _, body) => {
     expect(await read(name, body)).toEqual(body);
   });

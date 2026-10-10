@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
 
 // Ownership is the execution lease as the Worker uses it. *pgunit.Lease implements it.
@@ -19,6 +20,7 @@ type Ownership interface {
 // Owner is everything bound to one execution lease: one field per domain's
 // execution operations.
 type Owner struct {
+	Workspaces *workspaces.ExecutionOperations
 	Lease      Ownership
 	Deployment *deployment.ExecutionOperations // sandbox deployment changes on the lease-bound deploymentpg storage
 	Sessions   *sessions.ExecutionOperations   // Session execution operations on the lease-bound sessionpg storage

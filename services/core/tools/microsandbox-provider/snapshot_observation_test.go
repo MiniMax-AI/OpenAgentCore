@@ -19,9 +19,10 @@ func TestCapturedSnapshotObservationDoesNotRequireExecutionQualification(t *test
 			ref := sandbox.Reference{TenantID: "tenant", EnvironmentID: "environment", AllocationID: "allocation"}
 			source := wire.Compute{Name: "original", ID: "local:original"}
 			labels := wire.Labels(config, ref)
+			labels[workspaceModeLabel] = "owned"
 			labels[bootstrapLabel] = "complete"
 			actual["labels"] = labels
-			snapshotLabels := map[string]string{resourceProofLabel: resourceProof(config)}
+			snapshotLabels := map[string]string{workspaceModeLabel: "owned", resourceProofLabel: resourceProof(config)}
 			switch drift {
 			case "cpu":
 				actual["resources"].(map[string]any)["cpus"] = 1

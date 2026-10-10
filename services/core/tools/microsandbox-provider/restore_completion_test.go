@@ -17,7 +17,7 @@ func TestRestoreCompletionRecoversOnlyDerivedProof(t *testing.T) {
 			config, actual := deploymentFixture()
 			actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
 			actual["snapshot_parent"] = "verified-snapshot"
-			labels := map[string]string{}
+			labels := map[string]string{workspaceModeLabel: "owned"}
 			actual["labels"] = labels
 			target := wire.Compute{Name: "restored-target", Generation: 1, RestoredFrom: &wire.SnapshotIdentity{ID: "verified-snapshot"}}
 			reads, writes := 0, 0
@@ -42,7 +42,7 @@ func TestRestoreCompletionRecoversOnlyDerivedProof(t *testing.T) {
 				labels[resourceProofLabel] = resourceProof(config)
 				return nil
 			}
-			if _, err := finishRestoredTarget(config, target, readOwned, writeProof); !errors.Is(err, interrupted) {
+			if partial, err := finishRestoredTarget(config, target, readOwned, writeProof); !errors.Is(err, interrupted) || partial.Compute.ID != "local:restored" {
 				t.Fatal("interrupted write became successful restore", err)
 			}
 			state, err := finishRestoredTarget(config, target, readOwned, writeProof)
@@ -66,7 +66,7 @@ func TestRestoreCompletionRejectsUnverifiedTargets(t *testing.T) {
 			config, actual := deploymentFixture()
 			actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
 			actual["snapshot_parent"] = "verified-snapshot"
-			labels := map[string]string{}
+			labels := map[string]string{workspaceModeLabel: "owned"}
 			actual["labels"] = labels
 			target := wire.Compute{Name: "restored-target", ID: "local:restored", Generation: 1, RestoredFrom: &wire.SnapshotIdentity{ID: "verified-snapshot"}}
 			actualID, status := target.ID, "running"
@@ -126,7 +126,7 @@ func TestRestoreCompletionPreservesInspectionErrors(t *testing.T) {
 	for _, failedRead := range []int{1, 2} {
 		config, actual := deploymentFixture()
 		actual["snapshot_parent"] = "verified-snapshot"
-		actual["labels"] = map[string]string{resourceProofLabel: resourceProof(config)}
+		actual["labels"] = map[string]string{workspaceModeLabel: "owned", resourceProofLabel: resourceProof(config)}
 		target := wire.Compute{Name: "restored-target", ID: "local:restored", Generation: 1, RestoredFrom: &wire.SnapshotIdentity{ID: "verified-snapshot"}}
 		unavailable := errors.New("native inspection unavailable")
 		reads := 0

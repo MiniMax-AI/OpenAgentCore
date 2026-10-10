@@ -61,7 +61,7 @@ func TestCreateConfigurationRejectionSettlement(t *testing.T) {
 	}
 }
 
-func TestNonCreateResponseCannotSettleCreation(t *testing.T) {
+func TestExistingComputeObservationCannotSettleCreation(t *testing.T) {
 	for _, code := range []string{"", "invalid", "ownership", "unconfirmed"} {
 		t.Run(code, func(t *testing.T) {
 			config, ref := testConfig(), testRef()
@@ -79,5 +79,79 @@ func TestNonCreateResponseCannotSettleCreation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestInitialInfoAcceptsOnlyExactSettledAbsence(t *testing.T) {
+	for _, name := range []string{"exact", "bare not found", "no proof", "no state", "wrong version", "native ID", "foreign name", "generation", "restore", "bootstrap", "snapshot", "stopped source", "transport error", "unknown"} {
+		t.Run(name, func(t *testing.T) {
+			config, ref := testConfig(), testRef()
+			out := Response{Version: ProtocolVersion, CreateSettled: true, State: &State{Compute: Compute{Name: Name(config, ref, 0)}, Status: "absent"}}
+			var transportErr error
+			switch name {
+			case "bare not found":
+				out.ErrorCode = "not_found"
+			case "no proof":
+				out.CreateSettled = false
+			case "no state":
+				out.State = nil
+			case "wrong version":
+				out.Version--
+			case "native ID":
+				out.State.Compute.ID = "native:id"
+			case "foreign name":
+				out.State.Compute.Name = "foreign"
+			case "generation":
+				out.State.Compute.Generation = 1
+			case "restore":
+				out.State.Compute.RestoredFrom = &SnapshotIdentity{}
+			case "bootstrap":
+				out.State.BootstrapComplete = true
+			case "snapshot":
+				out.State.Snapshot = &SnapshotIdentity{}
+			case "stopped source":
+				out.State.SourceStopped = true
+			case "transport error":
+				transportErr = context.DeadlineExceeded
+			case "unknown":
+				out.ErrorCode = "unconfirmed"
+			}
+			provider, err := NewWithCaller(config, callerFunc(func(_ context.Context, q Request) (Response, error) {
+				if q.Operation != "initial_info" || q.Compute != (Compute{Name: Name(config, ref, 0)}) {
+					t.Fatal("ambiguous initial observation", q.Operation, q.Compute)
+				}
+				return out, transportErr
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, read := range []func(context.Context, sandbox.Reference) (sandbox.Info, error){provider.GetInfo, provider.Renew} {
+				info, err := read(deadline(t), ref)
+				if name == "exact" {
+					if err != nil || info != (sandbox.Info{Reference: ref, State: "absent", CreateSettled: true}) {
+						t.Fatal("lost absence receipt", info, err)
+					}
+				} else if info.CreateSettled {
+					t.Fatal("invalid absence settled", info, err)
+				}
+			}
+		})
+	}
+}
+
+func TestOrdinaryComputeInspectionDoesNotRequestInitialSettlement(t *testing.T) {
+	config, ref := testConfig(), testRef()
+	provider, err := NewWithCaller(config, callerFunc(func(_ context.Context, q Request) (Response, error) {
+		if q.Operation != "inspect" {
+			t.Fatal("ordinary compute changed admission", q.Operation)
+		}
+		return Response{Version: ProtocolVersion, ErrorCode: "not_found"}, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = provider.GetCompute(deadline(t), ref, Compute{Name: Name(config, ref, 0)})
+	if !errors.Is(err, sandbox.ErrNotFound) {
+		t.Fatal(err)
 	}
 }

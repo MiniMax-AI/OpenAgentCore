@@ -12,6 +12,8 @@ You add a node by generating a command in Web and running it on the host. The [s
 - **The sandbox configuration is saved.** Open **System** → **Manage sandbox configuration**, choose **Own machines**, the backend and a sandbox size, and **Save configuration**. To change a saved configuration, choose **Reset deployment** first. Every node of an installation uses that backend.
 - **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This console has no node files for …*.
 
+For microsandbox with independent workspace storage, complete the [NFS mount and service-account setup](../configuration.md#independent-workspace-storage) on this host before enrollment. The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
+
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
 
 ## Add a node

@@ -28,6 +28,7 @@ type Dependencies struct {
 	// InstallationBindings counts what is bound to the current public URL.
 	Installation         Installation
 	InstallationBindings InstallationBindings
+	WorkspaceStorage     WorkspaceStorage
 
 	Projects             Projects
 	ProjectsReader       ProjectsReader
@@ -120,6 +121,7 @@ func (d Dependencies) validate() error {
 	}
 	if err := required(
 		field{"InstallationBindings", d.InstallationBindings},
+		field{"WorkspaceStorage", d.WorkspaceStorage},
 		field{"Projects", d.Projects}, field{"ProjectsReader", d.ProjectsReader},
 		field{"Vaults", d.Vaults}, field{"VaultsReader", d.VaultsReader},
 		field{"ModelProviders", d.ModelProviders}, field{"ModelProvidersReader", d.ModelProvidersReader},

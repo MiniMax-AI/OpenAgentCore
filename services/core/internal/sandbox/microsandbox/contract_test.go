@@ -40,8 +40,8 @@ func TestProviderContract(t *testing.T) {
 			t.Fatal(err)
 		}
 		nativeOperation := s.Operation
-		if nativeOperation == "renew" {
-			nativeOperation = "inspect"
+		if nativeOperation == "renew" || nativeOperation == "inspect" {
+			nativeOperation = "initial_info"
 		}
 		return contracttest.Fixture{Provider: p, Bootstrap: b, Calls: func() []string { return calls }, WantCalls: []string{nativeOperation}}
 	})
@@ -50,7 +50,7 @@ func TestProviderContract(t *testing.T) {
 func TestProviderContractObservation(t *testing.T) {
 	c, r := testConfig(), testRef()
 	p, err := NewWithCaller(c, callerFunc(func(_ context.Context, q Request) (Response, error) {
-		if q.Operation != "inspect" && q.Operation != "create" {
+		if q.Operation != "initial_info" && q.Operation != "create" {
 			t.Fatal("observation mutated compute")
 		}
 		status := "stopped"

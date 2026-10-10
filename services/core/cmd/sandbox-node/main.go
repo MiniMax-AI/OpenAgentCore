@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	providerconfig "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	workspaceproviders "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs/providers"
 )
 
 func main() {
@@ -81,7 +82,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true, Workspace: workspaceproviders.New()})
 	if err != nil {
 		return err
 	}
