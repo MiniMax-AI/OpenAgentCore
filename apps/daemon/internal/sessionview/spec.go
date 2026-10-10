@@ -49,6 +49,10 @@ type WorldMount struct {
 	UID, GID uint32
 	// Mountpoints are the view paths the launcher mounts over. The world presents each one with its type, whether or not the sandbox has the path, and keeps it and its ancestors stable for the view's lifetime: a mountpoint that disappears or changes identity detaches what is mounted on it.
 	Mountpoints []Mountpoint
+	// Cgroup is the cgroup ID every process of the view runs in, and PidNS the identity (st_dev, st_ino of /proc/<pid>/ns/pid) of the PID namespace the launcher mounted in, which the FUSE headers name threads in. Zero values mean unknown.
+	Cgroup   uint64
+	PidNSDev uint64
+	PidNSIno uint64
 }
 
 // Presentation is how the world presents the mountpoints.

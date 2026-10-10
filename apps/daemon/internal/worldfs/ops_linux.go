@@ -29,6 +29,13 @@ func (f *frontend) Lookup(_ <-chan struct{}, in *fuse.InHeader, name string, out
 	if p.synthetic() {
 		return fuse.ENOENT
 	}
+	if pf, ok := f.lookupScoped(in.Pid, p, name); ok {
+		if pf.err != nil {
+			return status(pf.err)
+		}
+		f.adopt(pf.entry, out)
+		return fuse.OK
+	}
 	r, err := call(f, f.ctx, (*sandboxfs.Client).Lookup, &sandboxfs.LookupRequest{Parent: p.ref, Name: []byte(name)})
 	if err != nil {
 		return status(err)
@@ -73,6 +80,12 @@ func (f *frontend) GetAttr(_ <-chan struct{}, in *fuse.GetAttrIn, out *fuse.Attr
 	t, st := f.target(n, in.Flags()&fuse.FUSE_GETATTR_FH != 0, in.Fh())
 	if !st.Ok() {
 		return st
+	}
+	if t.Kind == sandboxfs.TargetNode {
+		if a, ok := f.attrScoped(in.Pid, n); ok {
+			f.fill(n, a, &out.Attr)
+			return fuse.OK
+		}
 	}
 	r, err := call(f, f.ctx, (*sandboxfs.Client).GetAttr, &sandboxfs.GetAttrRequest{Target: t})
 	if err != nil {

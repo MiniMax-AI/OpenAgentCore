@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -55,12 +56,26 @@ func TestMain(m *testing.M) {
 
 // runHelper edits the workspace the way editors do, then runs the shim through the sandbox's /bin symlink.
 func runHelper() int {
+	// Absolute-path metadata syscalls of a View process, each one prefetch operation. The file is written next, so the first statx is a miss at the leaf and the mutation is not in any operation's scope.
+	var st unix.Statx_t
+	for range 3 {
+		_ = unix.Statx(unix.AT_FDCWD, "/data/sub/dir", unix.AT_SYMLINK_NOFOLLOW, unix.STATX_ALL, &st)
+		_, _ = os.Readlink("/data/sub/dir")
+	}
+	if err := unix.Statx(unix.AT_FDCWD, "/data/f.txt", unix.AT_SYMLINK_NOFOLLOW, unix.STATX_ALL, &st); err != unix.ENOENT {
+		fmt.Fprintln(os.Stderr, "statx before write:", err)
+		return 1
+	}
 	if err := os.WriteFile("/data/f.tmp", []byte("edited in the view"), 0o644); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
 	if err := os.Rename("/data/f.tmp", "/data/f.txt"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	if err := unix.Statx(unix.AT_FDCWD, "/data/f.txt", unix.AT_SYMLINK_NOFOLLOW, unix.STATX_ALL, &st); err != nil || st.Size != 18 {
+		fmt.Fprintln(os.Stderr, "statx after rename:", err, st.Size)
 		return 1
 	}
 	out, err := exec.Command("/bin/sh").Output()
@@ -85,18 +100,25 @@ type mounted struct {
 	srv      *fileservicetest.Server
 	present  sessionview.Presentation
 	readDirs atomic.Int64 // ReadDir requests the world sent
-	stopped  bool         // the test unmounted and stopped the world itself
+	ops      [64]atomic.Int64
+	stopped  bool // the test unmounted and stopped the world itself
 }
 
-// counted counts the ReadDir requests written to a stream, one frame per write.
+// counted counts the requests written to a stream by tag, one frame per write.
 type counted struct {
 	io.ReadWriteCloser
 	readDirs *atomic.Int64
+	ops      *[64]atomic.Int64
 }
 
 func (c counted) Write(b []byte) (int, error) {
-	if len(b) >= 6 && binary.BigEndian.Uint16(b[4:6]) == uint16(sandboxfs.OpReadDir) {
-		c.readDirs.Add(1)
+	if len(b) >= 6 {
+		if op := binary.BigEndian.Uint16(b[4:6]); op < 64 {
+			c.ops[op].Add(1)
+			if op == uint16(sandboxfs.OpReadDir) {
+				c.readDirs.Add(1)
+			}
+		}
 	}
 	return c.ReadWriteCloser.Write(b)
 }
@@ -125,9 +147,21 @@ func serve(t *testing.T, backing string, id uint32, mps ...sessionview.Mountpoin
 		if err != nil {
 			return nil, err
 		}
-		return counted{rw, &m.readDirs}, nil
+		return counted{rw, &m.readDirs, &m.ops}, nil
 	})
-	ws, p, err := m.world.Serve(context.Background(), dev, sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps})
+	wm := sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps}
+	// Register this process's own cgroup and PID namespace, as the View launcher would.
+	var st unix.Stat_t
+	if cg, err := os.ReadFile("/proc/self/cgroup"); err == nil {
+		if _, path, ok := strings.Cut(strings.TrimSpace(string(cg)), "::"); ok && unix.Stat("/sys/fs/cgroup"+path, &st) == nil {
+			wm.Cgroup = st.Ino
+		}
+	}
+	if unix.Stat("/proc/self/ns/pid", &st) == nil {
+		wm.PidNSDev, wm.PidNSIno = uint64(st.Dev), st.Ino
+	}
+	t.Logf("scope registration: cgroup=%d pidns=%d:%d", wm.Cgroup, wm.PidNSDev, wm.PidNSIno)
+	ws, p, err := m.world.Serve(context.Background(), dev, wm)
 	m.present = p
 	if err == nil {
 		// The kernel asks the server about a file's first poll, and the Go runtime polls each file this process opens without releasing its P, which the world needs to answer.

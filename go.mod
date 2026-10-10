@@ -3,6 +3,7 @@ module github.com/MiniMax-AI/OpenAgentCore
 go 1.26.8
 
 require (
+	github.com/cilium/ebpf v0.21.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/creack/pty v1.1.24
 	github.com/go-chi/chi/v5 v5.3.2

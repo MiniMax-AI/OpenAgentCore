@@ -106,16 +106,21 @@ type frontend struct {
 	view     sandboxfs.Identity // the identity the view's processes run as
 	caps     sandboxfs.Capabilities
 
-	mu       sync.Mutex
-	nodes    map[uint64]*inode
-	byRef    map[sandboxfs.NodeRef]*inode
-	lastID   uint64
-	handles  map[uint64]*handle
-	lastFh   uint64
-	root     *inode
-	born     sandboxfs.Timestamp
-	forgets  map[sandboxfs.NodeRef]uint64 // references the kernel released, not yet sent
-	releases []cleanup                    // releases for the drainer: of handles the kernel closed whose Release went unanswered, and of acquisitions in doubt
+	mu         sync.Mutex
+	nodes      map[uint64]*inode
+	byRef      map[sandboxfs.NodeRef]*inode
+	lastID     uint64
+	handles    map[uint64]*handle
+	lastFh     uint64
+	root       *inode
+	born       sandboxfs.Timestamp
+	forgets    map[sandboxfs.NodeRef]uint64 // references the kernel released, not yet sent
+	releases   []cleanup                    // releases for the drainer: of handles the kernel closed whose Release went unanswered, and of acquisitions in doubt
+	operations map[uint32]*operation        // prefetched steps by operation thread
+	scoped     atomic.Bool                  // the view is registered with the scope programs
+	cgroup     uint64                       // the view's cgroup ID
+	scopeErr   error
+	reaped     chan struct{}
 
 	kick      chan struct{} // wakes the drainer
 	drainCtx  context.Context
@@ -147,6 +152,19 @@ func (f *frontend) serve(ctx context.Context, dev *os.File, mount sessionview.Wo
 		return sessionview.Presentation{}, fmt.Errorf("%w: serve: the world already serves a view", ErrConnect)
 	}
 	f.view = sandboxfs.Identity{UID: mount.UID, GID: mount.GID}
+	if mount.Cgroup != 0 && mount.PidNSIno != 0 {
+		if ok, err := acquireScopes(); ok {
+			if err := registerView(mount.Cgroup, mount.PidNSDev, mount.PidNSIno); err == nil {
+				f.cgroup = mount.Cgroup
+				f.scoped.Store(true)
+			} else {
+				releaseScopes()
+				f.scopeErr = err
+			}
+		} else {
+			f.scopeErr = err
+		}
+	}
 	now := time.Now()
 	f.born = sandboxfs.Timestamp{Sec: now.Unix(), Nsec: uint32(now.Nanosecond())}
 	p, opts, err := f.attach(ctx, mount.Mountpoints)
@@ -210,6 +228,10 @@ func (f *frontend) start(dev *os.File, opts *fuse.MountOptions) error {
 		return fmt.Errorf("%w: init: %w", ErrConnect, err)
 	}
 	go f.drain()
+	if f.scoped.Load() {
+		f.reaped = make(chan struct{})
+		go f.reap()
+	}
 	go func() {
 		srv.Serve()
 		close(f.served)
@@ -288,6 +310,9 @@ func (f *frontend) stop() error {
 		errs = append(errs, fmt.Errorf("%w: stop: the view's mount still exists", ErrConnect))
 	}
 	f.closed.Store(true)
+	f.mu.Lock()
+	f.endAll()
+	f.mu.Unlock()
 	ctx, cancel := context.WithTimeout(f.ctx, detachWait)
 	defer cancel()
 	// At the deadline every request still on f.ctx ends too, such as a redial that holds the stream.
@@ -304,8 +329,21 @@ func (f *frontend) stop() error {
 	return errors.Join(errs...)
 }
 
+// unscope withdraws the view from the scope programs; later records of its threads are never consulted.
+func (f *frontend) unscope() {
+	if f.scoped.Swap(false) {
+		unregisterView(f.cgroup)
+		releaseScopes()
+	}
+}
+
 // shutdown ends every request and redial on f.ctx and closes the stream. client returns no stream after it.
 func (f *frontend) shutdown() {
+	f.stopDrain()
+	if f.reaped != nil {
+		<-f.reaped
+	}
+	f.unscope()
 	f.cancel()
 	f.drop()
 }

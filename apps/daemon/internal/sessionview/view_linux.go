@@ -259,7 +259,15 @@ func (v *View) handshake(ctx context.Context, spec *Spec) error {
 		}
 	} else {
 		v.dev = files[0]
-		world, present, err := spec.World(ctx, v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps})
+		wm := WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps}
+		var st unix.Stat_t
+		if err := unix.Stat(v.cgroup, &st); err == nil {
+			wm.Cgroup = st.Ino
+		}
+		if err := unix.Stat(fmt.Sprintf("/proc/%d/ns/pid", v.cmd.Process.Pid), &st); err == nil {
+			wm.PidNSDev, wm.PidNSIno = uint64(st.Dev), st.Ino
+		}
+		world, present, err := spec.World(ctx, v.dev, wm)
 		if err != nil {
 			return &Error{Kind: ErrWorld, Op: "serve", Err: err}
 		}
