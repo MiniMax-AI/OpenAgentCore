@@ -263,17 +263,60 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 	}
 }
 
+func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
+	s, provider := configuredStore(t)
+	pool := s.pool
+	w := executionWriter(t, s)
+	cases := []struct {
+		state, phase string
+		count        bool
+	}{
+		{"creating", "disabled", true}, {"running", "running", true}, {"running", "quiescing", true}, {"running", "suspending", true}, {"running", "suspended", false}, {"running", "restoring", true}, {"running", "waking", true}, {"cleanup_pending", "restoring", true}, {"released", "running", false},
+	}
+	want := int64(0)
+	wantRetained := int64(0)
+	for _, item := range cases {
+		tenant := uuid.NewString()
+		_, env := localEnvironment(t, s, tenant)
+		owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID}, provider, runtimedevice.HashCredential(uuid.NewString()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET state=$2,compute_phase=$3,create_settled=($2<>'creating'),released_at=CASE WHEN $2='released' THEN clock_timestamp() END WHERE id=$1`, owner.ID, item.state, item.phase)
+		if item.count {
+			want++
+		}
+		if item.state != "released" {
+			wantRetained++
+		}
+		retained, err := deploymentStore(w).CountRetainedAllocations(t.Context(), provider)
+		if err != nil || retained != wantRetained {
+			t.Fatalf("retained capacity state=%s phase=%s got=%d want=%d err=%v", item.state, item.phase, retained, wantRetained, err)
+		}
+		got, err := deploymentStore(w).CountComputeReservations(t.Context(), provider)
+		if err != nil || got != want {
+			t.Fatalf("capacity state=%s phase=%s got=%d want=%d err=%v", item.state, item.phase, got, want, err)
+		}
+	}
+	got, err := deploymentStore(w).CountComputeReservations(t.Context(), uuid.NewString())
+	if err != nil || got != 0 {
+		t.Fatal("capacity crossed installation boundary", got, err)
+	}
+}
+
 func TestRuntimeSuspensionIdleStartsAfterLastCompletion(t *testing.T) {
-	_, w, pool, owner := runtimeSuspensionFixture(t)
-	turn := runtimeSuspensionCompleted(t, pool, owner)
+	s, w, pool, owner := runtimeSuspensionFixture(t)
+	runtimeSuspensionCompleted(t, pool, owner)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 hours',compute_phase_changed_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
-	var completed time.Time
-	if err := pool.QueryRow(t.Context(), `SELECT completed_at FROM turns WHERE id=$1`, turn).Scan(&completed); err != nil {
+	before := runtimeDatabaseTime(t, s)
+	id, _ := parseID(owner.SessionID)
+	if err := s.queries.RecordRuntimeTerminalActivity(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
+	after := runtimeDatabaseTime(t, s)
 	activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
-	if err != nil || !activity.LastActivity.Equal(completed) {
-		t.Fatal("long Turn completion did not restart idle interval", activity, completed, err)
+	if err != nil || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.ReadyToSuspend(time.Minute) {
+		t.Fatal("long Turn completion did not restart the ingestion idle interval", activity, before, after, err)
 	}
 }
 
@@ -354,6 +397,12 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			default:
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
+			if kind == "root" || kind == "subagent" {
+				id, _ := parseID(owner.SessionID)
+				if err := s.queries.RecordRuntimeTerminalActivity(t.Context(), id); err != nil {
+					t.Fatal(err)
+				}
+			}
 			until := time.Now().Add(time.Hour)
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrAllocationConflict) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)
@@ -364,6 +413,11 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			}
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, deployment.ErrInvalidInput) {
 				t.Fatal("missing idle timeout accepted", err)
+			}
+			// Re-observe the allocation after terminal ingestion advanced its activity fence.
+			owner, err = deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
+			if err != nil {
+				t.Fatal(err)
 			}
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); err != nil {
 				t.Fatal("elapsed idle timeout rejected", err)

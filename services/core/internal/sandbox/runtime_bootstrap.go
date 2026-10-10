@@ -7,6 +7,6 @@ import "github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 func (b Bootstrap) RuntimeConnection() runtimebootstrap.Connection {
 	return runtimebootstrap.Connection{
 		Version: runtimebootstrap.Version, CoreURL: b.CoreURL,
-		DeviceID: b.DeviceID, Credential: b.Credential,
+		DeviceID: b.DeviceID, Credential: b.Credential, Harness: b.Harness,
 	}
 }

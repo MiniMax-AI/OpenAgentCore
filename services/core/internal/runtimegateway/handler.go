@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
@@ -176,6 +177,8 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 		prev.Close("preempted by newer connection from same device_id")
 	}
 	h.cfg.Log("agentdaemon gateway: device_id=%s registered in registry, starting session", auth.DeviceID)
+	obslog.Ctx(r.Context()).Info("runtime transport registered", "device_id", auth.DeviceID, "protocol_version", version,
+		"allocation_id", auth.RuntimeAllocationID, "node_id", auth.RuntimeNodeID)
 	sess.Start()
 }
 

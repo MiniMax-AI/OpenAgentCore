@@ -20,7 +20,10 @@ type scheduledWork struct {
 	reservationID string
 }
 
-func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool) ([]scheduledWork, error) {
+func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool, hinted bool) ([]scheduledWork, error) {
+	if hinted {
+		s.nextEnvironmentScan = time.Time{}
+	}
 	turns, err := w.dispatcher.SessionsReader.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
 	if err != nil {
 		return nil, err

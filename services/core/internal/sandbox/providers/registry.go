@@ -88,8 +88,8 @@ func (r *Registry) BuildDirect(c sandbox.DirectConfig) (sandbox.SandboxProvider,
 	return p, nil
 }
 
-// SupportsCheckpoint reports whether the provider declares checkpoint suspension.
-func (r *Registry) SupportsCheckpoint(kind string) (bool, error) {
+// SupportsSuspension reports whether the provider declares checkpoint suspension.
+func (r *Registry) SupportsSuspension(kind string) (bool, error) {
 	a, err := r.Lookup(kind)
 	if err != nil {
 		return false, err

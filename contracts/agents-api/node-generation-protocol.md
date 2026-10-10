@@ -44,20 +44,21 @@ Each operation carries its own arguments and returns the following result on suc
 | `command` | `RunCommand` | `command` | `command` |
 | `observe` | `Observe` | `observation` | `sample` |
 | `initial` | `Initial` | None | `compute` |
-| `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
+| `new_compute` | `NewCompute` | Positive `generation` and optional `retained` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
+| `renew_compute` | `RenewCompute` | Exact current `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | None |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
 | `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
-| `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
+| `delete_retained` | `DeleteRetained` | `retained` | None |
 
-A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
+A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not reconciliation-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
 The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.
 
-The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_snapshot`. A failed response carries an `error_code`:
+The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_retained`. A failed response carries an `error_code`:
 
 | `error_code` | Meaning |
 | --- | --- |
@@ -67,7 +68,7 @@ The `response` frame carries `id` and `connection_id`. A successful response car
 | `unsupported` | The operation is declared unsupported; see below |
 | `unconfirmed`, or any other value | The outcome is unknown |
 
-A failed response carries no result, except an `info` that is an exact-reference `CreateSettled` receipt: a confirmed native Create that failed a later check can still prove that the attempt settled. A timeout, a lost response or a disconnect is unavailable or uncertain, never evidence of absence, and Core never replays a mutation after one; it observes the original operation instead. The [Sandbox Provider guide](../../docs/sandbox-provider.md#operation-outcomes-and-retries) defines each outcome.
+A failed response carries no result except an exact-provenance Resume target for cleanup (as specified below), or an `info` that is an exact-reference `CreateSettled` receipt: a confirmed native Create that failed a later check can still prove that the attempt settled. A timeout, a lost response or a disconnect is unavailable or uncertain, never evidence of absence, and Core never replays a mutation after one; it observes the original operation instead. The [Sandbox Provider guide](../../docs/sandbox-provider.md#operation-outcomes-and-retries) defines each outcome.
 
 Node startup and generation loading validate complete Provider operation declarations before accepting work, and the Core proxy uses the same registered declaration, so an unsupported operation rejects before node resolution or native I/O. The [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts) owns the inventory. An `unsupported` response carries an `unsupported` object with the exact method `operation` and an authored safe `reason`; the proxy checks both against the request. Missing, malformed or mismatched evidence is an unconfirmed result, never proof that a mutation was rejected. Unsupported stays distinct from observation unavailability and unknown compute or command results, and it neither settles resource ownership nor authorizes a replay.
 
@@ -123,4 +124,6 @@ The readiness classes, one exported error and one code each, are authored in `se
 
 Preparation diagnostics keep fixed typed causes. Only artifact transfer, checksum or release-provenance failures report `runtime_download_failed`; the private preparer signals that class through its exit category, without Core or the node parsing stderr. Provider, ownership, cancellation and unclassified failures keep their typed code or `provider_unavailable`. No raw provider text crosses the protocol.
 
-The current wire version is 5. Create bootstrap and Resume requests may carry an optional workspace filesystem binding. The node validates its tenant and Environment against the allocation reference, its immutable ObjectID, and its attachment configuration ID against the supplied configuration before forwarding it. The filesystem resolver validates adapter-native ownership. A missing binding selects owned storage; a present binding cannot fall back. Error responses may retain a Resume target only when its nonempty native ID, name, generation and snapshot provenance match the requested target; this is cleanup evidence, never successful restore.
+Creation carries the Session-selected `Bootstrap.Harness` into Runtime bootstrap version 2. Core and nodes use protocol version 7 and require a coordinated upgrade. `Bootstrap.Harness` is required. All ten suspension operations belong to the same `SandboxProvider` and are declared supported or unsupported together; dispatch uses no optional interface. `Observe` reads one allocation per request.
+
+The current wire version is 7. Create bootstrap and Resume requests may carry an optional workspace filesystem binding. The node validates its tenant and Environment against the allocation reference, its immutable ObjectID, and its attachment configuration ID against the supplied configuration before forwarding it. The filesystem resolver validates adapter-native ownership. A missing binding selects owned storage; a present binding cannot fall back. Error responses may retain a Resume target only when its nonempty native ID, name, generation and retained-state provenance match the requested target; this is cleanup evidence, never successful restore.

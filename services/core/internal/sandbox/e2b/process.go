@@ -54,6 +54,9 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 	case <-ctx.Done():
 		return Response{}, ctx.Err()
 	case err = <-done:
+		if !stderr.exceeded {
+			observeHelperCreate(ctx, q, stderr.Bytes())
+		}
 		if err != nil || stdout.exceeded || stderr.exceeded {
 			return Response{}, errors.New("helper result unconfirmed")
 		}
@@ -75,6 +78,12 @@ type limitBuffer struct {
 	bytes.Buffer
 	limit    int
 	exceeded bool
+}
+
+// Do not let the embedded bytes.Buffer's ReaderFrom bypass Write's limit when
+// os/exec copies a child's output with io.Copy.
+func (b *limitBuffer) ReadFrom(r io.Reader) (int64, error) {
+	return io.Copy(struct{ io.Writer }{b}, r)
 }
 
 func (b *limitBuffer) Write(data []byte) (int, error) {

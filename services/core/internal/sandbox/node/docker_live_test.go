@@ -87,7 +87,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-node-transport-credential", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-node-transport-credential", Harness: "codex", NetworkAccess: "enabled"}
 	callCtx, callCancel := context.WithTimeout(ctx, 25*time.Second)
 	info, err := proxy.Create(callCtx, b)
 	callCancel()

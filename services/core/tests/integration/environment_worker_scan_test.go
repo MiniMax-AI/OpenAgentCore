@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
+func TestWorkerEnvironmentRetriesNewlyReadyOnCapabilityHint(t *testing.T) {
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
 	pending := workerEnvironmentReservation(t, h)
@@ -20,7 +20,6 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 
 	h.session = publicSession(t, h, "scan-barrier")
 	receipt := h.message("barrier", "ordinary work")
-	scanned := time.Now()
 	_, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
 	// Dispatch starts only after selectWork has examined the pending input on
 	// the same pass, while its exact Runtime is still incapable of preparation.
@@ -28,13 +27,14 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	if barrier.ID != receipt.TurnID {
 		t.Fatal("unexpected scan barrier")
 	}
+	readyAt := time.Now()
 	awaitFixtureCapabilities(t, runtime, workerEnvironmentCapabilities())
 	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
 	waitTurn(t, h, barrier.ID, sessions.TurnCompleted)
 
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	if elapsed := time.Since(scanned); elapsed < 750*time.Millisecond || elapsed > 3*time.Second {
-		t.Fatal("readiness retry must use the next scan, without an empty scan interval", elapsed)
+	if elapsed := time.Since(readyAt); elapsed >= 750*time.Millisecond {
+		t.Fatal("capability hint waited for the periodic scan", elapsed)
 	}
 	if workerRuntimeForPreparation(t, h, prepare) != runtime {
 		t.Fatal("readiness retry moved Runtime ownership")

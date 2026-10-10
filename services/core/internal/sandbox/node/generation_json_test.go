@@ -63,7 +63,7 @@ func TestGenerationHealthRejectsUnboundedOrAmbiguousNumbers(t *testing.T) {
 }
 
 func TestNodeProtocolRejectsHistoricalVersions(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4} {
+	for _, version := range []int{1, 2, 3, 4, 5, 6} {
 		raw, _ := json.Marshal(frame{Version: version, Type: "hello", Identity: new(Identity), Health: &Health{ObservedAt: time.Now().UTC()}})
 		if _, err := decodeFrame(raw); err == nil {
 			t.Fatalf("accepted historical protocol %d", version)
@@ -88,5 +88,25 @@ func TestNodeGenerationManagementIsAnExplicitCurrentCapability(t *testing.T) {
 				t.Fatal("generation management accepted without declaration")
 			}
 		}
+	}
+}
+
+func TestNodeBootstrapRejectsAmbiguousHarness(t *testing.T) {
+	r := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
+	b := sandbox.Bootstrap{Reference: r, Harness: "codex"}
+	f := frame{Version: ProtocolVersion, Type: "request", Request: &request{DeploymentGeneration: 1, ID: uuid.NewString(), Sequence: 1, ConnectionID: uuid.NewString(), OwnerEpoch: 1, Operation: "create", TimeoutMillis: 1000, Reference: r, Bootstrap: &b}}
+	raw, _ := json.Marshal(f)
+	good := string(raw)
+	if _, err := decodeFrame(raw); err != nil {
+		t.Fatal("valid selected bootstrap", err)
+	}
+	for _, replacement := range []string{`"Harness":null`, `"Harness":""`, `"harness":"codex"`, `"Harness":"codex","Harness":"mcode"`, `"Harness":"codex","harness":"mcode"`, `"Harness":"Codex"`, `"Harness":42`} {
+		bad := strings.Replace(good, `"Harness":"codex"`, replacement, 1)
+		if decoded, err := decodeFrame([]byte(bad)); err == nil && decoded.Request.validate() == nil {
+			t.Fatal("ambiguous selection reached dispatch", replacement)
+		}
+	}
+	if _, err := decodeFrame([]byte(strings.Replace(good, `"Harness":"codex",`, "", 1))); err == nil {
+		t.Fatal("missing Harness accepted")
 	}
 }

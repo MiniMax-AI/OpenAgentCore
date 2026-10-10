@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Validate against the binary's active catalog and use that same snapshot for
 // execution. A CLI override alone is silently ignored for unsupported models.
-func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan) error {
+func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan) (resultErr error) {
+	started := time.Now()
+	defer func() { observePreparationStage(ctx, "model_catalog", started, resultErr) }()
 	args := []string{}
 	for _, kv := range plan.ExtraConfig {
 		args = append(args, "-c", kv[0]+"="+kv[1])
@@ -26,14 +29,30 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 	}
 	cmd.Dir = plan.Cwd
 	cmd.Env = append(os.Environ(), plan.Env...)
+	commandStarted := time.Now()
 	catalog, err := cmd.Output()
+	commandEnded := time.Now()
 	// The launcher can exit before its children, ending the context watcher.
+	cleanupStarted := time.Now()
+	var cleanupErr error
 	if cmd.Process != nil {
-		_ = cmd.Cancel()
+		cleanupErr = cmd.Cancel()
+	}
+	cleanupEnded := time.Now()
+	observePreparationInterval(ctx, "model_catalog_command", commandStarted, commandEnded, err)
+	// This is the existing best-effort process-group signal, not a second Wait.
+	if cmd.Process != nil {
+		observePreparationInterval(ctx, "model_catalog_cleanup", cleanupStarted, cleanupEnded, cleanupErr)
 	}
 	if err != nil {
 		return fmt.Errorf("codex: cannot verify model verbosity support: %w", err)
 	}
+	validationStarted := time.Now()
+	defer func() {
+		if !validationStarted.IsZero() {
+			observePreparationStage(ctx, "model_catalog_validation", validationStarted, resultErr)
+		}
+	}()
 	supported, err := catalogSupportsVerbosity(catalog, plan.Model)
 	if err != nil {
 		return fmt.Errorf("codex: cannot read model verbosity support: %w", err)
@@ -49,6 +68,10 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 	if !filepath.IsAbs(codexHome) {
 		return fmt.Errorf("codex: missing managed home for model catalog")
 	}
+	observePreparationStage(ctx, "model_catalog_validation", validationStarted, nil)
+	validationStarted = time.Time{}
+	snapshotStarted := time.Now()
+	defer func() { observePreparationStage(ctx, "model_catalog_snapshot", snapshotStarted, resultErr) }()
 	file, err := os.CreateTemp(codexHome, "model-catalog-*.json")
 	if err != nil {
 		return err

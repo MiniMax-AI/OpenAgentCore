@@ -46,7 +46,7 @@ func (p *retentionProvider) KillCompute(context.Context, sandbox.Reference, sand
 	p.kills++
 	return p.killError
 }
-func (p *retentionProvider) DeleteSnapshot(context.Context, sandbox.Reference, sandbox.SnapshotIdentity) error {
+func (p *retentionProvider) DeleteRetained(context.Context, sandbox.Reference, sandbox.RetainedState) error {
 	p.snapshots++
 	return nil
 }
@@ -74,7 +74,7 @@ func TestExpiredRetainedComputePreservesSessionAndPendingInput(t *testing.T) {
 	if _, err = fixture.pool.Exec(t.Context(), `UPDATE session_devices SET native_session_id='retained-native-session' WHERE device_id=$1`, owner.DeviceID); err != nil {
 		t.Fatal(err)
 	}
-	compute := runtimeCompute{Current: sandbox.Compute{ID: "old-compute"}, Snapshot: &sandbox.SnapshotIdentity{ID: "old-snapshot"}}
+	compute := runtimeCompute{Version: sandbox.SuspensionStateVersion, Current: sandbox.Compute{ID: "old-compute"}, Retained: &sandbox.RetainedState{ID: "old-snapshot", Data: "native-state"}}
 	raw, _ := json.Marshal(compute)
 	if _, err = fixture.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state=$2,compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID, raw); err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				{`UPDATE environments SET initialization='complete',status='disconnected' WHERE id=$1`, owner.EnvironmentID},
 				{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{"retained_native_history":true}}]' WHERE id=$1`, owner.DeviceID},
 				{`UPDATE session_devices SET native_session_id='retained-native-session' WHERE device_id=$1`, owner.DeviceID},
-				{`UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"id":"old-snapshot"}}',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID},
+				{`UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"protocol_version":"1","current":{"ID":"old-compute"},"retained":{"ID":"old-snapshot","Data":"native-state"}}',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID},
 			} {
 				if _, err = fixture.pool.Exec(t.Context(), statement.q, statement.arg); err != nil {
 					t.Fatal(err)
@@ -404,7 +404,7 @@ func TestRestoreUsesAllocationGenerationStorageInsteadOfCachedLane(t *testing.T)
 			}
 			r.config.Workspace = target.Workspace
 			r.config.Resources = target.Resources
-			state := runtimeCompute{Target: &sandbox.Compute{ID: "replacement-compute", Generation: 2}, Snapshot: &sandbox.SnapshotIdentity{ID: "snapshot"}, RestoreID: uuid.NewString()}
+			state := runtimeCompute{Target: &sandbox.Compute{ID: "replacement-compute", Generation: 2}, Retained: &sandbox.RetainedState{ID: "snapshot", Data: "native-state"}, RestoreID: uuid.NewString()}
 			if err = r.restoreCompute(t.Context(), provider, owner, state, false); !errors.Is(err, stop) {
 				t.Fatal(err)
 			}
@@ -422,6 +422,30 @@ func TestRestoreUsesAllocationGenerationStorageInsteadOfCachedLane(t *testing.T)
 			stale.ID = uuid.NewString()
 			if err = r.restoreCompute(t.Context(), provider, stale, state, false); !errors.Is(err, sandbox.ErrOwnership) || provider.request != nil {
 				t.Fatal("stale owner reached native Resume", err)
+			}
+		})
+	}
+}
+
+func TestSuspendedAllocationDemandDoesNotColdReplaceWriter(t *testing.T) {
+	for _, external := range []bool{false, true} {
+		t.Run(map[bool]string{false: "owned", true: "external"}[external], func(t *testing.T) {
+			provider := &retentionProvider{}
+			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, external))
+			r, s := f.lifecycle, f.session
+			owner, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = f.sessions.ReserveEnvironmentInput(t.Context(), s.TenantID, s.ID, "owned-pause", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"resume"}]}]}`)}}); err != nil {
+				t.Fatal(err)
+			}
+			replay, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
+			if err != nil || replay.ID != owner.ID || replay.DeviceID != owner.DeviceID || !replay.Replayed || replay.ComputePhase != "suspended" || provider.creates != 1 || provider.kills != 0 {
+				t.Fatal("owned suspended writer was cold replaced", replay, err)
 			}
 		})
 	}

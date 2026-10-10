@@ -27,11 +27,33 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 	return err
 }
 
+const countRuntimeComputeReservations = `-- name: CountRuntimeComputeReservations :one
+SELECT count(*) FROM runtime_allocations
+WHERE provider_key = $1 AND state <> 'released' AND compute_phase <> 'suspended'
+`
+
+func (q *Queries) CountRuntimeComputeReservations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRuntimeComputeReservations, providerKey)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countRuntimeRetainedAllocations = `-- name: CountRuntimeRetainedAllocations :one
+SELECT count(*) FROM runtime_allocations
+WHERE provider_key = $1 AND state <> 'released'
+`
+
+func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRuntimeRetainedAllocations, providerKey)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
     GREATEST(a.compute_activity_at, a.compute_phase_changed_at,
-    CASE WHEN a.node_id IS NULL THEN COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at) END,
-    CASE WHEN a.node_id IS NULL THEN (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id) END,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
     (EXISTS (SELECT 1 FROM turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
      OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
@@ -61,11 +83,29 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 	return i, err
 }
 
+const hasIncompatibleRuntimeComputeState = `-- name: HasIncompatibleRuntimeComputeState :one
+SELECT EXISTS (
+ SELECT 1 FROM runtime_allocations
+ WHERE state <> 'released'
+ AND ((compute_state->>'protocol_version') IS DISTINCT FROM $1::text
+  OR compute_state ? 'snapshot'
+  OR (compute_state #> '{current,RestoredFrom}') ?| ARRAY['Digest', 'CheckpointID', 'CheckpointRoot']
+  OR (compute_state #> '{target,RestoredFrom}') ?| ARRAY['Digest', 'CheckpointID', 'CheckpointRoot'])
+)::boolean
+`
+
+func (q *Queries) HasIncompatibleRuntimeComputeState(ctx context.Context, protocolVersion string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasIncompatibleRuntimeComputeState, protocolVersion)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const recordRuntimeTerminalActivity = `-- name: RecordRuntimeTerminalActivity :exec
 UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
 FROM environments e
 WHERE a.environment_id = e.id AND e.session_id = $1
-    AND a.node_id IS NOT NULL AND a.state = 'running'
+    AND a.state = 'running'
 `
 
 func (q *Queries) RecordRuntimeTerminalActivity(ctx context.Context, sessionID pgtype.UUID) error {
