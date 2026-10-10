@@ -21,6 +21,7 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 type runtimeManager struct {
 	workspaces          *workspaces.ExecutionOperations
 	workspaceCursor     string
+	replacementCursor   string
 	workspaceGate       chan struct{}
 	sessions            sessions.Reader
 	sessionExecution    *sessions.ExecutionOperations
@@ -141,6 +142,9 @@ func (m *runtimeManager) syncNodes(ctx context.Context) ([]*runtimeNode, error) 
 		return nil, m.ctx.Err()
 	}
 	defer func() { <-m.inventory }()
+	if err := m.reserveReplacementPlacements(ctx); err != nil {
+		return nil, err
+	}
 	// A direct caller may add a newly registered node during the query. Only
 	// entries present before this inventory snapshot can be retired by it.
 	previous := m.snapshotNodes()

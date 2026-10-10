@@ -24,9 +24,9 @@ func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
 			if relative == "entrypoint" {
 				t.Setenv(claudeSDKEntrypointEnv, "main.js")
 			} else {
-				t.Setenv("OAC_RUNTIME_HOME", "relative-home")
+				root = "relative-home"
 			}
-			out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
+			out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
 				t.Fatal("invalid paths reached runtime probe")
 				return RuntimeInfo{}, nil
 			})
@@ -47,7 +47,7 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	}
 	t.Setenv(claudeSDKNodeEnv, node)
 	for _, features := range [][]string{nil, {"mcp_http_tools"}, {"mcp_http_bearer_auth"}, {"mcp_http_tools", "mcp_http_bearer_auth"}, {"mcp_http_required"}, {"mcp_http_tools", "mcp_http_required"}, {"subagent_resources"}, {"structured_output"}} {
-		out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
+		out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
 			info := RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: features}
 			return info, nil
 		})
@@ -92,7 +92,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 	}
 	t.Setenv(claudeSDKNodeEnv, node)
 	entrypoint := filepath.Join(root, "bundle", "main.js")
-	options := agent.DiscoveryOptions{Profile: "test", Stdout: io.Discard, Stderr: io.Discard}
+	options := agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "test", Stdout: io.Discard, Stderr: io.Discard}
 	for _, configured := range []bool{false, true} {
 		for _, ready := range []bool{false, true} {
 			t.Setenv(claudeSDKEntrypointEnv, "")
@@ -102,7 +102,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 			calls := 0
 			runtime := discoverWithCheck(t.Context(), options, Declaration.Info, func(_ context.Context, c Config) (RuntimeInfo, error) {
 				calls++
-				if c.Node != node || c.Entrypoint != entrypoint || c.StateDir != filepath.Join(root, "daemon", "test", "runtime", "claude-sdk") || c.Env != nil {
+				if c.Node != node || c.Entrypoint != entrypoint || c.StateDir != filepath.Join(options.StateRoot, "daemon", "test", "runtime", "claude-sdk") || c.Env != nil {
 					t.Fatalf("configuration: %+v", c)
 				}
 				if !ready {

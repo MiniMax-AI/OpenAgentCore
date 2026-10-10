@@ -50,6 +50,18 @@ func Root() (string, error) {
 	return filepath.Join(home, ".oac"), nil
 }
 
+// StateDirectory is the single process setting for private durable Runtime state.
+// An explicit invalid value is an error, never a reason to use the default.
+func StateDirectory() (string, error) {
+	if value, present := os.LookupEnv("OAC_RUNTIME_STATE_DIRECTORY"); present {
+		if !filepath.IsAbs(value) || filepath.Clean(value) != value {
+			return "", fmt.Errorf("OAC_RUNTIME_STATE_DIRECTORY must be a clean absolute directory")
+		}
+		return value, nil
+	}
+	return Root()
+}
+
 // ProfileDir returns ~/.oac/daemon/<profile>. It is not created here.
 func ProfileDir(profile string) (string, error) {
 	if err := ValidateProfile(profile); err != nil {

@@ -72,6 +72,20 @@ An unset or empty value selects the default. Edit `.env`, then run `oac apply`. 
 | `insecure` | `false` | `true` is required for an `http` endpoint and rejected for `https` |
 | `headers` | none | Request headers for the endpoint. `Host`, `Content-Length`, `Content-Type` and `Content-Encoding` are reserved |
 
+### Runtime resource directories
+
+The Runtime resolves its resource directories before discovering Harness adapters. `<RuntimeHome>` is the Runtime home selected by `OAC_RUNTIME_HOME`. `OAC_RUNTIME_STATE_DIRECTORY` defaults only when unset; an empty, relative or noncanonical explicit value is rejected. Directory settings have no secondary file or environment fallback.
+
+| Runtime process setting | Default | Packaged Linux images |
+| --- | --- | --- |
+| `OAC_RUNTIME_INITIALIZATION_DIRECTORY` | `<RuntimeHome>/initialization` | `/environment/initialization` |
+| `OAC_RUNTIME_PACKAGE_DIRECTORY` | `<RuntimeHome>/packages` | `/environment/packages` |
+| `OAC_RUNTIME_STATE_DIRECTORY` | `<RuntimeHome>` | `/environment/runtime-state` |
+
+The state directory contains retained native Harness history and capability-installation completion records. It is separate from the declared workspace directory. Selecting a separate state directory does not relocate Runtime device credentials or connection identity from their instance-private paths in the Runtime home; they must not be copied with native history. [Harness onboarding](../contracts/agents-api/harness-onboarding.md#register-the-adapter) defines the adapter boundary, and [Environment preparation](../contracts/agents-api/environments.md) owns initialization and package behavior.
+
+Placing state on an independent filesystem preserves those files when compute is replaced. Native continuation still requires a qualified Harness, matching ownership and confirmed stop of the previous writer. It does not preserve process memory or arbitrary files on the compute root disk.
+
 ## Runtime settings: Web
 
 Runtime settings live in Core's database. Change them in Web; scripts use the same Core API with the Core key.

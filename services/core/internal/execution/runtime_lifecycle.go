@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"sync"
@@ -150,9 +151,23 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 	if !ready {
 		return deployment.Allocation{}, ErrExecutionUnavailable
 	}
-	nodeID, err := w.runtimes.deploymentService.LifecycleNode(ctx, tenant, environment)
-	if err != nil {
-		return deployment.Allocation{}, err
+	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
+	existing, lookupErr := w.runtimes.deploymentReader.EnvironmentAllocation(ctx, key)
+	if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
+		return deployment.Allocation{}, lookupErr
+	}
+	var nodeID string
+	if lookupErr == nil && existing.State == "released" {
+		reserved, reserveErr := w.runtimes.deployment.EnsurePlacement(ctx, key, providerKey)
+		if reserveErr != nil {
+			return deployment.Allocation{}, reserveErr
+		}
+		nodeID = reserved.NodeID
+	} else {
+		nodeID, err = w.runtimes.deploymentService.LifecycleNode(ctx, tenant, environment)
+		if err != nil {
+			return deployment.Allocation{}, err
+		}
 	}
 	node, err := w.runtimes.node(nodeID)
 	if err != nil {
@@ -180,22 +195,34 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err != nil || placement.Type != "openai_hosted" {
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
+	spec, err := r.workspaceSpecification(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}, "")
+	if err != nil {
+		return deployment.Allocation{}, err
+	}
+	if environmentValue.ExternalWorkspace && spec.Workspace == nil {
+		return deployment.Allocation{}, workspacefs.ErrUnsupported
+	}
 	var workspace *workspacefs.Binding
-	if r.config.Workspace != nil {
-		if r.workspaces == nil {
-			return deployment.Allocation{}, workspacefs.ErrUnavailable
-		}
+	if spec.Workspace != nil {
 		existing, lookupErr := r.reader.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
 			return deployment.Allocation{}, lookupErr
 		}
 		if errors.Is(lookupErr, deployment.ErrNotFound) {
-			workspace, err = r.workspaces.Ensure(ctx, tenant, environment, r.config.WorkspaceRequirements, r.config.Resources.EnvironmentDiskMiB)
+			workspace, err = r.workspaces.Ensure(ctx, tenant, environment, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
 			if err == nil && workspace == nil {
 				err = workspacefs.ErrUnavailable
 			}
 			if err != nil {
 				return deployment.Allocation{}, err
+			}
+		} else if existing.State == "released" {
+			workspace, err = r.workspaces.GetReady(ctx, tenant, environment, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
+			if err != nil {
+				return deployment.Allocation{}, err
+			}
+			if workspace == nil {
+				return deployment.Allocation{}, workspacefs.ErrNotFound
 			}
 		} else if existing.NodeID != r.nodeID {
 			return existing, sandbox.ErrOwnership
@@ -427,4 +454,29 @@ func runtimeReference(owner deployment.Allocation) sandbox.Reference {
 
 func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 	return w.runtimes.run(ctx)
+}
+
+// workspaceSpecification reads the immutable generation selected for this
+// Environment. A restore also fences the exact allocation before native I/O.
+func (r *runtimeLifecycle) workspaceSpecification(ctx context.Context, key deployment.AllocationKey, allocationID string) (sandbox.DeploymentSpec, error) {
+	target, err := r.reader.LifecyclePlacement(ctx, key)
+	if err != nil {
+		return sandbox.DeploymentSpec{}, err
+	}
+	if allocationID != "" && target.AllocationID != allocationID {
+		return sandbox.DeploymentSpec{}, sandbox.ErrOwnership
+	}
+	var spec sandbox.DeploymentSpec
+	if err := json.Unmarshal(target.Specification, &spec); err != nil {
+		return sandbox.DeploymentSpec{}, sandbox.ErrInvalid
+	}
+	if spec.Workspace != nil {
+		if r.workspaces == nil || r.config.WorkspaceRequirements == nil {
+			return sandbox.DeploymentSpec{}, workspacefs.ErrUnavailable
+		}
+		if err := workspacefs.ValidateCombination(*r.config.WorkspaceRequirements, *spec.Workspace, spec.Resources.EnvironmentDiskMiB); err != nil {
+			return sandbox.DeploymentSpec{}, err
+		}
+	}
+	return spec, nil
 }

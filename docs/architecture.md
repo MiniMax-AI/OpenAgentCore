@@ -2,7 +2,9 @@
 title: "Architecture"
 ---
 
-OpenAgentCore separates orchestration, compute and native execution. Core owns the API and durable state. Sandbox Providers manage compute. Independent workspace filesystem adapters manage durable Environment storage through a separate protocol. A Runtime daemon prepares an Environment and runs the selected Harness, whose native SDK or protocol owns the model and tool loop.
+OpenAgentCore is an Agent execution platform that brings Harnesses, models, tools, Sessions and execution environments together through replaceable protocol implementations. It separates orchestration, compute and native execution. Core owns the API and durable state. Sandbox Providers manage compute. Independent workspace filesystem adapters manage durable Environment storage through a separate protocol. A Runtime daemon prepares an Environment and runs the selected Harness, whose native SDK or protocol owns the model and tool loop.
+
+The recommended deployment choices are E2B-managed compute and self-managed microsandbox with independent persistent workspace storage. Both use the same Core orchestration and capability checks. Docker remains an available Provider. Compute and filesystem adapters declare their supported combinations; a deployment choice does not introduce a separate Agent execution flow. See [Sandbox Providers](./sandbox-provider.md) and [workspace filesystem providers](./workspace-provider.md) for their contracts and supported capabilities.
 
 ```mermaid
 flowchart TB

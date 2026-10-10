@@ -45,12 +45,12 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 	}
 	var factory agent.ExecutorFactory
 	if workspace {
-		factory = NewExecutorFactory(&config)
+		factory = NewExecutorFactory(testStateRoot(t), &config)
 	} else {
 		req = testRequest(t)
 		req.RunID, req.Input = "", nil
 		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)
-		factory = NewExecutorFactory(nil)
+		factory = NewExecutorFactory(testStateRoot(t), nil)
 	}
 	value, err := factory(t.Context(), req)
 	if err != nil {
@@ -293,7 +293,7 @@ func TestExecutorFactoryPreparationFailureHasNoTypedNilOwner(t *testing.T) {
 	if err := os.WriteFile(config.Binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	value, err := NewExecutorFactory(&config)(t.Context(), req)
+	value, err := NewExecutorFactory(testStateRoot(t), &config)(t.Context(), req)
 	if err == nil || value != nil {
 		t.Fatalf("settled preparation failure returned owner: nil=%t error=%v", value == nil, err)
 	}

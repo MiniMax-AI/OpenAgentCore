@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
 )
@@ -71,7 +70,7 @@ type SessionPlan struct {
 //
 // Execution controls select the native web_search and model_verbosity settings.
 // The codex binary itself is resolved via PATH only.
-func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
+func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
 		// Harnesses run unattended: Codex never offers its ask-the-user tool.
 		ExtraConfig: [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
@@ -99,7 +98,7 @@ func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto
 	plan.Model = stringOpt(opts, "model")
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
-	codexHome, err := allocCodexHome(agentStateKey)
+	codexHome, err := allocCodexHome(stateRoot, agentStateKey)
 	if err != nil {
 		return plan, err
 	}
@@ -117,6 +116,11 @@ func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto
 			return plan, err
 		}
 		plan.ModelProvider = oacProviderSlug
+		// The pinned native shell snapshot captures the loop environment before
+		// shell_environment_policy is applied. Do not persist provider credentials.
+		plan.DisableFeatures = append(plan.DisableFeatures, "shell_snapshot")
+		env = append(env, providerAPIKeyEnv+"="+provider.BearerToken)
+		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"shell_environment_policy.exclude", "[" + strconv(providerAPIKeyEnv) + "]"})
 	}
 
 	plan.Env = env
@@ -142,18 +146,17 @@ func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto
 // helpers
 // ---------------------------------------------------------------------------
 
-func allocCodexHome(agentStateKey string) (string, error) {
+func allocCodexHome(root, agentStateKey string) (string, error) {
 	if strings.TrimSpace(agentStateKey) == "" {
 		return "", fmt.Errorf("codex: agentStateKey required for CODEX_HOME allocation")
 	}
-	root, err := paths.Root()
-	if err != nil {
-		return "", err
+	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
+		return "", fmt.Errorf("codex: state root must be a clean absolute directory")
 	}
 	parts := strings.Split(agentStateKey, "/")
 	safeParts := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if safe := safePathPartCodex(part); safe != "" {
+		if safe := safePathPartCodex(part); safe != "" && safe != "." && safe != ".." {
 			safeParts = append(safeParts, safe)
 		}
 	}

@@ -285,7 +285,7 @@ func loadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 	tenant, _ := parseID(session.TenantID)
 	environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
 	if err == nil {
-		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
+		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, environment.ExternalWorkspace, nil)
 		if err != nil {
 			return session, err
 		}

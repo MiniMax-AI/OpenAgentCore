@@ -12,7 +12,7 @@ The adapter accepts only Codex `0.153.4`: installation and recovery checks requi
 
 Codex accepts only the `responses` model protocol ([`harnessconfig/codex`](../../../../internal/harnessconfig/codex/configuration.go)). A Chat Completions or Anthropic provider is rejected; nothing converts between protocols. [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection, including the per-Harness deployment default.
 
-Each Session has its own `CODEX_HOME` at `$OAC_RUNTIME_HOME/daemon/agent-sessions/<state key>/` (`OAC_RUNTIME_HOME` defaults to `~/.oac`). Native history stays there. The adapter regenerates that directory's `config.toml` on every prompt: the Session's frozen provider bundle becomes the `[model_providers.oac]` block, with `wire_api` `responses`, and the thread is pinned to that provider, so Codex never falls back to its built-in `openai` provider.
+Each Session has its own `CODEX_HOME` at `<StateRoot>/daemon/agent-sessions/<state key>/`, where the Runtime supplies `<StateRoot>` from the [state directory setting](../../../../docs/configuration.md#runtime-resource-directories). Native history stays there; Runtime device credentials stay in the Runtime home. The state layout alone does not qualify cross-node native continuation. The adapter regenerates that directory's `config.toml` on every prompt: the Session's frozen provider bundle becomes the `[model_providers.oac]` block, with `wire_api` `responses`, and the thread is pinned to that provider, so Codex never falls back to its built-in `openai` provider. Provider bearer credentials use the native `env_key` reference and enter the model-loop child process environment; they are not written into retained `config.toml`. The adapter excludes that variable from native shell environments with `shell_environment_policy.exclude` and disables `shell_snapshot`, whose capture in the pinned native version can otherwise persist the model-loop environment. This retains native thread history without retaining native shell snapshots; it introduces no user setting.
 
 ## Execution controls
 
@@ -66,7 +66,7 @@ Every other variant stays unclassified.
 | Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep`, the same base and package layer as the Claude and MiniMax images |
 | Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex` (mode 0555) and `/usr/local/codex-resources` |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executable and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).

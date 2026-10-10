@@ -41,6 +41,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | The Environment type is `openai_hosted` or `self_hosted` |
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
+| `retained_native_history` | The Environment uses an external workspace binding; owned workspace storage does not require this capability |
 | `web_search_control`, `text_verbosity` | The Harness's engine profile declares that control |
 | `structured_output` and `message_items` | The Agent requests `json_schema` output |
 | `subagent_observations` | `multi_agent.enabled` is true |
@@ -52,6 +53,8 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
 Core has no admission rule for `usage` and `resume`.
+
+`retained_native_history` means the composed Runtime and Harness can reopen the same native Session from its private retained state after confirmed native shutdown. It does not promise process memory, background processes or external connection recovery. The selected filesystem must separately provide retained storage. Core uses the previous device's persisted declaration to determine whether compute can be released without terminating the Session, and validates the replacement Runtime before admitting execution. Missing or invalid native history fails explicitly; it never authorizes a new native root or replay of prior input.
 
 The `execution_prepare` configuration carries the opt-ins Core sets for each Run:
 
@@ -122,6 +125,8 @@ A preparation reserves a per-Turn admission, not a new Executor. It carries an e
 Preparation and start run outside the receive loop and router lock. An admission expires five minutes after it is granted, and retries do not extend that deadline; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains at most 64 admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 
 Idle expiry of an Executor is a Runtime resource policy, separate from Core's active-Turn concurrency. On shutdown the Runtime closes active and idle Executors, keeps any target whose close failed and allows a later serialized retry. An ordinary disconnection closes the failed transport and keeps the exact router until shutdown succeeds; a wait timeout or failed cleanup never authorizes reconnection, and process shutdown keeps waiting rather than discarding owned native resources. Workspace operations keep their binding and settlement rules across Turn boundaries and Executor closure.
+
+Suspension closes admission, drains admitted work and receipts, and confirms closure of every idle Executor before acknowledging `environment_quiesced`. A failed or unconfirmed native close prevents acknowledgement and retains cleanup ownership. The Sandbox Provider remains responsible for the filesystem flush and compute-stop guarantees of its checkpoint implementation; Runtime quiescence alone does not establish those guarantees.
 
 ## Active input receipts
 

@@ -637,3 +637,10 @@ func (f *fakeSessionReader) GetManagedSessionArchive(context.Context, string, st
 	unexpected(f.t, "GetManagedSessionArchive")
 	return sessions.ManagedArchive{}, nil
 }
+
+func (f *fakeReader) ReplacementEnvironments(context.Context, string) ([]UnallocatedEnvironment, error) {
+	panic("unexpected ReplacementEnvironments")
+}
+func (f *fakeReader) RetainedNativeHistory(context.Context, AllocationKey) (bool, error) {
+	panic("unexpected RetainedNativeHistory")
+}

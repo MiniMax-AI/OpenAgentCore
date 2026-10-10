@@ -14,10 +14,16 @@ import (
 func TestDiscoveryAndRegistration(t *testing.T) {
 	for _, selected := range []string{"codex", "mcode", "claude_sdk", ""} {
 		t.Run(selected, func(t *testing.T) {
+			runtimeRoot, stateRoot := t.TempDir(), t.TempDir()
+			t.Setenv("OAC_RUNTIME_HOME", runtimeRoot)
+			t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", stateRoot)
 			called := []string{}
 			declarations := append([]agent.Declaration(nil), harnessDeclarations...)
 			for i := range declarations {
-				declarations[i].Discover = func(_ context.Context, _ agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
+				declarations[i].Discover = func(_ context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
+					if options.RuntimeRoot != runtimeRoot || options.StateRoot != stateRoot {
+						t.Fatal("discovery lost explicit directory context")
+					}
 					called = append(called, info.Kind)
 					info.Available = true
 					info.Version = "test"

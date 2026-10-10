@@ -203,7 +203,7 @@ const getRuntimePlacement = `-- name: GetRuntimePlacement :one
 SELECT p.environment_id, p.node_id, p.reserved_at, p.released_at, p.deployment_generation, n.name, (EXISTS(SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=p.deployment_generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch AND g.state='ready') AND n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at>clock_timestamp()-interval '45 seconds' AND n.removed_at IS NULL)::boolean AS available,
  COALESCE(a.observation_error,'')::text AS observation_error, COALESCE(a.state,'reserved')::text AS state, COALESCE(a.compute_phase,'disabled')::text AS compute_phase
 FROM runtime_placements p JOIN runtime_nodes n ON n.id=p.node_id CROSS JOIN runtime_deployment d
-LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id WHERE p.environment_id=$1
+LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state<>'released' WHERE p.environment_id=$1
 `
 
 type GetRuntimePlacementRow struct {
@@ -383,9 +383,9 @@ SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha2
  EXISTS(SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=n.ready_generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch AND g.state='ready')::boolean AS serving_ready,
  COALESCE((SELECT g.state FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=d.generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch),'')::text AS target_state,
  COALESCE((SELECT g.diagnostic FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=d.generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch),'')::text AS target_diagnostic,
- (SELECT count(*) FROM runtime_placements p LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id WHERE p.node_id=n.id AND p.released_at IS NULL AND (a.id IS NULL OR a.compute_phase <> 'suspended'))::bigint AS active,
+ (SELECT count(*) FROM runtime_placements p LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state<>'released' WHERE p.node_id=n.id AND p.released_at IS NULL AND (a.id IS NULL OR a.compute_phase <> 'suspended'))::bigint AS active,
  (SELECT count(*) FROM runtime_placements p WHERE p.node_id=n.id AND p.released_at IS NULL)::bigint AS retained,
- (SELECT count(*) FROM runtime_placements p WHERE p.node_id=n.id AND p.released_at IS NULL AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=p.environment_id))::bigint AS reserved,
+ (SELECT count(*) FROM runtime_placements p WHERE p.node_id=n.id AND p.released_at IS NULL AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=p.environment_id AND a.state<>'released'))::bigint AS reserved,
  (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state='cleanup_pending')::bigint AS cleanup_pending,
  (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state='running' AND a.compute_phase IN('running','disabled'))::bigint AS running,
  (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state<>'released' AND a.compute_state->'snapshot' IS NOT NULL AND a.compute_state->'snapshot'<>'null'::jsonb)::bigint AS snapshots
@@ -504,7 +504,7 @@ func (q *Queries) ReleaseRuntimePlacement(ctx context.Context, environmentID pgt
 const releaseUnallocatedRuntimePlacement = `-- name: ReleaseUnallocatedRuntimePlacement :exec
 UPDATE runtime_placements SET released_at=COALESCE(released_at,clock_timestamp())
 WHERE environment_id IN(SELECT id FROM environments WHERE session_id=$1)
-AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id)
+AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=runtime_placements.environment_id AND a.state<>'released')
 `
 
 func (q *Queries) ReleaseUnallocatedRuntimePlacement(ctx context.Context, sessionID pgtype.UUID) error {
@@ -519,6 +519,27 @@ UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL,ready_g
 func (q *Queries) RemoveRuntimeNode(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, removeRuntimeNode, id)
 	return err
+}
+
+const reserveReleasedRuntimePlacement = `-- name: ReserveReleasedRuntimePlacement :execrows
+UPDATE runtime_placements SET node_id = $2, deployment_generation = $3,
+    reserved_at = clock_timestamp(), released_at = NULL
+WHERE runtime_placements.environment_id = $1 AND released_at IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = $1 AND a.state <> 'released')
+`
+
+type ReserveReleasedRuntimePlacementParams struct {
+	EnvironmentID        pgtype.UUID `json:"environment_id"`
+	NodeID               pgtype.UUID `json:"node_id"`
+	DeploymentGeneration pgtype.Int8 `json:"deployment_generation"`
+}
+
+func (q *Queries) ReserveReleasedRuntimePlacement(ctx context.Context, arg ReserveReleasedRuntimePlacementParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveReleasedRuntimePlacement, arg.EnvironmentID, arg.NodeID, arg.DeploymentGeneration)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setRuntimeObservation = `-- name: SetRuntimeObservation :exec

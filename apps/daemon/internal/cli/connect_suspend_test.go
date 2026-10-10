@@ -17,7 +17,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -332,5 +336,133 @@ func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 				t.Fatal("recovery failed to settle")
 			}
 		})
+	}
+}
+
+func TestQuiesceCloseFailureDisconnectsAndSettlesBeforeReconnect(t *testing.T) {
+	environment, session := uuid.NewString(), uuid.NewString()
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", t.TempDir())
+	t.Setenv("OAC_RUNTIME_WORKSPACE", t.TempDir())
+	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
+	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", environment)
+	t.Setenv("OAC_RUNTIME_SESSION_ID", session)
+	t.Setenv("OAC_RUNTIME_NETWORK_ACCESS", "disabled")
+	t.Setenv("OAC_RUNTIME_ALLOWED_DOMAINS", "")
+	peers := make(chan *websocket.Conn, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err == nil {
+			peers <- peer
+		}
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	dial := func(ctx context.Context) (*transport.Conn, error) {
+		return transport.Dial(ctx, transport.DialOptions{WSURL: "ws" + strings.TrimPrefix(server.URL, "http"), DeviceID: "device", Credential: "fixture", DaemonVersion: proto.Version})
+	}
+	native := &cleanupExecutor{retry: make(chan struct{}), confirm: make(chan struct{})}
+	defer func() {
+		select {
+		case <-native.confirm:
+		default:
+			close(native.confirm)
+		}
+	}()
+	registry := agent.NewRegistry()
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "cleanup", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, harnessconfig.Configuration{})
+	registry.RegisterExecutor("cleanup", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return native, nil })
+	control := &suspendControl{path: filepath.Join(t.TempDir(), "control.json"), identity: suspendIdentity{EnvironmentID: environment}, signal: make(chan os.Signal, 1)}
+	finished := make(chan error, 1)
+	go func() {
+		finished <- runSuspendLoop(ctx, dial, registry, &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
+	}()
+	var peer *websocket.Conn
+	select {
+	case peer = <-peers:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no connection")
+	}
+	defer peer.Close()
+	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-" + session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = peer.WriteJSON(preparation); err != nil {
+		t.Fatal(err)
+	}
+	readStatus := func(want string) proto.PreparationStatusPayload {
+		t.Helper()
+		_ = peer.SetReadDeadline(time.Now().Add(3 * time.Second))
+		for {
+			var frame proto.Envelope
+			if err := peer.ReadJSON(&frame); err != nil {
+				t.Fatal(err)
+			}
+			if frame.Type != proto.TypePreparationStatus {
+				continue
+			}
+			var status proto.PreparationStatusPayload
+			if err := frame.DecodePayload(&status); err != nil {
+				t.Fatal(err)
+			}
+			if status.State == want {
+				return status
+			}
+			if status.State == "failed" || status.State == "rejected" {
+				t.Fatalf("preparation failed: %+v", status)
+			}
+		}
+	}
+	ready := readStatus("ready")
+	request := proto.EnvironmentSuspendPayload{EnvironmentID: environment, SuspendID: "attempt"}
+	// Admission is still held: ordinary busy must leave the socket usable.
+	sendLifecycleFrame(t, peer, proto.TypeEnvironmentQuiesce, request)
+	if got := readLifecycleResult(t, peer, proto.TypeEnvironmentQuiesced); got.Accepted || got.ErrorCode != "resource_busy" {
+		t.Fatalf("busy result: %+v", got)
+	}
+	release, err := proto.NewEnvelope(proto.TypeExecutionRelease, "prepare", proto.ExecutionReleasePayload{Handle: ready.Handle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = peer.WriteJSON(release); err != nil {
+		t.Fatal("busy rejection disconnected", err)
+	}
+	readStatus("released")
+	sendLifecycleFrame(t, peer, proto.TypeEnvironmentQuiesce, request)
+	if got := readLifecycleResult(t, peer, proto.TypeEnvironmentQuiesced); got.Accepted || got.ErrorCode != "resource_busy" {
+		t.Fatalf("failed Close acknowledged: %+v", got)
+	}
+	select {
+	case <-native.retry:
+	case <-time.After(3 * time.Second):
+		t.Fatal("fenced close failure did not enter Shutdown retry")
+	}
+	_ = peer.SetReadDeadline(time.Now().Add(time.Second))
+	for {
+		var frame proto.Envelope
+		if peer.ReadJSON(&frame) != nil {
+			break
+		}
+	}
+	select {
+	case other := <-peers:
+		_ = other.Close()
+		t.Fatal("reconnected before native cleanup settled")
+	default:
+	}
+	cancel()
+	close(native.confirm)
+	select {
+	case <-finished:
+	case <-time.After(3 * time.Second):
+		t.Fatal("confirmed cleanup failed to settle loop")
+	}
+	if native.closes.Load() != 2 {
+		t.Fatalf("Close calls=%d", native.closes.Load())
+	}
+	if _, err := os.Stat(control.path); !os.IsNotExist(err) {
+		t.Fatal("failed quiesce armed snapshot control")
 	}
 }

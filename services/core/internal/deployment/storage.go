@@ -96,6 +96,14 @@ type ReservationTx interface {
 	LoadReserved() (placement.Reserved, error)
 	// InsertAllocation stores the allocation of the Session's Environment.
 	InsertAllocation(allocation NewAllocation) (Allocation, error)
+	// CanReplaceAllocation verifies retained storage and settled, revoked prior ownership.
+	CanReplaceAllocation() (bool, error)
+	// LoadGenerationSpecification reads immutable storage requirements for placement.
+	LoadGenerationSpecification(generation uint64) (GenerationSpecification, error)
+	// LoadNodes reads eligible placement facts under the deployment lock.
+	LoadNodes() ([]placement.Node, error)
+	// ReservePlacement replaces the released reservation without changing historical receipts.
+	ReservePlacement(placement.Placement) error
 }
 
 // AllocationTx is one Session-locked allocation change. Each write applies to
@@ -128,6 +136,9 @@ type AllocationTx interface {
 
 // AllocationCleanupTx is one Session-locked allocation cleanup.
 type AllocationCleanupTx interface {
+	// CanRetainEnvironment checks the ready retained filesystem, completed
+	// initialization and selected Harness's qualified history under the Session lock.
+	CanRetainEnvironment(current Allocation) (bool, error)
 	AllocationTx
 	sessions.EnvironmentTerminationTx
 	// RevokeDevice revokes the allocation's device.
@@ -210,7 +221,7 @@ type Reader interface {
 	// AddressBindings counts what is bound to an installation address, read
 	// in one snapshot. publicURL is the address nodes are compared against.
 	AddressBindings(ctx context.Context, publicURL string) (AddressBindings, error)
-	// EnvironmentAllocation returns the Environment's allocation, including
+	// EnvironmentAllocation returns the Environment's latest allocation receipt, including
 	// for a deleted Session. It returns ErrInvalidInput for a malformed
 	// identifier and ErrNotFound for a missing allocation.
 	EnvironmentAllocation(ctx context.Context, key AllocationKey) (Allocation, error)
@@ -240,6 +251,10 @@ type Reader interface {
 	// ID, in ID order. It reads the committed placement and never selects a
 	// replacement node.
 	UnallocatedEnvironments(ctx context.Context, nodeID, after string) ([]UnallocatedEnvironment, error)
+	// RetainedNativeHistory reports the latest owner's persisted retention eligibility.
+	RetainedNativeHistory(ctx context.Context, key AllocationKey) (bool, error)
+	// ReplacementEnvironments lists retained Environments with pending input and no compute owner.
+	ReplacementEnvironments(ctx context.Context, after string) ([]UnallocatedEnvironment, error)
 	// LifecyclePlacement returns what routing the Environment to its
 	// lifecycle reads, including for a deleted Session. A missing Environment
 	// is sessions.ErrNotFound.

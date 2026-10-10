@@ -1,7 +1,7 @@
 ---
 title: 工作区文件系统 Provider
 source: docs/workspace-provider.md
-source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
+source_hash: 39d26eb96b553c925a46d1a2ae90fe4dc3d93fb21d5b9883e55656fd62e0f0fb
 ---
 
 独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有 Sandbox Provider 或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[Sandbox Provider](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
@@ -43,9 +43,9 @@ source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
 
 ## 生命周期与文件系统范围 {#lifetime-and-filesystem-scope}
 
-对象包含整个 `/environment` 目录树，包括工作区、暂存文件、初始化状态和包内容。它们位于同一文件系统，以保留 Environment 准备期间文件系统操作的语义。Harness 的私有原生历史和配置仍属于检查点状态，不重定向到工作区对象。
+对象包含整个 `/environment` 目录树，包括工作区、暂存文件、初始化状态、包内容，以及已具备资格的 Runtime 与 Harness 的私有原生历史。准备数据位于同一文件系统，以保留文件系统操作的语义。原生历史是工作区目录之外的私有状态；位置与设置由 [Runtime 资源目录](configuration.md#runtime-resource-directories)定义。凭据、临时 HOME 和其他计算本地状态不保证持久化。保留原生执行需要 [Core–Runtime 协议](runtime-protocol.md)中的能力声明；仅挂载持久存储并不足以证明支持。
 
-工作区存储随 Session 保留，直至显式删除 Session。归档、过期、重置和删除计算检查点均不授权删除工作区。Core 仅在显式删除 Session 且确认计算资源停止后调用 `Delete`；未解决的计算或存储变更须保留归属。Session 仍被保留时，创建失败不授权删除其存储。本契约不定义快照过期恢复。
+工作区存储随 Session 保留，直至显式删除 Session。归档、过期、重置和删除计算检查点均不授权删除工作区。Core 仅在显式删除 Session 且确认计算资源停止后调用 `Delete`；未解决的计算或存储变更须保留归属。Session 仍被保留时，创建失败不授权删除其存储。符合条件且未终结的 Session 可以在检查点保留期结束后继续保留，并按[冷替换生命周期](sandbox-provider.md#cold-replacement-after-checkpoint-retention)将同一对象挂载到新的计算资源。此流程不会复活已归档、重置或删除的执行。
 
 ## 内核 NFS 适配器 {#kernel-nfs-adapter}
 
@@ -59,4 +59,6 @@ source_hash: e9749e1aab1fc2135dcd92a843263243e4adccea393038c495fec67e114dbe83
 
 每个对象拥有 `objects/<ObjectID>/identity`、`staging/`、`live/`、`trash/`，以及删除开始后的 `deleted-marker`。永久标识绑定租户、Environment 和对象 UUID。Create 先准备并同步唯一的私有 staging 封装目录，再原子发布其非空目录为 `live`；重放不会覆盖现有 live 数据。Delete 先持久记录对象本地的终态标记，将 live 数据退役到唯一的对象本地 trash，再先删除数据、后删除其所有权标记。并发删除者收敛。最少量的标识和删除元数据会有意保留；删除不代表所有元数据文件均消失。Create 和 Resolve 拒绝已退役标识。迟到的在途 Create 可能留下空的受控元数据，需要在其系统调用完成后重复 Delete；它不能授权新写入者或复用对象标识。清理只查看该对象的 staging 和 trash，不全量扫描命名空间，也不使用后台服务。
 
-NFS 存储不提供计算 fencing 或自动分布式故障转移。Guest `flock` 不是跨 VM 写入者锁。上述单写入者和显式删除要求仍然必须遵守。共享文件系统保留 `/environment`，Harness 的私有原生历史仍在计算检查点内；因此，即使工作区文件仍然存在，原生快照过期仍可能导致私有历史丢失。保留工作区不代表原生快照 TTL 到期后仍可恢复原生执行。
+NFS 存储不提供计算 fencing 或自动分布式故障转移。Guest `flock` 不是跨 VM 写入者锁。上述单写入者和显式删除要求仍然必须遵守。确认释放后，可以允许另一兼容 node 上的新 VM 挂载同一对象，但 node 离线或 Create、Kill、快照清理结果未知均不证明旧写入方已停止。原生历史和数据库行为需要对所选 Runtime、Harness、文件系统组合进行资格验证；仅保留文件不保证原生 Session 恢复、跨 node 内存恢复或任意崩溃后的持久性。
+
+所选部署代次使用外部工作区存储时，Core 要求所选 Harness profile 支持 `retained_native_history`。创建流程在持有部署锁时校验该代次，然后才提交 Session 或计算预留。既有 Session 的 Runtime 准入和最终执行检查以不可变工作区绑定为依据。自带工作区存储不要求此能力。

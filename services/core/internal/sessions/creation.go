@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -73,6 +74,8 @@ type CreationTx interface {
 	// LockDeployment locks and reads the sandbox deployment, serializing
 	// hosted creation with deployment changes, restore and node removal.
 	LockDeployment(ctx context.Context) (placement.Deployment, error)
+	// LoadGenerationSpecification reads the retained generation selected under the deployment lock.
+	LoadGenerationSpecification(ctx context.Context, generation uint64) (json.RawMessage, error)
 	LoadNodes(ctx context.Context) ([]placement.Node, error)
 	ReservePlacement(ctx context.Context, chosen placement.Placement) error
 	// LockSkills locks the tenant's Skills in ID order, whatever the order of
@@ -222,6 +225,20 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 		}
 		chosen, err := s.rules.DecidePlacement(deployment, nodes)
 		if err != nil {
+			return nil, err
+		}
+		specification := deployment.Specification
+		if chosen != nil && chosen.Generation != deployment.Generation {
+			specification, err = tx.LoadGenerationSpecification(ctx, chosen.Generation)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var selected sandbox.DeploymentSpec
+		if err := json.Unmarshal(specification, &selected); err != nil {
+			return nil, err
+		}
+		if err := ValidateRetainedHistory(selected.Workspace != nil, input.SupportsRetainedNativeHistory); err != nil {
 			return nil, err
 		}
 		if chosen != nil {

@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 8fb6cbd0b8daed4686d1b6829a49e799f03bb78c6bdb1f93cdb9a4518fec4f8f
+source_hash: ac67b8c7a651bae18588cd5c845b40ab4d9c89382ae9f2599a039a27f300c1c2
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -213,9 +213,11 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 - 设置命令使用 Bash 运行；在 Windows 上必须使用 Git Bash，且不能由其他 shell 替代。默认工作目录为 `/workspace`。
 - 在 Windows 上，npm 安装以及名为 `npm` 或 `npx` 的 stdio MCP 命令（包括其 `.cmd` shim）会通过 Node 调用 npm 的 JavaScript 入口点运行，而不经过额外的 shell。
 
-初始化目录和软件包目录默认分别是 Runtime 主目录（`OAC_RUNTIME_HOME`）下的 `initialization` 和 `packages`，也可通过 `OAC_RUNTIME_INITIALIZATION_DIRECTORY` 和 `OAC_RUNTIME_PACKAGE_DIRECTORY` 设置；打包的 Linux 镜像使用 `/environment/initialization` 和 `/environment/packages`。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
+[Runtime 资源目录](../../../docs/zh/configuration.md#runtime-resource-directories)定义初始化、软件包和私有状态的位置。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
 
 每条命令都使用启动用户的权限和主机网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
+
+使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[Sandbox Provider 生命周期](../../../docs/zh/sandbox-provider.md#suspension)定义何时可以替换计算。
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 

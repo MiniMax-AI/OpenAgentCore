@@ -23,13 +23,15 @@ const terminalSendTimeout = 2 * time.Second
 // sessionConfig is the cross-cutting knob bag; production callers use
 // defaultSessionConfig.
 type sessionConfig struct {
+	stateRoot   string
 	codexBinary string
 	logger      *slog.Logger
 	killTimeout time.Duration
 }
 
-func defaultSessionConfig() sessionConfig {
+func defaultSessionConfig(stateRoot string) sessionConfig {
 	return sessionConfig{
+		stateRoot:   stateRoot,
 		codexBinary: defaultBinary(),
 		logger:      obslog.Bg(),
 		killTimeout: rpcKillTimeout,

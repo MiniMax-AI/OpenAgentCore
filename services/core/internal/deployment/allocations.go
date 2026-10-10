@@ -46,13 +46,22 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 		if err != nil {
 			return err
 		}
-		if found {
+		if found && existing.State != "released" {
 			if existing.ProviderKey != installation {
 				return ErrAllocationConflict
 			}
 			existing.Replayed = true
 			result = existing
 			return nil
+		}
+		if found {
+			allowed, err := tx.CanReplaceAllocation()
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				return ErrAllocationConflict
+			}
 		}
 		// Existing receipts replay first, so retries and cleanup continue
 		// while admission is closed.
@@ -177,7 +186,19 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 		if revoked.SessionDeleted {
 			err = sessions.CancelWork(ctx, tx)
 		} else {
-			err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, nil)
+			retain := false
+			if revoked.Expired {
+				retain, err = tx.CanRetainEnvironment(revoked)
+				if err != nil {
+					return err
+				}
+			}
+			// Compute retention ends independently of the Session only when its
+			// initialized filesystem and native history can continue on new compute.
+			// Explicit archive/reset makes this locked eligibility check false.
+			if !retain {
+				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, nil)
+			}
 		}
 		if err != nil {
 			return err

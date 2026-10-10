@@ -64,6 +64,7 @@ type Device struct {
 	EnvironmentID       pgtype.UUID        `json:"environment_id"`
 	ExecutorKeyID       pgtype.UUID        `json:"executor_key_id"`
 	ArchiveCancelTurnID pgtype.UUID        `json:"archive_cancel_turn_id"`
+	SupportedAgentKinds []byte             `json:"supported_agent_kinds"`
 }
 
 type Environment struct {
@@ -349,6 +350,13 @@ type RuntimePlacement struct {
 	ReservedAt           pgtype.Timestamptz `json:"reserved_at"`
 	ReleasedAt           pgtype.Timestamptz `json:"released_at"`
 	DeploymentGeneration pgtype.Int8        `json:"deployment_generation"`
+}
+
+type RuntimeResetRetainedEnvironment struct {
+	EnvironmentID        pgtype.UUID `json:"environment_id"`
+	SessionID            pgtype.UUID `json:"session_id"`
+	TenantID             pgtype.UUID `json:"tenant_id"`
+	DeploymentGeneration pgtype.Int8 `json:"deployment_generation"`
 }
 
 type Session struct {

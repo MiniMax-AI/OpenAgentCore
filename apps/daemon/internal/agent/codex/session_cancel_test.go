@@ -116,7 +116,7 @@ func cancellationTestSession(t *testing.T) (*Session, *TestClient, ServerSide) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	s := &Session{rpc: client.JSONRPCClient, cancelCtx: ctx, cancelFn: cancel,
-		cfg: defaultSessionConfig(), out: make(chan proto.Envelope, 8), bufs: NewItemBuffers()}
+		cfg: defaultSessionConfig(testStateRoot(t)), out: make(chan proto.Envelope, 8), bufs: NewItemBuffers()}
 	return s, client, server
 }
 

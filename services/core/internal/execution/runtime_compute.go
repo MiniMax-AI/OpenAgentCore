@@ -231,13 +231,13 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	if state.Target == nil || state.Snapshot == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
+	spec, err := r.workspaceSpecification(ctx, owner.Key(), owner.ID)
+	if err != nil {
+		return err
+	}
 	var workspace *workspacefs.Binding
-	if r.config.Workspace != nil {
-		if r.workspaces == nil {
-			return workspacefs.ErrUnavailable
-		}
-		var err error
-		workspace, err = r.workspaces.GetReady(ctx, owner.TenantID, owner.EnvironmentID, r.config.WorkspaceRequirements, r.config.Resources.EnvironmentDiskMiB)
+	if spec.Workspace != nil {
+		workspace, err = r.workspaces.GetReady(ctx, owner.TenantID, owner.EnvironmentID, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
 		if err == nil && workspace == nil {
 			err = workspacefs.ErrNotFound
 		}

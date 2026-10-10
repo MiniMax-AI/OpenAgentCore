@@ -102,6 +102,11 @@ func (t *creationTx) LockDeployment(ctx context.Context) (placement.Deployment, 
 	return placementpg.LockDeployment(ctx, t.q)
 }
 
+func (t *creationTx) LoadGenerationSpecification(ctx context.Context, generation uint64) (json.RawMessage, error) {
+	row, err := t.q.GetSandboxGeneration(ctx, int64(generation))
+	return row.Specification, err
+}
+
 func (t *creationTx) LoadNodes(ctx context.Context) ([]placement.Node, error) {
 	return placementpg.LoadNodes(ctx, t.q)
 }

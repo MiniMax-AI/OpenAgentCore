@@ -2,6 +2,7 @@ package sessionpg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -196,12 +197,19 @@ func (s *Store) TouchDevice(ctx context.Context, device string) (bool, error) {
 	return n > 0, err
 }
 
-func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string) (bool, error) {
+func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error) {
 	id, err := parseID(device)
 	if err != nil {
 		return false, err
 	}
-	n, err := s.units.Queries().TouchAuthenticatedDevice(ctx, sqlc.TouchAuthenticatedDeviceParams{ID: id, CredentialHash: credentialHash})
+	if kinds == nil {
+		kinds = []runtimedevice.SupportedAgentKind{}
+	}
+	raw, err := json.Marshal(kinds)
+	if err != nil {
+		return false, err
+	}
+	n, err := s.units.Queries().TouchAuthenticatedDevice(ctx, sqlc.TouchAuthenticatedDeviceParams{ID: id, CredentialHash: credentialHash, SupportedAgentKinds: raw})
 	return n > 0, err
 }
 
