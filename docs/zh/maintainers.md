@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 494618f4d605d96bfcb9b1413f8224722324e1037764cc5b38baca102a8f1e90
+source_hash: f91505a6502e09cc13b5ece7cb4ba578f6d2861621d70a1f836f89dcf9299ea4
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -35,7 +35,7 @@ make build-core-distribution
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | 原生安装器目录；请参阅[原生安装器](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | `~/.oac` 下的输出目录。默认值：`~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker 构建网络：`default`、`host` 或 `none` |
-| `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | 已缓存的 microsandbox 发布归档。默认值：`~/.oac/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz`，缺失时下载 |
+| `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | 已缓存的 microsandbox 发布归档。默认值：`~/.oac/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz`，缺失时下载 |
 | `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 镜像；默认值通过其 linux/amd64 清单摘要固定 |
 
 构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交和源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装器在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装器资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
@@ -105,16 +105,16 @@ make build-e2b-provider
 
 Docker 使用固定版本的 CPython 和 Debian 12 镜像按 `GOARCH=amd64`（默认）或 `GOARCH=arm64` 构建 Linux 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`。构建结果完全由辅助程序源代码、`LICENSE` 和构建脚本决定，因此会按它们的哈希缓存在 `~/.oac/cache/e2b-provider/` 下，仅在它们变化时重新构建。输出为 `oac-e2b-provider-linux-<architecture>.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像使用该目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
 
-**microsandbox 辅助程序。** 仅支持 Linux，并且需要 C 编译器：
+**microsandbox 辅助程序。** 仅支持 Linux amd64，并且需要 C 编译器：
 
 ```sh
 make build-microsandbox-provider
 make check-microsandbox-provider
 ```
 
-该辅助程序会写入 `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`。其独立的 Go 模块固定 microsandbox Go SDK v0.7.2，并嵌入匹配的 FFI 库；构建生产版本时，绝不能使用该 SDK 的 `microsandbox_ffi_path` 标签。Core 本身仍采用禁用 CGO 的构建。该辅助程序需要 glibc，并且只能在节点上运行。
+该辅助程序会写入 `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`。其独立的 Go 模块固定官方 microsandbox SDK 源码提交。上述两个命令与分发构建均使用 `scripts/build-microsandbox-provider.py`：它暂存模块依赖，验证匹配的官方 FFI 发行文件校验和，填充 SDK 的空发行包，并构建嵌入该 FFI 的程序。SDK 源码保持不变，仓库不提交 vendored 二进制文件。请使用此入口，而非直接调用 `go build`；构建生产版本时，绝不能使用该 SDK 的 `microsandbox_ffi_path` 标签。Core 本身仍采用禁用 CGO 的构建。该辅助程序需要 glibc，并且只能在节点上运行。
 
-**microsandbox 运行时。** 分发包使用官方的 [v0.7.2 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.2) 归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
+**microsandbox 运行时。** 分发包使用官方的 [v0.7.8 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.8) 归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `86f9f72dc3e639c7175bc07909b4b63ce412517c1ef8a2e1921171af5682fded`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
 
 ### 独立 Core 构建 {#standalone-core-builds}
 

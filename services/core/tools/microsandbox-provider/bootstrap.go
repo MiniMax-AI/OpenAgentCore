@@ -107,7 +107,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		return wire.Response{}, sandbox.ErrCommandUnconfirmed
 	}
 	// Persist the final bootstrap receipt without restarting the live guest.
-	// v0.7.2 cannot update active labels; ownership reads persisted config.
+	// v0.7.8 cannot update active labels; ownership reads persisted config.
 	_, e = live.Modify(ctx, sdk.ModifyOptions{Labels: map[string]string{bootstrapLabel: "complete"}, Policy: sdk.ModificationPolicyNextStart})
 	if e != nil {
 		return wire.Response{}, e

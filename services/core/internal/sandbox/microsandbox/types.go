@@ -10,7 +10,7 @@ import (
 )
 
 const ProtocolVersion = 4
-const SDKVersion = "v0.7.2"
+const SDKVersion = "v0.7.8"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
 const MaxResponseBytes = 16 * 1024 * 1024

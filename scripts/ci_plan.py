@@ -78,6 +78,7 @@ RULES = (
     (("scripts/build-native-", "scripts/native-"), SCRIPTS, ("native", "backend", "distribution")),
     (("scripts/build-core.sh", "scripts/build-core-image-context.sh"), (".sh",), ("backend", "api", "distribution", "native")),
     (("deploy/distribution/",), ("Dockerfile",), ("backend", "api", "distribution", "native", "compose")),
+    (("scripts/build-microsandbox-provider.",), (".py",), ("backend", "distribution")),
     (("scripts/build-e2b-provider.sh",), (".sh",), ("backend", "api", "distribution")),
     (("scripts/build-claude", "scripts/check-claude", "scripts/build-mcode", "scripts/prepare-release-runtimes.sh"),
      SCRIPTS, ("harness", "native", "backend", "distribution")),

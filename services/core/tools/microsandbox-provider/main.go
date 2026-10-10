@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"debug/elf"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,9 @@ import (
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
+
+//go:embed go.mod
+var moduleDefinition string
 
 func main() {
 	// The inherited node generation lease covers this helper's actual lifetime.
@@ -207,6 +211,16 @@ func allocationLock(q wire.Request) (*allocationGuard, error) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+func sdkModuleVersion() string {
+	for _, line := range strings.Split(moduleDefinition, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "github.com/superradcompany/microsandbox/sdk/go" {
+			return fields[1]
+		}
+	}
+	return ""
+}
+
 func checkInstallation(c wire.Config) error {
 	build, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -215,7 +229,7 @@ func checkInstallation(c wire.Config) error {
 	matched := false
 	for _, d := range build.Deps {
 		if d.Path == "github.com/superradcompany/microsandbox/sdk/go" {
-			matched = d.Version == wire.SDKVersion && d.Replace == nil
+			matched = d.Version == sdkModuleVersion() && d.Replace == nil
 		}
 	}
 	if !matched {
@@ -268,6 +282,13 @@ func checkInstallation(c wire.Config) error {
 	}
 	if runtime.MSBPath != c.RuntimePath || runtime.LibkrunfwPath != c.FirmwarePath {
 		return sandbox.ErrOwnership
+	}
+	nativeVersion, e := sdk.RuntimeVersion()
+	if e != nil {
+		return e
+	}
+	if sdk.SDKVersion() != strings.TrimPrefix(wire.SDKVersion, "v") || nativeVersion != sdk.SDKVersion() {
+		return sandbox.ErrInvalid
 	}
 	selected, e := sdk.DefaultBackendInfo()
 	if e != nil {
