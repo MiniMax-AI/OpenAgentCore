@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 75ead1a81873a6fd67451b9beacb530bf156cdeefcc8dd0add74d5c5d4404484
+source_hash: 6bfcaa201c332aa1907f6ab7b0e0ffde4c8f635b363dbea2d0633947615e7264
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -107,7 +107,7 @@ Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` �
 
 ### 独立工作区存储 {#independent-workspace-storage}
 
-首个支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出；不要启用 `no_root_squash` 或放宽权限来使检查通过。按照适配器的[所有权要求](./workspace-provider.md#kernel-nfs-adapter)准备命名空间和服务身份。
+首个支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。新安装应先准备存储和服务账户，再向 Core 暴露挂载、选择存储、配置 microsandbox，最后注册节点。启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出；不要启用 `no_root_squash` 或放宽权限来使检查通过。按照适配器的[所有权要求](./workspace-provider.md#kernel-nfs-adapter)准备命名空间和服务身份。
 
 Core 的 Compose 服务已使用 UID 65532 运行。添加节点前，创建同 UID 的 `oac-node`，主目录为 `/var/lib/oac-node`，使用 nologin shell 和非零主组。附加组只能包含其主组、`docker` 和 `kvm`；已有主目录必须属于该账户。安装器会接管此账户。如果没有预创建账户，安装器分配的系统 UID 不一定与 Core 一致。注册前应通过主机管理流程解决已有 UID 或账户冲突；修改运行中账户的 UID 不属于存储配置步骤。
 
@@ -125,7 +125,7 @@ services:
           create_host_path: false
 ```
 
-按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core key 调用 `PUT /core/v1/workspace-storage` 选择存储。分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构：
+按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core key 调用 `PUT /core/v1/workspace-storage` 选择存储。首次设置时，分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构。恢复时保留已有标识。选择操作会在 Core 中运行适配器的可用性、所有权和 xattr 检查；它不证明每个节点均能解析该挂载：
 
 ```json
 {
@@ -139,7 +139,7 @@ services:
 }
 ```
 
-随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，将 `resources.environment_disk_mib` 设为 `0`，并保留所需计算资源、Runtime 和 Provider 配置。正数表示请求配额，本适配器不实施此配额，因此会拒绝。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。Web 没有工作区存储编辑器。
+随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，将 `resources.environment_disk_mib` 设为 `0`，并保留所需计算资源、Runtime 和 Provider 配置。正数表示请求配额，本适配器不实施此配额，因此会拒绝。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。Web 没有工作区存储编辑器。选择文件系统和部署后，通过 **Nodes → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
 
 ### 节点容量 {#node-capacity}
 

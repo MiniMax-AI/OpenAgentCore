@@ -103,7 +103,7 @@ Which harnesses are enabled, and the default one, are process settings (`core.ha
 
 ### Independent workspace storage
 
-The initial supported independent filesystem combination is microsandbox with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Mount the same NFSv4.2 export on the Linux Core host and every participating node before starting their services, at the same absolute path, for example `/srv/oac-workspaces`. The operator manages the export, mount availability and service startup ordering. Use a trusted-client AUTH_SYS export with `root_squash`; do not enable `no_root_squash` or broaden permissions to make a check pass. Prepare the namespace and service principals according to the adapter's [ownership requirements](./workspace-provider.md#kernel-nfs-adapter).
+The initial supported independent filesystem combination is microsandbox with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). For a new installation, prepare storage and service accounts first, expose the mount to Core, select storage, configure microsandbox, then enroll nodes. Mount the same NFSv4.2 export on the Linux Core host and every participating node before starting their services, at the same absolute path, for example `/srv/oac-workspaces`. The operator manages the export, mount availability and service startup ordering. Use a trusted-client AUTH_SYS export with `root_squash`; do not enable `no_root_squash` or broaden permissions to make a check pass. Prepare the namespace and service principals according to the adapter's [ownership requirements](./workspace-provider.md#kernel-nfs-adapter).
 
 Core's Compose service already runs as UID 65532. Before adding a node, prepare `oac-node` with the same UID, home `/var/lib/oac-node`, a nologin shell and a nonzero primary group. Its supplementary groups may contain only its primary group, `docker` and `kvm`; an existing home must belong to that account. The installer adopts this account. Without a precreated account it allocates a system UID, which need not match Core. Resolve an existing UID or account conflict as a host administration task before enrollment; changing a running account's UID is not part of storage setup.
 
@@ -121,7 +121,7 @@ services:
           create_host_path: false
 ```
 
-Select storage using `PUT /core/v1/workspace-storage` with the Core key as described in the [administration API](../contracts/agents-api/admin-api.md#workspace-storage). Generate separate canonical UUIDs for the immutable configuration `id` and the namespace marker, then submit this shape with your actual values:
+Select storage using `PUT /core/v1/workspace-storage` with the Core key as described in the [administration API](../contracts/agents-api/admin-api.md#workspace-storage). For first-time setup, generate separate canonical UUIDs for the immutable configuration `id` and the namespace marker, then submit this shape with your actual values. Restores retain their existing identities. Selection runs the adapter's availability, ownership and xattr checks in Core; it does not prove that every node can resolve the mount:
 
 ```json
 {
@@ -135,7 +135,7 @@ Select storage using `PUT /core/v1/workspace-storage` with the Core key as descr
 }
 ```
 
-Then create or update the microsandbox deployment through the [sandbox deployment API](../contracts/agents-api/sandbox-deployment.md#routes), setting `resources.environment_disk_mib` to `0` and retaining the required compute resources, Runtime and provider configuration. A positive value requests a quota that this adapter does not enforce and is rejected. Deployment workspace requirements and each Session's attachment are derived from the selected database configuration; do not add a filesystem field to the deployment or a second storage configuration to node files. Web has no workspace storage editor.
+Then create or update the microsandbox deployment through the [sandbox deployment API](../contracts/agents-api/sandbox-deployment.md#routes), setting `resources.environment_disk_mib` to `0` and retaining the required compute resources, Runtime and provider configuration. A positive value requests a quota that this adapter does not enforce and is rejected. Deployment workspace requirements and each Session's attachment are derived from the selected database configuration; do not add a filesystem field to the deployment or a second storage configuration to node files. Web has no workspace storage editor. After the filesystem and deployment are selected, use **Nodes → Add node** to enroll the prepared hosts. Connected, ready compute alone does not qualify an external filesystem; validate actual Session creation and access through each participating node before admitting application traffic. Include the independent namespace in the [stopped-write backup and restore procedure](./getting-started/operations.md#back-up).
 
 ### Node capacity
 
