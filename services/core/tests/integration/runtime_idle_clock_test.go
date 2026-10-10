@@ -72,7 +72,7 @@ func verifyManagedIdleClock(t *testing.T, s, w *Store, owner deployment.Allocati
 		t.Fatal("new completion admitted premature idle", err)
 	}
 	// Advance only the internal activity age; the remote public timestamp remains unchanged.
-	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", owner.ID)
+	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", owner.ID)
 	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); err != nil {
 		t.Fatal("remote timestamp delayed elapsed idle timer", err)
 	}

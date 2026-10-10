@@ -74,7 +74,7 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 		t.Fatal(err)
 	}
 	f.persist(t)
-	s := &Session{runID: "run", nativeHome: f.home, rpc: client.JSONRPCClient, out: out, cancelCtx: ctx, cancelFn: cancel, cfg: defaultSessionConfig(), bufs: NewItemBuffers()}
+	s := &Session{runID: "run", nativeHome: f.home, rpc: client.JSONRPCClient, out: out, cancelCtx: ctx, cancelFn: cancel, cfg: defaultSessionConfig(testStateRoot(t)), bufs: NewItemBuffers()}
 	s.setThreadID("root")
 	s.beginRootTurn("root", "root-turn")
 	s.startSubagentObservations()

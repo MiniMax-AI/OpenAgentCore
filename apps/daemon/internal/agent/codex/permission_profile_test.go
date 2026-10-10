@@ -12,7 +12,7 @@ func TestRuntimeUsesHostPermissions(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	{
 		req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}}
-		plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{})
+		plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -27,7 +27,7 @@ func TestRuntimeUsesHostPermissions(t *testing.T) {
 		plan.Cleanup()
 		for _, network := range []string{"disabled", "restricted"} {
 			req.LocalEnvironment.NetworkAccess = network
-			if _, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{}); err == nil {
+			if _, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)}); err == nil {
 				t.Fatal("unsupported network admitted")
 			}
 		}
@@ -49,7 +49,7 @@ func TestSelfHostedToolEnvironmentCannotRedirectNativeHistory(t *testing.T) {
 		t.Setenv(key, value)
 	}
 	req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled"}}
-	plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{})
+	plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)})
 	if err != nil {
 		t.Fatal(err)
 	}

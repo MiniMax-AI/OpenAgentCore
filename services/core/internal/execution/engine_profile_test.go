@@ -149,3 +149,31 @@ func TestCommonOnlyValidationPreservesFunctionResults(t *testing.T) {
 		t.Fatal("common-only result acquired a native restriction", err)
 	}
 }
+
+func TestRetainedNativeHistoryDependsOnExternalWorkspace(t *testing.T) {
+	for _, required := range []bool{false, true} {
+		for _, supported := range []bool{false, true} {
+			if err := sessions.ValidateRetainedHistory(required, supported); (err == nil) != (!required || supported) {
+				t.Fatal(required, supported, err)
+			}
+		}
+	}
+	for _, qualified := range []bool{false, true} {
+		profile := enginetest.Profile(func(p *engine.Profile) {
+			p.Placements = []string{"openai_hosted"}
+			p.RetainedNativeHistory = proto.CapabilityFromBool(qualified)
+		})
+		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"test_harness": profile})}
+		if err := policy.ValidateSessionConfiguration("test_harness", json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted"}}`)); err != nil {
+			t.Fatal("generic hosted configuration acquired a storage requirement", qualified, err)
+		}
+		for _, external := range []bool{false, true} {
+			for _, runtimeSupported := range []bool{false, true} {
+				err := policy.validateEnvironmentHistory("test_harness", sessions.Environment{ExternalWorkspace: external}, runtimeSupported)
+				if (err == nil) != (!external || qualified && runtimeSupported) {
+					t.Fatal(external, qualified, runtimeSupported, err)
+				}
+			}
+		}
+	}
+}

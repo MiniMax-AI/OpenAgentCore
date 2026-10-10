@@ -126,6 +126,17 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	if err != nil {
 		return err
 	}
+	placement, err := parseEnvironmentPlacement(environment.Configuration)
+	if err != nil {
+		return err
+	}
+	if placement.Type == "openai_hosted" {
+		info, found, known := peer.AgentKindStatus(owner.Engine)
+		if !known || !found || !info.Available || w.dispatcher.validateEnvironmentHistory(owner.Engine, environment, info.Capabilities.RetainedNativeHistory) != nil {
+			*failure = sessions.ProvisioningFailure{Step: sessions.ProvisioningHarness}
+			return sessions.ErrInvalidInput
+		}
+	}
 	identity := agentcapabilities.Identity{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID}
 	operations := setupOperations(setup)
 	for index := 0; index < len(cfg.Files)+len(operations); index++ {

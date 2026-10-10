@@ -211,9 +211,11 @@ The daemon runs as its launching account and never uses sudo or raises its permi
 - Setup commands run with Bash; on Windows, Git Bash is required and no other shell substitutes. The default working directory is `/workspace`.
 - On Windows, npm installation and stdio MCP commands named `npm` or `npx` (including their `.cmd` shims) run through npm's JavaScript entry point with Node, without an extra shell.
 
-Initialization and package directories default to `initialization` and `packages` under the Runtime home (`OAC_RUNTIME_HOME`) and can be set with `OAC_RUNTIME_INITIALIZATION_DIRECTORY` and `OAC_RUNTIME_PACKAGE_DIRECTORY`; packaged Linux images use `/environment/initialization` and `/environment/packages`. These are resource paths, never Environment-source or operating-system switches in Core.
+[Runtime resource directories](../../docs/configuration.md#runtime-resource-directories) define the initialization, package and private state locations. These are resource paths, never Environment-source or operating-system switches in Core.
 
 Every command uses the launching user's permissions and the host network. Process ownership waits for exit and I/O settlement. Command output is discarded; a confirmed failure keeps only a bounded integer exit status.
+
+When hosted compute uses external workspace storage and is replaced, only the retained Environment filesystem and the qualified Harness's private native history persist. Setup commands are not replayed. Setup and tools can write other locations permitted to the launching user, but changes on the temporary system disk, process memory and background processes are not preserved by cold continuation. Store durable outputs in the workspace and use the declared package installation paths; the [Sandbox Provider lifecycle](../../docs/sandbox-provider.md#suspension) defines when compute can be replaced.
 
 ### Explicit local tool environment
 

@@ -53,7 +53,7 @@ func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerK
 
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
-    GREATEST(a.compute_activity_at,
+    GREATEST(a.compute_activity_at, a.compute_phase_changed_at,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
     (EXISTS (SELECT 1 FROM turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
      OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
@@ -116,7 +116,7 @@ func (q *Queries) RecordRuntimeTerminalActivity(ctx context.Context, sessionID p
 const runtimeComputeBlocksAdmission = `-- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    WHERE e.session_id = $1 AND a.compute_phase NOT IN ('disabled', 'running')
+    WHERE e.session_id = $1 AND a.state <> 'released' AND a.compute_phase NOT IN ('disabled', 'running')
 )::boolean
 `
 
@@ -130,7 +130,7 @@ func (q *Queries) RuntimeComputeBlocksAdmission(ctx context.Context, sessionID p
 const sessionHasRuntimeNode = `-- name: SessionHasRuntimeNode :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    WHERE e.session_id = $1 AND a.node_id IS NOT NULL
+    WHERE e.session_id = $1 AND a.state <> 'released' AND a.node_id IS NOT NULL
 )::boolean
 `
 

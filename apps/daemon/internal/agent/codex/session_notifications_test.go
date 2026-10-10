@@ -12,7 +12,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 	for _, childStarted := range []bool{false, true} {
 		t.Run(map[bool]string{false: "child without thread started", true: "child thread started"}[childStarted], func(t *testing.T) {
 			out := make(chan proto.Envelope, 64)
-			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(),
+			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)),
 				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), observeMessages: true}
 			s.registerHandlers()
 			s.setThreadID("root")
@@ -96,7 +96,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 }
 
 func TestNotificationsCannotEstablishRootIdentity(t *testing.T) {
-	s := &Session{cfg: defaultSessionConfig(), rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers()}
+	s := &Session{cfg: defaultSessionConfig(testStateRoot(t)), rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers()}
 	s.registerHandlers()
 	scopeNotification(t, s, "thread/started", `{"thread":{"id":"unrelated"}}`)
 	scopeNotification(t, s, "turn/started", `{"threadId":"unrelated","turn":{"id":"unrelated-turn"}}`)
@@ -116,7 +116,7 @@ func TestRootNativeErrorNotification(t *testing.T) {
 		for _, location := range []string{"error notification", "completion"} {
 			t.Run(name+"/"+location, func(t *testing.T) {
 				out := make(chan proto.Envelope, 4)
-				s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(), rpc: NewJSONRPCClient(JSONRPCConfig{})}
+				s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)), rpc: NewJSONRPCClient(JSONRPCConfig{})}
 				s.registerHandlers()
 				s.setThreadID("root")
 				scopeNotification(t, s, "turn/started", `{"threadId":"root","turn":{"id":"turn"}}`)

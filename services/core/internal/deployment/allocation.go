@@ -116,6 +116,8 @@ type UnallocatedEnvironment struct{ ID, TenantID string }
 // lifecycle reads: the deployment's provider and mode, the Environment's
 // allocation and the node placement its Session reserved.
 type LifecyclePlacement struct {
+	// Specification belongs to the current allocation or reserved generation.
+	Specification  json.RawMessage
 	Provider, Mode string
 	// AllocationID and AllocationNodeID are empty without an allocation or
 	// its node.

@@ -310,23 +310,9 @@ func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) erro
 // restoreWorkspace follows the allocation's immutable generation, never the
 // current deployment's filesystem selection or sizing.
 func (r *runtimeLifecycle) restoreWorkspace(ctx context.Context, owner deployment.Allocation) (*workspacefs.Binding, error) {
-	record, err := r.reader.Allocation(ctx, runtimeReference(owner))
+	spec, err := r.workspaceSpecification(ctx, owner.Key(), owner.ID)
 	if err != nil {
 		return nil, err
-	}
-	if record.ID != owner.ID || record.InstallationID != owner.ProviderKey || record.Generation != owner.DeploymentGeneration || record.Released {
-		return nil, sandbox.ErrOwnership
-	}
-	raw := record.Deployment.Specification
-	if record.Generation != record.Deployment.Generation {
-		if record.Retained == nil || record.Retained.Generation != record.Generation {
-			return nil, sandbox.ErrOwnership
-		}
-		raw = record.Retained.Specification
-	}
-	var spec sandbox.DeploymentSpec
-	if err := json.Unmarshal(raw, &spec); err != nil {
-		return nil, sandbox.ErrInvalid
 	}
 	if spec.Workspace == nil {
 		return nil, nil

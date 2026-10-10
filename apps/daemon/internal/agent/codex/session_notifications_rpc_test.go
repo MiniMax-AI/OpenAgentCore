@@ -19,7 +19,7 @@ func TestRootRPCNotificationOrdering(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				defer cancel()
 				out := make(chan proto.Envelope, 16)
-				s := &Session{runID: "run", out: out, rpc: client.JSONRPCClient, cancelCtx: ctx, bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
+				s := &Session{runID: "run", out: out, rpc: client.JSONRPCClient, cancelCtx: ctx, bufs: NewItemBuffers(), cfg: defaultSessionConfig(testStateRoot(t))}
 				s.registerHandlers()
 				barrier := make(chan struct{}, 1)
 				client.OnNotification("test/barrier", func(json.RawMessage) { barrier <- struct{}{} })
@@ -132,7 +132,7 @@ func TestThreadRPCResponseRequiresRootIdentity(t *testing.T) {
 			defer cleanup()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			s := &Session{rpc: client.JSONRPCClient, cancelCtx: ctx, cfg: defaultSessionConfig()}
+			s := &Session{rpc: client.JSONRPCClient, cancelCtx: ctx, cfg: defaultSessionConfig(testStateRoot(t))}
 			s.registerHandlers()
 			result := make(chan error, 1)
 			go func() { result <- s.resumeThread("root", SessionPlan{}) }()

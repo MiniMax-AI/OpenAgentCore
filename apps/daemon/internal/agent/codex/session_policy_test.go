@@ -16,7 +16,7 @@ func TestThreadRequestsApplyDeploymentPolicy(t *testing.T) {
 			for _, method := range []string{"thread/start", "thread/resume"} {
 				t.Run(method, func(t *testing.T) {
 					t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-					plan, _, err := prepareSessionPlan(context.Background(), proto.PromptRequestPayload{AgentStateKey: "conv/agent/codex", DisableSubagents: true, DisableExecutionEnvironment: true}, sessionConfig{})
+					plan, _, err := prepareSessionPlan(context.Background(), proto.PromptRequestPayload{AgentStateKey: "conv/agent/codex", DisableSubagents: true, DisableExecutionEnvironment: true}, sessionConfig{stateRoot: testStateRoot(t)})
 					if err != nil {
 						t.Fatal(err)
 					}

@@ -518,6 +518,7 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
 				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
 				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),
+				RetainedNativeHistory: info.Capabilities.RetainedNativeHistory.IsSupported(),
 				MessageItems:          info.Capabilities.MessageItems.IsSupported(),
 
 				ToolObservations:               info.Capabilities.ToolObservations.IsSupported(),

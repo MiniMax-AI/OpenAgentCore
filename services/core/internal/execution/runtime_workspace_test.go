@@ -93,7 +93,9 @@ func TestRuntimeWorkspaceConvergesBeforeComputeReservation(t *testing.T) {
 				}
 				return stop
 			}})
-			r := &runtimeLifecycle{sessions: workspaceEnvironmentReader{}, deployment: operations, reader: &strictDeploymentReader{t: t, environmentAllocation: func(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
+			r := &runtimeLifecycle{sessions: workspaceEnvironmentReader{}, deployment: operations, reader: &strictDeploymentReader{t: t, lifecyclePlacement: func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error) {
+				return deployment.LifecyclePlacement{Specification: []byte(`{"workspace":{"attachment":"host_directory"}}`)}, nil
+			}, environmentAllocation: func(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
 				return deployment.Allocation{}, deployment.ErrNotFound
 			}}, workspaces: workspaces.NewExecution(f, f, workspaceControls{f}, heldLease{}), config: RuntimeProvider{Mode: "direct", Generation: 1, InstallationID: uuid.NewString(), Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory}, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
 			_, err := r.provision(t.Context(), f.record.Reference.TenantID, f.record.Reference.EnvironmentID, r.config.InstallationID)
@@ -151,7 +153,9 @@ func TestOwnedGenerationDoesNotAdoptLaterFilesystemSelection(t *testing.T) {
 	_, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, &strictDeploymentReader{t: t}, &strictExecutionStorage{t: t, withReservation: func(context.Context, deployment.AllocationKey, func(sessions.LockedSession, deployment.ReservationTx) error) error {
 		return stop
 	}})
-	r := &runtimeLifecycle{sessions: workspaceEnvironmentReader{}, deployment: operations, reader: &strictDeploymentReader{t: t, environmentAllocation: func(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
+	r := &runtimeLifecycle{sessions: workspaceEnvironmentReader{}, deployment: operations, reader: &strictDeploymentReader{t: t, lifecyclePlacement: func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error) {
+		return deployment.LifecyclePlacement{Specification: []byte(`{}`)}, nil
+	}, environmentAllocation: func(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
 		return deployment.Allocation{}, deployment.ErrNotFound
 	}}, workspaces: workspaces.NewExecution(f, f, workspaceControls{f}, heldLease{}), config: RuntimeProvider{Mode: "direct", Generation: 1, InstallationID: uuid.NewString()}}
 	_, err := r.provision(t.Context(), f.record.Reference.TenantID, f.record.Reference.EnvironmentID, r.config.InstallationID)

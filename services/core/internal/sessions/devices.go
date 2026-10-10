@@ -94,7 +94,7 @@ type DeviceStorage interface {
 	TouchDevice(ctx context.Context, device string) (bool, error)
 	// TouchAuthenticatedDevice records that the device was seen with the
 	// credential and reports whether that credential still has authority.
-	TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string) (bool, error)
+	TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error)
 	// WithEnrollment authenticates the executor credential for the
 	// Environment, then runs apply in the transaction of the Environment's
 	// Session, with the Environment and what the Session lock shows. A
@@ -148,7 +148,7 @@ func (s *Service) TouchRuntimeHeartbeat(ctx context.Context, device string) (run
 // credential the gateway authenticated. A credential that lost its authority
 // reports Deleted.
 func (s *Service) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat runtimedevice.Heartbeat) (runtimedevice.HeartbeatStatus, error) {
-	current, err := s.storage.TouchAuthenticatedDevice(ctx, heartbeat.RuntimeID, heartbeat.CredentialHash)
+	current, err := s.storage.TouchAuthenticatedDevice(ctx, heartbeat.RuntimeID, heartbeat.CredentialHash, heartbeat.SupportedAgentKinds)
 	if err != nil {
 		return runtimedevice.HeartbeatStatus{}, err
 	}
@@ -156,7 +156,8 @@ func (s *Service) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat runti
 }
 
 // heartbeatStatus is the liveness a heartbeat reports. Live connectivity
-// belongs to the gateway Registry; only the last-seen time is stored.
+// belongs to the gateway Registry. Stored declarations describe capabilities,
+// not current connectivity.
 func heartbeatStatus(current bool) runtimedevice.HeartbeatStatus {
 	return runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: !current}
 }

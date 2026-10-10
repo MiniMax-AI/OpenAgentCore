@@ -47,7 +47,7 @@ func helperRequest(t *testing.T, scenario string, resume bool) proto.PromptReque
 func prepareExecutor(t *testing.T, ctx context.Context, req proto.PromptRequestPayload) (*executor, error) {
 	t.Helper()
 	req.RunID, req.Input = "", nil
-	value, err := NewExecutorFactory(nil)(ctx, req)
+	value, err := NewExecutorFactory(testStateRoot(t), nil)(ctx, req)
 	if value == nil {
 		return nil, err
 	}

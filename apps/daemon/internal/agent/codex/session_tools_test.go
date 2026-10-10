@@ -29,7 +29,7 @@ func TestToolObservations(t *testing.T) {
 		}
 		t.Run(source.ID, func(t *testing.T) {
 			out := make(chan proto.Envelope, 4)
-			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
+			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig(testStateRoot(t))}
 			s.setThreadID("private-thread")
 			s.onTurnStarted(json.RawMessage(`{"threadId":"private-thread","turn":{"id":"private-turn"}}`))
 			raw := json.RawMessage(`{"threadId":"private-thread","turnId":"private-turn","item":` + item + `}`)

@@ -137,6 +137,11 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 	if err := w.validateCreation(ctx, input); err != nil {
 		return sessions.Creation{}, err
 	}
+	profile, ok := w.dispatcher.Engines.Lookup(input.Engine)
+	if !ok {
+		return sessions.Creation{}, sessions.ErrInvalidInput
+	}
+	input.SupportsRetainedNativeHistory = profile.RetainedNativeHistory.IsSupported()
 	creation, err := w.dispatcher.Sessions.CreateSession(ctx, tenant, input)
 	if err == nil {
 		w.hintRuntimeWake(ctx, creation.Session)

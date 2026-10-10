@@ -163,6 +163,8 @@ type strictDeploymentReader struct {
 	unallocatedEnvironments  func(context.Context, string, string) ([]deployment.UnallocatedEnvironment, error)
 	lifecyclePlacement       func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error)
 	activity                 func(context.Context, string) (deployment.Activity, error)
+	replacementEnvironments  func(context.Context, string) ([]deployment.UnallocatedEnvironment, error)
+	retainedNativeHistory    func(context.Context, deployment.AllocationKey) (bool, error)
 }
 
 func (r *strictDeploymentReader) Deployment(ctx context.Context) (deployment.Record, error) {
@@ -356,4 +358,17 @@ func (r *strictDeploymentReader) CountRetainedAllocations(ctx context.Context, i
 		return 0, unexpectedDeploymentCall(r.t, "CountRetainedAllocations")
 	}
 	return r.countRetainedAllocations(ctx, installationID)
+}
+
+func (r *strictDeploymentReader) ReplacementEnvironments(ctx context.Context, after string) ([]deployment.UnallocatedEnvironment, error) {
+	if r.replacementEnvironments == nil {
+		return nil, unexpectedDeploymentCall(r.t, "ReplacementEnvironments")
+	}
+	return r.replacementEnvironments(ctx, after)
+}
+func (r *strictDeploymentReader) RetainedNativeHistory(ctx context.Context, key deployment.AllocationKey) (bool, error) {
+	if r.retainedNativeHistory == nil {
+		return false, unexpectedDeploymentCall(r.t, "RetainedNativeHistory")
+	}
+	return r.retainedNativeHistory(ctx, key)
 }

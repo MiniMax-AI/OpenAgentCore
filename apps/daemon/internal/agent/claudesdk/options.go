@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
@@ -152,13 +151,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
 		return fail("local execution and history recovery require a dedicated workspace")
 	}
-	root, err := paths.Root()
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	relative, err := filepath.Rel(root, config.StateDir)
-	if err != nil || !filepath.IsAbs(root) || !filepath.IsAbs(config.StateDir) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return fail("SDK state must be in a managed runtime subdirectory")
+	if !filepath.IsAbs(config.StateDir) || filepath.Clean(config.StateDir) != config.StateDir || filepath.Dir(config.StateDir) == config.StateDir {
+		return fail("SDK state must be an explicit private absolute directory")
 	}
 	start.Cwd = filepath.Join(config.StateDir, "work")
 	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {

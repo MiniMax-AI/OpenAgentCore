@@ -22,6 +22,7 @@ func TestDiscoveryUsesSharedOperationQualification(t *testing.T) {
 	workspace := strings.Replace(discoveryConfiguration, `"type":"none"`, `"type":"openai_hosted"`, 1)
 	policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": enginetest.Profile(func(p *engine.Profile) {
 		p.Placements = []string{"openai_hosted"}
+		p.RetainedNativeHistory = proto.CapabilitySupported
 		p.ToolSearch = proto.CapabilitySupported
 	})})}
 	if err := policy.ValidateSessionConfiguration("new_harness", json.RawMessage(workspace)); err != nil {

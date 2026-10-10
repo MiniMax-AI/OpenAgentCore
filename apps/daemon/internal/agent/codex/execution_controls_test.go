@@ -11,7 +11,7 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, search := range []string{"disabled", "cached", "live"} {
 		for _, verbosity := range []string{"low", "medium", "high"} {
-			plan, err := BuildSessionPlan("state", map[string]any{"model": "test-model"}, &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity})
+			plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{"model": "test-model"}, &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -30,7 +30,7 @@ func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
 		{}, {WebSearch: "disabled"}, {TextVerbosity: "medium"},
 		{WebSearch: "invalid", TextVerbosity: "medium"}, {WebSearch: "disabled", TextVerbosity: "invalid"},
 	} {
-		if plan, err := BuildSessionPlan("state", nil, &controls); err == nil {
+		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, &controls); err == nil {
 			plan.Cleanup()
 			t.Fatal("invalid controls accepted", controls)
 		}

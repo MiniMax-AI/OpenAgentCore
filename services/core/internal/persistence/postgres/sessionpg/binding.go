@@ -116,7 +116,7 @@ func (t *SessionTx) LoadEnvironmentInput(ctx context.Context) (*sessions.Environ
 
 func (t *SessionTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
 	row, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.tenant, ID: t.session})
-	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, row.ExternalWorkspace, err)
 }
 
 // RecordEnvironmentFailure fails the Environment only while it is the
@@ -185,7 +185,10 @@ func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions
 	if err != nil {
 		return err
 	}
-	_, err = t.q.BindSessionDevice(ctx, sqlc.BindSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: inserted})
+	_, err = t.q.BindHostedSessionDevice(ctx, sqlc.BindHostedSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: inserted})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ErrDeviceBindingConflict
+	}
 	return err
 }
 

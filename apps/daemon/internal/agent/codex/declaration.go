@@ -18,6 +18,7 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 		Streaming:                      proto.CapabilitySupported,
 		Usage:                          proto.CapabilitySupported,
 		Resume:                         proto.CapabilitySupported,
+		RetainedNativeHistory:          proto.CapabilityUnsupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
 		Steering:                       proto.CapabilitySupported,
 		MessageItems:                   proto.CapabilitySupported,
@@ -62,8 +63,9 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	caps.NativeSessionRecovery = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	caps.LocalEnvironment = proto.CapabilityFromBool(SupportsLocalEnvironment(version))
 	caps.WorkspaceReadPreparation = caps.LocalEnvironment
+	caps.RetainedNativeHistory = caps.LocalEnvironment
 	caps.MCPHTTPRequired = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
-	runtime.Executor = NewExecutorFactory()
+	runtime.Executor = NewExecutorFactory(options.StateRoot)
 	fmt.Fprintf(options.Stdout, "Codex preflight ok (%s)\n", version)
 	return runtime
 }

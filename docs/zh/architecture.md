@@ -1,10 +1,12 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: 75efb1d2899314719492ca4f2cd8bb5dbcdc14f54afb72ac33060a15da309d31
+source_hash: 061593c891cc4dd8b9077311bec8b8b93051c1cba9e387fb7db40a7ffc3a3de5
 ---
 
-OpenAgentCore 将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。Sandbox Provider 管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
+OpenAgentCore 是 Agent 运行平台，通过可替换的协议实现统一组织 Harness、模型、工具、Session 和执行环境。它将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。Sandbox Provider 管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
+
+推荐的部署选择是 E2B 托管计算，以及 microsandbox 配合独立持久化工作区存储的自部署方案。两者使用相同的 Core 编排和能力检查。Docker 仍是可用的 Provider。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。具体契约和支持能力见 [Sandbox Provider](./sandbox-provider.md) 和[工作区文件系统 Provider](./workspace-provider.md)。
 
 ```mermaid
 flowchart TB
