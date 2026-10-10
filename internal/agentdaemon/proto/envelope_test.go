@@ -88,6 +88,7 @@ func TestVersionCompatible(t *testing.T) {
 		ok     bool
 	}{
 		{Version, true},    // exact match
+		{"0.15.0", false},  // closes idle Executors before suspension
 		{"0.8.99", false},  // patch drift NOT OK
 		{"0.6.99", false},  // minor drift NOT OK
 		{"1.0.0", false},   // major drift NOT OK

@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 142a3d2a3dc5b790bcc80dff2364d094857f835e0e0687f91373251a4f4d9b3b
+source_hash: 902f53e5471de13ecac0e914e4d23d7650955a4c50ec1aa01517c13aef7946f7
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -129,7 +129,7 @@ preparation 和 start 在 receive loop 与 router lock 之外运行。admission 
 Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并发限制独立。关闭时 Runtime 关闭活动和空闲 Executor，保留关闭失败的目标，并允许稍后串行重试。普通断连会关闭失败的 transport 并保留原 router，直到 shutdown 成功；等待超时或清理失败不授权重连，进程 shutdown 继续等待，不丢弃自己拥有的原生资源。工作区操作在跨 Turn 和 Executor 关闭后仍保留绑定与结算规则。
 
 
-挂起先关闭准入、排空已接纳工作与回执，并确认每个空闲 Executor 已关闭，随后才确认 `environment_quiesced`。原生关闭失败或结果未确认时，不得确认挂起，且保留清理责任。Sandbox Provider 仍负责其 checkpoint 实现的文件系统刷新和计算停止保证；Runtime 静止本身不证明这些保证。
+挂起先关闭准入、排空已接纳工作与回执，同时保留已结算的空闲 Executor，随后才确认 `environment_quiesced`。活动、准备中、失效或其他未结算的所有者会阻止挂起。整个挂起期间停止空闲到期计时并隔离其回调；精确匹配且已认证的 `environment_resume` 为同一批所有者恢复一个新的空闲计时间隔。只有这种计划性重连跨 socket 保留 Router 与原生所有者；普通断连、shutdown 和连接生命周期取消仍要求确认清理完成。排空失败后，准入保持关闭直到 shutdown。恢复后的准备仍检查相同的原生身份与不可变配置，包括凭据冲突；绝不静默替换配置冲突的驻留 Executor。Sandbox Provider 仍负责其 checkpoint 实现的文件系统刷新和计算停止保证；Runtime 静止本身既不证明这些保证，也不证明原生 RAM 或外部网络连接已恢复。
 
 ## 活动输入回执 {#active-input-receipts}
 

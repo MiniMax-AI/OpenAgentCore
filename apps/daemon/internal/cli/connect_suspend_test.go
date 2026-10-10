@@ -339,7 +339,7 @@ func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 	}
 }
 
-func TestQuiesceCloseFailureDisconnectsAndSettlesBeforeReconnect(t *testing.T) {
+func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *testing.T) {
 	environment, session := uuid.NewString(), uuid.NewString()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", t.TempDir())
@@ -431,13 +431,38 @@ func TestQuiesceCloseFailureDisconnectsAndSettlesBeforeReconnect(t *testing.T) {
 	}
 	readStatus("released")
 	sendLifecycleFrame(t, peer, proto.TypeEnvironmentQuiesce, request)
-	if got := readLifecycleResult(t, peer, proto.TypeEnvironmentQuiesced); got.Accepted || got.ErrorCode != "resource_busy" {
-		t.Fatalf("failed Close acknowledged: %+v", got)
+	if got := readLifecycleResult(t, peer, proto.TypeEnvironmentQuiesced); !got.Accepted {
+		t.Fatalf("idle owner rejected: %+v", got)
 	}
+	if native.closes.Load() != 0 {
+		t.Fatal("quiesce closed the native owner")
+	}
+	control.signal <- syscall.SIGUSR1
+	select {
+	case peer = <-peers:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no planned reconnect")
+	}
+	defer peer.Close()
+	sendLifecycleFrame(t, peer, proto.TypeEnvironmentResume, request)
+	if got := readLifecycleResult(t, peer, proto.TypeEnvironmentResumed); !got.Accepted {
+		t.Fatalf("resume rejected: %+v", got)
+	}
+	preparation.ID = "resumed-prepare"
+	if err := peer.WriteJSON(preparation); err != nil {
+		t.Fatal(err)
+	}
+	resumed := readStatus("ready")
+	if !resumed.Reused || resumed.ExecutorID != ready.ExecutorID || resumed.Handle == ready.Handle || native.closes.Load() != 0 {
+		t.Fatalf("resume replaced native owner: before=%+v after=%+v closes=%d", ready, resumed, native.closes.Load())
+	}
+	// Cancelling the daemon still retires resident native resources. Failed
+	// cleanup must settle before the loop can finish or create another router.
+	cancel()
 	select {
 	case <-native.retry:
 	case <-time.After(3 * time.Second):
-		t.Fatal("fenced close failure did not enter Shutdown retry")
+		t.Fatal("cancelled resident owner did not enter Shutdown retry")
 	}
 	_ = peer.SetReadDeadline(time.Now().Add(time.Second))
 	for {
@@ -462,7 +487,7 @@ func TestQuiesceCloseFailureDisconnectsAndSettlesBeforeReconnect(t *testing.T) {
 	if native.closes.Load() != 2 {
 		t.Fatalf("Close calls=%d", native.closes.Load())
 	}
-	if _, err := os.Stat(control.path); !os.IsNotExist(err) {
-		t.Fatal("failed quiesce armed snapshot control")
+	if control.identity.SuspendID != "" || control.lastResumed == nil || !control.lastResumed.SameSuspension(request) {
+		t.Fatal("resumed suspension left snapshot control armed or lost its receipt")
 	}
 }
