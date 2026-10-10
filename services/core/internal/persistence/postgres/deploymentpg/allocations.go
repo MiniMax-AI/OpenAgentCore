@@ -163,7 +163,37 @@ func (s *Store) WithActivity(ctx context.Context, key deployment.AllocationKey, 
 			return err
 		}
 		touch := activityTx(func() error {
-			return q.TouchRuntimeActivity(ctx, sqlc.TouchRuntimeActivityParams{TenantID: tenant, EnvironmentID: environment})
+			retained := pgtype.UUID{}
+			current, found, err := findAllocation(ctx, q, tenant, environment)
+			if err != nil {
+				return err
+			}
+			if found && current.State == "released" {
+				d, err := placementpg.LockDeployment(ctx, q)
+				if err != nil {
+					return err
+				}
+				if d.Resetting {
+					return placement.ErrResetAdmission
+				}
+				id, err := parseID(current.ID)
+				if err != nil {
+					return err
+				}
+				replaceable, err := q.CanReplaceRuntimeAllocation(ctx, id)
+				if err != nil {
+					return err
+				}
+				qualified, err := q.CanRetainRuntimeEnvironment(ctx, id)
+				if err != nil {
+					return err
+				}
+				if !replaceable || !qualified {
+					return deployment.ErrAllocationConflict
+				}
+				retained = id
+			}
+			return q.TouchRuntimeActivity(ctx, sqlc.TouchRuntimeActivityParams{TenantID: tenant, EnvironmentID: environment, RetainedID: retained})
 		})
 		if err := apply(locked, touch); err != nil {
 			return err
@@ -194,7 +224,11 @@ func (t *reservationTx) LockDeployment() (placement.Deployment, error) {
 }
 
 func (t *reservationTx) LoadReserved() (placement.Reserved, error) {
-	return placementpg.LoadReserved(t.ctx, t.q, t.environment)
+	reserved, err := placementpg.LoadReserved(t.ctx, t.q, t.environment)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return placement.Reserved{Released: true}, nil
+	}
+	return reserved, err
 }
 
 func (t *reservationTx) CanReplaceAllocation() (bool, error) {
@@ -218,6 +252,13 @@ func (t *reservationTx) LoadNodes() ([]placement.Node, error) {
 }
 
 func (t *reservationTx) ReservePlacement(p placement.Placement) error {
+	_, found, err := t.FindAllocation()
+	if err != nil {
+		return err
+	}
+	if !found {
+		return placementpg.ReservePlacement(t.ctx, t.q, t.session, p)
+	}
 	node, err := parseID(p.NodeID)
 	if err != nil {
 		return err
@@ -365,7 +406,7 @@ type cleanupTx struct {
 	*sessionpg.SessionTx
 }
 
-func (t *cleanupTx) CanRetainEnvironment(current deployment.Allocation) (bool, error) {
+func (t *allocationTx) CanRetainEnvironment(current deployment.Allocation) (bool, error) {
 	id, err := parseID(current.ID)
 	if err != nil {
 		return false, err
@@ -565,22 +606,10 @@ func (s *Store) RetainedNativeHistory(ctx context.Context, key deployment.Alloca
 	return s.pool.Queries().CanRetainRuntimeEnvironment(ctx, id)
 }
 
-func (s *Store) ReplacementEnvironments(ctx context.Context, after string) ([]deployment.UnallocatedEnvironment, error) {
-	id, err := cursor(after)
-	if err != nil {
-		return nil, err
-	}
+func (s *Store) PlacementDemand(ctx context.Context, after deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	rows, err := s.pool.Queries().ListReplacementEnvironments(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]deployment.UnallocatedEnvironment, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, deployment.UnallocatedEnvironment{ID: uuidString(row.ID), TenantID: uuidString(row.TenantID)})
-	}
-	return result, nil
+	return loadPlacementDemand(ctx, s.pool.Queries(), after)
 }
 
 func (s *Store) LifecyclePlacement(ctx context.Context, key deployment.AllocationKey) (deployment.LifecyclePlacement, error) {

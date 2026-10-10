@@ -27,6 +27,8 @@ var (
 	// matches the stored allocation, device binding, state or compute revision,
 	// or a replay for another installation.
 	ErrAllocationConflict = errors.New("the sandbox allocation changed")
+	// ErrNotIdle means neither idle expiry nor current demand requires suspension.
+	ErrNotIdle = errors.New("sandbox compute is not ready to suspend")
 	// ErrNodeAddressMismatch rejects an enrollment whose Core address is not
 	// the installation public URL. The token stays unconsumed.
 	ErrNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")

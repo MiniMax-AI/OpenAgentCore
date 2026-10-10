@@ -129,12 +129,15 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 		return r.deployment.ClearWake(ctx, owner, owner.ComputeActivityAt)
 	}
 	policy := r.config.Suspension
-	if policy == nil || !activity.ReadyToSuspend(policy.IdleTimeout) {
+	if policy == nil || activity.Busy {
 		return nil
 	}
 	state.SuspendID, state.RestoreID, state.Rollback = uuid.NewString(), "", false
 	until := activity.ObservedAt.Add(policy.Retention)
 	next, err := r.saveCompute(ctx, owner, "quiescing", state, &until)
+	if errors.Is(err, deployment.ErrNotIdle) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -211,7 +214,8 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 		return err
 	}
 	if !activity.Busy && !activity.WakeRequested {
-		return nil
+		_, err := r.deployment.EndRetentionForDemand(ctx, owner)
+		return err
 	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership

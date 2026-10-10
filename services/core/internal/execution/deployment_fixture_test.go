@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"testing"
 	"time"
 
@@ -68,7 +69,7 @@ func deploymentOperations(t *testing.T, storage deployment.Storage, reader deplo
 	if err != nil {
 		t.Fatal(err)
 	}
-	operations, err := deployment.NewExecutionOperations(service, execution)
+	operations, err := deployment.NewExecutionOperations(service, execution, engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +141,7 @@ func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(
 
 // strictDeploymentReader runs each set func; any other call fails the test.
 type strictDeploymentReader struct {
-	replacementEnvironments func(context.Context, string) ([]deployment.UnallocatedEnvironment, error)
+	placementDemand         func(context.Context, deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error)
 	retainedNativeHistory   func(context.Context, deployment.AllocationKey) (bool, error)
 	t                       *testing.T
 	deployment              func(context.Context) (deployment.Record, error)
@@ -344,11 +345,11 @@ func (r *strictDeploymentReader) Activity(ctx context.Context, allocationID stri
 	return r.activity(ctx, allocationID)
 }
 
-func (r *strictDeploymentReader) ReplacementEnvironments(ctx context.Context, after string) ([]deployment.UnallocatedEnvironment, error) {
-	if r.replacementEnvironments == nil {
-		return nil, unexpectedDeploymentCall(r.t, "ReplacementEnvironments")
+func (r *strictDeploymentReader) PlacementDemand(ctx context.Context, after deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error) {
+	if r.placementDemand == nil {
+		return nil, deployment.PlacementDemandCursor{}, unexpectedDeploymentCall(r.t, "PlacementDemand")
 	}
-	return r.replacementEnvironments(ctx, after)
+	return r.placementDemand(ctx, after)
 }
 func (r *strictDeploymentReader) RetainedNativeHistory(ctx context.Context, key deployment.AllocationKey) (bool, error) {
 	if r.retainedNativeHistory == nil {

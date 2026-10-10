@@ -155,19 +155,20 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 
 const touchRuntimeActivity = `-- name: TouchRuntimeActivity :exec
 UPDATE runtime_allocations a
-SET compute_activity_at = clock_timestamp(), compute_wake_requested = true
+SET compute_activity_at = CASE WHEN a.state = 'released' AND a.compute_wake_requested THEN a.compute_activity_at ELSE clock_timestamp() END, compute_wake_requested = true
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE a.environment_id = e.id AND s.tenant_id = $1
     AND e.id = $2 AND s.deleted_at IS NULL
-    AND a.state = 'running' AND a.compute_phase <> 'disabled'
+    AND ((a.state = 'running' AND a.compute_phase <> 'disabled') OR a.id = $3::uuid)
 `
 
 type TouchRuntimeActivityParams struct {
 	TenantID      pgtype.UUID `json:"tenant_id"`
 	EnvironmentID pgtype.UUID `json:"environment_id"`
+	RetainedID    pgtype.UUID `json:"retained_id"`
 }
 
 func (q *Queries) TouchRuntimeActivity(ctx context.Context, arg TouchRuntimeActivityParams) error {
-	_, err := q.db.Exec(ctx, touchRuntimeActivity, arg.TenantID, arg.EnvironmentID)
+	_, err := q.db.Exec(ctx, touchRuntimeActivity, arg.TenantID, arg.EnvironmentID, arg.RetainedID)
 	return err
 }

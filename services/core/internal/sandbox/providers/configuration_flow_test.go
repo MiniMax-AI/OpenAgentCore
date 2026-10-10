@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -115,7 +116,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close(context.Background())
-	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, pgtest.CredentialKey(t)))
+	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, pgtest.CredentialKey(t)), engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}

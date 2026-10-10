@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"sync"
 	"testing"
 
@@ -56,7 +57,7 @@ func setupClosedExecution(t *testing.T, f fixture) *deployment.ExecutionOperatio
 		t.Fatal(err)
 	}
 	awaitRelease()
-	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher))
+	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher), engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}

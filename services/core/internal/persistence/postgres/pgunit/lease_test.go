@@ -33,7 +33,8 @@ func awaitLeaseRelease(t *testing.T, pool *pgxpool.Pool) {
 		var held bool
 		// Match the single-bigint key in queries/scheduling.sql, scoped to this database.
 		err := pool.QueryRow(t.Context(), `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted AND objsubid=1
-			AND classid::bigint * 4294967296 + objid::bigint = 706172736172
+			AND classid::bigint = (706172736172::bigint >> 32)
+        AND objid::bigint = (706172736172::bigint & 4294967295)
 			AND database=(SELECT oid FROM pg_database WHERE datname=current_database()))`).Scan(&held)
 		if err != nil {
 			t.Fatal("observe execution lease release", err)

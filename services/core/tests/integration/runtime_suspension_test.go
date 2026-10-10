@@ -355,7 +355,7 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
 			until := time.Now().Add(time.Hour)
-			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrAllocationConflict) {
+			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrNotIdle) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)
 			}
 			activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
@@ -405,6 +405,9 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("listed"))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
 		t.Fatal(err)
 	}
 	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))

@@ -223,8 +223,8 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 
 // SetCompute commits a compute phase before its external effects. The owner's
 // revision and the Session lock fence a stale lifecycle observation. Moving
-// running compute to quiescing requires the idle timeout, which the
-// transaction checks again against the activity it reads.
+// running compute to quiescing requires idle compute and either the idle
+// timeout or capacity pressure, rechecked in the transaction.
 func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (Allocation, error) {
 	if !computeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
 		return Allocation{}, ErrInvalidInput
@@ -248,8 +248,23 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 			if activity.Busy || activity.WakeRequested {
 				return Allocation{}, ErrAllocationConflict
 			}
-			if phase == "quiescing" && (!activity.ReadyToSuspend(idleTimeout) || current.ComputeActivityAt.After(owner.ComputeActivityAt)) {
-				return Allocation{}, ErrAllocationConflict
+			if phase == "quiescing" {
+				if current.ComputeActivityAt.After(owner.ComputeActivityAt) {
+					return Allocation{}, ErrAllocationConflict
+				}
+				if !activity.ReadyToSuspend(idleTimeout) {
+					// A short quiet period also backs off a rejected daemon quiesce.
+					if !activity.ReadyToSuspend(15*time.Second) || current.NodeID == "" {
+						return Allocation{}, ErrNotIdle
+					}
+					allowed, err := e.canSuspendForDemand(tx, current)
+					if err != nil {
+						return Allocation{}, err
+					}
+					if !allowed {
+						return Allocation{}, ErrNotIdle
+					}
+				}
 			}
 		}
 		// A node-backed restore reserves capacity on its original node.

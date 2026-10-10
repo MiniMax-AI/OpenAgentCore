@@ -3,6 +3,7 @@ package deploymentpg_test
 import (
 	"bytes"
 	"context"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"strings"
 	"testing"
 
@@ -77,7 +78,7 @@ func (f fixture) execution(t *testing.T) (*deployment.ExecutionOperations, *pgun
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher))
+	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher), engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}

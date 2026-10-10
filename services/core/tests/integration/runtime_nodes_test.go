@@ -44,8 +44,8 @@ func managerSessionInput(key string) sessions.CreateSession {
 }
 
 // createSessionOnNode steers automatic placement in multi-node tests: only node
-// stays provider-ready while the Session is created.
-func createSessionOnNode(t *testing.T, s *Store, tenant string, input sessions.CreateSession, node string) (sessions.Session, error) {
+// stays provider-ready while the scheduler reserves the created Session.
+func createSessionOnNode(t *testing.T, s, w *Store, tenant string, input sessions.CreateSession, node string) (sessions.Session, error) {
 	t.Helper()
 	// Use the same authenticated readiness observations as the scheduler. The
 	// compatibility provider_ready column alone is not admission authority.
@@ -83,7 +83,21 @@ func createSessionOnNode(t *testing.T, s *Store, tenant string, input sessions.C
 			}
 		}
 	}()
-	return s.CreateSession(t.Context(), tenant, input)
+	session, err := s.CreateSession(t.Context(), tenant, input)
+	if err == nil {
+		err = reserveSessionPlacement(t, s, w, session)
+	}
+	return session, err
+}
+
+func reserveSessionPlacement(t *testing.T, s, w *Store, session sessions.Session) error {
+	t.Helper()
+	setup, err := deploymentService(t, s).Setup(t.Context())
+	if err != nil {
+		return err
+	}
+	_, err = deploymentExecution(t, w).EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: session.Environment.ID}, setup.InstallationID)
+	return err
 }
 
 type sessionPlacement struct {
@@ -115,7 +129,7 @@ func sessionRuntimePlacement(ctx context.Context, s *Store, tenant, session stri
 	return placement, err
 }
 func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
-	s, _, d := managerFixture(t, 1, 4)
+	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
 	var wg sync.WaitGroup
 	results := make(chan sessions.Session, 16)
@@ -132,22 +146,45 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	wg.Wait()
 	close(results)
 	close(failures)
-	successes := 0
 	for err := range failures {
-		if err == nil {
-			successes++
-		} else if !errors.Is(err, placement.ErrNodeUnavailable) {
-			t.Fatal(err)
+		if err != nil {
+			t.Fatal("capacity rejected durable Session creation", err)
 		}
 	}
-	if successes != 1 {
-		t.Fatal("overbooked node", successes)
-	}
-	var retained sessions.Session
+	var created []sessions.Session
 	for session := range results {
-		if session.ID != "" {
-			retained = session
+		created = append(created, session)
+	}
+	if len(created) != 16 {
+		t.Fatal("lost accepted Sessions", len(created))
+	}
+	type admission struct {
+		session sessions.Session
+		err     error
+	}
+	reserved := make(chan admission, len(created))
+	for _, session := range created {
+		wg.Add(1)
+		go func() { defer wg.Done(); reserved <- admission{session, reserveSessionPlacement(t, s, w, session)} }()
+	}
+	wg.Wait()
+	close(reserved)
+	var retained sessions.Session
+	var waiting []sessions.Session
+	for result := range reserved {
+		if result.err == nil {
+			if retained.ID != "" {
+				t.Fatal("overbooked node")
+			}
+			retained = result.session
+		} else if errors.Is(result.err, placement.ErrNodeUnavailable) {
+			waiting = append(waiting, result.session)
+		} else {
+			t.Fatal(result.err)
 		}
+	}
+	if retained.ID == "" || len(waiting) != 15 {
+		t.Fatal("capacity admission", retained.ID, len(waiting))
 	}
 	service := deploymentService(t, s)
 	nodes, err := service.ListNodes(t.Context())
@@ -160,9 +197,18 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: retained.ID}); err != nil {
 		t.Fatal(err)
 	}
+	if err := reserveSessionPlacement(t, s, w, waiting[0]); err != nil {
+		t.Fatal("released slot did not admit waiting Session", err)
+	}
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: waiting[0].ID}); err != nil {
+		t.Fatal(err)
+	}
 	input := managerSessionInput("retry")
 	first, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, first); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
@@ -225,7 +271,11 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if err := nodes.Heartbeat(t.Context(), input.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old epoch heartbeat revived node", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, placement.ErrNodeUnavailable) {
+	queued, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("stale node admitted", err)
 	}
 	onlineManagerNode(t, s, d.NodeID)
@@ -242,6 +292,9 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	tenant := uuid.NewString()
 	first, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, first); err != nil {
 		t.Fatal(err)
 	}
 	retained, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: first.Environment.ID}, next.InstallationID, runtimedevice.HashCredential("runtime"))
@@ -286,6 +339,9 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
+		t.Fatal(err)
+	}
 	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
@@ -298,6 +354,10 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 		t.Fatal(err)
 	}
 	until := time.Now().Add(time.Hour)
+	second, err := s.CreateSession(t.Context(), tenant, managerSessionInput("second"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	go func() {
@@ -307,8 +367,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	}()
 	go func() {
 		<-start
-		_, err := s.CreateSession(t.Context(), tenant, managerSessionInput("second"))
-		results <- err
+		results <- reserveSessionPlacement(t, s, w, second)
 	}()
 	close(start)
 	success := 0
@@ -342,6 +401,9 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("long-offline"))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
 		t.Fatal(err)
 	}
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))

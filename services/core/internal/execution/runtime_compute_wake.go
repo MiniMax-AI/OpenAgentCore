@@ -146,8 +146,15 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 				if !qualified {
 					return ErrExecutionUnavailable
 				}
-				// The live file operation is demand. A committed placement, rather than
-				// another wake setting, lets maintenance recover a detached caller.
+				// A qualified released allocation retains the existing wake intent.
+				// The common placement scan orders it with pending Session input.
+				if touched != owner.ID {
+					if err := w.dispatcher.Deployment.TouchActivity(ctx, environment.TenantID, environment.ID); err != nil {
+						return err
+					}
+					touched = owner.ID
+					w.wakeScheduler()
+				}
 				next, err := w.ProvisionEnvironment(ctx, environment.TenantID, environment.ID, owner.ProviderKey)
 				if err != nil && next.ID == "" && !errors.Is(err, placement.ErrNodeUnavailable) && !errors.Is(err, placement.ErrNodesPreparing) && !errors.Is(err, deployment.ErrAllocationConflict) {
 					return err

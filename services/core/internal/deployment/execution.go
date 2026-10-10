@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -16,15 +17,16 @@ import (
 type ExecutionOperations struct {
 	service *Service
 	storage ExecutionStorage
+	engines engine.Catalog
 }
 
 // NewExecutionOperations binds the deployment changes to the lease-bound
 // storage of one execution owner.
-func NewExecutionOperations(service *Service, storage ExecutionStorage) (*ExecutionOperations, error) {
+func NewExecutionOperations(service *Service, storage ExecutionStorage, engines engine.Catalog) (*ExecutionOperations, error) {
 	if service == nil || storage == nil {
 		return nil, errors.New("deployment execution operations require the deployment service and execution storage")
 	}
-	return &ExecutionOperations{service: service, storage: storage}, nil
+	return &ExecutionOperations{service: service, storage: storage, engines: engines}, nil
 }
 
 // Claim reserves the installation for Web setup, once per execution owner

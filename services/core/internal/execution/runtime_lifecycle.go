@@ -74,7 +74,7 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentR
 		return nil, sandbox.ErrInvalid
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{workspaces: owner.Workspaces, workspaceGate: make(chan struct{}, 1), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{workspaces: owner.Workspaces, workspaceGate: make(chan struct{}, 1), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1), placementWake: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -156,18 +156,15 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 	if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
 		return deployment.Allocation{}, lookupErr
 	}
-	var nodeID string
-	if lookupErr == nil && existing.State == "released" {
-		reserved, reserveErr := w.runtimes.deployment.EnsurePlacement(ctx, key, providerKey)
-		if reserveErr != nil {
-			return deployment.Allocation{}, reserveErr
-		}
-		nodeID = reserved.NodeID
-	} else {
-		nodeID, err = w.runtimes.deploymentService.LifecycleNode(ctx, tenant, environment)
-		if err != nil {
+	if errors.Is(lookupErr, deployment.ErrNotFound) || existing.State == "released" {
+		// The common ordered inventory is the only placement entry point.
+		if _, err := w.runtimes.syncNodes(ctx); err != nil {
 			return deployment.Allocation{}, err
 		}
+	}
+	nodeID, err := w.runtimes.deploymentService.LifecycleNode(ctx, tenant, environment)
+	if err != nil {
+		return deployment.Allocation{}, err
 	}
 	node, err := w.runtimes.node(nodeID)
 	if err != nil {
