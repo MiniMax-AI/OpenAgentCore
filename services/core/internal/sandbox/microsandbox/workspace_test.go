@@ -59,9 +59,42 @@ func TestWorkspaceResolveBeforeRestoreAndRetainPartialTarget(t *testing.T) {
 }
 func TestWorkspaceDoesNotFallbackWithoutResolver(t *testing.T) {
 	calls := 0
-	p, _ := NewWithCaller(testConfig(), callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
-	_, err := p.Create(deadline(t), sandbox.Bootstrap{Reference: testRef(), Workspace: workspaceBinding()})
+	config := testConfig()
+	config.ExternalWorkspace = true
+	p, _ := NewWithCaller(config, callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
+	_, err := p.Create(deadline(t), sandbox.Bootstrap{Reference: testRef(), SessionID: testRef().TenantID, DeviceID: testRef().EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: workspaceBinding()})
 	if !errors.Is(err, workspacefs.ErrUnsupported) || calls != 0 {
 		t.Fatal(err, calls)
+	}
+}
+
+func TestPreNativeWorkspaceFailureSettlesAbsentCreation(t *testing.T) {
+	for _, failure := range []string{"resolve", "mode", "bootstrap", "unbounded"} {
+		t.Run(failure, func(t *testing.T) {
+			config, ref := testConfig(), testRef()
+			config.ExternalWorkspace = true
+			calls := 0
+			provider, err := NewWithCaller(config, callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
+			if err != nil {
+				t.Fatal(err)
+			}
+			provider.workspace = workspaceResolverFunc(func(context.Context, workspacefs.Binding) (workspacefs.Directory, error) {
+				return workspacefs.Directory{}, workspacefs.ErrUnavailable
+			})
+			bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: workspaceBinding()}
+			ctx := deadline(t)
+			switch failure {
+			case "mode":
+				bootstrap.Workspace = nil
+			case "bootstrap":
+				bootstrap.DeviceID = "invalid"
+			case "unbounded":
+				ctx = context.Background()
+			}
+			info, err := provider.Create(ctx, bootstrap)
+			if err == nil || calls != 0 || info.Reference != ref || !info.CreateSettled || info.State != "absent" || info.ProviderID != "" || info.BootstrapComplete {
+				t.Fatal("pre-native failure lost absence proof", info, err, calls)
+			}
+		})
 	}
 }

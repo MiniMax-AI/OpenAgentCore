@@ -126,9 +126,23 @@ func info(r sandbox.Reference, s State) sandbox.Info {
 	return sandbox.Info{Reference: r, ProviderID: s.Compute.ID, State: s.Status, BootstrapComplete: s.BootstrapComplete}
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
+	// Before dispatch, this one-shot attempt cannot have created native compute.
+	absent := sandbox.Info{Reference: b.Reference, State: "absent", CreateSettled: true}
+	if err := ctx.Err(); err != nil {
+		return absent, err
+	}
+	if _, bounded := ctx.Deadline(); !bounded {
+		return absent, sandbox.ErrInvalid
+	}
+	if err := ValidateBootstrap(b); err != nil {
+		return absent, err
+	}
+	if p.config.ExternalWorkspace != (b.Workspace != nil) {
+		return absent, sandbox.ErrInvalid
+	}
 	workspace, err := p.resolveWorkspace(ctx, b.Reference, b.Workspace)
 	if err != nil {
-		return sandbox.Info{Reference: b.Reference}, err
+		return absent, err
 	}
 	b.Workspace = nil
 	q := Request{Operation: "create", Reference: b.Reference, Bootstrap: &b, Workspace: workspace}
