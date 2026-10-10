@@ -248,29 +248,25 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 			return wire.State{}, wire.ErrUnconfirmed
 		}
 	}
-	// admitRestore rejects non-observation requests for every existing open
-	// record. Thus only this fresh dispatch, still holding the allocation lock,
-	// can certify a failure before RestoreSandbox was called. Never use this
-	// closure for a native restore error or for a recovered admission.
-	beforeDispatchFailure := func(cause error) (wire.State, error) {
-		if !q.ObserveOnly {
-			if err := b.closeUndispatchedRestore(q, cause); err != nil {
-				return wire.State{}, errors.Join(cause, err)
-			}
+	// Only a fresh dispatch may close its attempt before native execution.
+	// Lifecycle FFI calls use an uncancelled context; the request deadline is
+	// checked between settled operations, never used to cancel a native wait.
+	if !q.ObserveOnly {
+		if err := b.closeExpiredRestore(q); err != nil {
+			return wire.State{}, err
 		}
-		return wire.State{}, cause
 	}
 	// Admission is durable before any native import/restore operation. A prior
 	// admitted operation with no visible target remains unknown, never replayed.
 	artifact, e := b.importArchive(ctx, q.Snapshot)
 	if e != nil {
-		return beforeDispatchFailure(e)
+		return wire.State{}, e
 	}
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
-		return beforeDispatchFailure(e)
+		return wire.State{}, e
 	}
 	if err := qualifyWorkspace(artifact.Labels(), b.q.Workspace); err != nil {
-		return beforeDispatchFailure(err)
+		return wire.State{}, err
 	}
 	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {
@@ -285,6 +281,9 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	restore := sdk.RestoreConfig{NetworkPolicy: b.network(), ExternalMountPolicy: sdk.ExternalMountStrict}
 	if b.q.Workspace != nil {
 		restore.Volumes = map[string]sdk.MountConfig{"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})}
+	}
+	if err := b.closeExpiredRestore(q); err != nil {
+		return wire.State{}, err
 	}
 	live, e := sdk.RestoreSandbox(ctx, artifact, q.Target.Name, sdk.WithRestoreConfig(restore))
 	if e != nil {

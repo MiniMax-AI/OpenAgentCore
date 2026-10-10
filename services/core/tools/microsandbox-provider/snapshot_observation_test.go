@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
@@ -264,10 +266,15 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenArchiveIsDamaged(t *tes
 
 // These requests use the real SDK's empty local registry, without starting a VM.
 func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
+	if !isolatedSDKTest(t) {
+		return
+	}
+	home := t.TempDir()
+	t.Setenv("MSB_HOME", home)
 	for _, damage := range []string{"missing", "corrupt"} {
 		t.Run(damage, func(t *testing.T) {
 			request := initialInfoRequest(t)
-			t.Setenv("MSB_HOME", request.Config.RuntimeHome)
+			request.Config.RuntimeHome = home
 			guard, err := allocationLock(request)
 			if err != nil {
 				t.Fatal(err)
@@ -335,49 +342,58 @@ func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
 	}
 }
 
-func TestUndispatchedFailureClosesOnlyExplicitCancellation(t *testing.T) {
-	for _, cause := range []error{context.Canceled, fmt.Errorf("wrapped: %w", context.DeadlineExceeded), sandbox.ErrOwnership, sandbox.ErrInvalid, os.ErrNotExist, errors.New("opaque SDK failure")} {
-		t.Run(cause.Error(), func(t *testing.T) {
-			request := initialInfoRequest(t)
-			guard, err := allocationLock(request)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer guard.Close()
-			b := backend{q: request}
-			q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: "exact-target", Generation: 1}}
-			if _, err = b.admitRestore(q); err != nil {
-				t.Fatal(err)
-			}
-			if err = b.closeUndispatchedRestore(q, cause); err != nil {
-				t.Fatal(err)
-			}
-			guard.Close()
-			guard, err = allocationLock(request)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer guard.Close()
-			q.ObserveOnly = true
-			closed, err := b.admitRestore(q)
-			want := errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded)
-			if err != nil || closed != want {
-				t.Fatal("wrong closure", closed, want, err)
-			}
-			q.ObserveOnly = false
-			closed, err = b.admitRestore(q)
-			if want {
-				if err != nil || !closed {
-					t.Fatal("late dispatch permitted", closed, err)
-				}
-			} else if !errors.Is(err, wire.ErrUnconfirmed) {
-				t.Fatal("old admission replayed", err)
-			}
-		})
+func TestFreshRestoreRequestDeadlineClosesBeforeNativeExecution(t *testing.T) {
+	if !isolatedSDKTest(t) {
+		return
+	}
+	request := initialInfoRequest(t)
+	t.Setenv("MSB_HOME", request.Config.RuntimeHome)
+	guard, err := allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	// The real request acquired its lock before its deadline. Time can expire
+	// while prior SDK work settles; the lifecycle context deliberately stays live.
+	request.Deadline = time.Now().Add(-time.Second)
+	q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: wire.Name(request.Config, request.Reference, 1), Generation: 1}}
+	request.Operation = "resume"
+	request.Resume = &q
+	b := backend{q: request}
+	_, err = b.run(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("request deadline not enforced", err)
+	}
+	q.ObserveOnly = true
+	state, err := b.resume(context.Background(), q)
+	if err != nil || state.RestoreAttemptClosed != q.OperationID || state.Status != "absent" {
+		t.Fatal("closed proof missing", state, err)
+	}
+	q.ObserveOnly = false
+	if _, err = b.resume(context.Background(), q); !errors.Is(err, wire.ErrUnconfirmed) {
+		t.Fatal("late request replayed", err)
 	}
 }
 
+// The official SDK freezes its default backend on first use. Match production's
+// one-request helper process rather than changing MSB_HOME under a cached pool.
+func isolatedSDKTest(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv("OAC_NATIVE_TEST_CHILD") == t.Name() {
+		return true
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$", "-test.count=1")
+	cmd.Env = append(os.Environ(), "OAC_NATIVE_TEST_CHILD="+t.Name())
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("isolated SDK test: %v\n%s", err, output)
+	}
+	return false
+}
+
 func TestAdmittedAbsentObservationSkipsArchiveAndStaysUnknown(t *testing.T) {
+	if !isolatedSDKTest(t) {
+		return
+	}
 	request := initialInfoRequest(t)
 	t.Setenv("MSB_HOME", request.Config.RuntimeHome)
 	guard, err := allocationLock(request)
@@ -397,6 +413,7 @@ func TestAdmittedAbsentObservationSkipsArchiveAndStaysUnknown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b.q.Deadline = time.Now().Add(-time.Second)
 	q.ObserveOnly = true
 	state, err := b.resume(t.Context(), q)
 	if !errors.Is(err, wire.ErrUnconfirmed) || state.RestoreAttemptClosed != "" {
@@ -421,6 +438,7 @@ func TestPreDispatchClosureRejectsConflictingJournal(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer guard.Close()
+			request.Deadline = time.Now().Add(-time.Second)
 			b := backend{q: request}
 			q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: "target", Generation: 1}}
 			r := restoreAdmission{OperationID: q.OperationID, Target: q.Target, Snapshot: q.Snapshot}
@@ -440,9 +458,56 @@ func TestPreDispatchClosureRejectsConflictingJournal(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err = b.closeUndispatchedRestore(q, context.Canceled); err == nil {
-				t.Fatal("unsafe closure accepted")
+			before, readErr := os.ReadFile(path)
+			wantErr := sandbox.ErrOwnership
+			if kind == "missing" {
+				wantErr = os.ErrNotExist
+				if !errors.Is(readErr, os.ErrNotExist) {
+					t.Fatal("expected missing journal", readErr)
+				}
+			} else if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if err = b.closeExpiredRestore(q); !errors.Is(err, wantErr) {
+				t.Fatalf("unsafe closure result: got %v, want %v", err, wantErr)
+			}
+			after, readErr := os.ReadFile(path)
+			if kind == "missing" {
+				if !errors.Is(readErr, os.ErrNotExist) {
+					t.Fatal("missing journal was created", readErr)
+				}
+			} else if readErr != nil || string(after) != string(before) {
+				t.Fatal("rejected closure changed journal", readErr)
 			}
 		})
+	}
+}
+
+func TestFreshAdmissionClosesOnlyAfterRequestDeadline(t *testing.T) {
+	request := initialInfoRequest(t)
+	guard, err := allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	b := backend{q: request}
+	q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: "target", Generation: 1}}
+	if _, err = b.admitRestore(q); err != nil {
+		t.Fatal(err)
+	}
+	if err = b.closeExpiredRestore(q); err != nil {
+		t.Fatal("live request was closed", err)
+	}
+	var r restoreAdmission
+	path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
+	if err = readPrivateJSON(path, &r); err != nil || r.Closed {
+		t.Fatal(r, err)
+	}
+	b.q.Deadline = time.Now().Add(-time.Second)
+	if err = b.closeExpiredRestore(q); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal(err)
+	}
+	if err = readPrivateJSON(path, &r); err != nil || !r.Closed {
+		t.Fatal("expired dispatch not fenced", r, err)
 	}
 }

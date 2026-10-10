@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
@@ -333,10 +334,8 @@ func (b backend) admitRestore(q wire.ResumeRequest) (bool, error) {
 // Only the current fresh dispatch, under the allocation lock and before its
 // first RestoreSandbox call, may record this proof. A recovered open admission
 // or native restore error cannot establish that no guest execution occurred.
-func (b backend) closeUndispatchedRestore(q wire.ResumeRequest, cause error) error {
-	// Only explicit cancellation/deadline errors warrant another dispatch.
-	// Permanent or opaque failures retain this admission and its original expiry.
-	if !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+func (b backend) closeExpiredRestore(q wire.ResumeRequest) error {
+	if time.Now().Before(b.q.Deadline) {
 		return nil
 	}
 	if q.ObserveOnly || q.Target.ID != "" {
@@ -352,7 +351,10 @@ func (b backend) closeUndispatchedRestore(q wire.ResumeRequest, cause error) err
 		return sandbox.ErrOwnership
 	}
 	want.Closed = true
-	return durableJSON(path, want)
+	if err := durableJSON(path, want); err != nil {
+		return err
+	}
+	return context.DeadlineExceeded
 }
 
 // Completion records the incarnation whose native restore has become observable
