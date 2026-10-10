@@ -247,6 +247,12 @@ type Reader interface {
 	// Activity returns the allocation's activity; a missing allocation is
 	// ErrNotFound.
 	Activity(ctx context.Context, allocationID string) (Activity, error)
+	// CountComputeReservations counts the installation's allocations that
+	// reserve active compute.
+	CountComputeReservations(ctx context.Context, installationID string) (int64, error)
+	// CountRetainedAllocations counts the installation's allocations that
+	// retain resources.
+	CountRetainedAllocations(ctx context.Context, installationID string) (int64, error)
 }
 
 // NodeReads loads node authentication facts.
@@ -292,6 +298,8 @@ type NodeTx interface {
 
 // DeploymentTx is one leased deployment change.
 type DeploymentTx interface {
+	// HasIncompatibleComputeState checks all unreleased allocation protocol receipts.
+	HasIncompatibleComputeState(version string) (bool, error)
 	LoadDeployment() (Record, error)
 	LoadSnapshot() (Snapshot, error)
 	CountResources() (Resources, error)

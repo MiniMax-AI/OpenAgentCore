@@ -4,11 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	projectpg "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +12,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -43,11 +39,10 @@ func TestFreshHintRoutesAndPreservesLifecycleGuards(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			m := testRuntimeManager(t)
 			m.setupGate = make(chan struct{}, 1)
-			m.config = RuntimeProvider{InstallationID: uuid.NewString(), Mode: "direct", Provider: &freshHintProvider{}}
+			m.config = RuntimeProvider{InstallationID: uuid.NewString(), ProviderKind: "e2b", Mode: "direct", Provider: &freshHintProvider{}}
 			nodeID := ""
 			if scenario == "node" || scenario == "released_placement" {
-				m.config.ProviderKind = "docker"
-				m.config.Mode = "nodes"
+				m.config.ProviderKind, m.config.Mode = "docker", "nodes"
 				nodeID = uuid.NewString()
 			}
 			node, err := m.node(nodeID)
@@ -56,7 +51,7 @@ func TestFreshHintRoutesAndPreservesLifecycleGuards(t *testing.T) {
 			}
 			environment := sessions.Environment{ID: uuid.NewString(), Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 			if scenario == "self_hosted" {
-				environment.Configuration = json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)
+				environment.Configuration = json.RawMessage(`{"type":"self_hosted"}`)
 			}
 			if scenario == "suspended" {
 				environment.Initialization = "complete"
@@ -73,7 +68,7 @@ func TestFreshHintRoutesAndPreservesLifecycleGuards(t *testing.T) {
 					return deployment.Allocation{}, deployment.ErrNotFound
 				},
 				lifecyclePlacement: func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error) {
-					return deployment.LifecyclePlacement{Provider: m.config.ProviderKind, PlacementNodeID: nodeID, PlacementReleased: scenario == "released_placement"}, nil
+					return deployment.LifecyclePlacement{Provider: m.config.ProviderKind, Mode: m.config.Mode, PlacementNodeID: nodeID, PlacementReleased: scenario == "released_placement"}, nil
 				},
 			}
 			m.deploymentService, _ = deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
@@ -110,19 +105,19 @@ func (p *freshHintProvider) Create(_ context.Context, b sandbox.Bootstrap) (sand
 }
 
 func TestFreshEnvironmentHintProvisionsWithoutMaintenanceTick(t *testing.T) {
-	for _, mode := range []string{"create", "recovered_input", "recovered_initial"} {
+	for _, mode := range []string{"create", "create_initial", "recovered_input", "recovered_initial"} {
 		t.Run(mode, func(t *testing.T) {
 			owner, deployments, reader, pool := resetManagerDB(t, nil)
 			installation := initializeE2BDeployment(t, owner)
-			sessionReader, s := testSessions(t, pool, pgtest.CredentialKey(t))
+			sessionReader, sessionService := testSessions(t, pool, pgtest.CredentialKey(t))
 			provider := &freshHintProvider{created: make(chan struct{}, 1)}
 			m := testRuntimeManager(t)
 			m.setupGate = make(chan struct{}, 1)
 			m.sessions, m.sessionExecution = sessionReader, owner.Sessions
 			m.deployment, m.deploymentService, m.deploymentReader = owner.Deployment, deployments, reader
 			m.lease, m.registry = owner.Lease, runtimegateway.NewRegistry()
-			m.config = RuntimeProvider{Mode: "direct", InstallationID: installation, CoreURL: fixturePublicURL + "/api/v1", Provider: provider}
-			worker := &Worker{lease: owner.Lease, runtimes: m, dispatcher: &Dispatcher{Sessions: s, sessionExecution: owner.Sessions, SessionsReader: sessionReader, DeploymentReader: reader, notifications: &executionNotifications{}}, scheduleWake: make(chan struct{}, 1)}
+			m.config = RuntimeProvider{InstallationID: installation, Generation: 1, ProviderKind: "e2b", Mode: "direct", CoreURL: fixturePublicURL + "/api/v1", Provider: provider}
+			worker := &Worker{lease: owner.Lease, runtimes: m, dispatcher: &Dispatcher{Sessions: sessionService, SessionsReader: sessionReader, DeploymentReader: reader, notifications: &executionNotifications{}}, scheduleWake: make(chan struct{}, 1)}
 			node, err := m.node("")
 			if err != nil {
 				t.Fatal(err)
@@ -140,33 +135,24 @@ func TestFreshEnvironmentHintProvisionsWithoutMaintenanceTick(t *testing.T) {
 			}()
 			t.Cleanup(func() { cancel(); <-done })
 			<-scans // Startup scan finishes before any Session is committed.
-			projectID := uuid.NewString()
-			audit := adminaudit.WithSource(ctx, adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			management, err := projects.NewService(projectpg.New(pgunit.NewPool(pool)))
-			if err != nil {
-				t.Fatal(err)
-			}
-			project, err := management.CreateProject(audit, projects.CreateProject{ID: projectID, Name: "Fresh hint"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			tenant := project.TenantID
+			tenant := uuid.NewString()
 			input := sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted"}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ExecutionSourceSession}
 			messages := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`)}}
-			if mode == "recovered_initial" {
+			if mode == "recovered_initial" || mode == "create_initial" {
 				input.InitialInputs = messages
 			}
 			var creation sessions.Creation
 			switch mode {
-			case "create":
+			case "create", "create_initial":
+				// Ordinary and streaming HTTP creation share this Worker entrypoint.
 				creation, err = worker.CreateSession(ctx, tenant, input)
 			case "recovered_input", "recovered_initial":
-				creation, err = s.CreateSession(ctx, tenant, input)
+				creation, err = sessionService.CreateSession(ctx, tenant, input)
 			}
+			session := creation.Session
 			if err != nil {
 				t.Fatal(err)
 			}
-			session := creation.Session
 			if mode == "recovered_input" || mode == "recovered_initial" {
 				key := uuid.NewString()
 				if mode == "recovered_initial" {

@@ -7,6 +7,7 @@ from uuid import uuid4
 from provider import Provider
 from provider_test import ProviderTest
 from state import Failure
+from helper_contract_generated import PROTOCOL_VERSION
 
 
 class ObservationTest(ProviderTest):
@@ -15,7 +16,7 @@ class ObservationTest(ProviderTest):
         try:
             return Provider(request).execute()
         except Failure as error:
-            return {'Version': 2, 'ErrorCode': error.code}
+            return {'Version': PROTOCOL_VERSION, 'ErrorCode': error.code}
 
     def listing(self, *pages):
         pages = [list(page) for page in pages] or [[]]

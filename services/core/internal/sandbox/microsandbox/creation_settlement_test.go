@@ -150,7 +150,7 @@ func TestOrdinaryComputeInspectionDoesNotRequestInitialSettlement(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = provider.GetCompute(deadline(t), ref, Compute{Name: Name(config, ref, 0)})
+	_, err = provider.nativeGetCompute(deadline(t), ref, Compute{Name: Name(config, ref, 0)})
 	if !errors.Is(err, sandbox.ErrNotFound) {
 		t.Fatal(err)
 	}

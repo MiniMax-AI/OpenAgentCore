@@ -107,7 +107,7 @@ func newWorkspaceSettlementFixture(t *testing.T, provider sandbox.SandboxProvide
 	control := &settlementWorkspaceControl{configuration: configuration}
 	filesystems := workspaces.NewExecution(storage, writer, settlementWorkspaceControls{control}, lease)
 	declaration := control.Declaration()
-	lifecycle := &runtimeLifecycle{registry: runtimegateway.NewRegistry(), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: operations, deployments: deployments, reader: reader, lease: lease, workspaces: filesystems, config: RuntimeProvider{InstallationID: installation, Provider: provider, Workspace: &declaration, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
+	lifecycle := &runtimeLifecycle{registry: runtimegateway.NewRegistry(), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: operations, deployments: deployments, reader: reader, lease: lease, workspaces: filesystems, config: RuntimeProvider{InstallationID: installation, Mode: "direct", Generation: 1, Provider: provider, Workspace: &declaration, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
 	return workspaceSettlementFixture{lifecycle: lifecycle, sessions: service, storage: storage, control: control, session: session}
 }
 

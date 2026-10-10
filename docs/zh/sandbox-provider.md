@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: a69ba63ef2b5bd883e0a235807df9d270c23dab9b6df11cf6019534281ced8e9
+source_hash: e49b04aa281a5f8bba5838b14b9a3a7ab607a5484d79cd451fcd8bbcc77142d5
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -27,7 +27,7 @@ Core 拥有持久 Environment、allocation、placement 和 cleanup 状态；Prov
 
 ## 实现接口 {#implement-the-interface}
 
-`sandbox_provider.go` 包含 Core–Sandbox Provider 协议：负责 allocation、checkpoint 和观测的 `SandboxProvider` 接口及其请求与结果类型，以及 setup 阶段的 `ConfigurationAdapter` 及其类型化错误。Core 在此边界之外也使用的值类型，例如 `DeploymentSpec` 和 `CallFence`，位于同一 package 的独立文件中。每个方法在编译期都必须实现，`ProviderOperations()` 声明 Provider 支持哪些方法。以下五项操作始终支持：
+`sandbox_provider.go` 包含 Core–Sandbox Provider 协议：负责 allocation、暂停和观测的 `SandboxProvider` 接口及其请求与结果类型，以及 setup 阶段的 `ConfigurationAdapter` 及其类型化错误。Core 在此边界之外也使用的值类型，例如 `DeploymentSpec` 和 `CallFence`，位于同一 package 的独立文件中。每个方法在编译期都必须实现，`ProviderOperations()` 声明 Provider 支持哪些方法。以下五项操作始终支持：
 
 | 操作 | 用途 |
 | --- | --- |
@@ -47,7 +47,7 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 | --- | --- | --- |
 | `Create`、`GetInfo`、`Renew`、`Kill`、`RunCommand` | 支持 | Allocation 生命周期与有界命令 |
 | `Observe` | 明确决定 | 检查所有权、只读地观测一个 allocation |
-| `Initial`、`NewCompute`、`GetCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot`、`RunCommandCompute` | 所有 checkpoint 方法决定一致；仅 `nodes` 注册可以支持 | 精确计算实例、捕获与恢复、保留源恢复和清理 |
+| `Initial`、`NewCompute`、`GetCompute`、`RenewCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteRetained`、`RunCommandCompute` | 全部十项暂停方法决定一致；`nodes` 与 `direct` 模式均可支持 | 精确计算实例、捕获与恢复、保留源恢复和清理 |
 
 `Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例；`RunCommandCompute` 在一个精确 compute incarnation 中运行有界命令。Core 使用 `RunCommandCompute` 在恢复后唤醒 parked daemon（[`runtime_compute_wake.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute_wake.go)）。
 
@@ -91,7 +91,7 @@ Microsandbox 在返回创建不存在回执前永久关闭初始 Create 准入�
 
 `ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed` 和 `ErrCommandUnconfirmed` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将 provider diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
 
-Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与 provider snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
+暂停支持增加精确的 `Compute` 代次、名称和 ID，以及不透明的 `RetainedState` 收据。原样持久化操作 ID 和 Provider 保留状态的来源。暂停或恢复中的 `ReconcileOnly` 观察原始尝试，不会开始另一次捕获或恢复。`ResumeCompute` 仅解冻保留的源实例，绝不冷启动已停止的源实例。清理针对精确计算实例和保留状态，而非当前恰好同名的实例。声明支持前请阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
 
 ### 四个独立就绪事实 {#four-distinct-readiness-facts}
 
@@ -114,7 +114,7 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 2. 添加 specification 和 resource validator。
 3. 基于类型化原生配置实现 `sandbox.ConfigurationAdapter`。`DecodeInput` 严格解析请求中独立的公开 `configuration` 与只写 `credential` 对象。`Encode` 生成白名单公开 selector、只读观测和独立 secret bytes，不透传请求 JSON。`Decode` 恢复已存储 selector 并保留对所属资源的访问，不做远程 admission 或新模板验证。`Normalize` 修改前复制输入。`ResolveChange`、`Equal` 和 `WithCredential` 负责继承、身份与凭据组合。`Requirements` 声明是否需要凭据和公开 Core origin，以及支持哪些 setup 操作：`Discovery` 对应 `DiscoverConfiguration`，`SelectionDiscovery` 对应 `DiscoverSelection`，`CredentialVerification` 对应 `VerifyCredential`。`DiscoverConfiguration` 验证 query 并返回安全 catalog，不做 mutation 或 admission decision；Core 保留授权、输入限制与 deadline。`DiscoverSelection` 在提交前解析候选项省略的原生值，`VerifyCredential` 验证凭据对所属资源的访问，不修改资源。两者都接收候选项的 `sandbox.DirectConfig`，原生 client 只为该次调用构造。node provider 仅接受空公开对象，拒绝凭据，对每项 setup 操作和 credential replacement 返回 Unsupported。
 4. node adapter 从自己的包中导出 `BuildLocal` constructor、它解码的类型化 `native` 对象，以及它在共享 node artifact 之外添加的原生文件。node-local 设置（如主机路径）只存放在该对象中；resources 和 Runtime release 从 node 配置的 `specification` 读取。
-5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即 provider kind，也用于标记该 Provider 的观测；checkpoint 支持读取此项。生成的投影组合每个已注册的部署模式和 deployment policy 与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取，因此 Web 读取这些声明，而不比较 provider kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
+5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即 provider kind，也用于标记该 Provider 的观测；暂停支持读取此项。生成的投影组合每个已注册的部署模式和 deployment policy 与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取，因此 Web 读取这些声明，而不比较 provider kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
 6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约向运维人员提供 provider。
 
 **已知设计缺口：** Web 仍在 setup 向导的后端选择、Docker 确认，以及所有显示或解析 E2B 配置字段的地方（带服务预设的 setup 步骤、部署摘要和客户端的部署投影）中指名 provider，因为协议尚未声明配置字段。通过该界面提供另一 provider 目前需要修改共享的 Web。此耦合不符合[复杂性留在 adapter 内](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter)；新集成必须通过协议表达配置，把厂商专有行为留在 adapter。不得添加 Session 或 Turn 调度路径、厂商专有 column 或 API field，或 store 中的厂商 switch。
@@ -128,7 +128,7 @@ node 配置 `sandbox.NodeConfig` 包含 `provider`、`generation`、`installatio
 - `nodes` 注册仅有 `BuildLocal`，`direct` 注册仅有 `BuildDirect`；缺失、混合或未知 mode 被拒绝。
 - specification 和 resource validator、configuration adapter 与完整 operation 声明都是必需项，因此不完整注册不能发布部分投影。声明的默认大小必须通过 adapter 的 resource validator。
 - Runtime input policy 要么接受固定 Runtime，要么给出 adapter 拒绝它的固定原因，不能两者兼有。
-- Checkpoint 仅准入 `nodes` 注册，因为公共 lifecycle 只暂停 node allocation；声明 checkpoint 的 `direct` Provider 会被注册拒绝。注册不携带 suspension 数值：Core 对每个声明 checkpoint 支持的 Provider 应用同一个 [suspension policy](#suspension)。
+- 完整生命周期声明支持时，`nodes` 与 `direct` 模式都准入暂停。注册不携带 suspension 数值；Core 对所有支持的 Provider 应用同一个 [暂停策略](#suspension)。
 
 configuration adapter 必须非 nil，包括其具体值。每个 `ConfigurationRequirements` 字段都需要明确有效的决定：`Credential` 和 `PublicOrigin` 为 `Required` 或 `NotRequired`，`Discovery`、`SelectionDiscovery` 和 `CredentialVerification` 使用共享 supported 或 unsupported 声明并携带安全 reason。新增 requirement field 需要明确更新验证，不继承已有决定。要求凭据不承诺支持 `VerifyCredential` 操作。这些检查证明注册完整，不证明原生 SDK 行为正确；constructor 和 adapter 契约测试仍然适用。
 
@@ -138,7 +138,7 @@ configuration adapter 必须非 nil，包括其具体值。每个 `Configuration
 
 具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 调用已准备的 verification 和 fencing callback，不按厂商分支。
 
-厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回 provider、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过 provider name。
+厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回 provider、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 暂停的 backend 暴露暂停操作，公共 lifecycle 通过暂停声明准入 suspension，不通过 provider name。
 
 backend fingerprint 标识原生资源命名空间，不表示容量。Core 保留部署 generation，使所属 allocation 继续解析到原 backend；不要将保留 allocation 重新指向替代 backend。
 
@@ -168,15 +168,15 @@ allocation、专用 daemon credential digest 和精确 Session binding 在 `Crea
 
 配置 provider 后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
 
-Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式删除和 snapshot retention 授权其清理。停止或缺失 container 不授权丢弃保留工作区或历史。禁用 provider 停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
+Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式删除和保留状态期限授权其清理。停止或缺失 container 不授权丢弃保留工作区或历史。禁用 provider 停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
 
 终结清理原子撤销 device authority、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时 provider outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
 
 ### 每节点生命周期 worker {#per-node-lifecycle-workers}
 
-每个注册 node 有一个串行 lifecycle worker，负责 gate、allocation 与 pending cursor、connection 和 wake hint；E2B allocation 共享一个没有 node 的串行 lifecycle。薄 coordinator 发现 node 并关闭 worker，数据库、provider 或等待操作期间不持有 map mutex。worker 独立推进，因此一个在线 node 的 provider 卡住不会阻塞其他 node：lifecycle 并发为每 node 一项操作，随 node 数量增长。离线 worker 保留，因此其保留资源在重连后仍可观察。
+托管 Environment 提交后，Core 会向其放置节点的生命周期 worker 发送有界提示。已提交的待处理输入也会发送提示，以恢复遗漏的创建通知。提示复用现有串行门控、执行租约、容量检查和一次性分配凭据，不会在准入处理器内直接创建沙箱。每个正常维护周期最多允许一次额外提示扫描；周期扫描负责恢复遗漏或合并的提示。已有分配的观察仍先于待创建资源处理，因此同一节点上的慢观察仍可能延迟新 Environment。
 
-托管 Environment 提交后，Core 向其 placement 的生命周期 worker 发送有界提示。已提交的待处理输入也会发送提示，以恢复遗漏的创建通知。提示沿用串行 gate、租约、容量检查和一次性 allocation 收据，不在准入处理器内直接创建资源。每个正常维护周期最多允许一次额外提示扫描；周期扫描恢复遗漏或合并的提示。现有 allocation 观察仍先于待创建资源扫描，因此同一节点上缓慢的观察可能延迟新 Environment。
+每个注册 node 有一个串行 lifecycle worker，负责 gate、allocation 与 pending cursor、connection 和 wake hint；E2B allocation 共享一个没有 node 的串行 lifecycle。薄 coordinator 发现 node 并关闭 worker，数据库、provider 或等待操作期间不持有 map mutex。worker 独立推进，因此一个在线 node 的 provider 卡住不会阻塞其他 node：lifecycle 并发为每 node 一项操作，随 node 数量增长。离线 worker 保留，因此其保留资源在重连后仍可观察。
 
 allocation scan 在应用 32 行分页限制前按 node 过滤，pending scan join 尚未释放的已提交 placement。每个 node 推进自己的 cursor，包括越过失败观测，并在末尾回绕一次。direct provisioning 在进入该 node gate 前解析 tenant 范围内 placement，已有 allocation 必须与其一致；Core 不选择另一 node。
 
@@ -186,15 +186,33 @@ allocation scan 在应用 32 行分页限制前按 node 过滤，pending scan jo
 
 placement 自动完成：environment-to-node placement 与 Session 创建及其 retry identity 一起提交，调用方不能选择 node，重试即使 node 离线也保留原 node。Node capacity 计入 pending reservation 和未决资源，新 placement 与 suspended-to-restoring 转移共享数据库锁。未知操作保留预约，source teardown 必须确认后才能释放 active capacity，确认 cleanup 后释放 placement capacity。保留所有权需要精确 provider evidence：socket path、缺失 instance 或空列表都不证明 cleanup，也不授权 replacement。
 
-部署的 CPU、memory、disk 设置、`max_active`、`max_retained` 和 snapshot retention 限制每个 node。不提供 node-level drain、跨 node Session migration、multi-active Core、autoscaling 或 snapshot replication。node 持有 allocation、snapshot、reservation、unknown result 或 cleanup 时拒绝移除 node，离线 ownership 保留。
+部署的 CPU、memory、disk 设置、`max_active`、`max_retained` 和保留状态期限限制每个 node。不提供 node-level drain、跨 node Session migration、multi-active Core、autoscaling 或 snapshot replication。node 持有 allocation、保留状态、reservation、unknown result 或 cleanup 时拒绝移除 node，离线 ownership 保留。
 
 ### 暂停 {#suspension}
 
-Core 用同一个固定 policy 暂停每个声明 checkpoint 支持的 provider 的空闲工作：工作空闲 5 分钟（300 秒）后暂停，snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 仅在至少一个 Turn 已终结、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input、file operation 或 initialization，且真实 activity 已空闲达到该时间后暂停。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
+单一 `SandboxProvider` 一并声明 `Initial`、`NewCompute`、`GetCompute`、`RenewCompute`、`Suspend`、`Resume`、`KillCompute`、`DeleteRetained`、`RunCommandCompute` 和 `ResumeCompute`：十项全部支持或全部不支持。生命周期不通过可选暂停接口或 Provider 名称分支选择。
 
-Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspension。新 Turn claim、file-write intent 和 capture admission 在 Session lock 下串行化，共享一个 compute-phase 检查；新 pending work 取消 capture 并唤醒同一 source。正常 preparation 在经过认证的 resume handshake 后等待 compute phase 为 running；pending input 的 promotion 与 lifecycle transition 冲突时保持 pending。compute phase 和 revision-checked receipt 位于 allocation。Core 在 effect 前持久化 quiesce、capture 和 restore intent，仅新 receipt 执行 capture 或 restore，恢复观察精确 attempt，不重试未知 creation、capture 或 restore。已消费 snapshot 不让 running generation 回滚。删除、撤销和 retention expiry 优先于 wake，一直持续到最终数据库 compare-and-swap；未知 cleanup identity 保留，直到确认所属资源不存在。已消费 artifact 和旧 compute 被删除，因此暂停循环不累积可写磁盘链。
+`RetainedState` 是 adapter 拥有的不透明信封，包含 `Reference`、`ID`、`Data`、`OperationID`、`SourceGeneration`、`SourceName` 和 `SourceID`。`Data` 必须非空且不超过 64 KiB。Core 原样保留信封并校验操作与源实例归属；不可变的 allocation Provider/代次绑定决定唯一有权解释它的 adapter。保留状态不必是独立快照：microsandbox 将完整原生快照身份放入 `Data`，E2B 保留带版本的原生暂停收据，不承诺独立磁盘镜像。adapter 在任何副作用前校验原生内容及归属。
 
-排队工作和实时 Environment file access 唤醒 suspended Environment；history 和已发布 Artifact read 不唤醒。计划暂停在 daemon 连接上使用 Environment 和 suspension token。受 PID 与 start-time fencing 的本地 control signal（`RunCommandCompute`）唤醒 parked daemon，daemon 在准入工作前重新认证。确认前临时断连通过有界 attempt 和 backoff 重试同一已 armed suspension；永久认证或协议拒绝则关闭。Core 负责 snapshot retention deadline，daemon 没有相应 timer。quiesce 确认丢失时可以通过明确 rollback 解冻同一 source，但不授权 capture。
+`Compute.RestoredFrom`、`ComputeState.Retained`、`ResourcesReleased`、`SuspendSettled` 和恢复的 `ReconcileOnly` 是结算证据。资源缺失不证明未知暂停已结束。`RenewCompute` 只续租精确实例；不确定结果不授权第二次创建、捕获或恢复。持久 `runtime_compute` 使用 `protocol_version: "1"`；启动拒绝缺失或未知版本。仅匹配当前 retained-state 字段形状的版本 1 信封可直接读取，无需改写。旧 snapshot-only 形状即使标记相同的版本 1 也会被拒绝；数字相同不证明互通。升级不做迁移、合成重放或丢弃保留状态。
+
+`ResumeRequest.Workspace` 携带 allocation 独立拥有的文件系统绑定；Core 在恢复前获取 ready 绑定。源实例必须已释放活跃执行能力，目标才可成为写者。adapter 在原生副作用前校验绑定；不支持独立文件系统的 adapter 拒绝非空绑定。`DeleteRetained` 仅删除 adapter 的计算保留状态，绝不删除 workspace。显式 Session 删除先完成 compute 清理，再删除独立存储，恢复期间保持单一活跃写者。
+
+Core 对所有声明暂停支持的 Provider 应用统一固定策略：工作空闲 5 分钟（300 秒）后暂停，保留状态期限为 24 小时（86400 秒）；部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 返回这些值。Core 暂停已经初始化的 Environment，包括尚未执行 Turn 的 Environment，前提是没有 root 或 Subagent Turn 排队、执行或等待，没有输入、文件操作或初始化待处理，且真实活动已空闲达到该时长。Core 在同一事务中使用数据库时钟记录 allocation 的初始化完成和 root 或 child 终结转换。候选筛选和持有 Session 锁的复查比较数据库经过时间与空闲时长，初始保留状态期限也锚定同一数据库观测，因此 Core 与数据库主机的时钟无需一致。公开历史中的原生完成时间戳保持不变，但不驱动空闲准入，心跳也不重置活动时间。确认计划暂停前，daemon 关闭准入并排空原生清理、输出收据和文件工作。
+
+Worker 租约、Session 锁和每个 node 的 gate 负责所有 Provider 的暂停。新 Turn claim、文件写入意图和捕获准入在 Session 锁下串行化，共享计算阶段检查；新待处理工作取消捕获并唤醒同一源实例。正常准备在经过认证的恢复握手后等待计算阶段变为 running；待处理输入的提升与生命周期转换冲突时，输入保持 pending。计算阶段和经 revision 校验的收据存储在 allocation 中。Core 在副作用前持久化静止、捕获和恢复意图，仅新收据执行捕获或恢复；恢复流程观察精确尝试，不重试结果未知的创建、捕获或恢复。已消费的保留状态不会使运行中的代次回滚。删除、撤销和保留期到期始终优先于唤醒，直至最后的数据库 compare-and-swap；未知清理身份会一直保留，直到确认所属资源已不存在。已消费产物和旧计算实例会被删除，因此暂停循环不会累积可写磁盘链。
+
+排队工作和实时 Environment 文件访问会唤醒暂停的 Environment；历史和已发布 Artifact 的读取不会唤醒。计划暂停在 daemon 连接上使用 Environment 与 suspension token。由 PID 和启动时间隔离的本地控制信号（`RunCommandCompute`）唤醒 parked daemon，daemon 在准入工作前重新认证。确认前的临时断连通过有界尝试和退避重试同一已准备好的暂停；永久认证或协议拒绝会将其关闭。Core 负责保留状态的到期期限，daemon 没有相应定时器。静止确认丢失时可以通过明确回滚解冻同一源实例，但不授权捕获。
+
+`Suspend` 负责原生资源释放，返回绑定的保留句柄、suspended 状态、`ResourcesReleased` 和 `SuspendSettled` 后，Core 才释放活跃容量。`ReconcileOnly` 禁止重放原始捕获或暂停，但允许完成由持久保留产物证明安全的 adapter 清理。无保留状态的结果只有在带有 `SuspendSettled` 且源实例处于可恢复的运行或暂停状态时才允许回滚。其他所有不确定结果均保留所有权并关闭准入。Core 从不在 `Suspend` 后无条件销毁源实例。
+
+`Resume` 将保留状态恰好消费一次并恢复到预先提交的目标。恢复逻辑观察同一次尝试。Core 持久化 `waking`、认证并恢复 daemon、删除已消费的保留资源，然后提交 `running` 并准入工作。`DeleteRetained` 是幂等产物清理，会保留运行中的计算资源。清理失败会保持 `waking` 阶段，不能触发再次恢复。`KillCompute` 仍然是破坏性操作；清理旧代次时不得终止共享原生 ID 的较新活跃实例。
+
+现有 Session 锁、生命周期租约、空闲规则、容量查询和清理顺序继续作为权威。每个尚未释放的分配都占用 `max_retained`，包括运行中的分配。每个分配在预留时都写入共享计算协议版本，包括暂停阶段为 `disabled` 的分配。激活会拒绝任何协议版本缺失或不同的未释放分配；升级前必须由旧版本完成普通清理。Session 历史保留。
+
+### 协调协议升级 {#coordinated-protocol-upgrade}
+
+Core 与 node 一同升级到 node wire version 7；E2B helper 使用 private wire version 4，并重建包含托管暂停控制的模板；microsandbox helper 使用 private wire version 5。所有 Provider 交付 Runtime bootstrap version 2。每个边界独立验证自身契约，不同边界的版本号不能互换。激活前，使用此前兼容的版本对不兼容的未释放 allocation 完成正常清理。启动栅栏保留其持久收据及 Session 历史，不通过 Provider 调用迁移它们。
 
 ### 重置与归档 {#reset-and-archive}
 
@@ -202,7 +220,7 @@ Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspensi
 
 一个 snapshot 和 timestamp 对持有资源分区。离线 ownership 来自 allocation 或 active placement 的 node，与 online presence 使用同一 45 秒 connection 和 owner-epoch predicate，独立于 provider readiness；cleanup failure、offline state 或空 read 都不授权合成 release。held resource 为零时，Core 在数据库事务外 drain，在 deployment lock 下复查，并在一个事务中清空 deployment，再发布携带 generation 的空 provider，没有可失败工作。最终 write 或 drain 失败时，在释放 mutation gate 前使用有界 owner context 恢复已提交 provider；恢复失败时 admission 保持 fenced，owner 停止。
 
-管理员 [Session archive](../../contracts/agents-api/zh/admin-api.md#session-archive) 在 Session-first transaction 中保留 Project scope 与 hosted eligibility 检查，并一起处理 Environment expiry、cancellation、Runtime authority revocation 和 audit；reset 的后台 archive 从可信记录重建实际 Project scope，保留请求方 provenance。普通 provider lifecycle 释放 compute 和 snapshot。archive cancellation 在 terminal commit 前保留健康 receipt path：仅首次撤销 device 的 archive 记录精确 `archive_cancel_turn_id`（普通 revocation 清空它，重复 cleanup 保留它），现有已认证 delivery 可从 Turn 原 `cancel_requested_at` 起最多 20 秒排空该 cancellation。Core 独立于 subscription removal，通过 `done`、cancellation acknowledgement 和 terminal commit 跟踪 delivery，不授予新 connection、input、file 或 MCP authority，也不续期 lease。事务或 lifecycle gate 不等待 receipt，peer 丢失、到期或重启回到普通 failure 与 cleanup，不虚构 cancelled outcome。
+管理员 [Session archive](../../contracts/agents-api/zh/admin-api.md#session-archive) 在 Session-first transaction 中保留 Project scope 与 hosted eligibility 检查，并一起处理 Environment expiry、cancellation、Runtime authority revocation 和 audit；reset 的后台 archive 从可信记录重建实际 Project scope，保留请求方 provenance。普通 provider lifecycle 释放 compute 和保留状态。archive cancellation 在 terminal commit 前保留健康 receipt path：仅首次撤销 device 的 archive 记录精确 `archive_cancel_turn_id`（普通 revocation 清空它，重复 cleanup 保留它），现有已认证 delivery 可从 Turn 原 `cancel_requested_at` 起最多 20 秒排空该 cancellation。Core 独立于 subscription removal，通过 `done`、cancellation acknowledgement 和 terminal commit 跟踪 delivery，不授予新 connection、input、file 或 MCP authority，也不续期 lease。事务或 lifecycle gate 不等待 receipt，peer 丢失、到期或重启回到普通 failure 与 cleanup，不虚构 cancelled outcome。
 
 ## 验证集成 {#validate-the-integration}
 
