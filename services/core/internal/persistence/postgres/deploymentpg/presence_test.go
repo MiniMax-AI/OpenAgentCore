@@ -246,7 +246,7 @@ func TestNodeStaleEpochCannotReplaceCurrentConnection(t *testing.T) {
 	if err := f.service.DisconnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: false}); !errors.Is(err, deployment.ErrNodeCredential) {
+	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: false}, nil); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old Core rewrote health", err)
 	}
 	nodes, err := f.service.ListNodes(t.Context())
@@ -277,7 +277,7 @@ func TestNodeDiagnosticReachesListAndDetail(t *testing.T) {
 		{reported: "dial unix /var/run/docker.sock: permission denied", want: "provider_unavailable"},
 		{reported: "artifacts_unavailable", want: "", ready: true},
 	} {
-		if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: tc.ready, Diagnostic: sandbox.NodeDiagnosticCode(tc.reported)}); err != nil {
+		if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: tc.ready, Diagnostic: sandbox.NodeDiagnosticCode(tc.reported)}, nil); err != nil {
 			t.Fatal(tc.reported, err)
 		}
 		list, err := f.service.ListNodes(t.Context())
@@ -321,11 +321,11 @@ func TestNodeStatusUsesAuthenticatedFreshPresence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
+	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: false}, nil); err != nil {
 		t.Fatal(err)
 	}
 	status(true, false)
-	if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	status(true, true)

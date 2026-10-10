@@ -68,7 +68,9 @@ func BuildNode(config sandbox.NodeConfig, _ sandbox.LocalOptions, result *sandbo
 		return func() {}, errors.New("invalid managed Docker provider configuration")
 	}
 	result.Provider = provider
-	result.Probe = dockerProbe(c, entry.Image, config.Specification.Resources)
+	result.Probe = func(ctx context.Context) (*sandbox.CheckpointCompatibility, error) {
+		return nil, dockerProbe(c, entry.Image, config.Specification.Resources)(ctx)
+	}
 	result.BackendFingerprint = sandbox.BackendFingerprint(config.Provider, entry.Host)
 	return closeProvider, nil
 }

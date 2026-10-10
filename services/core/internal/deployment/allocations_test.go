@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -141,9 +142,13 @@ func (f *fakeAllocationTx) LoadGenerationSpecification(uint64) (GenerationSpecif
 	return GenerationSpecification{}, nil
 }
 
-func (f *fakeAllocationTx) LoadRestore(Allocation) (placement.Restore, error) {
-	unexpected(f.t, "LoadRestore")
-	return placement.Restore{}, nil
+func (f *fakeAllocationTx) LoadCheckpointPlacement(Allocation) (placement.Deployment, []placement.CheckpointNode, error) {
+	unexpected(f.t, "LoadCheckpointPlacement")
+	return placement.Deployment{}, nil, nil
+}
+func (f *fakeAllocationTx) MoveSuspended(Allocation, string, ComputeChange) (Allocation, error) {
+	unexpected(f.t, "MoveSuspended")
+	return Allocation{}, nil
 }
 
 func (f *fakeAllocationTx) ObserveRunning(Allocation) (Allocation, error) {
@@ -630,7 +635,13 @@ func TestSetComputeRechecksIdlePressureAndActivity(t *testing.T) {
 				},
 				loadSuspensionDemand: func(Allocation) (SuspensionDemand, error) {
 					pressureChecks++
-					return SuspensionDemand{Deployment: placement.Deployment{InstallationID: owner.ProviderKey, Mode: "nodes"}, Nodes: []placement.Node{{ID: owner.NodeID, Online: true, Active: 1, MaxActive: 1}}, RestoreWaiting: test.pressure}, nil
+					node := placement.Node{ID: owner.NodeID, Online: true, Active: 1, MaxActive: 1, Retained: 1, MaxRetained: 1, CoreURL: testPublicURL}
+					demand := SuspensionDemand{Deployment: placement.Deployment{InstallationID: owner.ProviderKey, Mode: "nodes"}, Nodes: []placement.Node{node}}
+					if test.pressure {
+						compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: "fixture", ExecutionClass: "fixture"}
+						demand.CheckpointRestores = []CheckpointRestoreDemand{{SourceNode: owner.NodeID, Compatibility: compatibility, Nodes: []placement.CheckpointNode{{Node: node, Checkpoint: &compatibility}}}}
+					}
+					return demand, nil
 				},
 				setCompute: func(a Allocation, c ComputeChange) (Allocation, error) {
 					writes++
@@ -660,4 +671,30 @@ func (f *fakeAllocationTx) CanRetainEnvironment(current Allocation) (bool, error
 		return false, nil
 	}
 	return f.canRetainEnvironment(current)
+}
+
+func TestBeginRestoreDirectKeepsAllocationAndRetention(t *testing.T) {
+	until := time.Now().Add(time.Hour)
+	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running", ComputePhase: "suspended", ComputeRetainedUntil: &until}
+	tx := &fakeAllocationTx{t: t, loadAllocation: func() (Allocation, error) { return owner, nil }, loadSessionDevice: func() (SessionDevice, bool, error) {
+		return SessionDevice{ID: owner.DeviceID, EnvironmentID: owner.EnvironmentID}, true, nil
+	}, loadActivity: func(Allocation) (Activity, error) { return Activity{WakeRequested: true}, nil }, setCompute: func(current Allocation, change ComputeChange) (Allocation, error) {
+		if change.Phase != "restoring" || change.RetainedUntil != owner.ComputeRetainedUntil {
+			t.Fatal("direct restore lost intent", change)
+		}
+		current.ComputePhase = change.Phase
+		return current, nil
+	}}
+	storage := &fakeExecutionStorage{t: t, withAllocation: func(_ context.Context, _ AllocationKey, apply func(AllocationTx) error) error { return apply(tx) }}
+	operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := operations.BeginRestore(t.Context(), owner, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture", ExecutionClass: "fixture"}, json.RawMessage(`{"restore_id":"attempt"}`))
+	if err != nil || restored.ID != owner.ID || restored.NodeID != "" || restored.ComputePhase != "restoring" {
+		t.Fatal("direct restore changed ownership", restored, err)
+	}
+	if _, err := operations.SetCompute(t.Context(), owner, "restoring", json.RawMessage(`{}`), &until, time.Minute); !errors.Is(err, ErrInvalidInput) {
+		t.Fatal("restore bypassed capacity admission", err)
+	}
 }

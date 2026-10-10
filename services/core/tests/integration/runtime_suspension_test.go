@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -57,7 +58,13 @@ func runtimeSuspensionStep(t *testing.T, w *Store, owner deployment.Allocation, 
 	if owner.ComputePhase == "running" && phase == "quiescing" {
 		idleTimeout = time.Nanosecond
 	}
-	next, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, phase, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`), until, idleTimeout)
+	var next deployment.Allocation
+	var err error
+	if phase == "restoring" {
+		next, err = deploymentExecution(t, w).BeginRestore(t.Context(), owner, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`))
+	} else {
+		next, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, phase, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`), until, idleTimeout)
+	}
 	if err != nil {
 		t.Fatalf("%s -> %s: %v", owner.ComputePhase, phase, err)
 	}
@@ -245,7 +252,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 		t.Fatal("snapshot retention expiry not observed", expired, err)
 	}
 	// Use the earlier unexpired observation to exercise expiry at the database CAS.
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), retained, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := deploymentExecution(t, w).BeginRestore(t.Context(), retained, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, json.RawMessage(`{}`)); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("expired snapshot restored from stale observation", err)
 	}
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: owner.TenantID, SessionID: owner.SessionID}); err != nil {
@@ -258,7 +265,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 	if err != nil || !deleted.SessionDeleted || deleted.ComputeWakeRequested {
 		t.Fatal("deleted session was woken", deleted, err)
 	}
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), deleted, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := deploymentExecution(t, w).BeginRestore(t.Context(), deleted, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, json.RawMessage(`{}`)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted session restored", err)
 	}
 }

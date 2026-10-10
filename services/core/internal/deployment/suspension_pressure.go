@@ -11,10 +11,17 @@ import (
 // SuspensionDemand is a transaction-bound capacity observation. It is not a
 // reservation: only a confirmed suspension frees an active slot.
 type SuspensionDemand struct {
-	Deployment     placement.Deployment
-	Nodes          []placement.Node
-	InFlightNodes  []string
-	RestoreWaiting bool
+	Deployment         placement.Deployment
+	Nodes              []placement.Node
+	InFlightNodes      []string
+	CheckpointRestores []CheckpointRestoreDemand
+}
+
+// CheckpointRestoreDemand carries one stopped owner and exact-generation target evidence.
+type CheckpointRestoreDemand struct {
+	SourceNode    string
+	Compatibility sandbox.CheckpointCompatibility
+	Nodes         []placement.CheckpointNode
 }
 
 func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocation) (bool, error) {
@@ -35,10 +42,36 @@ func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocat
 	if source == nil || !source.Online || source.Active < int64(source.MaxActive) {
 		return false, nil
 	}
-	// A retained restore already owns its retained slot and may use an older
-	// prepared generation than the node's serving generation.
-	if pressure.RestoreWaiting {
-		return !slices.Contains(pressure.InFlightNodes, owner.NodeID), nil
+	for _, demand := range pressure.CheckpointRestores {
+		if _, err := e.service.rules.ChooseCheckpoint(demand.Nodes, demand.SourceNode, demand.Compatibility, false); err == nil {
+			continue
+		} else if !errors.Is(err, placement.ErrNodeUnavailable) {
+			return false, err
+		}
+		candidates := slices.Clone(demand.Nodes)
+		for i := range candidates {
+			if candidates[i].Node.ID == owner.NodeID {
+				candidates[i].Node.Active--
+			}
+		}
+		chosen, err := e.service.rules.ChooseCheckpoint(candidates, demand.SourceNode, demand.Compatibility, false)
+		if err == nil && chosen == owner.NodeID {
+			eligible := make([]placement.Node, 0, len(candidates))
+			for _, candidate := range candidates {
+				if candidate.Checkpoint != nil && *candidate.Checkpoint == demand.Compatibility {
+					eligible = append(eligible, candidate.Node)
+				}
+			}
+			inFlight, err := e.reclamationInFlight(pressure, eligible)
+			if err != nil {
+				return false, err
+			}
+			if !inFlight {
+				return true, nil
+			}
+		} else if err != nil && !errors.Is(err, placement.ErrNodeUnavailable) {
+			return false, err
+		}
 	}
 	if source.Retained >= int64(source.MaxRetained) {
 		return false, nil

@@ -15,7 +15,7 @@ type GenerationProvider struct {
 	Generation          uint64
 	SpecificationDigest string
 	Provider            sandbox.SandboxProvider
-	Probe               func(context.Context) error
+	Probe               func(context.Context) (*sandbox.CheckpointCompatibility, error)
 	// Quiescent reports that no helper outlived its canceled caller; nil
 	// means always quiescent.
 	Quiescent func() bool
@@ -31,6 +31,7 @@ type GenerationManagerOptions struct {
 }
 
 type localGeneration struct {
+	checkpoint           *sandbox.CheckpointCompatibility
 	value                GenerationProvider
 	state, diagnostic    string
 	refs                 int
@@ -164,7 +165,7 @@ func (m *GenerationManager) Statuses() []sandbox.GenerationStatus {
 			continue
 		}
 		seen[key] = true
-		result = append(result, sandbox.GenerationStatus{Generation: key, SpecificationDigest: g.value.SpecificationDigest, State: g.state, Diagnostic: g.diagnostic})
+		result = append(result, sandbox.GenerationStatus{Generation: key, SpecificationDigest: g.value.SpecificationDigest, State: g.state, Diagnostic: g.diagnostic, Checkpoint: g.checkpoint})
 		if key != m.target.Generation && (m.target.ServingGeneration == nil || key != *m.target.ServingGeneration) {
 			m.statusCursor = key
 		}
@@ -360,7 +361,10 @@ func (m *GenerationManager) probeLoop() {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
-		err := g.value.Probe(ctx)
+		checkpoint, err := g.value.Probe(ctx)
+		if err == nil && ((sandbox.SupportsCheckpoint(g.value.Provider) && (checkpoint == nil || checkpoint.Validate() != nil)) || (!sandbox.SupportsCheckpoint(g.value.Provider) && checkpoint != nil)) {
+			err = sandbox.ErrInvalid
+		}
 		cancel()
 		m.mu.Lock()
 		g.refs--
@@ -368,9 +372,11 @@ func (m *GenerationManager) probeLoop() {
 		if !errors.Is(err, context.Canceled) {
 			state, diagnostic := g.state, g.diagnostic
 			g.state = "ready"
+			g.checkpoint = checkpoint
 			g.diagnostic = ""
 			if err != nil {
 				g.state = "failed"
+				g.checkpoint = nil
 				g.diagnostic = sandbox.NodeDiagnostic(err)
 				if errors.Is(err, sandbox.ErrRuntimeImageUnavailable) || errors.Is(err, sandbox.ErrArtifactsUnavailable) {
 					g.repairing = true

@@ -158,7 +158,7 @@ func TestDecidePlacement(t *testing.T) {
 	}
 }
 
-func TestCheckReservedAndRestore(t *testing.T) {
+func TestCheckReserved(t *testing.T) {
 	for name, test := range map[string]struct {
 		reserved Reserved
 		want     error
@@ -169,24 +169,6 @@ func TestCheckReservedAndRestore(t *testing.T) {
 	} {
 		if err := CheckReserved(test.reserved); !errors.Is(err, test.want) || (test.want == nil) != (err == nil) {
 			t.Errorf("%s: CheckReserved = %v, want %v", name, err, test.want)
-		}
-	}
-	node := func(online bool, active int64) *Node {
-		return &Node{ID: "a", Online: online, Active: active, MaxActive: 2}
-	}
-	for name, test := range map[string]struct {
-		restore Restore
-		want    error
-	}{
-		"ready":              {Restore{Node: node(true, 1), Generation: 3, GenerationReady: true}, nil},
-		"missing node":       {Restore{Generation: 3, GenerationReady: true}, ErrNodeUnavailable},
-		"no generation":      {Restore{Node: node(true, 1), GenerationReady: true}, ErrNodeUnavailable},
-		"offline":            {Restore{Node: node(false, 1), Generation: 3, GenerationReady: true}, ErrNodeUnavailable},
-		"generation unready": {Restore{Node: node(true, 1), Generation: 3}, ErrNodeUnavailable},
-		"at capacity":        {Restore{Node: node(true, 2), Generation: 3, GenerationReady: true}, ErrNodeUnavailable},
-	} {
-		if err := CheckRestore(test.restore); !errors.Is(err, test.want) || (test.want == nil) != (err == nil) {
-			t.Errorf("%s: CheckRestore = %v, want %v", name, err, test.want)
 		}
 	}
 }

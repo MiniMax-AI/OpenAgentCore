@@ -21,7 +21,13 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 	}
 	useKVM(t, true)
 	dir := t.TempDir()
-	native := Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"), Network: Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
+	native := Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, CheckpointRoot: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"), Network: Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".oac-checkpoint-store"), []byte(uuid.NewString()+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	raw, err := json.Marshal(native)
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +50,7 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = built.Probe(t.Context())
+		_, err = built.Probe(t.Context())
 		closeProvider()
 		if options.Standalone && err != nil || !options.Standalone && !errors.Is(err, sandbox.ErrRuntimeImageUnavailable) {
 			t.Fatalf("readiness for %+v: %v", options, err)

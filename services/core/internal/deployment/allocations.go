@@ -226,7 +226,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 // running compute to quiescing requires idle compute and either the idle
 // timeout or capacity pressure, rechecked in the transaction.
 func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (Allocation, error) {
-	if !computeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
+	if owner.ComputePhase == "suspended" && phase == "restoring" || !computeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
 		return Allocation{}, ErrInvalidInput
 	}
 	if phase != "running" && (retainedUntil == nil || retainedUntil.IsZero()) {
@@ -267,17 +267,76 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 				}
 			}
 		}
-		// A node-backed restore reserves capacity on its original node.
-		if current.ComputePhase == "suspended" && phase == "restoring" && current.NodeID != "" {
-			restore, err := tx.LoadRestore(current)
-			if err != nil {
-				return Allocation{}, err
-			}
-			if err := placement.CheckRestore(restore); err != nil {
-				return Allocation{}, err
-			}
-		}
 		return tx.SetCompute(current, ComputeChange{Phase: phase, State: state, RetainedUntil: retainedUntil})
+	})
+}
+
+// BeginRestore reserves a compatible destination before any native restore.
+// The caller supplies a fresh restore intent without a target; the destination
+// adapter derives the target after this commit. Snapshot portability proves
+// that publication and source-local cleanup settled before suspension.
+func (e *ExecutionOperations) BeginRestore(ctx context.Context, owner Allocation, compatibility sandbox.CheckpointCompatibility, state json.RawMessage) (Allocation, error) {
+	var object map[string]json.RawMessage
+	if compatibility.Validate() != nil || json.Unmarshal(state, &object) != nil || object == nil {
+		return Allocation{}, ErrInvalidInput
+	}
+	return e.change(ctx, owner, true, func(tx AllocationTx, current Allocation) (Allocation, error) {
+		if current.State != "running" || current.ComputePhase != "suspended" || current.ComputeRevision != owner.ComputeRevision || current.Expired || current.ComputeRetainedUntil == nil {
+			return Allocation{}, ErrAllocationConflict
+		}
+		activity, err := tx.LoadActivity(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if !activity.Busy && !activity.WakeRequested {
+			return Allocation{}, ErrAllocationConflict
+		}
+		if current.NodeID == "" {
+			return tx.SetCompute(current, ComputeChange{Phase: "restoring", State: state, RetainedUntil: current.ComputeRetainedUntil})
+		}
+		d, nodes, err := tx.LoadCheckpointPlacement(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if d.Resetting {
+			return Allocation{}, placement.ErrResetAdmission
+		}
+		if d.InstallationID != current.ProviderKey || d.Mode != string(sandbox.DeploymentNodes) {
+			return Allocation{}, placement.ErrNodeUnavailable
+		}
+		node, err := e.service.rules.ChooseCheckpoint(nodes, current.NodeID, compatibility, false)
+		if err != nil {
+			return Allocation{}, err
+		}
+		return tx.MoveSuspended(current, node, ComputeChange{Phase: "restoring", State: state, RetainedUntil: current.ComputeRetainedUntil})
+	})
+}
+
+// RelocateCleanup durably assigns a portable suspended artifact to a node that
+// can delete it. An unknown restore remains pinned to its existing target.
+func (e *ExecutionOperations) RelocateCleanup(ctx context.Context, owner Allocation, compatibility sandbox.CheckpointCompatibility) (Allocation, error) {
+	if owner.NodeID == "" || compatibility.Validate() != nil {
+		return Allocation{}, ErrInvalidInput
+	}
+	return e.change(ctx, owner, false, func(tx AllocationTx, current Allocation) (Allocation, error) {
+		if current.State != "cleanup_pending" || current.ComputePhase != "suspended" || current.ComputeRevision != owner.ComputeRevision {
+			return Allocation{}, ErrAllocationConflict
+		}
+		d, nodes, err := tx.LoadCheckpointPlacement(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if d.InstallationID != current.ProviderKey || d.Mode != string(sandbox.DeploymentNodes) {
+			return Allocation{}, placement.ErrNodeUnavailable
+		}
+		node, err := e.service.rules.ChooseCheckpoint(nodes, current.NodeID, compatibility, true)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if node == current.NodeID {
+			return current, nil
+		}
+		return tx.MoveSuspended(current, node, ComputeChange{Phase: current.ComputePhase, State: current.ComputeState, RetainedUntil: current.ComputeRetainedUntil})
 	})
 }
 

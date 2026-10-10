@@ -132,13 +132,16 @@ func TestPressureSuspensionServesRestoreOnItsOriginalNode(t *testing.T) {
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 	f.connect(t, node.NodeID)
 	waiting := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
-	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour',compute_wake_requested=true WHERE id=$1`, waiting.ID); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"snapshot":{"Compatibility":{"artifact_domain":"fixture-store","execution_class":"fixture-runtime"}}}',compute_retained_until=clock_timestamp()+interval '1 hour',compute_wake_requested=true WHERE id=$1`, waiting.ID); err != nil {
 		t.Fatal(err)
 	}
 	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
-	// Free capacity on another node cannot restore this retained compute.
+	// Free capacity in another artifact domain cannot restore this checkpoint.
 	other := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 	f.connect(t, other.NodeID)
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_node_generation_status SET checkpoint='{"artifact_domain":"other","execution_class":"fixture-runtime"}' WHERE node_id=$1`, other.NodeID); err != nil {
+		t.Fatal(err)
+	}
 	until := time.Now().Add(time.Hour)
 	if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute); err != nil {
 		t.Fatal(err)

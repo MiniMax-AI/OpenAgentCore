@@ -68,7 +68,7 @@ func (c *workspaceRefusalCaller) Call(context.Context, microsandbox.Request) (mi
 func TestActualWorkspaceRefusalKeepsSettledAbsenceOnWire(t *testing.T) {
 	ref := reference()
 	caller := new(workspaceRefusalCaller)
-	config := microsandbox.Config{ExternalWorkspace: true, InstallationID: "11111111-1111-4111-8111-111111111111", HelperPath: "/helper", RuntimeHome: "/runtime", RuntimePath: "/runtime/msb", FirmwarePath: "/runtime/firmware", RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), Image: "image@sha256:" + strings.Repeat("c", 64), CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 4096, Network: microsandbox.NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny"}}
+	config := microsandbox.Config{ExternalWorkspace: true, InstallationID: "11111111-1111-4111-8111-111111111111", HelperPath: "/helper", RuntimeHome: "/runtime", CheckpointRoot: "/checkpoints", RuntimePath: "/runtime/msb", FirmwarePath: "/runtime/firmware", RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), Image: "image@sha256:" + strings.Repeat("c", 64), CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 4096, Network: microsandbox.NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny"}}
 	provider, err := microsandbox.NewWithCaller(config, caller)
 	if err != nil {
 		t.Fatal(err)

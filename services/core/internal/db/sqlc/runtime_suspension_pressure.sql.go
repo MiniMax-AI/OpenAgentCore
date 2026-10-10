@@ -39,33 +39,34 @@ func (q *Queries) ListRuntimeSuspensionInFlightNodes(ctx context.Context) ([]pgt
 	return items, nil
 }
 
-const listWaitingRuntimeRestoreGenerations = `-- name: ListWaitingRuntimeRestoreGenerations :many
-SELECT DISTINCT a.deployment_generation
-FROM runtime_allocations a
-JOIN environments e ON e.id = a.environment_id
-JOIN sessions s ON s.id = e.session_id
-WHERE a.node_id = $1 AND a.state = 'running' AND a.compute_phase = 'suspended'
-  AND a.compute_retained_until > clock_timestamp()
-  AND s.deleted_at IS NULL AND e.status NOT IN ('failed', 'expired')
-  AND (a.compute_wake_requested OR EXISTS (
-      SELECT 1 FROM environment_input_reservations r
-      WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp()
-  ))
+const listWaitingCheckpointRestores = `-- name: ListWaitingCheckpointRestores :many
+SELECT DISTINCT a.node_id, a.deployment_generation, (a.compute_state->'snapshot'->'Compatibility')::jsonb AS checkpoint
+FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id
+WHERE a.node_id IS NOT NULL AND a.state='running' AND a.compute_phase='suspended'
+ AND a.compute_retained_until>clock_timestamp() AND s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+ AND a.compute_state->'snapshot'->'Compatibility' IS NOT NULL
+ AND (a.compute_wake_requested OR EXISTS(SELECT 1 FROM environment_input_reservations r WHERE r.session_id=s.id AND r.state='pending' AND r.deadline>clock_timestamp()))
 `
 
-func (q *Queries) ListWaitingRuntimeRestoreGenerations(ctx context.Context, nodeID pgtype.UUID) ([]pgtype.Int8, error) {
-	rows, err := q.db.Query(ctx, listWaitingRuntimeRestoreGenerations, nodeID)
+type ListWaitingCheckpointRestoresRow struct {
+	NodeID               pgtype.UUID `json:"node_id"`
+	DeploymentGeneration pgtype.Int8 `json:"deployment_generation"`
+	Checkpoint           []byte      `json:"checkpoint"`
+}
+
+func (q *Queries) ListWaitingCheckpointRestores(ctx context.Context) ([]ListWaitingCheckpointRestoresRow, error) {
+	rows, err := q.db.Query(ctx, listWaitingCheckpointRestores)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []pgtype.Int8{}
+	items := []ListWaitingCheckpointRestoresRow{}
 	for rows.Next() {
-		var deployment_generation pgtype.Int8
-		if err := rows.Scan(&deployment_generation); err != nil {
+		var i ListWaitingCheckpointRestoresRow
+		if err := rows.Scan(&i.NodeID, &i.DeploymentGeneration, &i.Checkpoint); err != nil {
 			return nil, err
 		}
-		items = append(items, deployment_generation)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

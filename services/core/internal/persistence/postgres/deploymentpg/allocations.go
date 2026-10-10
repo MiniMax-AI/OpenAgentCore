@@ -334,12 +334,31 @@ func (t *allocationTx) LoadActivity(current deployment.Allocation) (deployment.A
 	return loadActivity(t.ctx, t.q, id)
 }
 
-func (t *allocationTx) LoadRestore(current deployment.Allocation) (placement.Restore, error) {
-	node, err := parseID(current.NodeID)
+func (t *allocationTx) LoadCheckpointPlacement(current deployment.Allocation) (placement.Deployment, []placement.CheckpointNode, error) {
+	d, err := placementpg.LockDeployment(t.ctx, t.q)
 	if err != nil {
-		return placement.Restore{}, err
+		return d, nil, err
 	}
-	return placementpg.LoadRestore(t.ctx, t.q, node, current.DeploymentGeneration)
+	nodes, err := placementpg.LoadNodes(t.ctx, t.q)
+	if err != nil {
+		return d, nil, err
+	}
+	candidates, err := placementpg.LoadCheckpointNodes(t.ctx, t.q, current.DeploymentGeneration, nodes)
+	return d, candidates, err
+}
+
+func (t *allocationTx) MoveSuspended(current deployment.Allocation, nodeID string, change deployment.ComputeChange) (deployment.Allocation, error) {
+	source, err := parseID(current.NodeID)
+	if err != nil {
+		return deployment.Allocation{}, err
+	}
+	destination, err := parseID(nodeID)
+	if err != nil {
+		return deployment.Allocation{}, err
+	}
+	return t.change(current, func(ctx context.Context, id pgtype.UUID) (sqlc.RuntimeAllocation, error) {
+		return t.q.MoveSuspendedRuntimeCompute(ctx, sqlc.MoveSuspendedRuntimeComputeParams{ID: id, Source: source, Destination: destination, Revision: current.ComputeRevision, Phase: change.Phase, State: change.State})
+	})
 }
 
 func (t *allocationTx) ObserveRunning(current deployment.Allocation) (deployment.Allocation, error) {

@@ -391,8 +391,10 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 }
 
 func (h *Hub) recordHealth(ctx context.Context, p *peer, health Health) error {
-	if !p.generationManagement && health.Generations != nil {
-		return sandbox.ErrInvalid
+	if !p.generationManagement && len(health.Generations) > 0 {
+		if len(health.Generations) != 1 || health.Generations[0].Generation != p.identity.DeploymentGeneration || health.Generations[0].SpecificationDigest != p.identity.SpecificationDigest || (health.Generations[0].State == "ready") != health.ProviderReady {
+			return sandbox.ErrInvalid
+		}
 	}
 	if p.generationManagement {
 		if h.options.Generations == nil {

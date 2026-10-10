@@ -88,6 +88,13 @@ func (p *Provider) state(ctx context.Context, q Request) (State, error) {
 
 func (p *Provider) responseState(ctx context.Context, q Request, out Response) (State, error) {
 	var e error
+	if out.State != nil && out.State.RestoreAttemptClosed != "" {
+		if q.Operation != "resume" || q.Resume == nil || !out.State.ClosesRestoreAttempt(*q.Resume) {
+			return State{}, ErrUnconfirmed
+		}
+		return *out.State, nil
+	}
+
 	if out.State == nil || ValidateCompute(p.config, q.Reference, out.State.Compute) != nil || out.State.Compute.ID == "" {
 		return State{}, ErrUnconfirmed
 	}

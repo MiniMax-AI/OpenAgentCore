@@ -173,7 +173,7 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("unconfirmed connection admitted", err)
 	}
-	if err = service.Heartbeat(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err = service.Heartbeat(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {

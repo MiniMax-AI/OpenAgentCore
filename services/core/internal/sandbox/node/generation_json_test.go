@@ -63,7 +63,7 @@ func TestGenerationHealthRejectsUnboundedOrAmbiguousNumbers(t *testing.T) {
 }
 
 func TestNodeProtocolRejectsHistoricalVersions(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4} {
+	for _, version := range []int{1, 2, 3, 4, 5} {
 		raw, _ := json.Marshal(frame{Version: version, Type: "hello", Identity: new(Identity), Health: &Health{ObservedAt: time.Now().UTC()}})
 		if _, err := decodeFrame(raw); err == nil {
 			t.Fatalf("accepted historical protocol %d", version)
@@ -84,8 +84,9 @@ func TestNodeGenerationManagementIsAnExplicitCurrentCapability(t *testing.T) {
 		if managed {
 			f.GenerationManagement = false
 			raw, _ = json.Marshal(f)
-			if _, err := decodeFrame(raw); err == nil {
-				t.Fatal("generation management accepted without declaration")
+			decoded, err := decodeFrame(raw)
+			if err != nil || decoded.GenerationManagement || len(decoded.Health.Generations) != 1 {
+				t.Fatal("static qualification implicitly enabled generation management", err)
 			}
 		}
 	}

@@ -24,6 +24,9 @@ func validHash(s string) bool {
 	return e == nil && len(b) == 32 && strings.ToLower(s) == s
 }
 func (c Config) Validate() error {
+	if !filepath.IsAbs(c.CheckpointRoot) || filepath.Clean(c.CheckpointRoot) != c.CheckpointRoot {
+		return sandbox.ErrInvalid
+	}
 	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 || (!c.ExternalWorkspace && c.EnvironmentDiskMiB == 0) {
 		return sandbox.ErrInvalid
 	}
@@ -70,7 +73,7 @@ func ValidateCompute(c Config, r sandbox.Reference, v Compute) error {
 	return nil
 }
 func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
-	if !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || s.Digest == "" || s.CheckpointID == "" || s.CheckpointRoot == "" {
+	if s.Compatibility.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || s.Digest == "" || s.CheckpointID == "" || s.CheckpointRoot == "" {
 		return sandbox.ErrInvalid
 	}
 	return nil
@@ -98,6 +101,12 @@ func ValidateRequest(q Request) error {
 	}
 	if q.Workspace != nil && ((q.Operation != "create" && q.Operation != "resume") || !validID(q.Workspace.ObjectID) || !filepath.IsAbs(q.Workspace.Path) || filepath.Clean(q.Workspace.Path) != q.Workspace.Path || strings.ContainsRune(q.Workspace.Path, 0)) {
 		return sandbox.ErrInvalid
+	}
+	if q.Workspace != nil {
+		relative, err := filepath.Rel(q.Workspace.Path, q.Config.CheckpointRoot)
+		if err != nil || relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
+			return sandbox.ErrInvalid
+		}
 	}
 	switch q.Operation {
 	case "create":

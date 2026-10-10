@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-const ProtocolVersion = 4
+const ProtocolVersion = 5
 const SDKVersion = "v0.7.8"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
@@ -23,6 +23,7 @@ type Config struct {
 	InstallationID     string
 	HelperPath         string
 	RuntimeHome        string
+	CheckpointRoot     string
 	RuntimePath        string
 	FirmwarePath       string
 	RuntimeSHA256      string

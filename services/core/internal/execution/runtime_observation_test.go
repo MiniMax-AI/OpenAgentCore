@@ -18,7 +18,7 @@ func (p *observationCaptureProvider) Suspend(_ context.Context, q sandbox.Suspen
 	if p.captureError != nil {
 		return sandbox.ComputeState{}, p.captureError
 	}
-	return sandbox.ComputeState{Compute: q.Source, Snapshot: &sandbox.SnapshotIdentity{ID: "captured"}, Status: "suspended", SourceStopped: true}, nil
+	return sandbox.ComputeState{Compute: q.Source, Snapshot: &sandbox.SnapshotIdentity{ID: "captured", Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}, Status: "suspended", SourceStopped: p.killError == nil}, nil
 }
 
 func TestComputeFailureObservationUsesCommittedReceipt(t *testing.T) {

@@ -61,6 +61,70 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 	return i, err
 }
 
+const moveSuspendedRuntimeCompute = `-- name: MoveSuspendedRuntimeCompute :one
+WITH moved AS (
+    UPDATE runtime_placements p SET node_id=$1::uuid
+    FROM runtime_allocations a
+    WHERE a.id=$4 AND a.environment_id=p.environment_id
+      AND p.node_id=$5::uuid AND p.released_at IS NULL
+      AND p.deployment_generation=a.deployment_generation
+      AND a.node_id=p.node_id AND a.compute_revision=$6
+      AND a.compute_phase='suspended'
+      AND ((a.state='running' AND $2::text='restoring'
+            AND a.compute_retained_until>clock_timestamp()
+            AND EXISTS(SELECT 1 FROM environments e WHERE e.id=a.environment_id AND e.initialization='complete'))
+           OR (a.state='cleanup_pending' AND $2::text='suspended'))
+    RETURNING a.id
+)
+UPDATE runtime_allocations a
+SET node_id=$1::uuid, compute_phase=$2,
+    compute_state=$3::jsonb, compute_revision=a.compute_revision+1,
+    compute_phase_changed_at=CASE WHEN a.compute_phase=$2::text THEN a.compute_phase_changed_at ELSE clock_timestamp() END
+FROM moved WHERE a.id=moved.id RETURNING a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation
+`
+
+type MoveSuspendedRuntimeComputeParams struct {
+	Destination pgtype.UUID `json:"destination"`
+	Phase       string      `json:"phase"`
+	State       []byte      `json:"state"`
+	ID          pgtype.UUID `json:"id"`
+	Source      pgtype.UUID `json:"source"`
+	Revision    int64       `json:"revision"`
+}
+
+func (q *Queries) MoveSuspendedRuntimeCompute(ctx context.Context, arg MoveSuspendedRuntimeComputeParams) (RuntimeAllocation, error) {
+	row := q.db.QueryRow(ctx, moveSuspendedRuntimeCompute,
+		arg.Destination,
+		arg.Phase,
+		arg.State,
+		arg.ID,
+		arg.Source,
+		arg.Revision,
+	)
+	var i RuntimeAllocation
+	err := row.Scan(
+		&i.ID,
+		&i.EnvironmentID,
+		&i.DeviceID,
+		&i.ProviderKey,
+		&i.State,
+		&i.CreateSettled,
+		&i.CreatedAt,
+		&i.ReleasedAt,
+		&i.ComputePhase,
+		&i.ComputeRevision,
+		&i.ComputeState,
+		&i.ComputeActivityAt,
+		&i.ComputeWakeRequested,
+		&i.ComputeRetainedUntil,
+		&i.NodeID,
+		&i.ObservationError,
+		&i.ComputePhaseChangedAt,
+		&i.DeploymentGeneration,
+	)
+	return i, err
+}
+
 const recordRuntimeTerminalActivity = `-- name: RecordRuntimeTerminalActivity :exec
 UPDATE runtime_allocations a SET compute_activity_at = clock_timestamp()
 FROM environments e

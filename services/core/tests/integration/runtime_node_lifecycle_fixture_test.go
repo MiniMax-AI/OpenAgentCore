@@ -148,7 +148,7 @@ func (f *nodeIsolationFixture) online(id string) {
 	if err := f.nodes.ConnectNode(f.t.Context(), id, connection, f.epoch); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := f.nodes.Heartbeat(f.t.Context(), id, connection, f.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, id, connection, f.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -183,7 +183,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		f.t.Fatal(err)
 	}
 	for _, value := range others {
-		if err := f.nodes.Heartbeat(f.t.Context(), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
+		if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
 			f.t.Fatal(err)
 		}
 	}
@@ -192,7 +192,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		_, err = f.placement.EnsurePlacement(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, f.key)
 	}
 	for _, value := range others {
-		if err := f.nodes.Heartbeat(context.WithoutCancel(f.t.Context()), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+		if err := fixtureNodeHeartbeat(context.WithoutCancel(f.t.Context()), f.store, f.nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 			f.t.Fatal(err)
 		}
 	}

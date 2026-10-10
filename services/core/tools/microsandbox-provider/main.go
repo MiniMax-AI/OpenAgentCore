@@ -58,6 +58,13 @@ func serve(input io.Reader) wire.Response {
 		out.ErrorCode = "unconfirmed"
 		return out
 	}
+	if q.Workspace != nil {
+		real, err := filepath.EvalSymlinks(q.Workspace.Path)
+		if err != nil || real != q.Workspace.Path {
+			out.ErrorCode = "ownership"
+			return out
+		}
+	}
 	lock, err := allocationLock(q)
 	if err != nil {
 		out.ErrorCode = "unconfirmed"
@@ -173,7 +180,10 @@ func (g *allocationGuard) settleInitialAbsence(q wire.Request, nativeErr error) 
 }
 
 func allocationLock(q wire.Request) (*allocationGuard, error) {
-	dir := filepath.Join(q.Config.RuntimeHome, "oac-locks")
+	if _, e := wire.CheckpointStore(q.Config); e != nil {
+		return nil, e
+	}
+	dir := filepath.Join(q.Config.CheckpointRoot, wire.Name(q.Config, q.Reference, 0))
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return nil, e
 	}
@@ -183,6 +193,9 @@ func allocationLock(q wire.Request) (*allocationGuard, error) {
 	}
 	if !st.IsDir() || st.Mode().Perm() != 0700 {
 		return nil, sandbox.ErrOwnership
+	}
+	if e := syncDirectory(q.Config.CheckpointRoot); e != nil {
+		return nil, e
 	}
 	name := filepath.Join(dir, wire.Name(q.Config, q.Reference, 0)+".lock")
 	fd, e := syscall.Open(name, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)

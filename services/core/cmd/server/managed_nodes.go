@@ -67,7 +67,7 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			if err := owner(ctx); err != nil {
 				return err
 			}
-			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
+			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health), health.Generations)
 		},
 	})
 	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI()}

@@ -93,8 +93,12 @@ func run(ctx context.Context, args []string) error {
 	}
 	expected := node.Identity{SpecificationDigest: built.SpecificationDigest, DeploymentGeneration: config.Generation, InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint}
 	probe := func(ctx context.Context) (node.Health, error) {
-		err := built.Probe(ctx)
-		return node.Health{ProviderReady: err == nil}, err
+		checkpoint, err := built.Probe(ctx)
+		status := sandbox.GenerationStatus{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, State: "ready", Checkpoint: checkpoint}
+		if err != nil {
+			status.State, status.Diagnostic, status.Checkpoint = "failed", sandbox.NodeDiagnostic(err), nil
+		}
+		return node.Health{ProviderReady: err == nil, Generations: []sandbox.GenerationStatus{status}}, err
 	}
 	if args[0] == "register" {
 		if !filepath.IsAbs(*tokenFile) {

@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 245f1791cf2e42b3a40c91aa0df4f390a44709db5e0ffbcae1e12dc4170344fe
+source_hash: 537ae957a77d625b3adb7828156352a661ae09270b57b174406c6db159a957bd
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -145,7 +145,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 每个节点会添加 `rollout: {state, ready_generation, diagnostic?}`，其中 `ready_generation` 是可为 null 的持久服务固定状态，`diagnostic` 是目标代次的固定代码；分配项会添加 `deployment_generation`。仅当 `rollout.state` 为 `preparing` 或 `reset` 非 null 时，才每五秒轮询一次；旧 Session 以及失败、需要更新或离线的节点本身均不会使轮询保持活动状态。
 
-节点模式创建先验证目标部署，提交 Session、pending Environment 及初始输入，但不预留计算资源。节点全部已满、离线或准备中时，已接受的工作继续等待；未配置部署、reset 或不支持的组合仍拒绝准入。共同调度器对尚未放置的需求进行有界循环扫描，分页按需求记录时间和 Environment ID 排序，每轮使用固定时间上界，避免持续的新需求阻止重新访问较早的工作。它检查在线状态、精确服务代次就绪情况、地址、共享容量和所选代次的 Harness/文件系统兼容性，然后优先选择最新的合格固定代次。预留后的 placement 保持不可变。有界扫描跳过暂时不可调度的需求，并在重启后继续。已有 suspended allocation 通过同一容量锁在原节点恢复；这不构成热恢复和未放置工作之间的全局公平性保证。输入保留[原始五分钟期限](./environments.md#reservations)，等待容量的时间也计入其中。
+节点模式创建先验证目标部署，提交 Session、pending Environment 及初始输入，但不预留计算资源。节点全部已满、离线或准备中时，已接受的工作继续等待；未配置部署、reset 或不支持的组合仍拒绝准入。共同调度器对尚未放置的需求进行有界循环扫描，分页按需求记录时间和 Environment ID 排序，每轮使用固定时间上界，避免持续的新需求阻止重新访问较早的工作。它检查在线状态、精确服务代次就绪情况、地址、共享容量和所选代次的 Harness/文件系统兼容性，然后优先选择最新的合格固定代次。预留后的 placement 保持不可变，直到确认释放或已结清的检查点转移。有界扫描跳过暂时不可调度的需求，并在重启后继续。已有 suspended allocation 按[检查点转移契约](../../../docs/zh/sandbox-provider.md#checkpoint-transfer)，通过同一容量锁预留符合条件的检查点容量；这不构成热恢复和未放置工作之间的全局公平性保证。输入保留[原始五分钟期限](./environments.md#reservations)，等待容量的时间也计入其中。
 
 ## 重置 {#reset}
 

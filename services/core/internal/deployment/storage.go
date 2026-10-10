@@ -128,9 +128,12 @@ type AllocationTx interface {
 	PlacementDemand(after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)
 	// LoadGenerationSpecification reads immutable generation requirements.
 	LoadGenerationSpecification(generation uint64) (GenerationSpecification, error)
-	// LoadRestore locks the deployment and returns what restoring the
-	// allocation's suspended compute on its node reads.
-	LoadRestore(current Allocation) (placement.Restore, error)
+	// LoadCheckpointPlacement locks the deployment and loads fresh readiness
+	// for the allocation's exact immutable generation, including capacity.
+	LoadCheckpointPlacement(current Allocation) (placement.Deployment, []placement.CheckpointNode, error)
+	// MoveSuspended changes node ownership, placement and compute intent in one
+	// transaction. Only a settled suspended allocation can change nodes.
+	MoveSuspended(current Allocation, nodeID string, change ComputeChange) (Allocation, error)
 	// ObserveRunning records the allocation running with its creation settled.
 	ObserveRunning(current Allocation) (Allocation, error)
 	// SettleCreation records that the original Create can no longer change
@@ -506,4 +509,5 @@ type GenerationStatusRecord struct {
 	SpecificationDigest  string
 	OwnerEpoch           uint64
 	State, Diagnostic    string
+	Checkpoint           *sandbox.CheckpointCompatibility
 }

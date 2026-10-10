@@ -199,6 +199,9 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 		}
 		return r.wakeCompute(ctx, p, next, state)
 	}
+	if result.Snapshot.Compatibility.Validate() != nil {
+		return sandbox.ErrOwnership
+	}
 	state.Snapshot = result.Snapshot
 	// Store the verified artifact before any recovery-path kill. Snapshot failure
 	// or an unknown result cannot silently fall back to a cold Environment.
@@ -207,8 +210,9 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 		return err
 	}
 	owner = next
-	if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
-		return err
+	if !result.SourceStopped {
+		// Native absence alone does not settle capture or publish the archive.
+		return sandbox.ErrComputeUnconfirmed
 	}
 	_, err = r.saveCompute(ctx, next, "suspended", state, next.ComputeRetainedUntil)
 	return err
@@ -226,21 +230,39 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
 	}
-	target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Snapshot)
+	state.RestoreID = uuid.NewString()
+	raw, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
-	state.Target, state.RestoreID = &target, uuid.NewString()
-	next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
+	next, err := r.deployment.BeginRestore(ctx, owner, state.Snapshot.Compatibility, raw)
 	if err != nil {
 		return err
+	}
+	if next.NodeID != r.nodeID {
+		// The durable route and reservation belong to the target node's lane.
+		return nil
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
 func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
-	if state.Target == nil || state.Snapshot == nil || state.Rollback {
+	if state.Snapshot == nil || state.Snapshot.Compatibility.Validate() != nil || state.Rollback || state.RestoreID == "" {
 		return sandbox.ErrOwnership
+	}
+	if state.Target == nil {
+		// NewCompute derives identity without starting native execution. A crash
+		// before this commit can safely repeat derivation on the reserved target.
+		target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Snapshot)
+		if err != nil {
+			return err
+		}
+		state.Target = &target
+		next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
+		if err != nil {
+			return err
+		}
+		owner, observeOnly = next, false
 	}
 	spec, err := r.workspaceSpecification(ctx, owner.Key(), owner.ID)
 	if err != nil {
@@ -259,6 +281,18 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
 	if err != nil {
 		return err
+	}
+	if result.RestoreAttemptClosed != "" {
+		if !result.ClosesRestoreAttempt(sandbox.ResumeRequest{OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly}) {
+			return sandbox.ErrOwnership
+		}
+		// Only an exact, durably closed never-admitted attempt can be replaced.
+		state.RestoreID = uuid.NewString()
+		next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
+		if err != nil {
+			return err
+		}
+		return r.restoreCompute(ctx, p, next, state, false)
 	}
 	if result.Status != "running" || result.Compute.ID == "" {
 		return sandbox.ErrComputeUnconfirmed

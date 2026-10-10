@@ -2,12 +2,15 @@ package deploymentpg
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/placementpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 func (t *allocationTx) LoadGenerationSpecification(generation uint64) (deployment.GenerationSpecification, error) {
@@ -32,23 +35,28 @@ func (t *allocationTx) LoadSuspensionDemand(current deployment.Allocation) (depl
 	if err != nil {
 		return result, err
 	}
-	node, err := parseID(current.NodeID)
+	restores, err := t.q.ListWaitingCheckpointRestores(t.ctx)
 	if err != nil {
 		return result, err
 	}
-	generations, err := t.q.ListWaitingRuntimeRestoreGenerations(t.ctx, node)
-	if err != nil {
-		return result, err
-	}
-	for _, generation := range generations {
-		ready, err := t.q.NodeGenerationReady(t.ctx, sqlc.NodeGenerationReadyParams{NodeID: node, Generation: generation.Int64})
-		if err != nil {
+	byGeneration := map[int64][]placement.CheckpointNode{}
+	for _, restore := range restores {
+		var compatibility sandbox.CheckpointCompatibility
+		if err := json.Unmarshal(restore.Checkpoint, &compatibility); err != nil {
 			return result, err
 		}
-		if ready {
-			result.RestoreWaiting = true
-			return result, nil
+		if compatibility.Validate() != nil {
+			continue
 		}
+		nodes, ok := byGeneration[restore.DeploymentGeneration.Int64]
+		if !ok {
+			nodes, err = placementpg.LoadCheckpointNodes(t.ctx, t.q, uint64(restore.DeploymentGeneration.Int64), result.Nodes)
+			if err != nil {
+				return result, err
+			}
+			byGeneration[restore.DeploymentGeneration.Int64] = nodes
+		}
+		result.CheckpointRestores = append(result.CheckpointRestores, deployment.CheckpointRestoreDemand{SourceNode: uuidString(restore.NodeID), Compatibility: compatibility, Nodes: nodes})
 	}
 	return result, nil
 }

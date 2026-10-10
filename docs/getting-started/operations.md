@@ -130,6 +130,8 @@ A recoverable backup contains one consistent, stopped-write set. A database dump
 - Every independent workspace namespace selected by current or retained objects, even when it is outside the installation volume. Back up its entire root, including `.oac-storage-root`, object identities, staging, live data, trash and deletion markers. Preserve numeric ownership, modes, links and extended attributes, including every `user.*` attribute. Copying only `live/data` loses lifecycle evidence and can resurrect deleted identities. [Workspace storage](../workspace-provider.md#kernel-nfs-adapter) owns the layout and ownership requirements.
 - Each node's state directory, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, and its provider storage: Docker volumes or microsandbox's store. Include all compute and snapshot resources still referenced by the database. See [when a node host fails](./nodes.md#when-a-node-host-fails).
 
+- Each private `checkpoint_root` in its entirety, including `.oac-checkpoint-store`, archives, operation journals, lock files and tombstones, together with the matching Core database. It is separate from the native SDK store and independent workspace namespace. Preserve its identity and private ownership; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns its lifecycle.
+
 ### Establish a stopped-write window
 
 1. Block new application input, live file access and administrative mutations at the installation's ingress. Let active execution, initialization, file operations and native cleanup finish. Stop other applications or host processes that can write to the same filesystem.

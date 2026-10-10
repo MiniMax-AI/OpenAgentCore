@@ -109,14 +109,41 @@ type Reserved struct {
 	Available bool
 }
 
-// Restore is what restoring suspended compute on its node reads: the node,
-// nil when the installation no longer has it, and whether the node is ready
-// for the allocation's generation.
-type Restore struct {
-	Node *Node
-	// Generation is zero when the allocation has none.
-	Generation      uint64
-	GenerationReady bool
+// CheckpointNode is a fresh readiness declaration for one immutable generation.
+// Capacity is read under the same deployment lock as the allocation transfer.
+type CheckpointNode struct {
+	Node       Node
+	Checkpoint *sandbox.CheckpointCompatibility
+}
+
+// ChooseCheckpoint selects a compatible node without interpreting adapter tokens.
+// A retained allocation already owns its source slot. Cleanup needs no active
+// slot and compares only the artifact domain, but still reserves a retained slot.
+func (r *Rules) ChooseCheckpoint(nodes []CheckpointNode, source string, compatibility sandbox.CheckpointCompatibility, cleanup bool) (string, error) {
+	var chosen *Node
+	for i := range nodes {
+		candidate := &nodes[i]
+		n := &candidate.Node
+		if !n.Online || candidate.Checkpoint == nil || candidate.Checkpoint.ArtifactDomain != compatibility.ArtifactDomain {
+			continue
+		}
+		if !cleanup && (candidate.Checkpoint.ExecutionClass != compatibility.ExecutionClass || n.CoreURL != r.publicURL || n.Active >= int64(n.MaxActive)) {
+			continue
+		}
+		if n.ID != source && n.Retained >= int64(n.MaxRetained) {
+			continue
+		}
+		if n.ID == source {
+			return n.ID, nil
+		}
+		if chosen == nil || n.Active < chosen.Active || n.Active == chosen.Active && n.Retained < chosen.Retained {
+			chosen = n
+		}
+	}
+	if chosen == nil {
+		return "", ErrNodeUnavailable
+	}
+	return chosen.ID, nil
 }
 
 // CheckPublicOrigin rejects a provider that requires a reachable public
@@ -200,17 +227,6 @@ func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) 
 // reserved: the placement must be unreleased and its node available.
 func CheckReserved(reserved Reserved) error {
 	if reserved.Released || !reserved.Available {
-		return ErrNodeUnavailable
-	}
-	return nil
-}
-
-// CheckRestore admits restoring suspended compute on its original node: the
-// node must be online, ready for the allocation's generation and below its
-// active capacity. Restore never selects another node.
-func CheckRestore(restore Restore) error {
-	n := restore.Node
-	if n == nil || restore.Generation == 0 || !n.Online || !restore.GenerationReady || n.Active >= int64(n.MaxActive) {
 		return ErrNodeUnavailable
 	}
 	return nil

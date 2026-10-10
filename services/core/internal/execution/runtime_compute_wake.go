@@ -78,6 +78,16 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
+	if owner.ComputePhase == "suspended" && state.Snapshot != nil && owner.NodeID != "" {
+		next, err := r.deployment.RelocateCleanup(ctx, owner, state.Snapshot.Compatibility)
+		if err != nil {
+			return err
+		}
+		if next.NodeID != r.nodeID {
+			return nil
+		}
+		owner = next
+	}
 	// An uncommitted artifact is found by its persisted attempt, never a directory
 	// glob. The helper's allocation lock also waits for an earlier unknown call.
 	if owner.ComputePhase == "suspending" && state.Snapshot == nil {
@@ -94,8 +104,10 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 			return err
 		}
 	}
-	if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
-		return err
+	if owner.ComputePhase != "suspended" && owner.ComputePhase != "restoring" {
+		if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
+			return err
+		}
 	}
 	if state.Snapshot != nil {
 		if err := ignoreComputeAbsent(p.DeleteSnapshot(ctx, runtimeReference(owner), *state.Snapshot)); err != nil {

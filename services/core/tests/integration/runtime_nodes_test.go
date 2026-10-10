@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -34,7 +34,7 @@ func onlineManagerNode(t *testing.T, s *Store, id string) string {
 	if err := nodes.ConnectNode(t.Context(), id, connection, managerEpoch(t, s)); err != nil {
 		t.Fatal(err)
 	}
-	if err := nodes.Heartbeat(t.Context(), id, connection, managerEpoch(t, s), deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := fixtureNodeHeartbeat(t.Context(), s, nodes, id, connection, managerEpoch(t, s), deployment.NodeHealth{ProviderReady: true}); err != nil {
 		t.Fatal(err)
 	}
 	return connection
@@ -72,13 +72,13 @@ func createSessionOnNode(t *testing.T, s, w *Store, tenant string, input session
 	}
 	nodes := deploymentService(t, s)
 	for _, value := range others {
-		if err := nodes.Heartbeat(t.Context(), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
+		if err := fixtureNodeHeartbeat(t.Context(), s, nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	defer func() {
 		for _, value := range others {
-			if err := nodes.Heartbeat(context.WithoutCancel(t.Context()), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+			if err := fixtureNodeHeartbeat(context.WithoutCancel(t.Context()), s, nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -268,7 +268,7 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if next := managerEpoch(t, s); next != epoch+1 {
 		t.Fatal(next)
 	}
-	if err := nodes.Heartbeat(t.Context(), input.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); !errors.Is(err, deployment.ErrNodeCredential) {
+	if err := fixtureNodeHeartbeat(t.Context(), s, nodes, input.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old epoch heartbeat revived node", err)
 	}
 	queued, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale"))
@@ -333,7 +333,9 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	}
 }
 func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
-	s, w, d := managerFixture(t, 1, 4)
+	s, w, view, _ := webSpecificationFixture(t, "microsandbox")
+	node := enrollNode(t, s, view, deployment.Capacity{MaxActive: 1, MaxRetained: 4})
+	d := managerNode{InstallationID: view.InstallationID, NodeID: node.NodeID}
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, managerSessionInput("first"))
 	if err != nil {
@@ -353,7 +355,9 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	until := time.Now().Add(time.Hour)
+	if err := deploymentService(t, s).TouchActivity(t.Context(), allocation.TenantID, allocation.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
 	second, err := s.CreateSession(t.Context(), tenant, managerSessionInput("second"))
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +366,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		_, err := deploymentExecution(t, w).SetCompute(t.Context(), allocation, "restoring", json.RawMessage(`{"target":{"id":"restore"}}`), &until, 0)
+		_, err := deploymentExecution(t, w).BeginRestore(t.Context(), allocation, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, json.RawMessage(`{"target":{"id":"restore"}}`))
 		results <- err
 	}()
 	go func() {

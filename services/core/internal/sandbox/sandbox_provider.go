@@ -139,10 +139,25 @@ type Compute struct {
 	RestoredFrom *SnapshotIdentity
 }
 
+// CheckpointCompatibility identifies an adapter-verified private archive domain
+// and execution compatibility class. Core compares these opaque tokens only.
+type CheckpointCompatibility struct {
+	ArtifactDomain string `json:"artifact_domain"`
+	ExecutionClass string `json:"execution_class"`
+}
+
+func (c CheckpointCompatibility) Validate() error {
+	if c.ArtifactDomain == "" || c.ExecutionClass == "" || len(c.ArtifactDomain) > 256 || len(c.ExecutionClass) > 256 {
+		return ErrInvalid
+	}
+	return nil
+}
+
 // SnapshotIdentity is provider evidence from a verified full snapshot. Core
 // persists it unchanged and records consumption separately; it never invents
 // paths, checksums, native checkpoint fields, or source identity.
 type SnapshotIdentity struct {
+	Compatibility    CheckpointCompatibility
 	Reference        string
 	ID               string
 	Digest           string
@@ -159,8 +174,23 @@ type ComputeState struct {
 	Status            string
 	BootstrapComplete bool
 	Snapshot          *SnapshotIdentity
-	SourceStopped     bool
+	// SourceStopped proves the archive is durable and all source-local compute
+	// and capture obligations have settled, so another node can own restoration.
+	SourceStopped bool
+	// RestoreAttemptClosed echoes the exact Resume OperationID only after a
+	// never-admitted attempt is durably closed against late execution.
+	RestoreAttemptClosed string
 }
+
+// ClosesRestoreAttempt validates a never-executed closure against the exact
+// persisted request. Absence without this operation-bound evidence is unknown.
+func (s ComputeState) ClosesRestoreAttempt(q ResumeRequest) bool {
+	return q.ObserveOnly && q.OperationID != "" && s.RestoreAttemptClosed == q.OperationID && s.Status == "absent" &&
+		s.Compute.ID == "" && q.Target.ID == "" && s.Compute.Name == q.Target.Name && s.Compute.Generation == q.Target.Generation &&
+		s.Compute.RestoredFrom != nil && q.Target.RestoredFrom != nil && *s.Compute.RestoredFrom == q.Snapshot && *q.Target.RestoredFrom == q.Snapshot &&
+		!s.BootstrapComplete && !s.SourceStopped && s.Snapshot == nil
+}
+
 type SuspendRequest struct {
 	Reference   Reference
 	OperationID string
@@ -335,7 +365,7 @@ type Built struct {
 	SpecificationDigest                string
 	Provider                           SandboxProvider
 	InstallationID, BackendFingerprint string
-	Probe                              func(context.Context) error
+	Probe                              func(context.Context) (*CheckpointCompatibility, error)
 	// Quiescent is nil when no helper can outlive its caller.
 	Quiescent func() bool
 }

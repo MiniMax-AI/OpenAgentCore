@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
@@ -51,14 +52,7 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 		s, e := b.resume(ctx, *b.q.Resume)
 		return wire.Response{State: &s}, e
 	case "delete_snapshot":
-		_, e := b.verifiedSnapshot(ctx, *b.q.Snapshot)
-		if sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
-			return wire.Response{}, nil
-		}
-		if e != nil {
-			return wire.Response{}, e
-		}
-		return wire.Response{}, sdk.Snapshot.Remove(ctx, b.q.Snapshot.Reference, false)
+		return wire.Response{}, b.deleteArchive(ctx, *b.q.Snapshot)
 	}
 	return wire.Response{}, sandbox.ErrInvalid
 }
@@ -81,13 +75,23 @@ func (b backend) inspectOwned(ctx context.Context, c wire.Compute) (*sdk.Sandbox
 	return h, state, e
 }
 func (b backend) kill(ctx context.Context, c wire.Compute) error {
+	// Close dispatch before consulting native state. An admitted helper has either
+	// released this allocation flock or died; the SDK's transition and inherited
+	// lifecycle locks fence any surviving native launcher/runtime.
+	if e := durableJSON(filepath.Join(b.storeDirectory(), "k-"+c.Name+".json"), c); e != nil {
+		return e
+	}
+	if e := b.pinRestoreCleanup(&c); e != nil {
+		return e
+	}
 	h, _, e := b.inspectOwned(ctx, c)
 	if sdk.IsKind(e, sdk.ErrSandboxNotFound) {
-		return nil
+		return b.recordRestoreCleanup(c)
 	}
 	if e != nil {
 		return e
 	}
+	c.ID = h.ID()
 	if e = h.Kill(ctx); e != nil {
 		return e
 	}
@@ -96,13 +100,14 @@ func (b backend) kill(ctx context.Context, c wire.Compute) error {
 	}
 	_, e = sdk.GetSandbox(ctx, c.Name)
 	if sdk.IsKind(e, sdk.ErrSandboxNotFound) {
-		return nil
+		return b.recordRestoreCleanup(c)
 	}
 	if e == nil {
 		return errors.New("compute removal unconfirmed")
 	}
 	return e
 }
+
 func (b backend) network() *sdk.NetworkConfig {
 	n := b.q.Config.Network
 	result := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyAction(n.DefaultEgress), DefaultIngress: sdk.PolicyAction(n.DefaultIngress)}

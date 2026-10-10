@@ -132,9 +132,9 @@ func TestExpiredRetainedComputePreservesSessionAndPendingInput(t *testing.T) {
 	if _, err = fixture.pool.Exec(t.Context(), `UPDATE session_devices SET native_session_id='retained-native-session' WHERE device_id=$1`, owner.DeviceID); err != nil {
 		t.Fatal(err)
 	}
-	compute := runtimeCompute{Current: sandbox.Compute{ID: "old-compute"}, Snapshot: &sandbox.SnapshotIdentity{ID: "old-snapshot"}}
+	compute := runtimeCompute{Current: sandbox.Compute{ID: "old-compute"}, Snapshot: &sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, ID: "old-snapshot"}}
 	raw, _ := json.Marshal(compute)
-	if _, err = fixture.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state=$2,compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID, raw); err != nil {
+	if _, err = fixture.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspending',compute_state=$2,compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID, raw); err != nil {
 		t.Fatal(err)
 	}
 	input, err := fixture.sessions.ReserveEnvironmentInput(t.Context(), session.TenantID, session.ID, "after-retention", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"resume"}]}]}`)}})
@@ -213,7 +213,7 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				{`UPDATE environments SET initialization='complete',status='disconnected' WHERE id=$1`, owner.EnvironmentID},
 				{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{"retained_native_history":true}}]' WHERE id=$1`, owner.DeviceID},
 				{`UPDATE session_devices SET native_session_id='retained-native-session' WHERE device_id=$1`, owner.DeviceID},
-				{`UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"id":"old-snapshot"}}',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID},
+				{`UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"id":"old-snapshot","Compatibility":{"artifact_domain":"fixture-store","execution_class":"fixture-runtime"}}}',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID},
 			} {
 				if _, err = fixture.pool.Exec(t.Context(), statement.q, statement.arg); err != nil {
 					t.Fatal(err)
@@ -354,7 +354,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		if err = service.ConnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
 			t.Fatal(err)
 		}
 		return installation, node.NodeID
@@ -462,7 +462,7 @@ func TestRestoreUsesAllocationGenerationStorageInsteadOfCachedLane(t *testing.T)
 			}
 			r.config.Workspace = target.Workspace
 			r.config.Resources = target.Resources
-			state := runtimeCompute{Target: &sandbox.Compute{ID: "replacement-compute", Generation: 2}, Snapshot: &sandbox.SnapshotIdentity{ID: "snapshot"}, RestoreID: uuid.NewString()}
+			state := runtimeCompute{Target: &sandbox.Compute{ID: "replacement-compute", Generation: 2}, Snapshot: &sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, ID: "snapshot"}, RestoreID: uuid.NewString()}
 			if err = r.restoreCompute(t.Context(), provider, owner, state, false); !errors.Is(err, stop) {
 				t.Fatal(err)
 			}
