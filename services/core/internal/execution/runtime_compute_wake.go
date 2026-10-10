@@ -105,7 +105,14 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 
 // waitRuntimeAwake is called only for live Environment file operations, before
 // entering the Worker's work queues. Persisted history/artifact reads bypass it.
-func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) error {
+func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) (err error) {
+	// A deadline can arrive inside a read as well as between polling ticks.
+	// Both paths report the same unavailable outcome to the live file caller.
+	defer func() {
+		if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			err = ErrExecutionUnavailable
+		}
+	}()
 	key := deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
