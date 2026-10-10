@@ -662,3 +662,10 @@ func (f *fakeReader) CountRetainedAllocations(ctx context.Context, installationI
 	}
 	return f.countRetainedAllocations(ctx, installationID)
 }
+
+func (f *fakeReader) ReplacementEnvironments(context.Context, string) ([]UnallocatedEnvironment, error) {
+	panic("unexpected ReplacementEnvironments")
+}
+func (f *fakeReader) RetainedNativeHistory(context.Context, AllocationKey) (bool, error) {
+	panic("unexpected RetainedNativeHistory")
+}

@@ -21,8 +21,8 @@ type Executor struct {
 	closeMu  sync.Mutex
 }
 
-func PrepareExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-	return newExecutor(ctx, req, defaultSessionConfig())
+func PrepareExecutor(ctx context.Context, stateRoot string, req proto.PromptRequestPayload) (agent.Executor, error) {
+	return newExecutor(ctx, req, defaultSessionConfig(stateRoot))
 }
 
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
@@ -172,4 +172,8 @@ func (e *Executor) Close(ctx context.Context) error {
 
 var _ agent.Executor = (*Executor)(nil)
 
-func NewExecutorFactory() agent.ExecutorFactory { return PrepareExecutor }
+func NewExecutorFactory(stateRoot string) agent.ExecutorFactory {
+	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+		return PrepareExecutor(ctx, stateRoot, req)
+	}
+}

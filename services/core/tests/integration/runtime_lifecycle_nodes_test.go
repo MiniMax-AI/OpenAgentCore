@@ -173,7 +173,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	if _, err = deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	checkRoute(other, nil)
+	checkRoute("", placement.ErrNodeUnavailable) // Released ownership is no longer a lifecycle route.
 	if rows, err := deploymentStore(w).LifecycleAllocations(t.Context(), other, ""); err != nil || len(rows) != 0 {
 		t.Fatal("released allocation scanned", rows, err)
 	}

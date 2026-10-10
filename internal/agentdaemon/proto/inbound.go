@@ -158,6 +158,10 @@ type AgentKindCapabilities struct {
 	Usage                 CapabilitySupport `json:"usage"`
 	Resume                CapabilitySupport `json:"resume"`
 	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`
+	// RetainedNativeHistory resumes the same native Session after confirmed
+	// process shutdown using its retained private state, without replaying input.
+	// It does not promise process memory or external connection restoration.
+	RetainedNativeHistory CapabilitySupport `json:"retained_native_history"`
 	Steering              CapabilitySupport `json:"steering"`
 	MessageItems          CapabilitySupport `json:"message_items"`
 

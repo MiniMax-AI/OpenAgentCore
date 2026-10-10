@@ -22,7 +22,7 @@ SELECT s.id AS session_id, e.id AS environment_id,
            ELSE 'active'
        END::text AS state
 FROM sessions s JOIN environments e ON e.session_id = s.id
-LEFT JOIN runtime_allocations a ON a.environment_id = e.id
+LEFT JOIN runtime_allocations a ON a.environment_id = e.id AND a.state <> 'released'
 WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
 `
 

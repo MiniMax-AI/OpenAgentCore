@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudesdk"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
@@ -24,6 +25,14 @@ func preflightAgentCLIs(parent context.Context, rc *runContext, profile string) 
 	return discoverAgentCLIs(parent, rc, profile, harnessDeclarations)
 }
 func discoverAgentCLIs(parent context.Context, rc *runContext, profile string, declarations []agent.Declaration) (agentCLIDiscovery, error) {
+	runtimeRoot, err := paths.Root()
+	if err != nil {
+		return nil, err
+	}
+	stateRoot, err := paths.StateDirectory()
+	if err != nil {
+		return nil, err
+	}
 	var out agentCLIDiscovery
 	available := false
 	for _, declaration := range declarations {
@@ -31,7 +40,7 @@ func discoverAgentCLIs(parent context.Context, rc *runContext, profile string, d
 			continue
 		}
 		started := time.Now()
-		runtime := declaration.Discover(parent, agent.DiscoveryOptions{Profile: profile, Stdout: rc.stdout, Stderr: rc.stderr}, declaration.Info)
+		runtime := declaration.Discover(parent, agent.DiscoveryOptions{Profile: profile, StateRoot: stateRoot, RuntimeRoot: runtimeRoot, Stdout: rc.stdout, Stderr: rc.stderr}, declaration.Info)
 		obslog.Ctx(parent).Info("runtime startup stage", "stage", "harness_discovery",
 			"harness_kind", declaration.Info.Kind, "duration_ms", float64(time.Since(started))/float64(time.Millisecond),
 			"available", runtime != nil && runtime.Info.Available)

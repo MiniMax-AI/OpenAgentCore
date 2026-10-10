@@ -21,6 +21,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // settledWorkspaceRefusal models the provider's pre-native filesystem rejection:
@@ -42,7 +43,7 @@ type settlementWorkspaceControl struct {
 }
 
 func (c *settlementWorkspaceControl) Declaration() workspacefs.Declaration {
-	return workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory}
+	return workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 }
 func (c *settlementWorkspaceControl) Create(_ context.Context, ref workspacefs.Reference) (workspacefs.Attachment, error) {
 	return workspacefs.Attachment{Reference: ref, ConfigurationID: c.configuration.ID, Kind: workspacefs.AttachmentHostDirectory, Native: []byte(`{}`)}, nil
@@ -62,6 +63,7 @@ func (c settlementWorkspaceControls) Normalize(config workspacefs.Configuration)
 }
 
 type workspaceSettlementFixture struct {
+	pool      *pgxpool.Pool
 	lifecycle *runtimeLifecycle
 	sessions  *sessions.Service
 	storage   *workspacepg.Store
@@ -70,6 +72,10 @@ type workspaceSettlementFixture struct {
 }
 
 func newWorkspaceSettlementFixture(t *testing.T, provider sandbox.SandboxProvider) workspaceSettlementFixture {
+	return workspaceSettlementFixtureWithSetup(t, provider, nil)
+}
+
+func workspaceSettlementFixtureWithSetup(t *testing.T, provider sandbox.SandboxProvider, setup func(Owner, *deployment.Service, deployment.Reader) (string, string)) workspaceSettlementFixture {
 	t.Helper()
 
 	pool := pgtest.OpenIsolated(t, nil)
@@ -80,7 +86,12 @@ func newWorkspaceSettlementFixture(t *testing.T, provider sandbox.SandboxProvide
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
 	deployments, reader, operations := testDeployment(t, pool, pgtest.CredentialKey(t), lease)
 	owner := Owner{Lease: lease, Deployment: operations, Sessions: sessionExecution(t, lease)}
-	installation := initializeE2BDeployment(t, owner)
+	var installation, nodeID string
+	if setup == nil {
+		installation, nodeID = workspaceNodeSetup(t, true)(owner, deployments, reader)
+	} else {
+		installation, nodeID = setup(owner, deployments, reader)
+	}
 	projectID := uuid.NewString()
 	audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
 	management, err := projects.NewService(projectpg.New(pgunit.NewPool(pool)))
@@ -92,7 +103,7 @@ func newWorkspaceSettlementFixture(t *testing.T, provider sandbox.SandboxProvide
 		t.Fatal(err)
 	}
 	sessionReader, service := testSessions(t, pool, pgtest.CredentialKey(t))
-	created, err := service.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ExecutionSourceSession})
+	created, err := service.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{SupportsRetainedNativeHistory: true, Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ExecutionSourceSession})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,8 +118,8 @@ func newWorkspaceSettlementFixture(t *testing.T, provider sandbox.SandboxProvide
 	control := &settlementWorkspaceControl{configuration: configuration}
 	filesystems := workspaces.NewExecution(storage, writer, settlementWorkspaceControls{control}, lease)
 	declaration := control.Declaration()
-	lifecycle := &runtimeLifecycle{registry: runtimegateway.NewRegistry(), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: operations, deployments: deployments, reader: reader, lease: lease, workspaces: filesystems, config: RuntimeProvider{InstallationID: installation, Mode: "direct", Generation: 1, Provider: provider, Workspace: &declaration, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
-	return workspaceSettlementFixture{lifecycle: lifecycle, sessions: service, storage: storage, control: control, session: session}
+	lifecycle := &runtimeLifecycle{nodeID: nodeID, registry: runtimegateway.NewRegistry(), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: operations, deployments: deployments, reader: reader, lease: lease, workspaces: filesystems, config: RuntimeProvider{InstallationID: installation, Mode: "nodes", Generation: 1, Provider: provider, Workspace: &declaration, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
+	return workspaceSettlementFixture{pool: pool, lifecycle: lifecycle, sessions: service, storage: storage, control: control, session: session}
 }
 
 func TestSettledWorkspaceRefusalRetainsReceiptUntilExplicitSessionDeletion(t *testing.T) {
@@ -126,7 +137,7 @@ func TestSettledWorkspaceRefusalRetainsReceiptUntilExplicitSessionDeletion(t *te
 		t.Fatal("missing durable failure", environment.Status, err)
 	}
 	replay, err := lifecycle.provision(t.Context(), session.TenantID, session.Environment.ID, installation)
-	if err != nil || !replay.Replayed || replay.ID != allocation.ID || provider.creates != 1 {
+	if !errors.Is(err, deployment.ErrAllocationConflict) || replay.ID != "" || provider.creates != 1 {
 		t.Fatal("settled failed creation retried compute", replay, err)
 	}
 	if _, err = filesystems.DeleteBatch(t.Context(), ""); err != nil || control.deletes != 0 {

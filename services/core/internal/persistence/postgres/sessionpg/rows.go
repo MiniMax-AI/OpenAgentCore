@@ -101,7 +101,7 @@ func sessionCreator(kind, id pgtype.Text) (*identity.Subject, error) {
 // environmentFromRow maps a stored Environment of the tenant with its
 // normalized configuration snapshot, from the result of the query that read
 // it: no rows is sessions.ErrNotFound.
-func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration []byte, err error) (sessions.Environment, error) {
+func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration []byte, externalWorkspace bool, err error) (sessions.Environment, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sessions.Environment{}, sessions.ErrNotFound
 	}
@@ -115,6 +115,6 @@ func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration 
 	return sessions.Environment{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),
 		TenantID: uuid.UUID(tenant.Bytes).String(), Status: row.Status,
-		Initialization: row.Initialization, CreatedAt: row.CreatedAt.Time, Configuration: configuration,
+		ExternalWorkspace: externalWorkspace, Initialization: row.Initialization, CreatedAt: row.CreatedAt.Time, Configuration: configuration,
 	}, nil
 }

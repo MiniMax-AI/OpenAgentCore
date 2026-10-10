@@ -24,7 +24,7 @@ WHERE id = $1 AND compute_phase = 'running' AND compute_activity_at <= $2;
 
 -- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
-    GREATEST(a.compute_activity_at,
+    GREATEST(a.compute_activity_at, a.compute_phase_changed_at,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
     (EXISTS (SELECT 1 FROM turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
      OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
@@ -37,7 +37,7 @@ WHERE a.id = $1;
 -- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    WHERE e.session_id = $1 AND a.compute_phase NOT IN ('disabled', 'running')
+    WHERE e.session_id = $1 AND a.state <> 'released' AND a.compute_phase NOT IN ('disabled', 'running')
 )::boolean;
 
 -- name: RecordRuntimeTerminalActivity :exec
@@ -49,7 +49,7 @@ WHERE a.environment_id = e.id AND e.session_id = $1
 -- name: SessionHasRuntimeNode :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    WHERE e.session_id = $1 AND a.node_id IS NOT NULL
+    WHERE e.session_id = $1 AND a.state <> 'released' AND a.node_id IS NOT NULL
 )::boolean;
 
 -- name: HasIncompatibleRuntimeComputeState :one

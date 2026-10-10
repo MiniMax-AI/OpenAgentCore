@@ -37,7 +37,7 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	if err := os.WriteFile(binary, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := defaultSessionConfig()
+	cfg := defaultSessionConfig(testStateRoot(t))
 	cfg.codexBinary = binary
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "prepared-session",

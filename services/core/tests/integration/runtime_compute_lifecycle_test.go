@@ -372,7 +372,7 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deplo
 func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')`, id, owner.SessionID)
-	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
+	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	return id
 }
 func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {
@@ -415,7 +415,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 func TestRuntimeComputeLifecycleUnusedSessionSuspendsAndExpires(t *testing.T) {
 	f := newComputeLifecycleFixture(t, 1, 2)
 	tenant, session, env, owner := f.create()
-	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
+	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	suspended := f.phase(tenant, env.ID, "suspended")
 	if suspended.ComputeRetainedUntil == nil || f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.computes) != 0 || len(f.provider.snapshots) != 1 {
 		t.Fatal("unused Session did not suspend and release active compute")

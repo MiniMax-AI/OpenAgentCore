@@ -108,6 +108,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		writeDeploymentError(w, r, err)
 		return
 	}
+	setAdminAuditSource(r, "")
 	result, err := h.Sandboxes.DeploymentChanges.UpdateSandboxDeployment(r.Context(), selection)
 	if err != nil {
 		writeDeploymentError(w, r, err)

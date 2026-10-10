@@ -15,12 +15,12 @@ FOR SHARE OF c;
 -- name: EnrollRuntimeDevice :one
 INSERT INTO devices (id, tenant_id, name, environment_id, executor_key_id)
 VALUES (sqlc.arg(id), sqlc.arg(tenant_id), 'User-managed Runtime', sqlc.arg(environment_id), sqlc.arg(executor_key_id))
-ON CONFLICT (environment_id) DO UPDATE SET name = devices.name
+ON CONFLICT (environment_id) WHERE revoked_at IS NULL OR executor_key_id IS NOT NULL DO UPDATE SET name = devices.name
 WHERE devices.executor_key_id = EXCLUDED.executor_key_id AND devices.revoked_at IS NULL
 RETURNING id, name, environment_id;
 
 -- name: TouchAuthenticatedDevice :execrows
-UPDATE devices SET last_seen_at = clock_timestamp()
+UPDATE devices SET last_seen_at = clock_timestamp(), supported_agent_kinds = sqlc.arg(supported_agent_kinds)::jsonb
 WHERE devices.id = sqlc.arg(id) AND EXISTS (
     SELECT 1 FROM runtime_device_authority a
     WHERE a.id = devices.id AND a.credential_hash = sqlc.arg(credential_hash)

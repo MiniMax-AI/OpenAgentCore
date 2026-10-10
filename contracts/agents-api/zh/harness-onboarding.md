@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 38955b517dae94e5ce187e72a6b2e03cc7eeb7b886baa722b5f117dd3260253f
+source_hash: 779954060b3be129f858e2f57e62b1af56cfe2f925f98362b48b20d32574f681
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -149,7 +149,9 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。将版本门控和工厂选择条件保留在适配器内部。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。将版本门控和工厂选择条件保留在适配器内部。
+
+Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序注册该 Runtime：
 

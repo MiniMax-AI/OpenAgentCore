@@ -86,7 +86,7 @@ func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
 			case "outside":
-				config.StateDir = filepath.Dir(root)
+				config.StateDir = "relative-state"
 			}
 			_, err := startSingleTurn(context.Background(), config, request, make(chan proto.Envelope, 1))
 			if err == nil || !strings.HasPrefix(err.Error(), "claudesdk:") {

@@ -146,7 +146,7 @@ func TestCancelReleasesBlockedNativeProcess(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s := &Session{rpc: client, cancelCtx: ctx, cancelFn: cancel,
-		cfg: defaultSessionConfig(), bufs: NewItemBuffers()}
+		cfg: defaultSessionConfig(testStateRoot(t)), bufs: NewItemBuffers()}
 	s.setThreadID("native-thread")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"native-thread","turn":{"id":"native-turn"}}`))
 	cancelDone := make(chan struct{})

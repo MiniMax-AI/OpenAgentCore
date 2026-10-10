@@ -61,13 +61,15 @@ func createsEnvironment(configuration json.RawMessage) (bool, error) {
 
 // Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
 type Environment struct {
-	Initialization string
-	ID             string
-	SessionID      string
-	TenantID       string
-	Status         string
-	CreatedAt      time.Time
-	Configuration  json.RawMessage
+	// ExternalWorkspace is a read projection of the immutable filesystem binding, not a setting.
+	ExternalWorkspace bool
+	Initialization    string
+	ID                string
+	SessionID         string
+	TenantID          string
+	Status            string
+	CreatedAt         time.Time
+	Configuration     json.RawMessage
 }
 
 // EnvironmentInitialization owns preparation independently of compute ownership.
@@ -134,4 +136,12 @@ type EnvironmentFileWrite struct {
 	CreatedAt                time.Time
 	SettledAt                *time.Time
 	Replayed                 bool
+}
+
+// ValidateRetainedHistory checks the selected external filesystem and Harness combination.
+func ValidateRetainedHistory(required, supported bool) error {
+	if required && !supported {
+		return fmt.Errorf("%w: external workspace storage requires retained_native_history", ErrInvalidInput)
+	}
+	return nil
 }

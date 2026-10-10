@@ -4,16 +4,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 )
 
 // StateDir returns an adapter-owned state directory scoped to one agent
 // state. It never derives runtime state from the subprocess cwd.
-func StateDir(agentKind, agentStateKey string) (string, error) {
-	root, err := paths.Root()
-	if err != nil {
-		return "", fmt.Errorf("agent: resolve state directory: %w", err)
+func StateDir(root, agentKind, agentStateKey string) (string, error) {
+	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
+		return "", fmt.Errorf("agent: state root must be a clean absolute directory")
 	}
 	kind := safeRuntimePathPart(agentKind)
 	if kind == "" {

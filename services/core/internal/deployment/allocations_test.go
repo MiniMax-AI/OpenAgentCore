@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -67,6 +68,19 @@ func (f *fakeReservationTx) LoadReserved() (placement.Reserved, error) {
 		unexpected(f.t, "LoadReserved")
 	}
 	return f.loadReserved()
+}
+
+func (f *fakeReservationTx) CanReplaceAllocation() (bool, error) {
+	unexpected(f.t, "CanReplaceAllocation")
+	return false, nil
+}
+func (f *fakeReservationTx) LoadNodes() ([]placement.Node, error) {
+	unexpected(f.t, "LoadNodes")
+	return nil, nil
+}
+func (f *fakeReservationTx) ReservePlacement(placement.Placement) error {
+	unexpected(f.t, "ReservePlacement")
+	return nil
 }
 
 func (f *fakeReservationTx) InsertAllocation(allocation NewAllocation) (Allocation, error) {
@@ -141,6 +155,7 @@ func (f *fakeAllocationTx) RecordObservation(Allocation, string) error {
 // methods cover a Session without an active Turn, pending input or input
 // activity change.
 type fakeCleanupTx struct {
+	canRetainEnvironment func(Allocation) (bool, error)
 	*fakeAllocationTx
 	revokeDevice         func(Allocation) error
 	requestCleanup       func(Allocation) (Allocation, error)
@@ -150,6 +165,13 @@ type fakeCleanupTx struct {
 	failPendingInput     func() error
 	loadActiveTurn       func() (sessions.Turn, bool, error)
 	cancelPendingInput   func() error
+}
+
+func (f *fakeCleanupTx) CanRetainEnvironment(current Allocation) (bool, error) {
+	if f.canRetainEnvironment == nil {
+		return false, nil
+	}
+	return f.canRetainEnvironment(current)
 }
 
 func (f *fakeCleanupTx) RevokeDevice(current Allocation) error {
@@ -507,4 +529,43 @@ func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExpiredQualifiedFilesystemCleanupPreservesSessionWork(t *testing.T) {
+	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running", Expired: true, CreateSettled: true}
+	for _, deleted := range []bool{false, true} {
+		t.Run(fmt.Sprint("deleted=", deleted), func(t *testing.T) {
+			current := owner
+			current.SessionDeleted = deleted
+			checked, cancelled, revoked := false, false, false
+			tx := &fakeCleanupTx{fakeAllocationTx: &fakeAllocationTx{t: t, loadAllocation: func() (Allocation, error) { return current, nil }},
+				canRetainEnvironment: func(Allocation) (bool, error) {
+					if !revoked {
+						t.Fatal("eligibility checked before authority revocation")
+					}
+					checked = true
+					return true, nil
+				},
+				revokeDevice:   func(Allocation) error { revoked = true; return nil },
+				requestCleanup: func(a Allocation) (Allocation, error) { a.State = "cleanup_pending"; return a, nil },
+				loadActiveTurn: func() (sessions.Turn, bool, error) { cancelled = true; return sessions.Turn{}, false, nil }, cancelPendingInput: func() error { return nil },
+			}
+			storage := &fakeExecutionStorage{t: t, withAllocationCleanup: func(_ context.Context, _ AllocationKey, apply func(AllocationCleanupTx) error) error {
+				return apply(tx)
+			}}
+			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := operations.RequestCleanup(t.Context(), current)
+			if err != nil || result.State != "cleanup_pending" || !revoked || checked == deleted || cancelled != deleted {
+				t.Fatal("cleanup lost lifetime separation", result, err, checked, cancelled)
+			}
+		})
+	}
+}
+
+func (f *fakeReservationTx) LoadGenerationSpecification(uint64) (GenerationSpecification, error) {
+	unexpected(f.t, "LoadGenerationSpecification")
+	return GenerationSpecification{}, nil
 }

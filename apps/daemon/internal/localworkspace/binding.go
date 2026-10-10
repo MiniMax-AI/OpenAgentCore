@@ -2,6 +2,7 @@ package localworkspace
 
 import (
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"os"
 	"strings"
 	"sync"
@@ -22,11 +23,21 @@ type Binding struct {
 	writer         *fileWriter
 	capabilityMu   sync.Mutex
 	capabilityRoot string
+	stateRoot      string
 }
 
 // NewWithCapabilityDirectory freezes paths selected by the Runtime operator.
 func NewWithCapabilityDirectory(environment, session, workspace, directory string) (*Binding, error) {
-	return newNativeBinding(environment, session, workspace, directory)
+	stateRoot, err := paths.StateDirectory()
+	if err != nil {
+		return nil, err
+	}
+	b, err := newNativeBinding(environment, session, workspace, directory)
+	if err != nil {
+		return nil, err
+	}
+	b.stateRoot = stateRoot
+	return b, nil
 }
 
 func Load() (*Binding, error) {

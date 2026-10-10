@@ -28,7 +28,7 @@ func markerBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 }
 func markerPath(b *Binding) string {
 	identity := b.capabilityIdentity()
-	return filepath.Join(os.Getenv("OAC_RUNTIME_HOME"), "daemon", "capability-installations", identity.EnvironmentID+"-"+identity.SessionID+".json")
+	return filepath.Join(b.stateRoot, "daemon", "capability-installations", identity.EnvironmentID+"-"+identity.SessionID+".json")
 }
 func TestSnapshotMarkerRoundTrip(t *testing.T) {
 	b, _ := markerBinding(t)
@@ -218,5 +218,36 @@ func TestSnapshotMarkerCancellationDoesNotPublishCompletion(t *testing.T) {
 	}
 	if _, err := os.Stat(markerPath(b)); !os.IsNotExist(err) {
 		t.Fatal("cancelled preparation published marker", err)
+	}
+}
+
+func TestCapabilityMarkerSurvivesComputeReplacement(t *testing.T) {
+	retained := t.TempDir()
+	if err := os.Chmod(retained, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", retained)
+	b, _ := markerBinding(t)
+	marker, err := b.openSnapshotMarker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = marker.complete(); err != nil {
+		t.Fatal(err)
+	}
+	marker.close()
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	identity := b.capabilityIdentity()
+	replacement, err := NewWithCapabilityDirectory(identity.EnvironmentID, identity.SessionID, b.workspace, b.capabilityRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker, err = replacement.openSnapshotMarker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer marker.close()
+	if !marker.completed {
+		t.Fatal("compute replacement forgot completed capability installation")
 	}
 }

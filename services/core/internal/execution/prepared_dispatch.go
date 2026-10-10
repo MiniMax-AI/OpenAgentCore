@@ -58,7 +58,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil {
 		return run, err
 	}
-	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
+	caps, err := d.sessionCapabilities(ctx, peer, session, snapshot)
 	if err != nil {
 		return run, err
 	}

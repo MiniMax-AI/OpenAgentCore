@@ -12,7 +12,7 @@ func TestMessageObservationIsOptInAndKeepsNativeBoundaries(t *testing.T) {
 	for _, enabled := range []bool{false, true} {
 		t.Run(map[bool]string{false: "legacy", true: "observed"}[enabled], func(t *testing.T) {
 			out := make(chan proto.Envelope, 16)
-			s := &Session{runID: "run", observeMessages: enabled, out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig()}
+			s := &Session{runID: "run", observeMessages: enabled, out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig(testStateRoot(t))}
 			s.setThreadID("thread")
 			s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn"}}`))
 			s.onItemStarted(json.RawMessage(`{"threadId":"thread","turnId":"turn","item":{"type":"agentMessage","id":"a","phase":"commentary"}}`))

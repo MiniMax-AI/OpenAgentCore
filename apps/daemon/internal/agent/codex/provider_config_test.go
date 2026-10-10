@@ -3,6 +3,7 @@ package codex
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -21,7 +22,7 @@ func TestWriteCodexProviderConfig_Minimal(t *testing.T) {
 		`[model_providers.oac]`,
 		`name = "OpenAgentCore"`,
 		`base_url = "https://platform-api.example.com/v1"`,
-		`experimental_bearer_token = "sk-test"`,
+		`env_key = "OAC_CODEX_PROVIDER_API_KEY"`,
 		`wire_api = "responses"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -74,7 +75,7 @@ func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 	for _, want := range []string{
 		`name = "mygw"`,
 		`base_url = "https://platform-api.example.com/v1"`,
-		`experimental_bearer_token = "sk-test-fixture"`,
+		`env_key = "OAC_CODEX_PROVIDER_API_KEY"`,
 		`request_max_retries = 4`,
 		`stream_max_retries = 3`,
 		`[model_providers.oac.http_headers]`,
@@ -156,7 +157,7 @@ func TestNormaliseProviderConfig_Nil(t *testing.T) {
 }
 
 func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
-	plan, err := BuildSessionPlan("conv-1/agent-1/codex", map[string]any{
+	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", map[string]any{
 		"model": "fixture-model",
 		"model_provider": map[string]any{"protocol": "responses",
 			"base_url": "https://x/v1",
@@ -194,7 +195,7 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 }
 
 func TestBuildSessionPlan_NoProviderLeavesBuiltinDefault(t *testing.T) {
-	plan, err := BuildSessionPlan("conv-1/agent-1/codex", nil, nil)
+	plan, err := BuildSessionPlan(testStateRoot(t), "conv-1/agent-1/codex", nil, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
@@ -216,4 +217,66 @@ func mustReadFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
+}
+
+func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {
+	root := t.TempDir()
+	const token = "synthetic-private-provider-token"
+	plan, err := BuildSessionPlan(root, "stable-session", map[string]any{"model": "fixture-model", "model_provider": map[string]any{"protocol": "responses", "base_url": "https://model.example/v1", "api_key": token}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer plan.Cleanup()
+	body := mustReadFile(t, filepath.Join(nativeHomeFromPlan(plan), "config.toml"))
+	if strings.Contains(body, token) || strings.Contains(body, "experimental_bearer_token") {
+		t.Fatal("provider credential persisted")
+	}
+	foundEnv, foundExclude := false, false
+	for _, entry := range plan.Env {
+		if entry == providerAPIKeyEnv+"="+token {
+			foundEnv = true
+		}
+	}
+	for _, entry := range plan.ExtraConfig {
+		if entry[0] == "shell_environment_policy.exclude" && entry[1] == `["OAC_CODEX_PROVIDER_API_KEY"]` {
+			foundExclude = true
+		}
+		if strings.Contains(entry[1], token) {
+			t.Fatal("credential exposed in native arguments")
+		}
+	}
+	if !foundEnv || !foundExclude || !slices.Contains(plan.DisableFeatures, "shell_snapshot") {
+		t.Fatal("native auth or explicit tool-environment exclusion absent")
+	}
+	if _, exists := os.LookupEnv(providerAPIKeyEnv); exists {
+		t.Fatal("provider credential leaked to Runtime process environment")
+	}
+}
+
+func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	first, err := allocCodexHome(state, "stable-session")
+	if err != nil {
+		t.Fatal(err)
+	}
+	history := filepath.Join(first, "history-sentinel")
+	if err = os.WriteFile(history, []byte("retained"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	second, err := allocCodexHome(state, "stable-session")
+	if err != nil || second != first {
+		t.Fatal("instance identity changed native history", err)
+	}
+	if body, err := os.ReadFile(history); err != nil || string(body) != "retained" {
+		t.Fatal("history lost", err)
+	}
+	unavailable := filepath.Join(t.TempDir(), "file")
+	if err = os.WriteFile(unavailable, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = allocCodexHome(unavailable, "stable-session"); err == nil {
+		t.Fatal("unavailable explicit root fell back")
+	}
 }

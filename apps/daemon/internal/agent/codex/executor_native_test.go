@@ -45,7 +45,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 	for _, name := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
 		t.Setenv(name, "")
 	}
-	cfg := defaultSessionConfig()
+	cfg := defaultSessionConfig(testStateRoot(t))
 	cfg.codexBinary = binary
 	cfg.logger = slog.New(slog.DiscardHandler)
 	req := proto.PromptRequestPayload{
