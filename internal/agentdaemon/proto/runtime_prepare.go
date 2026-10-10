@@ -14,11 +14,13 @@ import (
 )
 
 const (
-	TypeRuntimePrepare          = "runtime_prepare"
-	TypeRuntimePrepareResult    = "runtime_prepare_result"
-	RuntimePrepareMaxBytes      = 50 << 20
-	RuntimePrepareChunkBytes    = WorkspaceWriteChunkBytes
-	RuntimePrepareMaxFrameBytes = 1 << 20
+	TypeRuntimePrepare             = "runtime_prepare"
+	TypeRuntimePrepareResult       = "runtime_prepare_result"
+	RuntimePrepareMaxBudgetMS      = 30 * 60 * 1000
+	RuntimePrepareTransferBudgetMS = 2 * 60 * 1000
+	RuntimePrepareMaxBytes         = 50 << 20
+	RuntimePrepareChunkBytes       = WorkspaceWriteChunkBytes
+	RuntimePrepareMaxFrameBytes    = 1 << 20
 )
 
 // RuntimeInitialFile addresses a file within the logical workspace.
@@ -38,6 +40,7 @@ type RuntimeInitialization struct {
 // Runtime resolves logical paths and owns installation destinations. Envelope.ID
 // identifies one connection-local transfer.
 type RuntimePreparePayload struct {
+	BudgetMS       int64                    `json:"budget_ms,omitempty"`
 	Step           string                   `json:"step"`
 	EnvironmentID  string                   `json:"environment_id,omitempty"`
 	SessionID      string                   `json:"session_id,omitempty"`
@@ -64,6 +67,9 @@ type RuntimePrepareResultPayload struct {
 
 func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 	if p.Step == "begin" {
+		if p.BudgetMS <= 0 || p.BudgetMS > RuntimePrepareMaxBudgetMS {
+			return false
+		}
 		for _, id := range []string{p.EnvironmentID, p.SessionID} {
 			value, err := uuid.Parse(id)
 			if err != nil || value == uuid.Nil || value.String() != id {
@@ -119,7 +125,7 @@ func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 		encoded, err := json.Marshal(p)
 		return err == nil && len(encoded) <= RuntimePrepareMaxFrameBytes
 	}
-	if p.EnvironmentID != "" || p.SessionID != "" || p.Action != "" || p.Slot != 0 ||
+	if p.BudgetMS != 0 || p.EnvironmentID != "" || p.SessionID != "" || p.Action != "" || p.Slot != 0 ||
 		p.Skill != nil || p.Plugin != nil || p.Sources != nil || p.File != nil || p.Initialization != nil || p.SizeBytes != 0 || p.SHA256 != "" {
 		return false
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -91,7 +92,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 }
 
 func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization) {
-	operation, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	operation, cancel := context.WithTimeout(ctx, time.Duration(proto.RuntimePrepareMaxBudgetMS)*time.Millisecond)
 	defer cancel()
 	failure := sessions.ProvisioningFailure{}
 	err := w.prepareEnvironment(operation, owner, &failure)
@@ -140,11 +141,10 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	identity := agentcapabilities.Identity{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID}
 	operations := setupOperations(setup)
 	for index := 0; index < len(cfg.Files)+len(operations); index++ {
-		step, stop := context.WithTimeout(ctx, 2*time.Minute)
-		err = w.lease.CheckOwnership(step)
+		err = w.lease.CheckOwnership(ctx)
 		if err == nil {
 			var currentPeer = peer
-			currentPeer, err = w.dispatcher.authorizedPeer(step, owner.DeviceID)
+			currentPeer, err = w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
 			if err == nil && currentPeer != peer {
 				err = errors.New("Runtime connection changed during initialization")
 			}
@@ -153,16 +153,15 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 		if err == nil && index < len(cfg.Files) {
 			var metadata environmentconfig.InitialFileMetadata
 			var body []byte
-			metadata, body, err = w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(step, owner.TenantID, owner.SessionID, index)
+			metadata, body, err = w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(ctx, owner.TenantID, owner.SessionID, index)
 			if err == nil {
-				err = installInitialFile(step, peer, identity, metadata, body)
+				err = installInitialFile(ctx, peer, identity, metadata, body)
 			}
 		} else if err == nil {
 			command := operations[index-len(cfg.Files)]
 			candidate = command.provisioningFailure(0)
-			err = runRuntimeSetup(step, peer, identity, command)
+			err = runRuntimeSetup(ctx, peer, identity, command)
 		}
-		stop()
 		if err != nil {
 			var confirmed *runtimeStepFailure
 			if errors.As(err, &confirmed) {

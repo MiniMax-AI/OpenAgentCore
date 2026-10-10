@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 48b9d8679a983adc5eb9164c9a94e1137bf75800fbb1a0f81a0ae1b3cfccdafb
+source_hash: 9007be1099cf50f5ba376d2de4a060d039b6ee0b1c13c78a94665c28c2fc3fc6
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -231,7 +231,7 @@ Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed
 
 - Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于 Provider 维护。
 - 缺少套接字不会消耗一次 pending 尝试。Harness 不可用时，会在安装前失败。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
-- 每个文件传输、configure、Skill、Plugin、软件包和设置步骤都有两分钟的预算；整个初始化过程有 30 分钟。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
+- 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
 
