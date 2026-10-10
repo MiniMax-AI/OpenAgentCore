@@ -25,7 +25,7 @@ import (
 )
 
 type nodeIsolationProvider struct {
-	*fakeCheckpointProvider
+	*fakeSuspensionProvider
 	blockMu   sync.Mutex
 	blocked   map[string]bool
 	mode      string
@@ -49,7 +49,7 @@ func (p *nodeIsolationProvider) block(ctx context.Context, r sandbox.Reference, 
 	return ctx.Err()
 }
 func (p *nodeIsolationProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	info, err := p.fakeCheckpointProvider.Create(ctx, b)
+	info, err := p.fakeSuspensionProvider.Create(ctx, b)
 	if err == nil {
 		err = p.connect(ctx, b)
 	}
@@ -59,13 +59,13 @@ func (p *nodeIsolationProvider) GetInfo(ctx context.Context, r sandbox.Reference
 	if err := p.block(ctx, r, "observe"); err != nil {
 		return sandbox.Info{}, err
 	}
-	return p.fakeCheckpointProvider.GetInfo(ctx, r)
+	return p.fakeSuspensionProvider.GetInfo(ctx, r)
 }
 func (p *nodeIsolationProvider) GetCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	if err := p.block(ctx, r, "observe"); err != nil {
 		return sandbox.ComputeState{}, err
 	}
-	return p.fakeCheckpointProvider.GetCompute(ctx, r, c)
+	return p.fakeSuspensionProvider.GetCompute(ctx, r, c)
 }
 func (p *nodeIsolationProvider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
 	return p.preparation.RunCommand(ctx, r, c)
@@ -90,8 +90,8 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	t.Helper()
 	s, pool := newManagedTestStore(t)
 	registry := runtimegateway.NewRegistry()
-	cp := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
+	cp := &fakeSuspensionProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.RetainedState{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
+	p := &nodeIsolationProvider{fakeSuspensionProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
 	preparationContext, cancelPreparation := context.WithCancel(t.Context())
 	t.Cleanup(cancelPreparation)
 	cp.preparation = &initializationPeer{t: t, apply: func(request proto.RuntimePreparePayload, data []byte) proto.RuntimePrepareResultPayload {

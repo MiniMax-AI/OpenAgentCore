@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: 73fb9968007f83d35f1e6fe185d9e376fa81fc7683fe822426b290632ca8de24
+source_hash: 537197f388a57bb983c0e7e0b8a3bfe66b1e8e0ef7f4f1fef572ad7dcf724cb3
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动托管 Runtime。本文负责 Provider 到 Runtime 的启动输入。类型与验证器位于 [`internal/runtimebootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/runtimebootstrap/bootstrap.go)；Go provider 使用 [`runtime_bootstrap.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/runtime_bootstrap.go) 中的 `sandbox.Bootstrap.RuntimeConnection()` 构造输入，SDK helper 原样转发序列化对象。provider 不读取或写入 Runtime 的私有认证存储。
@@ -35,6 +35,10 @@ Core 从分配所属会话派生 `harness`。组合镜像可以包含多个 Harn
 Runtime 验证输入，并负责认证与连接。启动成功仅证明交付完成：经过认证的连接、已准备的能力和执行就绪是 [Core–Runtime 协议](runtime-protocol.md) 下的独立观测；[Sandbox Provider 指南](sandbox-provider.md#four-distinct-readiness-facts) 列出各自证明的事实。
 
 自托管 executor 和运维人员供应的设备通过其他方式获取 daemon 身份；[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出所有凭据来源。它们都进入同一 Runtime 执行循环。
+
+## 托管暂停控制 {#hosted-suspension-control}
+
+私有托管暂停/唤醒控制文件的路径在 `internal/runtimebootstrap/bootstrap.go` 中以 `SuspendControlFile` 定义。Core 恢复逻辑和原生 Go adapter 读取该值；E2B helper 契约生成器将其投射到模板构建器。托管启动准备私有目录并提供 `OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE`，以启用 Runtime 暂停。这是随软件包发布的协议设置。共享 Sandbox Provider 注册负责空闲和保留默认值；adapter 负责自身原生租约超时。
 
 ## 验证 {#verification}
 

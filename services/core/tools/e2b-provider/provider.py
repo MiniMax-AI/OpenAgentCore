@@ -151,6 +151,9 @@ class Provider:
         bootstrap = request.get('Bootstrap')
         if bootstrap is not None and (not isinstance(bootstrap, dict) or bootstrap.get('Workspace') is not None):
             raise Failure('invalid')
+        resume = request.get('Resume')
+        if resume is not None and (not isinstance(resume, dict) or resume.get('Workspace') is not None):
+            raise Failure('invalid')
         deadline = datetime.fromisoformat(request['Deadline'].replace('Z', '+00:00'))
         self.deadline = time.monotonic() + (deadline - datetime.now(timezone.utc)).total_seconds()
         self.metadata = {PREFIX + field.lower(): value for field, value in
@@ -285,7 +288,9 @@ class Provider:
                 if definitely_rejected(error):
                     self.receipt.save(status='rejected', settled=True)
                 raise Failure('unconfirmed') from None
-        self.receipt.save(status='created', ids=[cloud.sandbox_id], connection=connection_material(cloud))
+        self.receipt.save(status='created', ids=[cloud.sandbox_id], connection=connection_material(cloud),
+                          compute={'Generation': 0, 'Name': self.reference['AllocationID'],
+                                   'ID': cloud.sandbox_id, 'RestoredFrom': None})
         # A create response must not steer envd traffic to an unrelated host.
         self.check_domain(cloud)
         # SDK Create returns connection material, but no metadata or resources.
@@ -466,6 +471,10 @@ class Provider:
         with Receipt(self.q, self.remaining) as self.receipt:
             try:
                 operation = self.q['Operation']
+                if operation in ('compute_info', 'compute_renew', 'suspend', 'resume', 'compute_kill',
+                                 'delete_retained', 'compute_command', 'resume_compute'):
+                    from suspension import Suspension
+                    return Suspension(self, Sandbox, connection_material, run).execute()
                 if operation == 'kill':
                     self.kill()
                     return {'Version': PROTOCOL_VERSION, 'Info': self.info(absent=True), 'ErrorCode': ''}

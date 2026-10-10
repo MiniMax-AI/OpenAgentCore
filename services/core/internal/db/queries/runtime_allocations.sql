@@ -1,6 +1,6 @@
 -- name: CreateRuntimeAllocation :one
-INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, node_id, deployment_generation)
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
+INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, node_id, deployment_generation, compute_state)
+VALUES ($1, $2, $3, $4, $5, $6, jsonb_build_object('protocol_version', sqlc.arg(protocol_version)::text)) RETURNING *;
 
 -- name: GetRuntimeAllocation :one
 SELECT sqlc.embed(a), e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
