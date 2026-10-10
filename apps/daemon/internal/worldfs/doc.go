@@ -1,4 +1,4 @@
-// Package worldfs serves a Session's world, the sandbox file system, as the FUSE file system a sessionview launcher mounts at the view's root. Every kernel request becomes at most one File request (see internal/sandboxfs), apart from the redial and lock recovery described below, so processes in the view read and write sandbox files natively; nothing on the agent host shows through, and nothing is created in the sandbox to support the view.
+// Package worldfs serves a Session's world, the sandbox file system, as the FUSE file system a sessionview launcher mounts at the view's root. Kernel requests become File requests (see internal/sandboxfs), with syscall-local metadata batching and the redial and lock recovery described below, so processes in the view read and write sandbox files natively; nothing on the agent host shows through, and nothing is created in the sandbox to support the view.
 //
 // [World.Serve] implements [sessionview.World]. Within the context sessionview.Start passes, it dials the attachment's File stream, checks Describe, attaches the world export (sandboxfs.WorldExport) and presents the view's mountpoints; it then serves the launcher's /dev/fuse connection with go-fuse's raw API.
 //
@@ -48,6 +48,14 @@
 // # Uncached profile
 //
 // Entry, attribute and negative timeouts are zero, every open returns FOPEN_DIRECT_IO, and the frontend never asks for the writeback cache, KEEP_CACHE or CACHE_DIR. A private mapping of a world file works, and the kernel reads its pages with READ when they fault; a shared mapping fails with ENODEV, since the frontend does not negotiate DIRECT_IO_ALLOW_MMAP. default_permissions stays off: the service decides access. The frontend negotiates only BIG_WRITES, MAX_PAGES (requests up to the service's read and write limit), PARALLEL_DIROPS, ATOMIC_O_TRUNC, POSIX_LOCKS and FLOCK_LOCKS.
+//
+// # Metadata batching
+//
+// On Linux amd64, one process-wide set of BPF raw tracepoints observes eligible non-mutating metadata syscalls in registered View cgroups. sessionview supplies each world its cgroup and the mount's PID namespace identity. The first matching kernel LOOKUP may use File.Walk for a plain absolute path; later LOOKUP and node GETATTR requests consume matching parent/name or node results once, only while the kernel still names the same thread and syscall epoch. The kernel continues to execute the original syscall. Handle checks, permissions, synthetic mountpoints and pinned ancestor checks retain their ordinary paths. No metadata is reused across syscalls.
+//
+// BPF availability is an internal optimization condition, not a File capability or installation prerequisite: when loading is unavailable, every request follows the same ordinary FUSE mapping. The programs require the namespace PID helper (Linux 5.7 or later), kernel BPF support and permission to load and attach them. Other architectures use the ordinary mapping. While any scoped world remains, all host syscalls pay the programs' initial cgroup filter; the last world removes all programs and maps.
+//
+// Kernel scope hints occupy a bounded LRU map and can be discarded at any time. Missing or changed hints stop consumption immediately. Userspace retains at most a bounded set of operations; unused Walk references are forgotten when their operation ends, when a periodic map check sees that its epoch ended, or on world teardown. That periodic cleanup never decides whether metadata can be consumed. Unregistering a View removes its hints; an in-flight tracepoint can leave a disposable hint until LRU eviction or the last world's teardown, but hints hold no remote references.
 //
 // # Errors
 //
