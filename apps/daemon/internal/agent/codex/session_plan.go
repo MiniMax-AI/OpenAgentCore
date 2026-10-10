@@ -20,7 +20,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err != nil {
 		return SessionPlan{}, nil, err
 	}
-	plan, err := BuildSessionPlan(req.AgentStateKey, req.AgentOptions, req.ExecutionControls)
+	plan, err := BuildSessionPlan(cfg.stateRoot, req.AgentStateKey, req.AgentOptions, req.ExecutionControls)
 	if err != nil {
 		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
 	}

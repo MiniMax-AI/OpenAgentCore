@@ -37,7 +37,7 @@ func TestPrepareModelVerbosity(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\nprintf '%s' '"+catalog+"'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := BuildSessionPlan("state", map[string]any{"model": "known-model"}, &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "high"})
+	plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{"model": "known-model"}, &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "high"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestPrepareDefaultModelVerbosity(t *testing.T) {
 	for _, model := range []string{"supported", "unsupported", "unknown-provider-model"} {
 		for _, level := range []string{"low", "medium", "high"} {
 			t.Run(model+"/"+level, func(t *testing.T) {
-				plan, err := BuildSessionPlan("state", map[string]any{"model": model}, &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: level})
+				plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{"model": model}, &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: level})
 				if err != nil {
 					t.Fatal(err)
 				}

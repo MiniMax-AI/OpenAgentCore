@@ -76,13 +76,13 @@ type SessionDevice struct{ ID, EnvironmentID string }
 // Activity separates real work from the connection keepalive. ObservedAt is
 // the database clock when it was read.
 type Activity struct {
-	LastActivity, ObservedAt              time.Time
-	Busy, WakeRequested, HasCompletedTurn bool
+	LastActivity, ObservedAt time.Time
+	Busy, WakeRequested      bool
 }
 
 // ReadyToSuspend evaluates the idle policy on one database-clock observation.
 func (a Activity) ReadyToSuspend(idleTimeout time.Duration) bool {
-	return idleTimeout > 0 && a.HasCompletedTurn && !a.Busy && !a.WakeRequested &&
+	return idleTimeout > 0 && !a.Busy && !a.WakeRequested &&
 		a.ObservedAt.Sub(a.LastActivity) >= idleTimeout
 }
 
@@ -116,6 +116,8 @@ type UnallocatedEnvironment struct{ ID, TenantID string }
 // lifecycle reads: the deployment's provider and mode, the Environment's
 // allocation and the node placement its Session reserved.
 type LifecyclePlacement struct {
+	// Specification belongs to the current allocation or reserved generation.
+	Specification  json.RawMessage
 	Provider, Mode string
 	// AllocationID and AllocationNodeID are empty without an allocation or
 	// its node.

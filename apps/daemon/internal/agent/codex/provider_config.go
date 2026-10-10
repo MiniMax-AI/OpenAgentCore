@@ -16,6 +16,7 @@ import (
 // the config.toml deterministic and removes a footgun where two prompts
 // in the same CODEX_HOME could disagree on which provider to use.
 const oacProviderSlug = "oac"
+const providerAPIKeyEnv = "OAC_CODEX_PROVIDER_API_KEY"
 
 // providerConfig is the daemon-internal view of the model provider the
 // Runtime prepared for this Session. Flattened from the common
@@ -30,8 +31,7 @@ type providerConfig struct {
 	// BaseURL is the model provider's HTTPS endpoint, including any
 	// path prefix (e.g. /v1). Required.
 	BaseURL string
-	// BearerToken is the literal API key. Codex's `experimental_bearer_token`
-	// field accepts a string; we emit it verbatim. Required.
+	// BearerToken is supplied only through the native env_key mechanism.
 	BearerToken string
 	// HTTPHeaders is forwarded as `[model_providers.oac.http_headers]`.
 	// Keys / values rendered as TOML basic strings.
@@ -90,8 +90,8 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 	b.WriteString(tomlQuoteString(cfg.BaseURL))
 	b.WriteByte('\n')
 
-	b.WriteString("experimental_bearer_token = ")
-	b.WriteString(tomlQuoteString(cfg.BearerToken))
+	b.WriteString("env_key = ")
+	b.WriteString(tomlQuoteString(providerAPIKeyEnv))
 	b.WriteByte('\n')
 
 	wireAPI := strings.TrimSpace(cfg.WireAPI)
@@ -159,7 +159,7 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 //
 // File is opened O_APPEND so concurrent writers in the same prompt
 // (today: at most one of each) don't race. 0o600 perms because the
-// file carries the API bearer token in plaintext.
+// file contains private per-Session configuration.
 func appendConfigTOML(path string, body string) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {

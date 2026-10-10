@@ -116,7 +116,7 @@ func (s *Store) Allocation(ctx context.Context, ref sandbox.Reference) (deployme
 	var result deployment.AllocationRecord
 	err = s.pool.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		row, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: tenant, EnvironmentID: environment})
+		row, err := q.GetLatestRuntimeAllocation(ctx, sqlc.GetLatestRuntimeAllocationParams{TenantID: tenant, EnvironmentID: environment})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return deployment.ErrNotFound
 		}

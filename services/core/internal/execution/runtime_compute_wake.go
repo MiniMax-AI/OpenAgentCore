@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -106,41 +107,82 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 // entering the Worker's work queues. Persisted history/artifact reads bypass it.
 func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) error {
 	key := deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}
-	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
-	if errors.Is(err, deployment.ErrNotFound) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" || owner.State == "released" {
-		return ErrExecutionUnavailable
-	}
-	if owner.ComputePhase == "disabled" {
-		return nil
-	}
-	if err := w.dispatcher.Deployment.TouchActivity(ctx, environment.TenantID, environment.ID); err != nil {
-		return err
-	}
-	timer := time.NewTicker(100 * time.Millisecond)
-	defer timer.Stop()
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	touched := ""
 	for {
-		owner, err = w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
+		owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
+		if errors.Is(err, deployment.ErrNotFound) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
-		if owner.SessionDeleted || owner.Expired || owner.State != "running" {
+		if owner.SessionDeleted {
 			return ErrExecutionUnavailable
 		}
-		if owner.ComputePhase == "running" {
-			return nil
+		if owner.State == "released" || owner.State == "cleanup_pending" || owner.Expired {
+			// Public archive and deletion remain terminal. A qualified compute-only
+			// expiry leaves the same Environment live while the old writer is fenced.
+			current, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, environment.TenantID, environment.ID)
+			if err != nil {
+				return err
+			}
+			if current.Status == "failed" || current.Status == "expired" {
+				return ErrExecutionUnavailable
+			}
+			if owner.State == "released" {
+				qualified, err := w.dispatcher.DeploymentReader.RetainedNativeHistory(ctx, key)
+				if err != nil {
+					return err
+				}
+				if !qualified {
+					return ErrExecutionUnavailable
+				}
+				// The live file operation is demand. A committed placement, rather than
+				// another wake setting, lets maintenance recover a detached caller.
+				next, err := w.ProvisionEnvironment(ctx, environment.TenantID, environment.ID, owner.ProviderKey)
+				if err != nil && next.ID == "" && !errors.Is(err, placement.ErrNodeUnavailable) && !errors.Is(err, placement.ErrNodesPreparing) && !errors.Is(err, deployment.ErrAllocationConflict) {
+					return err
+				}
+			}
+		} else if owner.State == "running" && owner.CreateSettled && (owner.ComputePhase == "disabled" || owner.ComputePhase == "running") {
+			// Bootstrap completion precedes daemon registration and its first
+			// capability declaration. File work must wait for both receipts.
+			peer, peerErr := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
+			if peerErr == nil {
+				session, err := w.dispatcher.SessionsReader.GetSession(ctx, environment.TenantID, environment.SessionID)
+				if err != nil {
+					return err
+				}
+				kind, found, known := peer.AgentKindStatus(session.Engine)
+				if known {
+					if !found || !kind.Available {
+						return ErrExecutionUnavailable
+					}
+					return nil
+				}
+			} else if !errors.Is(peerErr, sessions.ErrNotFound) && !errors.Is(peerErr, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(peerErr, runtimegateway.ErrSessionClosed) {
+				return peerErr
+			}
+		} else if owner.State == "running" && touched != owner.ID {
+			if err = w.dispatcher.Deployment.TouchActivity(ctx, environment.TenantID, environment.ID); err != nil {
+				return err
+			}
+			touched = owner.ID
+			if w.runtimes != nil {
+				select {
+				case w.runtimes.hints(owner.NodeID) <- struct{}{}:
+				default:
+				}
+			}
 		}
 		select {
 		case <-ctx.Done():
 			return ErrExecutionUnavailable
 		case <-w.stopped:
 			return ErrExecutionUnavailable
-		case <-timer.C:
+		case <-ticker.C:
 		}
 	}
 }

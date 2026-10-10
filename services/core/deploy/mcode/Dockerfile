@@ -13,7 +13,8 @@ ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs \
     OAC_RUNTIME_WORKSPACE=/environment/workspace \
     OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization \
-    OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages
+    OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages \
+    OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state
 USER 1000:1000
 RUN node /opt/mcode-harness/check.mjs && /opt/mcode-harness/native/cli.js --version
 WORKDIR /environment/workspace

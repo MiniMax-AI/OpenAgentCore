@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: ec6c807e262a37d2ecd456101dadf7ae4818f1bd711b4af5f08e27c9d1690d83
+source_hash: 10483462da09c4fca5d1cb04a219f7d93faa020ea6104536b33dce3deabea1d4
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -166,7 +166,7 @@ allocation、专用 daemon credential digest 和精确 Session binding 在 `Crea
 
 配置 provider 后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
 
-Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式删除和 snapshot retention 授权其清理。停止或缺失 container 不授权丢弃保留工作区或历史。禁用 provider 停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
+Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式生命周期清理和快照保留策略管理资源回收。停止或缺失 container 不授权丢弃保留工作区或历史，也不授权选择替代计算资源。禁用 provider 停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
 
 终结清理原子撤销 device authority、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时 provider outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
 
@@ -174,23 +174,31 @@ Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 
 
 每个注册 node 有一个串行 lifecycle worker，负责 gate、allocation 与 pending cursor、connection 和 wake hint；E2B allocation 共享一个没有 node 的串行 lifecycle。薄 coordinator 发现 node 并关闭 worker，数据库、provider 或等待操作期间不持有 map mutex。worker 独立推进，因此一个在线 node 的 provider 卡住不会阻塞其他 node：lifecycle 并发为每 node 一项操作，随 node 数量增长。离线 worker 保留，因此其保留资源在重连后仍可观察。
 
-allocation scan 在应用 32 行分页限制前按 node 过滤，pending scan join 尚未释放的已提交 placement。每个 node 推进自己的 cursor，包括越过失败观测，并在末尾回绕一次。direct provisioning 在进入该 node gate 前解析 tenant 范围内 placement，已有 allocation 必须与其一致；Core 不选择另一 node。
+allocation scan 在应用 32 行分页限制前按 node 过滤，pending scan join 尚未释放的已提交 placement。每个 node 推进自己的 cursor，包括越过失败观测，并在末尾回绕一次。direct provisioning 在进入该 node gate 前解析 tenant 范围内 placement，活动 allocation 必须与其一致。只有确认释放后才能建立新的 placement；断连不会迁移活动 allocation。
 
 释放 execution lease 前，coordinator 停止接受工作，取消并排空每个 node worker 和 direct caller。lease 丢失影响全部；普通 provider failure 限于所属 node。计划 deployment drain 或 node retirement 通过五秒有界 lease gate，在 leased operation 之间同步取消 lifecycle context，包括活动 manual reconcile，不仅为了改变配置就取消进行中的 leased query。失败的 cancellation fence 关闭 manager admission 并报告 owner failure。失败的 retirement 保留原 lifecycle identity 和 gate，直到 owner shutdown，drain barrier 保持关闭。Session lock、deployment capacity transaction 和 revision-checked receipt 仍是权威依据，外部操作不持有数据库锁。
 
 ### Placement 与容量 {#placement-and-capacity}
 
-placement 自动完成：environment-to-node placement 与 Session 创建及其 retry identity 一起提交，调用方不能选择 node，重试即使 node 离线也保留原 node。Node capacity 计入 pending reservation 和未决资源，新 placement 与 suspended-to-restoring 转移共享数据库锁。未知操作保留预约，source teardown 必须确认后才能释放 active capacity，确认 cleanup 后释放 placement capacity。保留所有权需要精确 provider evidence：socket path、缺失 instance 或空列表都不证明 cleanup，也不授权 replacement。
+placement 自动完成：Environment-to-node placement 与 Session 创建及其 retry identity 一起提交，调用方不能选择 node；活动 allocation 即使在 node 离线时也保留原 node。确认 allocation 释放后，符合条件的保留 Session 可以重新预约兼容容量，包括其他 node。Node capacity 计入 pending reservation 和未决资源，新 placement 与 suspended-to-restoring 转移共享数据库锁。未知操作保留预约，source teardown 必须确认后才能释放 active capacity，确认 cleanup 后释放 placement capacity。保留所有权需要精确 provider evidence：socket path、缺失 instance 或空列表都不证明 cleanup，也不授权 replacement。
 
-部署的 CPU、memory、disk 设置、`max_active`、`max_retained` 和 snapshot retention 限制每个 node。不提供 node-level drain、跨 node Session migration、multi-active Core、autoscaling 或 snapshot replication。node 持有 allocation、snapshot、reservation、unknown result 或 cleanup 时拒绝移除 node，离线 ownership 保留。
+部署的 CPU、memory、disk 设置、`max_active`、`max_retained` 和 snapshot retention 限制每个 node。确认释放后的冷替换不提供 node-level drain、跨 node 内存恢复、不可达写入方的故障转移、并发写入方、multi-active Core、autoscaling 或 snapshot replication。node 持有 allocation、snapshot、reservation、unknown result 或 cleanup 时拒绝移除 node，离线 ownership 保留。
 
 ### 暂停 {#suspension}
 
-Core 用同一个固定 policy 暂停每个声明 checkpoint 支持的 provider 的空闲工作：工作空闲 5 分钟（300 秒）后暂停，snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 仅在至少一个 Turn 已终结、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input、file operation 或 initialization，且真实 activity 已空闲达到该时间后暂停。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
+Core 用同一个固定 policy 暂停每个声明 checkpoint 支持的 provider 的空闲工作：工作空闲 5 分钟（300 秒）后暂停，snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 在 initialization 完成、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input 或 file operation，且真实 activity 已空闲达到该时间后暂停。Session 无需已运行过 Turn。idle clock 不早于 allocation 进入 running compute phase 的时刻开始，包括 wake 后重新进入该 phase。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
 
 Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspension。新 Turn claim、file-write intent 和 capture admission 在 Session lock 下串行化，共享一个 compute-phase 检查；新 pending work 取消 capture 并唤醒同一 source。正常 preparation 在经过认证的 resume handshake 后等待 compute phase 为 running；pending input 的 promotion 与 lifecycle transition 冲突时保持 pending。compute phase 和 revision-checked receipt 位于 allocation。Core 在 effect 前持久化 quiesce、capture 和 restore intent，仅新 receipt 执行 capture 或 restore，恢复观察精确 attempt，不重试未知 creation、capture 或 restore。已消费 snapshot 不让 running generation 回滚。删除、撤销和 retention expiry 优先于 wake，一直持续到最终数据库 compare-and-swap；未知 cleanup identity 保留，直到确认所属资源不存在。已消费 artifact 和旧 compute 被删除，因此暂停循环不累积可写磁盘链。
 
-排队工作和实时 Environment file access 唤醒 suspended Environment；history 和已发布 Artifact read 不唤醒。计划暂停在 daemon 连接上使用 Environment 和 suspension token。受 PID 与 start-time fencing 的本地 control signal（`RunCommandCompute`）唤醒 parked daemon，daemon 在准入工作前重新认证。确认前临时断连通过有界 attempt 和 backoff 重试同一已 armed suspension；永久认证或协议拒绝则关闭。Core 负责 snapshot retention deadline，daemon 没有相应 timer。quiesce 确认丢失时可以通过明确 rollback 解冻同一 source，但不授权 capture。
+排队工作和实时 Environment file access 唤醒 suspended Environment；history 和已发布 Artifact read 不唤醒。实时文件请求在进入文件工作队列前，等待当前 Runtime 通过 credential 授权的连接及 Harness 声明；compute Create 完成并不代表 Runtime 已就绪。计划暂停在 daemon 连接上使用 Environment 和 suspension token。受 PID 与 start-time fencing 的本地 control signal（`RunCommandCompute`）唤醒 parked daemon，daemon 在准入工作前重新认证。确认前临时断连通过有界 attempt 和 backoff 重试同一已 armed suspension；永久认证或协议拒绝则关闭。保留的检查点在原 node 恢复。Core 负责 snapshot retention deadline，daemon 没有相应 timer。quiesce 确认丢失时可以通过明确 rollback 解冻同一 source，但不授权 capture。
+
+### 检查点保留期后的冷替换 {#cold-replacement-after-checkpoint-retention}
+
+快照保留期限制计算资源，不限制符合条件的保留 Session 的生命周期。到期后，只有独立文件系统对象已就绪、初始化已完成、Session 与 Environment 均未终结，且此前已认证 Runtime 的 `retained_native_history` 声明已持久化时，Core 才能在不终结 Session 的情况下清理 allocation。能力及原生恢复义务由 [Core–Runtime 协议](runtime-protocol.md)定义。仅保留文件系统并不足够。
+
+Core 在释放 allocation 和 placement 归属前，确认原始创建已结算且所属计算资源与快照均已清理。替代计算资源准入前撤销旧 device 的权限。Create、Kill 或 DeleteSnapshot 的结果尚未确认时，Core 保留归属，不准入替代写入方。可恢复的 Session 与 Environment 保持断连，保留同一文件系统对象和初始化结果。归档、重置和删除优先，唤醒请求不能撤销它们。
+
+新 input 或实时 Environment 文件访问会在兼容 node 上预约新 allocation，并引导新的 Runtime device。准备流程复用同一文件系统和已完成的初始化，不重放初始化。验证替代 Runtime 的声明后，执行从保留历史续接同一原生 Session。原生历史缺失或无效时明确失败；Core 不替换为新的原生 Session，也不重放已完成的 input。读取历史和已发布 Artifact 不预约计算资源。此路径不保留 VM 内存、后台进程或开放连接，也不为未声明能力的 Runtime、Harness 或文件系统组合提供资格。
 
 ### 重置与归档 {#reset-and-archive}
 
@@ -242,4 +250,4 @@ node 使用 [provider 配置](configuration.md#docker-node-configuration)中的�
 
 `DeploymentPolicy.Workspace` 声明挂载要求；未声明表示不支持外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执选择代次的模式和能力；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。`ValidateWorkspacePolicy` 使用文件系统协议的组合校验器：不强制容量配额的外部文件系统拒绝正值 `EnvironmentDiskMiB`，零表示不请求配额。根磁盘容量仍为必需。未提供外部声明时，继续使用自有磁盘的容量边界。
 
-Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`，包含 workspace、staging、initialization 和 packages；私有 HOME 及 Harness 历史仍保存在 VM 根磁盘检查点中。原生资源通过明确的模式、对象和路径标签校验，不根据挂载形状推断模式。恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性证据不证明跨 VM 隔离。
+Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`；保留内容与私有原生历史遵循[工作区文件系统范围](workspace-provider.md#lifetime-and-filesystem-scope)和 [Runtime 资源目录](configuration.md#runtime-resource-directories)。私有 HOME、凭据和计算根磁盘不是持久历史存储。原生资源通过明确的模式、对象和路径标签校验，不根据挂载形状推断模式。同 node 检查点恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性证据不证明跨 VM 隔离或跨 node 内存恢复。

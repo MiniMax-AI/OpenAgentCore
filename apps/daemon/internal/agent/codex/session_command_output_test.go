@@ -10,7 +10,7 @@ import (
 
 func TestCommandOutputRequiresRootTurn(t *testing.T) {
 	out := make(chan proto.Envelope, 10)
-	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(), rpc: NewJSONRPCClient(JSONRPCConfig{})}
+	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)), rpc: NewJSONRPCClient(JSONRPCConfig{})}
 	s.registerHandlers()
 	s.setThreadID("root")
 	s.beginRootTurn("root", "turn")

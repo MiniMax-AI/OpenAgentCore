@@ -62,7 +62,7 @@ func TestNativeTokenUsageAcrossRuns(t *testing.T) {
 }
 
 func TestNativeTokenUsageFreshThreadAndIgnoredPayloads(t *testing.T) {
-	s := &Session{out: make(chan proto.Envelope, 8), cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+	s := &Session{out: make(chan proto.Envelope, 8), cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 	s.setThreadID("thread")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"current"}}`))
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":{"inputTokens":321,"outputTokens":45}}}`))
@@ -81,7 +81,7 @@ func TestNativeTokenUsageFreshThreadAndIgnoredPayloads(t *testing.T) {
 }
 
 func TestLegacyTurnUsagePayload(t *testing.T) {
-	s := &Session{out: make(chan proto.Envelope, 8), cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+	s := &Session{out: make(chan proto.Envelope, 8), cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 	s.setThreadID("thread")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"current"}}`))
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","usage":{"inputTokens":123,"outputTokens":12}}`))
@@ -95,7 +95,7 @@ func TestLegacyTurnUsagePayload(t *testing.T) {
 }
 
 func TestCompleteTokenBreakdownAndCancellation(t *testing.T) {
-	s := &Session{out: make(chan proto.Envelope, 8), cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+	s := &Session{out: make(chan proto.Envelope, 8), cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 	s.setThreadID("thread")
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"old","tokenUsage":{"total":{"inputTokens":100,"cachedInputTokens":20,"outputTokens":50,"reasoningOutputTokens":10,"totalTokens":150}}}`))
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"new"}}`))
@@ -164,7 +164,7 @@ func TestUnadvancedThreadTotalIsNotTurnUsage(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			out := make(chan proto.Envelope, 8)
-			s := &Session{runID: "run", out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+			s := &Session{runID: "run", out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 			s.setThreadID("thread")
 			total := `{"inputTokens":0,"cachedInputTokens":0,"outputTokens":0,"reasoningOutputTokens":0,"totalTokens":0}`
 			if replay != "" {

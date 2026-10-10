@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: eeb840aefb1eab56b16b5185c9fb6b3fcba5f0e9e666eaa32cf9e02f1e2fe134
+source_hash: 75ead1a81873a6fd67451b9beacb530bf156cdeefcc8dd0add74d5c5d4404484
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -75,6 +75,20 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `transport` | 未设置 | `otlp_http`；设置 `endpoint` 时必填 |
 | `insecure` | `false` | `http` 端点必须设为 `true`，`https` 端点不允许设为 `true` |
 | `headers` | 无 | 发往端点的请求标头。`Host`、`Content-Length`、`Content-Type` 和 `Content-Encoding` 为保留标头 |
+
+### Runtime 资源目录 {#runtime-resource-directories}
+
+Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` 是由 `OAC_RUNTIME_HOME` 选择的 Runtime 主目录。`OAC_RUNTIME_STATE_DIRECTORY` 仅在未设置时采用默认值；显式空值、相对路径或非规范路径会被拒绝。目录设置没有其他文件或环境变量回退来源。
+
+| Runtime 进程设置 | 默认值 | 打包的 Linux 镜像 |
+| --- | --- | --- |
+| `OAC_RUNTIME_INITIALIZATION_DIRECTORY` | `<RuntimeHome>/initialization` | `/environment/initialization` |
+| `OAC_RUNTIME_PACKAGE_DIRECTORY` | `<RuntimeHome>/packages` | `/environment/packages` |
+| `OAC_RUNTIME_STATE_DIRECTORY` | `<RuntimeHome>` | `/environment/runtime-state` |
+
+状态目录包含保留的原生 Harness 历史和能力安装完成记录，与声明的工作区目录分开。选择独立状态目录不会将 Runtime 设备凭据或连接身份移出 Runtime 主目录中的实例私有路径；不得随原生历史复制这些数据。[Harness 接入指南](../../contracts/agents-api/zh/harness-onboarding.md#register-the-adapter)定义适配器边界，[Environment 准备](../../contracts/agents-api/zh/environments.md)负责初始化和包的行为。
+
+将状态放在独立文件系统上，可以在替换计算资源时保留这些文件。原生续接仍要求 Harness 已通过资格验证、所有权匹配，并确认前一个写入者已停止。这不保留进程内存或计算资源根磁盘上的任意文件。
 
 ## 运行时设置：Web {#runtime-settings-web}
 

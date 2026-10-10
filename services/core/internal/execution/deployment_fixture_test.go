@@ -140,6 +140,8 @@ func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(
 
 // strictDeploymentReader runs each set func; any other call fails the test.
 type strictDeploymentReader struct {
+	replacementEnvironments func(context.Context, string) ([]deployment.UnallocatedEnvironment, error)
+	retainedNativeHistory   func(context.Context, deployment.AllocationKey) (bool, error)
 	t                       *testing.T
 	deployment              func(context.Context) (deployment.Record, error)
 	snapshot                func(context.Context) (deployment.Snapshot, error)
@@ -340,4 +342,17 @@ func (r *strictDeploymentReader) Activity(ctx context.Context, allocationID stri
 		return deployment.Activity{}, unexpectedDeploymentCall(r.t, "Activity")
 	}
 	return r.activity(ctx, allocationID)
+}
+
+func (r *strictDeploymentReader) ReplacementEnvironments(ctx context.Context, after string) ([]deployment.UnallocatedEnvironment, error) {
+	if r.replacementEnvironments == nil {
+		return nil, unexpectedDeploymentCall(r.t, "ReplacementEnvironments")
+	}
+	return r.replacementEnvironments(ctx, after)
+}
+func (r *strictDeploymentReader) RetainedNativeHistory(ctx context.Context, key deployment.AllocationKey) (bool, error) {
+	if r.retainedNativeHistory == nil {
+		return false, unexpectedDeploymentCall(r.t, "RetainedNativeHistory")
+	}
+	return r.retainedNativeHistory(ctx, key)
 }

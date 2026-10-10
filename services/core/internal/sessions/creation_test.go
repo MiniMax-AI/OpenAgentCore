@@ -25,20 +25,21 @@ import (
 type fakeCreationTx struct {
 	*fakeInputTx
 
-	upsertSession              func(NewSession) (Creation, error)
-	lockDeployment             func() (placement.Deployment, error)
-	loadNodes                  func() ([]placement.Node, error)
-	reservePlacement           func() error
-	lockSkills                 func() (map[string]skills.Skill, error)
-	readSkillVersion           func() (skills.Content, error)
-	saveModelExecution         func() error
-	saveExecutionConfiguration func() error
-	saveInitialFiles           func() error
-	saveSetup                  func() error
-	createEnvironment          func() (string, error)
-	pruneChanges               func() error
-	auditCreation              func() error
-	loadSession                func() (Session, error)
+	upsertSession               func(NewSession) (Creation, error)
+	loadGenerationSpecification func(uint64) (json.RawMessage, error)
+	lockDeployment              func() (placement.Deployment, error)
+	loadNodes                   func() ([]placement.Node, error)
+	reservePlacement            func() error
+	lockSkills                  func() (map[string]skills.Skill, error)
+	readSkillVersion            func() (skills.Content, error)
+	saveModelExecution          func() error
+	saveExecutionConfiguration  func() error
+	saveInitialFiles            func() error
+	saveSetup                   func() error
+	createEnvironment           func() (string, error)
+	pruneChanges                func() error
+	auditCreation               func() error
+	loadSession                 func() (Session, error)
 }
 
 var _ CreationTx = (*fakeCreationTx)(nil)
@@ -51,6 +52,11 @@ func (f *fakeCreationTx) UpsertSession(_ context.Context, session NewSession) (C
 func (f *fakeCreationTx) LockDeployment(context.Context) (placement.Deployment, error) {
 	f.record("LockDeployment", f.lockDeployment != nil)
 	return f.lockDeployment()
+}
+
+func (f *fakeCreationTx) LoadGenerationSpecification(_ context.Context, generation uint64) (json.RawMessage, error) {
+	f.record("LoadGenerationSpecification", f.loadGenerationSpecification != nil, fmt.Sprint(generation))
+	return f.loadGenerationSpecification(generation)
 }
 
 func (f *fakeCreationTx) LoadNodes(context.Context) ([]placement.Node, error) {
@@ -448,7 +454,7 @@ func TestCreateSession(t *testing.T) {
 	t.Run("a hosted Session is admitted under the deployment lock and placed after its Environment", func(t *testing.T) {
 		ready := uint64(5)
 		tx := newCreationTx(t, hostedSession, true)
-		tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Specification: json.RawMessage(`{}`)})
+		tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Generation: 5, Specification: json.RawMessage(`{}`)})
 		tx.createEnvironment = returns("environment")
 		tx.loadNodes = returns([]placement.Node{{ID: "node", Online: true, ServingReady: true, ReadyGeneration: &ready, MaxActive: 1, MaxRetained: 1, CoreURL: rules.PublicURL()}})
 		tx.reservePlacement = done
@@ -458,6 +464,34 @@ func TestCreateSession(t *testing.T) {
 			t.Fatalf("calls %q, %v", calls, err)
 		}
 	})
+
+	for _, external := range []bool{false, true} {
+		t.Run(fmt.Sprintf("selected generation external=%t", external), func(t *testing.T) {
+			ready := uint64(4)
+			tx := newCreationTx(t, hostedSession, true)
+			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Generation: 5, Specification: json.RawMessage(`{"workspace":{}}`)})
+			tx.createEnvironment = returns("environment")
+			tx.loadNodes = returns([]placement.Node{{ID: "node", Online: true, ServingReady: true, ReadyGeneration: &ready, MaxActive: 1, MaxRetained: 1, CoreURL: rules.PublicURL()}})
+			spec := json.RawMessage(`{}`)
+			if external {
+				spec = json.RawMessage(`{"workspace":{}}`)
+			}
+			tx.loadGenerationSpecification = func(generation uint64) (json.RawMessage, error) {
+				if generation != 4 {
+					t.Fatal(generation)
+				}
+				return spec, nil
+			}
+			tx.reservePlacement = done
+			_, err, calls := runCreation(t, rules, tx, creationInput("openai_hosted"))
+			if external != errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("selected generation admission: %v", err)
+			}
+			if external && strings.Contains(strings.Join(calls, " "), "ReservePlacement") {
+				t.Fatal("unsupported external placement reserved", calls)
+			}
+		})
+	}
 
 	for _, test := range []struct {
 		name  string
@@ -470,7 +504,7 @@ func TestCreateSession(t *testing.T) {
 			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Resetting: true})
 		}, placement.ErrResetAdmission, []string{"UpsertSession create", "LockDeployment"}},
 		{"no node places the Environment", rules, func(tx *fakeCreationTx) {
-			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Specification: json.RawMessage(`{}`)})
+			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Generation: 5, Specification: json.RawMessage(`{}`)})
 			tx.createEnvironment, tx.loadNodes = returns("environment"), returns([]placement.Node(nil))
 		}, placement.ErrNodeUnavailable, []string{"UpsertSession create", "LockDeployment", "CreateEnvironment", "LoadNodes"}},
 		{"hosted creation needs rules", nil, func(*fakeCreationTx) {}, nil, []string{"UpsertSession create"}},

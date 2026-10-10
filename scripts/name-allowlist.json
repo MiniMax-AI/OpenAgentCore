@@ -263,5 +263,10 @@
     "path": "scripts/ci_plan_test.py",
     "regex": "(?:example/parsar|@oac/parsar-example)",
     "reason": "The named Parsar example owns its dependency lock and component checks."
+  },
+  {
+    "path": "apps/daemon/internal/cli/connect_suspend_test.go",
+    "regex": "\"agents-api-\"",
+    "reason": "The cleanup regression uses the persisted Session state-key prefix required by Runtime executor ownership validation."
   }
 ]

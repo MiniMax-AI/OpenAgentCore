@@ -59,3 +59,5 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | Network `disabled` or `restricted` | Rejected | Rejected | Rejected |
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, anonymous or HTTPS bearer | Verified: self-hosted; admitted: hosted; anonymous or HTTPS bearer |
+
+External workspace storage additionally requires the selected Harness profile and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace Provider guide](../../docs/workspace-provider.md) owns storage combination admission.

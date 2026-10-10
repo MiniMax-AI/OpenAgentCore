@@ -28,7 +28,7 @@ var _ agent.Executor = (*executor)(nil)
 var _ agent.Turn = (*Session)(nil)
 
 // NewExecutorFactory fixes the deployment workspace once; nil selects none.
-func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
+func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.ExecutorFactory {
 	var frozen *WorkspaceConfig
 	if config != nil {
 		value := *config
@@ -46,10 +46,10 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		var opts launchOptions
 		binary := defaultBinary()
 		if frozen == nil {
-			opts, err = prepareOptions(req)
+			opts, err = prepareOptions(runtimeRoot, req)
 		} else {
 			binary = frozen.Binary
-			opts, err = prepareWorkspaceOptions(*frozen, req)
+			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
 		}
 		if err != nil {
 			return nil, err

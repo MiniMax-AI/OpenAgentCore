@@ -64,13 +64,13 @@ func runtimeSuspensionStep(t *testing.T, w *Store, owner deployment.Allocation, 
 	return next
 }
 
-func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
-	cases := []string{"no_completed_turn", "queued", "in_progress", "waiting", "subagent_queued", "subagent_in_progress", "subagent_waiting", "input_reservation", "file_write", "idle"}
+func TestRuntimeSuspensionRequiresIdleAndNoPendingWork(t *testing.T) {
+	cases := []string{"no_completed_turn", "initial_input", "queued", "in_progress", "waiting", "subagent_queued", "subagent_in_progress", "subagent_waiting", "input_reservation", "file_write", "idle"}
 	for _, kind := range cases {
 		t.Run(kind, func(t *testing.T) {
 			_, w, pool, owner := runtimeSuspensionFixture(t)
 			completed := ""
-			if kind != "no_completed_turn" {
+			if kind != "no_completed_turn" && kind != "initial_input" {
 				completed = runtimeSuspensionCompleted(t, pool, owner)
 			}
 			switch kind {
@@ -81,6 +81,8 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 				runtimeSuspensionSQL(t, pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, completed)
 				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, completed)
 				runtimeSuspensionSQL(t, pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn',$4,clock_timestamp())`, uuid.NewString(), owner.SessionID, child, strings.TrimPrefix(kind, "subagent_"))
+			case "initial_input":
+				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,is_initial,created_at,deadline) VALUES($1,$2,'initial','[{}]',true,clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
 			case "input_reservation":
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) VALUES($1,$2,'pending','[{}]',clock_timestamp(),clock_timestamp()+interval '1 minute')`, uuid.NewString(), owner.SessionID)
 			case "file_write":
@@ -91,12 +93,12 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantBusy := kind != "idle" && kind != "no_completed_turn"
-			if activity.Busy != wantBusy || activity.HasCompletedTurn != (kind != "no_completed_turn") {
+			if activity.Busy != wantBusy {
 				t.Fatalf("activity lost pending work: %+v", activity)
 			}
 			until := time.Now().Add(time.Hour)
 			_, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
-			if kind == "idle" {
+			if kind == "idle" || kind == "no_completed_turn" {
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -264,7 +266,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 func TestRuntimeSuspensionIdleStartsAfterLastCompletion(t *testing.T) {
 	_, w, pool, owner := runtimeSuspensionFixture(t)
 	turn := runtimeSuspensionCompleted(t, pool, owner)
-	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 hours',compute_phase_changed_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
 	var completed time.Time
 	if err := pool.QueryRow(t.Context(), `SELECT completed_at FROM turns WHERE id=$1`, turn).Scan(&completed); err != nil {
 		t.Fatal(err)
@@ -328,7 +330,7 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			s, w, pool, owner := runtimeSuspensionFixture(t)
 			turn := runtimeSuspensionCompleted(t, pool, owner)
-			runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '20 minutes' WHERE id=$1`, owner.ID)
+			runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '20 minutes',compute_phase_changed_at=clock_timestamp()-interval '20 minutes' WHERE id=$1`, owner.ID)
 			var err error
 			owner, err = deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 			if err != nil {
@@ -423,5 +425,34 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_phase_changed_at=NULL WHERE id=$1", allocation.ID)
 	if encoded, _ := json.Marshal(listed()); !strings.Contains(string(encoded), `"compute_phase_changed_at":null`) {
 		t.Fatal("an unknown phase time was not null", string(encoded))
+	}
+}
+
+func TestNeverStartedSessionIdleStartsAfterInitialization(t *testing.T) {
+	_, w, pool, owner := runtimeSuspensionFixture(t)
+	const timeout = 5 * time.Minute
+	until := time.Now().Add(time.Hour)
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '1 hour',created_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, owner.ID)
+	activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
+	if err != nil || activity.ReadyToSuspend(timeout) {
+		t.Fatal("creation age bypassed ready-time idle clock", activity, err)
+	}
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase_changed_at=clock_timestamp()-interval '6 minutes' WHERE id=$1`, owner.ID)
+	activity, err = deploymentStore(w).Activity(t.Context(), owner.ID)
+	if err != nil || !activity.ReadyToSuspend(timeout) {
+		t.Fatal("never-started initialized Session cannot idle", activity, err)
+	}
+	runtimeSuspensionSQL(t, pool, `UPDATE environments SET initialization='running' WHERE id=$1`, owner.EnvironmentID)
+	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, timeout); !errors.Is(err, deployment.ErrAllocationConflict) {
+		t.Fatal("unfinished initialization admitted suspension", err)
+	}
+	runtimeSuspensionSQL(t, pool, `UPDATE environments SET initialization='complete' WHERE id=$1`, owner.EnvironmentID)
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_wake_requested=true WHERE id=$1`, owner.ID)
+	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, timeout); !errors.Is(err, deployment.ErrAllocationConflict) {
+		t.Fatal("wake lost to suspension", err)
+	}
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_wake_requested=false WHERE id=$1`, owner.ID)
+	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, timeout); err != nil {
+		t.Fatal("idle Session with no Turn was blocked", err)
 	}
 }

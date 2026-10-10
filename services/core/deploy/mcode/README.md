@@ -16,7 +16,7 @@ MiniMax Code accepts the `anthropic`, `responses` and `chat_completions` protoco
 
 ## Execution profiles
 
-Each Session has its own native data directory, `$OAC_RUNTIME_HOME/runtime/mcode/state/<state key>/` (`OAC_RUNTIME_HOME` defaults to `~/.oac`), holding the generated native configuration, instructions (`AGENTS.md`, at most 32 KiB), MCP configuration and history. The native process gets `MINIMAX_DATA_DIR`, `HOME` and `USERPROFILE` set to that directory on top of the daemon user's environment.
+Each Session has its own native data directory, `$OAC_RUNTIME_HOME/runtime/mcode/state/<state key>/` (`OAC_RUNTIME_HOME` defaults to `~/.oac`), holding the generated native configuration, instructions (`AGENTS.md`, at most 32 KiB), MCP configuration and history. The native process gets `MINIMAX_DATA_DIR`, `HOME` and `USERPROFILE` set to that directory on top of the daemon user's environment. This directory remains private to the compute instance: the adapter does not declare retained native history across compute replacement.
 
 | Profile | Where it runs | Native configuration |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 | Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
 | Programs | `/usr/local/bin/oac-daemon` and the companion at `/opt/mcode-harness` (native CLI at `native/cli.js`, bridge at `bridge.mjs`) |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build runs the companion's `check.mjs` and the native `--version`. The combined Runtime image uses this image as its base. Sandboxes run it with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

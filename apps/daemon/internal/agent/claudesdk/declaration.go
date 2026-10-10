@@ -24,6 +24,7 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude
 	Streaming:                      proto.CapabilitySupported,
 	Usage:                          proto.CapabilitySupported,
 	Resume:                         proto.CapabilitySupported,
+	RetainedNativeHistory:          proto.CapabilityUnsupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
 	Steering:                       proto.CapabilitySupported,
 	MessageItems:                   proto.CapabilitySupported,
@@ -68,18 +69,17 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if !filepath.IsAbs(entrypoint) {
 		return fail(fmt.Errorf("%s must be absolute", claudeSDKEntrypointEnv))
 	}
-	profileDir, err := paths.ProfileDir(options.Profile)
-	if err != nil {
+	if err := paths.ValidateProfile(options.Profile); err != nil {
 		return fail(err)
 	}
-	if !filepath.IsAbs(profileDir) {
-		return fail(fmt.Errorf("Claude SDK state requires an absolute OAC_RUNTIME_HOME"))
+	if !filepath.IsAbs(options.RuntimeRoot) || filepath.Clean(options.RuntimeRoot) != options.RuntimeRoot {
+		return fail(fmt.Errorf("Claude SDK requires an explicit Runtime root"))
 	}
 	node := os.Getenv(claudeSDKNodeEnv)
 	if node == "" {
 		node = "node"
 	}
-	node, err = exec.LookPath(node)
+	node, err := exec.LookPath(node)
 	if err != nil {
 		return fail(fmt.Errorf("Claude SDK Node executable is unavailable"))
 	}
@@ -87,21 +87,20 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if err != nil {
 		return fail(err)
 	}
-	config = Config{Node: node, Entrypoint: entrypoint, StateDir: filepath.Join(profileDir, "runtime", "claude-sdk")}
+	if !filepath.IsAbs(options.StateRoot) || filepath.Clean(options.StateRoot) != options.StateRoot {
+		return fail(fmt.Errorf("Claude SDK requires an explicit state root"))
+	}
+	config = Config{Node: node, Entrypoint: entrypoint, StateDir: filepath.Join(options.StateRoot, "daemon", options.Profile, "runtime", "claude-sdk")}
 	binding, err := localworkspace.Load()
 	if err != nil {
 		return fail(err)
 	}
 	if binding != nil {
-		root, err := paths.Root()
-		if err != nil {
-			return fail(err)
-		}
 		config.Node, err = filepath.EvalSymlinks(node)
 		if err != nil {
 			return fail(err)
 		}
-		config, err = ConfigureLocal(config, root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
 		if err != nil {
 			return fail(err)
 		}
@@ -118,6 +117,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
 		caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
 		caps.NativeSessionRecovery = proto.CapabilitySupported
+		caps.RetainedNativeHistory = proto.CapabilityFromBool(info.SDK == "0.3.269" && info.Native == "2.1.269 (Claude Code)")
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
 	out.Info.Capabilities.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())

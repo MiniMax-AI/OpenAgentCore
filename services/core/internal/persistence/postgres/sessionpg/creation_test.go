@@ -644,3 +644,65 @@ func TestCreationAudit(t *testing.T) {
 		t.Fatal("created resources", owned, rows.Err())
 	}
 }
+
+// Profile admission uses the deployment selected while holding its lock, so a
+// storage-mode update cannot race a preflight check and persist unsupported work.
+func TestHostedExternalHistoryAdmissionRollsBackAfterDeploymentChange(t *testing.T) {
+	pool := pgtest.OpenIsolated(t, nil)
+	store, _ := creationService(t, pool)
+	rules, err := placement.NewRules(externalAdmissionDeclarations{}, "https://core.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := sessions.NewService(store, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	tenant := uuid.NewString()
+	exec(t, pool, `UPDATE runtime_deployment SET installation_id=$1, backend_fingerprint=$2, provider_kind='test-direct', mode='direct', generation=1, specification='{"resources":{"cpus":2,"memory_mib":2048}}'`, uuid.New(), strings.Repeat("a", 64))
+	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "raced", Configuration: json.RawMessage(`{"agent":{"model":"m"},"environment":{"type":"openai_hosted"}}`)}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	var holder int32
+	if err = tx.QueryRow(ctx, "SELECT pg_backend_pid() FROM runtime_deployment FOR UPDATE").Scan(&holder); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := service.CreateSession(ctx, tenant, input); done <- err }()
+	awaitBlocked(ctx, t, pool, holder)
+	if _, err = tx.Exec(ctx, `UPDATE runtime_deployment SET specification=jsonb_set(specification,'{workspace}','{}')`); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-done; !errors.Is(err, sessions.ErrInvalidInput) {
+		t.Fatal("external combination admitted", err)
+	}
+	if count := countRows(t, pool, "SELECT count(*) FROM sessions WHERE tenant_id=$1", tenant); count != 0 {
+		t.Fatal("rejected admission persisted Session", count)
+	}
+	input.SupportsRetainedNativeHistory = true
+	created, err := service.CreateSession(ctx, tenant, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.SupportsRetainedNativeHistory = false
+	retry, err := service.CreateSession(ctx, tenant, input)
+	if err != nil || retry.Created || retry.Session.ID != created.Session.ID {
+		t.Fatal("trusted admission input changed retry identity", retry, err)
+	}
+}
+
+// This fixture declares a direct provider supporting both storage modes.
+type externalAdmissionDeclarations struct{}
+
+func (externalAdmissionDeclarations) RequiresPublicOrigin(string) (bool, error) { return false, nil }
+func (externalAdmissionDeclarations) ValidateSpecification(string, sandbox.DeploymentSpec) error {
+	return nil
+}

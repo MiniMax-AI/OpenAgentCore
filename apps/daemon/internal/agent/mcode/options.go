@@ -18,7 +18,7 @@ type launchOptions struct {
 	MCP                 []map[string]any
 }
 
-func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
+func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchOptions, error) {
 	var result launchOptions
 	if _, err := harnessconfiguration.Configuration().PrepareHarnessConfig(req.AgentOptions); err != nil {
 		return result, err
@@ -26,7 +26,7 @@ func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
 	if err := validateExecutionRequest(req); err != nil {
 		return result, err
 	}
-	dataDir, err := agent.StateDir("mcode", req.AgentStateKey)
+	dataDir, err := agent.StateDir(runtimeRoot, "mcode", req.AgentStateKey)
 	if err != nil {
 		return result, err
 	}

@@ -201,7 +201,7 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 					if sendErr := sendSuspendResult(ctx, conn, env, proto.TypeEnvironmentQuiesced, request, "resource_busy"); sendErr != nil {
 						return nil, sendErr
 					}
-					if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+					if errors.Is(err, dispatch.ErrRouterQuiesced) || errors.Is(err, dispatch.ErrRouterClosed) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 						return nil, err
 					}
 					continue

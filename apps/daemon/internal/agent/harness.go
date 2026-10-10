@@ -45,7 +45,11 @@ type Declaration struct {
 
 // DiscoveryOptions provides process context without naming an implementation.
 type DiscoveryOptions struct {
-	Profile        string
+	Profile string
+	// StateRoot holds private history retained with the Environment filesystem.
+	StateRoot string
+	// RuntimeRoot holds instance-private configuration and process files.
+	RuntimeRoot    string
 	Stdout, Stderr io.Writer
 }
 

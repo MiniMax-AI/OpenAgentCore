@@ -16,6 +16,7 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode"
 	Streaming:                      proto.CapabilitySupported,
 	Usage:                          proto.CapabilityUnsupported,
 	Resume:                         proto.CapabilitySupported,
+	RetainedNativeHistory:          proto.CapabilityUnsupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
 	Steering:                       proto.CapabilityUnsupported,
 	MessageItems:                   proto.CapabilityUnsupported,
@@ -71,7 +72,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 	runtime.Info = result
 	workspace := discoverWorkspace(parent, options, runtime)
 	if runtime.Info.Available {
-		runtime.Executor = NewExecutorFactory(workspace)
+		runtime.Executor = NewExecutorFactory(options.RuntimeRoot, workspace)
 	}
 	fmt.Fprintf(options.Stdout, "mcode preflight ok (%s)\n", version)
 	return runtime

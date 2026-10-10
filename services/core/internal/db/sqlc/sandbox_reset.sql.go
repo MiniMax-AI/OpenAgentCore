@@ -64,9 +64,13 @@ held AS (
     SELECT p.deployment_generation, p.node_id, s.id, e.id, true, false
     FROM environments e JOIN sessions s ON s.id = e.session_id
     LEFT JOIN runtime_placements p ON p.environment_id = e.id AND p.released_at IS NULL
-    WHERE s.deleted_at IS NULL AND e.status = 'pending'
+    WHERE s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+        AND ((e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)) OR p.environment_id IS NOT NULL)
         AND s.configuration->'environment'->>'type' = 'openai_hosted'
-        AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)
+        AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released')
+    UNION ALL
+    SELECT r.deployment_generation, NULL::uuid, r.session_id, r.environment_id, true, false
+    FROM runtime_reset_retained_environments r
 ), classified AS (
     SELECT h.deployment_generation, h.node_id, h.session_id, h.environment_id, h.pending, h.cleanup, CASE WHEN h.cleanup THEN 'cleanup'
         WHEN EXISTS (SELECT 1 FROM turns t WHERE t.session_id = h.session_id AND t.status IN ('in_progress', 'waiting'))
@@ -166,7 +170,9 @@ WHERE s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'openai
     AND e.status NOT IN ('failed', 'expired')
     AND s.id > $1::uuid
     AND (EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state NOT IN ('released', 'cleanup_pending'))
-        OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id)))
+        OR (e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
+        OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
+        OR EXISTS (SELECT 1 FROM runtime_reset_retained_environments r WHERE r.environment_id = e.id))
     AND ($2::boolean OR NOT (
         EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.status IN ('in_progress', 'waiting'))
         OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = s.id AND t.status IN ('in_progress', 'waiting'))
