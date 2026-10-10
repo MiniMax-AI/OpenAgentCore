@@ -3,13 +3,13 @@ package deploymentpg_test
 import (
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
 )
 
 func runningPressureOwner(t *testing.T, f fixture, changes *deployment.ExecutionOperations, installation, node string, generation uint64) deployment.Allocation {
@@ -150,46 +150,27 @@ func TestPressureSuspensionServesRestoreOnItsOriginalNode(t *testing.T) {
 }
 
 func TestPressureDemandScansPastIncompatiblePage(t *testing.T) {
-	for _, retained := range []bool{false, true} {
-		t.Run(map[bool]string{false: "active", true: "retained"}[retained], func(t *testing.T) {
-			f := newFixture(t)
-			changes, _ := f.execution(t)
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
-			capacity := deployment.Capacity{MaxActive: 1, MaxRetained: 2}
-			if retained {
-				capacity.MaxRetained = 1
-			}
-			node := f.enroll(t, view, capacity)
-			f.connect(t, node.NodeID)
-			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
-			if retained {
-				owner = qualifyPressureRetention(t, f, owner)
-			}
-			for range 32 {
-				key := pendingPressureDemand(t, f)
-				if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='mcode' WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, key.EnvironmentID); err != nil {
-					t.Fatal(err)
-				}
-			}
-			pendingPressureDemand(t, f)
-			until := time.Now().Add(time.Hour)
-			var result deployment.Allocation
-			var err error
-			if retained {
-				result, err = changes.EndRetentionForDemand(t.Context(), owner)
-			} else {
-				result, err = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if retained && (result.ComputeRetainedUntil == nil || !result.ComputeRetainedUntil.Before(*owner.ComputeRetainedUntil)) {
-				t.Fatal("later compatible demand did not end retention")
-			}
-			if !retained && result.ComputePhase != "quiescing" {
-				t.Fatal("later compatible demand did not suspend compute")
-			}
-		})
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	capacity := deployment.Capacity{MaxActive: 1, MaxRetained: 2}
+	node := f.enroll(t, view, capacity)
+	f.connect(t, node.NodeID)
+	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
+	for range 32 {
+		key := pendingPressureDemand(t, f)
+		if _, err := f.pool.Exec(t.Context(), `UPDATE sessions SET engine='mcode' WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, key.EnvironmentID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pendingPressureDemand(t, f)
+	until := time.Now().Add(time.Hour)
+	result, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ComputePhase != "quiescing" {
+		t.Fatal("later compatible demand did not suspend compute")
 	}
 }
 
@@ -236,116 +217,92 @@ func TestPressureDemandRejectsUnqualifiedRetainedReceipt(t *testing.T) {
 
 func TestPressureReclamationIgnoresUnavailableNodeReceipts(t *testing.T) {
 	for _, obstruction := range []string{"offline expired", "offline quiescing", "offline suspending", "different address", "incompatible generation"} {
-		for _, retention := range []bool{false, true} {
-			t.Run(obstruction+map[bool]string{false: "/suspend", true: "/retention"}[retention], func(t *testing.T) {
-				f := newFixture(t)
-				changes, _ := f.execution(t)
-				spec := retainedSpecification()
-				if obstruction == "incompatible generation" {
-					spec = testSpecification("microsandbox")
-				}
-				installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: spec})
-				badNode := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
-				f.connect(t, badNode.NodeID)
-				stuck := runningPressureOwner(t, f, changes, installation, badNode.NodeID, view.Generation)
-				phase := "quiescing"
-				if obstruction == "offline suspending" {
-					phase = "suspending"
-				}
-				if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase=$2,compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, stuck.ID, phase); err != nil {
+		t.Run(obstruction, func(t *testing.T) {
+			f := newFixture(t)
+			changes, _ := f.execution(t)
+			spec := retainedSpecification()
+			if obstruction == "incompatible generation" {
+				spec = testSpecification("microsandbox")
+			}
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: spec})
+			badNode := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+			f.connect(t, badNode.NodeID)
+			stuck := runningPressureOwner(t, f, changes, installation, badNode.NodeID, view.Generation)
+			phase := "quiescing"
+			if obstruction == "offline suspending" {
+				phase = "suspending"
+			}
+			if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase=$2,compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, stuck.ID, phase); err != nil {
+				t.Fatal(err)
+			}
+			switch obstruction {
+			case "offline expired", "offline quiescing", "offline suspending":
+				if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1`, badNode.NodeID); err != nil {
 					t.Fatal(err)
 				}
-				switch obstruction {
-				case "offline expired", "offline quiescing", "offline suspending":
-					if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1`, badNode.NodeID); err != nil {
-						t.Fatal(err)
-					}
-					if obstruction == "offline expired" {
-						if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 minute' WHERE id=$1`, stuck.ID); err != nil {
-							t.Fatal(err)
-						}
-					}
-				case "different address":
-					if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET core_url='https://other.example' WHERE id=$1`, badNode.NodeID); err != nil {
-						t.Fatal(err)
-					}
-				case "incompatible generation":
-					var err error
-					view, err = changes.Update(admin(t), installation, sandbox.Selection{Provider: "microsandbox", ExpectedGeneration: view.Generation, DeploymentSpec: retainedSpecification()})
-					if err != nil {
+				if obstruction == "offline expired" {
+					if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 minute' WHERE id=$1`, stuck.ID); err != nil {
 						t.Fatal(err)
 					}
 				}
-				limit := 2
-				if retention {
-					limit = 1
-				}
-				node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: limit})
-				f.connect(t, node.NodeID)
-				var waiting deployment.AllocationKey
-				if obstruction == "incompatible generation" {
-					old := releaseRetainedFixture(t, f, changes, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
-					waiting = old.Key()
-				} else {
-					waiting = pendingPressureDemand(t, f)
-				}
-				// A real pending reservation supplies demand and retains its original deadline.
-				if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) SELECT $1,session_id,'pressure','[{}]',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM environments WHERE id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
+			case "different address":
+				if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET core_url='https://other.example' WHERE id=$1`, badNode.NodeID); err != nil {
 					t.Fatal(err)
 				}
-				owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
-				if retention {
-					owner = qualifyPressureRetention(t, f, owner)
-				}
-				until := time.Now().Add(time.Hour)
-				if retention {
-					if _, err := changes.EndRetentionForDemand(t.Context(), owner); err != nil {
-						t.Fatal(err)
-					}
-					current, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
-					if err != nil || !current.Expired {
-						t.Fatal("healthy retention did not advance", current, err)
-					}
-					pending, err := changes.RequestCleanup(t.Context(), current)
-					if err != nil {
-						t.Fatal(err)
-					}
-					// Supply the native deletion receipt for the healthy fixture only.
-					if _, err = changes.ReleaseAllocation(t.Context(), pending); err != nil {
-						t.Fatal(err)
-					}
-				} else {
-					current, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
-					if err != nil {
-						t.Fatal("healthy suspension blocked", err)
-					}
-					// Supply healthy native quiesce/capture/stop receipts through the
-					// existing fenced phase transitions; never settle the stuck owner.
-					for _, next := range []string{"suspending", "suspended"} {
-						current, err = changes.SetCompute(t.Context(), current, next, json.RawMessage(`{}`), &until, 5*time.Minute)
-						if err != nil {
-							t.Fatal(err)
-						}
-					}
-				}
-				reserved, err := changes.EnsurePlacement(t.Context(), waiting, installation)
-				if err != nil || reserved.NodeID != node.NodeID {
-					t.Fatal("waiting input did not advance on healthy node", reserved, err)
-				}
-				observed, err := f.adapter.EnvironmentAllocation(t.Context(), stuck.Key())
-				if err != nil || observed.ID != stuck.ID || observed.DeviceID != stuck.DeviceID || observed.State != "running" || observed.ComputePhase != phase {
-					t.Fatal("changed unknown receipt", observed, err)
-				}
-				nodes, err := f.adapter.Nodes(t.Context())
+			case "incompatible generation":
+				var err error
+				view, err = changes.Update(admin(t), installation, sandbox.Selection{Provider: "microsandbox", ExpectedGeneration: view.Generation, DeploymentSpec: retainedSpecification()})
 				if err != nil {
 					t.Fatal(err)
 				}
-				for _, n := range nodes {
-					if n.ID == badNode.NodeID && (n.Active != 1 || n.Retained != 1) {
-						t.Fatal("released unknown capacity", n)
-					}
+			}
+			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+			f.connect(t, node.NodeID)
+			var waiting deployment.AllocationKey
+			if obstruction == "incompatible generation" {
+				old := releaseRetainedFixture(t, f, changes, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
+				waiting = old.Key()
+			} else {
+				waiting = pendingPressureDemand(t, f)
+			}
+			// A real pending reservation supplies demand and retains its original deadline.
+			if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) SELECT $1,session_id,'pressure','[{}]',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM environments WHERE id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
+				t.Fatal(err)
+			}
+			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
+
+			until := time.Now().Add(time.Hour)
+
+			current, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+			if err != nil {
+				t.Fatal("healthy suspension blocked", err)
+			}
+			// Supply healthy native quiesce/capture/stop receipts through the
+			// existing fenced phase transitions; never settle the stuck owner.
+			for _, next := range []string{"suspending", "suspended"} {
+				current, err = changes.SetCompute(t.Context(), current, next, json.RawMessage(`{}`), &until, 5*time.Minute)
+				if err != nil {
+					t.Fatal(err)
 				}
-			})
-		}
+			}
+
+			reserved, err := changes.EnsurePlacement(t.Context(), waiting, installation)
+			if err != nil || reserved.NodeID != node.NodeID {
+				t.Fatal("waiting input did not advance on healthy node", reserved, err)
+			}
+			observed, err := f.adapter.EnvironmentAllocation(t.Context(), stuck.Key())
+			if err != nil || observed.ID != stuck.ID || observed.DeviceID != stuck.DeviceID || observed.State != "running" || observed.ComputePhase != phase {
+				t.Fatal("changed unknown receipt", observed, err)
+			}
+			nodes, err := f.adapter.Nodes(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, n := range nodes {
+				if n.ID == badNode.NodeID && (n.Active != 1 || n.Retained != 1) {
+					t.Fatal("released unknown capacity", n)
+				}
+			}
+		})
 	}
 }

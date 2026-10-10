@@ -40,20 +40,16 @@ func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocat
 	if pressure.RestoreWaiting {
 		return !slices.Contains(pressure.InFlightNodes, owner.NodeID), nil
 	}
-	reclaimRetained := source.Retained >= int64(source.MaxRetained)
-	if reclaimRetained {
-		retained, err := tx.CanRetainEnvironment(owner)
-		if err != nil || !retained {
-			return false, err
-		}
+	if source.Retained >= int64(source.MaxRetained) {
+		return false, nil
 	}
-	return e.placementNeedsCapacity(tx, pressure, owner.NodeID, true, reclaimRetained)
+	return e.placementNeedsCapacity(tx, pressure, owner.NodeID)
 }
 
 // placementNeedsCapacity scans bounded pages under the caller's deployment
-// lock and transaction deadline. Suspension and early retention expiry use the
-// same admission decision; an ineligible old receipt never supplies pressure.
-func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure SuspensionDemand, nodeID string, freeActive, freeRetained bool) (bool, error) {
+// lock and transaction deadline. Suspension must make active capacity usable
+// without releasing a retained slot; an ineligible receipt supplies no pressure.
+func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure SuspensionDemand, nodeID string) (bool, error) {
 	var after PlacementDemandCursor
 	for {
 		demands, next, err := tx.PlacementDemand(after)
@@ -80,12 +76,7 @@ func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure S
 			}
 			for i := range nodes {
 				if nodes[i].ID == nodeID {
-					if freeActive {
-						nodes[i].Active--
-					}
-					if freeRetained && nodes[i].Retained >= int64(nodes[i].MaxRetained) {
-						nodes[i].Retained--
-					}
+					nodes[i].Active--
 				}
 			}
 			chosen, err := e.service.rules.DecidePlacement(pressure.Deployment, nodes)

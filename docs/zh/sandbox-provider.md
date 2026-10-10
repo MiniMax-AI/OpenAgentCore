@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 4a7ce15e8fc2c9519b4974a60c746fbd436b24bbce5ab2ef461e442bea3e5f86
+source_hash: 567cd130134a45f483b156d7f2b74d246b191dd5db77b976976c0d710414dd37
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -198,7 +198,7 @@ Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspensi
 
 快照保留期限制计算资源，不限制符合条件的保留 Session 的生命周期。到期后，只有独立文件系统对象已就绪、初始化已完成、Session 与 Environment 均未终结，且此前已认证 Runtime 的 `retained_native_history` 声明已持久化时，Core 才能在不终结 Session 的情况下清理 allocation。能力及原生恢复义务由 [Core–Runtime 协议](runtime-protocol.md)定义。仅保留文件系统并不足够。
 
-兼容需求无法获得 retained slot 时，Core 可以提前结束空闲且已停止 allocation 的检查点保留期。它在 Session 和 deployment 锁内重新检查原生历史资格、pending work 和容量。等待需求预留该 slot 前，同一 expiry cleanup 必须确认资源已删除。24 小时保留期是上限，不保证容量压力下仍保留内存；文件与已验证的原生历史继续保留。
+容量压力不会缩短检查点保留期。在配置的期限到达前，已挂起的 allocation 保留快照并继续占用 retained slot；容量不足或节点不兼容不允许降级为冷替换。等待请求保持原有的输入期限。保留期到期后，常规 expiry cleanup 必须确认资源已删除，其他 allocation 才能预留该 slot；文件与已验证的原生历史继续保留。
 
 Core 在释放 allocation 和 placement 归属前，确认原始创建已结算且所属计算资源与快照均已清理。替代计算资源准入前撤销旧 device 的权限。Create、Kill 或 DeleteSnapshot 的结果尚未确认时，Core 保留归属，不准入替代写入方。可恢复的 Session 与 Environment 保持断连，保留同一文件系统对象和初始化结果。归档、重置和删除优先，唤醒请求不能撤销它们。
 

@@ -221,8 +221,7 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 		return err
 	}
 	if !activity.Busy && !activity.WakeRequested {
-		_, err := r.deployment.EndRetentionForDemand(ctx, owner)
-		return err
+		return nil
 	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
