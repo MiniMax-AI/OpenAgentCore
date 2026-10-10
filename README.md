@@ -8,7 +8,7 @@ An open-source, self-hosted implementation of the OpenAI Agents API with multipl
 
 [Website](https://openagentcore.dev/) · [Install](#install) · [Call the API](https://openagentcore.dev/docs/getting-started/quickstart) · [Documentation](https://openagentcore.dev/docs/getting-started/) · [Contributing](CONTRIBUTING.md)
 
-**English** · [简体中文](README.zh-CN.md)
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
 </div>
 

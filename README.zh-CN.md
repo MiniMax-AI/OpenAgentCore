@@ -8,7 +8,7 @@ OpenAI Agents API 的开源实现，支持多种原生执行引擎，可部署�
 
 [官网](https://openagentcore.dev/zh/) · [安装](#安装) · [调用 API](https://openagentcore.dev/zh/docs/getting-started/quickstart) · [文档](https://openagentcore.dev/zh/docs/getting-started/) · [参与贡献](CONTRIBUTING.md)
 
-[English](README.md) · **简体中文**
+[English](README.md) · **简体中文** · [日本語](README.ja.md)
 
 </div>
 
