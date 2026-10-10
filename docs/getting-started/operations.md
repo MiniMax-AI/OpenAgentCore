@@ -121,19 +121,43 @@ Core records which key made each public resource write; the retention of that hi
 
 ## Back up
 
-Back up these together; a restore needs all of them:
+A recoverable backup contains one consistent, stopped-write set. A database dump or Core volume export alone does not include independent workspace storage or node compute state. Use the same release when restoring; see [installation version policy](#installation-version-policy).
 
-- the Docker volume `<project>_data`, including its `database/`, `secrets/` and `state/` directories. It holds Projects, key digests, nodes, default models, encrypted credentials and all execution history, including large objects. A logical dump:
+### Backup contents
 
-  ```sh
-  docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
-    pg_dump -U agents_api agents_api > oac-backup.sql
-  ```
+- The Docker volume `<project>_data`, including `database/`, `secrets/` and `state/`. It holds Projects, key digests, nodes, default models, encrypted credentials and execution history, including large objects. Keep `secrets/core/credential.key` with its matching database or stored credentials cannot be decrypted.
+- The installation directory, including `.env`, `compose.yaml`, Compose overrides and the management command.
+- Every independent workspace namespace selected by current or retained objects, even when it is outside the installation volume. Back up its entire root, including `.oac-storage-root`, object identities, staging, live data, trash and deletion markers. Preserve numeric ownership, modes, links and extended attributes, including every `user.*` attribute. Copying only `live/data` loses lifecycle evidence and can resurrect deleted identities. [Workspace storage](../workspace-provider.md#kernel-nfs-adapter) owns the layout and ownership requirements.
+- Each node's state directory, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, and its provider storage: Docker volumes or microsandbox's store. Include all compute and snapshot resources still referenced by the database. See [when a node host fails](./nodes.md#when-a-node-host-fails).
 
-- the installation directory containing `.env`, `compose.yaml` and the command. The data volume's `secrets/core/credential.key` must stay with the database, or stored credentials cannot be decrypted.
-- each node's state directory on its host, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, with its provider storage: Docker volumes or microsandbox's store. See [when a node host fails](./nodes.md#when-a-node-host-fails) for restoring them.
+### Establish a stopped-write window
 
-Stop with `docker compose stop`, export the complete data volume and archive the installation directory, then `docker compose start`. Docker Desktop supports volume export from its **Volumes** view. A SQL dump alone does not include the encryption key or Provider state.
+1. Block new application input, live file access and administrative mutations at the installation's ingress. Let active execution, initialization, file operations and native cleanup finish. Stop other applications or host processes that can write to the same filesystem.
+2. While Core and nodes remain available, confirm that every owned writer has stopped and all Create, Kill, snapshot cleanup and filesystem mutations have settled. An offline node, timeout, missing instance or stopped service is insufficient. A confirmed suspension stops its source compute but retains a checkpoint that must be included in the backup. For the simplest cold recovery baseline, wait until eligible retained Sessions have completed checkpoint expiry cleanup and their allocations are released; retain their filesystem objects and native history under the [cold replacement contract](../sandbox-provider.md#cold-replacement-after-checkpoint-retention).
+3. Stop Core and Web, then stop the node control services to prevent new lifecycle work. Recheck the exact native resources and keep all writers stopped until every part of the backup is complete. **Stopping Core or a node service does not stop its sandboxes.** The node service uses `KillMode=process`; microVMs and other provider-managed compute may continue to run independently.
+4. Flush the stopped filesystem's pending writes using the storage platform's supported procedure and take its snapshot or export. Export the Core data volume and installation directory, plus required node state and provider stores, within the same window. Stop PostgreSQL before copying its `database/` files. Record the release, backup time, component inventory and checksums together, and keep the backup outside the installation being backed up.
+5. Restore service availability only after all copies finish. Bring up storage before Core and nodes, verify readiness, then reopen ingress. Do not replay uncertain native work to make a backup pass.
+
+There is no one-command, lossless maintenance drain. Archive and deployment reset change Session lifecycle state; they are not substitutes for a backup pause that preserves resumability. If any writer or mutation remains unknown, keep the backup incomplete and resolve that ownership first.
+
+For a logical database copy during the stopped-write window, leave only the database service running and use:
+
+```sh
+docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
+  pg_dump -U agents_api agents_api > oac-backup.sql
+```
+
+A logical dump still needs the matching secrets, state, independent filesystems and required node resources. Docker Desktop's **Volumes** export is a way to copy a stopped data volume; it does not coordinate these other components.
+
+### Restore and rehearse
+
+Keep application ingress and Core/node services stopped while restoring. Fence or shut down every old writer before exposing the restored filesystem; an unreachable old host is not a fence. A rehearsal must use an isolated installation and storage copy that cannot connect to the original nodes or share their writable namespace.
+
+Restore matching secrets and database state, the complete independent filesystem namespaces and any required node identities/provider stores before starting Core. Preserve the database's configuration and namespace UUIDs, object identities and deletion markers; do not run first-time namespace initialization over restored storage. Reestablish the configured mount paths and service UIDs, then validate the mounted filesystem, ownership and xattrs from each participating service context. [Independent workspace storage](../configuration.md#independent-workspace-storage) owns deployment setup.
+
+The cold released baseline resumes only qualified native history after new compute admission. A backup containing retained checkpoints also depends on the matching native runtime, node identity, provider store and external filesystem identities. File-level restore can change inode identity and prevent strict checkpoint restore even when file bytes match. This procedure does not promise portable memory snapshots or restoration onto an arbitrary replacement node; preserve unresolved ownership rather than substituting a new sandbox.
+
+Start the database, Core and node services only after their restored dependencies are complete; keep ingress restricted while checking them. In an isolated rehearsal, verify a retained Session's files and native continuation on fresh compute where qualified, confirm that deleted objects cannot be reopened, and check that no old writer can access the restored namespace. Record the results before relying on the backup for recovery.
 
 ## Uninstall
 
