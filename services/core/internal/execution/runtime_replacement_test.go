@@ -362,3 +362,67 @@ func TestProvisionRejectsRetainedBindingOnOwnedGeneration(t *testing.T) {
 		t.Fatal("incompatible compute reserved", err)
 	}
 }
+
+// A deterministic provider stops after capturing Resume, before subsequent
+// wake operations. The allocation, generation and filesystem binding are real.
+type resumeStorageProvider struct {
+	retentionProvider
+	request *sandbox.ResumeRequest
+	stop    error
+}
+
+func (p *resumeStorageProvider) Resume(_ context.Context, request sandbox.ResumeRequest) (sandbox.ComputeState, error) {
+	p.request = &request
+	return sandbox.ComputeState{}, p.stop
+}
+
+func TestRestoreUsesAllocationGenerationStorageInsteadOfCachedLane(t *testing.T) {
+	for _, external := range []bool{false, true} {
+		t.Run(map[bool]string{false: "owned_allocation_external_lane", true: "external_allocation_owned_lane"}[external], func(t *testing.T) {
+			stop := errors.New("resume request captured")
+			provider := &resumeStorageProvider{stop: stop}
+			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, external))
+			r, s := f.lifecycle, f.session
+			owner, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			setup, err := r.deployments.Setup(t.Context())
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := setup.Specification
+			target.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
+			target.Resources.EnvironmentDiskMiB = 0
+			if external {
+				target.Workspace = nil
+				target.Resources.EnvironmentDiskMiB = 8192
+			}
+			audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
+			if _, err = r.deployment.Update(audit, r.config.InstallationID, sandbox.Selection{Provider: setup.Provider, ExpectedGeneration: setup.Generation, DeploymentSpec: target}); err != nil {
+				t.Fatal(err)
+			}
+			r.config.Workspace = target.Workspace
+			r.config.Resources = target.Resources
+			state := runtimeCompute{Target: &sandbox.Compute{ID: "replacement-compute", Generation: 2}, Snapshot: &sandbox.SnapshotIdentity{ID: "snapshot"}, RestoreID: uuid.NewString()}
+			if err = r.restoreCompute(t.Context(), provider, owner, state, false); !errors.Is(err, stop) {
+				t.Fatal(err)
+			}
+			if provider.request == nil || (provider.request.Workspace != nil) != external {
+				t.Fatal("Resume binding followed cached lane", external, provider.request)
+			}
+			if external {
+				stored, err := f.storage.Get(t.Context(), s.TenantID, s.Environment.ID)
+				if err != nil || provider.request.Workspace.Attachment.Reference != stored.Reference {
+					t.Fatal("Resume lost retained object identity", err)
+				}
+			}
+			provider.request = nil
+			stale := owner
+			stale.ID = uuid.NewString()
+			if err = r.restoreCompute(t.Context(), provider, stale, state, false); !errors.Is(err, sandbox.ErrOwnership) || provider.request != nil {
+				t.Fatal("stale owner reached native Resume", err)
+			}
+		})
+	}
+}

@@ -183,8 +183,12 @@ func TestRuntimeAllocationCleanupRevokesAndKeepsIdentity(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	got, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, owner.ProviderKey, runtimedevice.HashCredential(uuid.NewString()))
-	if err != nil || !got.Replayed || got.State != "released" {
-		t.Fatalf("cleanup permitted replacement: %+v %v", got, err)
+	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), key, owner.ProviderKey, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrAllocationConflict) {
+		t.Fatalf("terminal cleanup permitted replacement: %v", err)
+	}
+	got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), key)
+	if err != nil || got.ID != owner.ID || got.DeviceID != owner.DeviceID || got.State != "released" {
+		t.Fatalf("cleanup changed retained ownership: %+v %v", got, err)
 	}
 }

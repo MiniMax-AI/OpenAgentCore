@@ -195,25 +195,15 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err != nil || placement.Type != "openai_hosted" {
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
-	target, err := r.reader.LifecyclePlacement(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+	spec, err := r.workspaceSpecification(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}, "")
 	if err != nil {
 		return deployment.Allocation{}, err
-	}
-	var spec sandbox.DeploymentSpec
-	if err := json.Unmarshal(target.Specification, &spec); err != nil {
-		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
 	if environmentValue.ExternalWorkspace && spec.Workspace == nil {
 		return deployment.Allocation{}, workspacefs.ErrUnsupported
 	}
 	var workspace *workspacefs.Binding
 	if spec.Workspace != nil {
-		if r.workspaces == nil || r.config.WorkspaceRequirements == nil {
-			return deployment.Allocation{}, workspacefs.ErrUnavailable
-		}
-		if err := workspacefs.ValidateCombination(*r.config.WorkspaceRequirements, *spec.Workspace, spec.Resources.EnvironmentDiskMiB); err != nil {
-			return deployment.Allocation{}, err
-		}
 		existing, lookupErr := r.reader.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
 			return deployment.Allocation{}, lookupErr
@@ -464,4 +454,29 @@ func runtimeReference(owner deployment.Allocation) sandbox.Reference {
 
 func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 	return w.runtimes.run(ctx)
+}
+
+// workspaceSpecification reads the immutable generation selected for this
+// Environment. A restore also fences the exact allocation before native I/O.
+func (r *runtimeLifecycle) workspaceSpecification(ctx context.Context, key deployment.AllocationKey, allocationID string) (sandbox.DeploymentSpec, error) {
+	target, err := r.reader.LifecyclePlacement(ctx, key)
+	if err != nil {
+		return sandbox.DeploymentSpec{}, err
+	}
+	if allocationID != "" && target.AllocationID != allocationID {
+		return sandbox.DeploymentSpec{}, sandbox.ErrOwnership
+	}
+	var spec sandbox.DeploymentSpec
+	if err := json.Unmarshal(target.Specification, &spec); err != nil {
+		return sandbox.DeploymentSpec{}, sandbox.ErrInvalid
+	}
+	if spec.Workspace != nil {
+		if r.workspaces == nil || r.config.WorkspaceRequirements == nil {
+			return sandbox.DeploymentSpec{}, workspacefs.ErrUnavailable
+		}
+		if err := workspacefs.ValidateCombination(*r.config.WorkspaceRequirements, *spec.Workspace, spec.Resources.EnvironmentDiskMiB); err != nil {
+			return sandbox.DeploymentSpec{}, err
+		}
+	}
+	return spec, nil
 }

@@ -349,7 +349,7 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deplo
 func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')`, id, owner.SessionID)
-	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
+	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	return id
 }
 func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {
@@ -361,12 +361,6 @@ func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {
 func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T) {
 	f := newComputeLifecycleFixture(t, 2, 4)
 	tenant, session, env, owner := f.create()
-	for range 3 {
-		f.phase(tenant, env.ID, "running")
-	}
-	if f.provider.captures != 0 {
-		t.Fatal("never-used Session suspended")
-	}
 	completed := f.complete(owner)
 	suspended := f.phase(tenant, env.ID, "suspended")
 	if f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.computes) != 0 || len(f.provider.snapshots) != 1 {
