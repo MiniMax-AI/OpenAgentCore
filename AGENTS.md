@@ -28,6 +28,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 | Application–Core (`/v1`) | Official schema pinned by `contracts/agents-api/upstream.json` plus Go-owned `x_agents_core` extensions; `make openapi` generates public Go types and `contracts/agents-api/openapi.yaml` | [Agents API guide](docs/api/public-agent-api.md) |
 | Web and operators–Core (`/core/v1`) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/core.openapi.yaml` | [Core administration API](contracts/agents-api/admin-api.md) |
 | Nodes and daemons–Core (`/api/v1` HTTP routes; the node and daemon wire protocols are separate rows) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](contracts/agents-api/machine-api.md) |
+| Core and sandbox nodes–Workspace filesystem | `services/core/internal/workspacefs/workspacefs.go` | [Workspace filesystem providers](docs/workspace-provider.md) |
 | Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |

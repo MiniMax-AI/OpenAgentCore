@@ -24,7 +24,7 @@ func validHash(s string) bool {
 	return e == nil && len(b) == 32 && strings.ToLower(s) == s
 }
 func (c Config) Validate() error {
-	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 || c.EnvironmentDiskMiB == 0 {
+	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 || (!c.ExternalWorkspace && c.EnvironmentDiskMiB == 0) {
 		return sandbox.ErrInvalid
 	}
 	imageName, digest, pinned := strings.Cut(c.Image, "@sha256:")
@@ -96,9 +96,15 @@ func ValidateRequest(q Request) error {
 	if q.Version != ProtocolVersion || q.Config.Validate() != nil || !ValidReference(q.Reference) || q.Deadline.IsZero() {
 		return sandbox.ErrInvalid
 	}
+	if q.Workspace != nil && ((q.Operation != "create" && q.Operation != "resume") || !validID(q.Workspace.ObjectID) || !filepath.IsAbs(q.Workspace.Path) || filepath.Clean(q.Workspace.Path) != q.Workspace.Path || strings.ContainsRune(q.Workspace.Path, 0)) {
+		return sandbox.ErrInvalid
+	}
 	switch q.Operation {
 	case "create":
-		if q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
+		if q.Config.ExternalWorkspace != (q.Workspace != nil) {
+			return sandbox.ErrInvalid
+		}
+		if (q.Workspace == nil && q.Config.EnvironmentDiskMiB == 0) || (q.Bootstrap != nil && q.Bootstrap.Workspace != nil) || q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
 			return sandbox.ErrInvalid
 		}
 	case "inspect", "kill", "resume_compute", "metrics":
@@ -120,8 +126,11 @@ func ValidateRequest(q Request) error {
 			return sandbox.ErrInvalid
 		}
 	case "resume":
+		if q.Config.ExternalWorkspace != (q.Workspace != nil) {
+			return sandbox.ErrInvalid
+		}
 		v := q.Resume
-		if v == nil || v.Reference != q.Reference || !validID(v.OperationID) || ValidateSnapshot(q.Config, q.Reference, v.Snapshot) != nil || ValidateCompute(q.Config, q.Reference, v.Target) != nil || v.Target.RestoredFrom == nil || *v.Target.RestoredFrom != v.Snapshot {
+		if (q.Workspace == nil && q.Config.EnvironmentDiskMiB == 0) || (v != nil && v.Workspace != nil) || v == nil || v.Reference != q.Reference || !validID(v.OperationID) || ValidateSnapshot(q.Config, q.Reference, v.Snapshot) != nil || ValidateCompute(q.Config, q.Reference, v.Target) != nil || v.Target.RestoredFrom == nil || *v.Target.RestoredFrom != v.Snapshot {
 			return sandbox.ErrInvalid
 		}
 	case "delete_snapshot":

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 type DeploymentMode string
@@ -39,6 +41,10 @@ type Resources struct {
 }
 
 func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error {
+	return r.ValidateWorkspacePolicy(provider, rules, nil)
+}
+
+func (r Resources) validatePolicy(provider string, rules DeploymentPolicy) error {
 	values := reflect.ValueOf(r)
 	for i, rule := range resourceContract {
 		min, max := rule.Min, rule.Max
@@ -88,23 +94,13 @@ func (r RuntimeRelease) Validate() error {
 type DeploymentSpec struct {
 	Resources Resources       `json:"resources" binding:"required"`
 	Runtime   *RuntimeRelease `json:"runtime,omitempty"`
+	// Workspace is a derived immutable capability receipt, never filesystem configuration.
+	Workspace *workspacefs.Declaration `json:"workspace,omitempty" readonly:"true"`
 }
 
 // ValidatePolicy applies a registered adapter's rules without knowing its kind.
 func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy) error {
-	if err := s.Resources.ValidatePolicy(provider, policy); err != nil {
-		return err
-	}
-	if !policy.Runtime {
-		if s.Runtime != nil {
-			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
-		}
-		return nil
-	}
-	if s.Runtime == nil {
-		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
-	}
-	return s.Runtime.Validate()
+	return s.ValidateWorkspacePolicy(provider, policy, s.Workspace)
 }
 
 func (s DeploymentSpec) Digest(provider string) string {
@@ -126,4 +122,38 @@ type Description struct {
 func BackendFingerprint(kind, namespace string) string {
 	digest := sha256.Sum256([]byte(kind + "\x00" + namespace))
 	return hex.EncodeToString(digest[:])
+}
+
+// ValidateWorkspacePolicy validates explicit external storage without weakening root disk limits.
+func (r Resources) ValidateWorkspacePolicy(provider string, rules DeploymentPolicy, declaration *workspacefs.Declaration) error {
+	if declaration == nil {
+		return r.validatePolicy(provider, rules)
+	}
+	if rules.Workspace == nil {
+		return workspacefs.ErrUnsupported
+	}
+	if err := workspacefs.ValidateCombination(*rules.Workspace, *declaration, r.EnvironmentDiskMiB); err != nil {
+		return err
+	}
+	checked := r
+	if checked.EnvironmentDiskMiB == 0 && rules.Disk {
+		checked.EnvironmentDiskMiB = minimumDiskMiB
+	}
+	return checked.validatePolicy(provider, rules)
+}
+func (s DeploymentSpec) ValidateWorkspacePolicy(provider string, policy DeploymentPolicy, declaration *workspacefs.Declaration) error {
+	if err := s.Resources.ValidateWorkspacePolicy(provider, policy, declaration); err != nil {
+		return err
+	}
+
+	if !policy.Runtime {
+		if s.Runtime != nil {
+			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
+		}
+		return nil
+	}
+	if s.Runtime == nil {
+		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
+	}
+	return s.Runtime.Validate()
 }

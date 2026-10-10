@@ -135,7 +135,7 @@ func validateGenerationJSON(raw []byte, kind string) error {
 		}
 	}
 	if value := values["response"]; value != nil {
-		if _, err := generationObject(value, "id connection_id", "error_code info compute state command sample", ""); err != nil {
+		if _, err := generationObject(value, "id connection_id", "error_code unsupported info compute state command sample", ""); err != nil {
 			return err
 		}
 	}

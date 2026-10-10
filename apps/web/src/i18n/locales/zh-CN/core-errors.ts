@@ -1,4 +1,9 @@
 export const coreErrors = {
+  "invalid_workspace_configuration": "工作区存储配置无效。",
+  "workspace_operation_unsupported": "所选工作区存储不支持该操作或沙箱组合。",
+  "workspace_storage_not_found": "尚未配置工作区存储或请求的对象不存在。",
+  "workspace_storage_conflict": "工作区存储归属或配置与当前状态冲突。",
+  "workspace_storage_unavailable": "工作区存储不可用或操作尚未确认。",
   "invalid_admin_key": "控制台的 Core Key 被拒绝。请在 Core 主机上轮换密钥，然后重新登录。",
   "console_sign_in_required": "请重新登录控制台。",
   "console_origin_rejected": "请通过配置的地址打开控制台。",

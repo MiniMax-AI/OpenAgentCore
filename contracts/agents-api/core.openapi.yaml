@@ -1781,6 +1781,11 @@ definitions:
         $ref: '#/definitions/sandbox.Resources'
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
+      workspace:
+        allOf:
+          - $ref: '#/definitions/workspacefs.Declaration'
+        description: Workspace is a derived immutable capability receipt, never filesystem configuration.
+        readOnly: true
     required:
       - resources
     type: object
@@ -3824,6 +3829,39 @@ definitions:
         x-nullable: true
     required:
       - type
+    type: object
+  workspacefs.AttachmentKind:
+    enum:
+      - host_directory
+    type: string
+    x-enum-varnames:
+      - AttachmentHostDirectory
+  workspacefs.Configuration:
+    properties:
+      adapter:
+        type: string
+      id:
+        format: uuid
+        type: string
+      parameters:
+        type: object
+    required:
+      - adapter
+      - id
+      - parameters
+    type: object
+  workspacefs.Declaration:
+    properties:
+      attachment:
+        $ref: '#/definitions/workspacefs.AttachmentKind'
+      capacity_quota:
+        type: boolean
+      user_xattr:
+        type: boolean
+    required:
+      - attachment
+      - capacity_quota
+      - user_xattr
     type: object
   writeaudit.APIKey:
     properties:
@@ -7392,6 +7430,92 @@ paths:
       summary: Summarize resource counts and Session usage by Project, Agent or creator key
       tags:
         - Core Administration
+  /core/v1/workspace-storage:
+    get:
+      description: Core key only. Returns the immutable selected filesystem configuration. No configuration returns 404.
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workspacefs.Configuration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Retrieve workspace storage configuration
+      tags:
+        - Workspace Storage
+    put:
+      consumes:
+        - application/json
+      description: Core key only. Selects an immutable filesystem configuration. Reusing an ID requires the same adapter and parameters; conflicting ownership returns 409.
+      parameters:
+        - description: Immutable workspace storage configuration
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/workspacefs.Configuration'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/workspacefs.Configuration'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Select workspace storage configuration
+      tags:
+        - Workspace Storage
 schemes:
   - http
   - https

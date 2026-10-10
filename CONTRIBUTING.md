@@ -21,6 +21,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Harness registration, service qualification and acceptance | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness capabilities by placement | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
 | Harness selection, model providers and native parameters | [Model execution](contracts/agents-api/model-execution.md) |
+| Independent workspace filesystem protocol and adapter behavior | [Workspace filesystem providers](docs/workspace-provider.md) |
 | Provider registration and lifecycle | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Sandbox deployment, selection and administrative transitions | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Operator node tasks | [Nodes guide](docs/getting-started/nodes.md) |

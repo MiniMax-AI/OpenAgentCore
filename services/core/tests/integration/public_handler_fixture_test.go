@@ -28,6 +28,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 // testExecutorURL is the daemon URL self-hosted Sessions report unless a test
@@ -96,7 +97,7 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 		Artifacts:       service,
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    sessionStore, Environments: service, EnvironmentsReader: sessionStore, Admin: sessionStore, AdminAudit: audit, WriteAudit: audit,
-		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
+		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict, WorkspaceStorage: strict,
 		Execution: api.Execution{ExecutorURL: testExecutorURL, SessionAdmission: service, InputAdmission: service, SessionArchive: strict, Workspaces: strict},
 		Sandboxes: api.Sandboxes{Deployment: deployments, NodeAllocations: deploymentStore(s), DeploymentChanges: strict, DeploymentReset: strict, ConfigurationDiscovery: strict},
 	}
@@ -274,4 +275,13 @@ func (s strictStandIn) StartSandboxReset(context.Context, deployment.ResetReques
 func (s strictStandIn) CancelSandboxReset(context.Context, uint64) (deployment.View, error) {
 	s.unexpected("CancelSandboxReset")
 	return deployment.View{}, nil
+}
+
+func (s strictStandIn) Configuration(context.Context) (workspacefs.Configuration, error) {
+	s.unexpected("WorkspaceStorage.Configuration")
+	return workspacefs.Configuration{}, nil
+}
+func (s strictStandIn) Configure(context.Context, workspacefs.Configuration) (workspacefs.Configuration, error) {
+	s.unexpected("WorkspaceStorage.Configure")
+	return workspacefs.Configuration{}, nil
 }

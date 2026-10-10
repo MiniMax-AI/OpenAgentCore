@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 3e149cc2ca300bc53e14be2fd98b155c80098fd1e3b308a0b4d72d2ec3071558
+source_hash: eeb840aefb1eab56b16b5185c9fb6b3fcba5f0e9e666eaa32cf9e02f1e2fe134
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -90,6 +90,43 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | 自托管 Session 的执行器凭据 | **Session log**，然后进入 **Session** 页面：**Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 请参阅[自托管执行器](getting-started/self-hosted.md) |
 
 哪些 Harness 已启用以及默认 Harness 属于进程设置（`core.harnesses`、`core.default_harness`）；System 会以只读方式显示它们。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
+
+<a id="independent-workspace-storage"></a>
+### 独立工作区存储
+
+首个支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出；不要启用 `no_root_squash` 或放宽权限来使检查通过。按照适配器的[所有权要求](./workspace-provider.md#kernel-nfs-adapter)准备命名空间和服务身份。
+
+Core 的 Compose 服务已使用 UID 65532 运行。添加节点前，创建同 UID 的 `oac-node`，主目录为 `/var/lib/oac-node`，使用 nologin shell 和非零主组。附加组只能包含其主组、`docker` 和 `kvm`；已有主目录必须属于该账户。安装器会接管此账户。如果没有预创建账户，安装器分配的系统 UID 不一定与 Core 一致。注册前应通过主机管理流程解决已有 UID 或账户冲突；修改运行中账户的 UID 不属于存储配置步骤。
+
+对于 Compose 部署，通过部署平台的 Compose 自定义能力，在现有 `core` 服务的 `volumes` 中添加可读写绑定挂载，保留现有服务卷和用户。主机源目录必须已经是 NFS 挂载；`create_host_path: false` 只防止创建不存在的源目录，并不能证明 NFS 已挂载。先挂载再创建容器；主机卸载或重新挂载后，应重新创建容器，使其挂载命名空间使用预期挂载。
+
+```yaml
+services:
+  core:
+    volumes:
+      - type: bind
+        source: /srv/oac-workspaces
+        target: /srv/oac-workspaces
+        read_only: false
+        bind:
+          create_host_path: false
+```
+
+按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core key 调用 `PUT /core/v1/workspace-storage` 选择存储。分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构：
+
+```json
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "adapter": "nfs",
+  "parameters": {
+    "root": "/srv/oac-workspaces",
+    "namespace_id": "22222222-2222-4222-8222-222222222222",
+    "uid": 65532
+  }
+}
+```
+
+随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，将 `resources.environment_disk_mib` 设为 `0`，并保留所需计算资源、Runtime 和 Provider 配置。正数表示请求配额，本适配器不实施此配额，因此会拒绝。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。Web 没有工作区存储编辑器。
 
 ### 节点容量 {#node-capacity}
 

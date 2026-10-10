@@ -2,10 +2,11 @@ package microsandbox
 
 import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{Disk: true, Runtime: true,
+	return sandbox.DeploymentPolicy{Workspace: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}, Disk: true, Runtime: true,
 		DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 4096, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192}}
 }
 

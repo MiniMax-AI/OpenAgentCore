@@ -22,6 +22,7 @@ Paths are relative to `/core/v1`.
 | Routes | Purpose | Contract |
 | --- | --- | --- |
 | `installation` | Public URL, API base URL, source commit, the installer's process settings and what is bound to the public URL | [Installation facts](#installation-facts) |
+| `workspace-storage` | Read or select independent workspace filesystem configuration | [Workspace storage](#workspace-storage) |
 | `projects`, `projects/{project_id}`, `projects/{project_id}/archive`, `projects/{project_id}/keys[/{key_id}]` | Projects and their API keys | [Projects and keys](#projects-and-keys) |
 | `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | Resource reads and deletion, Session history and Artifacts | [Resource reads and deletion](#resource-reads-and-deletion) |
 | `projects/{project_id}/sessions/{session_id}/archive` | Archive one hosted Session | [Session archive](#session-archive) |
@@ -38,6 +39,14 @@ Paths are relative to `/core/v1`.
 | `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
 | `metrics` | Core's own process, execution, database and job metrics | [Core metrics](./core-metrics.md) |
 | `audit-log` | Administrator writes | [Audit log](#audit-log) |
+
+## Workspace storage
+
+Operator scripts use `GET /core/v1/workspace-storage` and `PUT /core/v1/workspace-storage` with a Core key. Web has no workspace storage editor. The request and successful response use the canonical filesystem configuration: `{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...}}`. `parameters` is an adapter-owned JSON object; the selected adapter validates it. Unknown top-level fields are rejected.
+
+GET returns the selected configuration, or 404 `workspace_storage_not_found` when none is configured. PUT validates and selects an immutable configuration and returns it with 200. Reusing an ID requires identical adapter configuration; changing its meaning or conflicting with retained ownership returns 409 `workspace_storage_conflict`. Configuration changes are serialized with workspace ownership changes, and successful mutations carry the same administrator audit provenance as other deployment settings. The [workspace filesystem protocol](../../docs/workspace-provider.md) owns identity, attachment, admission and retention semantics.
+
+Invalid configuration returns 400 `invalid_workspace_configuration`; unsupported adapters or combinations return 400 `workspace_operation_unsupported`. Unavailable storage or an unconfirmed operation returns 503 `workspace_storage_unavailable`. Error messages do not expose native paths or adapter error text. The endpoint configures storage independently of Sandbox Provider selection; it does not create or delete a Session workspace.
 
 ## Projects and keys
 

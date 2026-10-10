@@ -45,6 +45,9 @@ func (r *Registry) Build(config sandbox.NodeConfig, options sandbox.LocalOptions
 	if config.Generation == 0 {
 		return nil, closeProvider, errors.New("node requires a deployment generation; obtain configuration from Core")
 	}
+	if config.Specification.Workspace != nil && options.Workspace == nil {
+		return nil, closeProvider, sandbox.ErrInvalid
+	}
 	if err := adapter.ValidateSpecification(config.Specification); err != nil {
 		return nil, closeProvider, err
 	}

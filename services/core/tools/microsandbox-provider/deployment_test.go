@@ -15,6 +15,7 @@ import (
 func deploymentFixture() (wire.Config, map[string]any) {
 	config := wire.Config{Image: "runtime@sha256:" + strings.Repeat("a", 64), CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192, EnvironmentDiskMiB: 4096}
 	actual := map[string]any{
+		"labels":    map[string]string{workspaceModeLabel: "owned"},
 		"image":     map[string]any{"Oci": map[string]any{"reference": config.Image, "root_disk": map[string]any{"kind": "managed", "size_mib": 8192}}},
 		"resources": map[string]any{"cpus": 2, "max_cpus": 2, "memory_mib": 2048, "max_memory_mib": 2048},
 		"mounts":    []any{map[string]any{"type": "Owned", "guest": "/environment", "storage": map[string]any{"kind": "disk", "capacity_mib": 4096}}},
@@ -54,7 +55,7 @@ func TestRestoredRootRequiresVerifiedInheritedProof(t *testing.T) {
 	actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
 	compute := wire.Compute{RestoredFrom: &wire.SnapshotIdentity{ID: "verified-parent"}}
 	for _, proof := range []string{"", "foreign", resourceProof(config)} {
-		actual["labels"] = map[string]string{resourceProofLabel: proof}
+		actual["labels"] = map[string]string{workspaceModeLabel: "owned", resourceProofLabel: proof}
 		raw, _ := json.Marshal(actual)
 		err := qualifyConfiguration(config, compute, string(raw), false)
 		if (proof == resourceProof(config)) != (err == nil) {
@@ -73,6 +74,7 @@ func TestSnapshotProofBindsResourcesWithoutChangingCleanupOwnership(t *testing.T
 	config, actual := deploymentFixture()
 	ref := sandbox.Reference{TenantID: "tenant", EnvironmentID: "environment", AllocationID: "allocation"}
 	labels := wire.Labels(config, ref)
+	labels[workspaceModeLabel] = "owned"
 	labels[resourceProofLabel] = resourceProof(config)
 	if err := qualifySnapshotResources(config, labels); err != nil {
 		t.Fatal(err)

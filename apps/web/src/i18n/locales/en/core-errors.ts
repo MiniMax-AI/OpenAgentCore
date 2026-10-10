@@ -1,5 +1,10 @@
 /** One message for each code in Core's shared catalog, services/core/internal/api/testdata/core-errors.json. */
 export const coreErrors = {
+  "invalid_workspace_configuration": "Invalid workspace storage configuration.",
+  "workspace_operation_unsupported": "The selected workspace storage does not support the operation or sandbox combination.",
+  "workspace_storage_not_found": "Workspace storage is not configured or the requested object does not exist.",
+  "workspace_storage_conflict": "Workspace storage ownership or configuration conflicts with the current state.",
+  "workspace_storage_unavailable": "Workspace storage is unavailable or an operation remains unconfirmed.",
   "invalid_admin_key": "The console's Core key was rejected. Rotate it on the Core host, then sign in again.",
   "console_sign_in_required": "Sign in to the console again.",
   "console_origin_rejected": "Open the console at its configured address.",

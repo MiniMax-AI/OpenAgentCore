@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: b40a45b42e42de5e64fa3ccae4666650e6c5d8b7d53a438d61a2e6665af2168e
+source_hash: 39ac8d674a737096598c9c31e8459b60a7e3a58dffc3f5b0258714ad5b05801e
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -50,13 +50,18 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `cpus` | 整数，1 到 255 |
 | `memory_mib` | 整数，512 到 1048576 MiB |
 | `root_disk_mib` | microsandbox：至少 1024 MiB；Docker 和 E2B：省略或为零 |
-| `environment_disk_mib` | microsandbox：至少 1024 MiB；Docker 和 E2B：省略或为零 |
+| `environment_disk_mib` | microsandbox 自有磁盘：至少 1024 MiB；外部文件系统：零表示不请求配额；正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
 
 这些限制描述每个沙箱。节点的 `max_active` 和 `max_retained` 是独立的预留限制，主机测量值绝不会允许超过其中任何一个。即使数值满足这些边界，原生提供商仍可能拒绝这些值。
 
 Docker 应用 CPU 和内存限制，并检查运行中容器的限制和精确镜像；它没有硬性的根磁盘或工作区磁盘配额。E2B 的 CPU 和内存必须与精确的就绪模板构建一致，Core 会在保存前通过固定版本 SDK 进行验证；磁盘容量仍属于模板的一部分。两种提供商都不接受其无法强制执行的磁盘配额。E2B 选择可以省略 `resources`：此时 Core 将构建的 CPU 数量和内存存储为 `cpus` 和 `memory_mib`，并通过 `specification.resources` 返回，不带磁盘字段。重启时，Core 会加载已提交的 E2B 选择，而不会再次验证模板构建，因此 E2B 中断绝不会阻碍检查或清理；新选择仍需验证。
 
 microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environment` 的独立自有磁盘。[microsandbox 辅助工具](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md)说明了 restore 如何处理这些限制。
+
+
+响应中可选的 `specification.workspace` 是从所选[工作区文件系统](../../../docs/zh/workspace-provider.md)派生的不可变能力回执，不是可独立写入的设置。它仅包含 `attachment`、`user_xattr` 和 `capacity_quota`；文件系统配置、路径和凭据不进入 Sandbox specification。Core 保存前校验组合声明，保留代次校验与节点构造均使用此回执。缺失 `workspace` 时保留自有磁盘模式及现有容量边界。Create 和 Resume 必须且仅当固定代次选择外部存储时提供绑定。
+
+为现有自有磁盘部署启用外部存储时，先选择文件系统配置，再使用兼容资源更新 Sandbox 部署（不支持配额的文件系统使用 `environment_disk_mib: 0`）。选择文件系统不会改变现有代次或 allocation。下一次 Sandbox 更新派生外部能力回执；旧的自有磁盘 allocation 保留原磁盘。文件系统选择必须支持 Provider 声明的要求；已采用外部存储的部署要求等价声明及兼容配额语义。
 
 ### Runtime 发行版 {#runtime-release}
 
@@ -227,3 +232,5 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 `sandbox/deployment_contract.go`负责资源边界、发行版模式和规范字段顺序，每个已注册 Provider 的 `sandbox.DeploymentPolicy` 声明其要求；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/node/node_spec.py` 中生成的声明，TypeScript 客户端和 Web 使用 `packages/agents-client/src/deployment-contract.ts` 中生成的边界、模式和 Provider 声明，因此不存在第二套限制、模式或提供商列表。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成两者；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
 
 规范摘要是紧凑 UTF-8 JSON 的 SHA-256，其中 `provider` 位于首位，其次是 `resources`，然后在提供商需要时放置 `runtime`。资源和 Runtime 字段遵循契约的声明顺序；值为零的可选磁盘字段会被省略，必填字段则保持存在。发行版标识采用小写 ASCII，摘要绝不会受传入字段顺序或空白字符影响。`services/core/internal/sandbox/testdata/deployment-contract.json`保存共享验收用例、精确的规范字节和摘要，Go 与 Python 测试都会使用这些内容。
+
+规范摘要的 JSON 在 `runtime` 后包含可选的 `workspace`，字段按文件系统声明顺序排列：`attachment`、`user_xattr`、`capacity_quota`，布尔字段始终保留。该回执参与不可变 specification digest。

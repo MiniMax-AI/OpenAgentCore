@@ -54,8 +54,9 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset
     </div>
     <dl className="sandbox-summary">
       <div><dt>{t("Provider")}</dt><dd>{sandboxProviderLabel(deployment.provider, locale)}</dd></div>
-      <div><dt>{t("Each sandbox")}</dt><dd>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${t("Root disk {{root}} · data disk {{data}}", { root: formatBytes(size.root_disk_mib * MIB), data: formatBytes((size.environment_disk_mib ?? 0) * MIB) })}` : ""}` : MISSING}</dd></div>
+      <div><dt>{t("Each sandbox")}</dt><dd>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${spec?.workspace ? t("Root disk {{root}} · external workspace", { root: formatBytes(size.root_disk_mib * MIB) }) : t("Root disk {{root}} · data disk {{data}}", { root: formatBytes(size.root_disk_mib * MIB), data: formatBytes((size.environment_disk_mib ?? 0) * MIB) })}` : ""}` : MISSING}</dd></div>
     </dl>
+    {spec?.workspace && !spec.workspace.capacity_quota ? <p>{t("Workspace storage is configured by the operator; no capacity quota is enforced.")}</p> : null}
     {deployment.provider === "e2b" ? <div className="sandbox-cloud-summary">
       <dl className="sandbox-summary">
         <div><dt>{t("Sandbox API URL")}</dt><dd><code>{deployment.configuration?.api_url}</code></dd></div>

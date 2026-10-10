@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: e14ff6b3d8166a04b629723aa4bd0fa6496b74307d0b6c60ebd454247c1ca3fd
+source_hash: 9940bc58072ad758d9a818978e86ff904675cef8ef35f99dc4b3761fdb1fa3b5
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -233,3 +233,12 @@ node 使用 [provider 配置](configuration.md#docker-node-configuration)中的�
 ### Seccomp profile {#seccomp-profile}
 
 [`seccomp.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/seccomp.json) 是 [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) 的 Moby default profile（Apache-2.0，参见 [seccomp.LICENSE](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/seccomp.LICENSE)；上游文件 SHA-256 为 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`），追加一条允许 `clone`、`unshare`、`setns`、`mount`、`umount2` 和 `pivot_root` 的规则。发行包将此文件作为 `runtime/seccomp.json` 交付每个 Docker node。
+
+<a id="independent-workspace-attachment"></a>
+## 独立工作区挂载
+
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带[工作区文件系统绑定](workspace-provider.md)。未提供时使用 Provider 自有的 Environment 磁盘；提供时选择精确的外部对象，不得回退到自有磁盘。Provider 在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；Sandbox Provider 不解释文件系统适配器参数或原生回执。
+
+`DeploymentPolicy.Workspace` 声明挂载要求；未声明表示不支持外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执选择代次的模式和能力；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。`ValidateWorkspacePolicy` 使用文件系统协议的组合校验器：不强制容量配额的外部文件系统拒绝正值 `EnvironmentDiskMiB`，零表示不请求配额。根磁盘容量仍为必需。未提供外部声明时，继续使用自有磁盘的容量边界。
+
+Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`，包含 workspace、staging、initialization 和 packages；私有 HOME 及 Harness 历史仍保存在 VM 根磁盘检查点中。原生资源通过明确的模式、对象和路径标签校验，不根据挂载形状推断模式。恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性证据不证明跨 VM 隔离。

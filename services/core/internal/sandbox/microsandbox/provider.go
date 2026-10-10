@@ -6,13 +6,15 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 var ErrUnconfirmed = sandbox.ErrComputeUnconfirmed
 
 type Provider struct {
-	config Config
-	caller Caller
+	workspace workspacefs.Resolver
+	config    Config
+	caller    Caller
 }
 
 var _ sandbox.SandboxProvider = (*Provider)(nil)
@@ -74,6 +76,11 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 func (p *Provider) state(ctx context.Context, q Request) (State, error) {
 	out, e := p.call(ctx, q)
 	if e != nil {
+		if q.Operation == "resume" {
+			if partial, valid := p.responseState(ctx, q, out); valid == nil {
+				return partial, e
+			}
+		}
 		return State{}, e
 	}
 	return p.responseState(ctx, q, out)
@@ -119,7 +126,12 @@ func info(r sandbox.Reference, s State) sandbox.Info {
 	return sandbox.Info{Reference: r, ProviderID: s.Compute.ID, State: s.Status, BootstrapComplete: s.BootstrapComplete}
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	q := Request{Operation: "create", Reference: b.Reference, Bootstrap: &b}
+	workspace, err := p.resolveWorkspace(ctx, b.Reference, b.Workspace)
+	if err != nil {
+		return sandbox.Info{Reference: b.Reference}, err
+	}
+	b.Workspace = nil
+	q := Request{Operation: "create", Reference: b.Reference, Bootstrap: &b, Workspace: workspace}
 	out, err := p.call(ctx, q)
 	settledRejection := errors.Is(err, sandbox.ErrInvalid) && !errors.Is(err, ErrUnconfirmed) && out.CreateSettled
 	if err != nil && !settledRejection {
@@ -179,7 +191,12 @@ func (p *Provider) Suspend(ctx context.Context, q SuspendRequest) (State, error)
 	return p.state(ctx, Request{Operation: "suspend", Reference: q.Reference, Suspend: &q})
 }
 func (p *Provider) Resume(ctx context.Context, q ResumeRequest) (State, error) {
-	return p.state(ctx, Request{Operation: "resume", Reference: q.Reference, Resume: &q})
+	workspace, err := p.resolveWorkspace(ctx, q.Reference, q.Workspace)
+	if err != nil {
+		return State{}, err
+	}
+	q.Workspace = nil
+	return p.state(ctx, Request{Operation: "resume", Reference: q.Reference, Resume: &q, Workspace: workspace})
 }
 func (p *Provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c Compute, command sandbox.Command) (sandbox.CommandResult, error) {
 	out, e := p.call(ctx, Request{Operation: "command", Reference: r, Compute: c, Command: &command})
@@ -211,4 +228,24 @@ func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generati
 		return Compute{}, e
 	}
 	return c, nil
+}
+
+func (p *Provider) resolveWorkspace(ctx context.Context, reference sandbox.Reference, binding *workspacefs.Binding) (*WorkspaceDirectory, error) {
+	if binding == nil {
+		return nil, nil
+	}
+	if err := sandbox.ValidateWorkspaceBinding(reference, binding); err != nil {
+		return nil, err
+	}
+	if p.workspace == nil {
+		return nil, workspacefs.ErrUnsupported
+	}
+	directory, err := p.workspace.Resolve(ctx, *binding)
+	if err != nil {
+		return nil, err
+	}
+	if err := directory.Validate(); err != nil {
+		return nil, err
+	}
+	return &WorkspaceDirectory{Path: directory.Path, ObjectID: binding.Attachment.Reference.ObjectID}, nil
 }

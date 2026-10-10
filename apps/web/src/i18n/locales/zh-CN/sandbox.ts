@@ -1,5 +1,7 @@
 import { firstRun } from "./first-run";
 export const sandbox = {
+  "Root disk {{root}} · external workspace": "根磁盘 {{root}} · 外部工作区",
+  "Workspace storage is configured by the operator; no capacity quota is enforced.": "工作区存储由运维人员配置；未实施容量配额。",
   "E2B provider": "E2B 服务商",
   "Other E2B-compatible provider": "其他兼容 E2B 的服务商",
   "Loading templates…": "正在读取模板…",

@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-const ProtocolVersion = 2
+const ProtocolVersion = 3
 const SDKVersion = "v0.7.2"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
@@ -18,6 +18,8 @@ const MaxResponseBytes = 16 * 1024 * 1024
 // Config is trusted deployment configuration. Paths and hashes refer to one
 // immutable, qualified installation. Network is explicitly used on create and restore.
 type Config struct {
+	// ExternalWorkspace is derived from the immutable deployment specification.
+	ExternalWorkspace  bool
 	InstallationID     string
 	HelperPath         string
 	RuntimeHome        string
@@ -49,7 +51,14 @@ type ResumeRequest = sandbox.ResumeRequest
 
 // Request and Response are the finite, private helper boundary. Confidential
 // Bootstrap and Command bytes travel only through stdin and are never logged.
+// WorkspaceDirectory is the resolved private helper input, without filesystem adapter configuration.
+type WorkspaceDirectory struct {
+	Path     string
+	ObjectID string
+}
+
 type Request struct {
+	Workspace *WorkspaceDirectory `json:",omitempty"`
 	Version   int
 	Operation string
 	Config    Config

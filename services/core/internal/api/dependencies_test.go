@@ -15,6 +15,7 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // testFakes holds one strict fake per Dependencies area.
 type testFakes struct {
+	workspaceStorage       *fakeWorkspaceStorage
 	projects               *fakeProjects
 	projectsReader         *fakeProjectsReader
 	vaults                 *fakeVaults
@@ -68,7 +69,8 @@ type testFakes struct {
 func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	f := &testFakes{
-		projects: &fakeProjects{t: t}, projectsReader: &fakeProjectsReader{t: t},
+		workspaceStorage: &fakeWorkspaceStorage{t: t},
+		projects:         &fakeProjects{t: t}, projectsReader: &fakeProjectsReader{t: t},
 		modelProviders: &fakeModelProviders{t: t}, modelProvidersReader: &fakeModelProvidersReader{t: t},
 		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
 		environmentTemplates: &fakeEnvironmentTemplates{t: t}, environmentTemplatesReader: &fakeEnvironmentTemplatesReader{t: t},
@@ -95,7 +97,8 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		configurationDiscovery: &fakeConfigurationDiscovery{t: t},
 	}
 	return Dependencies{
-		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
+		WorkspaceStorage: f.workspaceStorage,
+		Engine:           "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
 		Projects: f.projects, ProjectsReader: f.projectsReader,
 		ModelProviders: f.modelProviders, ModelProvidersReader: f.modelProvidersReader,
 		Vaults: f.vaults, VaultsReader: f.vaultsReader,
@@ -181,6 +184,7 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		{"default Harness", func(d *Dependencies, _ *testFakes) { d.Engine = "" }},
 		{"CoreKeys", func(d *Dependencies, _ *testFakes) { d.CoreKeys = nil }},
 		{"InstallationBindings", func(d *Dependencies, _ *testFakes) { d.InstallationBindings = nil }},
+		{"WorkspaceStorage", func(d *Dependencies, _ *testFakes) { d.WorkspaceStorage = nil }},
 		{"Projects", func(d *Dependencies, _ *testFakes) { d.Projects = nil }},
 		{"Sessions", func(d *Dependencies, _ *testFakes) { d.Sessions = nil }},
 		{"SessionCreation", func(d *Dependencies, _ *testFakes) { d.SessionCreation = nil }},

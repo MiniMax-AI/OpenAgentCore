@@ -107,7 +107,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		ArtifactsReader: struct{ api.ArtifactsReader }{},
 		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
-		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
+		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{}, WorkspaceStorage: struct{ api.WorkspaceStorage }{},
 		Execution: api.Execution{
 			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
 			SessionAdmission: struct{ api.SessionAdmission }{},

@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: cd12954864bf9c15cf2d700fc3d9ebaf6126c0ab4297784850cfdd32b86ae656
+source_hash: 9b75587ccab0088003e8bd12afe477af0e72fe6650045f5283700248f9df327e
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -15,6 +15,8 @@ source_hash: cd12954864bf9c15cf2d700fc3d9ebaf6126c0ab4297784850cfdd32b86ae656
 - **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，Add node 显示 *This console has no node files for …*。
 
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
+
+对于使用独立工作区存储的 microsandbox，应在注册前完成此主机上的 [NFS 挂载和服务账户配置](../configuration.md#independent-workspace-storage)。节点随每次 binding 接收所选不可变文件系统配置；不要单独编写节点存储设置。
 
 ## 添加节点 {#add-a-node}
 

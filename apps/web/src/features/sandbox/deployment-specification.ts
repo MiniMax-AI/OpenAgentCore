@@ -10,15 +10,19 @@ interface Manifest {
 }
 
 /** The size the Provider declares for setup to propose; null when its configuration selects the size. */
-export function defaultSandboxResources(provider: SandboxProvider): SandboxResources | null {
+export function defaultSandboxResources(provider: SandboxProvider, workspace?: SandboxSpecification["workspace"]): SandboxResources | null {
   const size: SandboxResources | null = deploymentContract.providers[provider].default_resources;
-  return size && { ...size };
+  return size && { ...size, ...(workspace ? { environment_disk_mib: 0 } : {}) };
 }
 
-/** Core's resource rule: optional disk fields stay zero unless the Provider declares disk limits. */
-export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources): boolean {
+/** Core keeps owned disk limits; external workspace capacity is optional and requires real quota support. */
+export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources, workspace?: SandboxSpecification["workspace"]): boolean {
+  const policy = deploymentContract.providers[provider];
+  if (workspace) {
+    if (!("workspace" in policy) || workspace.attachment !== policy.workspace.attachment || (policy.workspace.user_xattr && !workspace.user_xattr) || ((resources.environment_disk_mib ?? 0) > 0 && !workspace.capacity_quota)) return false;
+  }
   return deploymentContract.resources.every((rule) => {
-    const [min, max] = !rule.omit_zero ? [rule.min, rule.max] : deploymentContract.providers[provider].disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
+    const [min, max] = workspace && rule.name === "environment_disk_mib" && (resources.environment_disk_mib ?? 0) === 0 ? [0, 0] : !rule.omit_zero ? [rule.min, rule.max] : deploymentContract.providers[provider].disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
     const value = resources[rule.name] ?? 0;
     return Number.isInteger(value) && value >= min && value <= max;
   });

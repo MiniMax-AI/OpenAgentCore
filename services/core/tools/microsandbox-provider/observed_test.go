@@ -41,6 +41,7 @@ func TestInitialIdentityNeedsAllLabelsAndBootstrapReceipt(t *testing.T) {
 	config := wire.Config{InstallationID: "installation"}
 	ref := sandbox.Reference{TenantID: "tenant", EnvironmentID: "environment", AllocationID: "allocation"}
 	labels := wire.Labels(config, ref)
+	labels[workspaceModeLabel] = "owned"
 	labels[bootstrapLabel] = "pending"
 	raw, _ := json.Marshal(map[string]any{"labels": labels})
 	state, e := qualifyCompute(config, ref, wire.Compute{ID: "local:4"}, "local:4", "running", string(raw))

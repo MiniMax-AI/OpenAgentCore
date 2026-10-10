@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 var (
@@ -57,6 +58,11 @@ func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSess
 		var snapshot Snapshot
 		if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
 			return sessions.ErrInvalidInput
+		}
+		if snapshot.Environment.Type == "openai_hosted" {
+			if err := w.runtimes.validateWorkspaceAdmission(ctx); err != nil {
+				return err
+			}
 		}
 		if len(input.InitialInputs) == 0 && snapshot.Environment.Type == "self_hosted" {
 			return nil
@@ -145,4 +151,27 @@ func (w *Worker) checkAdmissionOwnership(ctx context.Context) error {
 		return ErrExecutionUnavailable
 	}
 	return nil
+}
+
+func (m *runtimeManager) validateWorkspaceAdmission(ctx context.Context) error {
+	m.mu.Lock()
+	config := m.config
+	m.mu.Unlock()
+	if config.Workspace == nil {
+		return nil
+	}
+	if m.workspaces == nil {
+		return workspacefs.ErrUnavailable
+	}
+	declaration, err := m.workspaces.Declaration(ctx)
+	if err != nil {
+		return err
+	}
+	if declaration == nil {
+		return workspacefs.ErrUnavailable
+	}
+	if config.WorkspaceRequirements == nil {
+		return workspacefs.ErrUnsupported
+	}
+	return workspacefs.ValidateCombination(*config.WorkspaceRequirements, *declaration, config.Resources.EnvironmentDiskMiB)
 }

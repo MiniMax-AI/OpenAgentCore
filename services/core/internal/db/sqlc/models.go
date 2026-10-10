@@ -144,6 +144,14 @@ type EnvironmentTemplate struct {
 	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
+type EnvironmentWorkspace struct {
+	ObjectID        pgtype.UUID `json:"object_id"`
+	EnvironmentID   pgtype.UUID `json:"environment_id"`
+	ConfigurationID pgtype.UUID `json:"configuration_id"`
+	State           string      `json:"state"`
+	Attachment      []byte      `json:"attachment"`
+}
+
 type ExecutionProjectScope struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	OrganizationID string      `json:"organization_id"`
@@ -540,6 +548,13 @@ type VaultCredential struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Status          string             `json:"status"`
 	OauthMetadata   []byte             `json:"oauth_metadata"`
+}
+
+type WorkspaceFsConfiguration struct {
+	ID         pgtype.UUID `json:"id"`
+	Adapter    string      `json:"adapter"`
+	Parameters []byte      `json:"parameters"`
+	Active     bool        `json:"active"`
 }
 
 type WriteAuditOperation struct {

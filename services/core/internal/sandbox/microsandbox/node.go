@@ -44,7 +44,7 @@ type Rule struct {
 	Port        string `json:"port"`
 }
 
-func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *ProcessCaller, result *sandbox.Built) (Config, error) {
+func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *ProcessCaller, result *sandbox.Built, options sandbox.LocalOptions) (Config, error) {
 	if !filepath.IsAbs(entry.RuntimeHome) || filepath.Clean(entry.RuntimeHome) != entry.RuntimeHome {
 		return Config{}, errors.New("managed microsandbox runtime_home must be a canonical absolute path")
 	}
@@ -54,7 +54,8 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	}
 	release, resources := spec.Runtime, spec.Resources
 	config := Config{
-		InstallationID: result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
+		ExternalWorkspace: spec.Workspace != nil,
+		InstallationID:    result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
 		RuntimeSHA256: release.RuntimeSHA256, FirmwareSHA256: release.FirmwareSHA256, Image: release.MicrosandboxRef,
 		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, EnvironmentDiskMiB: resources.EnvironmentDiskMiB, Network: network,
 	}
@@ -62,6 +63,7 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	if err != nil {
 		return Config{}, errors.New("invalid managed microsandbox provider configuration")
 	}
+	provider.workspace = options.Workspace
 	result.Provider = provider
 	result.Probe = microsandboxProbe(config, resources)
 	result.Quiescent = caller.Quiescent
@@ -89,7 +91,7 @@ func BuildNode(c sandbox.NodeConfig, options sandbox.LocalOptions, result *sandb
 		caller.LeasePath = filepath.Join(directory, strconv.FormatUint(c.Generation, 10)+".lease")
 		caller.LeaseIdentity = LeaseIdentity{InstallationID: result.InstallationID, Generation: c.Generation, SpecificationDigest: result.SpecificationDigest}
 	}
-	config, err := configureMicrosandbox(entry, c.Specification, caller, result)
+	config, err := configureMicrosandbox(entry, c.Specification, caller, result, options)
 	if err != nil {
 		return closeProvider, err
 	}

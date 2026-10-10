@@ -144,6 +144,10 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input sandbox.Sele
 	}
 	defer unlock()
 	m := w.runtimes
+	input, err = m.workspaceSelection(ctx, input)
+	if err != nil {
+		return deployment.View{}, err
+	}
 	input, unchanged, err := m.deployment.ClassifyChange(ctx, m.setupInstallationID, input)
 	if err != nil {
 		return deployment.View{}, err

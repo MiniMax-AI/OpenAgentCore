@@ -36,6 +36,10 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input sandbox.
 	}
 	defer unlock()
 	m := w.runtimes
+	input, err = m.workspaceSelection(ctx, input)
+	if err != nil {
+		return deployment.View{}, err
+	}
 	if err := m.deployment.CheckSetup(ctx, m.setupInstallationID, input); err != nil {
 		return deployment.View{}, err
 	}
@@ -113,6 +117,7 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 // Preparation is outside the manager mutex and all database transactions. A
 // rejected candidate cannot retire the current generation or its node lanes.
 func (m *runtimeManager) prepareCandidate(ctx context.Context, input sandbox.Selection) (PreparedRuntimeDeployment, error) {
+
 	setup, err := m.deploymentService.SetupForSelection(m.setupInstallationID, input)
 	if err != nil {
 		return PreparedRuntimeDeployment{}, err
@@ -165,4 +170,22 @@ func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, 
 	}
 	m.switching = false
 	m.switchDrained = nil
+}
+
+// workspaceSelection derives the external declaration before generation preflight
+// and equality checks; callers hold the deployment mutation gate.
+func (m *runtimeManager) workspaceSelection(ctx context.Context, input sandbox.Selection) (sandbox.Selection, error) {
+	if m.workspaces != nil {
+		declaration, err := m.workspaces.Declaration(ctx)
+		if err != nil {
+			return sandbox.Selection{}, err
+		}
+		if input.Workspace != nil && (declaration == nil || *input.Workspace != *declaration) {
+			return sandbox.Selection{}, sandbox.ErrInvalid
+		}
+		input.Workspace = declaration
+	} else if input.Workspace != nil {
+		return sandbox.Selection{}, sandbox.ErrInvalid
+	}
+	return input, nil
 }

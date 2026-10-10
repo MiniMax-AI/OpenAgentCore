@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 // Service reads the deployment and manages its nodes. It grants no execution
@@ -285,4 +286,31 @@ func (s *Service) selectionEqual(d Record, input sandbox.Selection) (bool, error
 		return false, nil
 	}
 	return s.registry.Equal(input.Provider, previous.Configuration, normalized.Configuration)
+}
+
+// ValidateWorkspaceConfiguration qualifies a filesystem selection against the
+// stored generation without constructing a native Sandbox Provider.
+func (s *Service) ValidateWorkspaceConfiguration(ctx context.Context, declaration workspacefs.Declaration) error {
+	setup, err := s.Setup(ctx)
+	if err != nil {
+		return err
+	}
+	if setup.Provider == "" {
+		return nil
+	}
+	adapter, err := s.registry.Lookup(setup.Provider)
+	if err != nil {
+		return err
+	}
+	if adapter.Policy.Workspace == nil {
+		return workspacefs.ErrUnsupported
+	}
+	capacity := uint32(0)
+	if setup.Specification.Workspace != nil {
+		if *setup.Specification.Workspace != declaration {
+			return workspacefs.ErrUnsupported
+		}
+		capacity = setup.Specification.Resources.EnvironmentDiskMiB
+	}
+	return workspacefs.ValidateCombination(*adapter.Policy.Workspace, declaration, capacity)
 }

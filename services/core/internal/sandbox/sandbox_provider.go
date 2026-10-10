@@ -31,6 +31,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 var (
@@ -50,6 +51,7 @@ var (
 type Reference struct{ TenantID, EnvironmentID, AllocationID string }
 
 type Bootstrap struct {
+	Workspace *workspacefs.Binding `json:",omitempty"`
 	Reference
 	SessionID, DeviceID, CoreURL, Credential string
 	NetworkAccess                            string
@@ -168,6 +170,7 @@ type SuspendRequest struct {
 	ObserveOnly bool
 }
 type ResumeRequest struct {
+	Workspace   *workspacefs.Binding `json:",omitempty"`
 	Reference   Reference
 	OperationID string
 	Snapshot    SnapshotIdentity
@@ -254,10 +257,11 @@ type ConfigurationRequirements struct {
 // the fixed reason for rejecting one otherwise. DefaultResources is the size
 // setup proposes, or nil when the Provider's configuration selects it.
 type DeploymentPolicy struct {
-	RuntimeError     string     `json:"-"`
-	Disk             bool       `json:"disk"`
-	Runtime          bool       `json:"runtime"`
-	DefaultResources *Resources `json:"default_resources"`
+	Workspace        *workspacefs.Requirements `json:"workspace,omitempty"`
+	RuntimeError     string                    `json:"-"`
+	Disk             bool                      `json:"disk"`
+	Runtime          bool                      `json:"runtime"`
+	DefaultResources *Resources                `json:"default_resources"`
 }
 
 // Configuration is an adapter-owned typed value, never a request or response DTO.
@@ -316,6 +320,7 @@ type NodeConfig struct {
 
 // LocalOptions supplies process-local context without changing persisted configuration.
 type LocalOptions struct {
+	Workspace workspacefs.Resolver
 	// Standalone selects registration or execution without a generation manager.
 	Standalone bool
 	// GenerationStateDirectory is the node state directory when constructing a
@@ -393,3 +398,18 @@ var (
 	ErrConfigurationUnconfirmed = &ConfigurationError{ConfigurationUnconfirmed, "sandbox_verification_unconfirmed", "", "Sandbox provider verification could not be confirmed."}
 	ErrConfigurationSelection   = &ConfigurationError{ConfigurationInvalid, "sandbox_configuration_invalid", "configuration", "Select a ready immutable provider configuration with matching resources."}
 )
+
+// ValidateWorkspaceBinding checks the shared ownership envelope before forwarding.
+// Adapter-native receipts are validated only by the selected filesystem resolver.
+func ValidateWorkspaceBinding(r Reference, binding *workspacefs.Binding) error {
+	if binding == nil {
+		return nil
+	}
+	if err := binding.Validate(); err != nil {
+		return err
+	}
+	if binding.Attachment.Reference.TenantID != r.TenantID || binding.Attachment.Reference.EnvironmentID != r.EnvironmentID {
+		return workspacefs.ErrOwnership
+	}
+	return nil
+}

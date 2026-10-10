@@ -45,6 +45,18 @@ describe("deployment resources and Runtime", () => {
     expect(validSandboxResources("e2b", { cpus: 2, memory_mib: 2048, root_disk_mib: 1024 })).toBe(false);
     expect(validSandboxResources("microsandbox", { cpus: 2, memory_mib: 2048, root_disk_mib: 1023, environment_disk_mib: 8192 })).toBe(false);
   });
+  it("validates external storage without fabricating a disk quota or weakening root disk bounds", () => {
+    const workspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
+    const resources = defaultSandboxResources("microsandbox", workspace)!;
+    expect(resources.environment_disk_mib).toBe(0);
+    expect(validSandboxResources("microsandbox", resources, workspace)).toBe(true);
+    expect(validSandboxResources("microsandbox", resources)).toBe(false);
+    expect(validSandboxResources("microsandbox", { ...resources, root_disk_mib: 0 }, workspace)).toBe(false);
+    expect(validSandboxResources("microsandbox", { ...resources, environment_disk_mib: 8192 }, workspace)).toBe(false);
+    expect(validSandboxResources("microsandbox", resources, { ...workspace, user_xattr: false })).toBe(false);
+    expect(validSandboxResources("docker", { cpus: 2, memory_mib: 2048 }, workspace)).toBe(false);
+    expect(validSandboxResources("microsandbox", { ...resources, environment_disk_mib: 8192 }, { ...workspace, capacity_quota: true })).toBe(true);
+  });
   it("accepts only Core's Runtime image in the Runtime reference", async () => {
     const digest = "b".repeat(64);
     const runtime_ref = `oac-runtime@sha256:${digest}`;

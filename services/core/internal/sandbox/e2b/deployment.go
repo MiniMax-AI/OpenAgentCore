@@ -41,6 +41,9 @@ func ValidateConfiguration(c *DeploymentConfiguration) error {
 // NormalizeSelection accepts omitted candidate resources only until live build
 // discovery. Persistence requires ValidateSpecification after preparation.
 func NormalizeSelection(s sandbox.Selection) (sandbox.Selection, error) {
+	if s.Workspace != nil {
+		return s, sandbox.ErrInvalid
+	}
 	if s.Resources == (sandbox.Resources{}) {
 		if s.Runtime != nil {
 			return s, &sandbox.ValidationError{Param: "runtime", Message: sandbox.ErrInvalid.Error() + ": " + Policy().RuntimeError}
