@@ -8,7 +8,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func TestUnpublishedWriteStorageFailure(t *testing.T) {
+func TestNativeUnpublishedWriteStorageFailure(t *testing.T) {
 	for _, cause := range []error{windows.ERROR_DISK_FULL, windows.ERROR_HANDLE_DISK_FULL, windows.ERROR_DISK_QUOTA_EXCEEDED} {
 		if got := unpublishedWriteError(&os.PathError{Op: "write", Path: "private/path", Err: cause}); got != agent.ErrWorkspaceWriteUnavailable {
 			t.Fatalf("storage exhaustion: got %v, want unavailable", got)
