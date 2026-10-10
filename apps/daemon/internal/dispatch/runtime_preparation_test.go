@@ -246,6 +246,7 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 
 func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.T) {
 	r, sender, environment, session := capabilitiesTestRouter(t)
+	sender.frames = make(chan proto.Envelope)
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
@@ -263,7 +264,10 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 		<-ctx.Done()
 		close(interrupted)
 		<-release
-		return os.WriteFile(retained, []byte("retained"), 0400)
+		if err := os.WriteFile(retained, []byte("retained"), 0400); err != nil {
+			return err
+		}
+		return context.Canceled
 	})
 	<-started
 	wait, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -280,13 +284,22 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 		t.Fatal("cancel released unsettled capability ownership")
 	}
 	close(release)
+	wait, stop = context.WithTimeout(context.Background(), 20*time.Millisecond)
+	err = r.Shutdown(wait)
+	stop()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("shutdown abandoned pending result delivery: %v", err)
+	}
+	capabilitiesReceipt(t, sender, id, "unknown")
 	shutdownCapabilitiesRouter(t, r)
-	capabilitiesReceipt(t, sender, id, "completed")
 	if _, err := os.Stat(retained); err != nil {
 		t.Fatal("shutdown deleted installation result")
 	}
-	if r.runtimePreparation != nil {
-		t.Fatal("confirmed completion retained capacity")
+	if r.runtimePreparation != owner || !owner.uncertain {
+		t.Fatal("shutdown erased unknown outcome")
+	}
+	if err := r.Handle(t.Context(), capabilityEnvelope(t, uuid.NewString(), request)); !errors.Is(err, ErrRouterClosed) {
+		t.Fatalf("closed router admitted a successor: %v", err)
 	}
 }
 
@@ -341,10 +354,16 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	if !owned {
 		t.Fatal("unknown mutation released its ownership")
 	}
-	wait, stop := context.WithTimeout(context.Background(), time.Second)
-	defer stop()
-	if err := r.Shutdown(wait); err == nil {
-		t.Fatal("shutdown claimed uncertain mutation settled")
+	next := uuid.NewString()
+	if err := r.Handle(t.Context(), capabilityEnvelope(t, next, request)); err != nil {
+		t.Fatal(err)
+	}
+	if got := capabilitiesReceipt(t, sender, next, "rejected"); got.ErrorCode != "runtime_preparation_capacity" {
+		t.Fatalf("unknown operation lost its admission fence: %+v", got)
+	}
+	shutdownCapabilitiesRouter(t, r)
+	if r.runtimePreparation != owner || !owner.uncertain {
+		t.Fatal("shutdown erased unknown outcome")
 	}
 }
 
