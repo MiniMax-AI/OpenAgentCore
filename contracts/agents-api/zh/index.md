@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 4e914f8cb40568147ededcaf115bf17764cc546f7e6410bd61ecc2231f96cbc8
+source_hash: acafcda64f517ec4c680d44b20124bf892441984b4e9365dd51478a62446f7b1
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -118,7 +118,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **执行和历史**
 
-- 在 microsandbox 上，Codex 和 MiniMax Code 已通过执行、取消、agent-host 重启、空闲暂停、快照恢复、工作区访问、历史续接和资源清理验收。三个 Harness 均已通过已安装 stdio MCP 的定向取消与重连验收，包括停止后代进程，同时保留无关服务和工作区文件。Claude Code 的完整 microsandbox 生命周期仍未通过验收：普通 Bash 取消可能超过原生结算期限。远端进程关闭本身不能证明原生 Turn 已完成结算。
+- 在 microsandbox 上，三个 Harness 均已通过执行、取消、agent-host 重启、空闲暂停、快照恢复、工作区访问、历史续接和资源清理验收。Claude Code 的普通前台 Bash 取消已通过原生 Turn 结算及取消后文件系统副作用检查。三个 Harness 均已通过已安装 stdio MCP 的定向取消与重连验收，包括停止后代进程，同时保留无关服务和工作区文件。
 - Claude Code 的原生文件系统检查会放大远程元数据往返。即使沙箱命令本身很快，工具调用和准备阶段仍可能有明显延迟；尚未确认其时延与沙箱内循环相当。
 
 - `self_hosted` 安装仅支持 Linux amd64。`oac-daemon install` 和 `start` 在其他平台返回 `UnsupportedPlatformError`，且拒绝发生在领取安装凭据之前。macOS、Windows 和 Linux arm64 的 Sandbox I/O 执行尚未通过验收；参阅[自托管平台](../../../docs/zh/getting-started/self-hosted.md#platforms)。
