@@ -67,7 +67,7 @@
 
 ### 恢复时优先处理
 
-1. 完成暂停的最新 File 变更聚焦资格：原始 Bash 写入/原生 Read、增加的原生 Edit→Read、精确文件字节/Artifact/HTTP、原始取消副作用断言和完整清理。活跃 Session 需确认实际 BPF 已加载，最终 View 释放后资源回收；未启用 BPF 的功能通过不能当优化 live 资格。无需重跑代码未变的三 Harness 完整 micro 生命周期。
+1. 先核对暂停清理期间的新异常：首次 DELETE 返回 409，对当时 in-progress Turn 的既有取消在 30 秒内未 settle，随后观察到 Turn failed，再次清理才成功。该次运行未完成、不是原始取消资格用例，根因尚未确定，不能判为用户暂停导致的必然现象，也不能用 d56 的取消 PASS 覆盖。保留原始事件后，从第一个明确卡点定位；修复与否依据真实原因和影响。然后完成暂停的最新 File 变更聚焦资格：原始 Bash 写入/原生 Read、增加的原生 Edit→Read、精确文件字节/Artifact/HTTP、原始取消副作用断言和完整清理。活跃 Session 需确认实际 BPF 已加载，最终 View 释放后资源回收；未启用 BPF 的功能通过不能当优化 live 资格。无需重跑代码未变的三 Harness 完整 micro 生命周期。
 2. 严重远程 metadata 串行延迟仍未闭环。100 ms fixture 下 Bash 仍约 25 秒；98 次 Walk 的服务时间区间并集约 9.823 秒，剩余 Lookup 有大量重复。现有数据不能把全部重复归因于跨 syscall，更不能宣布不可优化的下限。下一步要以当前候选逐调用归属、实际使用模式和可复现收益选方案，不能直接加弱一致性 TTL。
 3. 通用命令执行仍有覆盖缺口。shell 内启动的 Python/编译器/脚本已经在 sandbox；Harness 直接启动任意其他程序的情况尚无完整通用方案。PATH 快照/rehash 无法覆盖动态安装、直接路径及发现语义，不等于用户目标。当前没有采用 exec supervisor 或修改相关生产协议。
 
@@ -107,7 +107,7 @@
 
 ## 暂停现场与恢复顺序
 
-用户暂停后，已停止 detached chain/runner 后续调度，未进入新增 Edit 或原始取消验收用例。对当时的 Session 执行取消和公共 API 清理：Session 已删除、两个 Project 为空；Core release、native SDK 精确 Compute/Snapshot absence、node allocations、View/cgroup 和 daemon-only 检查全部通过，observer/chain/runner 均停止，daemon 的 BPF program/map fd 为空。已部署候选 `79486373` 保留，不回滚、不发布。该清理证明暂停安全完成，不代表新的原生文件优化资格通过。
+用户暂停后，已停止 detached chain/runner 后续调度，未进入新增 Edit 或原始取消验收用例。对当时的 Session 执行取消和公共 API 清理：Session 已删除、两个 Project 为空；Core release、native SDK 精确 Compute/Snapshot absence、node allocations、View/cgroup 和 daemon-only 检查全部通过，observer/chain/runner 均停止，daemon 的 BPF program/map fd 为空。已部署候选 `79486373` 保留，不回滚、不发布。清理期间首次 DELETE 409、取消 30 秒未 settle、随后 Turn failed 的异常已保留，第二次清理成功。该最终空状态证明暂停收尾完成，不代表新的原生文件优化或取消资格通过。
 
 恢复时：先读本文件和 ledger → 核对用户是否恢复探索及范围 → 检查实际 branch/source/部署和资源状态 → 复用现有已通过证据与未变制品 → 从上述聚焦未完成项继续。只有实际失败所影响的部分重验。主链路功能闭环和性能达到可接受范围是两件事，不互相替代。
 
@@ -117,6 +117,7 @@
 
 原始 live/fixture/advisor 证据保留在本机 `~/.oac/tests/aos-handoff-20261008/dependencies/`，包含：
 
+- `micro-worldfs-claude-79486373-preparation/collected/`：暂停候选部署、未完成 run、取消未 settle/Turn failed 原始记录，以及 `cleanup-core.json`、`claude_sdk.cleanup.native.json`、`cleanup-final-state.json`、`user-stop-final.json` 最终清理证据（位于其保留的原目录层级内）。
 - `micro-lifecycle-claude-d56e8e31-purpose-02-preparation/REPORT.md`：完整 Claude micro 生命周期和普通 Bash 取消。
 - `full-composition-mcode-micro-db30cac5-baseline-01/REPORT.md`：Mcode 组合资格。
 - `claude-tool-cancel-advisory/metadata-bridge/DELIVERY.md`：最新 metadata fixture 收益、成本和限制。
