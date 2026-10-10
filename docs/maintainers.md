@@ -59,6 +59,8 @@ The catalog records the commit, the Runtime protocol version, each archive's SHA
 
 `make build-core-distribution` builds all of these. Build one on its own to test a Harness image or a helper. Run every command from the repository root; default outputs go under `${OAC_DEV_HOME:-$HOME/.oac}/build`.
 
+The three maintained Runtime images share a build-time adjustment to the pinned Debian login profile: an inherited, exported `PATH` is preserved, while an unset `PATH` receives Debian’s defaults. This keeps the Runtime’s initialized package and user paths available in login and non-login tools without another package-path setting. The combined image inherits the same profile. A changed upstream profile fails the build for review; custom shell startup files can still explicitly change `PATH`.
+
 **Codex Runtime image.** Extract the official npm package `@openai/codex@0.153.4-linux-x64` under `~/.oac` (for example with `npm pack --ignore-scripts` and `tar -xzf`), then:
 
 ```sh
@@ -67,7 +69,7 @@ make build-codex-runtime
 docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/codex-runtime"
 ```
 
-The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources and `services/core/deploy/codex/Dockerfile`.
+The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources, the shared login-profile build step and `services/core/deploy/codex/Dockerfile`.
 
 **Claude Code Runtime image.** Node 20 or newer and pnpm are required.
 

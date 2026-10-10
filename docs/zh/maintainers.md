@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: aaadeb3a5e99b8d926e9f78b7fc41c7aba808e0d2af58969119e67954f9d7a58
+source_hash: 494618f4d605d96bfcb9b1413f8224722324e1037764cc5b38baca102a8f1e90
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -61,6 +61,8 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 
 `make build-core-distribution` 会构建以下全部内容。也可以单独构建其中一项，以测试某个 Harness 镜像或辅助程序。所有命令都必须从仓库根目录运行；默认输出位于 `${OAC_DEV_HOME:-$HOME/.oac}/build` 下。
 
+三个维护的 Runtime 镜像共用一个构建期调整：固定 Debian 登录 profile 会保留继承且已导出的 `PATH`，未设置时仍使用 Debian 默认值。这样，登录和非登录工具都能使用 Runtime 初始化的包路径与用户路径，无需另一份包路径设置。组合镜像继承同一 profile。上游 profile 结构变化会使构建失败以便审查；自定义 shell 启动文件仍可以显式更改 `PATH`。
+
 **Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@0.153.4-linux-x64`（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
 
 ```sh
@@ -69,7 +71,7 @@ make build-codex-runtime
 docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/codex-runtime"
 ```
 
-该脚本会检查软件包版本，为 Linux amd64 构建 `oac-daemon`，并准备一个仅包含守护进程、未修改的原生可执行文件、相关资源和 `services/core/deploy/codex/Dockerfile` 的上下文。
+该脚本会检查软件包版本，为 Linux amd64 构建 `oac-daemon`，并准备一个仅包含守护进程、未修改的原生可执行文件、相关资源、共用的登录 profile 构建步骤和 `services/core/deploy/codex/Dockerfile` 的上下文。
 
 **Claude Code Runtime 镜像。** 必须使用 Node 20 或更高版本以及 pnpm。
 

@@ -183,6 +183,7 @@ check-microsandbox-provider:
 
 .PHONY: check-distribution build-core-distribution
 check-distribution:
+	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/runtime_profile_test.py
 	node --test scripts/build-native-catalog.test.mjs
 	go test ./services/web ./services/core/cmd/oac -count=1
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/node -p 'test_*.py'

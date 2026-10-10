@@ -23,6 +23,7 @@ cp -RL "$companion/." "$context/mcode-harness/"
     -o "$context/oac-daemon" ./apps/daemon/cmd/oac-daemon
 )
 cp "$repo_root/services/core/deploy/mcode/Dockerfile" "$context/Dockerfile"
+cp "$repo_root/services/core/deploy/runtime_profile.py" "$context/runtime_profile.py"
 mkdir -p "$output"
 cp -R "$context/." "$output/"
 printf 'MiniMax Code Runtime image context: %s\n' "$output"
