@@ -107,6 +107,10 @@ func ValidateRequest(q Request) error {
 		if (q.Workspace == nil && q.Config.EnvironmentDiskMiB == 0) || (q.Bootstrap != nil && q.Bootstrap.Workspace != nil) || q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
 			return sandbox.ErrInvalid
 		}
+	case "initial_info":
+		if q.Compute != (Compute{Name: Name(q.Config, q.Reference, 0)}) {
+			return sandbox.ErrInvalid
+		}
 	case "inspect", "kill", "resume_compute", "metrics":
 		if q.Operation == "resume_compute" && q.Compute.ID == "" {
 			return sandbox.ErrInvalid

@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 9940bc58072ad758d9a818978e86ff904675cef8ef35f99dc4b3761fdb1fa3b5
+source_hash: ec6c807e262a37d2ecd456101dadf7ae4818f1bd711b4af5f08e27c9d1690d83
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -72,6 +72,8 @@ Core 串行化生命周期操作，并在任何不确定 mutation 后保留 allo
 - `State="absent"` 携带匹配 `Reference` 和 `CreateSettled=true`，是明确的创建不存在回执，不含原生 ID 或已完成引导。
 - `ErrNotFound`、空列表、超时或单独成功的 `Kill` 都不能证明进行中的 Create 不会稍后出现。
 - Core 也可以依据匹配的 running resource 和已完成 bootstrap 结算创建。取得此类证据或明确回执前，创建保持未知，即使清理尝试看不到资源。
+
+Microsandbox 在返回创建不存在回执前永久关闭初始 Create 准入；其 [helper 协议](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md#create-and-bootstrap)定义持久化 allocation 锁屏障。普通 `GetCompute` 的不存在观察不关闭准入。
 
 `Kill` 负责清理 allocation 的计算资源和保留资源，包括部分 bootstrap storage；名称冲突时不删除其他租户资源。Core 仅在确认清理和创建已结算后释放持久所有权。关闭 Executor 或取消 Harness 不删除 Environment、工作区或 allocation。
 

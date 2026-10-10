@@ -1,5 +1,5 @@
 // Package microsandbox is the pure-Go client for the colocated SDK helper.
-// Core owns all durable state; the helper owns no database or background service.
+// Core owns lifecycle intent; the helper owns no database or background service.
 package microsandbox
 
 import (
@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-const ProtocolVersion = 3
+const ProtocolVersion = 4
 const SDKVersion = "v0.7.2"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
@@ -72,8 +72,8 @@ type Request struct {
 	Deadline  time.Time
 }
 type Response struct {
-	// CreateSettled accompanies a configuration rejection after native Create
-	// completed and before bootstrap began. State binds the exact created compute.
+	// CreateSettled binds State to a completed Create rejection or an initial_info
+	// absence whose allocation lock permanently prevents a later initial Create.
 	CreateSettled bool `json:",omitempty"`
 	Version       int
 	State         *State

@@ -19,7 +19,7 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 	switch b.q.Operation {
 	case "create":
 		return b.create(ctx)
-	case "inspect":
+	case "inspect", "initial_info":
 		_, s, e := b.inspect(ctx, b.q.Compute)
 		return wire.Response{State: &s}, e
 	case "metrics":

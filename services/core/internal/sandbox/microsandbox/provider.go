@@ -170,8 +170,16 @@ func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.In
 	if e != nil {
 		return sandbox.Info{}, e
 	}
-	s, e := p.GetCompute(ctx, r, c)
-	return info(r, s), e
+	q := Request{Operation: "initial_info", Reference: r, Compute: c}
+	out, err := p.call(ctx, q)
+	if err != nil {
+		return sandbox.Info{Reference: r}, err
+	}
+	if out.CreateSettled && out.State != nil && *out.State == (State{Compute: c, Status: "absent"}) {
+		return sandbox.Info{Reference: r, State: "absent", CreateSettled: true}, nil
+	}
+	s, err := p.responseState(ctx, q, out)
+	return info(r, s), err
 }
 func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	return p.GetInfo(ctx, r)

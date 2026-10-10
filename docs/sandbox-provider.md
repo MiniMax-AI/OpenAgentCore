@@ -71,6 +71,8 @@ Core serializes lifecycle operations and keeps the allocation after any uncertai
 - `ErrNotFound`, an empty listing, a timeout or a successful `Kill` alone never proves that an in-flight Create cannot appear later.
 - Core can also settle creation from a matching running resource with a completed bootstrap. Until it has such evidence or an explicit receipt it keeps the creation unknown, even when a cleanup attempt sees no resources.
 
+Microsandbox closes initial Create admission before returning a creation-absence receipt; its [helper protocol](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md#create-and-bootstrap) defines the durable allocation-lock barrier. Ordinary `GetCompute` absence does not close admission.
+
 `Kill` owns cleanup of the allocation's compute and retained resources, including partial bootstrap storage, and never removes another tenant's resource on a name collision. Core releases durable ownership only after confirmed cleanup and settled creation. Closing an Executor or cancelling a Harness never deletes an Environment, its workspace or its allocation.
 
 ### Operation outcomes and retries
