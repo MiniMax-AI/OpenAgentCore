@@ -33,6 +33,7 @@ trap 'rm -rf "$context"' EXIT
 cp "$native_dir/bin/codex" "$context/codex"
 cp -R "$native_dir/codex-resources" "$context/codex-resources"
 cp "$repo_root/services/core/deploy/codex/Dockerfile" "$context/Dockerfile"
+cp "$repo_root/services/core/deploy/runtime_profile.py" "$context/runtime_profile.py"
 # Preserve the previous bundle if compilation or validation failed.
 mkdir -p "$output_dir"
 cp -R "$context/." "$output_dir/"
