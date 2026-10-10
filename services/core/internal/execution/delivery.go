@@ -266,7 +266,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			}
 		case <-workReady:
 			if !cancelSent.IsZero() {
-				if time.Since(cancelSent) > 15*time.Second {
+				if time.Since(cancelSent) > proto.CancellationConfirmationTimeout {
 					result.ErrorCode = "cancel_unconfirmed"
 					return
 				}

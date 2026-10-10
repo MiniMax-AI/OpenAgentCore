@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
@@ -73,69 +74,77 @@ func (s cancellationOutputSender) Send(ctx context.Context, env proto.Envelope) 
 }
 
 func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
-	sender := cancellationOutputSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
-	startEntered, startReturn := make(chan struct{}), make(chan struct{})
-	cancelEntered := make(chan struct{})
-	cleanupEntered, cleanupReturn := make(chan struct{}), make(chan struct{})
-	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}, outcome: proto.DonePayload{
-		Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3, TotalTokens: 10}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "observed-native"},
-	}}
-	var session *fakeSession
-	p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
-		session = &fakeSession{out: out, closeOutOnCancel: true,
-			postCancelEnvelopes: []proto.Envelope{mustEnv(t, proto.TypeDone, id, p.outcome)}}
-		out <- mustEnv(t, proto.TypeDelta, id, proto.DeltaPayload{Delta: "observed"})
-		out <- mustEnv(t, proto.TypeUsage, id, proto.UsagePayload{Usage: p.outcome.Usage})
-		close(startEntered)
-		<-startReturn
-		return session, nil
-	}
-	p.cancel = func(ctx context.Context) error {
-		close(cancelEntered)
-		if err := session.Cancel(ctx); err != nil {
-			return err
+	synctest.Test(t, func(t *testing.T) {
+		sender := cancellationOutputSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
+		startEntered, startReturn := make(chan struct{}), make(chan struct{})
+		cancelEntered := make(chan struct{})
+		cleanupEntered, cleanupReturn := make(chan struct{}), make(chan struct{})
+		p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}, outcome: proto.DonePayload{
+			Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3, TotalTokens: 10}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "observed-native"},
+		}}
+		var session *fakeSession
+		p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
+			session = &fakeSession{out: out, closeOutOnCancel: true,
+				postCancelEnvelopes: []proto.Envelope{mustEnv(t, proto.TypeDone, id, p.outcome)}}
+			out <- mustEnv(t, proto.TypeDelta, id, proto.DeltaPayload{Delta: "observed"})
+			out <- mustEnv(t, proto.TypeUsage, id, proto.UsagePayload{Usage: p.outcome.Usage})
+			close(startEntered)
+			<-startReturn
+			return session, nil
 		}
-		close(cleanupEntered)
-		<-cleanupReturn
-		return nil
-	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
-	startCancellationPreparation(t, r, sender.recSender)
-	<-startEntered
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"})); err != nil {
-		t.Fatal(err)
-	}
-	<-cancelEntered
-	if len(cancellationAcks(sender.recSender)) != 0 {
-		t.Fatal("receipt preceded Start handoff")
-	}
-	close(startReturn)
-	<-sender.entered
-	if len(cancellationAcks(sender.recSender)) != 0 {
-		t.Fatal("receipt preceded output delivery")
-	}
-	// Another receipt may wait, but it must not repeat native cancellation.
-	_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "second-delivery"}))
-	close(sender.release)
-	<-cleanupEntered
-	if len(cancellationAcks(sender.recSender)) != 0 || r.ActiveRuns() != 1 {
-		t.Fatal("cleanup released ownership early")
-	}
-	close(cleanupReturn)
-	waitFor(t, func() bool { return len(cancellationAcks(sender.recSender)) == 2 && r.ActiveRuns() == 0 }, "prepared cancellation receipts")
-	if p.calls.Load() != 1 || session.cancels() != 1 {
-		t.Fatal("native cancellation was repeated")
-	}
-	for _, ack := range cancellationAcks(sender.recSender) {
-		if !ack.Applied || ack.ErrorCode != "" || ack.Outcome == nil || !reflect.DeepEqual(*ack.Outcome, p.outcome) {
-			t.Fatalf("observed outcome lost: %+v", ack)
+		p.cancel = func(ctx context.Context) error {
+			close(cancelEntered)
+			if err := session.Cancel(ctx); err != nil {
+				return err
+			}
+			close(cleanupEntered)
+			<-cleanupReturn
+			return nil
 		}
-	}
-	got := sender.typesFor("run")
-	want := []string{proto.TypeDelta, proto.TypeUsage, proto.TypeDone, proto.TypeInteractionDecisionAck, proto.TypeInteractionDecisionAck}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("output/receipt order = %v", got)
-	}
+		r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
+		startCancellationPreparation(t, r, sender.recSender)
+		<-startEntered
+		if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"})); err != nil {
+			t.Fatal(err)
+		}
+		<-cancelEntered
+		if len(cancellationAcks(sender.recSender)) != 0 {
+			t.Fatal("receipt preceded Start handoff")
+		}
+		close(startReturn)
+		<-sender.entered
+		if len(cancellationAcks(sender.recSender)) != 0 {
+			t.Fatal("receipt preceded output delivery")
+		}
+		// Another receipt may wait, but it must not repeat native cancellation.
+		_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "second-delivery"}))
+		// Confirmation remains pending past both former native and Core bounds.
+		time.Sleep(17 * time.Second)
+		synctest.Wait()
+		if len(cancellationAcks(sender.recSender)) != 0 {
+			t.Fatal("receipt expired before the shared cancellation budget")
+		}
+		close(sender.release)
+		<-cleanupEntered
+		if len(cancellationAcks(sender.recSender)) != 0 || r.ActiveRuns() != 1 {
+			t.Fatal("cleanup released ownership early")
+		}
+		close(cleanupReturn)
+		waitFor(t, func() bool { return len(cancellationAcks(sender.recSender)) == 2 && r.ActiveRuns() == 0 }, "prepared cancellation receipts")
+		if p.calls.Load() != 1 || session.cancels() != 1 {
+			t.Fatal("native cancellation was repeated")
+		}
+		for _, ack := range cancellationAcks(sender.recSender) {
+			if !ack.Applied || ack.ErrorCode != "" || ack.Outcome == nil || !reflect.DeepEqual(*ack.Outcome, p.outcome) {
+				t.Fatalf("observed outcome lost: %+v", ack)
+			}
+		}
+		got := sender.typesFor("run")
+		want := []string{proto.TypeDelta, proto.TypeUsage, proto.TypeDone, proto.TypeInteractionDecisionAck, proto.TypeInteractionDecisionAck}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("output/receipt order = %v", got)
+		}
+	})
 }
 
 func TestPreparedCancellationBeforeTransferPreservesUnknownOutcome(t *testing.T) {
@@ -250,44 +259,46 @@ func TestPreparedCancellationFailuresRemainConservative(t *testing.T) {
 }
 
 func TestPreparedCancellationTimeoutKeepsCapacityUntilStartReturns(t *testing.T) {
-	sender := &recSender{}
-	entered, allowReturn := make(chan struct{}), make(chan struct{})
-	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.cancel = func(context.Context) error { return p.Close() }
-	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (fixtureSession, error) {
-		close(entered)
-		<-allowReturn
-		return nil, ctx.Err()
-	}
-	var count atomic.Int32
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
-		if count.Add(1) == 1 {
-			return p, nil
+	synctest.Test(t, func(t *testing.T) {
+		sender := &recSender{}
+		entered, allowReturn := make(chan struct{}), make(chan struct{})
+		p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
+		p.cancel = func(context.Context) error { return p.Close() }
+		p.start = func(ctx context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (fixtureSession, error) {
+			close(entered)
+			<-allowReturn
+			return nil, ctx.Err()
 		}
-		return &controlledPreparation{closed: make(chan struct{})}, nil
-	})
-	startCancellationPreparation(t, r, sender)
-	<-entered
+		var count atomic.Int32
+		r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
+			if count.Add(1) == 1 {
+				return p, nil
+			}
+			return &controlledPreparation{closed: make(chan struct{})}, nil
+		})
+		startCancellationPreparation(t, r, sender)
+		<-entered
 
-	_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"}))
-	deadline := time.Now().Add(12 * time.Second)
-	for len(cancellationAcks(sender)) == 0 && time.Now().Before(deadline) {
-		time.Sleep(time.Millisecond)
-	}
-	acks := cancellationAcks(sender)
-	if len(acks) != 1 || acks[0].Applied || acks[0].Outcome != nil || acks[0].ErrorCode != "cancel_timeout" || r.ActiveRuns() != 1 {
-		t.Fatal("timeout claimed settlement or lost ownership", acks)
-	}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "overflow", preparationRequest())); err == nil {
-		t.Fatal("timed-out cancellation returned capacity early")
-	}
-	close(allowReturn)
-	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "late cancelled Start cleanup")
-	if len(cancellationAcks(sender)) != 1 {
-		t.Fatal("late settlement emitted a second receipt")
-	}
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "replacement", preparationRequest())); err != nil {
-		t.Fatal("completed cleanup retained capacity", err)
-	}
-	waitPreparationStatus(t, sender, "replacement", "ready", "")
+		_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"}))
+		deadline := time.Now().Add(proto.CancellationConfirmationTimeout + time.Second)
+		for len(cancellationAcks(sender)) == 0 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		acks := cancellationAcks(sender)
+		if len(acks) != 1 || acks[0].Applied || acks[0].Outcome != nil || acks[0].ErrorCode != "cancel_timeout" || r.ActiveRuns() != 1 {
+			t.Fatal("timeout claimed settlement or lost ownership", acks)
+		}
+		if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "overflow", preparationRequest())); err == nil {
+			t.Fatal("timed-out cancellation returned capacity early")
+		}
+		close(allowReturn)
+		waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "late cancelled Start cleanup")
+		if len(cancellationAcks(sender)) != 1 {
+			t.Fatal("late settlement emitted a second receipt")
+		}
+		if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "replacement", preparationRequest())); err != nil {
+			t.Fatal("completed cleanup retained capacity", err)
+		}
+		waitPreparationStatus(t, sender, "replacement", "ready", "")
+	})
 }

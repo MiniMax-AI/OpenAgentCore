@@ -350,7 +350,7 @@ func (r *Router) closeExecutor(owner *executorState) error {
 	r.mu.Unlock()
 	var err error
 	if native != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), preparedCancelTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		err = native.Close(ctx)
 		cancel()
 	}

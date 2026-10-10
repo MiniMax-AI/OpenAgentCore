@@ -148,7 +148,7 @@ Core delivers active input as `prompt_steer`, one input at a time per Run, and w
 | Native acceptance | `accepted` arrives under the Turn lifetime, with no automatic redelivery |
 | Done | The Runtime sends `done` after native Turn settlement and after the receipt send of any in-flight input; the native write and receipt send budgets bound that input |
 
-Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives within 15 seconds. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
+Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives within the bounded wait. `CancellationConfirmationTimeout` defines one 30-second limit for native cancellation and settlement, the Runtime receipt wait, and Core's cancellation exchange and watchdog. Each wait starts when its operation begins; earlier caller cancellation or transport loss still wins, and confirmed results or failures return immediately. A result at the exact deadline may remain unconfirmed across transport. Function-result acknowledgement remains bounded at 15 seconds and Executor resource close at 10 seconds; neither resource retirement nor expiry proves Turn settlement. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
 
 ## What each acknowledgement proves
 

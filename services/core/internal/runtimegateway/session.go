@@ -35,7 +35,7 @@ var (
 	WriteTimeout = 10 * time.Second
 
 	// InteractionAckTimeout bounds the application-level round trip for a
-	// function result or cancellation after it is written to the daemon.
+	// function result after it is written to the daemon.
 	InteractionAckTimeout = 15 * time.Second
 
 	// ReadLimit caps a single inbound frame at 4 MiB. tool_call
@@ -325,7 +325,11 @@ func (s *Session) SendAndWaitInteractionAck(ctx context.Context, env proto.Envel
 	// The exchange prefers an ack that raced the deadline; treating an
 	// already-applied decision as retryable can trigger a contradictory second
 	// response.
-	waitCtx, cancel := context.WithTimeout(ctx, InteractionAckTimeout)
+	timeout := InteractionAckTimeout
+	if env.Type == proto.TypePromptCancel {
+		timeout = proto.CancellationConfirmationTimeout
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	reply, err := s.exchangeFrame(waitCtx, env, waiter)
 	if err != nil {
