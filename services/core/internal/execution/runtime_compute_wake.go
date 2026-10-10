@@ -84,6 +84,9 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 			return err
 		}
 		if next.NodeID != r.nodeID {
+			if r.hintDestination != nil {
+				r.hintDestination(next.NodeID)
+			}
 			return nil
 		}
 		owner = next

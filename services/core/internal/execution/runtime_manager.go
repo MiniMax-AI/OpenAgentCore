@@ -98,7 +98,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
+			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1), hintDestination: m.hintDestination,
 		}}
 		m.nodes[id] = n
 	}
@@ -116,6 +116,19 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 		go m.runNode(n)
 	}
 	return n, nil
+}
+
+// A committed handoff can introduce a node before the next inventory scan.
+// Reuse its ordinary lane and coalesced wake; polling recovers missed hints.
+func (m *runtimeManager) hintDestination(id string) {
+	n, err := m.node(id)
+	if err != nil {
+		return
+	}
+	select {
+	case n.lifecycle.wakeHints <- struct{}{}:
+	default:
+	}
 }
 
 func (m *runtimeManager) hints(id string) chan<- struct{} {

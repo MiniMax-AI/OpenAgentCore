@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -258,5 +259,190 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenArchiveIsDamaged(t *tes
 				}
 			})
 		}
+	}
+}
+
+// These requests use the real SDK's empty local registry, without starting a VM.
+func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
+	for _, damage := range []string{"missing", "corrupt"} {
+		t.Run(damage, func(t *testing.T) {
+			request := initialInfoRequest(t)
+			t.Setenv("MSB_HOME", request.Config.RuntimeHome)
+			guard, err := allocationLock(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer guard.Close()
+			b := backend{q: request}
+			q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: wire.Name(request.Config, request.Reference, 1), Generation: 1}}
+			if damage == "corrupt" {
+				compatibility, err := wire.CheckpointClass(request.Config)
+				if err != nil {
+					t.Fatal(err)
+				}
+				q.Snapshot = wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, q.OperationID), ID: "id", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: q.OperationID, SourceName: wire.Name(request.Config, request.Reference, 0), SourceID: "local:source"}
+				dir := b.archiveDirectory(q.OperationID)
+				if err = privateDirectory(dir); err != nil {
+					t.Fatal(err)
+				}
+				archive := filepath.Join(dir, "archive.msb")
+				if err = os.WriteFile(archive, []byte("original"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				hash, size, err := archiveDigest(archive)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = durableJSON(filepath.Join(dir, "receipt.json"), archiveReceipt{Snapshot: q.Snapshot, SHA256: hash, Size: size, SourceStopped: true, SourceTerminated: true}); err != nil {
+					t.Fatal(err)
+				}
+				if err = os.WriteFile(archive, []byte("corrupt!"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err = b.resume(t.Context(), q); err == nil {
+				t.Fatal("missing archive accepted")
+			}
+			path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
+			var record restoreAdmission
+			if err = readPrivateJSON(path, &record); err != nil || record.Closed {
+				t.Fatal("permanent failure closed", record, err)
+			}
+			before, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := os.ReadDir(b.storeDirectory())
+			if err != nil {
+				t.Fatal(err)
+			}
+			q.ObserveOnly = true
+			for i := 0; i < 3; i++ {
+				state, err := b.resume(t.Context(), q)
+				if !errors.Is(err, wire.ErrUnconfirmed) || state.RestoreAttemptClosed != "" {
+					t.Fatal(state, err)
+				}
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(before) != string(after) {
+				t.Fatal("journal changed", err)
+			}
+			afterFiles, err := os.ReadDir(b.storeDirectory())
+			if err != nil || len(afterFiles) != len(files) {
+				t.Fatal("journal grew", err)
+			}
+		})
+	}
+}
+
+func TestUndispatchedFailureClosesOnlyExplicitCancellation(t *testing.T) {
+	for _, cause := range []error{context.Canceled, fmt.Errorf("wrapped: %w", context.DeadlineExceeded), sandbox.ErrOwnership, sandbox.ErrInvalid, os.ErrNotExist, errors.New("opaque SDK failure")} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			request := initialInfoRequest(t)
+			guard, err := allocationLock(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer guard.Close()
+			b := backend{q: request}
+			q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: "exact-target", Generation: 1}}
+			if _, err = b.admitRestore(q); err != nil {
+				t.Fatal(err)
+			}
+			if err = b.closeUndispatchedRestore(q, cause); err != nil {
+				t.Fatal(err)
+			}
+			guard.Close()
+			guard, err = allocationLock(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer guard.Close()
+			q.ObserveOnly = true
+			closed, err := b.admitRestore(q)
+			want := errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded)
+			if err != nil || closed != want {
+				t.Fatal("wrong closure", closed, want, err)
+			}
+			q.ObserveOnly = false
+			closed, err = b.admitRestore(q)
+			if want {
+				if err != nil || !closed {
+					t.Fatal("late dispatch permitted", closed, err)
+				}
+			} else if !errors.Is(err, wire.ErrUnconfirmed) {
+				t.Fatal("old admission replayed", err)
+			}
+		})
+	}
+}
+
+func TestAdmittedAbsentObservationSkipsArchiveAndStaysUnknown(t *testing.T) {
+	request := initialInfoRequest(t)
+	t.Setenv("MSB_HOME", request.Config.RuntimeHome)
+	guard, err := allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	b := backend{q: request}
+	q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: wire.Name(request.Config, request.Reference, 1), Generation: 1}}
+	if _, err = b.admitRestore(q); err != nil {
+		t.Fatal(err)
+	}
+	// Even a missing archive must not be consulted: its ENOENT would differ from
+	// the typed unknown result returned for this existing admitted target.
+	path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q.ObserveOnly = true
+	state, err := b.resume(t.Context(), q)
+	if !errors.Is(err, wire.ErrUnconfirmed) || state.RestoreAttemptClosed != "" {
+		t.Fatal(state, err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(before) != string(after) {
+		t.Fatal("observation mutated admission", err)
+	}
+	q.ObserveOnly = false
+	if _, err = b.resume(t.Context(), q); !errors.Is(err, wire.ErrUnconfirmed) {
+		t.Fatal("old admission replayed", err)
+	}
+}
+
+func TestPreDispatchClosureRejectsConflictingJournal(t *testing.T) {
+	for _, kind := range []string{"observe", "completed", "cleaned", "foreign", "missing"} {
+		t.Run(kind, func(t *testing.T) {
+			request := initialInfoRequest(t)
+			guard, err := allocationLock(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer guard.Close()
+			b := backend{q: request}
+			q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: "target", Generation: 1}}
+			r := restoreAdmission{OperationID: q.OperationID, Target: q.Target, Snapshot: q.Snapshot}
+			switch kind {
+			case "observe":
+				q.ObserveOnly = true
+			case "completed":
+				r.CompletedID = "local:1"
+			case "cleaned":
+				r.Cleaned = true
+			case "foreign":
+				r.Target.Name = "foreign"
+			}
+			path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
+			if kind != "missing" {
+				if err = durableJSON(path, r); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err = b.closeUndispatchedRestore(q, context.Canceled); err == nil {
+				t.Fatal("unsafe closure accepted")
+			}
+		})
 	}
 }

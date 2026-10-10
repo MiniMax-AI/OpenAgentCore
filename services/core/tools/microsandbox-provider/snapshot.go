@@ -234,17 +234,43 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 		target.ID = ""
 		return wire.State{Compute: target, Status: "absent", RestoreAttemptClosed: q.OperationID}, nil
 	}
+	// An existing admitted observation may cheaply remain unknown. Native absence
+	// cannot close it: a detached launcher could still make the target visible.
+	if q.ObserveOnly {
+		_, observed, err := b.inspectOwned(ctx, q.Target)
+		if sdk.IsKind(err, sdk.ErrSandboxNotFound) {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+		if err != nil {
+			return wire.State{}, err
+		}
+		if observed.Status != "running" {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+	}
+	// admitRestore rejects non-observation requests for every existing open
+	// record. Thus only this fresh dispatch, still holding the allocation lock,
+	// can certify a failure before RestoreSandbox was called. Never use this
+	// closure for a native restore error or for a recovered admission.
+	beforeDispatchFailure := func(cause error) (wire.State, error) {
+		if !q.ObserveOnly {
+			if err := b.closeUndispatchedRestore(q, cause); err != nil {
+				return wire.State{}, errors.Join(cause, err)
+			}
+		}
+		return wire.State{}, cause
+	}
 	// Admission is durable before any native import/restore operation. A prior
 	// admitted operation with no visible target remains unknown, never replayed.
 	artifact, e := b.importArchive(ctx, q.Snapshot)
 	if e != nil {
-		return wire.State{}, e
+		return beforeDispatchFailure(e)
 	}
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
-		return wire.State{}, e
+		return beforeDispatchFailure(e)
 	}
 	if err := qualifyWorkspace(artifact.Labels(), b.q.Workspace); err != nil {
-		return wire.State{}, err
+		return beforeDispatchFailure(err)
 	}
 	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {

@@ -330,6 +330,31 @@ func (b backend) admitRestore(q wire.ResumeRequest) (bool, error) {
 	return want.Closed, nil
 }
 
+// Only the current fresh dispatch, under the allocation lock and before its
+// first RestoreSandbox call, may record this proof. A recovered open admission
+// or native restore error cannot establish that no guest execution occurred.
+func (b backend) closeUndispatchedRestore(q wire.ResumeRequest, cause error) error {
+	// Only explicit cancellation/deadline errors warrant another dispatch.
+	// Permanent or opaque failures retain this admission and its original expiry.
+	if !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded) {
+		return nil
+	}
+	if q.ObserveOnly || q.Target.ID != "" {
+		return sandbox.ErrOwnership
+	}
+	path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
+	var prior restoreAdmission
+	if err := readPrivateJSON(path, &prior); err != nil {
+		return err
+	}
+	want := restoreAdmission{OperationID: q.OperationID, Snapshot: q.Snapshot, Target: q.Target}
+	if !reflect.DeepEqual(prior, want) {
+		return sandbox.ErrOwnership
+	}
+	want.Closed = true
+	return durableJSON(path, want)
+}
+
 // Completion records the incarnation whose native restore has become observable
 // and whose full provenance and running state have been verified. This is
 // execution evidence; cleanup separately fences dispatch and uses native locks.

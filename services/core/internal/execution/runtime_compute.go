@@ -241,6 +241,9 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 	}
 	if next.NodeID != r.nodeID {
 		// The durable route and reservation belong to the target node's lane.
+		if r.hintDestination != nil {
+			r.hintDestination(next.NodeID)
+		}
 		return nil
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
@@ -286,7 +289,7 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 		if !result.ClosesRestoreAttempt(sandbox.ResumeRequest{OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly}) {
 			return sandbox.ErrOwnership
 		}
-		// Only an exact, durably closed never-admitted attempt can be replaced.
+		// Only an exact, durably closed attempt with no native dispatch can be replaced.
 		state.RestoreID = uuid.NewString()
 		next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
 		if err != nil {

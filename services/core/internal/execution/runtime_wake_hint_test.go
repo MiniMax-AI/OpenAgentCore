@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 type maintenanceTestLoop struct {
@@ -354,4 +356,31 @@ func TestRuntimeMaintenanceCancellationAfterSuccessfulScanWinsReadyTriggers(t *t
 	if !errors.Is(err, context.Canceled) || calls != 1 {
 		t.Fatalf("ready triggers bypassed cancellation: calls=%d, error=%v", calls, err)
 	}
+}
+
+func TestDestinationHintCreatesAndReusesOrdinaryLane(t *testing.T) {
+	m := &runtimeManager{ctx: t.Context(), config: RuntimeProvider{Mode: string(sandbox.DeploymentNodes), Provider: &retentionProvider{}}, nodes: map[string]*runtimeNode{}}
+	m.hintDestination("target")
+	n := m.nodes["target"]
+	if n == nil || n.lifecycle.hintDestination == nil || len(n.lifecycle.wakeHints) != 1 {
+		t.Fatal("missing destination lane or hint")
+	}
+	for range 10 {
+		m.hintDestination("target")
+	}
+	if m.nodes["target"] != n || len(n.lifecycle.wakeHints) != 1 {
+		t.Fatal("hint duplicated lane or failed to coalesce")
+	}
+	m.switching = true
+	m.hintDestination("during-transition")
+	if m.nodes["during-transition"] != nil {
+		t.Fatal("hint bypassed configuration transition")
+	}
+	m.switching = false
+	m.closed = true
+	m.hintDestination("after-close")
+	if m.nodes["after-close"] != nil {
+		t.Fatal("hint bypassed closed manager")
+	}
+	n.lifecycle.stop()
 }

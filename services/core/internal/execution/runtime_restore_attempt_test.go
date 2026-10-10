@@ -156,6 +156,14 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			hints := 0
+			r.hintDestination = func(id string) {
+				hints++
+				committed, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+				if err != nil || id != targetNode || committed.NodeID != id || committed.ID != owner.ID {
+					t.Fatal("hint preceded durable route or targeted wrong node", committed, err)
+				}
+			}
 			if err = r.observe(t.Context(), source); err != nil {
 				t.Fatal(err)
 			}
@@ -165,6 +173,9 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 			}
 			if moved.NodeID != targetNode || moved.ID != owner.ID || moved.DeviceID != owner.DeviceID || provider.derived != 0 || len(provider.requests) != 0 || provider.kills != 0 || provider.snapshots != 0 {
 				t.Fatal("source lane executed target effects or lost identity", moved)
+			}
+			if hints != 1 {
+				t.Fatalf("expected one committed handoff hint, got %d", hints)
 			}
 			// Simulate the independently scheduled target lane after the durable handoff.
 			r.nodeID = targetNode

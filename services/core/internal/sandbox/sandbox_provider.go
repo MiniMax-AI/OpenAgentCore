@@ -178,7 +178,7 @@ type ComputeState struct {
 	// and capture obligations have settled, so another node can own restoration.
 	SourceStopped bool
 	// RestoreAttemptClosed echoes the exact Resume OperationID only after a
-	// never-admitted attempt is durably closed against late execution.
+	// never-dispatched attempt is durably closed against late native execution.
 	RestoreAttemptClosed string
 }
 
