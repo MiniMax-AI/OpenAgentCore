@@ -2,6 +2,7 @@ package proto
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -50,6 +51,10 @@ type PromptRequestPayload struct {
 	DisableExecutionEnvironment  bool           `json:"disable_execution_environment,omitempty"`
 	DisableSubagents             bool           `json:"disable_subagents,omitempty"`
 }
+
+// CancellationConfirmationTimeout bounds native settlement and cancellation receipt waits.
+// An earlier caller or transport cancellation still wins; expiry is not confirmation.
+const CancellationConfirmationTimeout = 30 * time.Second
 
 // PromptCancelPayload optionally requests an application receipt; identity is on Envelope.ID.
 type PromptCancelPayload struct {

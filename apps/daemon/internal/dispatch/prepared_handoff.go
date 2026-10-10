@@ -160,7 +160,7 @@ func (r *Router) runPreparedRelease(state *sessionState, handoff *preparedHandof
 		outcome = &proto.DonePayload{}
 	}
 	if turn != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), preparedCancelTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), proto.CancellationConfirmationTimeout)
 		cancelDone := make(chan error, 1)
 		settled := make(chan struct{})
 		go func() {

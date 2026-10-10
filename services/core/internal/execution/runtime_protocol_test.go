@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Public Turn failure can describe lost orchestration, independently of native
@@ -51,4 +54,23 @@ func TestRuntimeProtocolUnknownEffectRetainsObservationFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRuntimeProtocolDoneWaitsForDelayedCancellationReceipt(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		result := Result{Done: proto.DonePayload{Usage: proto.Usage{InputTokens: 7}}}
+		j := journal{writer: &recoveringWriter{}, next: 1}
+		replies := make(chan cancellationResult, 1)
+		go func() {
+			time.Sleep(17 * time.Second)
+			replies <- cancellationResult{ack: proto.InteractionDecisionAckPayload{Applied: true, Outcome: &proto.DonePayload{Usage: proto.Usage{InputTokens: 9}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native"}}}}
+		}()
+		started := time.Now()
+		if status := finishDelivery(t.Context(), &j, &result, replies, false, nil); status != sessions.TurnCancelled {
+			t.Fatal(status, result)
+		}
+		if time.Since(started) != 17*time.Second || result.Done.Usage.InputTokens != 9 || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native" {
+			t.Fatalf("late receipt lost authority: %+v", result)
+		}
+	})
 }

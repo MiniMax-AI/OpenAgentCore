@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: f98c9ba9ff366f46dc2cb567c4b5e6a4f3538f59b769c7554bac40a2fa1160e3
+source_hash: d3a764e466f1a85db7218a40ba621d1ee1f47751e7ef4e4e0a1ed507cf7c4b2e
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、支持声明和验收。
@@ -120,7 +120,7 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 - 取消 stdio MCP 调用时，应在原生 abort 结束本地请求之前记录其已声明服务，保留该 Turn 取消期间准入的调用，在原生 Turn 排空后以这些服务标签调用 `ViewSession.StopMCP`。Host 终止选中的服务及其全部后代，包括这些服务先前产生的后台工作，并通过 `ScopeClosed` 确认各个旧 Process 作用域已结束。该操作期间阻止对应别名的新启动；未确认的终止保留所有权，并继续阻止这些别名的新启动。其他 MCP 服务与 workspace 保留。HTTP MCP 不属于此操作。Stdio MCP 准入要求 Process 服务具备已委派的 cgroup v2 作用域；缺少该能力的节点或容器返回 typed unsupported。
 - 作用域终止得到确认后，应确认选中的旧 MCP client 已无法复用，且后续调用会通过维护中的原生 owner 创建新连接，之后才能声明 Executor 可复用。本地 MCP 取消错误、通知、进程 leader 退出或 attachment 关闭确认都不能证明远端作用域已终止。重复或迟到的取消只等待原 Turn 已记录的目标和结果，不能重新选择后继 Turn 的服务。
 
-**Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的 64 帧通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入和函数准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算等待时间为十秒，回执发送预算为五秒；超时不能证明已达到静默状态。
+**Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的 64 帧通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入和函数准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算与取消回执等待遵循 [Core–Runtime 取消预算](../../../docs/zh/runtime-protocol.md#active-input-receipts)；回执发送预算为五秒；超时不能证明已达到静默状态。
 
 ## 事件、输入和可选能力 {#events-inputs-and-optional-capabilities}
 

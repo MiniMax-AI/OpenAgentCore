@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 5003cac2a7dd5d1926c8004a400a12cb947070581351dc45b9f2f7b7323dd726
+source_hash: 9ca34714c8bdfc64a484f9f81b92eb5ca05a08c63da55ac5ddb85f1c0b4e85b9
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -150,7 +150,7 @@ Core 通过 `prompt_steer` 交付活动输入，每个 Run 一次交付一个输
 | 原生接受 | `accepted` 在 Turn 生命周期内到达，不自动重新交付 |
 | Done | Runtime 在原生 Turn 结算完成、且正在处理的输入的回执发送结束后才发送 `done`；该输入受原生写入与回执发送预算限制 |
 
-`written` 和发送失败都不会推进 Core 的 input cursor。取消发出后，即使输入先变为未知，终结结果也由取消回执负责；15 秒内没有取消确认时，Core 记录 `cancel_unconfirmed`。未发出 `done` 时，取消回执携带已停止 Turn 的已确认 continuity snapshot。
+`written` 和发送失败都不会推进 Core 的 input cursor。取消发出后，即使输入先变为未知，终结结果也由取消回执负责；有界等待内没有取消确认时，Core 记录 `cancel_unconfirmed`。`CancellationConfirmationTimeout` 为原生取消与结算、Runtime 回执等待以及 Core 的取消交换与监控统一规定 30 秒上限。各项等待从对应操作开始时计时；更早的调用方取消或传输丢失仍优先生效，已确认的结果或失败立即返回。恰好在期限到达时产生的结果经过传输后仍可能无法确认。函数结果确认仍限制为 15 秒，Executor 资源关闭仍限制为 10 秒；资源回收或超时均不能证明 Turn 已结算。未发出 `done` 时，取消回执携带已停止 Turn 的已确认 continuity snapshot。
 
 ## 每类确认所证明的事实 {#what-each-acknowledgement-proves}
 

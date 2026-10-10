@@ -7,11 +7,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-const preparedCancelTimeout = 10 * time.Second
-
 func (r *Router) sendPreparedCancellation(state *sessionState, handoff *preparedHandoff, release *preparedRelease, attempt *preparedReleaseAttempt, env proto.Envelope, deliveryID string) {
 	defer r.shutdownWG.Done()
-	timer := time.NewTimer(preparedCancelTimeout)
+	timer := time.NewTimer(proto.CancellationConfirmationTimeout)
 	defer timer.Stop()
 	ack := proto.InteractionDecisionAckPayload{ErrorCode: "cancel_timeout"}
 	select {
