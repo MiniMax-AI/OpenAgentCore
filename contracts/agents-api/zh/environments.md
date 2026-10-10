@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: ac67b8c7a651bae18588cd5c845b40ab4d9c89382ae9f2599a039a27f300c1c2
+source_hash: 48b9d8679a983adc5eb9164c9a94e1137bf75800fbb1a0f81a0ae1b3cfccdafb
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -93,6 +93,8 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 ## 输入接纳 {#input-admission}
 
 Session 输入通过 `POST /agents/sessions/{id}/events` 以每次 1–64 个事件的有序批次提交。对于带 Environment 的 Session，Core 会将尚不能启动的输入预留，直到 Environment 完成连接和准备。
+
+有效的节点模式创建可以在提交后等待计算容量。初始输入在等待期间仍使用同一 reservation 和期限；无输入创建也会请求 Environment 准备。[Placement 与代次选择](./sandbox-deployment.md#generation-ownership-and-rollout) 定义调度规则。
 
 ### 初始输入 {#initial-input}
 

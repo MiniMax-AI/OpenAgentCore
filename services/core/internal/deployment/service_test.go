@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,7 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 	if tx != nil {
 		storage.withDeployment = func(_ context.Context, apply func(DeploymentTx) error) error { return apply(tx) }
 	}
-	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL), storage)
+	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL), storage, engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,10 +90,10 @@ func TestNewServiceAndOperationsRejectNilDependencies(t *testing.T) {
 		}
 	}
 	service := newService(t, storage, reader, testPublicURL)
-	if result, err := NewExecutionOperations(nil, &fakeExecutionStorage{t: t}); result != nil || err == nil {
+	if result, err := NewExecutionOperations(nil, &fakeExecutionStorage{t: t}, engine.Catalog{}); result != nil || err == nil {
 		t.Errorf("NewExecutionOperations without the service = %v, %v", result, err)
 	}
-	if result, err := NewExecutionOperations(service, nil); result != nil || err == nil {
+	if result, err := NewExecutionOperations(service, nil, engine.Catalog{}); result != nil || err == nil {
 		t.Errorf("NewExecutionOperations without storage = %v, %v", result, err)
 	}
 }

@@ -28,10 +28,10 @@ func lifecycleTestNode(t *testing.T, s *Store) string {
 	onlineManagerNode(t, s, id)
 	return id
 }
-func lifecycleTestSession(t *testing.T, s *Store, node string) (string, sessions.Session) {
+func lifecycleTestSession(t *testing.T, s, w *Store, node string) (string, sessions.Session) {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node)
+	session, err := createSessionOnNode(t, s, w, tenant, managerSessionInput(uuid.NewString()), node)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func lifecycleTestSession(t *testing.T, s *Store, node string) (string, sessions
 }
 func lifecycleTestAllocation(t *testing.T, s, w *Store, d managerNode, node string) deployment.Allocation {
 	t.Helper()
-	tenant, session := lifecycleTestSession(t, s, node)
+	tenant, session := lifecycleTestSession(t, s, w, node)
 	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
@@ -53,11 +53,11 @@ func TestRuntimeLifecycleNodePagesAreIndependent(t *testing.T) {
 	var allocated, pending []string
 	for range 34 {
 		allocated = append(allocated, lifecycleTestAllocation(t, s, w, d, d.NodeID).ID)
-		_, session := lifecycleTestSession(t, s, d.NodeID)
+		_, session := lifecycleTestSession(t, s, w, d.NodeID)
 		pending = append(pending, session.Environment.ID)
 	}
 	second := lifecycleTestAllocation(t, s, w, d, other)
-	_, secondPending := lifecycleTestSession(t, s, other)
+	_, secondPending := lifecycleTestSession(t, s, w, other)
 	// Offline and unresolved cleanup remain discoverable without changing placement.
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.NodeID); err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestRuntimeLifecycleNodePagesAreIndependent(t *testing.T) {
 func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	s, w, d := managerFixture(t, 100, 100)
 	other := lifecycleTestNode(t, s)
-	tenant, session := lifecycleTestSession(t, s, other)
+	tenant, session := lifecycleTestSession(t, s, w, other)
 	environment := session.Environment.ID
 	checkRoute := func(want string, wantErr error) {
 		t.Helper()
@@ -190,7 +190,7 @@ func TestRuntimeLifecycleNodeRejectsMissingOrReleasedPlacement(t *testing.T) {
 	for _, mutation := range []string{"DELETE FROM runtime_placements WHERE environment_id=$1", "UPDATE runtime_placements SET released_at=clock_timestamp() WHERE environment_id=$1"} {
 		t.Run(mutation[:6], func(t *testing.T) {
 			s, w, d := managerFixture(t, 4, 4)
-			tenant, session := lifecycleTestSession(t, s, d.NodeID)
+			tenant, session := lifecycleTestSession(t, s, w, d.NodeID)
 			if _, err := s.pool.Exec(t.Context(), mutation, session.Environment.ID); err != nil {
 				t.Fatal(err)
 			}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestSchedulerWakeCoalescesConcurrentAdmissionsAndKeepsNextHint(t *testing.T) {
-	worker := &Worker{scheduleWake: make(chan struct{}, 1)}
+	worker := &Worker{scheduleWake: make(chan struct{}, 1), runtimes: &runtimeManager{placementWake: make(chan struct{}, 1)}}
 	var callers sync.WaitGroup
 	for range 100 {
 		callers.Go(func() {
@@ -19,9 +19,18 @@ func TestSchedulerWakeCoalescesConcurrentAdmissionsAndKeepsNextHint(t *testing.T
 	if got := len(worker.scheduleWake); got != 1 {
 		t.Fatalf("queued wakeups = %d, want one", got)
 	}
+	if got := len(worker.runtimes.placementWake); got != 1 {
+		t.Fatalf("placement wakeups = %d, want one", got)
+	}
+	<-worker.runtimes.placementWake
 	<-worker.scheduleWake
 	// A commit while a previous scan is running needs a subsequent scan.
 	worker.wakeScheduler()
+	select {
+	case <-worker.runtimes.placementWake:
+	default:
+		t.Fatal("admission during placement scan lost its wakeup")
+	}
 	select {
 	case <-worker.scheduleWake:
 	default:

@@ -132,7 +132,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 			changes, deployments := deploymentExecution(t, w), deploymentService(t, s)
 			node := specificationNode(t, s, view)
 			tenant := uuid.NewString()
-			session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node.NodeID)
+			session, err := createSessionOnNode(t, s, w, tenant, managerSessionInput(uuid.NewString()), node.NodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -310,24 +310,35 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 // A node keeps the public URL it enrolled with. After the public URL changes it
 // receives no new sandboxes until it is re-added.
 func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
-	s, _, view, _ := webSpecificationFixture(t, "docker")
+	s, w, view, _ := webSpecificationFixture(t, "docker")
 	s.SetPlacement(placementRules(t, "https://old.example"))
+	w.SetPlacement(s.placement)
 	node := specificationNode(t, s, view)
 	nodes, err := deploymentService(t, s).ListNodes(t.Context())
 	if err != nil || len(nodes) != 1 || nodes[0].ID != node.NodeID || nodes[0].CoreURL != "https://old.example" {
 		t.Fatal("enrollment did not record the node's address", nodes, err)
 	}
 	s.SetPlacement(placementRules(t, "https://new.example"))
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
+	w.SetPlacement(s.placement)
+	queued, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("placed a new sandbox on a node bound to the old address", err)
 	}
 	bindings, err := deploymentService(t, s).AddressBindings(t.Context())
-	if err != nil || bindings.Nodes != 1 || bindings.NodesOnOtherAddress != 1 || bindings.HostedSandboxes != 0 {
+	if err != nil || bindings.Nodes != 1 || bindings.NodesOnOtherAddress != 1 || bindings.HostedSandboxes != 1 {
 		t.Fatal(bindings, err)
 	}
+	var placements int
+	if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_placements WHERE environment_id=$1", queued.Environment.ID).Scan(&placements); err != nil || placements != 0 {
+		t.Fatal("waiting Session acquired an incompatible placement", placements, err)
+	}
 	s.SetPlacement(placementRules(t, "https://old.example"))
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
-		t.Fatal("node on the current address rejected placement", err)
+	w.SetPlacement(s.placement)
+	if err := reserveSessionPlacement(t, s, w, queued); err != nil {
+		t.Fatal("node on current address rejected waiting placement", err)
 	}
 }
 

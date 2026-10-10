@@ -11,11 +11,11 @@ RETURNING *;
 
 -- name: TouchRuntimeActivity :exec
 UPDATE runtime_allocations a
-SET compute_activity_at = clock_timestamp(), compute_wake_requested = true
+SET compute_activity_at = CASE WHEN a.state = 'released' AND a.compute_wake_requested THEN a.compute_activity_at ELSE clock_timestamp() END, compute_wake_requested = true
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE a.environment_id = e.id AND s.tenant_id = sqlc.arg(tenant_id)
     AND e.id = sqlc.arg(environment_id) AND s.deleted_at IS NULL
-    AND a.state = 'running' AND a.compute_phase <> 'disabled';
+    AND ((a.state = 'running' AND a.compute_phase <> 'disabled') OR a.id = sqlc.narg(retained_id)::uuid);
 
 -- name: ClearRuntimeWake :exec
 UPDATE runtime_allocations

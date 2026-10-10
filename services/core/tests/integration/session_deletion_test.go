@@ -387,6 +387,9 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
+		t.Fatal(err)
+	}
 	type state struct {
 		deleted, released  pgtype.Timestamptz
 		retained, reserved int64

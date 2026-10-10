@@ -14,6 +14,8 @@ import (
 
 // LockedSession is what locking a Session row shows.
 type LockedSession struct {
+	// Engine is the immutable Harness selected when the Session was created.
+	Engine string
 	// Deleted reports that the Session was publicly deleted. Its row stays so
 	// that remaining execution can settle.
 	Deleted bool

@@ -139,7 +139,7 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 	}
 	input.SupportsRetainedNativeHistory = profile.RetainedNativeHistory.IsSupported()
 	creation, err := w.dispatcher.Sessions.CreateSession(ctx, tenant, input)
-	if err == nil && len(input.InitialInputs) > 0 {
+	if err == nil {
 		w.wakeScheduler()
 	}
 	return creation, err

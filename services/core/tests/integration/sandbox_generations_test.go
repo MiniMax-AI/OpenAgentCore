@@ -110,6 +110,9 @@ func TestPendingPlacementGenerationSurvivesRepeatedUpdates(t *testing.T) {
 	s, w, view, _ := webSpecificationFixture(t, "docker")
 	node := specificationNode(t, s, view)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
+		t.Fatal(err)
+	}
 	for generation := uint64(1); generation <= 2; generation++ {
 		tx, err := s.pool.Begin(t.Context())
 		if err != nil {

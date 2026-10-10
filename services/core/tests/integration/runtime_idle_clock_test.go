@@ -29,6 +29,9 @@ func managedIdleClockFixture(t *testing.T) (*Store, *Store, deployment.Allocatio
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
+		t.Fatal(err)
+	}
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +71,7 @@ func verifyManagedIdleClock(t *testing.T, s, w *Store, owner deployment.Allocati
 		t.Fatal("idle clock did not use committed terminal ingestion", activity, before, after, err)
 	}
 	until := runtimeDatabaseTime(t, s).Add(time.Hour)
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("new completion admitted premature idle", err)
 	}
 	// Advance only the internal activity age; the remote public timestamp remains unchanged.

@@ -14,7 +14,8 @@ func ObserveExecutionLeaseRelease(t *testing.T, pool *pgxpool.Pool) func() {
 	t.Helper()
 	// Match the single-bigint key in queries/scheduling.sql, scoped to this DB.
 	const lock = `locktype='advisory' AND granted AND objsubid=1
-		AND classid::bigint * 4294967296 + objid::bigint = 706172736172
+		AND classid::bigint = (706172736172::bigint >> 32)
+        AND objid::bigint = (706172736172::bigint & 4294967295)
 		AND database=(SELECT oid FROM pg_database WHERE datname=current_database())`
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()

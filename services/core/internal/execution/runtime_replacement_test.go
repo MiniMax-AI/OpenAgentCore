@@ -173,9 +173,9 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				t.Fatal(owner, err)
 			}
 			r.config.Mode = string(sandbox.DeploymentNodes)
-			manager := &runtimeManager{ctx: t.Context(), config: r.config, setupGate: make(chan struct{}, 1), nodes: make(map[string]*runtimeNode), workspaces: r.workspaces, sessions: r.sessions, sessionExecution: r.sessionExecution, deployment: r.deployment, deploymentService: r.deployments, deploymentReader: r.reader, lease: r.lease, registry: r.registry}
+			manager := &runtimeManager{ctx: t.Context(), config: r.config, setupGate: make(chan struct{}, 1), inventory: make(chan struct{}, 1), nodes: make(map[string]*runtimeNode), workspaces: r.workspaces, sessions: r.sessions, sessionExecution: r.sessionExecution, deployment: r.deployment, deploymentService: r.deployments, deploymentReader: r.reader, lease: r.lease, registry: r.registry}
 			// Neither retained storage nor an old receipt is demand by itself.
-			if err = manager.reserveReplacementPlacements(t.Context()); err != nil {
+			if err = manager.reservePlacements(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			candidates, err := r.reader.UnallocatedEnvironments(t.Context(), r.nodeID, "")
@@ -187,7 +187,7 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err = manager.reserveReplacementPlacements(t.Context()); err != nil {
+				if err = manager.reservePlacements(t.Context()); err != nil {
 					t.Fatal(err)
 				}
 				if err = r.provisionPending(t.Context()); err != nil {

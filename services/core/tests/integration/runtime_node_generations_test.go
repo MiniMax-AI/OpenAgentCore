@@ -35,8 +35,11 @@ func generationHeartbeat(t *testing.T, s *Store, node deployment.Enrollment, con
 	}
 }
 
-func placedGeneration(t *testing.T, s *Store, session sessions.Session) (string, int64) {
+func placedGeneration(t *testing.T, s, w *Store, session sessions.Session) (string, int64) {
 	t.Helper()
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
+		t.Fatal(err)
+	}
 	var node string
 	var generation int64
 	if err := s.pool.QueryRow(t.Context(), "SELECT node_id::text,deployment_generation FROM runtime_placements WHERE environment_id=$1", session.Environment.ID).Scan(&node, &generation); err != nil {
@@ -59,7 +62,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			pendingNode, pendingGeneration := placedGeneration(t, s, pending)
+			pendingNode, pendingGeneration := placedGeneration(t, s, w, pending)
 			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2}))
 			if err != nil {
 				t.Fatal(err)
@@ -76,7 +79,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 			if err != nil {
 				t.Fatal("target preparation suppressed fallback", err)
 			}
-			if _, g := placedGeneration(t, s, fallback); g != 1 {
+			if _, g := placedGeneration(t, s, w, fallback); g != 1 {
 				t.Fatal(g)
 			}
 			generationHeartbeat(t, s, a, ca, second, "ready")
@@ -84,7 +87,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n, g := placedGeneration(t, s, newest); n != a.NodeID || g != 2 {
+			if n, g := placedGeneration(t, s, w, newest); n != a.NodeID || g != 2 {
 				t.Fatal(n, g)
 			}
 			// Capacity remains shared across generations. A full newest pin cannot hide B.
@@ -95,7 +98,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if n, g := placedGeneration(t, s, old); n != b.NodeID || g != 1 {
+			if n, g := placedGeneration(t, s, w, old); n != b.NodeID || g != 1 {
 				t.Fatal("newest full hid older free node", n, g)
 			}
 			third, _ := changeNodeTarget(t, w, second, input)
@@ -163,7 +166,11 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 	if err != nil || nodes[0].ProviderReady || *nodes[0].Rollout.ReadyGeneration != 1 {
 		t.Fatal("reconnect inherited readiness or lost pin", nodes, err)
 	}
-	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
+	queued, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("unconfirmed connection admitted", err)
 	}
 	if err = service.Heartbeat(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
@@ -175,7 +182,7 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 }
 
 func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testing.T) {
-	s, _, first, _ := webSpecificationFixture(t, "docker")
+	s, w, first, _ := webSpecificationFixture(t, "docker")
 	node := specificationNode(t, s, first)
 	connection := uuid.NewString()
 	if err := deploymentService(t, s).ConnectNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {
@@ -183,15 +190,23 @@ func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testin
 	}
 	generationHeartbeat(t, s, node, connection, first, "preparing")
 	tenant := uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodesPreparing) {
+	queued, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodesPreparing) {
 		t.Fatal("actual preparation was not identified", err)
 	}
 	var sessions, placements int
-	if err := s.pool.QueryRow(t.Context(), "SELECT (SELECT count(*) FROM sessions WHERE tenant_id=$1),(SELECT count(*) FROM runtime_placements)", tenant).Scan(&sessions, &placements); err != nil || sessions != 0 || placements != 0 {
-		t.Fatal("refusal left provisional ownership", sessions, placements, err)
+	if err := s.pool.QueryRow(t.Context(), "SELECT (SELECT count(*) FROM sessions WHERE tenant_id=$1),(SELECT count(*) FROM runtime_placements)", tenant).Scan(&sessions, &placements); err != nil || sessions != 1 || placements != 0 {
+		t.Fatal("waiting request consumed provisional compute", sessions, placements, err)
 	}
 	generationHeartbeat(t, s, node, connection, first, "failed")
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
+	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("failed preparation advertised active work", err)
+	}
+	generationHeartbeat(t, s, node, connection, first, "ready")
+	if err := reserveSessionPlacement(t, s, w, queued); err != nil {
+		t.Fatal("ready node did not admit waiting Session", err)
 	}
 }

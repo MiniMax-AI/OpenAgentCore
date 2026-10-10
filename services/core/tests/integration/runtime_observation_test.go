@@ -16,6 +16,9 @@ func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := reserveSessionPlacement(t, s, w, session); err != nil {
+		t.Fatal(err)
+	}
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)

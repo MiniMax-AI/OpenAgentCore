@@ -69,6 +69,15 @@ func managedArchiveSession(t *testing.T, s *Store, input sessions.CreateSession)
 
 func archiveAllocation(t *testing.T, w *Store, tenant string, session sessions.Session, installation string) deployment.Allocation {
 	t.Helper()
+	setup, err := deploymentService(t, w).Setup(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if setup.Mode == "nodes" {
+		if err := reserveSessionPlacement(t, w, w, session); err != nil {
+			t.Fatal(err)
+		}
+	}
 	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)

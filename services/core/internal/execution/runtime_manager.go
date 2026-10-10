@@ -21,7 +21,8 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 type runtimeManager struct {
 	workspaces          *workspaces.ExecutionOperations
 	workspaceCursor     string
-	replacementCursor   string
+	placementCursor     deployment.PlacementDemandCursor
+	placementWake       chan struct{}
 	workspaceGate       chan struct{}
 	sessions            sessions.Reader
 	sessionExecution    *sessions.ExecutionOperations
@@ -142,7 +143,7 @@ func (m *runtimeManager) syncNodes(ctx context.Context) ([]*runtimeNode, error) 
 		return nil, m.ctx.Err()
 	}
 	defer func() { <-m.inventory }()
-	if err := m.reserveReplacementPlacements(ctx); err != nil {
+	if err := m.reservePlacements(ctx); err != nil {
 		return nil, err
 	}
 	// A direct caller may add a newly registered node during the query. Only
@@ -272,6 +273,10 @@ func (m *runtimeManager) run(ctx context.Context) error {
 			return m.ctx.Err()
 		case err := <-m.failed:
 			return err
+		case <-m.placementWake:
+			if _, err := m.syncNodes(ctx); err != nil && !errors.Is(err, errRuntimeTransition) {
+				return err
+			}
 		case <-ticker.C:
 			if err := m.deployment.CollectGenerations(ctx); err != nil {
 				return err

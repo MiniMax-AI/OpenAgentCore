@@ -24,7 +24,7 @@ func LockSession(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UU
 	if err != nil {
 		return sessions.LockedSession{}, err
 	}
-	return sessions.LockedSession{Deleted: row.DeletedAt.Valid}, nil
+	return sessions.LockedSession{Deleted: row.DeletedAt.Valid, Engine: row.Engine}, nil
 }
 
 // WithSession runs one Session transaction on runner: it locks the tenant's
