@@ -29,7 +29,11 @@ func changeNodeTarget(t *testing.T, w *Store, view deployment.View, input sandbo
 
 func generationHeartbeat(t *testing.T, s *Store, node deployment.Enrollment, connection string, view deployment.View, state string) {
 	t.Helper()
-	err := deploymentService(t, s).HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}})
+	status := sandbox.GenerationStatus{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}
+	if state == "ready" && view.Provider == "microsandbox" {
+		status.Checkpoint = &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
+	}
+	err := deploymentService(t, s).HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{status})
 	if err != nil {
 		t.Fatal(err)
 	}
