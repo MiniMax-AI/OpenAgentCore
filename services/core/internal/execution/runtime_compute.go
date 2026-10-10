@@ -45,7 +45,8 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	}
 	return r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
-func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) error {
+func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
 	if err := providercontract.Require(p, "Initial"); err != nil {
 		return err
@@ -65,7 +66,8 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.A
 	return err
 }
 
-func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) error {
+func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
 	if err := providercontract.Require(p, "Initial"); err != nil {
 		return err
@@ -105,7 +107,8 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	}
 }
 
-func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
 	if err != nil {
 		return err
@@ -141,6 +144,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	if err != nil {
 		return err
 	}
+	owner = next
 	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentQuiesce, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID})
 	if err != nil {
 		return err
@@ -175,7 +179,8 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	return r.captureCompute(ctx, p, suspending, state, false)
 }
 
-func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Snapshot: state.Snapshot, ObserveOnly: observeOnly})
 	if err != nil {
 		return err
@@ -201,6 +206,7 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 	if err != nil {
 		return err
 	}
+	owner = next
 	if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
 		return err
 	}
@@ -208,7 +214,8 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 	return err
 }
 
-func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	activity, err := r.reader.Activity(ctx, owner.ID)
 	if err != nil {
 		return err
@@ -231,7 +238,8 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
-func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	if state.Target == nil || state.Snapshot == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
