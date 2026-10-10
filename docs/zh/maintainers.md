@@ -61,7 +61,7 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 
 `make build-core-distribution` 会构建以下全部内容。也可以单独构建其中一项，以测试某个 Harness 镜像或辅助程序。所有命令都必须从仓库根目录运行；默认输出位于 `${OAC_DEV_HOME:-$HOME/.oac}/build` 下。
 
-三个维护的 Runtime 镜像共用一个构建期调整：固定 Debian 登录 profile 会保留继承且已导出的 `PATH`，未设置时仍使用 Debian 默认值。这样，登录和非登录工具都能使用 Runtime 初始化的包路径与用户路径，无需另一份包路径设置。组合镜像继承同一 profile。上游 profile 结构变化会使构建失败以便审查；自定义 shell 启动文件仍可以显式更改 `PATH`。
+三个维护的 Runtime 镜像共用一个构建期调整：固定 Debian 登录 profile 会保留继承且已导出的 `PATH`，未设置 `PATH` 时仍使用 Debian 默认值。这样，登录和非登录工具都能使用 Runtime 初始化的包路径与用户路径，无需另一份包路径设置。组合镜像继承同一 profile。上游 profile 结构变化会使构建失败以便审查；自定义 shell 启动文件仍可以显式更改 `PATH`。
 
 **Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@0.153.4-linux-x64`（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
 
