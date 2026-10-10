@@ -24,6 +24,9 @@ docker compose -f ~/.oac/core/compose.yaml ps
 
 The examples use the default installation directory. On Windows, invoke the management command with `& "$HOME/.oac/core/oac.exe"` followed by the same arguments. For a custom installation directory, replace the path in each command.
 
+After local credentials and enrollment are resolved, Runtime Harness discovery and the authenticated bootstrap HTTP request run concurrently. Both must succeed before the Runtime opens its connection or publishes capabilities. Failure cancels the sibling operation and waits for cleanup. The executor remains owned by the connection lifetime. Runtime startup changes require a rebuilt, qualified Runtime template.
+
+
 ## Service health
 
 Use these observations for different questions:
@@ -187,3 +190,7 @@ Installation and mutating `oac` commands share the [installation lock](../config
 Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It forwards `/v1` and `/api/v1` to Core unchanged, with the caller's own credential, serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM access. Machine routes under `/api/v1` use their own enrollment and connection credentials. No service receives a Docker socket.
 
 Sandboxes are the isolation boundary ([Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](./nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](./nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.
+
+## Runtime availability probes
+
+Codex CLI availability emits `runtime version probe` records for `process_spawn` and `process_wait`, with duration and outcome only. The wait interval includes executable loading and the version command; neither interval is model execution.

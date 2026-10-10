@@ -70,7 +70,7 @@ func runConnect(ctx *runContext, args []string) error {
 		if *remote != "" || *environment != "" || *credentialFile != "" || fs.NArg() != 0 {
 			return errors.New("connect: bootstrap input cannot be combined with enrollment options")
 		}
-		bootstrapped, err = bootstrapProfile(*bootstrapFile)
+		bootstrapped, err = bootstrapProfile(*bootstrapFile, ctx)
 		if err != nil {
 			return err
 		}
@@ -98,13 +98,6 @@ func runConnect(ctx *runContext, args []string) error {
 		return spawnBackground(context.Background(), ctx, *profile, os.Args)
 	}
 
-	// Self-check before loading credentials so a machine with no
-	// supported agent CLI fails fast.
-	agentCLIs, err := preflightAgentCLIs(context.Background(), ctx, *profile)
-	if err != nil {
-		return err
-	}
-
 	var prof auth.Profile
 	if bootstrapped != nil {
 		prof = *bootstrapped
@@ -115,7 +108,7 @@ func runConnect(ctx *runContext, args []string) error {
 		}
 	}
 
-	return mainLoop(ctx, *profile, prof, agentCLIs)
+	return mainLoop(ctx, *profile, prof)
 }
 
 // spawnBackground forks the daemon into the background. Parent
@@ -186,11 +179,16 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string, argv [
 // background process. SIGINT / SIGTERM cancels the root context, which
 // unblocks the read pump and any in-flight Send so the daemon exits
 // without orphaning agent subprocesses.
-func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery) error {
-	return mainLoopRemote(context.Background(), rc, profile, prof, agentCLIs, "")
+func mainLoop(rc *runContext, profile string, prof auth.Profile) error {
+	return mainLoopRemote(context.Background(), rc, profile, prof, "")
 }
 
-func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery, remote string) error {
+func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof auth.Profile, remote string) error {
+	return mainLoopRemoteWithDiscovery(parent, rc, profile, prof, remote, func(ctx context.Context) (agentCLIDiscovery, error) {
+		return preflightAgentCLIs(ctx, rc, profile)
+	})
+}
+func mainLoopRemoteWithDiscovery(parent context.Context, rc *runContext, profile string, prof auth.Profile, remote string, discover func(context.Context) (agentCLIDiscovery, error)) error {
 	// Route through obs/log so daemon log lines pick up the same
 	// trace_id / span_id auto-injection as the server side — when the
 	// daemon adopts an envelope's trace, every log call under that ctx
@@ -205,18 +203,18 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	rootCtx, cancel := daemonize.NotifyContext(parent)
 	defer cancel()
 
-	bootCtx, bootCancel := context.WithTimeout(rootCtx, bootstrapTimeout)
-	var boot *transport.BootstrapResponse
-	var err error
-	if remote == "" {
-		boot, err = transport.Bootstrap(bootCtx, prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
-	} else {
-		boot, err = environmentBootstrap(bootCtx, prof, remote)
-	}
-	bootCancel()
+	boot, agentCLIs, err := prepareConnection(rootCtx, discover, func(ctx context.Context) (*transport.BootstrapResponse, error) {
+		bootCtx, stop := context.WithTimeout(ctx, bootstrapTimeout)
+		defer stop()
+		if remote != "" {
+			return environmentBootstrap(bootCtx, prof, remote)
+		}
+		return transport.Bootstrap(bootCtx, prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
+	})
 	if err != nil {
-		return fmt.Errorf("connect: bootstrap: %w", err)
+		return err
 	}
+
 	wsURL, err := transport.DeriveWSURL(*boot, prof.ServerURL)
 	if err != nil {
 		return fmt.Errorf("connect: derive ws url: %w", err)

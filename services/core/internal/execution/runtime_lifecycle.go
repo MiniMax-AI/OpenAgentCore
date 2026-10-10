@@ -202,6 +202,10 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		}
 	}
 	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
+	session, err := r.sessions.GetSession(ctx, tenant, environmentValue.SessionID)
+	if err != nil {
+		return deployment.Allocation{}, err
+	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return deployment.Allocation{}, err
@@ -222,7 +226,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	}
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
-		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
+		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token, Harness: session.Engine, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
 	})
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
 		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)

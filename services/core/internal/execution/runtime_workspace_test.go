@@ -16,6 +16,10 @@ import (
 
 type workspaceEnvironmentReader struct{ sessions.Reader }
 
+func (workspaceEnvironmentReader) GetSession(context.Context, string, string) (sessions.Session, error) {
+	return sessions.Session{Engine: "codex"}, nil
+}
+
 func (workspaceEnvironmentReader) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
 	return sessions.Environment{Configuration: []byte(`{"type":"openai_hosted"}`)}, nil
 }

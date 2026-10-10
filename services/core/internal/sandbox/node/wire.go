@@ -11,6 +11,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
@@ -18,7 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 5
+const ProtocolVersion = 6
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -254,7 +255,7 @@ func (q request) validate() error {
 			return nil
 		}
 	case "create":
-		if count == 1 && q.Bootstrap != nil && q.Bootstrap.Reference == q.Reference && sandbox.ValidateWorkspaceBinding(q.Reference, q.Bootstrap.Workspace) == nil {
+		if count == 1 && q.Bootstrap != nil && q.Bootstrap.Reference == q.Reference && runtimebootstrap.ValidHarness(q.Bootstrap.Harness) && sandbox.ValidateWorkspaceBinding(q.Reference, q.Bootstrap.Workspace) == nil {
 			return nil
 		}
 	case "info", "renew", "kill", "initial":

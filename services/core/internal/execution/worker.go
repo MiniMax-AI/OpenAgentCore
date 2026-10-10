@@ -134,6 +134,9 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input session
 		return sessions.Creation{}, err
 	}
 	creation, err := w.dispatcher.Sessions.CreateSession(ctx, tenant, input)
+	if err == nil {
+		w.hintRuntimeWake(ctx, creation.Session)
+	}
 	if err == nil && len(input.InitialInputs) > 0 {
 		w.wakeScheduler()
 	}
@@ -264,6 +267,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			rescanOnCompletion = false
 		case <-w.scheduleWake:
 			rescanOnCompletion = true
+		case <-w.dispatcher.Registry.CapabilityHints():
+			rescanOnCompletion = true
 		case <-ticker.C:
 			maintenance = true
 		}
@@ -293,10 +298,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			w.observeSchedulerPoll(0, nil)
 			continue
 		}
-		if !maintenance {
-			schedule.nextEnvironmentScan = time.Time{}
-		}
-		work, err := schedule.selectWork(ctx, w, devices, active)
+		work, err := schedule.selectWork(ctx, w, devices, active, !maintenance)
 		w.observeSlots(len(active))
 		if err != nil {
 			w.observeSchedulerPoll(0, err)

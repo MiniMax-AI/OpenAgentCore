@@ -160,6 +160,8 @@ Node readiness binds to the exact generation, the current connection and the own
 
 ### Allocation lifecycle
 
+Core includes the owning Session’s immutable Harness in `Bootstrap.Harness`; every provider projects it into the [Runtime bootstrap](./runtime-bootstrap.md) without choosing an implementation.
+
 The allocation, its dedicated daemon credential digest and the exact Session binding commit atomically before `Create`, under the execution lease and the Session lock. Only a fresh allocation receipt permits `Create`; retries and a Core restart observe the same reference without replaying it or rotating the credential. An allocation is private compute ownership, separate from public Environment connection and native readiness; adapters qualify bootstrap completion, and Core never infers it from an engine or provider name.
 
 With a configured provider, the Worker scans committed pending hosted Environments that have no allocation, which covers idle Session creation and recovery after an interruption between commit and bootstrap; an existing allocation never re-enters that path. The scan is bounded and serialized by the lifecycle owner and needs no caller action. An initial reservation without a Turn leaves its Session idle, and a daemon connection is never treated as native readiness. The same scan publishes authenticated connection observations with durable generations, after verifying the exact Session and device binding and a settled bootstrap.
@@ -171,6 +173,8 @@ Terminal cleanup atomically revokes the device's authority, records the Environm
 ### Per-node lifecycle workers
 
 Each registered node has one serial lifecycle worker that owns its gate, allocation and pending cursors, connections and wake hints; E2B allocations share one serial lifecycle without a node. A thin coordinator discovers nodes and shuts workers down, and never holds its map mutex during database, provider or wait operations. Workers advance independently, so a stuck provider on one online node never stalls another: lifecycle concurrency is one operation per node and grows with the node count. Offline workers stay, so their retained resources remain observable after reconnection.
+
+After a hosted Environment commits, Core sends a bounded hint to its placement’s lifecycle worker. A committed pending input also sends a hint, recovering a missed creation notification. Hints use the existing serial gate, lease, capacity checks and one-shot allocation receipts; they do not provision inline in the admission handler. Each normal maintenance period permits at most one extra hinted scan, and periodic scans recover missed or coalesced hints. Existing allocation observations still precede pending provisioning, so a slow observation on the same node can delay a fresh Environment.
 
 Allocation scans filter by node before their 32-row page limit, and pending scans join the unreleased committed placement. Each node advances its own cursor, including past failed observations, and wraps once at the end. Direct provisioning resolves the tenant-scoped placement before entering that node's gate, and an existing allocation must agree with it; Core never chooses another node.
 

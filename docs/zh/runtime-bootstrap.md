@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: f7e9275feee79ac1fb1299227e148b85c26efc8b8af5ca0e8f498126c563d182
+source_hash: 73fb9968007f83d35f1e6fe185d9e376fa81fc7683fe822426b290632ca8de24
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动托管 Runtime。本文负责 Provider 到 Runtime 的启动输入。类型与验证器位于 [`internal/runtimebootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/runtimebootstrap/bootstrap.go)；Go provider 使用 [`runtime_bootstrap.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/runtime_bootstrap.go) 中的 `sandbox.Bootstrap.RuntimeConnection()` 构造输入，SDK helper 原样转发序列化对象。provider 不读取或写入 Runtime 的私有认证存储。
@@ -19,6 +19,7 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `version` | 精确的引导版本 `runtimebootstrap.Version` |
 | `core_url` | 以 `/api/v1` 结尾的 HTTP(S) 机器 API 基址，不含凭据、查询或片段 |
 | `device_id` | Core 签发的 daemon 身份的规范非零 UUID |
+| `harness` | 会话固定选择的 Harness 标识；托管 Runtime 只探测并注册此 Harness |
 | `credential` | Core 签发的非空 daemon 凭据，不含空白或 NUL |
 
 解码器拒绝未知、重复、缺失和大小写别名字段，拒绝其他版本及超过 `runtimebootstrap.MaxBytes`（16 KiB）的文档。错误不包含提交的值。文件缺失或格式错误时，daemon 在连接前失败。
@@ -28,6 +29,8 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 ## 职责与就绪状态 {#responsibilities-and-readiness}
 
 provider 创建账户、挂载和工作区，交付该文件，设置 Runtime 的资源与 Environment 绑定配置，然后以无特权 Runtime 账户启动 daemon。Docker 将文件写入 Runtime 拥有的 home volume；microsandbox 和 E2B 在启动同一命令之前交付文件。
+
+Core 从分配所属会话派生 `harness`。组合镜像可以包含多个 Harness，但托管 Runtime 只探测所选 Harness；未知、缺失或不可用的选择会失败，不探测其他 Harness。启动协议版本为 2，Core、提供商辅助程序和新启动的 Runtime 镜像需配套升级；已有分配保留原启动文件和 Runtime。自托管安装仍探测已安装的 Harness 集合。
 
 Runtime 验证输入，并负责认证与连接。启动成功仅证明交付完成：经过认证的连接、已准备的能力和执行就绪是 [Core–Runtime 协议](runtime-protocol.md) 下的独立观测；[Sandbox Provider 指南](sandbox-provider.md#four-distinct-readiness-facts) 列出各自证明的事实。
 

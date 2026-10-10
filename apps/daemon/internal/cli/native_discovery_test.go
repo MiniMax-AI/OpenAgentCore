@@ -73,3 +73,23 @@ func TestDiscoveryUnavailableAndCancelled(t *testing.T) {
 		t.Fatal("unconfigured adapter retained")
 	}
 }
+
+func TestSelectedHarnessUnavailableDoesNotProbeOthers(t *testing.T) {
+	declarations := append([]agent.Declaration(nil), harnessDeclarations...)
+	for i := range declarations {
+		declarations[i].Discover = func(_ context.Context, _ agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
+			if info.Kind != "codex" {
+				t.Fatalf("unselected Harness was probed: %s", info.Kind)
+			}
+			return &agent.Runtime{Info: info}
+		}
+	}
+	rc := &runContext{stdout: io.Discard, stderr: io.Discard, installedKinds: map[string]bool{"codex": true}}
+	if _, err := discoverAgentCLIs(t.Context(), rc, "default", declarations); err == nil {
+		t.Fatal("unavailable selection was accepted")
+	}
+	rc.installedKinds = map[string]bool{"unknown": true}
+	if _, err := discoverAgentCLIs(t.Context(), rc, "default", declarations); err == nil {
+		t.Fatal("unknown selection fell back")
+	}
+}

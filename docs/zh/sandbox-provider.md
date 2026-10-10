@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: ec6c807e262a37d2ecd456101dadf7ae4818f1bd711b4af5f08e27c9d1690d83
+source_hash: a69ba63ef2b5bd883e0a235807df9d270c23dab9b6df11cf6019534281ced8e9
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -162,6 +162,8 @@ Node readiness 绑定到精确 generation、当前连接和 owner epoch。持久
 
 ### Allocation 生命周期 {#allocation-lifecycle}
 
+Core 在 `Bootstrap.Harness` 中传递所属会话固定选择的 Harness；所有提供商都将其投影到 [Runtime 启动输入](./runtime-bootstrap.md)，不自行选择实现。
+
 allocation、专用 daemon credential digest 和精确 Session binding 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或 provider name 推断。
 
 配置 provider 后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
@@ -173,6 +175,8 @@ Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 
 ### 每节点生命周期 worker {#per-node-lifecycle-workers}
 
 每个注册 node 有一个串行 lifecycle worker，负责 gate、allocation 与 pending cursor、connection 和 wake hint；E2B allocation 共享一个没有 node 的串行 lifecycle。薄 coordinator 发现 node 并关闭 worker，数据库、provider 或等待操作期间不持有 map mutex。worker 独立推进，因此一个在线 node 的 provider 卡住不会阻塞其他 node：lifecycle 并发为每 node 一项操作，随 node 数量增长。离线 worker 保留，因此其保留资源在重连后仍可观察。
+
+托管 Environment 提交后，Core 向其 placement 的生命周期 worker 发送有界提示。已提交的待处理输入也会发送提示，以恢复遗漏的创建通知。提示沿用串行 gate、租约、容量检查和一次性 allocation 收据，不在准入处理器内直接创建资源。每个正常维护周期最多允许一次额外提示扫描；周期扫描恢复遗漏或合并的提示。现有 allocation 观察仍先于待创建资源扫描，因此同一节点上缓慢的观察可能延迟新 Environment。
 
 allocation scan 在应用 32 行分页限制前按 node 过滤，pending scan join 尚未释放的已提交 placement。每个 node 推进自己的 cursor，包括越过失败观测，并在末尾回绕一次。direct provisioning 在进入该 node gate 前解析 tenant 范围内 placement，已有 allocation 必须与其一致；Core 不选择另一 node。
 

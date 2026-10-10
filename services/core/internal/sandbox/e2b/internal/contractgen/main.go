@@ -71,9 +71,9 @@ func main() {
 	write("services/core/internal/sandbox/e2b/helper_sdk_generated.go", goCode)
 	bootstrap := fields(reflect.TypeFor[sandbox.Bootstrap]())
 	requiredBootstrap := fieldNames(reflect.TypeFor[sandbox.Bootstrap](), true)
-	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" })
+	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "Harness" })
 	requiredBootstrap = append(requiredBootstrap, "InstallationID", "RuntimeBootstrap")
-	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" })
+	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "Harness" })
 	bootstrap = append(bootstrap, "InstallationID", "RuntimeBootstrap")
 	identity := fields(reflect.TypeFor[sandbox.Reference]())
 	for _, name := range []string{"SessionID", "DeviceID"} {
@@ -115,7 +115,7 @@ func main() {
 // envelopes and managed bootstrap inputs in both implementations.
 func fixtures() []byte {
 	r := sandbox.Reference{TenantID: "11111111-1111-4111-8111-111111111111", EnvironmentID: "22222222-2222-4222-8222-222222222222", AllocationID: "33333333-3333-4333-8333-333333333333"}
-	b := sandbox.Bootstrap{Reference: r, SessionID: "44444444-4444-4444-8444-444444444444", DeviceID: "55555555-5555-4555-8555-555555555555", CoreURL: "https://core.example/api/v1", Credential: "fixture-only", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: "44444444-4444-4444-8444-444444444444", DeviceID: "55555555-5555-4555-8555-555555555555", CoreURL: "https://core.example/api/v1", Credential: "fixture-only", Harness: "codex", NetworkAccess: "enabled"}
 	installation := "66666666-6666-4666-8666-666666666666"
 	connection := b.RuntimeConnection()
 	q := e2b.Request{Version: e2b.ProtocolVersion, Operation: "create", Config: e2b.Config{InstallationID: installation}, Reference: r, Bootstrap: &b, RuntimeBootstrap: &connection, Deadline: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)}
@@ -187,6 +187,7 @@ func fixtures() []byte {
 	managed := object(b)
 	delete(managed, "CoreURL")
 	delete(managed, "Credential")
+	delete(managed, "Harness")
 	managed["InstallationID"] = installation
 	managed["RuntimeBootstrap"] = runtimebootstrap.Connection(connection)
 	for _, policy := range []agentnetwork.Policy{{Access: "enabled"}, {Access: "disabled"}, {Access: "restricted", AllowedDomains: []string{"example.com"}}} {

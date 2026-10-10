@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from uuid import UUID
 
-from e2b import Sandbox, SandboxQuery, SandboxState
+from e2b import FileType, Sandbox, SandboxQuery, SandboxState
 from e2b.api.client.models.sandbox_metric import SandboxMetric
 from e2b.exceptions import AuthenticationException, FileNotFoundException, SandboxNotFoundException
 
@@ -18,6 +18,20 @@ from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIE
 
 PREFIX = 'oac_'
 FIELDS = ('InstallationID', *REFERENCE_FIELDS)
+
+# Execute the existing protected entry point and return its durable receipt on
+# the same command stream. A read failure leaves successful startup recoverable
+# through Inspect, without replaying initialization.
+BOOTSTRAP_SCRIPT = """import runpy,sys
+runpy.run_path('/opt/oac-e2b/managed_init.py', run_name='__main__')
+try:
+    with open('/root/.oac/e2b/managed-ready.json', 'rb') as source:
+        receipt = source.read(4097)
+    if len(receipt) <= 4096:
+        sys.stdout.buffer.write(receipt)
+except OSError:
+    pass
+"""
 
 
 def valid_id(value):
@@ -196,12 +210,16 @@ class Provider:
             except FileNotFoundException:
                 receipt = None
             if receipt is not None:
-                expected = record.get('bootstrap_identity')
-                if (receipt.get('identity') != expected or receipt.get('status') != 'daemon_started' or
-                        type(receipt.get('daemon_pid')) is not int or receipt['daemon_pid'] <= 0):
-                    raise Failure('ownership')
-                self.receipt.save(settled=True, bootstrap_complete=True)
+                self.accept_bootstrap_receipt(receipt)
         return cloud
+
+    def accept_bootstrap_receipt(self, receipt):
+        expected = (self.receipt.data or {}).get('bootstrap_identity')
+        if (not isinstance(receipt, dict) or receipt.get('identity') != expected or
+                receipt.get('status') != 'daemon_started' or
+                type(receipt.get('daemon_pid')) is not int or receipt['daemon_pid'] <= 0):
+            raise Failure('ownership')
+        self.receipt.save(settled=True, bootstrap_complete=True)
 
     def create(self):
         if self.receipt.data is not None:
@@ -233,27 +251,40 @@ class Provider:
             self.receipt.save(status='configuration_rejected', settled=True)
             raise
         # Validate the current template entry point before writing any credential.
-        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c',
-                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') or not os.access('/opt/oac-e2b/managed_init.py', os.R_OK) else 0)"]},
-                    self.remaining, user='root')
-        if check['ExitCode'] != 0:
+        try:
+            entry = cloud.files.get_info('/opt/oac-e2b/managed_init.py',
+                                         user='root', request_timeout=self.remaining())
+            if entry.type != FileType.FILE:
+                self.receipt.save(status='bootstrap_failed', settled=True)
+                raise Failure('template_invalid')
+            # A successful download can also refer to a special file. Check
+            # the type first, then verify readability without a probe process.
+            with cloud.files.read('/opt/oac-e2b/managed_init.py', format='stream',
+                                  user='root', request_timeout=self.remaining()):
+                pass
+        except FileNotFoundException:
             self.receipt.save(status='bootstrap_failed', settled=True)
-            raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
+            raise Failure('template_invalid') from None
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
-        del payload['CoreURL'], payload['Credential']
+        del payload['CoreURL'], payload['Credential'], payload['Harness']
         if (set(payload) - set(MANAGED_BOOTSTRAP_FIELDS) or
                 not set(MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload)):
             raise Failure('invalid')
         cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),
                           user='root', request_timeout=self.remaining())
         self.receipt.save(status='bootstrap_pending')
-        result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '/opt/oac-e2b/managed_init.py']},
+        result = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c', BOOTSTRAP_SCRIPT]},
                      self.remaining, user='root')
         if result['ExitCode'] != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
             raise Failure('unconfirmed')
         self.receipt.save(status='bootstrap_exited', settled=True)
+        try:
+            receipt = json.loads(result['Stdout'])
+        except (ValueError, KeyError):
+            raise Failure('unconfirmed') from None
+        self.accept_bootstrap_receipt(receipt)
         return self.inspect()
 
     def renew(self):
