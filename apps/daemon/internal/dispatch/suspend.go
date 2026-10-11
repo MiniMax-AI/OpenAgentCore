@@ -3,7 +3,6 @@ package dispatch
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -14,9 +13,9 @@ var ErrRouterQuiesced = errors.New("dispatch: router quiesced")
 var ErrRouterBusy = errors.New("dispatch: router has unsettled work")
 
 // Quiesce serializes against admission, then drains every admitted output and
-// receipt and closes idle Executors before acknowledging suspension. Busy
-// rejection leaves admission open; a failed close or drain timeout keeps it
-// closed until the caller shuts the connection down.
+// receipt while retaining settled idle Executors for suspension. Busy rejection
+// leaves admission open; a drain timeout keeps it closed until the caller shuts
+// the connection down.
 func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPayload) error {
 	if strings.TrimSpace(request.EnvironmentID) == "" || strings.TrimSpace(request.SuspendID) == "" || len(request.SuspendID) > 128 {
 		return errors.New("dispatch: invalid suspension identity")
@@ -56,27 +55,20 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 			p.timer.Stop()
 		}
 	}
-	owners := r.closeIdleExecutorsLocked()
-	for _, owner := range owners {
+	for _, owner := range r.executors {
+		if owner.timer != nil {
+			owner.timer.Stop()
+		}
+		// Stop cannot retract a callback already waiting for the lock. Fence its
+		// lease before releasing the lock, including after an eventual Resume.
 		owner.idleLease++
-		owner.closeReason = "suspend"
 	}
 	r.mu.Unlock()
-	r.closeIdleExecutors(owners)
 	err := r.shutdownWG.waitContext(ctx)
 	r.mu.Lock()
 	if r.closed {
 		err = ErrRouterClosed
-	} else if err == nil {
-		for _, owner := range r.executors {
-			cause := owner.closeErr
-			if cause == nil {
-				cause = errors.New("cleanup has not settled")
-			}
-			err = errors.Join(err, fmt.Errorf("dispatch: executor %s: %w", owner.id, cause))
-		}
 	}
-
 	r.mu.Unlock()
 	if err != nil {
 		return errors.Join(ErrRouterQuiesced, err)

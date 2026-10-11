@@ -77,6 +77,7 @@ type nodeIsolationFixture struct {
 	nodes                *deployment.Service
 	pool                 *pgxpool.Pool
 	worker               *execution.Worker
+	placement            *deployment.ExecutionOperations
 	provider             *nodeIsolationProvider
 	key, nodeA, nodeB    string
 	epoch                uint64
@@ -119,7 +120,9 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: webDeployment(t, s, "microsandbox"), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
-	f.worker = startWebWorker(t, s, registry, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})
+	owner := executionOwner(t, s)
+	f.placement = owner.Deployment
+	f.worker = startOwnedWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: webRuntimes(t, s, f.key, p, &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour})}, owner)
 	t.Cleanup(f.stop)
 	f.epoch = fixtureOwnerEpoch(t, s)
 	f.enroll(f.nodeA)
@@ -145,7 +148,7 @@ func (f *nodeIsolationFixture) online(id string) {
 	if err := f.nodes.ConnectNode(f.t.Context(), id, connection, f.epoch); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := f.nodes.Heartbeat(f.t.Context(), id, connection, f.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, id, connection, f.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -180,13 +183,16 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		f.t.Fatal(err)
 	}
 	for _, value := range others {
-		if err := f.nodes.Heartbeat(f.t.Context(), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
+		if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
 			f.t.Fatal(err)
 		}
 	}
 	session, err := f.store.CreateSession(f.t.Context(), tenant, input)
+	if err == nil {
+		_, err = f.placement.EnsurePlacement(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, f.key)
+	}
 	for _, value := range others {
-		if err := f.nodes.Heartbeat(context.WithoutCancel(f.t.Context()), value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+		if err := fixtureNodeHeartbeat(context.WithoutCancel(f.t.Context()), f.store, f.nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
 			f.t.Fatal(err)
 		}
 	}

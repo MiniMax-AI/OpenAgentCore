@@ -174,7 +174,7 @@ class CollectionTests(unittest.TestCase):
         runtime.chmod(0o700)
         image = self.value["specification"]["runtime"]["microsandbox_ref"]
         self.value["specification"]["runtime"]["runtime_sha256"] = hashlib.sha256(runtime.read_bytes()).hexdigest()
-        self.value["native"] = {"helper_path": str(self.release / "helper"), "runtime_home": str(home), "runtime_path": str(runtime), "firmware_path": str(self.release / "firmware")}
+        self.value["native"] = {"helper_path": str(self.release / "helper"), "runtime_home": str(home), "checkpoint_root": str(self.root / "checkpoints"), "runtime_path": str(runtime), "firmware_path": str(self.release / "firmware")}
         self.args.specification_digest = node_spec.digest("microsandbox", self.value["specification"])
         node_generations.atomic_json(self.root / "provider.json", self.value)
         # This fixture changes provider before any helper exists.

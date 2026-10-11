@@ -74,10 +74,6 @@ type CreationTx interface {
 	// LockDeployment locks and reads the sandbox deployment, serializing
 	// hosted creation with deployment changes, restore and node removal.
 	LockDeployment(ctx context.Context) (placement.Deployment, error)
-	// LoadGenerationSpecification reads the retained generation selected under the deployment lock.
-	LoadGenerationSpecification(ctx context.Context, generation uint64) (json.RawMessage, error)
-	LoadNodes(ctx context.Context) ([]placement.Node, error)
-	ReservePlacement(ctx context.Context, chosen placement.Placement) error
 	// LockSkills locks the tenant's Skills in ID order, whatever the order of
 	// ids, and returns them by ID. A missing one is ErrNotFound.
 	LockSkills(ctx context.Context, ids []string) (map[string]skills.Skill, error)
@@ -117,7 +113,7 @@ type CreationTx interface {
 // CreateSession creates a Session under a tenant-scoped key, so retries,
 // including concurrent ones, return the stored Session. The same key with
 // different input or another creator is ErrIdempotencyConflict. Only the new
-// Session freezes resources, takes a placement and admits its initial inputs,
+// Session freezes resources and admits its initial inputs,
 // so a retry after completion or later Turns never submits them again.
 func (s *Service) CreateSession(ctx context.Context, tenant string, input CreateSession) (Creation, error) {
 	session, batch, encoded, err := prepareCreation(input, s.storage.FingerprintProviderKey)
@@ -219,33 +215,18 @@ func (s *Service) createResources(ctx context.Context, tx CreationTx, session Se
 		created = append(created, writeaudit.Resource{Type: writeaudit.ResourceEnvironment, ID: environment, ParentID: session.ID})
 	}
 	if hosted {
-		nodes, err := tx.LoadNodes(ctx)
-		if err != nil {
+		if err := s.rules.CheckPublicOrigin(deployment.Provider); err != nil {
 			return nil, err
 		}
-		chosen, err := s.rules.DecidePlacement(deployment, nodes)
-		if err != nil {
+		var target sandbox.DeploymentSpec
+		if err := json.Unmarshal(deployment.Specification, &target); err != nil {
 			return nil, err
 		}
-		specification := deployment.Specification
-		if chosen != nil && chosen.Generation != deployment.Generation {
-			specification, err = tx.LoadGenerationSpecification(ctx, chosen.Generation)
-			if err != nil {
-				return nil, err
-			}
-		}
-		var selected sandbox.DeploymentSpec
-		if err := json.Unmarshal(specification, &selected); err != nil {
+		if err := ValidateRetainedHistory(target.Workspace != nil, input.SupportsRetainedNativeHistory); err != nil {
 			return nil, err
 		}
-		if err := ValidateRetainedHistory(selected.Workspace != nil, input.SupportsRetainedNativeHistory); err != nil {
-			return nil, err
-		}
-		if chosen != nil {
-			if err := tx.ReservePlacement(ctx, *chosen); err != nil {
-				return nil, err
-			}
-		}
+		// Node placement belongs to the common scheduler, including when
+		// capacity is available, so new Sessions cannot bypass waiting work.
 	}
 	if len(batch) == 0 {
 		return created, nil

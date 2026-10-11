@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -516,8 +517,8 @@ func (s *Service) NodeRetention(ctx context.Context, nodeID, connectionID string
 
 // Heartbeat records a protocol 1 node's health, which reports readiness of its
 // enrollment generation only.
-func (s *Service) Heartbeat(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth) error {
-	return s.heartbeat(ctx, nodeID, connectionID, epoch, health, nil, 1)
+func (s *Service) Heartbeat(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth, statuses []sandbox.GenerationStatus) error {
+	return s.heartbeat(ctx, nodeID, connectionID, epoch, health, statuses, 1)
 }
 
 // HeartbeatGenerations records a node's health and the preparation state of
@@ -558,7 +559,12 @@ func (s *Service) heartbeat(ctx context.Context, nodeID, connectionID string, ep
 		if !current {
 			return ErrNodeCredential
 		}
-		if protocol == 1 {
+		if protocol == 1 && len(statuses) > 0 {
+			if len(statuses) != 1 || statuses[0].Generation != n.DeploymentGeneration || statuses[0].SpecificationDigest != n.SpecificationDigest || (statuses[0].State == "ready") != health.ProviderReady {
+				return ErrInvalidInput
+			}
+		}
+		if protocol == 1 && len(statuses) == 0 {
 			state := "failed"
 			if health.ProviderReady {
 				state = "ready"
@@ -570,8 +576,16 @@ func (s *Service) heartbeat(ctx context.Context, nodeID, connectionID string, ep
 }
 
 func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses []sandbox.GenerationStatus, protocol int) error {
+	adapter, err := s.registry.Lookup(d.Provider)
+	if err != nil {
+		return err
+	}
+	checkpointSupported := adapter.Operations()["Initial"].State == providercontract.Supported
 	seen := map[uint64]bool{}
 	for _, status := range statuses {
+		if status.Checkpoint != nil && (status.State != "ready" || !checkpointSupported || status.Checkpoint.Validate() != nil) || status.State == "ready" && checkpointSupported && status.Checkpoint == nil {
+			return ErrInvalidInput
+		}
 		if !validGeneration(status.Generation) || !validDigest(status.SpecificationDigest) || seen[status.Generation] || (status.State != "ready" && status.State != "preparing" && status.State != "failed") || status.State == "ready" && status.Diagnostic != "" {
 			return ErrInvalidInput
 		}
@@ -592,7 +606,7 @@ func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses 
 		if spec.Digest(d.Provider) != status.SpecificationDigest {
 			return ErrSpecificationMismatch
 		}
-		if err := tx.UpsertGenerationStatus(GenerationStatusRecord{NodeID: n.ID, ConnectionID: n.ConnectionID, Generation: status.Generation, SpecificationDigest: status.SpecificationDigest, OwnerEpoch: d.OwnerEpoch, State: status.State, Diagnostic: sandbox.NormalizeNodeDiagnostic(status.Diagnostic)}); err != nil {
+		if err := tx.UpsertGenerationStatus(GenerationStatusRecord{NodeID: n.ID, ConnectionID: n.ConnectionID, Generation: status.Generation, SpecificationDigest: status.SpecificationDigest, OwnerEpoch: d.OwnerEpoch, State: status.State, Diagnostic: sandbox.NormalizeNodeDiagnostic(status.Diagnostic), Checkpoint: status.Checkpoint}); err != nil {
 			return err
 		}
 		if status.State == "ready" && status.Generation == d.Generation {

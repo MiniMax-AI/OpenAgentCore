@@ -13,19 +13,18 @@ import (
 	"github.com/google/uuid"
 )
 
-const runtimePreparationTimeout = 120 * time.Second
-
 // Router.mu protects one connection-local transfer. Partial installation data
 // belongs to the bound Environment and is never removed by transfer cleanup.
 type runtimePreparationTransfer struct {
-	envelope  proto.Envelope
-	request   proto.RuntimePreparePayload
-	data      []byte
-	ready     chan struct{}
-	cancel    context.CancelFunc
-	finished  bool
-	apply     bool
-	uncertain bool
+	transferDeadline time.Time
+	envelope         proto.Envelope
+	request          proto.RuntimePreparePayload
+	data             []byte
+	ready            chan struct{}
+	cancel           context.CancelFunc
+	finished         bool
+	apply            bool
+	uncertain        bool
 }
 
 func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) error {
@@ -65,9 +64,10 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env.ID, rejectedRuntimePreparation("resource_unavailable"))
 		}
-		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimePreparationTimeout)
+		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(request.BudgetMS)*time.Millisecond)
 		u := &runtimePreparationTransfer{
-			envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
+			transferDeadline: time.Now().Add(time.Duration(proto.RuntimePrepareTransferBudgetMS) * time.Millisecond),
+			envelope:         env, request: request, data: make([]byte, 0, request.SizeBytes),
 			ready: make(chan struct{}), cancel: cancel,
 		}
 		r.runtimePreparation = u
@@ -100,7 +100,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		return nil
 	}
 	apply := false
-	if request.Step == "commit" && len(u.data) == u.request.SizeBytes {
+	if request.Step == "commit" && len(u.data) == u.request.SizeBytes && time.Now().Before(u.transferDeadline) {
 		if u.request.Action == "finalize" || u.request.Action == "initialize" {
 			apply = true
 		} else {
@@ -135,7 +135,10 @@ func (r *Router) finishRuntimePreparationTransferLocked(u *runtimePreparationTra
 func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, proto.RuntimePreparePayload, []byte) error) {
 	defer r.shutdownWG.Done()
 	defer u.cancel()
+	staging := time.NewTimer(time.Until(u.transferDeadline))
+	defer staging.Stop()
 	select {
+	case <-staging.C:
 	case <-u.ready:
 	case <-r.shutdownCh:
 	case <-ctx.Done():

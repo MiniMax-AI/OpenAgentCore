@@ -102,7 +102,7 @@ type ReservationTx interface {
 	LoadGenerationSpecification(generation uint64) (GenerationSpecification, error)
 	// LoadNodes reads eligible placement facts under the deployment lock.
 	LoadNodes() ([]placement.Node, error)
-	// ReservePlacement replaces the released reservation without changing historical receipts.
+	// ReservePlacement inserts a first reservation or replaces a released reservation without changing historical receipts.
 	ReservePlacement(placement.Placement) error
 }
 
@@ -110,6 +110,10 @@ type ReservationTx interface {
 // current, the allocation LoadAllocation returned, and returns it changed. A
 // write whose stored guard no longer holds is ErrAllocationConflict.
 type AllocationTx interface {
+	// CanRetainEnvironment checks the ready retained filesystem, completed
+	// initialization and selected Harness's qualified history under the Session lock.
+	CanRetainEnvironment(current Allocation) (bool, error)
+
 	// LoadAllocation returns the Environment's allocation.
 	LoadAllocation() (Allocation, error)
 	// LoadSessionDevice returns the device the Session is bound to and
@@ -117,9 +121,19 @@ type AllocationTx interface {
 	LoadSessionDevice() (SessionDevice, bool, error)
 	// LoadActivity returns the allocation's activity.
 	LoadActivity(current Allocation) (Activity, error)
-	// LoadRestore locks the deployment and returns what restoring the
-	// allocation's suspended compute on its node reads.
-	LoadRestore(current Allocation) (placement.Restore, error)
+	// LoadSuspensionDemand locks the deployment and reads demand and capacity.
+	LoadSuspensionDemand(current Allocation) (SuspensionDemand, error)
+	// PlacementDemand reads one qualified page; next advances past all inspected
+	// rows, including ineligible receipts. An empty next.EnvironmentID ends the scan.
+	PlacementDemand(after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)
+	// LoadGenerationSpecification reads immutable generation requirements.
+	LoadGenerationSpecification(generation uint64) (GenerationSpecification, error)
+	// LoadCheckpointPlacement locks the deployment and loads fresh readiness
+	// for the allocation's exact immutable generation, including capacity.
+	LoadCheckpointPlacement(current Allocation) (placement.Deployment, []placement.CheckpointNode, error)
+	// MoveSuspended changes node ownership, placement and compute intent in one
+	// transaction. Only a settled suspended allocation can change nodes.
+	MoveSuspended(current Allocation, nodeID string, change ComputeChange) (Allocation, error)
 	// ObserveRunning records the allocation running with its creation settled.
 	ObserveRunning(current Allocation) (Allocation, error)
 	// SettleCreation records that the original Create can no longer change
@@ -136,9 +150,6 @@ type AllocationTx interface {
 
 // AllocationCleanupTx is one Session-locked allocation cleanup.
 type AllocationCleanupTx interface {
-	// CanRetainEnvironment checks the ready retained filesystem, completed
-	// initialization and selected Harness's qualified history under the Session lock.
-	CanRetainEnvironment(current Allocation) (bool, error)
 	AllocationTx
 	sessions.EnvironmentTerminationTx
 	// RevokeDevice revokes the allocation's device.
@@ -253,8 +264,8 @@ type Reader interface {
 	UnallocatedEnvironments(ctx context.Context, nodeID, after string) ([]UnallocatedEnvironment, error)
 	// RetainedNativeHistory reports the latest owner's persisted retention eligibility.
 	RetainedNativeHistory(ctx context.Context, key AllocationKey) (bool, error)
-	// ReplacementEnvironments lists retained Environments with pending input and no compute owner.
-	ReplacementEnvironments(ctx context.Context, after string) ([]UnallocatedEnvironment, error)
+	// PlacementDemand lists up to 32 unreserved first or retained requests in demand-time and ID order.
+	PlacementDemand(ctx context.Context, after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)
 	// LifecyclePlacement returns what routing the Environment to its
 	// lifecycle reads, including for a deleted Session. A missing Environment
 	// is sessions.ErrNotFound.
@@ -506,4 +517,5 @@ type GenerationStatusRecord struct {
 	SpecificationDigest  string
 	OwnerEpoch           uint64
 	State, Diagnostic    string
+	Checkpoint           *sandbox.CheckpointCompatibility
 }

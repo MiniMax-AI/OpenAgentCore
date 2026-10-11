@@ -61,7 +61,7 @@ func TestRestoreCompletionRecoversOnlyDerivedProof(t *testing.T) {
 }
 
 func TestRestoreCompletionRejectsUnverifiedTargets(t *testing.T) {
-	for _, fault := range []string{"cpu", "memory", "environment", "image", "root", "foreign parent", "foreign ID", "foreign proof", "stopped", "unfinished", "replacement after write", "proof not persisted"} {
+	for _, fault := range []string{"cpu", "memory", "environment", "image", "root", "foreign parent", "foreign ID", "foreign proof", "stopped", "starting", "paused", "crashed", "unfinished", "replacement after write", "proof not persisted"} {
 		t.Run(fault, func(t *testing.T) {
 			config, actual := deploymentFixture()
 			actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
@@ -87,8 +87,8 @@ func TestRestoreCompletionRejectsUnverifiedTargets(t *testing.T) {
 				actualID = "local:foreign"
 			case "foreign proof":
 				labels[resourceProofLabel] = "foreign"
-			case "stopped":
-				status = "stopped"
+			case "stopped", "starting", "paused", "crashed":
+				status = fault
 			case "unfinished":
 				actual["checkpoint_restore"] = map[string]string{"checkpoint_id": "pending"}
 			}

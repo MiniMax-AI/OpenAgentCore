@@ -54,34 +54,64 @@ func (q *Queries) GetRuntimeLifecyclePlacement(ctx context.Context, arg GetRunti
 	return i, err
 }
 
-const listReplacementEnvironments = `-- name: ListReplacementEnvironments :many
-SELECT e.id, s.tenant_id
+const listPlacementDemand = `-- name: ListPlacementDemand :many
+WITH demand AS (
+SELECT e.id, s.tenant_id, s.engine, (latest.id IS NOT NULL)::boolean AS retained,
+       CASE WHEN latest.id IS NULL THEN s.created_at
+            ELSE LEAST((SELECT min(r.created_at) FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp()), CASE WHEN latest.compute_wake_requested THEN latest.compute_activity_at END) END::timestamptz AS demanded_at
 FROM environments e JOIN sessions s ON s.id = e.session_id
-JOIN environment_workspaces w ON w.environment_id = e.id AND w.state = 'ready'
-WHERE e.id > $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
-  AND e.initialization = 'complete' AND s.configuration->'environment'->>'type' = 'openai_hosted'
-  AND (SELECT reset_clear IS NULL FROM runtime_deployment)
-  AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state = 'released')
+LEFT JOIN LATERAL (SELECT a.id, a.state, a.compute_wake_requested, a.compute_activity_at FROM runtime_allocations a WHERE a.environment_id = e.id ORDER BY a.created_at DESC, a.id DESC LIMIT 1) latest ON true
+WHERE s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+  AND s.configuration->'environment'->>'type' = 'openai_hosted'
+  AND (SELECT reset_clear IS NULL AND mode = 'nodes' FROM runtime_deployment)
+  AND NOT EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL)
   AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released')
-  AND EXISTS (SELECT 1 FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending')
-ORDER BY e.id LIMIT 32
+  AND (
+    (e.initialization IN ('pending','complete') AND latest.id IS NULL)
+    OR (e.initialization = 'complete'
+      AND EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id AND w.state = 'ready')
+      AND EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state = 'released')
+      AND (latest.compute_wake_requested OR EXISTS (SELECT 1 FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp())))
+  )
+)
+SELECT id, tenant_id, engine, retained, demanded_at, COALESCE($1::timestamptz, statement_timestamp())::timestamptz AS scan_until FROM demand
+WHERE (demanded_at, id) > ($2::timestamptz, $3::uuid)
+AND demanded_at <= COALESCE($1::timestamptz, statement_timestamp())
+ORDER BY demanded_at, id LIMIT 32
 `
 
-type ListReplacementEnvironmentsRow struct {
-	ID       pgtype.UUID `json:"id"`
-	TenantID pgtype.UUID `json:"tenant_id"`
+type ListPlacementDemandParams struct {
+	UntilTime pgtype.Timestamptz `json:"until_time"`
+	AfterTime pgtype.Timestamptz `json:"after_time"`
+	AfterID   pgtype.UUID        `json:"after_id"`
 }
 
-func (q *Queries) ListReplacementEnvironments(ctx context.Context, id pgtype.UUID) ([]ListReplacementEnvironmentsRow, error) {
-	rows, err := q.db.Query(ctx, listReplacementEnvironments, id)
+type ListPlacementDemandRow struct {
+	ID         pgtype.UUID        `json:"id"`
+	TenantID   pgtype.UUID        `json:"tenant_id"`
+	Engine     string             `json:"engine"`
+	Retained   bool               `json:"retained"`
+	DemandedAt pgtype.Timestamptz `json:"demanded_at"`
+	ScanUntil  pgtype.Timestamptz `json:"scan_until"`
+}
+
+func (q *Queries) ListPlacementDemand(ctx context.Context, arg ListPlacementDemandParams) ([]ListPlacementDemandRow, error) {
+	rows, err := q.db.Query(ctx, listPlacementDemand, arg.UntilTime, arg.AfterTime, arg.AfterID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListReplacementEnvironmentsRow{}
+	items := []ListPlacementDemandRow{}
 	for rows.Next() {
-		var i ListReplacementEnvironmentsRow
-		if err := rows.Scan(&i.ID, &i.TenantID); err != nil {
+		var i ListPlacementDemandRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Engine,
+			&i.Retained,
+			&i.DemandedAt,
+			&i.ScanUntil,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -191,6 +221,7 @@ SELECT e.id, s.tenant_id
 FROM environments e JOIN sessions s ON s.id=e.session_id
 LEFT JOIN runtime_placements p ON p.environment_id=e.id
 WHERE p.node_id IS NOT DISTINCT FROM $1::uuid
+  AND (p.environment_id IS NOT NULL OR (SELECT mode = 'direct' FROM runtime_deployment))
   AND p.released_at IS NULL
   AND (SELECT reset_clear IS NULL FROM runtime_deployment)
   AND e.id > $2::uuid AND s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')

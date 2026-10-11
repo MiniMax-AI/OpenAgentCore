@@ -69,9 +69,9 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 
 	r.shutdownWG.Wait()
 	r.mu.Lock()
-	if r.runtimePreparation != nil && r.runtimePreparation.uncertain {
-		attempt.err = errors.Join(attempt.err, errors.New("dispatch: capability preparation remains uncertain"))
-	}
+	// Runtime preparation joins only after ApplyRuntimePreparation stops local
+	// mutations and its receipt send finishes. An unknown result still fences
+	// this closed Router, but is not outstanding cleanup. Core owns no-replay.
 	if r.workspaceWrite != nil && r.workspaceWrite.uncertain {
 		attempt.err = errors.Join(attempt.err, errors.New("dispatch: local workspace write remains uncertain"))
 	}

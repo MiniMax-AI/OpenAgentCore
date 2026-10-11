@@ -21,7 +21,8 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 type runtimeManager struct {
 	workspaces          *workspaces.ExecutionOperations
 	workspaceCursor     string
-	replacementCursor   string
+	placementCursor     deployment.PlacementDemandCursor
+	placementWake       chan struct{}
 	workspaceGate       chan struct{}
 	sessions            sessions.Reader
 	sessionExecution    *sessions.ExecutionOperations
@@ -97,7 +98,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
+			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1), hintDestination: m.hintDestination,
 		}}
 		m.nodes[id] = n
 	}
@@ -115,6 +116,19 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 		go m.runNode(n)
 	}
 	return n, nil
+}
+
+// A committed handoff can introduce a node before the next inventory scan.
+// Reuse its ordinary lane and coalesced wake; polling recovers missed hints.
+func (m *runtimeManager) hintDestination(id string) {
+	n, err := m.node(id)
+	if err != nil {
+		return
+	}
+	select {
+	case n.lifecycle.wakeHints <- struct{}{}:
+	default:
+	}
 }
 
 func (m *runtimeManager) hints(id string) chan<- struct{} {
@@ -142,7 +156,7 @@ func (m *runtimeManager) syncNodes(ctx context.Context) ([]*runtimeNode, error) 
 		return nil, m.ctx.Err()
 	}
 	defer func() { <-m.inventory }()
-	if err := m.reserveReplacementPlacements(ctx); err != nil {
+	if err := m.reservePlacements(ctx); err != nil {
 		return nil, err
 	}
 	// A direct caller may add a newly registered node during the query. Only
@@ -272,6 +286,10 @@ func (m *runtimeManager) run(ctx context.Context) error {
 			return m.ctx.Err()
 		case err := <-m.failed:
 			return err
+		case <-m.placementWake:
+			if _, err := m.syncNodes(ctx); err != nil && !errors.Is(err, errRuntimeTransition) {
+				return err
+			}
 		case <-ticker.C:
 			if err := m.deployment.CollectGenerations(ctx); err != nil {
 				return err

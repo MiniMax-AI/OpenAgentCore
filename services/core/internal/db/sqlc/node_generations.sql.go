@@ -43,6 +43,42 @@ func (q *Queries) GetNodeGenerationSpecification(ctx context.Context, generation
 	return i, err
 }
 
+const listCheckpointGenerationNodes = `-- name: ListCheckpointGenerationNodes :many
+SELECT n.id, g.checkpoint
+FROM runtime_nodes n
+JOIN runtime_node_generation_status g ON g.node_id=n.id
+CROSS JOIN runtime_deployment d
+WHERE g.generation=$1 AND n.installation_id=d.installation_id AND n.removed_at IS NULL
+AND n.connection_id=g.connection_id AND n.connected_epoch=g.owner_epoch AND g.owner_epoch=d.owner_epoch
+AND n.last_seen_at>clock_timestamp()-interval '45 seconds' AND g.state='ready'
+ORDER BY n.id
+`
+
+type ListCheckpointGenerationNodesRow struct {
+	ID         pgtype.UUID `json:"id"`
+	Checkpoint []byte      `json:"checkpoint"`
+}
+
+func (q *Queries) ListCheckpointGenerationNodes(ctx context.Context, generation int64) ([]ListCheckpointGenerationNodesRow, error) {
+	rows, err := q.db.Query(ctx, listCheckpointGenerationNodes, generation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCheckpointGenerationNodesRow{}
+	for rows.Next() {
+		var i ListCheckpointGenerationNodesRow
+		if err := rows.Scan(&i.ID, &i.Checkpoint); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const nodeGenerationKept = `-- name: NodeGenerationKept :one
 SELECT (EXISTS(SELECT 1 FROM runtime_deployment d WHERE d.generation=$1)
  OR EXISTS(SELECT 1 FROM runtime_nodes n WHERE n.id=$2 AND n.removed_at IS NULL AND n.ready_generation=$1)
@@ -114,10 +150,10 @@ func (q *Queries) RefreshNodeServingReadiness(ctx context.Context, arg RefreshNo
 }
 
 const upsertNodeGenerationStatus = `-- name: UpsertNodeGenerationStatus :exec
-INSERT INTO runtime_node_generation_status(node_id,generation,specification_digest,connection_id,owner_epoch,state,diagnostic)
-VALUES($1,$2,$3,$4,$5,$6,$7)
+INSERT INTO runtime_node_generation_status(node_id,generation,specification_digest,connection_id,owner_epoch,state,diagnostic,checkpoint)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
 ON CONFLICT(node_id,generation) DO UPDATE SET specification_digest=EXCLUDED.specification_digest,connection_id=EXCLUDED.connection_id,
- owner_epoch=EXCLUDED.owner_epoch,state=EXCLUDED.state,diagnostic=EXCLUDED.diagnostic,observed_at=clock_timestamp()
+ owner_epoch=EXCLUDED.owner_epoch,state=EXCLUDED.state,diagnostic=EXCLUDED.diagnostic,checkpoint=EXCLUDED.checkpoint,observed_at=clock_timestamp()
 `
 
 type UpsertNodeGenerationStatusParams struct {
@@ -128,6 +164,7 @@ type UpsertNodeGenerationStatusParams struct {
 	OwnerEpoch          int64       `json:"owner_epoch"`
 	State               string      `json:"state"`
 	Diagnostic          string      `json:"diagnostic"`
+	Checkpoint          []byte      `json:"checkpoint"`
 }
 
 func (q *Queries) UpsertNodeGenerationStatus(ctx context.Context, arg UpsertNodeGenerationStatusParams) error {
@@ -139,6 +176,7 @@ func (q *Queries) UpsertNodeGenerationStatus(ctx context.Context, arg UpsertNode
 		arg.OwnerEpoch,
 		arg.State,
 		arg.Diagnostic,
+		arg.Checkpoint,
 	)
 	return err
 }

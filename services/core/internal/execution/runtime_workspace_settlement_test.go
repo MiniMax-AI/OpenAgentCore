@@ -108,6 +108,11 @@ func workspaceSettlementFixtureWithSetup(t *testing.T, provider sandbox.SandboxP
 		t.Fatal(err)
 	}
 	session := created.Session
+	if nodeID != "" {
+		if _, err := operations.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: session.Environment.ID}, installation); err != nil {
+			t.Fatal(err)
+		}
+	}
 	configuration := workspacefs.Configuration{ID: uuid.NewString(), Adapter: "fixture", Parameters: []byte(`{}`)}
 	storage := workspacepg.New(pgunit.NewPool(pool))
 	writer := workspacepg.NewExecution(lease)

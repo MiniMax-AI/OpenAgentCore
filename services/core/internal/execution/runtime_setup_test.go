@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -36,7 +37,7 @@ func TestRuntimeSetupReceiptOutcomes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: test.outcome, ExitCode: test.code}, err: test.err}
-			err := runRuntimeSetup(t.Context(), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: setupCanary}}})
+			err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: setupCanary}}})
 			if test.outcome == "completed" && test.err == nil {
 				if err != nil {
 					t.Fatal(err)
@@ -73,14 +74,47 @@ func TestInitialFileUsesTypedRuntimeBytes(t *testing.T) {
 	size := int64(len(body))
 	owner := agentcapabilities.Identity{EnvironmentID: "environment", SessionID: "session"}
 	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
-	if err := installInitialFile(t.Context(), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
+	if err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
 		t.Fatal(err)
 	}
 	if peer.request.Action != "file" || peer.request.File.Path != "/workspace/a" || peer.request.EnvironmentID != owner.EnvironmentID || peer.request.SessionID != owner.SessionID || string(peer.data) != setupCanary {
 		t.Fatal("file transport changed")
 	}
 	size++
-	if err := installInitialFile(t.Context(), peer, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
+	if err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
 		t.Fatal("mismatched source size accepted")
+	}
+}
+
+func initializationTestContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
+	t.Cleanup(cancel)
+	return ctx
+}
+
+func TestRuntimeSetupUsesRemainingInitializationBudget(t *testing.T) {
+	ctx := initializationTestContext(t)
+	deadline, _ := ctx.Deadline()
+	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
+	err := runRuntimeSetup(ctx, peer, agentcapabilities.Identity{}, runtimeSetupOperation{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remaining := time.Until(deadline).Milliseconds()
+	if peer.request.BudgetMS < remaining || peer.request.BudgetMS > remaining+1000 || peer.request.BudgetMS <= 120000 {
+		t.Fatalf("remaining operation budget lost: %d vs %d", peer.request.BudgetMS, remaining)
+	}
+	for name, c := range map[string]context.Context{"unbounded": t.Context(), "expired": func() context.Context {
+		c, stop := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		stop()
+		return c
+	}()} {
+		t.Run(name, func(t *testing.T) {
+			peer := &receiptRuntime{}
+			if runRuntimeSetup(c, peer, agentcapabilities.Identity{}, runtimeSetupOperation{}) == nil || peer.request.BudgetMS != 0 {
+				t.Fatal("invalid budget sent")
+			}
+		})
 	}
 }

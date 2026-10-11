@@ -2,10 +2,12 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // provisionPending shares the existing lifecycle owner and serial gate. This
@@ -35,36 +37,73 @@ func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
 	return nil
 }
 
-// reserveReplacementPlacements runs on the manager's existing inventory clock,
-// before node scans. The committed input supplies demand; placement is the
-// durable retry intent after the first caller or hint is gone. No native
-// operation runs here and no retained idle filesystem consumes a reservation.
-func (m *runtimeManager) reserveReplacementPlacements(ctx context.Context) error {
+// reservePlacements runs under the inventory gate before node scans. Committed
+// Sessions and inputs supply demand; a placement survives a disconnected caller.
+// No native operation runs here or consumes a reservation for retained idle files.
+func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 	m.mu.Lock()
 	configuration := m.config
 	m.mu.Unlock()
-	if m.workspaces == nil || configuration.Workspace == nil {
+	if configuration.Mode != string(sandbox.DeploymentNodes) {
 		return nil
 	}
 	operation, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	rows, err := m.deploymentReader.ReplacementEnvironments(operation, m.replacementCursor)
+	rows, next, err := m.deploymentReader.PlacementDemand(operation, m.placementCursor)
 	if err != nil {
+		// A bounded inventory read may time out while the execution owner is
+		// still healthy. Keep its cursor for the next hint or maintenance tick.
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			return m.lease.CheckOwnership(ctx)
+		}
 		return err
 	}
 	if len(rows) == 0 {
-		m.replacementCursor = ""
+		m.placementCursor = deployment.PlacementDemandCursor{}
 		return nil
 	}
 	for _, environment := range rows {
-		m.replacementCursor = environment.ID
-		_, err = m.deployment.EnsurePlacement(operation, deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}, configuration.InstallationID)
+		if operation.Err() != nil {
+			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
+				return ownership
+			}
+			return ctx.Err()
+		}
+		reserved, err := m.deployment.EnsurePlacement(operation, deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}, configuration.InstallationID)
+		// A timed-out attempt yields its position, but later rows have not
+		// been attempted and must receive a fresh budget on the next scan.
+		m.placementCursor = deployment.PlacementDemandCursor{At: environment.At, EnvironmentID: environment.ID, Until: next.Until}
 		if err != nil {
 			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
 				return ownership
 			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if operation.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
 			log.Ctx(ctx).Warn("managed Runtime placement incomplete", "environment_id", environment.ID)
+			continue
 		}
+		node, err := m.node(reserved.NodeID)
+		if err != nil {
+			return err
+		}
+		select {
+		case node.lifecycle.wakeHints <- struct{}{}:
+		default:
+		}
+		if operation.Err() != nil {
+			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
+				return ownership
+			}
+			return ctx.Err()
+		}
+	}
+	m.placementCursor = next
+	if next.EnvironmentID == "" {
+		m.placementCursor = deployment.PlacementDemandCursor{}
 	}
 	return nil
 }

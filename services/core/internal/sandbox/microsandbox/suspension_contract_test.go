@@ -2,7 +2,7 @@ package microsandbox
 
 import (
 	"context"
-	"errors"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"testing"
 )
@@ -19,26 +19,21 @@ func TestSharedSuspendSettlesExactSourceCleanupInsideAdapter(t *testing.T) {
 					if q.Suspend.ObserveOnly != reconcile {
 						t.Fatal("reconcile intent changed")
 					}
-					return Response{Version: ProtocolVersion, State: &State{Compute: source, Status: "suspended", BootstrapComplete: true, Snapshot: &snap, SourceStopped: !reconcile}}, nil
+					return Response{Version: ProtocolVersion, State: &State{Compute: source, Status: "suspended", BootstrapComplete: true, Snapshot: &snap, SourceStopped: !cleanupFails}}, nil
 				}
-				if q.Operation != "kill" || q.Compute.ID != source.ID {
-					t.Fatal("wrong source cleanup", q.Operation)
-				}
-				if cleanupFails {
-					return Response{}, errors.New("lost cleanup")
-				}
-				return Response{Version: ProtocolVersion}, nil
+				t.Fatal("unexpected extra native operation", q.Operation)
+				return Response{}, nil
 			}))
 			if e != nil {
 				t.Fatal(e)
 			}
 			q := sandbox.SuspendRequest{Reference: r, OperationID: snap.OperationID, Source: compute(source), ReconcileOnly: reconcile}
 			got, e := p.Suspend(deadline(t), q)
-			if len(calls) != 2 || calls[0] != "suspend" || calls[1] != "kill" {
+			if len(calls) != 1 || calls[0] != "suspend" {
 				t.Fatal(calls)
 			}
 			if cleanupFails {
-				if e == nil || got.SuspendSettled {
+				if got.ResourcesReleased || (e == nil && sandbox.ValidateSuspendResult(q, got) == nil) {
 					t.Fatal("failed cleanup released capacity")
 				}
 				continue

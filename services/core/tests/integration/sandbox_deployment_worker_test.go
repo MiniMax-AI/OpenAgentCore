@@ -50,8 +50,12 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, placement.ErrNodeUnavailable) {
-		t.Fatal("zero-node deployment admitted Session", err)
+	queued, err := s.CreateSession(t.Context(), uuid.NewString(), input)
+	if err != nil {
+		t.Fatal("zero-node deployment rejected waiting Session", err)
+	}
+	if _, err := w.ProvisionEnvironment(t.Context(), queued.TenantID, queued.Environment.ID, id); !errors.Is(err, placement.ErrNodeUnavailable) {
+		t.Fatal("zero-node deployment provisioned compute", err)
 	}
 	token, err := EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 16}))
 	if err != nil {
@@ -68,7 +72,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		if err := deployments.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err := deployments.Heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+		if err := deployments.Heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

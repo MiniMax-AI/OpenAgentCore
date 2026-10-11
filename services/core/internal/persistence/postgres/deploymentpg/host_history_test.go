@@ -36,7 +36,7 @@ func TestNodeHostHistorySamplingAndDetail(t *testing.T) {
 	now := time.Now().UTC()
 	host := &deployment.NodeHost{EffectiveCPUCores: hostHistoryPtr(2.0), CPUUtilization: hostHistoryPtr(0.35), TotalMemoryBytes: hostHistoryPtr(int64(4096)), AvailableMemoryBytes: hostHistoryPtr(int64(1024)), AvailableDiskBytes: hostHistoryPtr(int64(8192)), ObservedAt: &now}
 	health := deployment.NodeHealth{ProviderReady: true, Host: host}
-	if err := f.service.Heartbeat(t.Context(), node, connection, epoch, health); err != nil {
+	if err := f.heartbeat(t.Context(), node, connection, epoch, health, nil); err != nil {
 		t.Fatal(err)
 	}
 	for i, want := range []int64{1, 0} {
@@ -113,7 +113,7 @@ func TestNodeHostHistorySamplingAndDetail(t *testing.T) {
 	// A disconnected node cannot create another history row, even with a fresh last observation.
 	next := now.Add(time.Millisecond)
 	host.ObservedAt = &next
-	if err := f.service.Heartbeat(t.Context(), node, connection, epoch, health); err != nil {
+	if err := f.heartbeat(t.Context(), node, connection, epoch, health, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.service.DisconnectNode(t.Context(), node, connection, epoch); err != nil {
@@ -136,7 +136,7 @@ func TestNodeHostHistorySamplingAndDetail(t *testing.T) {
 func TestNodeHostHistoryFencingAndUnknown(t *testing.T) {
 	f, node, conn, epoch := hostHistoryNode(t)
 	for _, at := range []time.Time{time.Now().Add(-time.Minute), time.Now().Add(time.Hour)} {
-		if err := f.service.Heartbeat(t.Context(), node, conn, epoch, deployment.NodeHealth{Host: &deployment.NodeHost{ObservedAt: &at}}); err != nil {
+		if err := f.heartbeat(t.Context(), node, conn, epoch, deployment.NodeHealth{Host: &deployment.NodeHost{ObservedAt: &at}}, nil); err != nil {
 			t.Fatal(err)
 		}
 		if n, err := f.adapter.SampleHostHistory(t.Context()); err != nil || n != 0 {
@@ -145,10 +145,10 @@ func TestNodeHostHistoryFencingAndUnknown(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	health := deployment.NodeHealth{Host: &deployment.NodeHost{ObservedAt: &now}}
-	if err := f.service.Heartbeat(t.Context(), node, uuid.NewString(), epoch, health); !errors.Is(err, deployment.ErrNodeCredential) {
+	if err := f.heartbeat(t.Context(), node, uuid.NewString(), epoch, health, nil); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal(err)
 	}
-	if err := f.service.Heartbeat(t.Context(), node, conn, epoch, health); err != nil {
+	if err := f.heartbeat(t.Context(), node, conn, epoch, health, nil); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := f.adapter.SampleHostHistory(t.Context()); err != nil || n != 1 {
@@ -164,7 +164,7 @@ func TestNodeHostHistoryFencingAndUnknown(t *testing.T) {
 		{ObservedAt: &now, TotalMemoryBytes: hostHistoryPtr(int64(10)), AvailableMemoryBytes: hostHistoryPtr(int64(11))},
 		{ObservedAt: &now, AvailableDiskBytes: hostHistoryPtr(int64(-1))}, {ObservedAt: &now, EffectiveCPUCores: hostHistoryPtr(0.0)}, {},
 	} {
-		if err := f.service.Heartbeat(t.Context(), node, conn, epoch, deployment.NodeHealth{Host: host}); !errors.Is(err, deployment.ErrInvalidInput) {
+		if err := f.heartbeat(t.Context(), node, conn, epoch, deployment.NodeHealth{Host: host}, nil); !errors.Is(err, deployment.ErrInvalidInput) {
 			t.Fatal(host, err)
 		}
 	}

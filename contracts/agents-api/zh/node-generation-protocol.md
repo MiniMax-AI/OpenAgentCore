@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: e9a9e3d1027d797bdf467d867023fa11792866ea93252f94904a66f7be45af1e
+source_hash: 074df236614044bf7e2c7a3049a6acbfad4bc84f29fe248600cfbcd8c3e8bf09
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
@@ -76,9 +76,9 @@ Core 发送包含以下内容的 `request` 帧：
 
 ## 代次控制 {#generation-control}
 
-未启用代次管理的节点只服务其登记的代次，配置固定，并且不会收到准备或保留帧。支持代次管理的节点会准备 Core 在 `welcome` 和 `heartbeat_ack` 中通告的目标代次，并在此期间继续服务其持久化的服务代次；目标代次的准备独立于服务 Provider 的就绪状态。
+未启用代次管理的节点只服务其登记的代次，配置固定，并且不会收到准备或保留帧。它可以在 `Health.Generations` 报告该精确代次；支持检查点的 Provider 必须报告，并包含已验证的检查点资格。`provider_ready` 必须与报告的状态一致。支持代次管理的节点会准备 Core 在 `welcome` 和 `heartbeat_ack` 中通告的目标代次，并在此期间继续服务其持久化的服务代次；目标代次的准备独立于服务 Provider 的就绪状态。
 
-节点的 `hello` 和心跳最多携带八条代次观察记录。每条记录指定一个正值的有符号 64 位代次编号、其小写 SHA-256 规范摘要、`ready`、`preparing` 或 `failed` 状态，以及可选的固定诊断信息。目标代次和服务代次的记录排在前面，其余记录公平轮换。八条记录限制的是单条消息，而不是节点可保留的代次数量。省略某条观察记录绝不会授权删除，也不会暗示不存在。
+节点的 `hello` 和心跳最多携带八条代次观察记录。每条记录指定一个正值的有符号 64 位代次编号、其小写 SHA-256 规范摘要、`ready`、`preparing` 或 `failed` 状态，以及可选的固定诊断信息。目标代次和服务代次的记录排在前面，其余记录公平轮换。八条记录限制的是单条消息，而不是节点可保留的代次数量。省略某条观察记录绝不会授权删除，也不会暗示不存在。 支持检查点的 ready 代次携带 `checkpoint`，包含非空且不透明的 `artifact_domain` 和 `execution_class` token，各最多 256 字节。不支持的 Provider 省略该字段；preparing 或 failed 代次不声明它。Core 将声明与已认证连接和代次一起持久化，仅在当前在线连接的该代次仍 ready 时使用。[Provider 契约](../../../docs/zh/sandbox-provider.md#checkpoint-transfer) 定义归档与执行兼容性。
 
 保留使用独立且有界的交换。`retention` 请求最多指定八个本地 `(generation, specification_digest)` 引用、一个 UUID、一个每次递增 1 的 `sequence`、当前 `connection_id` 和所有者 epoch。`retention_ack` 必须与完整的待处理请求匹配，包括条目顺序和身份信息，并为每个条目给出显式布尔值 `keep`。每条连接只能有一个交换处于待处理状态，断连会将其丢弃。任何未经请求、重放、过期、不完整或混合的确认都不会删除任何内容。保留流量从不使用 Provider 请求队列。
 
@@ -126,6 +126,6 @@ Runtime 字节缺失时，绝不将固定的放置实例迁移到当前 Runtime�
 
 准备诊断使用固定的类型化原因。只有制品传输、校验和或版本来源验证失败才会报告 `runtime_download_failed`；私有准备器通过退出类别指示这一类失败，Core 和节点都不解析 stderr。Provider 故障、所有权故障、取消和未分类故障保留其类型化代码，或使用 `provider_unavailable`。协议中不会传输任何 Provider 原始文本。
 
-创建操作通过 `Bootstrap.Harness` 将会话选择传递到 Runtime 启动协议版本 2。Core 和节点使用协议版本 7，需协调升级配套组件。`Bootstrap.Harness` 是必填字段。十项暂停操作均属于同一个 `SandboxProvider`，必须完整声明支持或不支持；不通过可选接口分派。`Observe` 每次只观测一个 allocation。
+创建操作通过 `Bootstrap.Harness` 将会话选择传递到 Runtime 启动协议版本 2。Core 和节点使用协议版本 8，需协调升级配套组件。`Bootstrap.Harness` 是必填字段。十项暂停操作均属于同一个 `SandboxProvider`，必须完整声明支持或不支持；不通过可选接口分派。`Observe` 每次只观测一个 allocation。
 
 当前线协议版本为 7。Create 引导和 Resume 请求可携带可选的工作区文件系统绑定。节点在转发前校验其租户及 Environment 与分配引用一致、ObjectID 不可变且有效，以及挂载配置 ID 与所传配置一致。文件系统解析器负责适配器原生所有权校验。未提供绑定时选择自有存储；已提供绑定时不得回退。错误响应仅可保留原生 ID 非空且名称、代次、保留状态来源均匹配请求的 Resume 目标；这仅为清理证据，不代表恢复成功。

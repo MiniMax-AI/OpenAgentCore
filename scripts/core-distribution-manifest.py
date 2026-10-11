@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 import zipapp
 
 
-RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b"
+RUNTIME_ARCHIVE_SHA256 = "86f9f72dc3e639c7175bc07909b4b63ce412517c1ef8a2e1921171af5682fded"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/node"))
 import provider_assets
@@ -204,7 +204,7 @@ def verify_runtime(image, daemon, source):
 
 def extract_runtime(archive, destination):
     if sha256(archive) != RUNTIME_ARCHIVE_SHA256:
-        raise ValueError("microsandbox v0.7.2 release checksum mismatch")
+        raise ValueError("microsandbox v0.7.8 release checksum mismatch")
     destination = pathlib.Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as bundle:
@@ -346,7 +346,7 @@ def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", off
         "image_manifest_digests": {name: identity[1] for name, identity in identities.items()},
         "runtime_ref": "oac-runtime@" + digest,
         "microsandbox": {
-            "version": "0.7.2",
+            "version": "0.7.8",
             "runtime_sha256": sha256(stage / "core/microsandbox/msb"),
             "firmware_sha256": sha256(stage / "core/microsandbox/libkrunfw.so.5.6.1"),
         },

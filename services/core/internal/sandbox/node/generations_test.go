@@ -207,7 +207,7 @@ func TestRestartRecoversExactOlderGenerationBeforeAdvertisingReadiness(t *testin
 	probe := make(chan struct{}, 1)
 	qualify := make(chan struct{})
 	m, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
-		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) error { return nil }}},
+		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) (*sandbox.CheckpointCompatibility, error) { return nil, nil }}},
 		Recover: []sandbox.GenerationReference{{Generation: 1, SpecificationDigest: digest}},
 		Prepare: func(ctx context.Context, generation uint64, got string) (GenerationProvider, error) {
 			if got != digest {
@@ -219,16 +219,16 @@ func TestRestartRecoversExactOlderGenerationBeforeAdvertisingReadiness(t *testin
 			case <-ctx.Done():
 				return GenerationProvider{}, ctx.Err()
 			}
-			return GenerationProvider{Generation: generation, SpecificationDigest: got, Provider: &fakeProvider{}, Probe: func(ctx context.Context) error {
+			return GenerationProvider{Generation: generation, SpecificationDigest: got, Provider: &fakeProvider{}, Probe: func(ctx context.Context) (*sandbox.CheckpointCompatibility, error) {
 				select {
 				case probe <- struct{}{}:
 				default:
 				}
 				select {
 				case <-qualify:
-					return nil
+					return nil, nil
 				case <-ctx.Done():
-					return ctx.Err()
+					return nil, ctx.Err()
 				}
 			}}, nil
 		},
@@ -296,12 +296,12 @@ func TestInterruptedCollectionNeverPreparesOrServesAfterRestart(t *testing.T) {
 	probed := make(chan struct{}, 1)
 	removes := 0
 	manager, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
-		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) error {
+		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) (*sandbox.CheckpointCompatibility, error) {
 			select {
 			case probed <- struct{}{}:
 			default:
 			}
-			return nil
+			return nil, nil
 		}}},
 		Collect: []sandbox.GenerationReference{ref},
 		Prepare: func(context.Context, uint64, string) (GenerationProvider, error) {

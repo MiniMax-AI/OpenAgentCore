@@ -253,7 +253,7 @@ func (r *Router) abandonExecutorAdmission(p *preparationState, state, code strin
 }
 
 func (r *Router) scheduleExecutorIdleLocked(owner *executorState) {
-	if owner.invalid || owner.preparing || owner.run != nil || owner.admission != nil {
+	if r.closed || r.suspension != nil || owner.invalid || owner.preparing || owner.run != nil || owner.admission != nil {
 		return
 	}
 	if owner.timer != nil {
@@ -281,7 +281,7 @@ func (r *Router) scheduleExecutorIdleLocked(owner *executorState) {
 // expireIdleExecutor closes owner only while lease is its current idle lease.
 func (r *Router) expireIdleExecutor(owner *executorState, lease uint64) {
 	r.mu.Lock()
-	if r.executors[owner.sessionID] != owner || owner.idleLease != lease || owner.run != nil || owner.admission != nil || owner.invalid {
+	if r.closed || r.suspension != nil || r.executors[owner.sessionID] != owner || owner.idleLease != lease || owner.run != nil || owner.admission != nil || owner.invalid {
 		r.mu.Unlock()
 		return
 	}

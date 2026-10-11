@@ -1,7 +1,7 @@
 ---
 title: 工作区文件系统 Provider
 source: docs/workspace-provider.md
-source_hash: 39d26eb96b553c925a46d1a2ae90fe4dc3d93fb21d5b9883e55656fd62e0f0fb
+source_hash: 21eb220ac59a477a8e799a6de20e01b339536901e8c9685695d2ac498b1b7bdb
 ---
 
 独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有 Sandbox Provider 或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[Sandbox Provider](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
@@ -56,6 +56,8 @@ source_hash: 39d26eb96b553c925a46d1a2ae90fe4dc3d93fb21d5b9883e55656fd62e0f0fb
 构造函数只验证并规范化 JSON，不执行文件系统 I/O。`Check` 验证打开的根目录确实位于内核 NFS，有效 UID 与私有所有权和权限匹配，命名空间标记匹配，并且实际文件描述符上的 `user.*` xattr 设置、读取和删除成功。包括打开根目录和可用性检查在内的所有文件系统操作，共享每进程最多 32 个在途操作的预算。调用者超时后收到 `ErrUnconfirmed`；该操作仍占用名额，直到内核调用返回。预算耗尽返回 `ErrUnavailable`。相对于目录描述符的操作始终锚定已打开的根目录。挂载不可用或配置路径只是本地目录时，验证失败，不创建本地回退。
 
 能力声明为 `host_directory`、`user_xattr: true`、`capacity_quota: false`。原生挂载凭据仅包含命名空间标识；解析时根据不可变配置和文件系统所有权验证完整 binding，随后返回根目录下的 `objects/<ObjectID>/live/data`。仅此数据目录暴露给 guest。租户和应用输入都不提供主机路径。
+
+NFS 适配器不实施按 Environment 或租户划分的字节或 inode 配额。单个对象可能耗尽共享文件系统，阻止其他对象写入，也可能阻止写入安全删除所需的持久终态元数据。运维人员必须监测可用字节和 inode，并为生命周期元数据和清理保留余量。对整个命名空间设置容量上限，并不提供租户或对象之间的容量隔离。
 
 每个对象拥有 `objects/<ObjectID>/identity`、`staging/`、`live/`、`trash/`，以及删除开始后的 `deleted-marker`。永久标识绑定租户、Environment 和对象 UUID。Create 先准备并同步唯一的私有 staging 封装目录，再原子发布其非空目录为 `live`；重放不会覆盖现有 live 数据。Delete 先持久记录对象本地的终态标记，将 live 数据退役到唯一的对象本地 trash，再先删除数据、后删除其所有权标记。并发删除者收敛。最少量的标识和删除元数据会有意保留；删除不代表所有元数据文件均消失。Create 和 Resolve 拒绝已退役标识。迟到的在途 Create 可能留下空的受控元数据，需要在其系统调用完成后重复 Delete；它不能授权新写入者或复用对象标识。清理只查看该对象的 staging 和 trash，不全量扫描命名空间，也不使用后台服务。
 

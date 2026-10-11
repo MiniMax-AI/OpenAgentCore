@@ -121,8 +121,22 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("completed preparation replayed")
 				}
-			} else if p.writes.Load() != 1 {
-				t.Fatal("unknown operation replayed", p.writes.Load())
+			} else {
+				if p.writes.Load() != 1 {
+					t.Fatal("unknown operation replayed", p.writes.Load())
+				}
+				stop()
+				_, _ = managedWorkerMode(t, s, key, p, true)
+				if err := p.connect(sandbox.Bootstrap{DeviceID: owner.DeviceID, Credential: p.credential}); err != nil {
+					t.Fatal(err)
+				}
+				time.Sleep(350 * time.Millisecond)
+				if p.writes.Load() != 1 || initializationState(t, s, tenant, env.ID) != "failed" {
+					t.Fatal("reconnect or Worker restart replayed unknown initialization")
+				}
+				if _, err := sessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+					t.Fatal("unknown initialization admitted execution", err)
+				}
 			}
 			p.mu.Lock()
 			kills := p.kills

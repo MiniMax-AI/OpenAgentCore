@@ -485,7 +485,7 @@ class NodeInstallTests(unittest.TestCase):
         self.install()
         config = json.loads((self.root / "provider.json").read_text())["native"]
         # Resources, the image and artifact hashes are read from the specification.
-        self.assertEqual(set(config), {"helper_path", "runtime_path", "firmware_path", "runtime_home", "network"})
+        self.assertEqual(set(config), {"helper_path", "runtime_path", "firmware_path", "runtime_home", "checkpoint_root", "network"})
         rules = config["network"]["rules"]
         self.assertIn({"action": "allow", "direction": "egress", "destination": "172.29.144.1", "protocol": "tcp", "port": "24443"}, rules)
         self.assertNotIn("private", [rule["destination"] for rule in rules])
@@ -1114,6 +1114,35 @@ class NodePrerequisiteTests(unittest.TestCase):
         with mock.patch.object(installer.Path, "home", return_value=Path("/home/" + "long" * 20)):
             with self.assertRaisesRegex(installer.InstallError, "HOME is too long"):
                 installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")
+
+
+class CheckpointRootTests(unittest.TestCase):
+    def test_identity_is_private_stable_and_not_recreated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "checkpoints"
+            installer.prepare_checkpoint_root(root)
+            marker = root / ".oac-checkpoint-store"
+            first = marker.read_bytes()
+            installer.prepare_checkpoint_root(root)
+            self.assertEqual(first, marker.read_bytes())
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
+            marker.write_text("incomplete")
+            with self.assertRaises(installer.InstallError):
+                installer.prepare_checkpoint_root(root)
+
+    def test_foreign_contents_and_symlink_are_not_adopted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "checkpoints"
+            root.mkdir()
+            (root / "unowned").write_bytes(b"data")
+            with self.assertRaisesRegex(installer.InstallError, "unowned"):
+                installer.prepare_checkpoint_root(root)
+            (root / "unowned").unlink()
+            marker = root / ".oac-checkpoint-store"
+            marker.symlink_to(Path(temporary) / "missing")
+            with self.assertRaises(installer.InstallError):
+                installer.prepare_checkpoint_root(root)
 
 
 class UnsupportedNodeUpdateTests(unittest.TestCase):

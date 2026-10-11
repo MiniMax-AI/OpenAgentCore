@@ -237,7 +237,14 @@ func (t *nodeTx) UpsertGenerationStatus(status deployment.GenerationStatusRecord
 	if err != nil {
 		return err
 	}
-	return t.q.UpsertNodeGenerationStatus(t.ctx, sqlc.UpsertNodeGenerationStatusParams{NodeID: id, Generation: int64(status.Generation), SpecificationDigest: status.SpecificationDigest, ConnectionID: connection, OwnerEpoch: int64(status.OwnerEpoch), State: status.State, Diagnostic: status.Diagnostic})
+	var checkpoint []byte
+	if status.Checkpoint != nil {
+		checkpoint, err = json.Marshal(status.Checkpoint)
+		if err != nil {
+			return err
+		}
+	}
+	return t.q.UpsertNodeGenerationStatus(t.ctx, sqlc.UpsertNodeGenerationStatusParams{NodeID: id, Generation: int64(status.Generation), SpecificationDigest: status.SpecificationDigest, ConnectionID: connection, OwnerEpoch: int64(status.OwnerEpoch), State: status.State, Diagnostic: status.Diagnostic, Checkpoint: checkpoint})
 }
 
 func (t *nodeTx) PromoteServingGeneration(nodeID string, generation uint64) error {

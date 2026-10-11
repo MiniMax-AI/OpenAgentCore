@@ -9,7 +9,7 @@ import (
 // retained translates a verified native snapshot without exposing its schema to Core.
 func retained(s SnapshotIdentity) sandbox.RetainedState {
 	raw, _ := json.Marshal(s)
-	return sandbox.RetainedState{Reference: s.Reference, ID: s.ID, OperationID: s.OperationID, SourceGeneration: s.SourceGeneration, SourceName: s.SourceName, SourceID: s.SourceID, Data: string(raw)}
+	return sandbox.RetainedState{Compatibility: s.Compatibility, Reference: s.Reference, ID: s.ID, OperationID: s.OperationID, SourceGeneration: s.SourceGeneration, SourceName: s.SourceName, SourceID: s.SourceID, Data: string(raw)}
 }
 func (p *Provider) snapshot(r sandbox.Reference, s sandbox.RetainedState) (SnapshotIdentity, error) {
 	var native SnapshotIdentity
@@ -41,7 +41,7 @@ func (p *Provider) nativeCompute(r sandbox.Reference, c sandbox.Compute) (Comput
 	return out, nil
 }
 func state(s State) sandbox.ComputeState {
-	out := sandbox.ComputeState{Compute: compute(s.Compute), Status: s.Status, BootstrapComplete: s.BootstrapComplete, ResourcesReleased: s.SourceStopped}
+	out := sandbox.ComputeState{Compute: compute(s.Compute), Status: s.Status, BootstrapComplete: s.BootstrapComplete, ResourcesReleased: s.SourceStopped, RestoreAttemptClosed: s.RestoreAttemptClosed}
 	if s.Snapshot != nil {
 		v := retained(*s.Snapshot)
 		out.Retained = &v
@@ -89,15 +89,6 @@ func (p *Provider) Suspend(ctx context.Context, q sandbox.SuspendRequest) (sandb
 		n.Snapshot = &s
 	}
 	s, e := p.nativeSuspend(ctx, n)
-	if e == nil && s.Snapshot != nil {
-		// Complete the same exact-source cleanup previously performed by Core.
-		// Native KillCompute still verifies ownership and removes its disks.
-		e = p.nativeKillCompute(ctx, q.Reference, c)
-		if e == nil {
-			s.SourceStopped = true
-			s.Status = "suspended"
-		}
-	}
 	out := state(s)
 	// The helper holds the allocation lock until the original native work settles.
 	out.SuspendSettled = e == nil

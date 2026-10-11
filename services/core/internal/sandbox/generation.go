@@ -10,10 +10,11 @@ import (
 // GenerationStatus is one sparse observation, not a complete provider inventory.
 // A serving pin is owned by Core and is independent of target preparation.
 type GenerationStatus struct {
-	Generation          uint64 `json:"generation"`
-	SpecificationDigest string `json:"specification_digest"`
-	State               string `json:"state"`
-	Diagnostic          string `json:"diagnostic,omitempty"`
+	Generation          uint64                   `json:"generation"`
+	SpecificationDigest string                   `json:"specification_digest"`
+	State               string                   `json:"state"`
+	Diagnostic          string                   `json:"diagnostic,omitempty"`
+	Checkpoint          *CheckpointCompatibility `json:"checkpoint,omitempty"`
 }
 
 type GenerationReference struct {

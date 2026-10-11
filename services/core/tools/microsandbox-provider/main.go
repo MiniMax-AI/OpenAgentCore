@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"debug/elf"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,9 @@ import (
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
+
+//go:embed go.mod
+var moduleDefinition string
 
 func main() {
 	// The inherited node generation lease covers this helper's actual lifetime.
@@ -53,6 +57,13 @@ func serve(input io.Reader) wire.Response {
 	if err := checkInstallation(q.Config); err != nil {
 		out.ErrorCode = "unconfirmed"
 		return out
+	}
+	if q.Workspace != nil {
+		real, err := filepath.EvalSymlinks(q.Workspace.Path)
+		if err != nil || real != q.Workspace.Path {
+			out.ErrorCode = "ownership"
+			return out
+		}
 	}
 	lock, err := allocationLock(q)
 	if err != nil {
@@ -169,7 +180,10 @@ func (g *allocationGuard) settleInitialAbsence(q wire.Request, nativeErr error) 
 }
 
 func allocationLock(q wire.Request) (*allocationGuard, error) {
-	dir := filepath.Join(q.Config.RuntimeHome, "oac-locks")
+	if _, e := wire.CheckpointStore(q.Config); e != nil {
+		return nil, e
+	}
+	dir := filepath.Join(q.Config.CheckpointRoot, wire.Name(q.Config, q.Reference, 0))
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return nil, e
 	}
@@ -179,6 +193,9 @@ func allocationLock(q wire.Request) (*allocationGuard, error) {
 	}
 	if !st.IsDir() || st.Mode().Perm() != 0700 {
 		return nil, sandbox.ErrOwnership
+	}
+	if e := syncDirectory(q.Config.CheckpointRoot); e != nil {
+		return nil, e
 	}
 	name := filepath.Join(dir, wire.Name(q.Config, q.Reference, 0)+".lock")
 	fd, e := syscall.Open(name, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
@@ -207,6 +224,16 @@ func allocationLock(q wire.Request) (*allocationGuard, error) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+func sdkModuleVersion() string {
+	for _, line := range strings.Split(moduleDefinition, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "github.com/superradcompany/microsandbox/sdk/go" {
+			return fields[1]
+		}
+	}
+	return ""
+}
+
 func checkInstallation(c wire.Config) error {
 	build, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -215,7 +242,7 @@ func checkInstallation(c wire.Config) error {
 	matched := false
 	for _, d := range build.Deps {
 		if d.Path == "github.com/superradcompany/microsandbox/sdk/go" {
-			matched = d.Version == wire.SDKVersion && d.Replace == nil
+			matched = d.Version == sdkModuleVersion() && d.Replace == nil
 		}
 	}
 	if !matched {
@@ -268,6 +295,13 @@ func checkInstallation(c wire.Config) error {
 	}
 	if runtime.MSBPath != c.RuntimePath || runtime.LibkrunfwPath != c.FirmwarePath {
 		return sandbox.ErrOwnership
+	}
+	nativeVersion, e := sdk.RuntimeVersion()
+	if e != nil {
+		return e
+	}
+	if sdk.SDKVersion() != strings.TrimPrefix(wire.SDKVersion, "v") || nativeVersion != sdk.SDKVersion() {
+		return sandbox.ErrInvalid
 	}
 	selected, e := sdk.DefaultBackendInfo()
 	if e != nil {

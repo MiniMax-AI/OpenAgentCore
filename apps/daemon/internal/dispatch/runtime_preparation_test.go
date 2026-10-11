@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -57,7 +58,7 @@ func capabilityEnvelope(t *testing.T, id string, request proto.RuntimePreparePay
 func capabilityBegin(environment, session string, body []byte) proto.RuntimePreparePayload {
 	digest := sha256.Sum256(body)
 	return proto.RuntimePreparePayload{
-		Step: "begin", Action: "skill", EnvironmentID: environment, SessionID: session,
+		BudgetMS: 300000, Step: "begin", Action: "skill", EnvironmentID: environment, SessionID: session,
 		Skill:     &agentskill.Metadata{Type: "inline", Name: "proof", Description: "A proof."},
 		SizeBytes: len(body), SHA256: hex.EncodeToString(digest[:]),
 	}
@@ -245,9 +246,10 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 
 func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.T) {
 	r, sender, environment, session := capabilitiesTestRouter(t)
+	sender.frames = make(chan proto.Envelope)
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
-	request := proto.RuntimePreparePayload{Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
+	request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
 	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
@@ -262,7 +264,10 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 		<-ctx.Done()
 		close(interrupted)
 		<-release
-		return os.WriteFile(retained, []byte("retained"), 0400)
+		if err := os.WriteFile(retained, []byte("retained"), 0400); err != nil {
+			return err
+		}
+		return context.Canceled
 	})
 	<-started
 	wait, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -279,13 +284,22 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 		t.Fatal("cancel released unsettled capability ownership")
 	}
 	close(release)
+	wait, stop = context.WithTimeout(context.Background(), 20*time.Millisecond)
+	err = r.Shutdown(wait)
+	stop()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("shutdown abandoned pending result delivery: %v", err)
+	}
+	capabilitiesReceipt(t, sender, id, "unknown")
 	shutdownCapabilitiesRouter(t, r)
-	capabilitiesReceipt(t, sender, id, "completed")
 	if _, err := os.Stat(retained); err != nil {
 		t.Fatal("shutdown deleted installation result")
 	}
-	if r.runtimePreparation != nil {
-		t.Fatal("confirmed completion retained capacity")
+	if r.runtimePreparation != owner || !owner.uncertain {
+		t.Fatal("shutdown erased unknown outcome")
+	}
+	if err := r.Handle(t.Context(), capabilityEnvelope(t, uuid.NewString(), request)); !errors.Is(err, ErrRouterClosed) {
+		t.Fatalf("closed router admitted a successor: %v", err)
 	}
 }
 
@@ -340,9 +354,91 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	if !owned {
 		t.Fatal("unknown mutation released its ownership")
 	}
-	wait, stop := context.WithTimeout(context.Background(), time.Second)
-	defer stop()
-	if err := r.Shutdown(wait); err == nil {
-		t.Fatal("shutdown claimed uncertain mutation settled")
+	next := uuid.NewString()
+	if err := r.Handle(t.Context(), capabilityEnvelope(t, next, request)); err != nil {
+		t.Fatal(err)
 	}
+	if got := capabilitiesReceipt(t, sender, next, "rejected"); got.ErrorCode != "runtime_preparation_capacity" {
+		t.Fatalf("unknown operation lost its admission fence: %+v", got)
+	}
+	shutdownCapabilitiesRouter(t, r)
+	if r.runtimePreparation != owner || !owner.uncertain {
+		t.Fatal("shutdown erased unknown outcome")
+	}
+}
+
+func TestRuntimePreparationStagingDeadlineRejectsWithoutApplying(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sender, environment, session := capabilitiesTestRouter(t)
+		id := uuid.NewString()
+		request := capabilityBegin(environment, session, []byte("abc"))
+		if err := r.Handle(t.Context(), capabilityEnvelope(t, id, request)); err != nil {
+			t.Fatal(err)
+		}
+		capabilitiesReceipt(t, sender, id, "ready")
+		time.Sleep(121 * time.Second)
+		synctest.Wait()
+		capabilitiesReceipt(t, sender, id, "rejected")
+		r.mu.Lock()
+		pending := r.runtimePreparation != nil
+		r.mu.Unlock()
+		if pending {
+			t.Fatal("uncommitted staging retained ownership")
+		}
+		shutdownCapabilitiesRouter(t, r)
+	})
+}
+
+func TestRuntimePreparationApplyOutlivesStagingAndHonorsBudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sender, environment, session := capabilitiesTestRouter(t)
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+		id := uuid.NewString()
+		request := capabilityBegin(environment, session, []byte("abc"))
+		owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true, transferDeadline: time.Now().Add(2 * time.Minute)}
+		close(owner.ready)
+		r.runtimePreparation = owner
+		r.shutdownWG.Add(1)
+		stopped := make(chan struct{})
+		go r.runRuntimePreparationTransfer(ctx, owner, func(ctx context.Context, _ proto.RuntimePreparePayload, _ []byte) error {
+			<-ctx.Done()
+			close(stopped)
+			return ctx.Err()
+		})
+		time.Sleep(121 * time.Second)
+		synctest.Wait()
+		select {
+		case <-stopped:
+			t.Fatal("staging timeout killed apply")
+		default:
+		}
+		time.Sleep(180 * time.Second)
+		synctest.Wait()
+		<-stopped
+		capabilitiesReceipt(t, sender, id, "unknown")
+		// Unknown effects remain retained; this test must not claim safe replay.
+		r.mu.Lock()
+		unknown := r.runtimePreparation == owner && owner.uncertain
+		r.mu.Unlock()
+		if !unknown {
+			t.Fatal("unknown apply lost ownership")
+		}
+	})
+}
+
+func TestRuntimePreparationHonorsBeginBudgetDuringStaging(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sender, environment, session := capabilitiesTestRouter(t)
+		id := uuid.NewString()
+		request := capabilityBegin(environment, session, []byte("abc"))
+		request.BudgetMS = 10
+		if err := r.Handle(t.Context(), capabilityEnvelope(t, id, request)); err != nil {
+			t.Fatal(err)
+		}
+		capabilitiesReceipt(t, sender, id, "ready")
+		time.Sleep(11 * time.Millisecond)
+		synctest.Wait()
+		capabilitiesReceipt(t, sender, id, "rejected")
+		shutdownCapabilitiesRouter(t, r)
+	})
 }

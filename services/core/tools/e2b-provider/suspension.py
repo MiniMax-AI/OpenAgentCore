@@ -89,6 +89,15 @@ class Suspension:
         q = self.request('Suspend')
         current = self.current()
         self.matches(q.get('Source'), current)
+        fence = self.record.get('suspend_fence')
+        closed = []
+        if fence:
+            if fence['source'] == current:
+                closed = fence['closed']
+            elif fence['source']['Generation'] >= current['Generation']:
+                raise Failure('ownership')
+        if q['OperationID'] in closed and not q['ReconcileOnly']:
+            raise Failure('ownership')
         handle = self.retained(q['OperationID'], current)
         if q.get('Retained') not in (None, handle):
             raise Failure('ownership')
@@ -104,6 +113,13 @@ class Suspension:
             cloud = self.cloud()
             if cloud.state != 'running':
                 raise Failure('unconfirmed')
+            if q['OperationID'] not in closed:
+                if len(closed) >= 64:
+                    raise Failure('unconfirmed')
+                closed = closed + [q['OperationID']]
+            # Close the exact attempt durably before Core may thaw this source.
+            # Rollback does not advance the generation and cannot clear fences.
+            self.p.receipt.save(suspend_fence={'source': current, 'closed': closed})
             state = self.state(current, cloud)
             state['SuspendSettled'] = True
             return {'State': state}
@@ -135,6 +151,23 @@ class Suspension:
         target = {'Generation': retained['SourceGeneration'] + 1, 'Name': retained['SourceName'],
                   'ID': retained['SourceID'], 'RestoredFrom': retained}
         self.matches(q.get('Target'), target)
+        closed = entry.get('closed_resume_ids', [])
+        if q['OperationID'] in closed:
+            if not q['ReconcileOnly'] or entry['phase'] != 'paused':
+                raise Failure('ownership')
+            return {'State': {'Compute': target, 'Status': 'absent', 'BootstrapComplete': False,
+                              'Retained': None, 'ResourcesReleased': False, 'SuspendSettled': False,
+                              'RestoreAttemptClosed': q['OperationID']}}
+        if entry['phase'] == 'paused' and q['ReconcileOnly']:
+            # Under the allocation flock no helper has persisted native dispatch
+            # for this attempt. Fence its late request durably before reporting it.
+            # Scope the bounded history to this retained generation; never evict.
+            if len(closed) >= 64:
+                raise Failure('unconfirmed')
+            self.p.receipt.save(suspension=dict(entry, closed_resume_ids=closed + [q['OperationID']]))
+            return {'State': {'Compute': target, 'Status': 'absent', 'BootstrapComplete': False,
+                              'Retained': None, 'ResourcesReleased': False, 'SuspendSettled': False,
+                              'RestoreAttemptClosed': q['OperationID']}}
         if entry['phase'] in ('resume_pending', 'resumed', 'consumed'):
             if entry.get('resume_id') != q['OperationID'] or entry.get('target') != target:
                 raise Failure('ownership')
@@ -207,6 +240,14 @@ class Suspension:
             raise Failure('ownership')
         if entry['phase'] == 'consumed':
             return {}
+        if self.record.get('status') != 'killed' and entry['phase'] == 'paused':
+            source = {'Generation': wanted['SourceGeneration'], 'Name': wanted['SourceName'],
+                      'ID': wanted['SourceID'], 'RestoredFrom': self.current()['RestoredFrom']}
+            self.matches(source, self.current())
+            # A settled, unconsumed pause owns this exact native resource. The
+            # final discovery in kill rechecks paused ownership; unknown deletion
+            # keeps this receipt, and confirmed absence can settle a retry.
+            self.p.kill(expected_paused_id=source['ID'])
         if self.record.get('status') != 'killed':
             if entry['phase'] != 'resumed':
                 raise Failure('unconfirmed')

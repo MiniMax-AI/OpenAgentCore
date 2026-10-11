@@ -46,3 +46,22 @@ func TestSuspensionRejectsUnsettledAndForeignHelperOutcomes(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestResumeClosedAttemptPreservesInPlaceNativeIdentity(t *testing.T) {
+	p, f, r := fixture(t)
+	retained := sandbox.RetainedState{Reference: r.AllocationID, ID: uuid.NewString(), OperationID: uuid.NewString(), SourceName: r.AllocationID, SourceID: "native-id", Data: "opaque"}
+	target, err := p.NewCompute(bounded(t), r, 1, &retained)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := sandbox.ResumeRequest{Reference: r, OperationID: uuid.NewString(), Retained: retained, Target: target, ReconcileOnly: true}
+	f.response.State = &sandbox.ComputeState{Compute: target, Status: "absent", RestoreAttemptClosed: q.OperationID}
+	got, err := p.Resume(bounded(t), q)
+	if err != nil || !got.ClosesRestoreAttempt(q) {
+		t.Fatal("in-place closure lost", got, err)
+	}
+	f.response.State.Compute.ID = "foreign-id"
+	if _, err := p.Resume(bounded(t), q); !errors.Is(err, sandbox.ErrOwnership) {
+		t.Fatal("foreign native closure accepted", err)
+	}
+}
