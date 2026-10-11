@@ -41,6 +41,7 @@ const (
 
 // Config is Core's process configuration.
 type Config struct {
+	SandboxCapacity SandboxLimits
 	// Addr is OAC_ADDR, the listener address.
 	Addr string
 	// PublicOrigin is OAC_PUBLIC_URL.
@@ -102,6 +103,9 @@ type runtimeHistoryFile struct {
 func Load() (Config, error) {
 	var c Config
 	var err error
+	if c.SandboxCapacity, err = SandboxCapacity(); err != nil {
+		return Config{}, err
+	}
 	if c.Log, err = log.LoadConfig(); err != nil {
 		return Config{}, err
 	}
@@ -170,6 +174,8 @@ func (c Config) Settings() []api.InstallationSetting {
 		setting("log.level", strings.ToLower(c.Log.Level.String()), "info", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
 		setting("log.format", format, "auto", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
 		setting("log.add_source", c.Log.AddSource, false, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("core.sandbox_capacity.max_active", c.SandboxCapacity.MaxActive, defaultSandboxMaxActive, []api.InstallationService{api.InstallationCore}),
+		setting("core.sandbox_capacity.max_retained", c.SandboxCapacity.MaxRetained, defaultSandboxMaxRetained, []api.InstallationService{api.InstallationCore}),
 		setting("core.execution_concurrency", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []api.InstallationService{api.InstallationCore}),
 		setting("core.harnesses", c.Harnesses, (engine.Catalog{}).Kinds(), []api.InstallationService{api.InstallationCore}),
 		setting("core.default_harness", c.DefaultHarness, defaultHarness, []api.InstallationService{api.InstallationCore}),

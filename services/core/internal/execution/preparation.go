@@ -21,6 +21,7 @@ type preparationRejection struct {
 func (e *preparationRejection) Error() string { return "preparation control rejected: " + e.code }
 
 type preparedStart struct {
+	ctx           context.Context
 	createdAt     time.Time
 	startSentAt   time.Time
 	startObserved bool
@@ -32,13 +33,13 @@ type preparedStart struct {
 	sub           *runtimegateway.Subscription
 }
 
-func newPreparedStart(peer *runtimegateway.Session) (*preparedStart, error) {
+func newPreparedStart(ctx context.Context, peer *runtimegateway.Session) (*preparedStart, error) {
 	id := uuid.NewString()
 	sub, err := peer.SubscribePreparation(id)
 	if err != nil {
 		return nil, err
 	}
-	return &preparedStart{peer: peer, requestID: id, sub: sub, createdAt: time.Now()}, nil
+	return &preparedStart{ctx: ctx, peer: peer, requestID: id, sub: sub, createdAt: time.Now()}, nil
 }
 
 func (p *preparedStart) close() {

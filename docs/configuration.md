@@ -50,6 +50,8 @@ Model providers are not process settings; see [Default models](#default-models).
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
 | `OAC_LOG_ADD_SOURCE` | unset | `1` adds source locations |
 | `OAC_EXECUTION_CONCURRENCY` | `4` | Concurrent execution work, from 1 to 1024 |
+| `OAC_SANDBOX_MAX_ACTIVE` | `100` | Active sandbox limit for direct Providers with suspension, from 1 to 100000. Independent of execution concurrency and node capacity |
+| `OAC_SANDBOX_MAX_RETAINED` | `400` | Retained sandbox limit for direct Providers, from 1 to 100000, including active, suspended and unconfirmed cleanup. Must be at least the active limit |
 | `OAC_DEFAULT_HARNESS` | `codex` | Harness used when a request does not name one |
 | `OAC_HARNESSES` | Every registered Harness | Comma-separated Harnesses to enable besides the default one. Unknown names stop startup |
 | `OAC_WRITE_AUDIT_RETENTION` | `2160h` | Minimum `1h` |
@@ -100,6 +102,10 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](./getting-started/self-hosted.md) |
 
 Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
+
+### Direct Provider capacity
+
+Set `OAC_SANDBOX_MAX_ACTIVE` and `OAC_SANDBOX_MAX_RETAINED` in `.env`, then run `oac apply`. Core uses these limits for direct Providers with suspension enabled. Every unreleased allocation consumes retained capacity. Lowering a limit stops no existing sandbox; new allocations wait until usage falls below both limits. These settings are independent of `OAC_EXECUTION_CONCURRENCY` and enrolled node capacity.
 
 ### Independent workspace storage
 
@@ -207,7 +213,7 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 | `OAC_CREDENTIAL_KEY_FILE` | Required. `/run/oac/credential.key`: a base64-encoded random 32-byte key. Core seals stored credentials with it |
 | `OAC_CORE_KEY_DIGESTS_FILE` | Required. `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
 | `OAC_INSTALLATION_ID_FILE` | Required. `/run/oac/installation.id`: the installation ID, a canonical UUID. Core refuses an ID other than the one its database recorded |
-| `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
+| `OAC_SANDBOX_MAX_ACTIVE`, `OAC_SANDBOX_MAX_RETAINED`, `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS`, `OAC_HISTORY_SETTINGS_FILE`, `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | The matching [process settings](#settings). Web reads the three log settings too |
 | `OAC_PROVIDER_ROOT` | Absolute adapter artifact root. The Core image sets `/opt/oac`. Each adapter owns its helper paths beneath this root. Core serves self-hosted daemon installers from its `native-installers/` directory when that holds a `catalog.json`, after checking the catalog against its own release. Adapter state lives at `/state`, the data volume's [`state/`](#compose-installations) |
 
 Core logs the history file path it loads, never environment values or file contents.

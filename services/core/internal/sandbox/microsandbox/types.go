@@ -4,6 +4,7 @@ package microsandbox
 
 import (
 	"context"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -43,12 +44,55 @@ type NetworkPolicy struct {
 }
 type NetworkRule struct{ Action, Direction, Destination, Protocol, Port string }
 
-// These aliases keep the helper wire private while Core uses provider-neutral types.
-type Compute = sandbox.Compute
-type SnapshotIdentity = sandbox.SnapshotIdentity
-type State = sandbox.ComputeState
-type SuspendRequest = sandbox.SuspendRequest
-type ResumeRequest = sandbox.ResumeRequest
+// Native snapshot wire types belong to this adapter.
+type Compute struct {
+	Generation   uint64
+	Name         string
+	ID           string
+	RestoredFrom *SnapshotIdentity
+}
+
+// SnapshotIdentity is provider evidence from a verified full snapshot. Core
+// persists it unchanged and records consumption separately; it never invents
+// paths, checksums, native checkpoint fields, or source identity.
+type SnapshotIdentity struct {
+	Compatibility    sandbox.CheckpointCompatibility
+	Reference        string
+	ID               string
+	Digest           string
+	CheckpointID     string
+	CheckpointRoot   string
+	OperationID      string
+	SourceGeneration uint64
+	SourceName       string
+	SourceID         string
+}
+
+type State struct {
+	RestoreAttemptClosed string
+	Compute              Compute
+	Status               string
+	BootstrapComplete    bool
+	Snapshot             *SnapshotIdentity
+	SourceStopped        bool
+}
+type SuspendRequest struct {
+	Reference   sandbox.Reference
+	OperationID string
+	Source      Compute
+	Snapshot    *SnapshotIdentity
+	// Recovery observes the previous attempt and never starts a new capture.
+	ObserveOnly bool
+}
+type ResumeRequest struct {
+	Workspace   *workspacefs.Binding `json:",omitempty"`
+	Reference   sandbox.Reference
+	OperationID string
+	Snapshot    SnapshotIdentity
+	Target      Compute
+	// Recovery observes the previous target and never starts a new restore.
+	ObserveOnly bool
+}
 
 // Request and Response are the finite, private helper boundary. Confidential
 // Bootstrap and Command bytes travel only through stdin and are never logged.
@@ -96,4 +140,12 @@ type Metrics struct {
 
 type Caller interface {
 	Call(context.Context, Request) (Response, error)
+}
+
+// ClosesRestoreAttempt verifies the exact never-dispatched private helper attempt.
+func (s State) ClosesRestoreAttempt(q ResumeRequest) bool {
+	return q.ObserveOnly && q.OperationID != "" && s.RestoreAttemptClosed == q.OperationID && s.Status == "absent" &&
+		s.Compute.ID == "" && q.Target.ID == "" && s.Compute.Name == q.Target.Name && s.Compute.Generation == q.Target.Generation &&
+		s.Compute.RestoredFrom != nil && q.Target.RestoredFrom != nil && *s.Compute.RestoredFrom == q.Snapshot && *q.Target.RestoredFrom == q.Snapshot &&
+		!s.BootstrapComplete && !s.SourceStopped && s.Snapshot == nil
 }

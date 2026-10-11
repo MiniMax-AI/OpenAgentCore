@@ -14,7 +14,7 @@ import (
 )
 
 func TestBootstrapDeliversOnlyPublicConnectionInput(t *testing.T) {
-	b := sandbox.Bootstrap{CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-secret"}
+	b := sandbox.Bootstrap{CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-secret", Harness: "codex"}
 	found := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "PUT" || !strings.HasSuffix(r.URL.Path, "/containers/test/archive") {

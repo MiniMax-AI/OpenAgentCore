@@ -97,7 +97,7 @@ func TestRuntimeWorkspaceConvergesBeforeComputeReservation(t *testing.T) {
 				return deployment.LifecyclePlacement{Specification: []byte(`{"workspace":{"attachment":"host_directory"}}`)}, nil
 			}, environmentAllocation: func(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
 				return deployment.Allocation{}, deployment.ErrNotFound
-			}}, workspaces: workspaces.NewExecution(f, f, workspaceControls{f}, heldLease{}), config: RuntimeProvider{InstallationID: uuid.NewString(), Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory}, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
+			}}, workspaces: workspaces.NewExecution(f, f, workspaceControls{f}, heldLease{}), config: RuntimeProvider{Mode: "direct", Generation: 1, InstallationID: uuid.NewString(), Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory}, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
 			_, err := r.provision(t.Context(), f.record.Reference.TenantID, f.record.Reference.EnvironmentID, r.config.InstallationID)
 			if fail {
 				if !errors.Is(err, workspacefs.ErrUnavailable) || reserved {
@@ -153,9 +153,11 @@ func TestOwnedGenerationDoesNotAdoptLaterFilesystemSelection(t *testing.T) {
 	_, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, &strictDeploymentReader{t: t}, &strictExecutionStorage{t: t, withReservation: func(context.Context, deployment.AllocationKey, func(sessions.LockedSession, deployment.ReservationTx) error) error {
 		return stop
 	}})
-	r := &runtimeLifecycle{reader: &strictDeploymentReader{t: t, lifecyclePlacement: func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error) {
+	r := &runtimeLifecycle{sessions: workspaceEnvironmentReader{}, deployment: operations, reader: &strictDeploymentReader{t: t, lifecyclePlacement: func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error) {
 		return deployment.LifecyclePlacement{Specification: []byte(`{}`)}, nil
-	}}, sessions: workspaceEnvironmentReader{}, deployment: operations, workspaces: workspaces.NewExecution(f, f, workspaceControls{f}, heldLease{}), config: RuntimeProvider{InstallationID: uuid.NewString()}}
+	}, environmentAllocation: func(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
+		return deployment.Allocation{}, deployment.ErrNotFound
+	}}, workspaces: workspaces.NewExecution(f, f, workspaceControls{f}, heldLease{}), config: RuntimeProvider{Mode: "direct", Generation: 1, InstallationID: uuid.NewString()}}
 	_, err := r.provision(t.Context(), f.record.Reference.TenantID, f.record.Reference.EnvironmentID, r.config.InstallationID)
 	if !errors.Is(err, stop) || f.binds != 0 || f.creates != 0 {
 		t.Fatal("owned generation retroactively attached filesystem", err)

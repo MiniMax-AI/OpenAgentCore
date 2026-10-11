@@ -14,7 +14,7 @@ import (
 // Core does not cache native ownership. A replacement requires the Runtime to
 // confirm cleanup and recover the exact Session history before returning ready.
 func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegateway.Session, tenant, session, turn string, request proto.PromptRequestPayload, expectedStatus string) (*preparedStart, error) {
-	prepared, err := newPreparedStart(peer)
+	prepared, err := newPreparedStart(ctx, peer)
 	if err != nil {
 		return nil, err
 	}

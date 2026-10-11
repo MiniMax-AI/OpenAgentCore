@@ -10,8 +10,11 @@ package runtimegateway
 import (
 	"context"
 	"errors"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"sync"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
 // ErrDeviceNotRegistered is returned by Registry lookups when a caller
@@ -36,16 +39,18 @@ type Registry struct {
 	// is inserted into byDevice. Buffered(1) so a Register that
 	// happens between WaitForDevice registering and selecting on the
 	// chan still wakes the waiter.
-	waiters map[string][]chan *Session
+	waiters         map[string][]chan *Session
+	capabilityHints chan struct{}
 }
 
 // NewRegistry returns an empty registry. The zero value would also
 // work but the constructor avoids accidental nil-map panics.
 func NewRegistry() *Registry {
 	return &Registry{
-		byDevice: map[string]*Session{},
-		byRun:    map[string]*Session{},
-		waiters:  map[string][]chan *Session{},
+		byDevice:        map[string]*Session{},
+		byRun:           map[string]*Session{},
+		waiters:         map[string][]chan *Session{},
+		capabilityHints: make(chan struct{}, 1),
 	}
 }
 
@@ -236,4 +241,31 @@ func (r *Registry) removeWaiter(deviceID string, ch chan *Session) {
 	} else {
 		r.waiters[deviceID] = filtered
 	}
+}
+
+// CapabilityHints coalesces capability changes for the single execution Worker.
+// A hint grants no execution authority; the Worker rechecks its normal gates.
+func (r *Registry) CapabilityHints() <-chan struct{} { return r.capabilityHints }
+
+func (r *Registry) observeCapabilitySnapshot(sess *Session, kinds []runtimedevice.SupportedAgentKind) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.byDevice[sess.DeviceID] != sess || sess.IsClosed() {
+		return false
+	}
+	available := 0
+	for _, kind := range kinds {
+		if kind.Available {
+			available++
+		}
+	}
+	obslog.Ctx(context.Background()).Info("runtime capability snapshot observed", "device_id", sess.DeviceID, "kind_count", len(kinds), "available_kind_count", available)
+	if available == 0 {
+		return true
+	}
+	select {
+	case r.capabilityHints <- struct{}{}:
+	default:
+	}
+	return true
 }

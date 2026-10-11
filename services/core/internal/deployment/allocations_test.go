@@ -690,7 +690,7 @@ func TestBeginRestoreDirectKeepsAllocationAndRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored, err := operations.BeginRestore(t.Context(), owner, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture", ExecutionClass: "fixture"}, json.RawMessage(`{"restore_id":"attempt"}`))
+	restored, err := operations.BeginRestore(t.Context(), owner, sandbox.CheckpointCompatibility{}, json.RawMessage(`{"restore_id":"attempt"}`))
 	if err != nil || restored.ID != owner.ID || restored.NodeID != "" || restored.ComputePhase != "restoring" {
 		t.Fatal("direct restore changed ownership", restored, err)
 	}

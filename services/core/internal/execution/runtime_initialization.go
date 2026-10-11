@@ -95,10 +95,12 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	operation, cancel := context.WithTimeout(ctx, time.Duration(proto.RuntimePrepareMaxBudgetMS)*time.Millisecond)
 	defer cancel()
 	failure := sessions.ProvisioningFailure{}
+	initializeAt := time.Now()
 	err := w.prepareEnvironment(operation, owner, &failure)
 	if err == nil {
 		err = w.dispatcher.sessionExecution.CompleteEnvironmentInitialization(operation, owner)
 	}
+	observeExecutionStage(ctx, "environment_initialize", initializeAt, err, "environment_id", owner.EnvironmentID, "session_id", owner.SessionID, "device_id", owner.DeviceID)
 	if err != nil {
 		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
 		// A later scan settles an unrecorded failure; it never retries the setup.

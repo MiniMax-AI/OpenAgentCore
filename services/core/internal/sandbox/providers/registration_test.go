@@ -173,12 +173,12 @@ func TestRegistrationRejectsInvalidDefaultResources(t *testing.T) {
 	}
 }
 
-// Only a nodes registration may declare checkpoint support.
-func TestRegistrationCheckpointRequiresNodes(t *testing.T) {
+// Complete suspension support is independent of deployment placement.
+func TestRegistrationSuspensionSupportsDirect(t *testing.T) {
 	registry := Builtin()
 	a := registry.adapters["microsandbox"]
 	a.Mode, a.BuildLocal, a.NodeArtifacts, a.BuildDirect = "direct", nil, nil, registry.adapters["e2b"].BuildDirect
-	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) || !strings.Contains(err.Error(), "checkpoint") {
-		t.Fatal("direct checkpoint registration accepted", err)
+	if err := ValidateRegistration(a); err != nil {
+		t.Fatal("direct suspension registration rejected", err)
 	}
 }

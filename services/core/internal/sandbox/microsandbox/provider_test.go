@@ -44,7 +44,7 @@ func TestRejectsChangedComputeIdentity(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	_, e = p.GetCompute(deadline(t), r, Compute{Name: Name(c, r, 0), ID: "local:4"})
+	_, e = p.nativeGetCompute(deadline(t), r, Compute{Name: Name(c, r, 0), ID: "local:4"})
 	if !errors.Is(e, sandbox.ErrOwnership) {
 		t.Fatalf("foreign identity accepted: %v", e)
 	}
@@ -60,7 +60,7 @@ func TestRestoreMustRetainExactProvenance(t *testing.T) {
 		got.RestoredFrom = &v
 		return Response{Version: ProtocolVersion, State: &State{Compute: got, Status: "running", BootstrapComplete: true}}, nil
 	}))
-	_, e := p.Resume(deadline(t), ResumeRequest{Reference: r, OperationID: "66666666-6666-4666-8666-666666666666", Snapshot: s, Target: target})
+	_, e := p.nativeResume(deadline(t), ResumeRequest{Reference: r, OperationID: "66666666-6666-4666-8666-666666666666", Snapshot: s, Target: target})
 	if !errors.Is(e, sandbox.ErrOwnership) {
 		t.Fatalf("different snapshot accepted: %v", e)
 	}
@@ -70,7 +70,7 @@ func TestRejectsSnapshotPathBeforeHelper(t *testing.T) {
 	s.Reference = "/foreign/checkpoint"
 	calls := 0
 	p, _ := NewWithCaller(c, callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
-	if e := p.DeleteSnapshot(deadline(t), r, s); !errors.Is(e, sandbox.ErrInvalid) || calls != 0 {
+	if e := p.nativeDeleteSnapshot(deadline(t), r, s); !errors.Is(e, sandbox.ErrInvalid) || calls != 0 {
 		t.Fatalf("e=%v calls=%d", e, calls)
 	}
 }
@@ -83,7 +83,7 @@ func TestObserveOnlyPreservesCapturedButResidentState(t *testing.T) {
 		}
 		return Response{Version: ProtocolVersion, State: &State{Compute: source, Status: "paused", Snapshot: &s}}, nil
 	}))
-	got, e := p.Suspend(deadline(t), SuspendRequest{Reference: r, OperationID: s.OperationID, Source: source, ObserveOnly: true})
+	got, e := p.nativeSuspend(deadline(t), SuspendRequest{Reference: r, OperationID: s.OperationID, Source: source, ObserveOnly: true})
 	if e != nil || got.SourceStopped || got.Status != "paused" {
 		t.Fatalf("state=%+v error=%v", got, e)
 	}
@@ -117,11 +117,11 @@ func TestNoDeadlineOrForeignAllocationNeverCallsHelper(t *testing.T) {
 	r := testRef()
 	foreign := r
 	foreign.EnvironmentID = "77777777-7777-4777-8777-777777777777"
-	initial, initialErr := p.Initial(deadline(t), r)
+	initial, initialErr := p.nativeInitial(deadline(t), r)
 	if initialErr != nil {
 		t.Fatal(initialErr)
 	}
-	_, e = p.GetCompute(deadline(t), foreign, initial)
+	_, e = p.nativeGetCompute(deadline(t), foreign, initial)
 	if !errors.Is(e, sandbox.ErrInvalid) || calls != 0 {
 		t.Fatalf("e=%v calls=%d", e, calls)
 	}
@@ -146,7 +146,7 @@ func TestMissingSnapshotObservationAllowsOnlyIntactSourceRollback(t *testing.T) 
 			p, _ := NewWithCaller(c, callerFunc(func(context.Context, Request) (Response, error) {
 				return Response{Version: ProtocolVersion, State: &State{Compute: source, Status: status, BootstrapComplete: true}}, nil
 			}))
-			_, e := p.Suspend(deadline(t), SuspendRequest{Reference: r, OperationID: s.OperationID, Source: source, ObserveOnly: true})
+			_, e := p.nativeSuspend(deadline(t), SuspendRequest{Reference: r, OperationID: s.OperationID, Source: source, ObserveOnly: true})
 			if status == "running" || status == "paused" {
 				if e != nil {
 					t.Fatal(e)

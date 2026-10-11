@@ -19,7 +19,7 @@ SELECT n.*, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND
  (SELECT count(*) FROM runtime_placements p WHERE p.node_id=n.id AND p.released_at IS NULL AND NOT EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.environment_id=p.environment_id AND a.state<>'released'))::bigint AS reserved,
  (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state='cleanup_pending')::bigint AS cleanup_pending,
  (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state='running' AND a.compute_phase IN('running','disabled'))::bigint AS running,
- (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state<>'released' AND a.compute_state->'snapshot' IS NOT NULL AND a.compute_state->'snapshot'<>'null'::jsonb)::bigint AS snapshots
+ (SELECT count(*) FROM runtime_allocations a WHERE a.node_id=n.id AND a.state<>'released' AND a.compute_state->'retained' IS NOT NULL AND a.compute_state->'retained'<>'null'::jsonb)::bigint AS snapshots
 FROM runtime_nodes n CROSS JOIN runtime_deployment d
 WHERE n.removed_at IS NULL AND n.installation_id=d.installation_id
 AND (sqlc.narg(node_id)::uuid IS NULL OR n.id=sqlc.narg(node_id)::uuid) ORDER BY n.id;

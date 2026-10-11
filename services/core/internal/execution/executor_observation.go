@@ -11,20 +11,20 @@ import (
 // These durations use one Core process monotonic clock. They describe control
 // readiness and input-to-first-text latency, not model-only or native tool time.
 func recordExecutorReadiness(p *preparedStart, status proto.PreparationStatusPayload) {
-	obslog.Bg().Info("executor ready", "request_id", p.requestID,
+	obslog.Ctx(p.ctx).Info("executor ready", "preparation_request_id", p.requestID,
 		"executor_id", status.ExecutorID, "reused", status.Reused,
 		"control_ready_ms", time.Since(p.createdAt).Milliseconds())
 }
 
 // The started receipt confirms adapter ownership, not model consumption.
 func recordExecutorStart(p *preparedStart, turn string) {
-	obslog.Bg().Info("executor start acknowledged", "turn_id", turn,
-		"request_id", p.requestID, "executor_id", p.executorID,
+	obslog.Ctx(p.ctx).Info("executor start acknowledged", "turn_id", turn,
+		"preparation_request_id", p.requestID, "executor_id", p.executorID,
 		"start_control_ms", time.Since(p.startSentAt).Milliseconds())
 }
 
 func recordFirstText(ctx context.Context, session, turn string, submitted time.Time) {
-	obslog.Bg().InfoContext(ctx, "executor first text", "session_id", session,
+	obslog.Ctx(ctx).Info("executor first text", "session_id", session,
 		"turn_id", turn, "input_to_first_text_ms", time.Since(submitted).Milliseconds())
 }
 

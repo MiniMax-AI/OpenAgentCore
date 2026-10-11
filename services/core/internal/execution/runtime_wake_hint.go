@@ -2,14 +2,15 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// A hint only accelerates observation of an already committed input. Lookup or
-// delivery failure leaves that input for the normal maintenance scan.
+// Hints only accelerate lifecycle work for committed Environments and inputs.
+// Lookup or delivery failure leaves that work for the normal maintenance scan.
 func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) {
 	r := w.runtimes
 	if r == nil {
@@ -19,16 +20,40 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) 
 	config := r.config
 	available := !r.closed && !r.switching
 	r.mu.Unlock()
-	if !available || config.Suspension == nil || r.ctx.Err() != nil {
+	if !available || r.ctx.Err() != nil {
 		return
 	}
 	lookup, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	environment, err := w.dispatcher.SessionsReader.GetSessionEnvironment(lookup, session.TenantID, session.ID)
-	if err != nil || environment.Initialization != "complete" {
+	if err != nil {
+		return
+	}
+	placement, err := parseEnvironmentPlacement(environment.Configuration)
+	if err != nil || placement.Type != "openai_hosted" {
 		return
 	}
 	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(lookup, deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: environment.ID})
+	if errors.Is(err, deployment.ErrNotFound) {
+		// Placement exists before allocation. Route through its lifecycle owner;
+		// the scan still enforces lease, capacity and one-shot Create receipts.
+		nodeID, err := r.deploymentService.LifecycleNode(lookup, session.TenantID, environment.ID)
+		if err != nil || lookup.Err() != nil {
+			return
+		}
+		node, err := r.node(nodeID)
+		if err != nil {
+			return
+		}
+		select {
+		case node.lifecycle.wakeHints <- struct{}{}:
+		default:
+		}
+		return
+	}
+	if config.Suspension == nil || environment.Initialization != "complete" {
+		return
+	}
 	if err != nil || owner.ProviderKey != config.InstallationID || owner.State != "running" ||
 		!owner.CreateSettled || owner.SessionDeleted || owner.Expired {
 		return

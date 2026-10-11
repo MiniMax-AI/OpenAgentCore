@@ -55,11 +55,6 @@ func ValidateRegistration(a Adapter) error {
 	if err := sandbox.ValidateOperations(operations); err != nil {
 		return err
 	}
-	// The common lifecycle suspends only node allocations, so only a nodes
-	// registration may declare checkpoint support.
-	if operations["Initial"].State == providercontract.Supported && a.Mode != sandbox.DeploymentNodes {
-		return invalid("checkpoint support outside nodes mode")
-	}
 	if a.Policy.DefaultResources != nil && a.ValidateResources(*a.Policy.DefaultResources) != nil {
 		return invalid("default resources")
 	}

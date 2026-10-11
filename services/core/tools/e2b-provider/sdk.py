@@ -1,5 +1,6 @@
 """The version-pinned SDK boundary. No handwritten provider HTTP or envd RPC."""
 import base64
+from contextlib import nullcontext
 import shlex
 
 from e2b import Sandbox
@@ -155,7 +156,7 @@ def definitely_rejected(error):
             isinstance(error, SandboxException) and error.status_code in (400, 401, 403, 404, 422, 429))
 
 
-def run(sandbox, command, remaining, user='runtime'):
+def run(sandbox, command, remaining, user='runtime', observe_stage=None):
     raw = command.get('Stdin')
     data = base64.b64decode(raw, validate=True) if raw is not None else None
     if data is not None and len(data) > MAX_COMMAND_INPUT:
@@ -174,9 +175,10 @@ def run(sandbox, command, remaining, user='runtime'):
             raise Failure('command_unconfirmed')
 
     try:
-        process = sandbox.commands.run(shlex.join(args), user=user, cwd=directory,
-                                       background=True, stdin=data is not None,
-                                       timeout=remaining(), request_timeout=remaining())
+        with observe_stage('bootstrap_stream_open') if observe_stage else nullcontext():
+            process = sandbox.commands.run(shlex.join(args), user=user, cwd=directory,
+                                           background=True, stdin=data is not None,
+                                           timeout=remaining(), request_timeout=remaining())
         if data is not None:
             # Avoid an oversized unary SDK message; every chunk is submitted once.
             for offset in range(0, len(data), 64 * 1024):
@@ -184,8 +186,9 @@ def run(sandbox, command, remaining, user='runtime'):
                                             request_timeout=remaining())
             sandbox.commands.close_stdin(process.pid, request_timeout=remaining())
         try:
-            result = process.wait(on_stdout=lambda text: bounded(0, text),
-                                  on_stderr=lambda text: bounded(1, text))
+            with observe_stage('bootstrap_stream_completion') if observe_stage else nullcontext():
+                result = process.wait(on_stdout=lambda text: bounded(0, text),
+                                      on_stderr=lambda text: bounded(1, text))
         except CommandExitException as error:
             result = error
         return {'Stdout': result.stdout, 'Stderr': result.stderr, 'ExitCode': result.exit_code}

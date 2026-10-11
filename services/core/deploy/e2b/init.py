@@ -1,15 +1,35 @@
 #!/usr/bin/env python3
 """One-shot user-owned Runtime startup; never an enrollment or execution service."""
 import json
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
+import sys
+import time
 from uuid import UUID
 from urllib.parse import urlsplit
 
 ROOT = Path('/root/.oac/e2b')
 PROFILE = Path('/home/runtime/.oac/daemon/default')
 IMAGE_ENV = Path('/etc/oac-runtime-env.json')
+
+
+@contextmanager
+def bootstrap_stage(stage):
+    """Fixed numeric guest timings; receipts and command stdout stay unchanged."""
+    started = time.monotonic_ns()
+    completed = False
+    try:
+        yield
+        completed = True
+    finally:
+        try:
+            sys.stderr.write(json.dumps({'event': 'e2b_bootstrap_stage', 'stage': stage,
+                                         'duration_us': (time.monotonic_ns() - started) // 1000,
+                                         'completed': completed}) + '\n')
+        except Exception:
+            pass
 
 
 def launch_identity(payload):
@@ -65,30 +85,32 @@ def write_private(path, value, owner=None):
 
 def prepare_runtime():
     """Restore the protected image and shared Runtime layout before any daemon starts."""
-    # E2B finalization makes /usr/local world-writable after template commands.
-    subprocess.run(['chown', '-R', 'root:root', '/usr/local'], check=True)
-    subprocess.run(['chmod', '-R', 'go-w', '/usr/local'], check=True)
-    for protected in ['/usr/bin/envd', '/etc/inittab', '/etc/init.d/rcS']:
-        if protected == '/etc/init.d/rcS' and not Path(protected).exists():
-            continue
-        os.chown(protected, 0, 0)
-        os.chmod(protected, 0o755)
-    # Disable E2B's unused passwordless sudo account before unprivileged startup.
-    subprocess.run(['usermod', '--lock', '--shell', '/usr/sbin/nologin', 'user'], check=True)
-    environment = json.loads(IMAGE_ENV.read_text())
-    if (environment.get('OAC_RUNTIME_HOME') != '/home/runtime/.oac'
-            or environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace'
-            or any(key in environment for key in ['OAC_RUNTIME_ENVIRONMENT_ID',
-                                                 'OAC_RUNTIME_SESSION_ID'])):
-        raise ValueError('Image must contain an unbound packaged Runtime profile')
-    environment['PATH'] = '/usr/local/bin:/usr/bin:/bin'
-    subprocess.run(['mount', '--bind', '/environment/workspace', '/workspace'], check=True)
-    PROFILE.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for directory in [Path('/home/runtime'), Path('/home/runtime/.oac'), PROFILE.parent, PROFILE,
-                      Path('/environment/workspace'), Path('/environment/staging'),
-                      Path('/environment/initialization'), Path('/environment/packages')]:
-        os.chown(directory, 1000, 1000)
-        directory.chmod(0o700)
+    with bootstrap_stage('bootstrap_protection'):
+        # E2B finalization makes /usr/local world-writable after template commands.
+        subprocess.run(['chown', '-R', 'root:root', '/usr/local'], check=True)
+        subprocess.run(['chmod', '-R', 'go-w', '/usr/local'], check=True)
+        for protected in ['/usr/bin/envd', '/etc/inittab', '/etc/init.d/rcS']:
+            if protected == '/etc/init.d/rcS' and not Path(protected).exists():
+                continue
+            os.chown(protected, 0, 0)
+            os.chmod(protected, 0o755)
+        # Disable E2B's unused passwordless sudo account before unprivileged startup.
+        subprocess.run(['usermod', '--lock', '--shell', '/usr/sbin/nologin', 'user'], check=True)
+    with bootstrap_stage('bootstrap_layout'):
+        environment = json.loads(IMAGE_ENV.read_text())
+        if (environment.get('OAC_RUNTIME_HOME') != '/home/runtime/.oac'
+                or environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace'
+                or any(key in environment for key in ['OAC_RUNTIME_ENVIRONMENT_ID',
+                                                     'OAC_RUNTIME_SESSION_ID'])):
+            raise ValueError('Image must contain an unbound packaged Runtime profile')
+        environment['PATH'] = '/usr/local/bin:/usr/bin:/bin'
+        subprocess.run(['mount', '--bind', '/environment/workspace', '/workspace'], check=True)
+        PROFILE.mkdir(mode=0o700, parents=True, exist_ok=True)
+        for directory in [Path('/home/runtime'), Path('/home/runtime/.oac'), PROFILE.parent, PROFILE,
+                          Path('/environment/workspace'), Path('/environment/staging'),
+                          Path('/environment/initialization'), Path('/environment/packages')]:
+            os.chown(directory, 1000, 1000)
+            directory.chmod(0o700)
     return environment
 
 
@@ -106,6 +128,8 @@ def initialize():
     # Claim before any side effect. An interrupted attempt must never start twice.
     write_private(ROOT / 'launch.json', identity)
     environment = prepare_runtime()
+    # Application-owned startup does not participate in Core-managed suspension.
+    environment.pop('OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE', None)
     credential = PROFILE.parent / 'executor-key.json'
     write_private(credential, payload['executor_key'], owner=1000)
     source.unlink()

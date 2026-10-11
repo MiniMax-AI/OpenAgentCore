@@ -76,6 +76,12 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// Fixture Runtime enrollment also emits a capability hint. Isolate
+			// the admission signal under test from that already committed work.
+			select {
+			case <-h.d.Registry.CapabilityHints():
+			default:
+			}
 			trace.armed.Store(true)
 			started = true
 			go func() { done <- worker.Run(ctx) }()

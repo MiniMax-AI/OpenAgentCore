@@ -127,10 +127,11 @@ type deferReplySentinel struct{}
 var DeferReply = deferReplySentinel{}
 
 type pendingRequest struct {
-	method   string
-	resp     chan rpcResponse
-	timer    *time.Timer
-	onResult func(json.RawMessage) error
+	method     string
+	resp       chan rpcResponse
+	timer      *time.Timer
+	onResult   func(json.RawMessage) error
+	onResponse func(bool)
 }
 
 type rpcResponse struct {
@@ -170,7 +171,7 @@ func NewJSONRPCClient(cfg JSONRPCConfig) *JSONRPCClient {
 //   - exec.LookPath / Start failure → returns the spawn error verbatim
 //   - initialize timeout → kills the child, returns context.DeadlineExceeded
 //   - JSON-RPC error on initialize → kills the child, returns the error
-func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (InitializeResult, error) {
+func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (_ InitializeResult, resultErr error) {
 	args := append([]string{}, c.cfg.ExtraArgs...)
 	args = append(args, "app-server", "--stdio")
 	for _, f := range c.cfg.EnableFeatures {
@@ -180,10 +181,12 @@ func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (Initi
 		args = append(args, "--disable", f)
 	}
 
+	spawnStarted := time.Now()
 	process, err := clirunner.Start(clirunner.StartOptions{
 		Parent: ctx, Binary: c.cfg.Binary, Args: args, Dir: c.cfg.Cwd, Env: c.cfg.Env,
 		NeedStdin: true, KillTimeout: 250 * time.Millisecond,
 	})
+	observePreparationStage(ctx, "process_spawn", spawnStarted, err)
 	if err != nil {
 		return InitializeResult{}, fmt.Errorf("codex rpc: spawn %q: %w", c.cfg.Binary, err)
 	}
@@ -201,6 +204,8 @@ func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (Initi
 
 	initCtx, cancel := context.WithTimeout(ctx, rpcInitTimeout)
 	defer cancel()
+	initializeStarted := time.Now()
+	defer func() { observePreparationStage(ctx, "rpc_initialize", initializeStarted, resultErr) }()
 	rawResult, err := c.Request(initCtx, "initialize", init)
 	if err != nil {
 		_ = c.Close()
@@ -369,6 +374,9 @@ func (c *JSONRPCClient) handleResponse(rawID, rawResult, rawError json.RawMessag
 	}
 	if p.timer != nil {
 		p.timer.Stop()
+	}
+	if p.onResponse != nil {
+		p.onResponse(len(rawError) == 0 || string(rawError) == "null")
 	}
 	if len(rawError) > 0 && string(rawError) != "null" {
 		var errBody JsonRpcError

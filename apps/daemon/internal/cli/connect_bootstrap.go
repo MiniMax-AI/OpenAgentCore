@@ -9,7 +9,7 @@ import (
 
 // The launch file is the sole credential source for this connection. Reopening
 // it on process restart never reads or overwrites an auth profile.
-func bootstrapProfile(path string) (*auth.Profile, error) {
+func bootstrapProfile(path string, rc *runContext) (*auth.Profile, error) {
 	raw, err := runtimefs.ReadPrivatePath(path, runtimebootstrap.MaxBytes)
 	if err != nil {
 		return nil, errors.New("connect: Runtime bootstrap file unavailable")
@@ -18,5 +18,6 @@ func bootstrapProfile(path string) (*auth.Profile, error) {
 	if err != nil {
 		return nil, err
 	}
+	rc.installedKinds = map[string]bool{input.Harness: true}
 	return &auth.Profile{ServerURL: input.CoreURL, RuntimeID: input.DeviceID, RunnerCredential: input.Credential}, nil
 }

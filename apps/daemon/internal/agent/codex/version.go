@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 // InstallURL points operators at the Codex install instructions when
@@ -38,11 +40,39 @@ func CheckCLIAvailable(ctx context.Context, binary string) (string, error) {
 		return "", fmt.Errorf("%w: %s", ErrCLINotFound, binary)
 	}
 
-	var stdout, stderr bytes.Buffer
+	var stdout firstOutputBuffer
+	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, binary, "--version")
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	spawnAt := time.Now()
+	err := cmd.Start()
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	obslog.Ctx(ctx).Info("runtime version probe", "harness_kind", "codex", "stage", "process_spawn", "duration_ms", float64(time.Since(spawnAt))/float64(time.Millisecond), "status", status)
+	if err == nil {
+		waitAt := time.Now()
+		err = cmd.Wait()
+		completedAt := time.Now()
+		if err != nil {
+			status = "error"
+		}
+		obslog.Ctx(ctx).Info("runtime version probe", "harness_kind", "codex", "stage", "process_wait", "duration_ms", float64(completedAt.Sub(waitAt))/float64(time.Millisecond), "status", status)
+		// Wait joins the stdout copier. Inspect its timestamp only after it returns;
+		// receiving bytes never replaces process exit or output validation.
+		if !stdout.first.IsZero() {
+			obslog.Ctx(ctx).Info("runtime version probe", "harness_kind", "codex", "stage", "first_stdout", "duration_ms", float64(stdout.first.Sub(spawnAt))/float64(time.Millisecond))
+			obslog.Ctx(ctx).Info("runtime version probe", "harness_kind", "codex", "stage", "stdout_to_completion", "duration_ms", float64(completedAt.Sub(stdout.first))/float64(time.Millisecond), "status", status)
+		}
+		if cmd.ProcessState != nil {
+			obslog.Ctx(ctx).Info("runtime version probe resources", "harness_kind", "codex",
+				"user_cpu_ms", float64(cmd.ProcessState.UserTime())/float64(time.Millisecond),
+				"system_cpu_ms", float64(cmd.ProcessState.SystemTime())/float64(time.Millisecond))
+		}
+	}
+	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
@@ -58,3 +88,19 @@ func CheckCLIAvailable(ctx context.Context, binary string) (string, error) {
 	}
 	return out, nil
 }
+
+// exec writes through a single stdout copier and Wait joins it. Do not embed
+// bytes.Buffer: its ReaderFrom would bypass Write and lose the first-byte event.
+type firstOutputBuffer struct {
+	buffer bytes.Buffer
+	first  time.Time
+}
+
+func (b *firstOutputBuffer) Write(p []byte) (int, error) {
+	if len(p) > 0 && b.first.IsZero() {
+		b.first = time.Now()
+	}
+	return b.buffer.Write(p)
+}
+
+func (b *firstOutputBuffer) String() string { return b.buffer.String() }

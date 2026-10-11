@@ -3,11 +3,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudesdk"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 var harnessDeclarations = []agent.Declaration{codex.Declaration, mcode.Declaration, claudesdk.Declaration}
@@ -36,7 +39,11 @@ func discoverAgentCLIs(parent context.Context, rc *runContext, profile string, d
 		if rc.installedKinds != nil && !rc.installedKinds[declaration.Info.Kind] {
 			continue
 		}
+		started := time.Now()
 		runtime := declaration.Discover(parent, agent.DiscoveryOptions{Profile: profile, StateRoot: stateRoot, RuntimeRoot: runtimeRoot, Stdout: rc.stdout, Stderr: rc.stderr}, declaration.Info)
+		obslog.Ctx(parent).Info("runtime startup stage", "stage", "harness_discovery",
+			"harness_kind", declaration.Info.Kind, "duration_ms", float64(time.Since(started))/float64(time.Millisecond),
+			"available", runtime != nil && runtime.Info.Available)
 		if runtime == nil {
 			continue
 		}

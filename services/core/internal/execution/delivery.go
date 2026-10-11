@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"time"
 
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -37,7 +39,11 @@ func requestCancellation(ctx context.Context, peer *runtimegateway.Session, runI
 }
 
 func send(ctx context.Context, peer *runtimegateway.Session, kind, runID string, payload any) error {
-	env, err := proto.NewEnvelope(kind, runID, payload)
+	trace := ""
+	if carrier, ok := obslog.TraceFromContext(ctx); ok {
+		trace = carrier.String()
+	}
+	env, err := proto.NewEnvelopeWithTrace(kind, runID, payload, trace)
 	if err != nil {
 		return err
 	}

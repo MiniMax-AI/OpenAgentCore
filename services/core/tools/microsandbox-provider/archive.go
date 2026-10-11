@@ -492,3 +492,47 @@ func (b backend) pinRestoreCleanup(target *wire.Compute) error {
 	}
 	return nil
 }
+
+// One bounded journal fences capture admission across process restarts. Source
+// generations only advance after suspend verified the new exact native source.
+// Keeping that high-water identity rejects delayed requests from older writers.
+type captureAdmission struct {
+	Source     wire.Compute
+	Operations map[string]bool // true means durably closed without dispatch
+}
+
+func (b backend) admitSuspend(q wire.SuspendRequest) (bool, error) {
+	path := filepath.Join(b.storeDirectory(), "capture-admission.json")
+	var prior captureAdmission
+	err := readPrivateJSON(path, &prior)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	if err == nil {
+		if prior.Source.ID == "" || prior.Operations == nil || len(prior.Operations) > 64 {
+			return false, sandbox.ErrOwnership
+		}
+		if !reflect.DeepEqual(prior.Source, q.Source) {
+			if q.Source.Generation <= prior.Source.Generation {
+				return false, sandbox.ErrOwnership
+			}
+			prior = captureAdmission{Source: q.Source, Operations: map[string]bool{}}
+		}
+	} else {
+		prior = captureAdmission{Source: q.Source, Operations: map[string]bool{}}
+	}
+	if closed, exists := prior.Operations[q.OperationID]; exists {
+		if !closed && !q.ObserveOnly {
+			return false, wire.ErrUnconfirmed
+		}
+		return closed, nil
+	}
+	if len(prior.Operations) >= 64 {
+		return false, wire.ErrUnconfirmed
+	}
+	prior.Operations[q.OperationID] = q.ObserveOnly
+	if err := durableJSON(path, prior); err != nil {
+		return false, err
+	}
+	return q.ObserveOnly, nil
+}

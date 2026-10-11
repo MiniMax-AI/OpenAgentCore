@@ -29,7 +29,7 @@ q=json.load(sys.stdin)
 with (pathlib.Path(q['Config']['StateDir'])/'requests').open('a') as f: f.write(json.dumps(q)+'\n')
 info=dict(q['Reference'],State='running',ProviderID='owned',CreateSettled=True)
 if q['Operation']=='kill': info['State']='absent'
-print(json.dumps({'Version':1,'Info':info}))
+print(json.dumps({'Version':q['Version'],'Info':info}))
 `
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ print(json.dumps({'Version':1,'Info':info}))
 		value.Configuration = &key
 		return value, nil
 	}
-	setup := &managedSetup{processPaths: paths, registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, allocationSetup: allocation}, installationID: id}
+	setup := &managedSetup{capacity: testSandboxCapacity(t), processPaths: paths, registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, allocationSetup: allocation}, installationID: id}
 	// A facade retained by a generation-one lifecycle still reads current credentials.
 	router := &generationRouter{setup: setup}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -132,7 +132,7 @@ code = ''
 if k == 'revoked': code = 'unauthorized'
 elif k == 'unconfirmed': code = 'unconfirmed'
 elif not (k.startswith('team-a') and template in ('owned-a', 'new-a') or k == 'team-b' and template == 'public-b'): code = 'team_mismatch'
-result = {'Version': 1, 'ErrorCode': code}
+result = {'Version': q['Version'], 'ErrorCode': code}
 if not code:
     result['DeploymentValid'] = True
     if q['Operation'] == 'validate_deployment':
@@ -151,7 +151,7 @@ print(json.dumps(result))
 			setups := &fakeDeploymentSetups{t: t, setup: committedSetup(&committed), withCredential: credentialService(t),
 				generationPage: func(context.Context, int64) ([]deployment.Setup, error) { return nil, nil }}
 			allocations := &fakeGenerationAllocations{t: t, credentialAllocations: func(context.Context, string) ([]deployment.Allocation, error) { return nil, nil }}
-			s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: setups, allocations: allocations}
+			s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: setups, allocations: allocations}
 			loaded, err := s.load(t.Context())
 			if err != nil {
 				t.Fatal(err)

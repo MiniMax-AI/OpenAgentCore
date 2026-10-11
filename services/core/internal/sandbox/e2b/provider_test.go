@@ -103,7 +103,7 @@ func TestKillRequiresTerminalProof(t *testing.T) {
 }
 func TestCreateAndCommandUseOnlyPrivateRequest(t *testing.T) {
 	p, f, r := fixture(t)
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private-bootstrap", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private-bootstrap", Harness: "codex", NetworkAccess: "enabled"}
 	f.response.Info = &sandbox.Info{Reference: r, State: "running", ProviderID: "native-id", CreateSettled: true, BootstrapComplete: true}
 	if _, err := p.Create(bounded(t), b); err != nil {
 		t.Fatal(err)
@@ -143,7 +143,7 @@ func TestDeadlineAndCommandAdmission(t *testing.T) {
 
 func TestDefinitePreHelperCreateFailureCarriesAbsenceProof(t *testing.T) {
 	p, f, r := fixture(t)
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private", Harness: "codex", NetworkAccess: "enabled"}
 	for _, err := range []error{errHelperNotStarted, context.DeadlineExceeded} {
 		f.err = err
 		info, gotErr := p.Create(bounded(t), b)

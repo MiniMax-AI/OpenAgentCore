@@ -7,12 +7,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	"github.com/google/uuid"
 	"testing"
+	"time"
 )
 
 func TestProviderContract(t *testing.T) {
 	contracttest.RunFailures(t, func(t *testing.T, s contracttest.Scenario, cancel context.CancelFunc) contracttest.Fixture {
 		c, r := testConfig(), testRef()
-		b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled"}
+		b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", Harness: "codex", NetworkAccess: "enabled"}
 		var calls []string
 		p, err := NewWithCaller(c, callerFunc(func(ctx context.Context, q Request) (Response, error) {
 			calls = append(calls, q.Operation)
@@ -62,11 +63,29 @@ func TestProviderContractObservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", Harness: "codex", NetworkAccess: "enabled"}
 	got, err := p.Create(deadline(t), b)
 	contracttest.AssertObservation(t, got, err, r, "native-owned", "running")
 	got, err = p.GetInfo(deadline(t), r)
 	contracttest.AssertObservation(t, got, err, r, "native-owned", "stopped")
 	got, err = p.Renew(deadline(t), r)
 	contracttest.AssertObservation(t, got, err, r, "native-owned", "stopped")
+}
+
+func TestBootstrapWireRejectsSupersededVersion(t *testing.T) {
+	c, r := testConfig(), testRef()
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "fixture", Harness: "codex", NetworkAccess: "enabled"}
+	q := Request{Version: ProtocolVersion, Operation: "create", Config: c, Reference: r, Bootstrap: &b, Deadline: time.Now().Add(time.Minute)}
+	if err := ValidateRequest(q); err != nil {
+		t.Fatal(err)
+	}
+	q.Version = 2
+	if err := ValidateRequest(q); !errors.Is(err, sandbox.ErrInvalid) {
+		t.Fatal("superseded bootstrap wire accepted", err)
+	}
+	q.Version = ProtocolVersion
+	b.Harness = ""
+	if err := ValidateRequest(q); !errors.Is(err, sandbox.ErrInvalid) {
+		t.Fatal("missing selected Harness accepted", err)
+	}
 }

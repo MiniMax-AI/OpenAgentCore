@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
+func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (_ *Prepared, resultErr error) {
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		return nil, errors.New("codex: structured output is not qualified")
 	}
@@ -34,7 +35,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if err != nil {
 		return nil, err
 	}
+	planStarted := time.Now()
 	plan, skillRoots, err := prepareSessionPlan(parent, req, cfg)
+	observePreparationStage(parent, "session_plan", planStarted, err)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +87,8 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
 		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
 	}
+	verificationStarted := time.Now()
+	defer func() { observePreparationStage(parent, "verification", verificationStarted, resultErr) }()
 	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
 		if err := verifyProgrammaticToolsDisabled(cancelCtx, rpc); err != nil {
 			return p.preparationFailed(err)

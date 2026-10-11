@@ -37,7 +37,8 @@ class StartupTest(unittest.TestCase):
             profile = Path(temporary) / 'private/default'
             environment_file = Path(temporary) / 'image.json'
             environment_file.write_text(json.dumps({'HOME': '/home/runtime',
-                'OAC_RUNTIME_HOME': '/home/runtime/.oac', 'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}))
+                'OAC_RUNTIME_HOME': '/home/runtime/.oac', 'OAC_RUNTIME_WORKSPACE': '/environment/workspace',
+                'OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE': '/private/control/fixture.json'}))
             (root / 'bootstrap.json').write_text(json.dumps(PAYLOAD))
             real_chmod = Path.chmod
 
@@ -57,6 +58,7 @@ class StartupTest(unittest.TestCase):
                 self.assertEqual(argv[argv.index('--remote') + 1], PAYLOAD['remote_url'])
                 self.assertNotIn('test-private-key', repr(popen.call_args))
                 self.assertNotIn('OAC_RUNTIME_SESSION_ID', options['env'])
+                self.assertNotIn('OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE', options['env'])
                 self.assertEqual((options['user'], options['group'], options['extra_groups']), (1000, 1000, []))
                 self.assertEqual(options['umask'], 0o077)
                 key = profile.parent / 'executor-key.json'

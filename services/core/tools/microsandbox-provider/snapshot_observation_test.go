@@ -511,3 +511,79 @@ func TestFreshAdmissionClosesOnlyAfterRequestDeadline(t *testing.T) {
 		t.Fatal("expired dispatch not fenced", r, err)
 	}
 }
+
+func TestCaptureAdmissionClosesNeverDispatchedOperationDurably(t *testing.T) {
+	request := initialInfoRequest(t)
+	guard, err := allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := backend{q: request}
+	source := request.Compute
+	source.ID = "local:exact"
+	q := wire.SuspendRequest{OperationID: "66666666-6666-4666-8666-666666666666", Source: source, ObserveOnly: true}
+	if closed, err := b.admitSuspend(q); err != nil || !closed {
+		t.Fatal(closed, err)
+	}
+	guard.Close()
+	guard, err = allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	q.ObserveOnly = false
+	if closed, err := b.admitSuspend(q); err != nil || !closed {
+		t.Fatal("late fresh capture crossed durable closure", closed, err)
+	}
+	q.OperationID = "77777777-7777-4777-8777-777777777777"
+	if closed, err := b.admitSuspend(q); err != nil || closed {
+		t.Fatal(closed, err)
+	}
+	// A crash after open admission remains unknown even without a visible archive.
+	q.ObserveOnly = true
+	if closed, err := b.admitSuspend(q); err != nil || closed {
+		t.Fatal("unknown capture manufactured no-effect proof", closed, err)
+	}
+	q.ObserveOnly = false
+	if _, err := b.admitSuspend(q); !errors.Is(err, wire.ErrUnconfirmed) {
+		t.Fatal("admitted capture replayed", err)
+	}
+}
+
+func TestCaptureAdmissionBoundAndSourceGenerationFence(t *testing.T) {
+	request := initialInfoRequest(t)
+	guard, err := allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	b := backend{q: request}
+	source := request.Compute
+	source.ID = "local:exact"
+	q := wire.SuspendRequest{Source: source, ObserveOnly: true}
+	for i := range 64 {
+		q.OperationID = fmt.Sprintf("%08x-6666-4666-8666-666666666666", i)
+		if closed, err := b.admitSuspend(q); err != nil || !closed {
+			t.Fatal(i, closed, err)
+		}
+	}
+	q.OperationID = "ffffffff-6666-4666-8666-666666666666"
+	if _, err := b.admitSuspend(q); !errors.Is(err, wire.ErrUnconfirmed) {
+		t.Fatal("capture journal exceeded its bound", err)
+	}
+	old := q
+	q.Source.Generation++
+	q.Source.Name = wire.Name(request.Config, request.Reference, q.Source.Generation)
+	q.Source.ID = "local:next"
+	if closed, err := b.admitSuspend(q); err != nil || !closed {
+		t.Fatal("verified next source could not advance journal", closed, err)
+	}
+	old.ObserveOnly = false
+	if _, err := b.admitSuspend(old); !errors.Is(err, sandbox.ErrOwnership) {
+		t.Fatal("late older source admitted", err)
+	}
+	var journal captureAdmission
+	if err := readPrivateJSON(filepath.Join(b.storeDirectory(), "capture-admission.json"), &journal); err != nil || len(journal.Operations) != 1 || journal.Source.Generation != q.Source.Generation {
+		t.Fatal("generation journal not bounded", journal, err)
+	}
+}

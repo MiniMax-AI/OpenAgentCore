@@ -129,7 +129,10 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
-	go func() { _, err := proxy.Create(createCtx, sandbox.Bootstrap{Reference: r}); createDone <- err }()
+	go func() {
+		_, err := proxy.Create(createCtx, sandbox.Bootstrap{Reference: r, Harness: "codex"})
+		createDone <- err
+	}()
 	<-p.started
 	if err := <-createDone; !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("lost reply = %v", err)
@@ -166,11 +169,11 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 	}
 }
 
-func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
+func TestOfflineIsUnknownAndDockerDoesNotAdvertiseSuspension(t *testing.T) {
 	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	p := h.Proxy(uuid.NewString(), docker.Operations(), 1)
-	if sandbox.SupportsCheckpoint(p) {
-		t.Fatal("docker advertised checkpoint")
+	if sandbox.SupportsSuspension(p) {
+		t.Fatal("docker advertised suspension")
 	}
 	_, err := p.GetInfo(context.Background(), reference())
 	if !errors.Is(err, sandbox.ErrComputeUnconfirmed) || errors.Is(err, sandbox.ErrNotFound) {

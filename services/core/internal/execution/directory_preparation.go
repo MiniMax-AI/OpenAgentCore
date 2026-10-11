@@ -29,7 +29,7 @@ func (d *Dispatcher) withPreparedWorkspace(owner context.Context, peer *runtimeg
 	if err := d.configurePreparedEnvironment(session, environment, bound, &req); err != nil {
 		return ErrExecutionUnavailable
 	}
-	prepared, err := newPreparedStart(peer)
+	prepared, err := newPreparedStart(owner, peer)
 	if err != nil {
 		return ErrExecutionUnavailable
 	}
