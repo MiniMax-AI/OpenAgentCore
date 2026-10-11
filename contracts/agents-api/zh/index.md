@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: d7fff07ff5af2349fe56e951e0ed6e215e9d8ba5a191a251730b8fb1e4b00251
+source_hash: bb527943480bed1ad33d3e8eb330543bdced57b66617e52b5a2b18e2d9f5bcc8
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -131,7 +131,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - Runtime 不会实施 `disabled` 或 `restricted` 网络，因此需要这些网络的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
 - `packages.system` 会被拒绝；系统软件包必须预先安装。
-- 冷续接不恢复进程内存、后台进程或临时系统盘修改；已完成的 setup 不会重放。参见 [Environment 持久化](environments.md#runtime-capability-preparation)。跨节点内存恢复及接管未确认停止的旧写入者尚未通过资格验证。在[已确认的计算资源丢失](../../../docs/zh/sandbox-provider.md#confirmed-compute-loss)后，任何 Harness 的原生历史崩溃一致性均未通过资格验证。
+- 冷续接不恢复进程内存、后台进程或临时系统盘修改；已完成的 setup 不会重放。参见 [Environment 持久化](environments.md#runtime-capability-preparation)。跨节点内存恢复及接管未确认停止的旧写入者尚未通过资格验证。在使用保留 NFS 存储的 microsandbox 上，Codex 与 Claude Code 已通过空闲 Turn 后、Turn 中断时以及完成确认后两秒内发生[已确认的计算资源丢失](../../../docs/zh/sandbox-provider.md#confirmed-compute-loss)的续接检查。历史缺失检查保留了原生身份，并以通用 `engine_failed` 或 `environment_unavailable` 结果明确失败。主机崩溃时的持久性及任意崩溃受损历史的完整性仍未通过资格验证。
 
 **Files 和 Environment files**
 
