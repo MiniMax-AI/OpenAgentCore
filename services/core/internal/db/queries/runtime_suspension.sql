@@ -11,11 +11,11 @@ RETURNING *;
 
 -- name: TouchRuntimeActivity :exec
 UPDATE runtime_allocations a
-SET compute_activity_at = clock_timestamp(), compute_wake_requested = true
+SET compute_activity_at = CASE WHEN a.state = 'released' AND a.compute_wake_requested THEN a.compute_activity_at ELSE clock_timestamp() END, compute_wake_requested = true
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE a.environment_id = e.id AND s.tenant_id = sqlc.arg(tenant_id)
     AND e.id = sqlc.arg(environment_id) AND s.deleted_at IS NULL
-    AND a.state = 'running' AND a.compute_phase <> 'disabled';
+    AND ((a.state = 'running' AND a.compute_phase <> 'disabled') OR a.id = sqlc.narg(retained_id)::uuid);
 
 -- name: ClearRuntimeWake :exec
 UPDATE runtime_allocations
@@ -69,3 +69,23 @@ WHERE provider_key = $1 AND state <> 'released' AND compute_phase <> 'suspended'
 -- name: CountRuntimeRetainedAllocations :one
 SELECT count(*) FROM runtime_allocations
 WHERE provider_key = $1 AND state <> 'released';
+-- name: MoveSuspendedRuntimeCompute :one
+WITH moved AS (
+    UPDATE runtime_placements p SET node_id=sqlc.arg(destination)::uuid
+    FROM runtime_allocations a
+    WHERE a.id=sqlc.arg(id) AND a.environment_id=p.environment_id
+      AND p.node_id=sqlc.arg(source)::uuid AND p.released_at IS NULL
+      AND p.deployment_generation=a.deployment_generation
+      AND a.node_id=p.node_id AND a.compute_revision=sqlc.arg(revision)
+      AND a.compute_phase='suspended'
+      AND ((a.state='running' AND sqlc.arg(phase)::text='restoring'
+            AND a.compute_retained_until>clock_timestamp()
+            AND EXISTS(SELECT 1 FROM environments e WHERE e.id=a.environment_id AND e.initialization='complete'))
+           OR (a.state='cleanup_pending' AND sqlc.arg(phase)::text='suspended'))
+    RETURNING a.id
+)
+UPDATE runtime_allocations a
+SET node_id=sqlc.arg(destination)::uuid, compute_phase=sqlc.arg(phase),
+    compute_state=sqlc.arg(state)::jsonb, compute_revision=a.compute_revision+1,
+    compute_phase_changed_at=CASE WHEN a.compute_phase=sqlc.arg(phase)::text THEN a.compute_phase_changed_at ELSE clock_timestamp() END
+FROM moved WHERE a.id=moved.id RETURNING a.*;

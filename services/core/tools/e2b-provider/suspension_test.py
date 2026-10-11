@@ -168,3 +168,121 @@ class SuspensionTest(unittest.TestCase):
         self.api.connect.assert_called_once()
         self.api.kill.assert_called_once()
         self.assertEqual(self.record()['status'], 'killed')
+    def test_paused_delete_reclaims_same_native_id_and_settles_lost_reply(self):
+        from e2b.exceptions import SandboxNotFoundException
+        source = self.prepare()
+        _, paused = self.pause(source)
+        retained = paused['State']['Retained']
+        def killed_then_lost(*args, **kwargs):
+            self.api.get_info.side_effect = SandboxNotFoundException('gone')
+            raise TimeoutError()
+        self.api.kill.side_effect = killed_then_lost
+        self.assertEqual(self.invoke('delete_retained', Retained=retained)['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.record()['suspension']['phase'], 'paused')
+        self.assertEqual(self.invoke('delete_retained', Retained=retained)['ErrorCode'], '')
+        self.assertEqual(self.record()['status'], 'killed')
+        self.assertEqual(self.record()['suspension']['phase'], 'consumed')
+        self.api.kill.assert_called_once()
+        self.assertEqual(self.api.kill.call_args.args[0], source['ID'])
+
+    def test_paused_delete_rejects_running_source(self):
+        source = self.prepare()
+        _, paused = self.pause(source)
+        self.cloud.state = 'running'
+        self.assertEqual(self.invoke('delete_retained', Retained=paused['State']['Retained'])['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.record()['suspension']['phase'], 'paused')
+        self.api.kill.assert_not_called()
+
+    def test_never_dispatched_restore_closes_durably_and_rejects_late_request(self):
+        source = self.prepare()
+        _, paused = self.pause(source)
+        q = self.resume_request(paused['State']['Retained'])
+        observed = self.invoke('resume', Resume=dict(q, ReconcileOnly=True))
+        self.assertEqual(observed['ErrorCode'], '')
+        self.assertEqual(observed['State']['RestoreAttemptClosed'], q['OperationID'])
+        self.assertEqual(observed['State']['Compute'], q['Target'])
+        self.api.connect.assert_not_called()
+        self.assertEqual(self.invoke('resume', Resume=q)['ErrorCode'], 'ownership')
+        self.assertEqual(self.invoke('resume', Resume=dict(q, ReconcileOnly=True)), observed)
+        fresh = dict(q, OperationID=str(uuid4()))
+        self.assertEqual(self.invoke('resume', Resume=fresh)['ErrorCode'], '')
+        self.assertEqual(self.invoke('resume', Resume=dict(q, ReconcileOnly=True))['ErrorCode'], 'ownership')
+        self.api.connect.assert_called_once()
+
+    def test_closed_restore_history_is_bounded_without_eviction(self):
+        source = self.prepare()
+        _, paused = self.pause(source)
+        requests = []
+        for _ in range(64):
+            q = self.resume_request(paused['State']['Retained'])
+            requests.append(q)
+            self.assertEqual(self.invoke('resume', Resume=dict(q, ReconcileOnly=True))['ErrorCode'], '')
+        extra = self.resume_request(paused['State']['Retained'])
+        self.assertEqual(self.invoke('resume', Resume=dict(extra, ReconcileOnly=True))['ErrorCode'], 'unconfirmed')
+        self.assertEqual(len(self.record()['suspension']['closed_resume_ids']), 64)
+        self.assertEqual(self.invoke('resume', Resume=requests[0])['ErrorCode'], 'ownership')
+        self.api.connect.assert_not_called()
+        # A fresh, authorized attempt can still proceed; closing unknown attempts
+        # never consumes the original native retained image.
+        self.assertEqual(self.invoke('resume', Resume=extra)['ErrorCode'], '')
+        self.assertEqual(self.invoke('delete_retained', Retained=paused['State']['Retained'])['ErrorCode'], '')
+        current = self.record()['compute']
+        _, next_pause = self.pause(current)
+        self.assertNotIn('closed_resume_ids', self.record()['suspension'])
+        self.assertEqual(self.invoke('resume', Resume=requests[0])['ErrorCode'], 'ownership')
+
+    def test_paused_delete_settles_after_killed_receipt_write_fails(self):
+        from e2b.exceptions import SandboxNotFoundException
+        from state import Receipt
+        from unittest.mock import patch
+        source = self.prepare()
+        _, paused = self.pause(source)
+        retained = paused['State']['Retained']
+        def killed(*args, **kwargs):
+            self.api.get_info.side_effect = SandboxNotFoundException('gone')
+        self.api.kill.side_effect = killed
+        save = Receipt.save
+        def fail_killed(receipt, **values):
+            if values.get('status') == 'killed':
+                raise OSError('fixture durable write failed')
+            return save(receipt, **values)
+        with patch.object(Receipt, 'save', fail_killed):
+            self.assertEqual(self.invoke('delete_retained', Retained=retained)['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.invoke('delete_retained', Retained=retained)['ErrorCode'], '')
+        self.api.kill.assert_called_once()
+        self.assertEqual(self.record()['suspension']['phase'], 'consumed')
+
+    def test_rollback_closes_late_suspend_across_helper_reopen(self):
+        source = self.prepare()
+        q = {'Reference': self.reference, 'OperationID': str(uuid4()), 'Source': source,
+             'Retained': None, 'ReconcileOnly': True}
+        result = self.invoke('suspend', Suspend=q)
+        self.assertTrue(result['State']['SuspendSettled'])
+        self.assertIsNone(result['State']['Retained'])
+        self.assertEqual(self.invoke('suspend', Suspend=dict(q, ReconcileOnly=False))['ErrorCode'], 'ownership')
+        self.assertEqual(self.cloud.state, 'running')
+        self.api.pause.assert_not_called()
+        self.assertEqual(self.invoke('suspend', Suspend=q), result)
+
+    def test_suspend_fences_bound_and_survive_same_generation_rollback(self):
+        source = self.prepare()
+        requests = []
+        for _ in range(64):
+            q = {'Reference': self.reference, 'OperationID': str(uuid4()), 'Source': source,
+                 'Retained': None, 'ReconcileOnly': True}
+            requests.append(q)
+            self.assertTrue(self.invoke('suspend', Suspend=q)['State']['SuspendSettled'])
+        extra = dict(q, OperationID=str(uuid4()))
+        self.assertEqual(self.invoke('suspend', Suspend=extra)['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.invoke('suspend', Suspend=dict(requests[0], ReconcileOnly=False))['ErrorCode'], 'ownership')
+        self.assertEqual(len(self.record()['suspend_fence']['closed']), 64)
+        # Only a real resume advances the incarnation; the next observation then
+        # replaces the journal while stale source requests remain fenced.
+        _, paused = self.pause(source)
+        resume = self.resume_request(paused['State']['Retained'])
+        current = self.invoke('resume', Resume=resume)['State']['Compute']
+        self.assertEqual(self.invoke('delete_retained', Retained=paused['State']['Retained'])['ErrorCode'], '')
+        fresh = dict(extra, Source=current, OperationID=str(uuid4()))
+        self.assertTrue(self.invoke('suspend', Suspend=fresh)['State']['SuspendSettled'])
+        self.assertEqual(len(self.record()['suspend_fence']['closed']), 1)
+        self.assertEqual(self.invoke('suspend', Suspend=dict(requests[0], ReconcileOnly=False))['ErrorCode'], 'ownership')

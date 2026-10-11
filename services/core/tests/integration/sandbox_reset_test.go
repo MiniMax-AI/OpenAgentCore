@@ -253,6 +253,9 @@ func TestSandboxResetAuditFailureRollsBackPauseAndCompletion(t *testing.T) {
 func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 	s, w, d := managerFixture(t, 10, 10)
 	_, pending := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
+	if err := reserveSessionPlacement(t, s, w, pending); err != nil {
+		t.Fatal(err)
+	}
 	tenant, suspended := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	allocation := archiveAllocation(t, w, tenant, suspended, d.InstallationID)
 	runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_allocations SET compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, allocation.ID)

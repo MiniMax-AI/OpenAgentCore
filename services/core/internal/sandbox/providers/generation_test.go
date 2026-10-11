@@ -21,7 +21,7 @@ func generationConfig(t *testing.T) (sandbox.NodeConfig, sandboxmicro.Native) {
 	dir := t.TempDir()
 	spec := validRegistrationSpec()
 	spec.Resources.RootDiskMiB, spec.Resources.EnvironmentDiskMiB = 8192, 8192
-	native := sandboxmicro.Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
+	native := sandboxmicro.Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, CheckpointRoot: t.TempDir(), RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
 		Network: sandboxmicro.Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
 	raw, err := json.Marshal(native)
 	if err != nil {

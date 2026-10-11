@@ -50,8 +50,10 @@ func (s *Session) PrepareRuntime(ctx context.Context, id string, request proto.R
 	s.capabilities = map[string]chan proto.Envelope{id: replies}
 	s.capabilitiesMu.Unlock()
 	defer func() { s.capabilitiesMu.Lock(); delete(s.capabilities, id); s.capabilitiesMu.Unlock() }()
-	ctx, cancel := context.WithTimeout(ctx, 195*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(request.BudgetMS)*time.Millisecond)
 	defer cancel()
+	transfer, stopTransfer := context.WithTimeout(ctx, time.Duration(proto.RuntimePrepareTransferBudgetMS)*time.Millisecond)
+	defer stopTransfer()
 	exchange := func(payload proto.RuntimePreparePayload, outcome string, offset int) (proto.RuntimePrepareResultPayload, error) {
 		env, err := proto.NewEnvelope(proto.TypeRuntimePrepare, id, payload)
 		if err != nil {
@@ -61,7 +63,13 @@ func (s *Session) PrepareRuntime(ctx context.Context, id string, request proto.R
 		if err != nil || len(encoded) > proto.RuntimePrepareMaxFrameBytes {
 			return unknown, errors.New("agentdaemon gateway: invalid Runtime frame")
 		}
-		reply, err := s.exchangeChunkFrame(ctx, env, replies)
+		operation := ctx
+		if outcome != "completed" {
+			operation = transfer
+		} else if err := transfer.Err(); err != nil {
+			return unknown, err
+		}
+		reply, err := s.exchangeChunkFrame(operation, env, replies)
 		if err != nil {
 			return unknown, err
 		}

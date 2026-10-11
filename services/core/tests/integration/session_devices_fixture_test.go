@@ -20,6 +20,7 @@ func bindSessionDevice(t *testing.T, s *Store, tenant, session, device string) e
 	if err != nil {
 		return err
 	}
+	defer func() { _ = lease.Close(context.Background()) }()
 	released := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 	operations, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
 	if err == nil {

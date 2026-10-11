@@ -81,6 +81,12 @@ func (p *Provider) Resume(ctx context.Context, q sandbox.ResumeRequest) (sandbox
 	if err != nil {
 		return sandbox.ComputeState{}, err
 	}
+	if out.State != nil && out.State.RestoreAttemptClosed != "" {
+		if !out.State.ClosesRestoreAttempt(q) {
+			return sandbox.ComputeState{}, sandbox.ErrOwnership
+		}
+		return *out.State, nil
+	}
 	if out.State == nil || sandbox.ValidateComputeResult(q.Target, out.State.Compute) != nil || out.State.Status != "running" || !out.State.BootstrapComplete {
 		return sandbox.ComputeState{}, sandbox.ErrComputeUnconfirmed
 	}

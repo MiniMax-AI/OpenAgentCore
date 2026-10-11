@@ -14,7 +14,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	if state.Rollback {
 		if _, err := p.ResumeCompute(ctx, runtimeReference(owner), state.Current); err != nil {
 			return err
@@ -66,7 +67,9 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 	if err != nil {
 		return err
 	}
-	if err := r.deployment.ClearWake(ctx, next, owner.ComputeActivityAt); err != nil {
+	observedActivity := owner.ComputeActivityAt
+	owner = next
+	if err := r.deployment.ClearWake(ctx, next, observedActivity); err != nil {
 		return err
 	}
 	return r.observeConnection(ctx, next)
@@ -75,6 +78,19 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
+	}
+	if owner.ComputePhase == "suspended" && state.Retained != nil && owner.NodeID != "" {
+		next, err := r.deployment.RelocateCleanup(ctx, owner, state.Retained.Compatibility)
+		if err != nil {
+			return err
+		}
+		if next.NodeID != r.nodeID {
+			if r.hintDestination != nil {
+				r.hintDestination(next.NodeID)
+			}
+			return nil
+		}
+		owner = next
 	}
 	// An uncommitted artifact is found by its persisted attempt, never a directory
 	// glob. The helper's allocation lock also waits for an earlier unknown call.
@@ -92,8 +108,10 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 			return err
 		}
 	}
-	if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
-		return err
+	if owner.ComputePhase != "suspended" && owner.ComputePhase != "restoring" {
+		if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
+			return err
+		}
 	}
 	if state.Retained != nil {
 		if err := ignoreComputeAbsent(p.DeleteRetained(ctx, runtimeReference(owner), *state.Retained)); err != nil {
@@ -147,8 +165,15 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 				if !qualified {
 					return ErrExecutionUnavailable
 				}
-				// The live file operation is demand. A committed placement, rather than
-				// another wake setting, lets maintenance recover a detached caller.
+				// A qualified released allocation retains the existing wake intent.
+				// The common placement scan orders it with pending Session input.
+				if touched != owner.ID {
+					if err := w.dispatcher.Deployment.TouchActivity(ctx, environment.TenantID, environment.ID); err != nil {
+						return err
+					}
+					touched = owner.ID
+					w.wakeScheduler()
+				}
 				next, err := w.ProvisionEnvironment(ctx, environment.TenantID, environment.ID, owner.ProviderKey)
 				if err != nil && next.ID == "" && !errors.Is(err, placement.ErrNodeUnavailable) && !errors.Is(err, placement.ErrNodesPreparing) && !errors.Is(err, deployment.ErrAllocationConflict) {
 					return err

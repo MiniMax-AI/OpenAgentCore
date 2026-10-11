@@ -1,6 +1,7 @@
 package microsandbox
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -23,11 +24,12 @@ var NodeArtifacts = []providerassets.Artifact{
 // The helper owns local paths; no ambient backend is selected. Resources, the
 // image and the artifact hashes come from the deployment specification.
 type Native struct {
-	HelperPath   string  `json:"helper_path"`
-	RuntimeHome  string  `json:"runtime_home"`
-	RuntimePath  string  `json:"runtime_path"`
-	FirmwarePath string  `json:"firmware_path"`
-	Network      Network `json:"network"`
+	HelperPath     string  `json:"helper_path"`
+	RuntimeHome    string  `json:"runtime_home"`
+	CheckpointRoot string  `json:"checkpoint_root"`
+	RuntimePath    string  `json:"runtime_path"`
+	FirmwarePath   string  `json:"firmware_path"`
+	Network        Network `json:"network"`
 }
 
 type Network struct {
@@ -55,7 +57,7 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	release, resources := spec.Runtime, spec.Resources
 	config := Config{
 		ExternalWorkspace: spec.Workspace != nil,
-		InstallationID:    result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
+		InstallationID:    result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, CheckpointRoot: entry.CheckpointRoot, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
 		RuntimeSHA256: release.RuntimeSHA256, FirmwareSHA256: release.FirmwareSHA256, Image: release.MicrosandboxRef,
 		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, EnvironmentDiskMiB: resources.EnvironmentDiskMiB, Network: network,
 	}
@@ -65,7 +67,17 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	}
 	provider.workspace = options.Workspace
 	result.Provider = provider
-	result.Probe = microsandboxProbe(config, resources)
+	baseProbe := microsandboxProbe(config, resources)
+	result.Probe = func(ctx context.Context) (*sandbox.CheckpointCompatibility, error) {
+		if err := baseProbe(ctx); err != nil {
+			return nil, err
+		}
+		c, err := CheckpointClass(config)
+		if err != nil {
+			return nil, err
+		}
+		return &c, nil
+	}
 	result.Quiescent = caller.Quiescent
 	result.BackendFingerprint = sandbox.BackendFingerprint("microsandbox", entry.RuntimeHome)
 	return config, nil
@@ -75,7 +87,7 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 func BuildNode(c sandbox.NodeConfig, options sandbox.LocalOptions, result *sandbox.Built) (func(), error) {
 	closeProvider := func() {}
 	var entry Native
-	if sandbox.DecodeConfigurationObject(c.Native, &entry, "helper_path", "runtime_home", "runtime_path", "firmware_path", "network") != nil {
+	if sandbox.DecodeConfigurationObject(c.Native, &entry, "helper_path", "runtime_home", "runtime_path", "firmware_path", "network", "checkpoint_root") != nil {
 		return closeProvider, errors.New("invalid managed microsandbox node configuration")
 	}
 	caller := &ProcessCaller{}
@@ -96,7 +108,15 @@ func BuildNode(c sandbox.NodeConfig, options sandbox.LocalOptions, result *sandb
 		return closeProvider, err
 	}
 	if options.GenerationStateDirectory != "" {
-		result.Probe = microsandboxGenerationProbe(config, result.Probe)
+		baseProbe := result.Probe
+		result.Probe = func(ctx context.Context) (*sandbox.CheckpointCompatibility, error) {
+			var compatibility *sandbox.CheckpointCompatibility
+			imageProbe := microsandboxGenerationProbe(config, func(ctx context.Context) error { var err error; compatibility, err = baseProbe(ctx); return err })
+			if err := imageProbe(ctx); err != nil {
+				return nil, err
+			}
+			return compatibility, nil
+		}
 	}
 	return closeProvider, nil
 }

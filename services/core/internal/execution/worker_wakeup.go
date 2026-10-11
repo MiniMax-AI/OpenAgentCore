@@ -9,6 +9,12 @@ import (
 // wakeScheduler only hints at committed work. The existing loop retains lease,
 // capacity and Session ownership; polling recovers absent or coalesced hints.
 func (w *Worker) wakeScheduler() {
+	if w.runtimes != nil {
+		select {
+		case w.runtimes.placementWake <- struct{}{}:
+		default:
+		}
+	}
 	select {
 	case w.scheduleWake <- struct{}{}:
 	default:

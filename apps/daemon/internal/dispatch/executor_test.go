@@ -342,3 +342,52 @@ func TestExecutorRejectsOutputFromAnotherTurn(t *testing.T) {
 func (*reusableTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	return agent.ErrSteeringRejected
 }
+
+func TestExecutorResumesSameOwnerAndNextTurnAfterSuspension(t *testing.T) {
+	owner := &reusableExecutor{starts: make(chan *reusableTurn, 2)}
+	var factories atomic.Int32
+	registry := agent.NewRegistry()
+	registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		factories.Add(1)
+		return owner, nil
+	})
+	sender := &recSender{}
+	r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, LocalWorkspace: preparationWorkspace(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := r.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	first := executorAdmission(t, r, sender, "first", preparationRequest())
+	startExecutorTurn(t, r, sender, "first", "one", first)
+	(<-owner.starts).finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "first Turn settled")
+	request := proto.EnvironmentSuspendPayload{EnvironmentID: preparationEnvironmentID, SuspendID: "suspension"}
+	if err := r.Quiesce(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	resumedSender := &recSender{}
+	if err := r.Resume(request, resumedSender); err != nil {
+		t.Fatal(err)
+	}
+	req := preparationRequest()
+	req.Configuration.AgentSessionID = "native-session"
+	conflict := req
+	conflict.Configuration.AgentOptions = map[string]any{"model": "changed"}
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "conflict", conflict)); err == nil {
+		t.Fatal("suspension relaxed the fixed configuration")
+	}
+	second := executorAdmission(t, r, resumedSender, "second", req)
+	if !second.Reused || first.ExecutorID != second.ExecutorID || first.Handle == second.Handle || factories.Load() != 1 || owner.closes.Load() != 0 {
+		t.Fatal("suspension replaced the resident native owner")
+	}
+	startExecutorTurn(t, r, resumedSender, "second", "two", second)
+	(<-owner.starts).finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "resumed Turn settled")
+	if owner.closes.Load() != 0 {
+		t.Fatal("resumed Turn retired its healthy native owner")
+	}
+}

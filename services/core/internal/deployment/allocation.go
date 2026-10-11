@@ -112,6 +112,25 @@ type ObservationSessionPage struct {
 // an existing one.
 type UnallocatedEnvironment struct{ ID, TenantID string }
 
+// PlacementDemand is committed work awaiting a node reservation. Demand time
+// belongs to Session creation or its oldest pending input, not to a retry.
+type PlacementDemand struct {
+	UnallocatedEnvironment
+	Engine   string
+	Retained bool
+	At       time.Time
+}
+
+// PlacementDemandCursor continues the bounded, oldest-demand-first scan.
+// An empty EnvironmentID ends a page scan; Until may still describe a
+// nonempty final page for callers that yield before processing every row.
+type PlacementDemandCursor struct {
+	// Until fixes the database-clock horizon of one sweep, so new arrivals cannot prevent wraparound.
+	Until         time.Time
+	At            time.Time
+	EnvironmentID string
+}
+
 // LifecyclePlacement is what routing a hosted Environment to its node
 // lifecycle reads: the deployment's provider and mode, the Environment's
 // allocation and the node placement its Session reserved.

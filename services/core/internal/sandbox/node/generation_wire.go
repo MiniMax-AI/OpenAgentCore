@@ -46,6 +46,9 @@ func validateVersionFrame(f frame, size int) error {
 			if !validGeneration(g.Generation) || !validSpecificationDigest(g.SpecificationDigest) || seen[g.Generation] || (g.State != "ready" && g.State != "preparing" && g.State != "failed") || g.State == "ready" && g.Diagnostic != "" || len(g.Diagnostic) > 64 || sandbox.NormalizeNodeDiagnostic(g.Diagnostic) != g.Diagnostic {
 				return sandbox.ErrInvalid
 			}
+			if g.Checkpoint != nil && (g.State != "ready" || g.Checkpoint.Validate() != nil) {
+				return sandbox.ErrInvalid
+			}
 			seen[g.Generation] = true
 		}
 	}
@@ -72,9 +75,6 @@ func validateVersionFrame(f frame, size int) error {
 	}
 	switch f.Type {
 	case "hello":
-		if !f.GenerationManagement && f.Health != nil && f.Health.Generations != nil {
-			return sandbox.ErrInvalid
-		}
 		if f.Identity == nil || f.Health == nil || f.Request != nil || f.Response != nil || f.Control != nil || f.Deployment != nil {
 			return sandbox.ErrInvalid
 		}

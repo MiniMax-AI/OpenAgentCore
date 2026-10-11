@@ -134,6 +134,9 @@ var suspensionOperations = []string{"Initial", "NewCompute", "GetCompute", "Rene
 
 // ValidateRetained checks the shared envelope; only its adapter interprets Data.
 func ValidateRetained(s RetainedState) error {
+	if s.Compatibility != (CheckpointCompatibility{}) && s.Compatibility.Validate() != nil {
+		return ErrInvalid
+	}
 	if s.Reference == "" || s.ID == "" || s.OperationID == "" || s.SourceID == "" || s.SourceName == "" || len(s.Data) == 0 || len(s.Data) > 64*1024 {
 		return ErrInvalid
 	}
@@ -149,9 +152,24 @@ type Compute struct {
 	RestoredFrom *RetainedState
 }
 
-// RetainedState is adapter-owned recoverable state. Data is opaque to Core.
-// A retained state does not imply an independent snapshot.
+// CheckpointCompatibility identifies an adapter-verified private archive domain
+// and execution compatibility class. Core compares these opaque tokens only.
+type CheckpointCompatibility struct {
+	ArtifactDomain string `json:"artifact_domain"`
+	ExecutionClass string `json:"execution_class"`
+}
+
+func (c CheckpointCompatibility) Validate() error {
+	if c.ArtifactDomain == "" || c.ExecutionClass == "" || len(c.ArtifactDomain) > 256 || len(c.ExecutionClass) > 256 {
+		return ErrInvalid
+	}
+	return nil
+}
+
+// RetainedState is adapter-owned recoverable state; Data stays opaque to Core.
+// Optional Compatibility declares portable checkpoint qualification.
 type RetainedState struct {
+	Compatibility    CheckpointCompatibility `json:",omitzero"`
 	Reference        string
 	ID               string
 	Data             string
@@ -162,13 +180,26 @@ type RetainedState struct {
 }
 
 type ComputeState struct {
-	Compute           Compute
-	Status            string
-	BootstrapComplete bool
-	Retained          *RetainedState
-	ResourcesReleased bool
-	SuspendSettled    bool
+	RestoreAttemptClosed string
+	Compute              Compute
+	Status               string
+	BootstrapComplete    bool
+	Retained             *RetainedState
+	ResourcesReleased    bool
+	// SuspendSettled without Retained also durably fences every late dispatch
+	// of this exact source and operation; native absence alone is insufficient.
+	SuspendSettled bool
 }
+
+// ClosesRestoreAttempt validates a never-executed closure against the exact
+// persisted request. Absence without this operation-bound evidence is unknown.
+func (s ComputeState) ClosesRestoreAttempt(q ResumeRequest) bool {
+	return q.ReconcileOnly && q.OperationID != "" && s.RestoreAttemptClosed == q.OperationID && s.Status == "absent" &&
+		s.Compute.ID == q.Target.ID && s.Compute.Name == q.Target.Name && s.Compute.Generation == q.Target.Generation &&
+		s.Compute.RestoredFrom != nil && q.Target.RestoredFrom != nil && *s.Compute.RestoredFrom == q.Retained && *q.Target.RestoredFrom == q.Retained &&
+		!s.BootstrapComplete && !s.ResourcesReleased && s.Retained == nil
+}
+
 type SuspendRequest struct {
 	Reference   Reference
 	OperationID string
@@ -204,10 +235,10 @@ func ValidateSuspendResult(q SuspendRequest, s ComputeState) error {
 	if ValidateComputeResult(q.Source, s.Compute) != nil {
 		return ErrOwnership
 	}
-	if !s.SuspendSettled || !s.BootstrapComplete {
-		return ErrComputeUnconfirmed
-	}
 	if s.Retained == nil {
+		if !s.SuspendSettled || !s.BootstrapComplete {
+			return ErrComputeUnconfirmed
+		}
 		if !q.ReconcileOnly || s.ResourcesReleased || (s.Status != "running" && s.Status != "paused") {
 			return ErrComputeUnconfirmed
 		}
@@ -217,7 +248,7 @@ func ValidateSuspendResult(q SuspendRequest, s ComputeState) error {
 	if ValidateRetained(*v) != nil || v.OperationID != q.OperationID || v.SourceID != q.Source.ID || v.SourceName != q.Source.Name || v.SourceGeneration != q.Source.Generation || (q.Retained != nil && *q.Retained != *v) {
 		return ErrOwnership
 	}
-	if !s.ResourcesReleased || s.Status != "suspended" {
+	if !s.SuspendSettled || !s.BootstrapComplete || !s.ResourcesReleased || s.Status != "suspended" {
 		return ErrComputeUnconfirmed
 	}
 	return nil
@@ -382,7 +413,7 @@ type Built struct {
 	SpecificationDigest                string
 	Provider                           SandboxProvider
 	InstallationID, BackendFingerprint string
-	Probe                              func(context.Context) error
+	Probe                              func(context.Context) (*CheckpointCompatibility, error)
 	// Quiescent is nil when no helper can outlive its caller.
 	Quiescent func() bool
 }

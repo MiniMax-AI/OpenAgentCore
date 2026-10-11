@@ -239,6 +239,9 @@ def validate_preparation_plan(root, plan, base, installer):
         if not any(paths == [release / name for name in installer.MICRO] for release in (root, root / "releases" / source)):
             raise installer.InstallError("Preparation artifacts are outside their immutable release")
         expected_home = generation_home(root, plan, base, installer)
+        if micro["checkpoint_root"] != base["native"]["checkpoint_root"]:
+            raise installer.InstallError("Preparation checkpoint store differs")
+        installer.prepare_checkpoint_root(Path(micro["checkpoint_root"]), initialize=False)
         if Path(micro["runtime_home"]) != expected_home:
             raise installer.InstallError("Preparation native store differs")
         for path in paths + [expected_home]:
@@ -399,6 +402,7 @@ def prepare(args, installer):
                 raise installer.RuntimeDownloadError("Runtime release provenance differs") from error
             if args.provider == "microsandbox":
                 args.runtime_home = Path(value["native"]["runtime_home"]) if value else generation_home(root, args.configuration, base, installer)
+                args.checkpoint_root = Path(base["native"]["checkpoint_root"])
             if value is None:
                 value = installer.provider_config(root / "releases" / runtime["source_commit"], args, runtime["image_id"])
             if preparation is None:

@@ -11,7 +11,7 @@ import (
 )
 
 const ProtocolVersion = 5
-const SDKVersion = "v0.7.2"
+const SDKVersion = "v0.7.8"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
 const MaxResponseBytes = 16 * 1024 * 1024
@@ -24,6 +24,7 @@ type Config struct {
 	InstallationID     string
 	HelperPath         string
 	RuntimeHome        string
+	CheckpointRoot     string
 	RuntimePath        string
 	FirmwarePath       string
 	RuntimeSHA256      string
@@ -55,6 +56,7 @@ type Compute struct {
 // persists it unchanged and records consumption separately; it never invents
 // paths, checksums, native checkpoint fields, or source identity.
 type SnapshotIdentity struct {
+	Compatibility    sandbox.CheckpointCompatibility
 	Reference        string
 	ID               string
 	Digest           string
@@ -67,11 +69,12 @@ type SnapshotIdentity struct {
 }
 
 type State struct {
-	Compute           Compute
-	Status            string
-	BootstrapComplete bool
-	Snapshot          *SnapshotIdentity
-	SourceStopped     bool
+	RestoreAttemptClosed string
+	Compute              Compute
+	Status               string
+	BootstrapComplete    bool
+	Snapshot             *SnapshotIdentity
+	SourceStopped        bool
 }
 type SuspendRequest struct {
 	Reference   sandbox.Reference
@@ -137,4 +140,12 @@ type Metrics struct {
 
 type Caller interface {
 	Call(context.Context, Request) (Response, error)
+}
+
+// ClosesRestoreAttempt verifies the exact never-dispatched private helper attempt.
+func (s State) ClosesRestoreAttempt(q ResumeRequest) bool {
+	return q.ObserveOnly && q.OperationID != "" && s.RestoreAttemptClosed == q.OperationID && s.Status == "absent" &&
+		s.Compute.ID == "" && q.Target.ID == "" && s.Compute.Name == q.Target.Name && s.Compute.Generation == q.Target.Generation &&
+		s.Compute.RestoredFrom != nil && q.Target.RestoredFrom != nil && *s.Compute.RestoredFrom == q.Snapshot && *q.Target.RestoredFrom == q.Snapshot &&
+		!s.BootstrapComplete && !s.SourceStopped && s.Snapshot == nil
 }

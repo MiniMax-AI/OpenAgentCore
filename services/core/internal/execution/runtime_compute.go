@@ -51,7 +51,8 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	}
 	return r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
-func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) error {
+func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
 	if err := providercontract.Require(p, "Initial"); err != nil {
 		return err
@@ -71,7 +72,8 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.A
 	return err
 }
 
-func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) error {
+func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
 	if err := providercontract.Require(p, "Initial"); err != nil {
 		return err
@@ -111,7 +113,8 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	}
 }
 
-func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
 	if err != nil {
 		return err
@@ -142,15 +145,19 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 		return r.deployment.ClearWake(ctx, owner, owner.ComputeActivityAt)
 	}
 	policy := r.config.Suspension
-	if policy == nil || !activity.ReadyToSuspend(policy.IdleTimeout) {
+	if policy == nil || activity.Busy {
 		return nil
 	}
 	state.SuspendID, state.RestoreID, state.Rollback = uuid.NewString(), "", false
 	until := activity.ObservedAt.Add(policy.Retention)
 	next, err := r.saveCompute(ctx, owner, "quiescing", state, &until)
+	if errors.Is(err, deployment.ErrNotIdle) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
+	owner = next
 	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentQuiesce, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID})
 	if err != nil {
 		return err
@@ -185,13 +192,15 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	return r.captureCompute(ctx, p, suspending, state, false)
 }
 
-func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Retained: state.Retained, ReconcileOnly: observeOnly})
 	if err != nil {
 		return err
 	}
-	if err := sandbox.ValidateSuspendResult(sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Retained: state.Retained, ReconcileOnly: observeOnly}, result); err != nil {
-		return err
+	validationErr := sandbox.ValidateSuspendResult(sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Retained: state.Retained, ReconcileOnly: observeOnly}, result)
+	if validationErr != nil && (result.Retained == nil || !errors.Is(validationErr, sandbox.ErrComputeUnconfirmed)) {
+		return validationErr
 	}
 	if result.Retained == nil {
 		if !observeOnly || !result.SuspendSettled || result.ResourcesReleased || (result.Status != "running" && result.Status != "paused") {
@@ -204,12 +213,27 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 		}
 		return r.wakeCompute(ctx, p, next, state)
 	}
+	if owner.NodeID != "" && result.Retained.Compatibility.Validate() != nil {
+		return sandbox.ErrOwnership
+	}
 	state.Retained = result.Retained
-	_, err = r.saveCompute(ctx, owner, "suspended", state, owner.ComputeRetainedUntil)
+	// Store the verified artifact before any recovery-path kill. Retained failure
+	// or an unknown result cannot silently fall back to a cold Environment.
+	next, err := r.saveCompute(ctx, owner, "suspending", state, owner.ComputeRetainedUntil)
+	if err != nil {
+		return err
+	}
+	owner = next
+	if validationErr != nil {
+		// Native absence alone does not settle capture or publish the archive.
+		return sandbox.ErrComputeUnconfirmed
+	}
+	_, err = r.saveCompute(ctx, next, "suspended", state, next.ComputeRetainedUntil)
 	return err
 }
 
-func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
 	activity, err := r.reader.Activity(ctx, owner.ID)
 	if err != nil {
 		return err
@@ -223,23 +247,45 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 	if state.Retained == nil || state.Target != nil {
 		return sandbox.ErrOwnership
 	}
-	target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Retained)
+	state.RestoreID = uuid.NewString()
+	raw, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
-	if target.Name == "" || target.Generation != state.Current.Generation+1 || target.RestoredFrom == nil || *target.RestoredFrom != *state.Retained {
-		return sandbox.ErrOwnership
-	}
-	state.Target, state.RestoreID = &target, uuid.NewString()
-	next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
+	next, err := r.deployment.BeginRestore(ctx, owner, state.Retained.Compatibility, raw)
 	if err != nil {
 		return err
+	}
+	if next.NodeID != r.nodeID {
+		// The durable route and reservation belong to the target node's lane.
+		if r.hintDestination != nil {
+			r.hintDestination(next.NodeID)
+		}
+		return nil
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
-func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
-	if state.Target == nil || state.Retained == nil || state.Rollback {
+func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
+	defer func() { err = withObservationOwner(owner, err) }()
+	if state.Retained == nil || state.Rollback || state.RestoreID == "" {
 		return sandbox.ErrOwnership
+	}
+	if state.Target == nil {
+		// NewCompute derives identity without starting native execution. A crash
+		// before this commit can safely repeat derivation on the reserved target.
+		target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Retained)
+		if err != nil {
+			return err
+		}
+		if target.Name == "" || target.Generation != state.Current.Generation+1 || target.RestoredFrom == nil || *target.RestoredFrom != *state.Retained {
+			return sandbox.ErrOwnership
+		}
+		state.Target = &target
+		next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
+		if err != nil {
+			return err
+		}
+		owner, observeOnly = next, false
 	}
 	workspace, err := r.restoreWorkspace(ctx, owner)
 	if err != nil {
@@ -250,6 +296,18 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	observeExecutionStage(ctx, "provider_resume", resumeAt, err, "allocation_id", owner.ID, "session_id", owner.SessionID, "environment_id", owner.EnvironmentID, "node_id", r.nodeID, "reconcile_only", observeOnly)
 	if err != nil {
 		return err
+	}
+	if result.RestoreAttemptClosed != "" {
+		if !result.ClosesRestoreAttempt(sandbox.ResumeRequest{OperationID: state.RestoreID, Retained: *state.Retained, Target: *state.Target, ReconcileOnly: observeOnly}) {
+			return sandbox.ErrOwnership
+		}
+		// Only an exact, durably closed attempt with no native dispatch can be replaced.
+		state.RestoreID = uuid.NewString()
+		next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
+		if err != nil {
+			return err
+		}
+		return r.restoreCompute(ctx, p, next, state, false)
 	}
 	if result.Status != "running" || !result.BootstrapComplete || sandbox.ValidateComputeResult(*state.Target, result.Compute) != nil {
 		return sandbox.ErrComputeUnconfirmed

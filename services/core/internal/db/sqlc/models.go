@@ -342,6 +342,7 @@ type RuntimeNodeGenerationStatus struct {
 	State               string             `json:"state"`
 	Diagnostic          string             `json:"diagnostic"`
 	ObservedAt          pgtype.Timestamptz `json:"observed_at"`
+	Checkpoint          []byte             `json:"checkpoint"`
 }
 
 type RuntimePlacement struct {

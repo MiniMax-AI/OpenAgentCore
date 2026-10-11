@@ -5,7 +5,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -49,7 +52,8 @@ func (b backend) inspectSnapshot(ctx context.Context, operation string, source w
 	if report.Digest != artifact.Digest() || report.Checkpoint == nil || report.Checkpoint.Root == "" || report.Checkpoint.Kind == "" || state.Checkpoint == nil || state.Checkpoint.CheckpointID == "" {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
-	identity := wire.SnapshotIdentity{Reference: selector, ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, CheckpointRoot: report.Checkpoint.Root, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}
+	compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: artifact.Labels()["io.oac.artifact_domain"], ExecutionClass: artifact.Labels()["io.oac.execution_class"]}
+	identity := wire.SnapshotIdentity{Compatibility: compatibility, Reference: selector, ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, CheckpointRoot: report.Checkpoint.Root, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}
 	if wire.ValidateSnapshot(b.q.Config, b.q.Reference, identity) != nil {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
@@ -66,11 +70,41 @@ func (b backend) verifiedSnapshot(ctx context.Context, want wire.SnapshotIdentit
 	return a, nil
 }
 func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State, error) {
+	receipt, receiptErr := b.receipt(q.OperationID)
+	if receiptErr == nil {
+		if receipt.Deleted || receipt.Snapshot.SourceName != q.Source.Name || receipt.Snapshot.SourceID != q.Source.ID || receipt.Snapshot.SourceGeneration != q.Source.Generation || (q.Snapshot != nil && *q.Snapshot != receipt.Snapshot) {
+			return wire.State{}, sandbox.ErrOwnership
+		}
+		return b.settleSource(ctx, q, receipt)
+	} else if !errors.Is(receiptErr, os.ErrNotExist) {
+		return wire.State{}, receiptErr
+	}
+
 	// The host allocation flock spans pause, capture, verification and source kill.
 	// A surviving completed artifact is observed, never overwritten or recaptured.
 	artifact, snap, e := b.inspectSnapshot(ctx, q.OperationID, q.Source)
 	if sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
+		// Native absence cannot settle an admitted capture. Only a durable
+		// never-dispatched closure permits rollback of this exact source.
+		// Existing archives/receipts above retain their source-cleanup path.
+		_, sourceState, inspectErr := b.inspectOwned(ctx, q.Source)
+		if inspectErr != nil {
+			return wire.State{}, inspectErr
+		}
+		if !sourceState.BootstrapComplete || (sourceState.Status != "running" && sourceState.Status != "paused") {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+		closed, admissionErr := b.admitSuspend(q)
+		if admissionErr != nil {
+			return wire.State{}, admissionErr
+		}
+		if !q.ObserveOnly && closed {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
 		if q.ObserveOnly {
+			if !closed {
+				return wire.State{}, wire.ErrUnconfirmed
+			}
 			if q.Snapshot != nil {
 				return wire.State{}, wire.ErrUnconfirmed
 			}
@@ -97,6 +131,12 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 			return wire.State{}, err
 		}
 		labels := b.snapshotLabels(q.OperationID, q.Source)
+		compatibility, err := wire.CheckpointClass(b.q.Config)
+		if err != nil {
+			return wire.State{}, err
+		}
+		labels["io.oac.artifact_domain"] = compatibility.ArtifactDomain
+		labels["io.oac.execution_class"] = compatibility.ExecutionClass
 		var captured struct {
 			Labels map[string]string `json:"labels"`
 		}
@@ -120,23 +160,37 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 	if q.Snapshot != nil && snap != *q.Snapshot {
 		return wire.State{}, sandbox.ErrOwnership
 	}
-	if q.ObserveOnly {
-		// A completed operation receipt remains observable for cleanup even if
-		// its source or resource proof is no longer qualified for execution.
-		return observeCapturedSnapshot(q.Source, snap, func(source wire.Compute) (wire.State, error) {
-			_, state, err := b.inspectOwned(ctx, source)
-			return state, err
-		})
-	}
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
 		return wire.State{}, e
 	}
-	h, _, e := b.inspect(ctx, q.Source)
+	receipt, e = b.publishArchive(ctx, artifact, snap)
+	if e != nil {
+		return wire.State{}, e
+	}
+	return b.settleSource(ctx, q, receipt)
+}
+
+func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r archiveReceipt) (wire.State, error) {
+	if e := b.verifyArchive(r); e != nil {
+		if q.ObserveOnly {
+			// Ownership comes from the durable receipt, independently of archive
+			// usability. Expose cleanup identity without authorizing source transfer,
+			// claiming its current state, or weakening the restore integrity check.
+			return wire.State{Compute: q.Source, Status: "unknown", Snapshot: &r.Snapshot}, nil
+		}
+		return wire.State{}, e
+	}
+	if r.SourceStopped {
+		return wire.State{Compute: q.Source, Status: "suspended", BootstrapComplete: true, Snapshot: &r.Snapshot, SourceStopped: true}, nil
+	}
+	h, state, e := b.inspectOwned(ctx, q.Source)
 	if e != nil && !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
 		return wire.State{}, e
 	}
-	if e == nil {
-		// Graceful stop could run the captured source after the checkpoint.
+	if e == nil && !terminal(sdk.SandboxStatus(state.Status)) {
+		if state.Status != "paused" {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
 		if e = h.Kill(ctx); e != nil {
 			return wire.State{}, e
 		}
@@ -147,12 +201,84 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 		if !terminal(observed.Status()) {
 			return wire.State{}, fmt.Errorf("source termination unconfirmed")
 		}
+	} else if sdk.IsKind(e, sdk.ErrSandboxNotFound) && !r.SourceTerminated {
+		return wire.State{}, wire.ErrUnconfirmed
 	}
-	return wire.State{Compute: q.Source, Status: "suspended", BootstrapComplete: true, Snapshot: &snap, SourceStopped: true}, nil
+	if !r.SourceTerminated {
+		r.SourceTerminated = true
+		if e = durableJSON(filepath.Join(b.archiveDirectory(q.OperationID), "receipt.json"), r); e != nil {
+			return wire.State{}, e
+		}
+	}
+	if h != nil {
+		if e = h.Remove(ctx); e != nil {
+			return wire.State{}, e
+		}
+	}
+	if _, e = sdk.GetSandbox(ctx, q.Source.Name); !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
+		return wire.State{}, wire.ErrUnconfirmed
+	}
+	if e = sdk.Snapshot.Remove(ctx, r.Snapshot.Reference, false); e != nil && !sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
+		return wire.State{}, e
+	}
+	r.SourceStopped = true
+	if e = durableJSON(filepath.Join(b.archiveDirectory(q.OperationID), "receipt.json"), r); e != nil {
+		return wire.State{}, e
+	}
+	return wire.State{Compute: q.Source, Status: "suspended", BootstrapComplete: true, Snapshot: &r.Snapshot, SourceStopped: true}, nil
 }
+
 func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, error) {
-	// Verify the exact full artifact before either adopting or creating a target.
-	artifact, e := b.verifiedSnapshot(ctx, q.Snapshot)
+	// No managed target may predate its exact admission journal.
+	if _, err := os.Lstat(filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")); errors.Is(err, os.ErrNotExist) {
+		_, err = sdk.GetSandbox(ctx, q.Target.Name)
+		if err == nil {
+			return wire.State{}, sandbox.ErrOwnership
+		}
+		if !sdk.IsKind(err, sdk.ErrSandboxNotFound) {
+			return wire.State{}, err
+		}
+	} else if err != nil {
+		return wire.State{}, err
+	}
+
+	closed, e := b.admitRestore(q)
+	if e != nil {
+		return wire.State{}, e
+	}
+	if closed {
+		if !q.ObserveOnly {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+		target := q.Target
+		target.ID = ""
+		return wire.State{Compute: target, Status: "absent", RestoreAttemptClosed: q.OperationID}, nil
+	}
+	// An existing admitted observation may cheaply remain unknown. Native absence
+	// cannot close it: a detached launcher could still make the target visible.
+	if q.ObserveOnly {
+		_, observed, err := b.inspectOwned(ctx, q.Target)
+		if sdk.IsKind(err, sdk.ErrSandboxNotFound) {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+		if err != nil {
+			return wire.State{}, err
+		}
+		if observed.Status != "running" {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+	}
+	// Only a fresh dispatch may close its attempt before native execution.
+	// Lifecycle FFI calls use an uncancelled context; the request deadline is
+	// checked between settled operations, never used to cancel a native wait.
+	if !q.ObserveOnly {
+		if err := b.closeExpiredRestore(q); err != nil {
+			return wire.State{}, err
+		}
+	}
+	// Admission is durable before any native import/restore operation. A prior
+	// admitted operation with no visible target remains unknown, never replayed.
+	artifact, e := b.importArchive(ctx, q.Snapshot)
 	if e != nil {
 		return wire.State{}, e
 	}
@@ -164,7 +290,7 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	}
 	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {
-		return b.finishRestore(ctx, q.Target)
+		return b.completeRestore(ctx, q, q.Target)
 	}
 	if !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
 		return wire.State{}, e
@@ -172,20 +298,12 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if q.ObserveOnly || q.Target.ID != "" {
 		return wire.State{}, wire.ErrUnconfirmed
 	}
-	source, err := sdk.GetSandbox(ctx, q.Snapshot.SourceName)
-	if err == nil {
-		if source.ID() != q.Snapshot.SourceID {
-			return wire.State{}, sandbox.ErrOwnership
-		}
-		if !terminal(source.Status()) {
-			return wire.State{}, wire.ErrUnconfirmed
-		}
-	} else if !sdk.IsKind(err, sdk.ErrSandboxNotFound) {
-		return wire.State{}, err
-	}
 	restore := sdk.RestoreConfig{NetworkPolicy: b.network(), ExternalMountPolicy: sdk.ExternalMountStrict}
 	if b.q.Workspace != nil {
 		restore.Volumes = map[string]sdk.MountConfig{"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})}
+	}
+	if err := b.closeExpiredRestore(q); err != nil {
+		return wire.State{}, err
 	}
 	live, e := sdk.RestoreSandbox(ctx, artifact, q.Target.Name, sdk.WithRestoreConfig(restore))
 	if e != nil {
@@ -195,7 +313,7 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	target.ID = live.ID()
 	// The same completion path handles a fresh target and a previous Restore
 	// whose response or derived proof write was interrupted.
-	state, err := b.finishRestore(ctx, target)
+	state, err := b.completeRestore(ctx, q, target)
 	detachErr := live.Detach(context.Background())
 	if err != nil {
 		return state, err
@@ -204,21 +322,6 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 		return state, detachErr
 	}
 	return state, nil
-}
-
-// Observation consumes an already verified artifact identity and never changes
-// source state. Execution qualification belongs to capture and subsequent use.
-func observeCapturedSnapshot(source wire.Compute, snapshot wire.SnapshotIdentity, readOwned func(wire.Compute) (wire.State, error)) (wire.State, error) {
-	state, err := readOwned(source)
-	if err != nil && !sdk.IsKind(err, sdk.ErrSandboxNotFound) {
-		return wire.State{}, err
-	}
-	stopped := sdk.IsKind(err, sdk.ErrSandboxNotFound) || terminal(sdk.SandboxStatus(state.Status))
-	status := "suspended"
-	if !stopped {
-		status = state.Status
-	}
-	return wire.State{Compute: source, Status: status, BootstrapComplete: true, Snapshot: &snapshot, SourceStopped: stopped}, nil
 }
 
 func terminal(s sdk.SandboxStatus) bool {

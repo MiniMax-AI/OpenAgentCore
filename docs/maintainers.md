@@ -33,7 +33,7 @@ make build-core-distribution
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | Native installer catalog directory; see [Native installers](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | Output directory under `~/.oac`. Default: `~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker build network: `default`, `host` or `none` |
-| `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | Cached microsandbox release archive. Default: `~/.oac/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz`, downloaded when missing |
+| `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | Cached microsandbox release archive. Default: `~/.oac/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz`, downloaded when missing |
 | `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 image; the default is pinned by its linux/amd64 manifest digest |
 
 The build reuses the Core, Web, Runtime, SDK and helper builders. The manifest records the commit and source tree, image config and OCI manifest digests, the Runtime OCI manifest digest, the microsandbox runtime and firmware hashes, and the size and SHA-256 of every Runtime and node artifact; native installers carry only their SHA-256 in the [catalog](#native-installers). Output is the control archive and its `.sha256`, the optional offline archive, and the versioned Runtime, node and native installer assets. Nothing is published. Rebuilding into a directory that already holds this commit's distribution is refused.
@@ -59,6 +59,8 @@ The catalog records the commit, the Runtime protocol version, each archive's SHA
 
 `make build-core-distribution` builds all of these. Build one on its own to test a Harness image or a helper. Run every command from the repository root; default outputs go under `${OAC_DEV_HOME:-$HOME/.oac}/build`.
 
+The three maintained Runtime images share a build-time adjustment to the pinned Debian login profile: an inherited, exported `PATH` is preserved, while an unset `PATH` receives Debian’s defaults. This keeps the Runtime’s initialized package and user paths available in login and non-login tools without another package-path setting. The combined image inherits the same profile. A changed upstream profile fails the build for review; custom shell startup files can still explicitly change `PATH`.
+
 **Codex Runtime image.** Extract the official npm package `@openai/codex@0.153.4-linux-x64` under `~/.oac` (for example with `npm pack --ignore-scripts` and `tar -xzf`), then:
 
 ```sh
@@ -67,7 +69,7 @@ make build-codex-runtime
 docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/codex-runtime"
 ```
 
-The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources and `services/core/deploy/codex/Dockerfile`.
+The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources, the shared login-profile build step and `services/core/deploy/codex/Dockerfile`.
 
 **Claude Code Runtime image.** Node 20 or newer and pnpm are required.
 
@@ -101,16 +103,16 @@ make build-e2b-provider
 
 Docker builds the Linux helper for `GOARCH=amd64` (default) or `GOARCH=arm64` with the pinned CPython and Debian 12 image. The Python dependency closure, including PyInstaller, is hash-locked in `services/core/tools/e2b-provider/requirements.lock`; no E2B account key is needed. Set `E2B_PROVIDER_BUILD_DIR` for another output directory. The build is a pure function of the helper sources, `LICENSE` and the build script, so it is cached under `~/.oac/cache/e2b-provider/` by their hash and rebuilt only when they change. The output is `oac-e2b-provider-linux-<architecture>.tar.gz` with its `.sha256`; it extracts to `oac-e2b-provider/` with the executable, `_internal/`, `licenses/`, `requirements.lock` and `manifest.json`. The Core image uses that tree; the host needs a compatible glibc and CA certificates, not Python.
 
-**microsandbox helper.** Linux only, with a C compiler:
+**microsandbox helper.** Linux amd64 only, with a C compiler:
 
 ```sh
 make build-microsandbox-provider
 make check-microsandbox-provider
 ```
 
-The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`. Its separate Go module pins the microsandbox Go SDK v0.7.2 and embeds the matching FFI library; never build production with the SDK's `microsandbox_ffi_path` tag. Core itself stays a CGO-disabled build. The helper needs glibc and runs only on nodes.
+The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`. Its separate Go module pins the official microsandbox SDK source commit. Both commands and the distribution build use `scripts/build-microsandbox-provider.py`: it stages the module dependencies, verifies the matching official FFI release checksum, fills the SDK's empty release bundle and builds with that FFI embedded. The SDK source is unchanged and no vendored binary is committed. Use this entry point rather than invoking `go build` directly; never build production with the SDK's `microsandbox_ffi_path` tag. Core itself stays a CGO-disabled build. The helper needs glibc and runs only on nodes.
 
-**microsandbox runtime.** The distribution uses the official [v0.7.2 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.2) archive `microsandbox-linux-x86_64.tar.gz`, SHA256 `47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b` (`RUNTIME_ARCHIVE_SHA256` in `scripts/core-distribution-manifest.py`). The build verifies the checksum before extracting `msb` and `libkrunfw.so.5.6.1` and records both files' hashes. The helper checks those hashes on every call and never installs or upgrades them.
+**microsandbox runtime.** The distribution uses the official [v0.7.8 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.8) archive `microsandbox-linux-x86_64.tar.gz`, SHA256 `86f9f72dc3e639c7175bc07909b4b63ce412517c1ef8a2e1921171af5682fded` (`RUNTIME_ARCHIVE_SHA256` in `scripts/core-distribution-manifest.py`). The build verifies the checksum before extracting `msb` and `libkrunfw.so.5.6.1` and records both files' hashes. The helper checks those hashes on every call and never installs or upgrades them.
 
 ### Standalone Core builds
 

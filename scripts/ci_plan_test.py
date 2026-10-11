@@ -57,6 +57,10 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("distribution", self.jobs(path))
 
+    def test_microsandbox_builder_keeps_helper_and_distribution_checks(self):
+        for path in ("scripts/build-microsandbox-provider.py", "scripts/build-microsandbox-provider.test.py"):
+            self.assertTrue({"backend", "distribution"} <= self.jobs(path))
+
     def test_distribution_image_build_keeps_api_acceptance(self):
         plan = ci.select(["scripts/build-core-distribution.sh"])
         self.assertTrue(plan["image"])

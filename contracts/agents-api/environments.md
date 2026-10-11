@@ -92,6 +92,8 @@ The application owns the machine. It creates the Session with a clean absolute `
 
 Session input goes through `POST /agents/sessions/{id}/events` in ordered batches of 1–64 events. On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared.
 
+A valid node-backed creation can wait for compute capacity after committing. Initial input uses the same reservation and deadline while waiting; creating without input still requests Environment preparation. [Placement and generation selection](./sandbox-deployment.md#generation-ownership-and-rollout) define the scheduling rules.
+
 ### Initial input
 
 Creation accepts initial text as a string or an ordered array of user messages. Omitted or null input creates no Turn and no connection action.
@@ -227,7 +229,7 @@ An Environment's initialization is `pending`, `running`, `complete` or `failed`,
 
 - The Worker's initialization scheduler scans 32 Environments at a time, wraps at the end and bounds concurrent preparations by execution concurrency, independently of Provider maintenance.
 - A missing socket does not consume a pending attempt. An unavailable Harness fails before installation. Each operation rechecks current authority and the original socket; completion rechecks the exact binding.
-- Each file transfer, configure, Skill, Plugin, package and setup step has a two-minute budget; the whole initialization has 30 minutes. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
+- Each file, Skill or Plugin transfer has a two-minute staging budget. Configure, package installation, setup commands and snapshot finalization share the whole initialization’s 30-minute budget, whose remaining duration Core carries on each operation and the Runtime enforces. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
 - A running initialization whose owner is lost, including across a Core restart, fails as unconfirmed; nothing is replayed. A completed Environment never reinstalls on reconnect or native recovery, so later user changes survive.
 - Failure is terminal for the Session but destroys neither compute nor files.
 

@@ -16,8 +16,8 @@ import (
 )
 
 func TestAllocationLockSurvivesCallerDeadlineUntilExplicitSettlement(t *testing.T) {
-	home := t.TempDir()
-	q := wire.Request{Config: wire.Config{RuntimeHome: home}, Deadline: time.Now().Add(time.Second)}
+	home := checkpointFixture(t)
+	q := wire.Request{Config: wire.Config{RuntimeHome: home, CheckpointRoot: home}, Deadline: time.Now().Add(time.Second)}
 	release, e := allocationLock(q)
 	if e != nil {
 		t.Fatal(e)
@@ -39,12 +39,12 @@ func TestAllocationLockSurvivesCallerDeadlineUntilExplicitSettlement(t *testing.
 	release.Close()
 }
 func TestLockDirectoryCannotRedirectIntoAnotherHome(t *testing.T) {
-	home := t.TempDir()
+	home := checkpointFixture(t)
 	foreign := t.TempDir()
-	if e := os.Symlink(foreign, filepath.Join(home, "oac-locks")); e != nil {
+	if e := os.Symlink(foreign, filepath.Join(home, wire.Name(wire.Config{}, sandbox.Reference{}, 0))); e != nil {
 		t.Fatal(e)
 	}
-	_, e := allocationLock(wire.Request{Config: wire.Config{RuntimeHome: home}, Deadline: time.Now().Add(time.Second)})
+	_, e := allocationLock(wire.Request{Config: wire.Config{RuntimeHome: home, CheckpointRoot: home}, Deadline: time.Now().Add(time.Second)})
 	if e == nil {
 		t.Fatal("symlink lock directory accepted")
 	}
@@ -56,6 +56,7 @@ func initialInfoRequest(t *testing.T) wire.Request {
 	config.InstallationID = "11111111-1111-4111-8111-111111111111"
 	config.HelperPath, config.RuntimePath, config.FirmwarePath = "/helper", "/runtime", "/firmware"
 	config.RuntimeHome = t.TempDir()
+	config.CheckpointRoot = checkpointFixture(t)
 	config.RuntimeSHA256, config.FirmwareSHA256 = strings.Repeat("a", 64), strings.Repeat("b", 64)
 	config.Network = wire.NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny"}
 	ref := sandbox.Reference{TenantID: "22222222-2222-4222-8222-222222222222", EnvironmentID: "33333333-3333-4333-8333-333333333333", AllocationID: "44444444-4444-4444-8444-444444444444"}
@@ -192,4 +193,16 @@ func TestInvalidOrUnwritableAdmissionStateFailsClosed(t *testing.T) {
 			t.Fatal("failed marker write settled", out, err)
 		}
 	})
+}
+
+func checkpointFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if e := os.Chmod(root, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(root, ".oac-checkpoint-store"), []byte("55555555-5555-4555-8555-555555555555\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	return root
 }

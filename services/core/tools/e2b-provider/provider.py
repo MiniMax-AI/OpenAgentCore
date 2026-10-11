@@ -352,10 +352,13 @@ class Provider:
         Sandbox.set_timeout(cloud.sandbox_id, self.config['TimeoutSeconds'], **self.options())
         return self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
 
-    def kill(self):
+    def kill(self, expected_paused_id=None):
         if self.rejected_absence():
             return
         found = self.discover()
+        if expected_paused_id is not None and (len(found) > 1 or any(
+                cloud.sandbox_id != expected_paused_id or cloud.state != 'paused' for cloud in found)):
+            raise Failure('unconfirmed')
         # The allocation flock excludes any still-running local Create helper.
         # A matching actual VM proves the original request reached allocation.
         known = bool((self.receipt.data or {}).get('ids'))

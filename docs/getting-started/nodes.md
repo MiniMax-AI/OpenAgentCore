@@ -12,6 +12,10 @@ You add a node by generating a command in Web and running it on the host. The [s
 - **The sandbox configuration is saved.** Open **System** → **Manage sandbox configuration**, choose **Own machines**, the backend and a sandbox size, and **Save configuration**. To change a saved configuration, choose **Reset deployment** first. Every node of an installation uses that backend.
 - **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This console has no node files for …*.
 
+For microsandbox checkpoint recovery across nodes, add `--checkpoint-root /absolute/private/shared-store` to the installer command on each participating node. Mount the same private store at those paths before installation and grant only the node service account access. The default is a private node-local store and supports recovery on that node. The checkpoint store is separate from workspace storage and must never be guest-accessible; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns compatibility and retention requirements.
+
+Microsandbox includes the host kernel and CPU profile in its checkpoint execution compatibility. An OS or CPU-profile change can therefore make retained checkpoints incompatible even on their original node. Before maintenance, keep a node with the matching execution class and the same ready generation available for those checkpoints; otherwise their requests wait under the [checkpoint retention policy](../sandbox-provider.md#checkpoint-transfer).
+
 For microsandbox with independent workspace storage, complete the [NFS mount and service-account setup](../configuration.md#independent-workspace-storage) on this host before enrollment. The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
@@ -127,7 +131,8 @@ Use manual registration when you manage the node's files and service yourself in
 3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
 4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size, the Runtime image and artifact hashes from `specification`:
    - Docker: the [Docker node configuration](../configuration.md#docker-node-configuration) fields, with `host` an explicit Unix socket, `image` the local ID of the imported Runtime image and `seccomp_file` absolute.
-   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, a `network` policy, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
+   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, a `network` policy, an explicit `checkpoint_root` for private checkpoint archives, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
+   Before the first microsandbox registration, initialize the empty `checkpoint_root` as the node service account using the same release's source checkout: `PYTHONPATH=deploy/node python3 -c 'from node_install import prepare_checkpoint_root; prepare_checkpoint_root("/absolute/private/checkpoints")'`. This reuses the installer's exclusive UUID-marker initialization and ownership checks. Initialize a shared store once; other nodes use the existing marker. Never replace the marker or initialize over restored or nonempty unowned storage.
 5. Register, then run the node under the host's service supervisor, with real absolute paths:
 
    ```sh
@@ -148,7 +153,7 @@ The node connects out to Core; Core needs no SSH or Docker TCP access to the hos
 
 ## When a node host fails
 
-A restarted node service keeps its identity and finds its existing sandboxes again. Core never replaces a missing sandbox by itself, and never moves a Session to another node: the Session's resources show as **Node disconnected** or **Sandbox resource missing** until the original host and its storage are back, or you archive the Session. A lost node state directory is a recovery incident: restore it from its [backup](./operations.md#back-up) together with the database and the provider storage, rather than registering the host again over existing resources.
+A restarted node service keeps its identity and finds its existing sandboxes again. Core does not take over an active or unconfirmed writer merely because its node is unreachable or its sandbox is missing: those resources show as **Node disconnected** or **Sandbox resource missing** while ownership remains unresolved. A settled retained checkpoint can follow the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer), and confirmed release can permit [cold replacement](../sandbox-provider.md#cold-replacement-after-checkpoint-retention). A lost node state directory is a recovery incident: restore it from its [backup](./operations.md#back-up) together with the database and the provider storage, rather than registering the host again over existing resources.
 
 ## Troubleshooting
 

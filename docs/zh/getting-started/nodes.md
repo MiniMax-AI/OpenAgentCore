@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 9b75587ccab0088003e8bd12afe477af0e72fe6650045f5283700248f9df327e
+source_hash: 0c62518cc740387ed03035ea4870108edeaaa82331a7509b573fb2b775ae3aba
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -15,6 +15,10 @@ source_hash: 9b75587ccab0088003e8bd12afe477af0e72fe6650045f5283700248f9df327e
 - **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，Add node 显示 *This console has no node files for …*。
 
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
+
+microsandbox 跨节点检查点恢复要求在每个参与节点的安装命令加入 `--checkpoint-root /absolute/private/shared-store`。安装前将同一个私有 store 挂载到这些路径，并只允许 node 服务账户访问。默认使用节点本地私有 store，只支持在该节点恢复。检查点 store 独立于 workspace 存储，绝不能允许 guest 访问；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer) 定义兼容性和保留要求。
+
+Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因此，操作系统或 CPU profile 变化可能使保留的检查点不再兼容，甚至无法在原节点恢复。维护前，应为这些检查点保留具有匹配 execution class 且已就绪同一 generation 的节点；否则，相关请求会按[检查点保留策略](../sandbox-provider.md#checkpoint-transfer)等待。
 
 对于使用独立工作区存储的 microsandbox，应在注册前完成此主机上的 [NFS 挂载和服务账户配置](../configuration.md#independent-workspace-storage)。节点随每次 binding 接收所选不可变文件系统配置；不要单独编写节点存储设置。
 
@@ -129,7 +133,8 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 3. 使用令牌读取节点配置，不会消耗令牌：`GET /api/v1/sandbox-node/configuration`，带 `Authorization: Bearer <token>`。
 4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并添加 `native` 对象，写入该提供商的主机设置。适配器从 `specification` 读取沙箱规格、Runtime 镜像和产物哈希：
    - Docker：[Docker 节点配置](../configuration.md#docker-node-configuration)中的字段，其中 `host` 是显式 Unix 套接字，`image` 是导入的 Runtime 镜像的本地 ID，`seccomp_file` 是绝对路径。
-   - microsandbox：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`；`network` 策略；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
+   - microsandbox：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`；`network` 策略；私有检查点归档的显式 `checkpoint_root`；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
+   首次注册 microsandbox 前，以 node 服务账户在相同发行版本的源码 checkout 中初始化空的 `checkpoint_root`：`PYTHONPATH=deploy/node python3 -c 'from node_install import prepare_checkpoint_root; prepare_checkpoint_root("/absolute/private/checkpoints")'`。它复用安装程序的 UUID marker 排他初始化与所有权检查。共享 store 只初始化一次，其他 node 使用已有 marker。不得替换 marker，也不得在恢复后的存储或非空且无所有权证明的目录上重新初始化。
 5. 使用真实绝对路径注册，然后通过主机服务管理器运行节点：
 
    ```sh
@@ -150,7 +155,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 ## 节点主机故障时 {#when-a-node-host-fails}
 
-重启节点服务会保留身份并重新发现已有沙箱。Core 不会自行替换缺失沙箱，也不会将 Session 移到其他节点：Session 资源显示 **Node disconnected** 或 **Sandbox resource missing**，直到原主机及存储恢复，或你归档 Session。丢失节点状态目录属于恢复事件：从[备份](operations.md#back-up)恢复，并同时恢复数据库和提供商存储；不要在已有资源上重新注册主机。
+重启节点服务会保留身份并重新发现已有沙箱。Core 不会仅因节点不可达或沙箱缺失就接管活动或未确认的 writer：所有权未结清时，这些资源显示 **Node disconnected** 或 **Sandbox resource missing**。已结清的保留检查点可以遵循[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)，确认释放后可以按条件进行[冷替换](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)。丢失节点状态目录属于恢复事件：从[备份](operations.md#back-up)恢复，并同时恢复数据库和提供商存储；不要在已有资源上重新注册主机。
 
 ## 问题排查 {#troubleshooting}
 

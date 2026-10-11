@@ -7,6 +7,7 @@ package placementpg
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // LockDeployment locks the deployment and returns it as placement reads it.
@@ -65,21 +67,34 @@ func ReleasePlacement(ctx context.Context, q *sqlc.Queries, environment pgtype.U
 	return q.ReleaseRuntimePlacement(ctx, environment)
 }
 
-// LoadRestore locks the deployment and returns what restoring suspended
-// compute of the generation on the node reads.
-func LoadRestore(ctx context.Context, q *sqlc.Queries, nodeID pgtype.UUID, generation uint64) (placement.Restore, error) {
-	if _, err := q.LockRuntimeDeployment(ctx); err != nil {
-		return placement.Restore{}, err
+// LoadCheckpointNodes joins current presence/capacity with exact-generation
+// readiness. The caller holds the deployment lock for both observations.
+func LoadCheckpointNodes(ctx context.Context, q *sqlc.Queries, generation uint64, nodes []placement.Node) ([]placement.CheckpointNode, error) {
+	ready, err := q.ListCheckpointGenerationNodes(ctx, int64(generation))
+	if err != nil {
+		return nil, err
 	}
-	restore := placement.Restore{Generation: generation}
-	rows, err := q.ListRuntimeNodes(ctx, nodeID)
-	if err != nil || len(rows) == 0 {
-		return restore, err
+	byID := make(map[string]placement.Node, len(nodes))
+	for _, node := range nodes {
+		byID[node.ID] = node
 	}
-	n := node(rows[0])
-	restore.Node = &n
-	restore.GenerationReady, err = q.NodeGenerationReady(ctx, sqlc.NodeGenerationReadyParams{NodeID: nodeID, Generation: int64(generation)})
-	return restore, err
+	candidates := make([]placement.CheckpointNode, 0, len(ready))
+	for _, row := range ready {
+		if len(row.Checkpoint) == 0 {
+			continue
+		}
+		var compatibility sandbox.CheckpointCompatibility
+		if err := json.Unmarshal(row.Checkpoint, &compatibility); err != nil {
+			return nil, err
+		}
+		if err := compatibility.Validate(); err != nil {
+			return nil, err
+		}
+		if node, ok := byID[uuidString(row.ID)]; ok {
+			candidates = append(candidates, placement.CheckpointNode{Node: node, Checkpoint: &compatibility})
+		}
+	}
+	return candidates, nil
 }
 
 // ComputeBlocksAdmission reports whether the Session's managed compute is in

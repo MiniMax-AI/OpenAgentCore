@@ -59,7 +59,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(other), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, auth, "codex", workerExecution(t, w))
+	handler, err := publicHandler(t, h.s, auth, "codex", workerExecution(t, w), acceptUnavailable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +144,16 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 			t.Fatal("rejection did not settle", intent, err)
 		}
 	}
+	// Exhaustion rejected before publication is unavailable, not invalid input;
+	// its exact receipt still settles ownership so another write can proceed.
+	doneUnavailable := post(token, environment.ID, inline)
+	unavailableID := serveFileWrite(h, proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "resource_unavailable"})
+	if got := await(doneUnavailable); got.status != http.StatusServiceUnavailable {
+		t.Fatal("resource rejection became invalid input", got)
+	}
+	if intent, err := FixtureFileWrite(t.Context(), h.s.pool, h.tenant, environment.ID, unavailableID); err != nil || intent.State != "rejected" {
+		t.Fatal("known unavailable result retained uncertainty", intent, err)
+	}
 	// The rejected copy did not consume its Source File.
 	if got, err := fileStore.Get(t.Context(), h.tenant, source.ID); err != nil || got.SizeBytes != 3 {
 		t.Fatal("source file consumed", got, err)
@@ -156,7 +166,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 	if foreign.status != 404 || foreign != missing {
 		t.Fatal("tenant B reached the Environment", foreign, missing)
 	}
-	if got := states(); !reflect.DeepEqual(got, map[string]int{"rejected": 3}) {
+	if got := states(); !reflect.DeepEqual(got, map[string]int{"rejected": 4}) {
 		t.Fatal("rejections left a receipt or blocking intent", got)
 	}
 	// Known rejections release the mutation owner for a successor.
@@ -165,7 +175,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 	if got := await(done); got.status != 201 {
 		t.Fatal("successor rejected", got)
 	}
-	if got := states(); !reflect.DeepEqual(got, map[string]int{"rejected": 3, "committed": 1}) {
+	if got := states(); !reflect.DeepEqual(got, map[string]int{"rejected": 4, "committed": 1}) {
 		t.Fatal("successor receipt", got)
 	}
 	session, err := sessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)

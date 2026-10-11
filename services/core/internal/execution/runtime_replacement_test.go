@@ -11,10 +11,13 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -51,6 +54,61 @@ func (p *retentionProvider) DeleteRetained(context.Context, sandbox.Reference, s
 	return nil
 }
 
+func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
+	provider := &retentionProvider{}
+	fixture := newWorkspaceSettlementFixture(t, provider)
+	r, session := fixture.lifecycle, fixture.session
+	owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []struct {
+		sql string
+		arg any
+	}{
+		{`UPDATE runtime_nodes SET max_active=1,max_retained=1 WHERE id=$1`, owner.NodeID},
+		{`UPDATE environments SET initialization='complete',status='disconnected' WHERE id=$1`, owner.EnvironmentID},
+		{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{"retained_native_history":true}}]' WHERE id=$1`, owner.DeviceID},
+		{`UPDATE runtime_allocations SET state='running',compute_phase='suspended',compute_state='{"protocol_version":"1","current":{"ID":"old-compute"},"retained":{"ID":"old-snapshot","Data":"opaque","Compatibility":{"artifact_domain":"fixture-store","execution_class":"fixture-runtime"}}}',compute_retained_until=clock_timestamp()+interval '24 hours' WHERE id=$1`, owner.ID},
+	} {
+		if _, err := fixture.pool.Exec(t.Context(), statement.sql, statement.arg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	waiting, err := fixture.sessions.CreateSession(t.Context(), session.TenantID, sessions.CreateSession{SupportsRetainedNativeHistory: true, Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ExecutionSourceSession})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := fixture.sessions.ReserveEnvironmentInput(t.Context(), session.TenantID, waiting.Session.ID, "waiting-for-capacity", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"continue"}]}]}`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err = r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if err := r.observeCompute(t.Context(), owner); err != nil {
+			t.Fatal(err)
+		}
+		current, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+		if err != nil || current.Expired || current.ComputePhase != "suspended" || current.ComputeRevision != owner.ComputeRevision || current.ComputeRetainedUntil == nil || !current.ComputeRetainedUntil.Equal(*owner.ComputeRetainedUntil) {
+			t.Fatal("pressure changed retained snapshot", current, err)
+		}
+		if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); !errors.Is(err, placement.ErrNodeUnavailable) {
+			t.Fatal("released retained capacity without cleanup", err)
+		}
+	}
+	pending, err := r.sessions.GetEnvironmentInputReservation(t.Context(), session.TenantID, waiting.Session.ID, input.ID)
+	if err != nil || pending.State != sessions.EnvironmentInputPending || !pending.Deadline.Equal(input.Deadline) {
+		t.Fatal("pressure changed input deadline", pending, err)
+	}
+
+	if provider.kills != 0 || provider.snapshots != 0 || provider.creates != 1 {
+		t.Fatal("pressure changed native resources", provider)
+	}
+}
+
 func TestExpiredRetainedComputePreservesSessionAndPendingInput(t *testing.T) {
 	provider := &retentionProvider{killError: sandbox.ErrComputeUnconfirmed}
 	fixture := newWorkspaceSettlementFixture(t, provider)
@@ -76,7 +134,7 @@ func TestExpiredRetainedComputePreservesSessionAndPendingInput(t *testing.T) {
 	}
 	compute := runtimeCompute{Version: sandbox.SuspensionStateVersion, Current: sandbox.Compute{ID: "old-compute"}, Retained: &sandbox.RetainedState{ID: "old-snapshot", Data: "native-state"}}
 	raw, _ := json.Marshal(compute)
-	if _, err = fixture.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state=$2,compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID, raw); err != nil {
+	if _, err = fixture.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspending',compute_state=$2,compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID, raw); err != nil {
 		t.Fatal(err)
 	}
 	input, err := fixture.sessions.ReserveEnvironmentInput(t.Context(), session.TenantID, session.ID, "after-retention", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"resume"}]}]}`)}})
@@ -155,7 +213,7 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				{`UPDATE environments SET initialization='complete',status='disconnected' WHERE id=$1`, owner.EnvironmentID},
 				{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{"retained_native_history":true}}]' WHERE id=$1`, owner.DeviceID},
 				{`UPDATE session_devices SET native_session_id='retained-native-session' WHERE device_id=$1`, owner.DeviceID},
-				{`UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"protocol_version":"1","current":{"ID":"old-compute"},"retained":{"ID":"old-snapshot","Data":"native-state"}}',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID},
+				{`UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"protocol_version":"1","current":{"ID":"old-compute"},"retained":{"ID":"old-snapshot","Data":"native-state","Compatibility":{"artifact_domain":"fixture-store","execution_class":"fixture-runtime"}}}',compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID},
 			} {
 				if _, err = fixture.pool.Exec(t.Context(), statement.q, statement.arg); err != nil {
 					t.Fatal(err)
@@ -173,9 +231,9 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				t.Fatal(owner, err)
 			}
 			r.config.Mode = string(sandbox.DeploymentNodes)
-			manager := &runtimeManager{ctx: t.Context(), config: r.config, setupGate: make(chan struct{}, 1), nodes: make(map[string]*runtimeNode), workspaces: r.workspaces, sessions: r.sessions, sessionExecution: r.sessionExecution, deployment: r.deployment, deploymentService: r.deployments, deploymentReader: r.reader, lease: r.lease, registry: r.registry}
+			manager := &runtimeManager{ctx: t.Context(), config: r.config, setupGate: make(chan struct{}, 1), inventory: make(chan struct{}, 1), nodes: make(map[string]*runtimeNode), workspaces: r.workspaces, sessions: r.sessions, sessionExecution: r.sessionExecution, deployment: r.deployment, deploymentService: r.deployments, deploymentReader: r.reader, lease: r.lease, registry: r.registry}
 			// Neither retained storage nor an old receipt is demand by itself.
-			if err = manager.reserveReplacementPlacements(t.Context()); err != nil {
+			if err = manager.reservePlacements(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			candidates, err := r.reader.UnallocatedEnvironments(t.Context(), r.nodeID, "")
@@ -187,7 +245,7 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err = manager.reserveReplacementPlacements(t.Context()); err != nil {
+				if err = manager.reservePlacements(t.Context()); err != nil {
 					t.Fatal(err)
 				}
 				if err = r.provisionPending(t.Context()); err != nil {
@@ -296,7 +354,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		if err = service.ConnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
 			t.Fatal(err)
 		}
 		return installation, node.NodeID

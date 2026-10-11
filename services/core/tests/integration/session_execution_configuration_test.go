@@ -272,6 +272,11 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 		if phase == "running" {
 			retained = nil
 		}
+		if phase == "restoring" {
+			if err := deploymentService(t, s).TouchActivity(t.Context(), tenant, environment.ID); err != nil {
+				t.Fatal(err)
+			}
+		}
 		owner = runtimeSuspensionStep(t, w, owner, phase, retained)
 		before, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 		if err != nil {

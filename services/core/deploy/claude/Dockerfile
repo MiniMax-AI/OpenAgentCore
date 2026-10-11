@@ -5,6 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /environment/workspace /workspace /home/runtime
+COPY runtime_profile.py /tmp/oac-runtime-profile.py
+RUN python3 /tmp/oac-runtime-profile.py && rm /tmp/oac-runtime-profile.py
 COPY --chmod=0555 oac-daemon /usr/local/bin/
 COPY claude-sdk /opt/claude-sdk
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \

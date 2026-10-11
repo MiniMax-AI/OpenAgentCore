@@ -123,6 +123,12 @@ func (p *provider) state(ctx context.Context, q request) (sandbox.ComputeState, 
 		}
 		return sandbox.ComputeState{}, e
 	}
+	if r.State != nil && r.State.RestoreAttemptClosed != "" {
+		if q.Operation == "resume" && q.Resume != nil && r.State.ClosesRestoreAttempt(*q.Resume) {
+			return *r.State, nil
+		}
+		return sandbox.ComputeState{}, sandbox.ErrComputeUnconfirmed
+	}
 	if r.State == nil || r.State.Compute.ID == "" {
 		return sandbox.ComputeState{}, sandbox.ErrComputeUnconfirmed
 	}

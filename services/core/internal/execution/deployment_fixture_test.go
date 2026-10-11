@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"testing"
 	"time"
 
@@ -68,7 +69,7 @@ func deploymentOperations(t *testing.T, storage deployment.Storage, reader deplo
 	if err != nil {
 		t.Fatal(err)
 	}
-	operations, err := deployment.NewExecutionOperations(service, execution)
+	operations, err := deployment.NewExecutionOperations(service, execution, engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,6 +143,8 @@ func (s *strictExecutionStorage) WithDeployment(ctx context.Context, apply func(
 type strictDeploymentReader struct {
 	countRetainedAllocations func(context.Context, string) (int64, error)
 	countComputeReservations func(context.Context, string) (int64, error)
+	placementDemand          func(context.Context, deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error)
+	retainedNativeHistory    func(context.Context, deployment.AllocationKey) (bool, error)
 	t                        *testing.T
 	deployment               func(context.Context) (deployment.Record, error)
 	snapshot                 func(context.Context) (deployment.Snapshot, error)
@@ -163,8 +166,6 @@ type strictDeploymentReader struct {
 	unallocatedEnvironments  func(context.Context, string, string) ([]deployment.UnallocatedEnvironment, error)
 	lifecyclePlacement       func(context.Context, deployment.AllocationKey) (deployment.LifecyclePlacement, error)
 	activity                 func(context.Context, string) (deployment.Activity, error)
-	replacementEnvironments  func(context.Context, string) ([]deployment.UnallocatedEnvironment, error)
-	retainedNativeHistory    func(context.Context, deployment.AllocationKey) (bool, error)
 }
 
 func (r *strictDeploymentReader) Deployment(ctx context.Context) (deployment.Record, error) {
@@ -360,11 +361,11 @@ func (r *strictDeploymentReader) CountRetainedAllocations(ctx context.Context, i
 	return r.countRetainedAllocations(ctx, installationID)
 }
 
-func (r *strictDeploymentReader) ReplacementEnvironments(ctx context.Context, after string) ([]deployment.UnallocatedEnvironment, error) {
-	if r.replacementEnvironments == nil {
-		return nil, unexpectedDeploymentCall(r.t, "ReplacementEnvironments")
+func (r *strictDeploymentReader) PlacementDemand(ctx context.Context, after deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error) {
+	if r.placementDemand == nil {
+		return nil, deployment.PlacementDemandCursor{}, unexpectedDeploymentCall(r.t, "PlacementDemand")
 	}
-	return r.replacementEnvironments(ctx, after)
+	return r.placementDemand(ctx, after)
 }
 func (r *strictDeploymentReader) RetainedNativeHistory(ctx context.Context, key deployment.AllocationKey) (bool, error) {
 	if r.retainedNativeHistory == nil {
