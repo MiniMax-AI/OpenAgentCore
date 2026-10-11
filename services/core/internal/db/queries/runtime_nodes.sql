@@ -90,3 +90,8 @@ UPDATE runtime_placements SET node_id = $2, deployment_generation = $3,
     reserved_at = clock_timestamp(), released_at = NULL
 WHERE runtime_placements.environment_id = $1 AND released_at IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = $1 AND a.state <> 'released');
+
+-- name: ReleaseFailedRuntimePlacement :exec
+UPDATE runtime_placements SET released_at = clock_timestamp()
+WHERE runtime_placements.environment_id = $1 AND runtime_placements.node_id = $2 AND runtime_placements.deployment_generation = $3 AND runtime_placements.released_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = $1 AND a.state <> 'released');

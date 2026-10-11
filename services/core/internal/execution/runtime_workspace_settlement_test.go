@@ -67,8 +67,10 @@ type workspaceSettlementFixture struct {
 	lifecycle *runtimeLifecycle
 	sessions  *sessions.Service
 	storage   *workspacepg.Store
+	writer    *workspacepg.Execution
 	control   *settlementWorkspaceControl
 	session   sessions.Session
+	projectID string
 }
 
 func newWorkspaceSettlementFixture(t *testing.T, provider sandbox.SandboxProvider) workspaceSettlementFixture {
@@ -124,7 +126,7 @@ func workspaceSettlementFixtureWithSetup(t *testing.T, provider sandbox.SandboxP
 	filesystems := workspaces.NewExecution(storage, writer, settlementWorkspaceControls{control}, lease)
 	declaration := control.Declaration()
 	lifecycle := &runtimeLifecycle{nodeID: nodeID, registry: runtimegateway.NewRegistry(), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: operations, deployments: deployments, reader: reader, lease: lease, workspaces: filesystems, config: RuntimeProvider{InstallationID: installation, Provider: provider, Workspace: &declaration, WorkspaceRequirements: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory}}}
-	return workspaceSettlementFixture{pool: pool, lifecycle: lifecycle, sessions: service, storage: storage, control: control, session: session}
+	return workspaceSettlementFixture{pool: pool, lifecycle: lifecycle, sessions: service, storage: storage, writer: writer, control: control, session: session, projectID: project.ID}
 }
 
 func TestSettledWorkspaceRefusalRetainsReceiptUntilExplicitSessionDeletion(t *testing.T) {

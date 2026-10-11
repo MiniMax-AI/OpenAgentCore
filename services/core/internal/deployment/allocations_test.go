@@ -698,3 +698,8 @@ func TestBeginRestoreDirectKeepsAllocationAndRetention(t *testing.T) {
 		t.Fatal("restore bypassed capacity admission", err)
 	}
 }
+
+func (f *fakeReservationTx) ReleaseFailedPlacement(placement.Reserved) error {
+	unexpected(f.t, "ReleaseFailedPlacement")
+	return nil
+}

@@ -252,11 +252,11 @@ func (t *reservationTx) LoadNodes() ([]placement.Node, error) {
 }
 
 func (t *reservationTx) ReservePlacement(p placement.Placement) error {
-	_, found, err := t.FindAllocation()
+	reserved, err := t.LoadReserved()
 	if err != nil {
 		return err
 	}
-	if !found {
+	if reserved.NodeID == "" {
 		return placementpg.ReservePlacement(t.ctx, t.q, t.session, p)
 	}
 	node, err := parseID(p.NodeID)
@@ -646,7 +646,7 @@ func (s *Store) LifecyclePlacement(ctx context.Context, key deployment.Allocatio
 		return deployment.LifecyclePlacement{}, err
 	}
 	return deployment.LifecyclePlacement{Specification: row.Specification, Provider: row.ProviderKind, Mode: row.Mode, AllocationID: uuidString(row.AllocationID), AllocationNodeID: uuidString(row.AllocationNodeID),
-		PlacementNodeID: uuidString(row.PlacementNodeID), PlacementReleased: row.ReleasedAt.Valid}, nil
+		PlacementNodeID: uuidString(row.PlacementNodeID), PlacementGeneration: uint64(row.PlacementGeneration.Int64), PlacementReleased: row.ReleasedAt.Valid}, nil
 }
 
 func (s *Store) Activity(ctx context.Context, allocationID string) (deployment.Activity, error) {
@@ -659,4 +659,12 @@ func (s *Store) Activity(ctx context.Context, allocationID string) (deployment.A
 
 func (t *reservationTx) LoadGenerationSpecification(generation uint64) (deployment.GenerationSpecification, error) {
 	return (unit{ctx: t.ctx, q: t.q}).LoadGenerationSpecification(generation)
+}
+
+func (t *reservationTx) ReleaseFailedPlacement(p placement.Reserved) error {
+	node, err := parseID(p.NodeID)
+	if err != nil {
+		return err
+	}
+	return t.q.ReleaseFailedRuntimePlacement(t.ctx, sqlc.ReleaseFailedRuntimePlacementParams{EnvironmentID: t.environment, NodeID: node, DeploymentGeneration: pgtype.Int8{Int64: int64(p.Generation), Valid: true}})
 }

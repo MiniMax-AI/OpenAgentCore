@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -180,10 +181,35 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 }
 
 // provision runs under the lifecycle gate and uses the durable one-shot receipt.
-func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (deployment.Allocation, error) {
+func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (result deployment.Allocation, resultErr error) {
 	provider := r.config.Provider
 	if providerKey != r.config.InstallationID {
 		return deployment.Allocation{}, sandbox.ErrInvalid
+	}
+
+	if r.nodeID != "" {
+		key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
+		target, err := r.reader.LifecyclePlacement(ctx, key)
+		if err != nil {
+			return deployment.Allocation{}, err
+		}
+		if target.PlacementNodeID != r.nodeID {
+			return deployment.Allocation{}, sandbox.ErrOwnership
+		}
+		if target.PlacementReleased && target.AllocationID == "" {
+			return deployment.Allocation{}, deployment.ErrAllocationConflict
+		}
+		if !target.PlacementReleased {
+			expected := placement.Reserved{NodeID: target.PlacementNodeID, Generation: target.PlacementGeneration}
+			defer func() {
+				if resultErr == nil || result.ID != "" {
+					return
+				}
+				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, r.deployment.ReleaseFailedPlacement(cleanup, key, expected))
+			}()
+		}
 	}
 	environmentValue, err := r.sessions.GetEnvironment(ctx, tenant, environment)
 	if err != nil {

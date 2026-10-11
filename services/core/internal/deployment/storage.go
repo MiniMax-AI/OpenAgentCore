@@ -104,6 +104,8 @@ type ReservationTx interface {
 	LoadNodes() ([]placement.Node, error)
 	// ReservePlacement inserts a first reservation or replaces a released reservation without changing historical receipts.
 	ReservePlacement(placement.Placement) error
+	// ReleaseFailedPlacement yields only the exact reservation without active compute.
+	ReleaseFailedPlacement(placement.Reserved) error
 }
 
 // AllocationTx is one Session-locked allocation change. Each write applies to

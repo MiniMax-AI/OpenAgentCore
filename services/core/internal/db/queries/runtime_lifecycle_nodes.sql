@@ -29,7 +29,7 @@ ORDER BY e.id LIMIT 32;
 
 -- name: GetRuntimeLifecyclePlacement :one
 SELECT d.provider_kind, d.mode, a.id AS allocation_id, a.node_id AS allocation_node_id,
-       p.node_id AS placement_node_id, p.released_at,
+       p.node_id AS placement_node_id, p.deployment_generation AS placement_generation, p.released_at,
        CASE WHEN COALESCE(a.deployment_generation, p.deployment_generation, d.generation)=d.generation
             THEN d.specification ELSE g.specification END::jsonb AS specification
 FROM environments e JOIN sessions s ON s.id=e.session_id
@@ -41,10 +41,11 @@ WHERE s.tenant_id=$1 AND e.id=$2;
 
 -- name: ListPlacementDemand :many
 WITH demand AS (
-SELECT e.id, s.tenant_id, s.engine, (latest.id IS NOT NULL)::boolean AS retained,
-       CASE WHEN latest.id IS NULL THEN s.created_at
-            ELSE LEAST((SELECT min(r.created_at) FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp()), CASE WHEN latest.compute_wake_requested THEN latest.compute_activity_at END) END::timestamptz AS demanded_at
+SELECT e.id, s.tenant_id, s.engine, (latest.id IS NOT NULL OR EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id=e.id))::boolean AS retained,
+       GREATEST(p.released_at, CASE WHEN latest.id IS NULL THEN s.created_at
+            ELSE LEAST((SELECT min(r.created_at) FROM environment_input_reservations r WHERE r.session_id = s.id AND r.state = 'pending' AND r.deadline > clock_timestamp()), CASE WHEN latest.compute_wake_requested THEN latest.compute_activity_at END) END)::timestamptz AS demanded_at
 FROM environments e JOIN sessions s ON s.id = e.session_id
+LEFT JOIN runtime_placements p ON p.environment_id = e.id
 LEFT JOIN LATERAL (SELECT a.id, a.state, a.compute_wake_requested, a.compute_activity_at FROM runtime_allocations a WHERE a.environment_id = e.id ORDER BY a.created_at DESC, a.id DESC LIMIT 1) latest ON true
 WHERE s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
   AND s.configuration->'environment'->>'type' = 'openai_hosted'

@@ -116,7 +116,8 @@ type UnallocatedEnvironment struct{ ID, TenantID string }
 // belongs to Session creation or its oldest pending input, not to a retry.
 type PlacementDemand struct {
 	UnallocatedEnvironment
-	Engine   string
+	Engine string
+	// Retained requires external storage because an allocation or filesystem identity already exists.
 	Retained bool
 	At       time.Time
 }
@@ -142,8 +143,9 @@ type LifecyclePlacement struct {
 	// its node.
 	AllocationID, AllocationNodeID string
 	// PlacementNodeID is empty without a placement.
-	PlacementNodeID   string
-	PlacementReleased bool
+	PlacementNodeID     string
+	PlacementReleased   bool
+	PlacementGeneration uint64
 }
 
 // NodeAllocation is an unreleased allocation a node serves.

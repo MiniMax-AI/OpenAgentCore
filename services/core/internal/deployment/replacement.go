@@ -77,7 +77,7 @@ func (e *ExecutionOperations) EnsurePlacement(ctx context.Context, key Allocatio
 		if err != nil {
 			return err
 		}
-		filtered, err := e.eligibleNodes(d, nodes, locked.Engine, found, tx.LoadGenerationSpecification)
+		filtered, err := e.eligibleNodes(d, nodes, locked.Engine, found || environment.ExternalWorkspace, tx.LoadGenerationSpecification)
 		if err != nil {
 			return err
 		}
@@ -137,4 +137,36 @@ func (e *ExecutionOperations) eligibleNodes(d placement.Deployment, nodes []plac
 		}
 	}
 	return filtered, nil
+}
+
+// ReleaseFailedPlacement yields a failed preparation attempt without touching
+// filesystem identity or an allocation that already owns compute.
+func (e *ExecutionOperations) ReleaseFailedPlacement(ctx context.Context, key AllocationKey, expected placement.Reserved) error {
+	key, err := key.parse()
+	if err != nil {
+		return err
+	}
+	if expected.NodeID == "" || expected.Generation == 0 {
+		return sandbox.ErrInvalid
+	}
+	return e.storage.WithReservation(ctx, key, func(_ sessions.LockedSession, tx ReservationTx) error {
+		if _, err := tx.LockDeployment(); err != nil {
+			return err
+		}
+		existing, found, err := tx.FindAllocation()
+		if err != nil {
+			return err
+		}
+		if found && existing.State != "released" {
+			return nil
+		}
+		reserved, err := tx.LoadReserved()
+		if err != nil {
+			return err
+		}
+		if reserved.Released || reserved.NodeID != expected.NodeID || reserved.Generation != expected.Generation {
+			return nil
+		}
+		return tx.ReleaseFailedPlacement(expected)
+	})
 }
