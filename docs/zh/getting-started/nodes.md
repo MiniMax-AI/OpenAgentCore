@@ -1,12 +1,12 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 0c62518cc740387ed03035ea4870108edeaaa82331a7509b573fb2b775ae3aba
+source_hash: 7b83f6f64b4aa1b4336c8f1fe12eecb1cecf5a4fa2388198357ee776bd52036e
 ---
 
-节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
+节点是一台 Linux 主机，在沙箱后端为 Docker、microsandbox 或 smolvm 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
 
-添加节点的方法是在 Web 生成命令并在主机上执行。[沙箱部署协议](../../../contracts/agents-api/zh/sandbox-deployment.md)定义沙箱设置及其变更规则，[节点协议](../../../contracts/agents-api/zh/node-generation-protocol.md)定义节点如何准备和保留 Runtime 代次。
+Docker 和 microsandbox 节点通过 Web 生成命令并在主机上执行来添加。smolvm 节点按照下文步骤手动注册。[沙箱部署协议](../../../contracts/agents-api/zh/sandbox-deployment.md)定义沙箱设置及其变更规则，[节点协议](../../../contracts/agents-api/zh/node-generation-protocol.md)定义节点如何准备和保留 Runtime 代次。
 
 ## 添加节点前 {#before-you-add-a-node}
 
@@ -49,6 +49,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 - SELinux 不处于 enforcing 模式。安装程序不支持 enforcing SELinux 主机。
 - Docker：正在运行的 rootful Docker Engine，其 `/var/run/docker.sock` 套接字属于 `docker` 组，权限为 `0660`，并强制执行 CPU 和内存限制（cgroup v2）。
 - microsandbox：`/dev/kvm` 属于 `kvm` 组（硬件或嵌套虚拟化），并具有 microsandbox 链接的库（glibc）。
+- smolvm（手动注册）：可访问 `/dev/kvm`，并在只有节点账户可以访问的 Unix socket 上运行持久的 smolvm API 服务；节点须保留打包的 Runtime OCI 归档。
 - CPU 和内存至少足以运行一个所配置规格的沙箱，以及约 2 GB 的 Runtime 镜像磁盘空间。
 - 可通过公开 URL 访问控制台和 Core；沙箱也能访问 Core。
 
@@ -128,12 +129,15 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 如果自行管理节点文件和服务，而不执行 Web 命令，请使用手动注册。手动注册的节点只服务注册时的配置：规格或 Runtime 修改后，**Nodes** 显示 **Node software incompatible**；它继续服务旧配置，直到移除节点并重新注册主机。
 
+使用 smolvm 时，通过 [Core 管理 API](operations.md#script-the-core-api)选择后端：向 `/sandbox/deployment` 发出 POST，包含观察到的 `expected_generation`、`provider: "smolvm"`、`configuration: {}`、含两项磁盘容量的 `resources`，以及匹配的完整 [Runtime 发行版标识](../../../contracts/agents-api/zh/sandbox-deployment.md#runtime-release)。Web 配置向导和 **Add node** 命令不会安装 smolvm 服务。使用与 `oac-node` 相同的账户运行 `smolvm serve start --listen unix:///var/lib/oac/smolvm.sock`，并持久保存 smolvm 机器数据；API socket 可控制机器，必须对该账户设置权限 `0600`。使用支持持久机器标签和本地 OCI 归档镜像的 smolvm 版本。
+
 1. 使用与 Core 同一发行版本的 `oac-node`。
 2. 获取注册令牌：使用 **Add node** 命令中的令牌，或通过 Core 密钥调用 `POST /core/v1/sandbox/enrollment-tokens`。令牌一次性使用，包含批准的节点容量；响应的 `expires_at` 给出过期时间。在主机上存入权限为 `0600` 的文件。
 3. 使用令牌读取节点配置，不会消耗令牌：`GET /api/v1/sandbox-node/configuration`，带 `Authorization: Bearer <token>`。
 4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并添加 `native` 对象，写入该提供商的主机设置。适配器从 `specification` 读取沙箱规格、Runtime 镜像和产物哈希：
    - Docker：[Docker 节点配置](../configuration.md#docker-node-configuration)中的字段，其中 `host` 是显式 Unix 套接字，`image` 是导入的 Runtime 镜像的本地 ID，`seccomp_file` 是绝对路径。
    - microsandbox：绝对路径 `helper_path`、`runtime_path` 和 `firmware_path`；`network` 策略；私有检查点归档的显式 `checkpoint_root`；以及 `runtime_home` 私有目录。目录缺失时辅助程序以 `0700` 创建。microsandbox 在其中放置 Unix 套接字，因此路径不要超过 48 字节；安装程序对自管节点拒绝更长路径。
+   - smolvm：`socket` 是规范的本地 `unix:///绝对路径.sock` API URL；`image_file` 是 Runtime 发行版 OCI 归档的绝对路径；`receipt_root` 是持久且私有的目录（权限 `0700`）。节点会根据 Core 选定的 Runtime 镜像及 manifest 摘要校验归档。请手动注册；安装程序不会部署 smolvm 服务。
    首次注册 microsandbox 前，以 node 服务账户在相同发行版本的源码 checkout 中初始化空的 `checkpoint_root`：`PYTHONPATH=deploy/node python3 -c 'from node_install import prepare_checkpoint_root; prepare_checkpoint_root("/absolute/private/checkpoints")'`。它复用安装程序的 UUID marker 排他初始化与所有权检查。共享 store 只初始化一次，其他 node 使用已有 marker。不得替换 marker，也不得在恢复后的存储或非空且无所有权证明的目录上重新初始化。
 5. 使用真实绝对路径注册，然后通过主机服务管理器运行节点：
 

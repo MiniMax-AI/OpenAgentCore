@@ -150,7 +150,7 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	}
 	// Direct providers may legitimately need no remote credential or extra
 	// selection state; registration must not require irrelevant callback stubs.
-	a.Mode, a.BuildLocal, a.NodeArtifacts = "direct", nil, nil
+	a.Mode, a.BuildLocal, a.NodeArtifacts, a.AutomaticInstall = "direct", nil, nil, false
 	a.BuildDirect = func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
 		calls++
 		return &docker.Provider{}, nil
@@ -177,7 +177,7 @@ func TestRegistrationRejectsInvalidDefaultResources(t *testing.T) {
 func TestRegistrationCheckpointRequiresNodes(t *testing.T) {
 	registry := Builtin()
 	a := registry.adapters["microsandbox"]
-	a.Mode, a.BuildLocal, a.NodeArtifacts, a.BuildDirect = "direct", nil, nil, registry.adapters["e2b"].BuildDirect
+	a.Mode, a.BuildLocal, a.NodeArtifacts, a.BuildDirect, a.AutomaticInstall = "direct", nil, nil, registry.adapters["e2b"].BuildDirect, false
 	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) || !strings.Contains(err.Error(), "checkpoint") {
 		t.Fatal("direct checkpoint registration accepted", err)
 	}

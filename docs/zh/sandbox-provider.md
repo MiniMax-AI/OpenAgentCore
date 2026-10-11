@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 63ad2e39e7536caee9bd43f9b643073d32b32147f1440d188d6d38752628adc7
+source_hash: 722dc88c9249a2885b414c90dede2c0e974f925c255d488f186ac76411e61c60
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -115,7 +115,7 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 3. 基于类型化原生配置实现 `sandbox.ConfigurationAdapter`。`DecodeInput` 严格解析请求中独立的公开 `configuration` 与只写 `credential` 对象。`Encode` 生成白名单公开 selector、只读观测和独立 secret bytes，不透传请求 JSON。`Decode` 恢复已存储 selector 并保留对所属资源的访问，不做远程 admission 或新模板验证。`Normalize` 修改前复制输入。`ResolveChange`、`Equal` 和 `WithCredential` 负责继承、身份与凭据组合。`Requirements` 声明是否需要凭据和公开 Core origin，以及支持哪些 setup 操作：`Discovery` 对应 `DiscoverConfiguration`，`SelectionDiscovery` 对应 `DiscoverSelection`，`CredentialVerification` 对应 `VerifyCredential`。`DiscoverConfiguration` 验证 query 并返回安全 catalog，不做 mutation 或 admission decision；Core 保留授权、输入限制与 deadline。`DiscoverSelection` 在提交前解析候选项省略的原生值，`VerifyCredential` 验证凭据对所属资源的访问，不修改资源。两者都接收候选项的 `sandbox.DirectConfig`，原生 client 只为该次调用构造。node provider 仅接受空公开对象，拒绝凭据，对每项 setup 操作和 credential replacement 返回 Unsupported。
 4. node adapter 从自己的包中导出 `BuildLocal` constructor、它解码的类型化 `native` 对象，以及它在共享 node artifact 之外添加的原生文件。node-local 设置（如主机路径）只存放在该对象中；resources 和 Runtime release 从 node 配置的 `specification` 读取。
 5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即 provider kind，也用于标记该 Provider 的观测；checkpoint 支持读取此项。生成的投影组合每个已注册的部署模式和 deployment policy 与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取，因此 Web 读取这些声明，而不比较 provider kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
-6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约向运维人员提供 provider。
+6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约向运维人员提供 provider。只有打包的节点安装程序能够部署原生服务时，才设置 `AutomaticInstall`：生成的 provider 列表同时控制 **Add node** 和安装程序；其他节点提供商使用[手动注册](getting-started/nodes.md#register-a-node-manually)。
 
 **已知设计缺口：** Web 仍在 setup 向导的后端选择、Docker 确认，以及所有显示或解析 E2B 配置字段的地方（带服务预设的 setup 步骤、部署摘要和客户端的部署投影）中指名 provider，因为协议尚未声明配置字段。通过该界面提供另一 provider 目前需要修改共享的 Web。此耦合不符合[复杂性留在 adapter 内](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter)；新集成必须通过协议表达配置，把厂商专有行为留在 adapter。不得添加 Session 或 Turn 调度路径、厂商专有 column 或 API field，或 store 中的厂商 switch。
 
@@ -238,7 +238,14 @@ node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 
 | --- | --- | --- | --- |
 | Docker (node) | [`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker) | [`sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node) 中的 node proxy | [Docker adapter](#docker-adapter) |
 | microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) | [Node](getting-started/nodes.md) |
+| smolvm (node) | `sandbox/smolvm` | 通过本地 Unix socket 访问 smolvm HTTP API | [Node](getting-started/nodes.md) |
 | E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) | [沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md#e2b-configuration)；应用管理的模板见 [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md) |
+
+## smolvm adapter {#smolvm-adapter}
+
+节点上的 `smolvm` adapter 将已发布的 Runtime OCI 归档运行在每个 allocation 专属的 VM 中。`native` 配置有三个字段：`socket` 是正在运行的 smolvm API 服务的规范 `unix:///绝对路径.sock` URL；`image_file` 是节点上已发布的 Runtime OCI 归档的绝对路径；`receipt_root` 是持久且仅允许所有者访问的引导回执目录（权限 `0700`）。每个 allocation 存活期间必须保留回执目录和 smolvm 机器数据。允许创建机器和执行命令的 API socket 必须是权限 `0600` 的 Unix socket，仅节点账户可以访问。
+
+每次读取或修改前，adapter 都会核验 installation、tenant、Environment 与 allocation 标签。Runtime 凭据文件交付并启动 guest 后才写入绑定原生身份的回执；缺少回执表示引导尚未完成。`RunCommand` 在所属 VM 内暂存二进制标准输入，并以 UID 1000 运行。Checkpoint 和外部 workspace 操作明确不受支持。
 
 ## Docker adapter {#docker-adapter}
 

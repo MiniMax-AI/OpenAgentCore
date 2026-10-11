@@ -55,5 +55,6 @@ export function sandboxConfigurationRejection(error: unknown, locale: SupportedL
 export function sandboxProviderLabel(provider: SandboxProvider | "", locale: SupportedLanguage): string {
   if (provider === "docker") return "Docker";
   if (provider === "microsandbox") return "microsandbox";
+  if (provider === "smolvm") return "smolvm";
   return i18n.getFixedT(locale, "sandbox")(provider === "e2b" ? "E2B cloud" : "Unknown state");
 }

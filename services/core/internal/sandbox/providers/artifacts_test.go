@@ -19,6 +19,13 @@ func TestArtifactProjectionsMatchRegistrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	installers, err := registry.AutomaticInstallers()
+	if err != nil || !reflect.DeepEqual(installers, providerassets.AutomaticInstallers()) {
+		t.Fatalf("stale automatic installer provider projection: %v, %v", installers, err)
+	}
+	if !reflect.DeepEqual(installers, []string{"docker", "microsandbox"}) {
+		t.Fatalf("manual providers unexpectedly advertised as automatic: %v", installers)
+	}
 	if !reflect.DeepEqual(catalog, providerassets.Catalog()) {
 		t.Fatal("stale Web artifact projection; regenerate provider-artifacts")
 	}

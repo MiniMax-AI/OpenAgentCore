@@ -7,6 +7,8 @@ import urllib.error
 import urllib.request
 import uuid
 
+import provider_assets
+
 
 class SpecificationError(Exception):
     pass
@@ -27,7 +29,7 @@ def release(manifest):
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}},\"smolvm\":{\"mode\":\"nodes\",\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
@@ -89,7 +91,7 @@ def validate(data, args):
         raise SpecificationError(PUBLIC_URL_CHANGED)
     try:
         provider, spec = data["provider"], data["specification"]
-        if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
+        if (provider not in provider_assets.AUTOMATIC_PROVIDERS or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
                 or set(spec) - {"workspace"} != {"resources", "runtime"}

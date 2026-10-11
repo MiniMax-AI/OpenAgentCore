@@ -53,6 +53,7 @@ const microsandbox = {
   ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 }, runtime },
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
+const smolvm = { ...microsandbox, provider: "smolvm", suspension: null };
 const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
 const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification,
   resources: { ...microsandbox.specification.resources, environment_disk_mib: 0 }, workspace: externalWorkspace } };
@@ -85,7 +86,7 @@ describe("strict sandbox administration projections", () => {
     ["nodes", "ready and unready", { data: [node, unready] }], ["nodes", "empty", { data: [] }],
     ["detail", "observed", detail], ["unobserved", "never observed", unobserved],
     ["allocations", "known and unknown phase times", { data: [allocation, { ...allocation, compute_phase: "suspended", compute_phase_changed_at: created, diagnostic: "node_unavailable" }] }],
-    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
+    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "smolvm", smolvm], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
   ])("accepts %s as Core serializes it: %s", async (name, _, body) => {
     expect(await read(name, body)).toEqual(body);
   });

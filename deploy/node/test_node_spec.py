@@ -93,6 +93,14 @@ class SpecificationTests(unittest.TestCase):
         with self.assertRaises(node_spec.SpecificationError):
             node_spec.validate(self.data, self.args)
 
+    def test_manual_provider_is_not_advertised_by_automatic_installer(self):
+        data = copy.deepcopy(self.data)
+        data["provider"] = "smolvm"
+        data["specification"]["resources"].update(root_disk_mib=8192, environment_disk_mib=8192)
+        data["specification_digest"] = node_spec.digest("smolvm", data["specification"])
+        with self.assertRaisesRegex(node_spec.SpecificationError, "configuration differs or is invalid"):
+            node_spec.validate(data, self.args)
+
     def test_capacity_requires_approved_bounded_integers(self):
         for key, value in (("max_active", None), ("max_active", True), ("max_active", 0),
                            ("max_retained", 1), ("max_retained", 1000001)):

@@ -24,6 +24,9 @@ func ValidateRegistration(a Adapter) error {
 			return invalid("node constructor")
 		}
 	case sandbox.DeploymentDirect:
+		if a.AutomaticInstall {
+			return invalid("installer support for direct provider")
+		}
 		if len(a.NodeArtifacts) != 0 {
 			return invalid("direct node artifacts")
 		}

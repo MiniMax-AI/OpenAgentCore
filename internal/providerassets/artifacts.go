@@ -24,3 +24,15 @@ func Catalog() map[string][]Artifact {
 	}
 	return catalog
 }
+
+//go:embed automatic_installers.json
+var automaticInstallersJSON []byte
+
+// AutomaticInstallers reports the node kinds supported by the bundled installer.
+func AutomaticInstallers() []string {
+	var kinds []string
+	if err := json.Unmarshal(automaticInstallersJSON, &kinds); err != nil {
+		panic(err)
+	}
+	return kinds
+}

@@ -2,9 +2,9 @@
 title: "Add and manage nodes"
 ---
 
-A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is Docker or microsandbox. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes.
+A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is Docker, microsandbox or smolvm. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes.
 
-You add a node by generating a command in Web and running it on the host. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
+For Docker and microsandbox, add a node by generating a command in Web and running it on the host. Register smolvm nodes manually using the steps below. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
 
 ## Before you add a node
 
@@ -47,6 +47,7 @@ The installer shows each phase as it runs and, once Core confirms the node, a su
 - SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
 - microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
+- smolvm (manual registration): `/dev/kvm` and a persistent smolvm API service bound to a Unix socket accessible only to the node account; the packaged Runtime OCI archive must remain on the node.
 - CPUs and memory for at least one sandbox of the installation's size, and about 2 GB of disk for the Runtime image.
 - Access to the console and Core at the public URL; sandboxes reach Core too.
 
@@ -126,12 +127,15 @@ It never deletes sandboxes, volumes or images. It keeps the Runtime image and pr
 
 Use manual registration when you manage the node's files and service yourself instead of running Web's command. A manually registered node serves only the configuration it registered with: after a size or Runtime change, **Nodes** shows it as **Node software incompatible**, and it keeps serving the old configuration until you remove it and register the host again.
 
+For smolvm, select the backend through the [Core administration API](./operations.md#script-the-core-api): POST `/sandbox/deployment` with the observed `expected_generation`, `provider: "smolvm"`, `configuration: {}`, `resources` including both disk sizes, and the complete matching [Runtime release identity](../../contracts/agents-api/sandbox-deployment.md#runtime-release). Web's configuration wizard and **Add node** command do not set up the smolvm service. Run `smolvm serve start --listen unix:///var/lib/oac/smolvm.sock` as the same account as `oac-node`, with a durable smolvm machine store; the API socket grants control over machines and must have mode `0600` for that account. Use a smolvm build that supports persistent machine labels and local OCI archive images.
+
 1. Take `oac-node` from the same release as Core.
 2. Get an enrollment token: the token in a command from **Add node**, or `POST /core/v1/sandbox/enrollment-tokens` with the Core key. It is single-use and carries the node's approved capacity; the response's `expires_at` says when it expires. Save it in a `0600` file on the host.
 3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
 4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size, the Runtime image and artifact hashes from `specification`:
    - Docker: the [Docker node configuration](../configuration.md#docker-node-configuration) fields, with `host` an explicit Unix socket, `image` the local ID of the imported Runtime image and `seccomp_file` absolute.
    - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, a `network` policy, an explicit `checkpoint_root` for private checkpoint archives, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
+   - smolvm: `socket` as a canonical local `unix:///absolute/path.sock` API URL, `image_file` as the absolute path to the Runtime release OCI archive, and `receipt_root` as a persistent private directory (mode `0700`). The node verifies the archive against Core’s selected Runtime image and manifest digests. Use manual registration; the installer does not provision a smolvm service.
    Before the first microsandbox registration, initialize the empty `checkpoint_root` as the node service account using the same release's source checkout: `PYTHONPATH=deploy/node python3 -c 'from node_install import prepare_checkpoint_root; prepare_checkpoint_root("/absolute/private/checkpoints")'`. This reuses the installer's exclusive UUID-marker initialization and ownership checks. Initialize a shared store once; other nodes use the existing marker. Never replace the marker or initialize over restored or nonempty unowned storage.
 5. Register, then run the node under the host's service supervisor, with real absolute paths:
 
