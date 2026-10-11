@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: edaa63076fb1629202fc159bb084124eaf0efef56f094d03a99538e281e74e65
+source_hash: 30ee130c8e62827662f1d0867da206e911e4dbb57ed5d75fe68cffdfda55e2b3
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -218,7 +218,7 @@ Core 在释放 allocation 和 placement 归属前，确认原始创建已结算�
 
 正在运行的计算资源没有保留期限，因此主机崩溃或重启后，其 allocation 原本会无限期保持归属。所属节点重新上线后，对于计算阶段为 `running` 且支持检查点的 allocation，只有同时满足以下条件时，`GetCompute` 对已持久化的精确 incarnation 返回 `ErrNotFound` 或已验证的 `stopped`、`crashed` 状态才会释放该 allocation：原始创建已结算，该 incarnation 有 native ID，未记录 capture、restore 或 rollback 意图，allocation 的 device 没有已认证的 Runtime 连接，且 Session 满足[冷替换](#cold-replacement-after-checkpoint-retention)条件。随后 Core 对该精确 incarnation 调用 `KillCompute`。只有其结果得到确认，才允许一次持有 Session 锁的提交：重新检查计算 revision 与上述条件，撤销 device，并释放 allocation 和 placement。Session、Environment、等待中的 input、原生 Session 身份和文件系统均保留，新 input 或实时文件访问按冷替换续接。
 
-其他观察结果均保留归属及其诊断：`paused`、`running` 或未知原生状态、身份不匹配、超时或传输错误、未知创建、已记录的 restore、存在 Runtime 实时连接、自带工作区存储、初始化未完成、Session 已终结，或缺少 `retained_native_history` 声明。`KillCompute` 失败时不做任何修改，并发的归档、删除或计算阶段变更优先。节点离线时 Core 从不执行此操作，因为没有节点就无权停止计算资源。续接保留文件系统并使用已记录的原生 Session ID；Harness 恢复出错时执行失败，不创建另一个原生 Session。Core 不重放已中断或已完成的输入。崩溃后重新打开的原生历史相对于已确认 Turn 的完整性[尚未通过资格验证](../../contracts/agents-api/zh/index.md)；身份检查无法检测已截断但仍可解析的历史尾部。
+其他观察结果均保留归属及其诊断：`paused`、`running` 或未知原生状态、身份不匹配、超时或传输错误、未知创建、已记录的 restore、存在 Runtime 实时连接、自带工作区存储、初始化未完成、Session 已终结，或缺少 `retained_native_history` 声明。`KillCompute` 失败时不做任何修改，并发的归档、删除或计算阶段变更优先。节点离线时 Core 从不执行此操作，因为没有节点就无权停止计算资源。续接保留文件系统并使用已记录的原生 Session ID；Harness 恢复出错时执行失败，不创建另一个原生 Session。Core 不重放已中断或已完成的输入。[覆盖台账](../../contracts/agents-api/zh/index.md)记录已通过资格验证的续接场景，包括完成确认后立即崩溃。任意崩溃受损原生历史的完整性仍未通过资格验证；身份检查无法检测已截断但仍可解析的历史尾部。
 
 ### 重置与归档 {#reset-and-archive}
 
