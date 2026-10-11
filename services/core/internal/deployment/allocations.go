@@ -149,26 +149,49 @@ func (e *ExecutionOperations) ReleaseAllocation(ctx context.Context, owner Alloc
 // reason unless its compute expired. Cancellation requests do not prove that
 // native work has stopped.
 func (e *ExecutionOperations) RequestCleanup(ctx context.Context, owner Allocation) (Allocation, error) {
-	return e.cleanup(ctx, owner, false)
+	return e.cleanup(ctx, owner, cleanupRequested)
 }
 
 // ReleaseAbsentCreation consumes provider proof that the original Create is
 // settled and owns no resources: it requests cleanup and releases the
 // allocation in one commit.
 func (e *ExecutionOperations) ReleaseAbsentCreation(ctx context.Context, owner Allocation) (Allocation, error) {
-	return e.cleanup(ctx, owner, true)
+	return e.cleanup(ctx, owner, creationAbsent)
 }
 
-func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, absent bool) (Allocation, error) {
+// ReleaseLostCompute consumes the owning node's confirmed cleanup of the
+// owner's settled running incarnation after it observed that incarnation
+// absent, stopped or crashed. It revokes the device and releases the allocation in one commit
+// only while the owner's compute revision is current and its Session can
+// continue on new compute; otherwise it changes nothing. The Session, its
+// pending input, native identity and filesystem stay.
+func (e *ExecutionOperations) ReleaseLostCompute(ctx context.Context, owner Allocation) (Allocation, error) {
+	return e.cleanup(ctx, owner, computeLost)
+}
+
+// cleanupEvidence is the provider proof a cleanup commit consumes.
+type cleanupEvidence int
+
+const (
+	cleanupRequested cleanupEvidence = iota
+	creationAbsent
+	computeLost
+)
+
+func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evidence cleanupEvidence) (Allocation, error) {
 	key, err := owner.Key().parse()
 	if err != nil {
 		return Allocation{}, err
 	}
+	lost := evidence == computeLost
 	var result Allocation
 	err = e.storage.WithAllocationCleanup(ctx, key, func(tx AllocationCleanupTx) error {
-		current, err := checkAllocation(tx, owner, false)
+		current, err := checkAllocation(tx, owner, lost)
 		if err != nil {
 			return err
+		}
+		if lost && (current.State != "running" || current.ComputePhase != "running" || current.ComputeRevision != owner.ComputeRevision || !current.CreateSettled) {
+			return ErrAllocationConflict
 		}
 		if current.State == "released" {
 			result = current
@@ -187,7 +210,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 			err = sessions.CancelWork(ctx, tx)
 		} else {
 			retain := false
-			if revoked.Expired {
+			if revoked.Expired || lost {
 				retain, err = tx.CanRetainEnvironment(revoked)
 				if err != nil {
 					return err
@@ -196,6 +219,9 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 			// Compute retention ends independently of the Session only when its
 			// initialized filesystem and native history can continue on new compute.
 			// Explicit archive/reset makes this locked eligibility check false.
+			if !retain && lost {
+				return ErrAllocationConflict
+			}
 			if !retain {
 				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, nil)
 			}
@@ -204,7 +230,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, abs
 			return err
 		}
 		pending, err := tx.RequestCleanup(current)
-		if err != nil || !absent {
+		if err != nil || evidence == cleanupRequested {
 			result = pending
 			return err
 		}

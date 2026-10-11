@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 0c62518cc740387ed03035ea4870108edeaaa82331a7509b573fb2b775ae3aba
+source_hash: dc02bedb776a48e79850afbefa7ec401a93912186ec294afb8d52d5c6d50d9cb
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -155,7 +155,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 ## 节点主机故障时 {#when-a-node-host-fails}
 
-重启节点服务会保留身份并重新发现已有沙箱。Core 不会仅因节点不可达或沙箱缺失就接管活动或未确认的 writer：所有权未结清时，这些资源显示 **Node disconnected** 或 **Sandbox resource missing**。已结清的保留检查点可以遵循[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)，确认释放后可以按条件进行[冷替换](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)。丢失节点状态目录属于恢复事件：从[备份](operations.md#back-up)恢复，并同时恢复数据库和提供商存储；不要在已有资源上重新注册主机。
+重启节点服务会保留身份并重新发现已有沙箱。Core 不会仅因节点不可达或沙箱缺失就接管活动或未确认的 writer：所有权未结清时，这些资源显示 **Node disconnected** 或 **Sandbox resource missing**。主机崩溃或挂起时，应重启主机而不是移除其节点：节点重新连接后，节点确认已不存在的运行中沙箱会按[已确认的计算资源丢失](../sandbox-provider.md#confirmed-compute-loss)规则释放，Session 的下一个 input 在新计算资源上续接；其他缺失的沙箱保持 **Sandbox resource missing**。主机始终未恢复时，其 Session 的计算资源归属保持不变。已结清的保留检查点可以遵循[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)，确认释放后可以按条件进行[冷替换](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)。丢失节点状态目录属于恢复事件：从[备份](operations.md#back-up)恢复，并同时恢复数据库和提供商存储；不要在已有资源上重新注册主机。
 
 ## 问题排查 {#troubleshooting}
 

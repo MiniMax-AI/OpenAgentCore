@@ -10,7 +10,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
@@ -123,8 +125,17 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
+	if errors.Is(err, sandbox.ErrNotFound) {
+		return r.releaseLostCompute(ctx, p, owner, state, err)
+	}
 	if err != nil {
 		return err
+	}
+	if compute.Terminated() {
+		if compute.Compute.ID != state.Current.ID || compute.Compute.Name != state.Current.Name || compute.Compute.Generation != state.Current.Generation {
+			return sandbox.ErrOwnership
+		}
+		return r.releaseLostCompute(ctx, p, owner, state, sandbox.ErrComputeUnconfirmed)
 	}
 	if compute.Status != "running" || !compute.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
@@ -190,6 +201,48 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 		return err
 	}
 	return r.captureCompute(ctx, p, suspending, state, false)
+}
+
+// releaseLostCompute settles a settled running incarnation that its owning
+// node reports absent, stopped or crashed. Only exact cleanup of that
+// incarnation, with no live Runtime, no other compute intent and a Session
+// that can continue on new compute, releases ownership; every other case
+// returns the observation's error.
+func (r *runtimeLifecycle) releaseLostCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observed error) error {
+	if !owner.CreateSettled || owner.State != "running" || state.Current.ID == "" || state.Target != nil || state.Snapshot != nil || state.SuspendID != "" || state.RestoreID != "" || state.Rollback {
+		return observed
+	}
+	if _, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID); err == nil {
+		return sandbox.ErrComputeUnconfirmed
+	} else if !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
+		return err
+	}
+	current, err := r.reader.EnvironmentAllocation(ctx, owner.Key())
+	if err != nil {
+		return err
+	}
+	if current.ID != owner.ID || current.State != owner.State || current.ComputePhase != owner.ComputePhase || current.ComputeRevision != owner.ComputeRevision {
+		return deployment.ErrAllocationConflict
+	}
+	retained, err := r.reader.RetainedNativeHistory(ctx, owner.Key())
+	if err != nil {
+		return err
+	}
+	if !retained {
+		return observed
+	}
+	if err := r.lease.CheckOwnership(ctx); err != nil {
+		return err
+	}
+	if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
+		return err
+	}
+	released, err := r.deployment.ReleaseLostCompute(ctx, owner)
+	if err != nil {
+		return err
+	}
+	r.clearRuntimeState(released)
+	return nil
 }
 
 func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {

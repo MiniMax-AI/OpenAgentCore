@@ -596,6 +596,65 @@ func TestExpiredQualifiedFilesystemCleanupPreservesSessionWork(t *testing.T) {
 	}
 }
 
+func TestReleaseLostComputeRetainsOrChangesNothing(t *testing.T) {
+	owner := Allocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), EnvironmentID: uuid.NewString(), TenantID: uuid.NewString(), ProviderKey: uuid.NewString(), State: "running", ComputePhase: "running", ComputeRevision: 7, CreateSettled: true}
+	for _, test := range []struct {
+		name   string
+		stored func(*Allocation)
+		retain bool
+		want   []string
+		err    error
+	}{
+		{"retained", func(*Allocation) {}, true, []string{"LoadAllocation", "LoadSessionDevice", "RevokeDevice", "LoadAllocation", "CanRetainEnvironment", "RequestCleanup", "SettleCreation", "Release"}, nil},
+		{"not retainable", func(*Allocation) {}, false, []string{"LoadAllocation", "LoadSessionDevice", "RevokeDevice", "LoadAllocation", "CanRetainEnvironment"}, ErrAllocationConflict},
+		{"newer revision", func(a *Allocation) { a.ComputeRevision++ }, true, []string{"LoadAllocation", "LoadSessionDevice"}, ErrAllocationConflict},
+		{"quiescing", func(a *Allocation) { a.ComputePhase = "quiescing" }, true, []string{"LoadAllocation", "LoadSessionDevice"}, ErrAllocationConflict},
+		{"unknown creation", func(a *Allocation) { a.CreateSettled = false }, true, []string{"LoadAllocation", "LoadSessionDevice"}, ErrAllocationConflict},
+		{"released", func(a *Allocation) { a.State = "released" }, true, []string{"LoadAllocation", "LoadSessionDevice"}, ErrAllocationConflict},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var calls []string
+			stored := owner
+			test.stored(&stored)
+			change := func(name string, apply func(*Allocation)) func(Allocation) (Allocation, error) {
+				return func(current Allocation) (Allocation, error) {
+					calls = append(calls, name)
+					apply(&current)
+					return current, nil
+				}
+			}
+			tx := &fakeCleanupTx{
+				fakeAllocationTx: &fakeAllocationTx{t: t,
+					loadAllocation: func() (Allocation, error) { calls = append(calls, "LoadAllocation"); return stored, nil },
+					loadSessionDevice: func() (SessionDevice, bool, error) {
+						calls = append(calls, "LoadSessionDevice")
+						return SessionDevice{ID: owner.DeviceID, EnvironmentID: owner.EnvironmentID}, true, nil
+					},
+					settleCreation: change("SettleCreation", func(*Allocation) {}),
+					release:        change("Release", func(a *Allocation) { a.State = "released" }),
+				},
+				canRetainEnvironment: func(Allocation) (bool, error) {
+					calls = append(calls, "CanRetainEnvironment")
+					return test.retain, nil
+				},
+				revokeDevice:   func(Allocation) error { calls = append(calls, "RevokeDevice"); return nil },
+				requestCleanup: change("RequestCleanup", func(a *Allocation) { a.State = "cleanup_pending" }),
+			}
+			storage := &fakeExecutionStorage{t: t, withAllocationCleanup: func(_ context.Context, _ AllocationKey, apply func(AllocationCleanupTx) error) error {
+				return apply(tx)
+			}}
+			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := operations.ReleaseLostCompute(t.Context(), owner)
+			if !errors.Is(err, test.err) || !slices.Equal(calls, test.want) || (test.err == nil && result.State != "released") {
+				t.Fatal("lost compute release", result.State, calls, err)
+			}
+		})
+	}
+}
+
 func (f *fakeReservationTx) LoadGenerationSpecification(uint64) (GenerationSpecification, error) {
 	unexpected(f.t, "LoadGenerationSpecification")
 	return GenerationSpecification{}, nil

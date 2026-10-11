@@ -109,6 +109,8 @@ type SandboxProvider interface {
 	// Store remain the lifecycle owner. Its operations share one declaration.
 	Initial(context.Context, Reference) (Compute, error)
 	NewCompute(context.Context, Reference, uint64, *SnapshotIdentity) (Compute, error)
+	// GetCompute returns ErrNotFound only after the owning node verified that
+	// the exact incarnation no longer exists.
 	GetCompute(context.Context, Reference, Compute) (ComputeState, error)
 	Suspend(context.Context, SuspendRequest) (ComputeState, error)
 	Resume(context.Context, ResumeRequest) (ComputeState, error)
@@ -170,7 +172,10 @@ type SnapshotIdentity struct {
 }
 
 type ComputeState struct {
-	Compute           Compute
+	Compute Compute
+	// Status is the native state of Compute. "stopped" and "crashed" mean the
+	// adapter verified that the exact incarnation's process no longer exists;
+	// its record or disks can remain until KillCompute removes them.
 	Status            string
 	BootstrapComplete bool
 	Snapshot          *SnapshotIdentity
@@ -181,6 +186,9 @@ type ComputeState struct {
 	// never-dispatched attempt is durably closed against late native execution.
 	RestoreAttemptClosed string
 }
+
+// Terminated reports a verified stopped or crashed incarnation.
+func (s ComputeState) Terminated() bool { return s.Status == "stopped" || s.Status == "crashed" }
 
 // ClosesRestoreAttempt validates a never-executed closure against the exact
 // persisted request. Absence without this operation-bound evidence is unknown.
