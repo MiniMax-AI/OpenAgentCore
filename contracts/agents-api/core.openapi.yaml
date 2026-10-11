@@ -659,7 +659,7 @@ definitions:
         allOf:
           - $ref: '#/definitions/sandbox.Resources'
         description: |-
-          Per-sandbox limits, required for Docker and microsandbox. E2B may omit
+          Per-sandbox limits, required for node providers. E2B may omit
           them; Core then uses the validated template build's cpus and memory_mib.
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
@@ -680,7 +680,7 @@ definitions:
         allOf:
           - $ref: '#/definitions/sandbox.Resources'
         description: |-
-          Per-sandbox limits, required for Docker and microsandbox. E2B may omit
+          Per-sandbox limits, required for node providers. E2B may omit
           them; Core then uses the validated template build's cpus and memory_mib.
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'

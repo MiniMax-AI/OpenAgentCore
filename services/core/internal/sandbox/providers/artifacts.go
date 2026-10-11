@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"sort"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
@@ -66,4 +67,22 @@ func validateNodeArtifacts(items []providerassets.Artifact) error {
 		return invalid
 	}
 	return nil
+}
+
+// AutomaticInstallers projects the adapters the bundled node installer knows
+// how to prepare. Manually registered node providers still retain artifacts in
+// ArtifactCatalog for independent distribution and validation.
+func (r *Registry) AutomaticInstallers() ([]string, error) {
+	var result []string
+	for kind := range r.adapters {
+		adapter, err := r.Lookup(kind)
+		if err != nil {
+			return nil, err
+		}
+		if adapter.AutomaticInstall {
+			result = append(result, kind)
+		}
+	}
+	sort.Strings(result)
+	return result, nil
 }

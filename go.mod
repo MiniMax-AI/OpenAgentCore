@@ -12,6 +12,7 @@ require (
 	github.com/moby/moby/client v0.6.0
 	github.com/openai/openai-go/v3 v3.61.0
 	github.com/pressly/goose/v3 v3.27.3
+	github.com/smol-machines/smolvm-sdk/smolvm-go v0.0.0-20261011012951-aa0738e5774e
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0

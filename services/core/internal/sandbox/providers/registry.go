@@ -11,12 +11,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/smolvm"
 )
 
 // Adapter describes configuration and transport independently of compute operations.
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
 	NodeArtifacts         []providerassets.Artifact
+	AutomaticInstall      bool
 	Policy                sandbox.DeploymentPolicy
 	Configuration         sandbox.ConfigurationAdapter
 	BuildLocal            func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
@@ -38,16 +40,22 @@ var ErrUnknownProvider = fmt.Errorf("%w: unsupported sandbox provider", sandbox.
 func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
 		"docker": {
-			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
+			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, AutomaticInstall: true,
+			Policy: docker.Policy(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
 			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 		},
 		"microsandbox": {
-			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
-			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
+			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...), AutomaticInstall: true,
+			Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
 			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
+		},
+		"smolvm": {
+			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage},
+			Policy:        smolvm.Policy(), Operations: smolvm.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: smolvm.BuildNode,
+			ValidateSpecification: smolvm.ValidateSpecification, ValidateResources: smolvm.ValidateResources,
+			Configuration: nodeConfigurationAdapter{smolvm.ValidateSpecification},
 		},
 		"e2b": {
 			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: e2b.BuildDirect,

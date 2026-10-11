@@ -14,7 +14,7 @@ import (
 
 type SandboxDeploymentInput struct {
 	ExpectedGeneration *uint64 `json:"expected_generation" binding:"required"`
-	// Per-sandbox limits, required for Docker and microsandbox. E2B may omit
+	// Per-sandbox limits, required for node providers. E2B may omit
 	// them; Core then uses the validated template build's cpus and memory_mib.
 	Resources     sandbox.Resources       `json:"resources"`
 	Runtime       *sandbox.RuntimeRelease `json:"runtime,omitempty"`

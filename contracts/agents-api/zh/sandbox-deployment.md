@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 537ae957a77d625b3adb7828156352a661ae09270b57b174406c6db159a957bd
+source_hash: f09554e72efbda0f009587504f9b3b77e7c61156b21e63a37da9ca5e06288797
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -35,13 +35,13 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | 字段 | 含义 |
 | --- | --- |
 | `expected_generation` | 必填的非负整数，来自 GET；绝不会自动刷新并重放 |
-| `provider` | 必须是 `docker`、`microsandbox`、`e2b` 中恰好一个 |
-| `resources` | 每个沙箱的限制，见下文；Docker 和 microsandbox 必填，E2B 可选 |
-| `runtime` | 不可变的 [Runtime 发行版](#runtime-release)；Docker 和 microsandbox 必填，E2B 必须省略 |
-| `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。Docker 和 microsandbox 仅接受 `{}` 或省略 |
-| `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。Docker 和 microsandbox 拒绝该字段 |
+| `provider` | 必须是 `docker`、`microsandbox`、`smolvm`、`e2b` 中恰好一个 |
+| `resources` | 每个沙箱的限制，见下文；Docker、microsandbox 和 smolvm 必填，E2B 可选 |
+| `runtime` | 不可变的 [Runtime 发行版](#runtime-release)；Docker、microsandbox 和 smolvm 必填，E2B 必须省略 |
+| `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。Docker、microsandbox 和 smolvm 仅接受 `{}` 或省略 |
+| `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。Docker、microsandbox 和 smolvm 拒绝该字段 |
 
-请求中没有 Core 地址。Core 根据安装公开 URL（`config.json` 中的 `public_url`，Core 对应 `OAC_PUBLIC_URL`）派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。E2B 客户机从 E2B 云访问 Core，因此当公开 URL 为回环地址时，E2B 选择会被拒绝，并返回 409 `sandbox_configuration_error`。Docker 和 microsandbox 选择接受回环公开 URL，但这仅适用于本地开发，因为客户机的回环地址无法访问其主机。更改公开 URL 属于安装变更：使用旧地址注册的节点不会收到新沙箱，必须移除后重新添加。
+请求中没有 Core 地址。Core 根据安装公开 URL（`config.json` 中的 `public_url`，Core 对应 `OAC_PUBLIC_URL`）派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。E2B 客户机从 E2B 云访问 Core，因此当公开 URL 为回环地址时，E2B 选择会被拒绝，并返回 409 `sandbox_configuration_error`。Docker、microsandbox 和 smolvm 选择接受回环公开 URL，但这仅适用于本地开发，因为客户机的回环地址无法访问其主机。更改公开 URL 属于安装变更：使用旧地址注册的节点不会收到新沙箱，必须移除后重新添加。
 
 ### 资源 {#resources}
 
@@ -49,8 +49,8 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | --- | --- |
 | `cpus` | 整数，1 到 255 |
 | `memory_mib` | 整数，512 到 1048576 MiB |
-| `root_disk_mib` | microsandbox：至少 1024 MiB；Docker 和 E2B：省略或为零 |
-| `environment_disk_mib` | microsandbox 自有磁盘：至少 1024 MiB；外部文件系统：零表示不请求配额；正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
+| `root_disk_mib` | microsandbox 和 smolvm：至少 1024 MiB；Docker 和 E2B：省略或为零 |
+| `environment_disk_mib` | microsandbox 和 smolvm 自有磁盘：至少 1024 MiB；microsandbox 外部文件系统：零表示不请求配额；正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
 
 这些限制描述每个沙箱。节点的 `max_active` 和 `max_retained` 是独立的预留限制，主机测量值绝不会允许超过其中任何一个。即使数值满足这些边界，原生提供商仍可能拒绝这些值。
 
@@ -65,12 +65,12 @@ microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environme
 
 ### Runtime 发行版 {#runtime-release}
 
-Docker 和 microsandbox 使用一个经过验证发行包中的每个字段：
+Docker、microsandbox 和 smolvm 使用一个经过验证发行包中的每个字段：
 
 | 字段 | 标识 |
 | --- | --- |
 | `source_commit` | 由 40 个字符组成的小写提交 SHA |
-| `image_id` | Docker 镜像配置 ID：`sha256:` 加 64 个小写十六进制字符 |
+| `image_id` | OCI 镜像配置 ID：`sha256:` 加 64 个小写十六进制字符 |
 | `image_manifest_digest` | OCI 镜像清单摘要，格式相同 |
 | `microsandbox_ref` | `oac-runtime@sha256:` 加 64 个小写十六进制字符 |
 | `runtime_sha256` | 原生 microsandbox Runtime 二进制文件的 SHA-256 |
@@ -84,18 +84,18 @@ E2B 使用 `template-id:build-uuid` 形式的 `configuration.template`；构建 
 
 ### 配置发现 {#configuration-discovery}
 
-`POST /core/v1/sandbox/providers/{provider}/discovery` 恰好接受 `configuration`、`credential` 和 `query` 对象，总大小最多为 64 KiB，运行时间最多为 30 秒。未知成员和 null 对象会被拒绝。凭据仅用于该请求，绝不会被存储或返回；发现操作不会保存任何内容、不会更改部署、不会分配任何资源，也绝不会证明某项选择会被准入。Docker 和 microsandbox 会以 400 `sandbox_operation_unsupported` 拒绝该操作。
+`POST /core/v1/sandbox/providers/{provider}/discovery` 恰好接受 `configuration`、`credential` 和 `query` 对象，总大小最多为 64 KiB，运行时间最多为 30 秒。未知成员和 null 对象会被拒绝。凭据仅用于该请求，绝不会被存储或返回；发现操作不会保存任何内容、不会更改部署、不会分配任何资源，也绝不会证明某项选择会被准入。Docker、microsandbox 和 smolvm 会以 400 `sandbox_operation_unsupported` 拒绝该操作。
 
 对于 E2B，发布 `{"configuration": {"api_url": "…", "domain": "…"}, "credential": {"api_key": "…"}, "query": {}}` 可列出模板；添加 `"query": {"template": "template-id"}` 可列出该模板的就绪构建；官方端点可能会省略两个端点字段。结果为 `{"templates": [{"id": "…", "names": ["…"]}]}` 和 `{"builds": [{"id": "build-uuid", "cpus": 2, "memory_mib": 2048}]}`，两者都可能为空。固定版本 SDK 辅助工具读取 `GET /v2/templates` 并返回最多 200 条结果；达到限制或提供商失败会返回 503 和通用消息。部署写入操作会单独验证所选构建。
 
 ## 安全响应 {#safe-response}
 
-GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url`（只读：安装公开 URL，即使配置前也存在）、`mode`、`generation`、`owner_epoch`、`reset`、`rollout`、`suspension`、`resources` 和 `credential_configured`。已配置的部署还会返回 `specification`、`specification_digest`、`configuration` 和 `metadata`：这是适配器对其选择器及其记录的观测结果所作的公开投影，绝不会包含原始存储值或机密。E2B 返回 `configuration.template`、`configuration.api_url`、`configuration.domain`，并在记录后返回 `metadata.template_build`。Docker 和 microsandbox 返回空的 `configuration` 和 `metadata` 对象以及 `credential_configured: false`；未配置的部署则不含这两个对象。
+GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url`（只读：安装公开 URL，即使配置前也存在）、`mode`、`generation`、`owner_epoch`、`reset`、`rollout`、`suspension`、`resources` 和 `credential_configured`。已配置的部署还会返回 `specification`、`specification_digest`、`configuration` 和 `metadata`：这是适配器对其选择器及其记录的观测结果所作的公开投影，绝不会包含原始存储值或机密。E2B 返回 `configuration.template`、`configuration.api_url`、`configuration.domain`，并在记录后返回 `metadata.template_build`。Docker、microsandbox 和 smolvm 返回空的 `configuration` 和 `metadata` 对象以及 `credential_configured: false`；未配置的部署则不含这两个对象。
 
 - `metadata.template_build` 为 `{status, resources: {cpus, memory_mib, root_disk_mib}}`：这是保存选择时 Core 通过固定版本 SDK 读取的构建。GET 绝不会调用 E2B，因此 E2B 中断期间该操作仍保持低成本。验证仅接受 CPU 数量和内存与所选值一致的 `ready` 构建；`root_disk_mib` 是构建的原生磁盘大小，Core 不会强制执行该值。未知值为 null，`metadata: {}` 表示未记录任何观测，在不提供凭据的情况下提交完全相同的 PUT 也不会刷新它。
 - 所选 Provider 声明 checkpoint 支持时，`suspension` 为 `{idle_seconds, retention_seconds}`，即 Core 的 [suspension policy](../../../docs/zh/sandbox-provider.md#suspension)；其他部署（包括未配置的部署）返回 null。
 - 请求中的 `resources` 和响应中的 `specification.resources` 是每个沙箱的限制。响应中的 `resources.allocations` 和 `resources.pending` 分别计算尚未释放的分配，以及尚未分配沙箱的待处理托管 Environment。
-- 未配置的部署具有空的 provider 且没有 specification。Docker 和 microsandbox 使用 `mode: nodes`；E2B 使用 `mode: direct`，且没有合成节点。
+- 未配置的部署具有空的 provider 且没有 specification。Docker、microsandbox 和 smolvm 使用 `mode: nodes`；E2B 使用 `mode: direct`，且没有合成节点。
 - `generation` 标识已保存的选择。`owner_epoch` 用于对执行所有者和节点连接进行栅栏隔离；它不能替代 `expected_generation`。
 - `specification_digest` 是服务器对提供商、限制和 Runtime 发行版的标识；注册过程会原样回显该值。
 
@@ -105,7 +105,7 @@ GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url
 
 POST 会在持久保存候选配置之前对其进行验证，并且不会创建计算资源、Session 或模型请求。在当前代次上，完全相同的选择是无操作；使用旧代次则返回 409 `sandbox_generation_stale`，即使请求体相同也是如此。缺少前置条件或准备失败时，已提交的提供商保持不变。更改后端前必须先重置。POST 还会在重置完成后使用该重置的新代次进行初始化。
 
-仅在没有重置进行时，PUT 才接受同一提供商。只发送一次观测到的代次，绝不自动重放结果不确定的写入操作。新分配使用新提交的 specification，现有分配则保留其不可变的部署代次。同提供商更改不会停用任何节点、令牌或所有者 epoch，也不会排空任何执行：Docker 和 microsandbox 节点在继续提供旧固定版本的同时独立准备新目标，而 E2B 更改会立即生效。
+仅在没有重置进行时，PUT 才接受同一提供商。只发送一次观测到的代次，绝不自动重放结果不确定的写入操作。新分配使用新提交的 specification，现有分配则保留其不可变的部署代次。同提供商更改不会停用任何节点、令牌或所有者 epoch，也不会排空任何执行：节点在继续提供旧固定版本的同时独立准备新目标，而 E2B 更改会立即生效。
 
 ### E2B 密钥替换 {#e2b-key-replacement}
 
@@ -180,7 +180,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 ## 节点与分配 {#nodes-and-allocations}
 
-节点容量由管理员批准，独立于部署 specification。`POST /core/v1/sandbox/enrollment-tokens` 接受可选的 `max_active` 和 `max_retained`，默认分别为 2 和 8，并返回 `{token, expires_at, enrollment_id}`；`enrollment_id` 是该命令的公共句柄，绝不是凭据。microsandbox 会使用两个限制。Docker 绝不暂停，因此 Core 会在此处和 PATCH 中用 `max_active` 替换其 `max_retained`。E2B 没有节点，并返回 409 `sandbox_deployment_conflict`。Core 将批准值与令牌一同存储，并复制到其注册的节点；节点不能提交容量，其本地检查可以拒绝其无法运行的部署，但绝不会提高限制。[节点容量](../../../docs/zh/configuration.md#node-capacity)为操作员说明了这些限制。
+节点容量由管理员批准，独立于部署 specification。`POST /core/v1/sandbox/enrollment-tokens` 接受可选的 `max_active` 和 `max_retained`，默认分别为 2 和 8，并返回 `{token, expires_at, enrollment_id}`；`enrollment_id` 是该命令的公共句柄，绝不是凭据。microsandbox 会使用两个限制。Docker 和 smolvm 绝不暂停，因此 Core 会在此处和 PATCH 中用 `max_active` 替换其 `max_retained`。E2B 没有节点，并返回 409 `sandbox_deployment_conflict`。Core 将批准值与令牌一同存储，并复制到其注册的节点；节点不能提交容量，其本地检查可以拒绝其无法运行的部署，但绝不会提高限制。[节点容量](../../../docs/zh/configuration.md#node-capacity)为操作员说明了这些限制。
 
 `GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、`diagnostic`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`enrollment_id` 和 `core_url`。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
 
@@ -194,22 +194,22 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 某些字段在不同提供商中保持同一名称，但含义不同或不适用。部署字段来自 `GET /core/v1/sandbox/deployment`，节点和分配字段来自节点路由，Runtime 字段来自 [Runtime 遥测 API](runtime-observability-api.md)；其中 `disk` 仅出现在观测列表中，历史则在 [Session Runtime 历史](runtime-observability-api.md#session-runtime-history)下说明。
 
-| 字段 | E2B | Docker | microsandbox |
-| --- | --- | --- | --- |
-| 部署 `specification.resources` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` |
-| 部署 `specification.runtime` | 不存在；`configuration.template` 用于选择构建 | 完整的[发行版](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 | 完整的[发行版](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 |
-| 部署 `metadata.template_build` | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 | 不存在：`metadata` 为空 |
-| 部署 `suspension` | `null`；Core 不暂停 E2B 沙箱 | `null` | `{idle_seconds, retention_seconds}` |
-| 部署 `resources.allocations`、`resources.pending` | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 | 所有节点的总数 |
-| 注册令牌 `max_active`、`max_retained` | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` | 两个限制均适用 |
-| 节点列表和详情 | 空列表；详情返回 404 | 已注册节点 | 已注册节点 |
-| 节点 `retained`、`snapshots`、`max_retained` | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` | 已暂停沙箱数为 `retained` 减去 `active` |
-| 节点 `host.available_disk_bytes` | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 |
-| 分配 `compute_phase`、`compute_phase_changed_at` | 不适用：没有节点分配 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 | 包含 `suspended`；该时间加上 `suspension.retention_seconds` 可大致确定 Core 回收快照的时间 |
-| Runtime 观测 `cpu`、`memory` | 来自 E2B 指标：`cpu.utilization_ratio` 和 `capacity_cores`、内存使用量和限制；无累计 CPU 时间 | 来自 Docker stats：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 来自 VM：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 |
-| Runtime 观测 `disk` | E2B `diskUsed` 和 `diskTotal`；模板未报告时为 `null` | `null`：无磁盘配额 | `null` |
-| Runtime 观测 `lifecycle_state: sleeping` | 从不 | 从不 | 暂停期间 |
-| Runtime 历史 CPU | 每个时间桶中 E2B 所报告使用率比值的平均值 | 根据累计 CPU 时间派生 | 根据累计 CPU 时间派生 |
+| 字段 | E2B | Docker | microsandbox | smolvm |
+| --- | --- | --- | --- | --- |
+| 部署 `specification.resources` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` |
+| 部署 `specification.runtime` | 不存在；`configuration.template` 用于选择构建 | 完整的[发行版](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 | 完整的[发行版](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 | 完整的[发行版](#runtime-release)；节点依据 `image_id` 和 `image_manifest_digest` 校验 OCI 归档 |
+| 部署 `metadata.template_build` | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 | 不存在：`metadata` 为空 | 不存在：`metadata` 为空 |
+| 部署 `suspension` | `null`；Core 不暂停 E2B 沙箱 | `null` | `{idle_seconds, retention_seconds}` | `null` |
+| 部署 `resources.allocations`、`resources.pending` | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 | 所有节点的总数 | 所有节点的总数 |
+| 注册令牌 `max_active`、`max_retained` | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` | 两个限制均适用 | `max_retained` 始终等于 `max_active` |
+| 节点列表和详情 | 空列表；详情返回 404 | 已注册节点 | 已注册节点 | 已注册节点 |
+| 节点 `retained`、`snapshots`、`max_retained` | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` | 已暂停沙箱数为 `retained` 减去 `active` | `retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` |
+| 节点 `host.available_disk_bytes` | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 | 节点状态目录所在文件系统的可用空间 |
+| 分配 `compute_phase`、`compute_phase_changed_at` | 不适用：没有节点分配 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 | 包含 `suspended`；该时间加上 `suspension.retention_seconds` 可大致确定 Core 回收快照的时间 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 |
+| Runtime 观测 `cpu`、`memory` | 来自 E2B 指标：`cpu.utilization_ratio` 和 `capacity_cores`、内存使用量和限制；无累计 CPU 时间 | 来自 Docker stats：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 来自 VM：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 不可用：不支持原生观测 |
+| Runtime 观测 `disk` | E2B `diskUsed` 和 `diskTotal`；模板未报告时为 `null` | `null`：无磁盘配额 | `null` | 不可用：不支持原生观测 |
+| Runtime 观测 `lifecycle_state: sleeping` | 从不 | 从不 | 暂停期间 | 从不 |
+| Runtime 历史 CPU | 每个时间桶中 E2B 所报告使用率比值的平均值 | 根据累计 CPU 时间派生 | 根据累计 CPU 时间派生 | 不可用：不支持原生观测 |
 
 ## 错误 {#errors}
 

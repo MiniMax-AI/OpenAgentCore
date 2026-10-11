@@ -1295,7 +1295,7 @@ def main(argv=None):
     source.add_argument("--source-url", type=origin)
     source.add_argument("--bundle", type=Path)
     parser.add_argument("--core-url", type=origin)
-    parser.add_argument("--provider", choices=("docker", "microsandbox"), help="Optional assertion; Core owns provider selection")
+    parser.add_argument("--provider", choices=provider_assets.AUTOMATIC_PROVIDERS, help="Optional assertion; Core owns provider selection")
     parser.add_argument("--installation-id", required=True)
     parser.add_argument("--checkpoint-root", type=Path, help="Private microsandbox checkpoint directory, shared across compatible nodes when configured")
     parser.add_argument("--enrollment-token-stdin", action="store_true", help="Read the one-time enrollment token from standard input")

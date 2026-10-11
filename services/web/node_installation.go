@@ -160,8 +160,10 @@ func (h *console) nodeArtifacts() []string {
 	if err != nil {
 		return available
 	}
-	for provider, artifacts := range providerassets.Catalog() {
-		complete := true
+	catalog := providerassets.Catalog()
+	for _, provider := range providerassets.AutomaticInstallers() {
+		artifacts := catalog[provider]
+		complete := len(artifacts) > 0
 		for _, artifact := range artifacts {
 			logical := artifact.Path
 			entry, ok := manifest.Artifacts[logical]
