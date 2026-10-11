@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 2d0f6969acaa9383ef74c639547219e3146366f91a0ab5d42ad734569533c144
+source_hash: 506550dd727916c603fa2dfd713eaf190856b0536d6e4b6652a374419f2e7a4e
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -184,7 +184,9 @@ services:
 
 #### 租户容量 {#tenant-capacity}
 
-`tenant_capacity_mib` 是安装唯一的租户容量策略，只能与选择一起通过 `PUT /core/v1/workspace-storage` 写入，并保存在 Core 数据库中。正值要求配额模式配置，配额模式配置也要求正值。它限制单个租户所有尚未确认删除的工作区的获准容量之和，并跨配置变更生效；计数规则由[能力验证](./workspace-provider.md#capability-validation)负责。被拒绝的工作区使 Session 执行不可用；删除 Session 后，其存储被移除时即释放容量。调低该值只拒绝新工作区。
+`tenant_capacity_mib` 是安装唯一的租户容量策略，只能与选择一起通过 `PUT /core/v1/workspace-storage` 写入，并保存在 Core 数据库中。正值要求配额模式配置，配额模式配置也要求正值。它限制单个租户所有尚未确认删除的工作区的获准容量之和，并跨配置变更生效；计数规则由[能力验证](./workspace-provider.md#capability-validation)负责。调低该值只拒绝新工作区；删除 Session 后，其存储被移除时即释放容量。
+
+Session 创建可以在异步工作区准入之前成功。容量耗尽时，Core 会重试，不为被拒绝的工作区分配存储或计算资源；待处理输入保留原有的 [Environment 输入截止时间](../../contracts/agents-api/zh/environments.md#reservations)。无输入创建的空闲 Session 没有输入截止时间，会等待容量释放。
 
 非配额模式下创建的工作区保持无上限；不会调整其大小或迁移它们。只要保留此类工作区，在正策略下其租户在删除该 Session 前无法准入新工作区。
 

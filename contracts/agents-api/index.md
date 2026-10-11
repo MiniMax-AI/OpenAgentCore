@@ -125,6 +125,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Environments and Templates**
 
+- Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the existing [input reservation deadline](./environments.md#reservations).
 - Runtimes do not enforce `disabled` or `restricted` networks, so Sessions that need them are rejected ([restricted network policy](./environments.md#restricted-network)).
 - `packages.system` is rejected; system packages must be preinstalled.
 - Cold continuation does not restore process memory, background processes or temporary system-disk changes; completed setup is not replayed. See [Environment persistence](./environments.md#runtime-capability-preparation). Cross-node memory restoration and takeover of an unconfirmed old writer are not qualified.

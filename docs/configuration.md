@@ -180,7 +180,9 @@ Supported recovery for quota mode is a block-level copy of the XFS filesystem; s
 
 #### Tenant capacity
 
-`tenant_capacity_mib` is the installation's single tenant capacity policy, written only together with the selection by `PUT /core/v1/workspace-storage` and stored in Core's database. A positive value requires a quota mode configuration, and a quota mode configuration requires a positive value. It bounds the sum of admitted capacities of one tenant's workspaces that are not yet confirmed deleted, across configuration changes; [capability validation](./workspace-provider.md#capability-validation) owns the counting rules. A refused workspace makes Session execution unavailable; deleting Sessions frees capacity once their storage is removed. Lowering the value refuses new workspaces only.
+`tenant_capacity_mib` is the installation's single tenant capacity policy, written only together with the selection by `PUT /core/v1/workspace-storage` and stored in Core's database. A positive value requires a quota mode configuration, and a quota mode configuration requires a positive value. It bounds the sum of admitted capacities of one tenant's workspaces that are not yet confirmed deleted, across configuration changes; [capability validation](./workspace-provider.md#capability-validation) owns the counting rules. Lowering the value refuses new workspaces only; deleting Sessions frees capacity once their storage is removed.
+
+Session creation can succeed before this asynchronous workspace admission. While capacity is exhausted, Core retries without allocating the refused workspace or its compute; pending input keeps its original [Environment input deadline](../contracts/agents-api/environments.md#reservations). An idle Session created without input has no input deadline and waits for capacity.
 
 Workspaces created without quota mode remain unbounded; nothing resizes or migrates them. While one is retained, its tenant cannot admit new workspaces under a positive policy until that Session is deleted.
 

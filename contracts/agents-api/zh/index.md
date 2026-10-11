@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 37355fa7100a2610ef727a3bb28f028d175be1b48b2d9f81c89b40f14cf17aef
+source_hash: ddc93473d2f9acf6623072b3245b1dc244109f8fc597ef097e25d7ddf07cf392
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -128,6 +128,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Environments 和 Templates**
 
+- Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - Runtime 不会实施 `disabled` 或 `restricted` 网络，因此需要这些网络的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
 - `packages.system` 会被拒绝；系统软件包必须预先安装。
 - 冷续接不恢复进程内存、后台进程或临时系统盘修改；已完成的 setup 不会重放。参见 [Environment 持久化](environments.md#runtime-capability-preparation)。跨节点内存恢复及接管未确认停止的旧写入者尚未通过资格验证。
