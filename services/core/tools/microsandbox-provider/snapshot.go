@@ -84,7 +84,27 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 	// A surviving completed artifact is observed, never overwritten or recaptured.
 	artifact, snap, e := b.inspectSnapshot(ctx, q.OperationID, q.Source)
 	if sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
+		// Native absence cannot settle an admitted capture. Only a durable
+		// never-dispatched closure permits rollback of this exact source.
+		// Existing archives/receipts above retain their source-cleanup path.
+		_, sourceState, inspectErr := b.inspectOwned(ctx, q.Source)
+		if inspectErr != nil {
+			return wire.State{}, inspectErr
+		}
+		if !sourceState.BootstrapComplete || (sourceState.Status != "running" && sourceState.Status != "paused") {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
+		closed, admissionErr := b.admitSuspend(q)
+		if admissionErr != nil {
+			return wire.State{}, admissionErr
+		}
+		if !q.ObserveOnly && closed {
+			return wire.State{}, wire.ErrUnconfirmed
+		}
 		if q.ObserveOnly {
+			if !closed {
+				return wire.State{}, wire.ErrUnconfirmed
+			}
 			if q.Snapshot != nil {
 				return wire.State{}, wire.ErrUnconfirmed
 			}

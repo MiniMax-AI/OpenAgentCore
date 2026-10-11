@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 
 from e2b import Template
+from helper_contract_generated import SUSPEND_CONTROL_FILE
 
 BASE = 'node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27'
 parser = argparse.ArgumentParser()
@@ -27,6 +28,7 @@ environment = dict(value.split('=', 1) for value in image['Config']['Env']
                    if value.startswith(('HOME=', 'OAC_')))
 if environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace':
     parser.error('Image does not use the colocated Runtime layout')
+environment['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'] = SUSPEND_CONTROL_FILE
 dev_home = Path(os.environ.get('OAC_DEV_HOME') or Path.home() / '.oac')
 if not dev_home.is_absolute():
     parser.error('OAC_DEV_HOME must be absolute')

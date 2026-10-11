@@ -76,7 +76,7 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	bootstrap := func() sandbox.Bootstrap {
-		return sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-test-credential", NetworkAccess: "enabled"}
+		return sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-test-credential", Harness: "codex", NetworkAccess: "enabled"}
 	}
 	b := bootstrap()
 	b.NetworkAccess, b.AllowedDomains = "restricted", []string{"Example.com", "api.example.com"}

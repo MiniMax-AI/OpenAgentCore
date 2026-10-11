@@ -277,7 +277,7 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 // that publication and source-local cleanup settled before suspension.
 func (e *ExecutionOperations) BeginRestore(ctx context.Context, owner Allocation, compatibility sandbox.CheckpointCompatibility, state json.RawMessage) (Allocation, error) {
 	var object map[string]json.RawMessage
-	if compatibility.Validate() != nil || json.Unmarshal(state, &object) != nil || object == nil {
+	if (owner.NodeID != "" && compatibility.Validate() != nil) || json.Unmarshal(state, &object) != nil || object == nil {
 		return Allocation{}, ErrInvalidInput
 	}
 	return e.change(ctx, owner, true, func(tx AllocationTx, current Allocation) (Allocation, error) {

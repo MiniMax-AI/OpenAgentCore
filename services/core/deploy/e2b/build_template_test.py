@@ -64,6 +64,9 @@ class BundlePermissionsTest(unittest.TestCase):
                     self.assertIs(instance, template)
                     context = Path(factory.call_args.kwargs['file_context_path'])
                     self.assertEqual(stat.S_IMODE(context.stat().st_mode), 0o700)
+                    from helper_contract_generated import SUSPEND_CONTROL_FILE
+                    runtime_env = json.loads((context / 'runtime-env.json').read_text())
+                    self.assertEqual(runtime_env['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'], SUSPEND_CONTROL_FILE)
                     with tarfile.open(context / 'runtime.tar.gz') as archive:
                         modes = {m.name: stat.S_IMODE(m.mode) for m in archive.getmembers()}
                     for parent in ('usr', 'usr/local', 'etc'):

@@ -362,7 +362,7 @@ func (m *GenerationManager) probeLoop() {
 		}
 		ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 		checkpoint, err := g.value.Probe(ctx)
-		if err == nil && ((sandbox.SupportsCheckpoint(g.value.Provider) && (checkpoint == nil || checkpoint.Validate() != nil)) || (!sandbox.SupportsCheckpoint(g.value.Provider) && checkpoint != nil)) {
+		if err == nil && ((sandbox.SupportsSuspension(g.value.Provider) && (checkpoint == nil || checkpoint.Validate() != nil)) || (!sandbox.SupportsSuspension(g.value.Provider) && checkpoint != nil)) {
 			err = sandbox.ErrInvalid
 		}
 		cancel()

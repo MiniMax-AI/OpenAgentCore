@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -27,7 +28,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 		}
 		// This idempotent control signal is fenced by guest PID/start time and the
 		// suspension token. It cannot execute or replay an agent request.
-		result, err := p.RunCommandCompute(ctx, runtimeReference(owner), state.Current, sandbox.Command{Args: []string{"oac-daemon", "resume", "--control-file", "/run/oac/daemon-suspend.json", "--environment-id", owner.EnvironmentID, "--suspend-id", state.SuspendID}})
+		result, err := p.RunCommandCompute(ctx, runtimeReference(owner), state.Current, sandbox.Command{Args: []string{"oac-daemon", "resume", "--control-file", runtimebootstrap.SuspendControlFile, "--environment-id", owner.EnvironmentID, "--suspend-id", state.SuspendID}})
 		if err != nil {
 			return err
 		}
@@ -57,8 +58,8 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 	}
 	// The artifact has been consumed. Never restore it after this generation
 	// admits work, even if garbage collection or the final database commit fails.
-	if state.Snapshot != nil {
-		if err := ignoreComputeAbsent(p.DeleteSnapshot(ctx, runtimeReference(owner), *state.Snapshot)); err != nil {
+	if state.Retained != nil {
+		if err := ignoreComputeAbsent(p.DeleteRetained(ctx, runtimeReference(owner), *state.Retained)); err != nil {
 			return err
 		}
 	}
@@ -78,8 +79,8 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
-	if owner.ComputePhase == "suspended" && state.Snapshot != nil && owner.NodeID != "" {
-		next, err := r.deployment.RelocateCleanup(ctx, owner, state.Snapshot.Compatibility)
+	if owner.ComputePhase == "suspended" && state.Retained != nil && owner.NodeID != "" {
+		next, err := r.deployment.RelocateCleanup(ctx, owner, state.Retained.Compatibility)
 		if err != nil {
 			return err
 		}
@@ -93,13 +94,13 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 	}
 	// An uncommitted artifact is found by its persisted attempt, never a directory
 	// glob. The helper's allocation lock also waits for an earlier unknown call.
-	if owner.ComputePhase == "suspending" && state.Snapshot == nil {
-		result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, ObserveOnly: true})
+	if owner.ComputePhase == "suspending" && state.Retained == nil {
+		result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, ReconcileOnly: true})
 		if err != nil && !errors.Is(err, sandbox.ErrNotFound) {
 			return err
 		}
 		if err == nil {
-			state.Snapshot = result.Snapshot
+			state.Retained = result.Retained
 		}
 	}
 	if state.Target != nil {
@@ -112,8 +113,8 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Sandbox
 			return err
 		}
 	}
-	if state.Snapshot != nil {
-		if err := ignoreComputeAbsent(p.DeleteSnapshot(ctx, runtimeReference(owner), *state.Snapshot)); err != nil {
+	if state.Retained != nil {
+		if err := ignoreComputeAbsent(p.DeleteRetained(ctx, runtimeReference(owner), *state.Retained)); err != nil {
 			return err
 		}
 	}

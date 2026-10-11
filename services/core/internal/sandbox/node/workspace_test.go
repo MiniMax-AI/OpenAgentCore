@@ -30,9 +30,28 @@ func TestWorkspaceWireBindsConfigurationAndEnvironment(t *testing.T) {
 			case "object":
 				b.Attachment.Reference.ObjectID = "invalid"
 			}
-			q := request{ID: ref.AllocationID, Reference: ref, Operation: "create", TimeoutMillis: 1000, Bootstrap: &sandbox.Bootstrap{Reference: ref, Workspace: &b}}
+			q := request{ID: ref.AllocationID, Reference: ref, Operation: "create", TimeoutMillis: 1000, Bootstrap: &sandbox.Bootstrap{Harness: "codex", Reference: ref, Workspace: &b}}
 			if (q.validate() == nil) != (fault == "match") {
 				t.Fatal("invalid create binding forwarding", fault)
+			}
+			for _, external := range []bool{false, true} {
+				wireRequest := q
+				bootstrap := *q.Bootstrap
+				wireRequest.Bootstrap = &bootstrap
+				if !external {
+					bootstrap.Workspace = nil
+				}
+				wireRequest.DeploymentGeneration, wireRequest.Sequence, wireRequest.OwnerEpoch = 1, 1, 1
+				wireRequest.ConnectionID = ref.TenantID
+				raw, err := json.Marshal(frame{Version: ProtocolVersion, Type: "request", Request: &wireRequest})
+				if err != nil {
+					t.Fatal(err)
+				}
+				decoded, err := decodeFrame(raw)
+				want := !external || fault == "match"
+				if (err == nil && decoded.Request.validate() == nil) != want {
+					t.Fatalf("workspace wire external=%v fault=%s: %v", external, fault, err)
+				}
 			}
 			q.Operation = "resume"
 			q.Bootstrap = nil
@@ -75,7 +94,7 @@ func TestActualWorkspaceRefusalKeepsSettledAbsenceOnWire(t *testing.T) {
 	}
 	fsConfig := workspacefs.Configuration{ID: "44444444-4444-4444-8444-444444444444", Adapter: "fixture", Parameters: json.RawMessage(`{}`)}
 	binding := &workspacefs.Binding{Configuration: fsConfig, Attachment: workspacefs.Attachment{Reference: workspacefs.Reference{TenantID: ref.TenantID, EnvironmentID: ref.EnvironmentID, ObjectID: "55555555-5555-4555-8555-555555555555"}, ConfigurationID: fsConfig.ID, Kind: workspacefs.AttachmentHostDirectory, Native: json.RawMessage(`{}`)}}
-	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: binding}
+	bootstrap := sandbox.Bootstrap{Harness: "codex", Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: binding}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	out := execute(ctx, provider, request{ID: ref.AllocationID, ConnectionID: ref.TenantID, Reference: ref, Operation: "create", TimeoutMillis: 1000, Bootstrap: &bootstrap})

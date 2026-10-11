@@ -89,8 +89,8 @@ func TestClosedRestoreEvidenceSurvivesNodeTransport(t *testing.T) {
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	snapshot := sandbox.SnapshotIdentity{ID: "snapshot", Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "store", ExecutionClass: "class"}}
-	q := sandbox.ResumeRequest{Reference: reference(), OperationID: uuid.NewString(), Snapshot: snapshot, Target: sandbox.Compute{Generation: 1, Name: "exact-target", RestoredFrom: &snapshot}, ObserveOnly: true}
+	snapshot := sandbox.RetainedState{ID: "snapshot", Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "store", ExecutionClass: "class"}}
+	q := sandbox.ResumeRequest{Reference: reference(), OperationID: uuid.NewString(), Retained: snapshot, Target: sandbox.Compute{Generation: 1, Name: "exact-target", RestoredFrom: &snapshot}, ReconcileOnly: true}
 	result, err := hub.Proxy(id.NodeID, microsandbox.Operations(), id.DeploymentGeneration).Resume(t.Context(), q)
 	if err != nil || !result.ClosesRestoreAttempt(q) {
 		t.Fatalf("exact closed proof lost in proxy: %#v %v", result, err)

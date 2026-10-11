@@ -335,7 +335,11 @@ identity={"installation_id":"test-installation","generation":1,"specification_di
 with g.collection_lease(Path(sys.argv[2]),1,i,identity,initialize=sys.argv[3]=="init"): pass
 `
 	run := func(mode string) error {
-		return exec.Command("python3", "-c", script, installer, root, mode, testLeaseIdentity().SpecificationDigest).Run()
+		output, err := exec.Command("python3", "-c", script, installer, root, mode, testLeaseIdentity().SpecificationDigest).CombinedOutput()
+		if err != nil {
+			t.Log(string(output))
+		}
+		return err
 	}
 	if err := run("init"); err != nil {
 		t.Fatal("Python initialization", err)

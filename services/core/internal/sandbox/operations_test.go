@@ -24,7 +24,7 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 		name   string
 		change func(providercontract.Operations)
 	}{
-		{"omitted", func(o providercontract.Operations) { delete(o, "DeleteSnapshot") }},
+		{"omitted", func(o providercontract.Operations) { delete(o, "DeleteRetained") }},
 		{"zero", func(o providercontract.Operations) { o["Observe"] = providercontract.Support{} }},
 		{"unknown", func(o providercontract.Operations) {
 			o["FutureOperation"] = providercontract.Support{State: providercontract.Supported}

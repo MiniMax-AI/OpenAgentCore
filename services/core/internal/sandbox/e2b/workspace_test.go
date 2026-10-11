@@ -15,3 +15,11 @@ func TestCreateExplicitlyRejectsExternalWorkspace(t *testing.T) {
 		t.Fatal("external workspace not rejected before native access", err)
 	}
 }
+
+func TestResumeExplicitlyRejectsExternalWorkspace(t *testing.T) {
+	provider := new(Provider)
+	_, err := provider.Resume(context.Background(), sandbox.ResumeRequest{Workspace: &workspacefs.Binding{}})
+	if reason, ok := providercontract.UnsupportedReason(err, "Resume"); !ok || reason != "external_workspace_unsupported" {
+		t.Fatal("external workspace not rejected before native access", err)
+	}
+}

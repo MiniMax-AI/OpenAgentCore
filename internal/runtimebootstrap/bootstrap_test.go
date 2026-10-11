@@ -7,7 +7,7 @@ import (
 )
 
 func TestConnectionRoundTrip(t *testing.T) {
-	input := Connection{Version: Version, CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-credential"}
+	input := Connection{Version: Version, CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-credential", Harness: "codex"}
 	raw, err := input.Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -19,11 +19,11 @@ func TestConnectionRoundTrip(t *testing.T) {
 }
 
 func TestConnectionRejectsAmbiguousOrForeignInput(t *testing.T) {
-	good := `{"version":1,"core_url":"https://core.example/api/v1","device_id":"da912024-1543-4242-a2c1-5f4f7ebbc6c7","credential":"test-secret"}`
+	good := `{"version":2,"harness":"codex","core_url":"https://core.example/api/v1","device_id":"da912024-1543-4242-a2c1-5f4f7ebbc6c7","credential":"test-secret"}`
 	for name, raw := range map[string]string{
 		"null": "null", "array": "[]", "trailing": good + "{}",
-		"duplicate": strings.Replace(good, `"version":1`, `"version":1,"version":1`, 1),
-		"unknown":   strings.Replace(good, `"version":1`, `"extra":1,"version":1`, 1),
+		"duplicate": strings.Replace(good, `"version":2`, `"version":2,"version":2`, 1),
+		"unknown":   strings.Replace(good, `"version":2`, `"extra":1,"version":2`, 1),
 		"case":      strings.Replace(good, "credential", "Credential", 1),
 		"old auth":  `{"server_url":"https://core.example","runtime_id":"old","runner_credential":"test-secret"}`,
 		"oversized": strings.Repeat(" ", MaxBytes) + good,
@@ -35,9 +35,10 @@ func TestConnectionRejectsAmbiguousOrForeignInput(t *testing.T) {
 		})
 	}
 	for field, values := range map[string][]any{
-		"version":    {nil, 0, 2, "1"},
+		"version":    {nil, 0, 1, 3, "2"},
 		"core_url":   {"http://user:pass@core.example/api/v1", "https://core.example/api/v1?", "https://core.example/api/v1#", "https://core.example", "https://core.example/api/v1/", "https://core.example/api/v1?q=1", ""},
 		"device_id":  {"", "invalid", "00000000-0000-0000-0000-000000000000"},
+		"harness":    {nil, "", "Codex", "unknown-kind", "../codex", strings.Repeat("x", 65)},
 		"credential": {nil, "", "test\nsecret", "test\x00secret"},
 	} {
 		for _, value := range values {

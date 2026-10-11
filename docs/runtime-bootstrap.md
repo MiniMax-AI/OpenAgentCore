@@ -17,6 +17,7 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `version` | The exact bootstrap version, `runtimebootstrap.Version` |
 | `core_url` | HTTP(S) machine API base ending in `/api/v1`, without credentials, query or fragment |
 | `device_id` | Canonical nonzero UUID of the daemon identity Core issued |
+| `harness` | The immutable Session Harness identifier; only this Harness is probed and registered by a managed Runtime |
 | `credential` | Nonempty daemon credential Core issued, without whitespace or NUL |
 
 The decoder rejects unknown, duplicate, missing and case-aliased fields, other versions and documents larger than `runtimebootstrap.MaxBytes` (16 KiB). Errors never include submitted values. A missing or malformed file fails before the daemon connects.
@@ -27,9 +28,15 @@ The file is the only authentication input for this launch: the daemon refuses to
 
 The provider creates the account, mounts and workspace, delivers this file, sets the Runtime's resource and Environment binding settings, and starts the daemon as the unprivileged Runtime account. Docker writes the file into the Runtime's owned home volume; microsandbox and E2B deliver it before launching the same command.
 
+Core derives `harness` from the Session that owns the allocation. A combined image can contain several Harnesses, but its managed Runtime discovers only this selection; an unknown, missing or unavailable selection fails without probing another Harness. The bootstrap version is 2. Upgrade Core, its provider helpers and newly launched Runtime images together; retained allocations keep their existing bootstrap and Runtime. Self-hosted installations continue to discover their installed Harness set.
+
 The Runtime validates the input and owns authentication and connection. A successful launch proves only the handoff: an authenticated connection, prepared capabilities and execution readiness are separate observations under the [Core–Runtime protocol](./runtime-protocol.md), and the [Sandbox Provider guide](./sandbox-provider.md#four-distinct-readiness-facts) lists what each one proves.
 
 Self-hosted executors and operator-provisioned devices get their daemon identity in other ways; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. All of them enter the same Runtime execution loop.
+
+## Hosted suspension control
+
+The private hosted park/wake control-file path is authored as `SuspendControlFile` in `internal/runtimebootstrap/bootstrap.go`. Core recovery and native Go adapters read that value; the E2B helper contract generator projects it into the template builder. Managed startup prepares its private directory and supplies `OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE` to enable Runtime suspension. This is a packaged protocol setting. The shared Sandbox Provider registration owns idle and retention defaults; the adapter owns its native lease timeout.
 
 ## Verification
 

@@ -71,9 +71,9 @@ func main() {
 	write("services/core/internal/sandbox/e2b/helper_sdk_generated.go", goCode)
 	bootstrap := fields(reflect.TypeFor[sandbox.Bootstrap]())
 	requiredBootstrap := fieldNames(reflect.TypeFor[sandbox.Bootstrap](), true)
-	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" })
+	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "Harness" })
 	requiredBootstrap = append(requiredBootstrap, "InstallationID", "RuntimeBootstrap")
-	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" })
+	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "Harness" })
 	bootstrap = append(bootstrap, "InstallationID", "RuntimeBootstrap")
 	identity := fields(reflect.TypeFor[sandbox.Reference]())
 	for _, name := range []string{"SessionID", "DeviceID"} {
@@ -85,11 +85,17 @@ func main() {
 	identity = append(identity, "InstallationID")
 	values := map[string]any{
 		"PROTOCOL_VERSION": e2b.ProtocolVersion, "SDK_VERSION": sdk,
-		"MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
-		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes, "MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
-		"OPERATIONS": e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
+		"SUSPEND_CONTROL_FILE": runtimebootstrap.SuspendControlFile,
+		"MAX_REQUEST":          e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
+		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes,
+		"MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
+		"OPERATIONS":                e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
 		"REQUEST_FIELDS": fields(reflect.TypeFor[e2b.Request]()), "RESPONSE_FIELDS": fields(reflect.TypeFor[e2b.Response]()),
 		"REFERENCE_FIELDS":         fields(reflect.TypeFor[sandbox.Reference]()),
+		"COMPUTE_FIELDS":           fields(reflect.TypeFor[sandbox.Compute]()),
+		"RETAINED_FIELDS":          fields(reflect.TypeFor[sandbox.RetainedState]()),
+		"SUSPEND_FIELDS":           fields(reflect.TypeFor[sandbox.SuspendRequest]()),
+		"RESUME_FIELDS":            fields(reflect.TypeFor[sandbox.ResumeRequest]()),
 		"MANAGED_BOOTSTRAP_FIELDS": bootstrap, "MANAGED_BOOTSTRAP_REQUIRED_FIELDS": requiredBootstrap, "MANAGED_IDENTITY_FIELDS": identity,
 		"NETWORK_ACCESS": networkValues(filepath.Join(root, "internal/agentnetwork/policy.go")),
 	}
@@ -115,7 +121,7 @@ func main() {
 // envelopes and managed bootstrap inputs in both implementations.
 func fixtures() []byte {
 	r := sandbox.Reference{TenantID: "11111111-1111-4111-8111-111111111111", EnvironmentID: "22222222-2222-4222-8222-222222222222", AllocationID: "33333333-3333-4333-8333-333333333333"}
-	b := sandbox.Bootstrap{Reference: r, SessionID: "44444444-4444-4444-8444-444444444444", DeviceID: "55555555-5555-4555-8555-555555555555", CoreURL: "https://core.example/api/v1", Credential: "fixture-only", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: "44444444-4444-4444-8444-444444444444", DeviceID: "55555555-5555-4555-8555-555555555555", CoreURL: "https://core.example/api/v1", Credential: "fixture-only", Harness: "codex", NetworkAccess: "enabled"}
 	installation := "66666666-6666-4666-8666-666666666666"
 	connection := b.RuntimeConnection()
 	q := e2b.Request{Version: e2b.ProtocolVersion, Operation: "create", Config: e2b.Config{InstallationID: installation}, Reference: r, Bootstrap: &b, RuntimeBootstrap: &connection, Deadline: time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC)}
@@ -132,7 +138,24 @@ func fixtures() []byte {
 	}
 	for _, operation := range e2b.HelperOperations() {
 		copy := q
+
 		copy.Operation = operation
+		c := sandbox.Compute{Name: r.AllocationID, ID: "native-fixture"}
+		retained := sandbox.RetainedState{Reference: r.AllocationID, ID: installation, OperationID: installation, SourceName: c.Name, SourceID: c.ID, Data: "opaque"}
+		switch operation {
+		case "compute_info", "compute_renew", "compute_kill", "compute_command", "resume_compute":
+			copy.Compute = &c
+			if operation == "compute_command" {
+				copy.Command = &sandbox.Command{Args: []string{"true"}}
+			}
+		case "suspend":
+			copy.Suspend = &sandbox.SuspendRequest{Reference: r, OperationID: installation, Source: c}
+		case "resume":
+			target := sandbox.Compute{Generation: 1, Name: c.Name, ID: c.ID, RestoredFrom: &retained}
+			copy.Resume = &sandbox.ResumeRequest{Reference: r, OperationID: installation, Retained: retained, Target: target}
+		case "delete_retained":
+			copy.Retained = &retained
+		}
 		if operation == "verify_credential" {
 			copy.References = []sandbox.Reference{r}
 		}
@@ -156,6 +179,17 @@ func fixtures() []byte {
 		bootstrapValue["Workspace"] = workspace
 		value["Bootstrap"] = bootstrapValue
 		add("request", fmt.Sprintf("workspace-%v", workspace), workspace == nil, value)
+	}
+	for _, workspace := range []any{nil, map[string]any{}} {
+		retained := sandbox.RetainedState{Reference: r.AllocationID, ID: installation, OperationID: installation, SourceName: r.AllocationID, SourceID: "native-fixture", Data: "opaque"}
+		copy := q
+		copy.Operation = "resume"
+		copy.Resume = &sandbox.ResumeRequest{Reference: r, OperationID: installation, Retained: retained, Target: sandbox.Compute{Generation: 1, Name: r.AllocationID, ID: "native-fixture", RestoredFrom: &retained}}
+		value := object(copy)
+		resume := object(copy.Resume)
+		resume["Workspace"] = workspace
+		value["Resume"] = resume
+		add("request", fmt.Sprintf("resume-workspace-%v", workspace), workspace == nil, value)
 	}
 	for _, count := range []int{0, e2b.MaxCredentialReferences, e2b.MaxCredentialReferences + 1} {
 		copy := q
@@ -187,6 +221,7 @@ func fixtures() []byte {
 	managed := object(b)
 	delete(managed, "CoreURL")
 	delete(managed, "Credential")
+	delete(managed, "Harness")
 	managed["InstallationID"] = installation
 	managed["RuntimeBootstrap"] = runtimebootstrap.Connection(connection)
 	for _, policy := range []agentnetwork.Policy{{Access: "enabled"}, {Access: "disabled"}, {Access: "restricted", AllowedDomains: []string{"example.com"}}} {

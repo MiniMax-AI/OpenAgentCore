@@ -87,7 +87,7 @@ func TestManagedDriftRejectsBeforeBootstrapAndRetainsCleanup(t *testing.T) {
 				t.Fatal(err)
 			}
 			resources.CPUs = 9
-			b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "secret", NetworkAccess: "enabled"}
+			b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "secret", Harness: "codex", NetworkAccess: "enabled"}
 			info, err := p.Create(t.Context(), b)
 			if !errors.Is(err, sandbox.ErrInvalid) {
 				t.Fatal("drift accepted", err)

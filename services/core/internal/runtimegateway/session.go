@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -100,9 +101,10 @@ type Session struct {
 	// supportedKinds is the latest daemon-advertised agent_kind snapshot,
 	// updated from heartbeat frames and read by the connector before
 	// sending execution_prepare so unsupported engines fail on the server.
-	kindsMu        sync.RWMutex
-	kindsSeen      bool
-	supportedKinds []runtimedevice.SupportedAgentKind
+	kindsMu                      sync.RWMutex
+	kindsSeen                    bool
+	supportedKinds               []runtimedevice.SupportedAgentKind
+	capabilityObservationPending bool
 
 	// Subscribers keyed by runID. The read loop only sends on these
 	// channels; Unsubscribe is the only place that closes them.
@@ -222,9 +224,23 @@ func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKin
 	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
 	s.kindsMu.Lock()
+	changed := !s.kindsSeen || !reflect.DeepEqual(s.supportedKinds, copyKinds)
 	s.kindsSeen = true
 	s.supportedKinds = copyKinds
+	if changed {
+		s.capabilityObservationPending = true
+	}
 	s.kindsMu.Unlock()
+}
+
+// A failed authorization or persistence check retains the pending hint
+// for the next confirmed heartbeat without changing capability publication.
+func (s *Session) observeConfirmedCapabilities(kinds []runtimedevice.SupportedAgentKind) {
+	s.kindsMu.Lock()
+	defer s.kindsMu.Unlock()
+	if s.capabilityObservationPending && s.reg.observeCapabilitySnapshot(s, kinds) {
+		s.capabilityObservationPending = false
+	}
 }
 
 // Close closes the transport and subscriptions with ErrSessionClosed, then
@@ -453,6 +469,7 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 	kinds := deviceKindsFromHeartbeat(p)
 	s.setSupportedAgentKinds(kinds)
 	if s.heartbeat == nil {
+		s.observeConfirmedCapabilities(kinds)
 		return
 	}
 
@@ -481,7 +498,9 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		// actual admin action; the daemon only sees it's no longer
 		// the current owner.
 		s.CloseWithCode(CloseRuntimeDeleted, "runtime retired")
+		return
 	}
+	s.observeConfirmedCapabilities(kinds)
 }
 
 func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.SupportedAgentKind {

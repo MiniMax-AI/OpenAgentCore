@@ -18,7 +18,7 @@ func (p *observationCaptureProvider) Suspend(_ context.Context, q sandbox.Suspen
 	if p.captureError != nil {
 		return sandbox.ComputeState{}, p.captureError
 	}
-	return sandbox.ComputeState{Compute: q.Source, Snapshot: &sandbox.SnapshotIdentity{ID: "captured", Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}, Status: "suspended", SourceStopped: p.killError == nil}, nil
+	return sandbox.ComputeState{Compute: q.Source, Retained: &sandbox.RetainedState{Reference: "capture", Data: "opaque", OperationID: q.OperationID, SourceID: q.Source.ID, SourceName: q.Source.Name, SourceGeneration: q.Source.Generation, ID: "captured", Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}, Status: "suspended", BootstrapComplete: true, SuspendSettled: true, ResourcesReleased: p.killError == nil}, nil
 }
 
 func TestComputeFailureObservationUsesCommittedReceipt(t *testing.T) {
@@ -48,7 +48,7 @@ func TestComputeFailureObservationUsesCommittedReceipt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			state := runtimeCompute{Current: sandbox.Compute{ID: "source", Name: "source"}, SuspendID: "attempt"}
+			state := runtimeCompute{Version: sandbox.SuspensionStateVersion, Current: sandbox.Compute{ID: "source", Name: "source"}, SuspendID: "attempt"}
 			until := time.Now().Add(time.Hour)
 			suspending, err := r.saveCompute(t.Context(), original, "suspending", state, &until)
 			if err != nil {

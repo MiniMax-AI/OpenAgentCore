@@ -19,7 +19,7 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 	}{
 		{"docker", "nodes", "nodes", false},
 		{"microsandbox", "nodes", "nodes", true},
-		{"e2b", "direct", "e2b", false},
+		{"e2b", "direct", "e2b", true},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			d, err := registry.Describe(tc.kind, installation)
@@ -27,7 +27,7 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 				t.Fatalf("wrong mode or namespace: %+v %v", d, err)
 			}
 			a, err := registry.Lookup(tc.kind)
-			checkpoint, checkpointErr := registry.SupportsCheckpoint(tc.kind)
+			checkpoint, checkpointErr := registry.SupportsSuspension(tc.kind)
 			if err != nil || checkpointErr != nil || checkpoint != tc.checkpoint || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
 				t.Fatal("inconsistent construction/capability registration", err, checkpointErr)
 			}
@@ -70,7 +70,7 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	// Registration is test-local: production registrations are fixed, never plugins.
 	registry.adapters[kind] = registry.adapters["docker"]
 	s, err := registry.Normalize(sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()})
-	checkpoint, checkpointErr := registry.SupportsCheckpoint(kind)
+	checkpoint, checkpointErr := registry.SupportsSuspension(kind)
 	if err != nil || checkpointErr != nil || s.Provider != kind || checkpoint {
 		t.Fatal("new entry did not follow shared boundary", err, checkpointErr)
 	}
@@ -111,8 +111,8 @@ func TestCapabilityLookupsReportFailures(t *testing.T) {
 	invalid.Operations = nil
 	registry.adapters["invalid-registration"] = invalid
 	for kind, want := range map[string]error{"unregistered": ErrUnknownProvider, "invalid-registration": providercontract.ErrContract} {
-		if _, err := registry.SupportsCheckpoint(kind); !errors.Is(err, want) {
-			t.Fatal(kind, "SupportsCheckpoint", err)
+		if _, err := registry.SupportsSuspension(kind); !errors.Is(err, want) {
+			t.Fatal(kind, "SupportsSuspension", err)
 		}
 		if _, err := registry.RetainedLimit(kind, 1, 2); !errors.Is(err, want) {
 			t.Fatal(kind, "RetainedLimit", err)

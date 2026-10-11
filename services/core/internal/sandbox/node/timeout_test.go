@@ -108,7 +108,10 @@ func TestQueuedMutationExpiresWithoutExecution(t *testing.T) {
 	createCtx, stopCreate := context.WithTimeout(ctx, 3*time.Second)
 	defer stopCreate()
 	created := make(chan error, 1)
-	go func() { _, err := proxy.Create(createCtx, sandbox.Bootstrap{Reference: r}); created <- err }()
+	go func() {
+		_, err := proxy.Create(createCtx, sandbox.Bootstrap{Reference: r, Harness: "codex"})
+		created <- err
+	}()
 	<-p.started
 	killCtx, stopKill := context.WithTimeout(ctx, 80*time.Millisecond)
 	defer stopKill()

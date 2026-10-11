@@ -253,7 +253,7 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 // suspension returns Core's idle suspension policy for a provider that
 // declares checkpoint support, and nil for any other provider.
 func (s *Service) suspension(provider string) (*Suspension, error) {
-	checkpoint, err := s.registry.SupportsCheckpoint(provider)
+	checkpoint, err := s.registry.SupportsSuspension(provider)
 	if err != nil || !checkpoint {
 		return nil, err
 	}
