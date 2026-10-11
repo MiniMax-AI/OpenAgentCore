@@ -1,6 +1,7 @@
 package workspacepg_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/workspacepg"
@@ -20,10 +22,13 @@ import (
 )
 
 type fixture struct {
-	pool      *pgxpool.Pool
-	store     *workspacepg.Store
-	execution *workspacepg.Execution
-	lease     *pgunit.Lease
+	pool         *pgxpool.Pool
+	store        *workspacepg.Store
+	execution    *workspacepg.Execution
+	lease        *pgunit.Lease
+	cipher       *credentialcrypto.Cipher
+	installation string
+	active       *string
 }
 
 func newFixture(t *testing.T) fixture {
@@ -34,15 +39,27 @@ func newFixture(t *testing.T) fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	f := fixture{pool: pool, store: workspacepg.New(pgunit.NewPool(pool)), execution: workspacepg.NewExecution(lease), lease: lease}
-	if err := f.execution.SelectConfiguration(admin(t), newConfiguration()); err != nil {
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
+	if err != nil {
 		t.Fatal(err)
 	}
+	installation := uuid.NewString()
+	f := fixture{pool: pool, store: workspacepg.New(pgunit.NewPool(pool), cipher, installation), execution: workspacepg.NewExecution(lease, cipher, installation), lease: lease,
+		cipher: cipher, installation: installation, active: new(string)}
+	f.selectConfiguration(t, newConfiguration(), 0)
 	return f
 }
 
-func newConfiguration() workspacefs.Configuration {
-	return workspacefs.Configuration{ID: uuid.NewString(), Adapter: "fixture", Parameters: []byte(`{"storage":"test"}`)}
+func newConfiguration() workspacefs.ConfigurationRecord {
+	return workspacefs.ConfigurationRecord{Configuration: workspacefs.Configuration{ID: uuid.NewString(), Adapter: "fixture", Parameters: []byte(`{"storage":"test"}`)}}
+}
+
+func (f fixture) selectConfiguration(t *testing.T, config workspacefs.ConfigurationRecord, tenantCapacity uint32) {
+	t.Helper()
+	if err := f.execution.SelectConfiguration(admin(t), config, tenantCapacity); err != nil {
+		t.Fatal(err)
+	}
+	*f.active = config.ID
 }
 
 func admin(t *testing.T) context.Context {
@@ -57,8 +74,9 @@ func TestConfigurationSelectionRequiresAtomicAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	next := newConfiguration()
-	next.Parameters = []byte(`{"secret":"private-configuration-value"}`)
-	if err := f.execution.SelectConfiguration(t.Context(), next); !errors.Is(err, adminaudit.ErrInvalidSource) {
+	next.Parameters = []byte(`{"public":"configuration-value"}`)
+	next.Credential = []byte(`{"key":"private-configuration-value"}`)
+	if err := f.execution.SelectConfiguration(t.Context(), next, 0); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatal("selection without audit source", err)
 	}
 	active, err := f.store.ActiveConfiguration(t.Context())
@@ -74,7 +92,7 @@ func TestConfigurationSelectionRequiresAtomicAudit(t *testing.T) {
 	}
 	ctx := admin(t)
 	for range 2 {
-		if err := f.execution.SelectConfiguration(ctx, next); err != nil {
+		if err := f.execution.SelectConfiguration(ctx, next, 0); err != nil {
 			t.Fatal("immutable selection retry", err)
 		}
 	}
@@ -116,11 +134,16 @@ func (f fixture) environment(t *testing.T) (string, string, string) {
 func (f fixture) bind(t *testing.T) (workspaces.Record, string) {
 	t.Helper()
 	tenant, session, environment := f.environment(t)
-	record, err := f.execution.Bind(t.Context(), tenant, environment)
+	record, err := f.execution.Bind(t.Context(), tenant, environment, *f.active, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return record, session
+}
+
+func (f fixture) rebind(t *testing.T, record workspaces.Record) (workspaces.Record, error) {
+	t.Helper()
+	return f.execution.Bind(t.Context(), record.Reference.TenantID, record.Reference.EnvironmentID, record.Configuration.ID, record.CapacityMiB)
 }
 
 func attachment(record workspaces.Record) workspacefs.Attachment {
@@ -139,10 +162,8 @@ func TestConfigurationSwitchPreservesBinding(t *testing.T) {
 	f := newFixture(t)
 	first, _ := f.bind(t)
 	second := newConfiguration()
-	if err := f.execution.SelectConfiguration(admin(t), second); err != nil {
-		t.Fatal(err)
-	}
-	replayed, err := f.execution.Bind(t.Context(), first.Reference.TenantID, first.Reference.EnvironmentID)
+	f.selectConfiguration(t, second, 0)
+	replayed, err := f.execution.Bind(t.Context(), first.Reference.TenantID, first.Reference.EnvironmentID, second.ID, 0)
 	if err != nil || replayed.Reference != first.Reference || replayed.Configuration.ID != first.Configuration.ID {
 		t.Fatal("configuration switch changed existing creation", replayed, err)
 	}
@@ -152,14 +173,14 @@ func TestConfigurationSwitchPreservesBinding(t *testing.T) {
 	}
 	changed := first.Configuration
 	changed.Parameters = []byte(`{"storage":"other"}`)
-	if err := f.execution.SelectConfiguration(admin(t), changed); !errors.Is(err, workspaces.ErrConflict) {
+	if err := f.execution.SelectConfiguration(admin(t), changed, 0); !errors.Is(err, workspaces.ErrConflict) {
 		t.Fatal("mutated configuration", err)
 	}
 	active, err := f.store.ActiveConfiguration(t.Context())
 	if err != nil || active.ID != second.ID {
 		t.Fatal("rejected selection changed active configuration", active, err)
 	}
-	if err := f.execution.SelectConfiguration(admin(t), first.Configuration); err != nil {
+	if err := f.execution.SelectConfiguration(admin(t), first.Configuration, 0); err != nil {
 		t.Fatal("could not reselect retained configuration", err)
 	}
 	if _, err := f.pool.Exec(t.Context(), `UPDATE workspace_fs_configurations SET adapter='other' WHERE id=$1`, first.Configuration.ID); err == nil {
@@ -175,7 +196,7 @@ func TestConcurrentSelectionHasOneActiveConfiguration(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 8)
 	for range 8 {
-		wg.Go(func() { errors <- f.execution.SelectConfiguration(admin(t), newConfiguration()) })
+		wg.Go(func() { errors <- f.execution.SelectConfiguration(admin(t), newConfiguration(), 0) })
 	}
 	wg.Wait()
 	close(errors)
@@ -249,7 +270,7 @@ func TestDeletedSessionRejectsLateReadyAndQueuesWithoutAllocation(t *testing.T) 
 	if err != nil || retained.State != workspaces.Deleted || retained.Reference != record.Reference {
 		t.Fatal("deleted identity not retained", retained, err)
 	}
-	if _, err := f.execution.Bind(t.Context(), record.Reference.TenantID, record.Reference.EnvironmentID); !errors.Is(err, workspaces.ErrConflict) {
+	if _, err := f.rebind(t, record); !errors.Is(err, workspaces.ErrConflict) {
 		t.Fatal("deleted identity reused", err)
 	}
 	if err := f.execution.MarkReady(t.Context(), record.Reference, attachment(record)); !errors.Is(err, workspaces.ErrConflict) {
@@ -345,7 +366,7 @@ func TestFailedCreationRetainedUntilExplicitSessionDeletion(t *testing.T) {
 	if err := f.execution.MarkDeleted(t.Context(), record.Reference); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.execution.Bind(t.Context(), record.Reference.TenantID, record.Reference.EnvironmentID); !errors.Is(err, workspaces.ErrConflict) {
+	if _, err := f.rebind(t, record); !errors.Is(err, workspaces.ErrConflict) {
 		t.Fatal("deleted identity reused", err)
 	}
 }
@@ -358,7 +379,7 @@ func TestTenantAndAttachmentOwnership(t *testing.T) {
 	if _, err := f.store.Get(t.Context(), foreign.TenantID, foreign.EnvironmentID); !errors.Is(err, workspaces.ErrNotFound) {
 		t.Fatal("foreign tenant read workspace", err)
 	}
-	if _, err := f.execution.Bind(t.Context(), foreign.TenantID, foreign.EnvironmentID); !errors.Is(err, workspaces.ErrNotFound) {
+	if _, err := f.execution.Bind(t.Context(), foreign.TenantID, foreign.EnvironmentID, record.Configuration.ID, 0); !errors.Is(err, workspaces.ErrNotFound) {
 		t.Fatal("foreign tenant rebound workspace", err)
 	}
 	if err := f.execution.MarkReady(t.Context(), foreign, attachment(record)); !errors.Is(err, workspaces.ErrNotFound) {
@@ -394,9 +415,9 @@ func TestWorkspaceWritesRequireExecutionLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, write := range map[string]func() error{
-		"configuration": func() error { return f.execution.SelectConfiguration(admin(t), newConfiguration()) },
+		"configuration": func() error { return f.execution.SelectConfiguration(admin(t), newConfiguration(), 0) },
 		"bind": func() error {
-			_, err := f.execution.Bind(t.Context(), record.Reference.TenantID, record.Reference.EnvironmentID)
+			_, err := f.rebind(t, record)
 			return err
 		},
 		"ready":   func() error { return f.execution.MarkReady(t.Context(), record.Reference, attachment(record)) },

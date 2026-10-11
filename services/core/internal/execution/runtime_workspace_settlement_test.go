@@ -45,7 +45,7 @@ type settlementWorkspaceControl struct {
 func (c *settlementWorkspaceControl) Declaration() workspacefs.Declaration {
 	return workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 }
-func (c *settlementWorkspaceControl) Create(_ context.Context, ref workspacefs.Reference) (workspacefs.Attachment, error) {
+func (c *settlementWorkspaceControl) Create(_ context.Context, ref workspacefs.Reference, _ uint32) (workspacefs.Attachment, error) {
 	return workspacefs.Attachment{Reference: ref, ConfigurationID: c.configuration.ID, Kind: workspacefs.AttachmentHostDirectory, Native: []byte(`{}`)}, nil
 }
 func (c *settlementWorkspaceControl) Delete(context.Context, workspacefs.Reference) error {
@@ -55,11 +55,11 @@ func (c *settlementWorkspaceControl) Delete(context.Context, workspacefs.Referen
 
 type settlementWorkspaceControls struct{ control *settlementWorkspaceControl }
 
-func (c settlementWorkspaceControls) Control(workspacefs.Configuration) (workspacefs.Control, error) {
+func (c settlementWorkspaceControls) Control(workspacefs.ConfigurationRecord) (workspacefs.Control, error) {
 	return c.control, nil
 }
-func (c settlementWorkspaceControls) Normalize(config workspacefs.Configuration) (workspacefs.Configuration, error) {
-	return config, nil
+func (c settlementWorkspaceControls) Normalize(config workspacefs.Configuration, _ json.RawMessage) (workspacefs.ConfigurationRecord, error) {
+	return workspacefs.ConfigurationRecord{Configuration: config}, nil
 }
 
 type workspaceSettlementFixture struct {
@@ -114,10 +114,10 @@ func workspaceSettlementFixtureWithSetup(t *testing.T, provider sandbox.SandboxP
 		}
 	}
 	configuration := workspacefs.Configuration{ID: uuid.NewString(), Adapter: "fixture", Parameters: []byte(`{}`)}
-	storage := workspacepg.New(pgunit.NewPool(pool))
-	writer := workspacepg.NewExecution(lease)
+	storage := workspacepg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t), installation)
+	writer := workspacepg.NewExecution(lease, pgtest.CredentialKey(t), installation)
 	workspaceAudit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-	if err = writer.SelectConfiguration(workspaceAudit, configuration); err != nil {
+	if err = writer.SelectConfiguration(workspaceAudit, workspacefs.ConfigurationRecord{Configuration: configuration}, 0); err != nil {
 		t.Fatal(err)
 	}
 	control := &settlementWorkspaceControl{configuration: configuration}

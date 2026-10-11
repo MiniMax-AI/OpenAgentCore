@@ -273,7 +273,7 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	}
 	var workspace *workspacefs.Binding
 	if spec.Workspace != nil {
-		workspace, err = r.workspaces.GetReady(ctx, owner.TenantID, owner.EnvironmentID, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
+		workspace, err = r.workspaces.GetReady(ctx, owner.TenantID, owner.EnvironmentID, r.config.WorkspaceRequirements)
 		if err == nil && workspace == nil {
 			err = workspacefs.ErrNotFound
 		}

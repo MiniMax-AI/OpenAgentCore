@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 9687c874ba9e39dbceeb6f2206aff8e5163309a381262955ca247c67aa10455c
+source_hash: 4538ac64f7aee138b27b98f7f33542230d0b21a4fc183dc375fe0803833ac0d6
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -44,9 +44,9 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 
 ## 工作区存储 {#workspace-storage}
 
-运维脚本使用 Core key 调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。Web 没有工作区存储编辑器。请求与成功响应使用规范文件系统配置：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...}}`。`parameters` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
+运维脚本使用 Core key 调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。Web 没有工作区存储编辑器。成功响应为选择结果：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`。请求包含相同的必需字段，以及可选的只写 `credential` 对象。`parameters` 和 `credential` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
 
-GET 返回所选配置；尚未配置时返回 404 `workspace_storage_not_found`。PUT 验证并选择不可变配置，以 200 返回该配置。复用 ID 要求适配器配置完全一致；更改其含义或与保留归属冲突会返回 409 `workspace_storage_conflict`。配置更改与工作区归属变更串行执行，成功变更携带与其他部署设置相同的管理员审计来源。[工作区文件系统协议](../../../docs/zh/workspace-provider.md) 规定标识、挂载、准入和保留语义。
+GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspace_storage_not_found`。它绝不返回凭据。PUT 验证并选择不可变配置，同时设置 [`tenant_capacity_mib`](../../../docs/zh/configuration.md#tenant-capacity)，以 200 返回选择结果。正的 `tenant_capacity_mib` 要求实施容量配额的配置，此类配置也要求正值；否则 PUT 返回 400 `workspace_operation_unsupported`。Core 加密凭据，绝不返回、记录日志或审计凭据。复用 ID 要求适配器、参数和凭据完全一致；省略 `credential` 会保留已存储的凭据，显式 `null` 无效。更改其含义或与保留归属冲突会返回 409 `workspace_storage_conflict`。配置更改与工作区归属变更串行执行，成功变更携带与其他部署设置相同的管理员审计来源。[工作区文件系统协议](../../../docs/zh/workspace-provider.md) 规定标识、挂载、准入和保留语义。
 
 无效配置返回 400 `invalid_workspace_configuration`；不支持的适配器或组合返回 400 `workspace_operation_unsupported`。存储不可用或操作尚未确认返回 503 `workspace_storage_unavailable`。错误消息不暴露原生路径或适配器错误文本。此端点独立于 Sandbox Provider 选择配置存储，不创建或删除 Session 工作区。
 

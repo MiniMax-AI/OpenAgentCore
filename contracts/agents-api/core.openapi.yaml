@@ -830,6 +830,25 @@ definitions:
       - status
       - turn_id
     type: object
+  api.WorkspaceStorageInput:
+    properties:
+      adapter:
+        type: string
+      credential:
+        type: object
+      id:
+        format: uuid
+        type: string
+      parameters:
+        type: object
+      tenant_capacity_mib:
+        type: integer
+    required:
+      - adapter
+      - id
+      - parameters
+      - tenant_capacity_mib
+    type: object
   coremetrics.Database:
     properties:
       ping_ms:
@@ -3836,20 +3855,6 @@ definitions:
     type: string
     x-enum-varnames:
       - AttachmentHostDirectory
-  workspacefs.Configuration:
-    properties:
-      adapter:
-        type: string
-      id:
-        format: uuid
-        type: string
-      parameters:
-        type: object
-    required:
-      - adapter
-      - id
-      - parameters
-    type: object
   workspacefs.Declaration:
     properties:
       attachment:
@@ -3862,6 +3867,23 @@ definitions:
       - attachment
       - capacity_quota
       - user_xattr
+    type: object
+  workspaces.Selection:
+    properties:
+      adapter:
+        type: string
+      id:
+        format: uuid
+        type: string
+      parameters:
+        type: object
+      tenant_capacity_mib:
+        type: integer
+    required:
+      - adapter
+      - id
+      - parameters
+      - tenant_capacity_mib
     type: object
   writeaudit.APIKey:
     properties:
@@ -7432,14 +7454,14 @@ paths:
         - Core Administration
   /core/v1/workspace-storage:
     get:
-      description: Core key only. Returns the immutable selected filesystem configuration. No configuration returns 404.
+      description: Core key only. Returns the immutable selected filesystem configuration and the tenant capacity policy, never a credential. No configuration returns 404.
       produces:
         - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/workspacefs.Configuration'
+            $ref: '#/definitions/workspaces.Selection'
         "400":
           description: Bad Request
           schema:
@@ -7472,21 +7494,21 @@ paths:
     put:
       consumes:
         - application/json
-      description: Core key only. Selects an immutable filesystem configuration. Reusing an ID requires the same adapter and parameters; conflicting ownership returns 409.
+      description: Core key only. Selects an immutable filesystem configuration and the tenant capacity policy in one change. Reusing an ID requires the same adapter, parameters and credential; an omitted credential retains the stored one. A positive tenant_capacity_mib requires, and is required by, a configuration that enforces capacity quotas. Conflicting ownership returns 409.
       parameters:
-        - description: Immutable workspace storage configuration
+        - description: Workspace storage selection
           in: body
           name: body
           required: true
           schema:
-            $ref: '#/definitions/workspacefs.Configuration'
+            $ref: '#/definitions/api.WorkspaceStorageInput'
       produces:
         - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/workspacefs.Configuration'
+            $ref: '#/definitions/workspaces.Selection'
         "400":
           description: Bad Request
           schema:

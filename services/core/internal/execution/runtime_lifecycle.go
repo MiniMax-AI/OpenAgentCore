@@ -215,7 +215,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 				return deployment.Allocation{}, err
 			}
 		} else if existing.State == "released" {
-			workspace, err = r.workspaces.GetReady(ctx, tenant, environment, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
+			workspace, err = r.workspaces.GetReady(ctx, tenant, environment, r.config.WorkspaceRequirements)
 			if err != nil {
 				return deployment.Allocation{}, err
 			}

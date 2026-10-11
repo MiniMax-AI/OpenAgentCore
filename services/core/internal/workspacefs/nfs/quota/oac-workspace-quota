@@ -1,0 +1,458 @@
+#!/usr/bin/python3 -I
+"""Bind kernel NFS workspace objects to XFS project quotas on the storage host.
+
+The OpenAgentCore nfs adapter calls this command through a restricted OpenSSH
+forced command that runs it as root:
+
+    oac-workspace-quota --config /etc/oac/workspace-quota.json serve
+
+serve reads one JSON request from stdin and writes one JSON object to stdout.
+The request can name no path, project ID, user or command. The operator
+initializes the journal once, locally:
+
+    oac-workspace-quota --config /etc/oac/workspace-quota.json init \\
+        --projid-start FIRST --projid-end LAST
+
+Each object's staging directory receives its own project ID and inheritance
+before Core creates any stage in it, so live data and retired trash keep that
+project; the object's identity, deletion marker and parents stay outside it.
+A local SQLite journal on the same XFS filesystem, outside the export, records
+the immutable binding of each object to its reference, configuration, capacity,
+staging inode and project ID. Request/response fixtures shared with the Go
+adapter live in ../testdata/quota.
+"""
+
+import argparse
+import errno
+import fcntl
+import json
+import os
+import re
+import sqlite3
+import stat
+import struct
+import subprocess
+import sys
+import uuid
+
+MIB = 1 << 20
+REQUEST_LIMIT = 4096
+ROOT_MARKER = ".oac-storage-root"
+CONTROL_DIRECTORY = ".oac-quota"
+PROJINHERIT = 0x200
+FS_IOC_FSGETXATTR = 0x801C581F
+FS_IOC_FSSETXATTR = 0x401C5820
+FS_IOC_GETVERSION = 0x80087601
+XFS_IOC_FSGEOMETRY_V1 = 0x80705864
+TOOL_ENVIRONMENT = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}
+
+ERROR_CODES = frozenset({
+    "invalid_request", "object_deleted", "identity_mismatch", "binding_mismatch", "object_replaced",
+    "foreign_project", "nonempty_object", "quota_mismatch", "unsafe_path", "object_missing",
+    "enforcement_off", "range_exhausted", "journal_mismatch", "operation_failed",
+})
+ENSURE_FIELDS = frozenset({"operation", "namespace_id", "tenant_id", "environment_id", "object_id",
+                           "configuration_id", "capacity_mib", "inodes_hard"})
+
+
+class Refused(Exception):
+    def __init__(self, code):
+        assert code in ERROR_CODES, code
+        super().__init__(code)
+        self.code = code
+
+
+def require(condition, code):
+    if not condition:
+        raise Refused(code)
+
+
+def step(name):
+    """Crash-injection point for tests; production does nothing."""
+
+
+def canonical_uuid(value):
+    if type(value) is not str:
+        return False
+    try:
+        parsed = uuid.UUID(value)
+    except ValueError:
+        return False
+    return parsed.int != 0 and str(parsed) == value
+
+
+def bounded_int(value, low, high):
+    return type(value) is int and low <= value <= high
+
+
+class XFS:
+    """Privileged XFS operations. Tests substitute an equivalent fake."""
+
+    def __init__(self, mount_point=None, lock_fd=None):
+        self.mount_point, self.lock_fd = mount_point, lock_fd
+
+    def filesystem_uuid(self, fd):
+        geometry = fcntl.ioctl(fd, XFS_IOC_FSGEOMETRY_V1, bytes(112))
+        return str(uuid.UUID(bytes=geometry[64:80]))
+
+    def attributes(self, fd):
+        flags, _, _, project, _ = struct.unpack("=5I8x", fcntl.ioctl(fd, FS_IOC_FSGETXATTR, bytes(28)))
+        return project, bool(flags & PROJINHERIT)
+
+    def project(self, fd, project):
+        # One FS_IOC_FSSETXATTR sets the project and inheritance together.
+        fields = list(struct.unpack("=5I8x", fcntl.ioctl(fd, FS_IOC_FSGETXATTR, bytes(28))))
+        fields[0] |= PROJINHERIT
+        fields[3] = project
+        fcntl.ioctl(fd, FS_IOC_FSSETXATTR, struct.pack("=5I8x", *fields))
+
+    def generation(self, fd):
+        return struct.unpack("=q", fcntl.ioctl(fd, FS_IOC_GETVERSION, bytes(8)))[0]
+
+    def _quota(self, command):
+        # The child inherits the helper lock, so it remains held if the helper dies.
+        result = subprocess.run(["xfs_quota", "-x", "-c", command, self.mount_point], capture_output=True, text=True,
+                                timeout=20, env=TOOL_ENVIRONMENT, pass_fds=(self.lock_fd,), stdin=subprocess.DEVNULL)
+        require(result.returncode == 0 and not result.stderr.strip(), "operation_failed")
+        return result.stdout
+
+    def enforced(self):
+        output = self._quota("state -p")
+        return (len(re.findall(r"^\s*Accounting: ON$", output, re.M)) == 1
+                and len(re.findall(r"^\s*Enforcement: ON$", output, re.M)) == 1)
+
+    def limits(self, project):
+        """Return (bsoft, bhard, isoft, ihard, rtbsoft, rtbhard) in bytes and inodes.
+        A project without a dquot reports zero limits; that never means the ID is unused."""
+        rows = [line.split() for line in self._quota("dump -p -L %d -U %d" % (project, project)).splitlines()
+                if line.strip() and not line.startswith("fs = ")]
+        if not rows:
+            return (0, 0, 0, 0, 0, 0)
+        require(len(rows) == 1 and len(rows[0]) in (5, 7) and all(v.isdigit() for v in rows[0]), "operation_failed")
+        values = [int(v) for v in rows[0]] + [0, 0]
+        require(values[0] == project, "operation_failed")
+        bsoft, bhard, isoft, ihard, rtsoft, rthard = values[1:7]
+        return (bsoft * 512, bhard * 512, isoft, ihard, rtsoft * 512, rthard * 512)
+
+    def usage(self, project):
+        """Return (bytes, inodes) charged to project; zero without a dquot."""
+        lines = [line for line in self._quota("quota -p -N -b -i %d" % project).splitlines() if line.strip()]
+        if not lines:
+            return (0, 0)
+        match = re.fullmatch(r"\S+\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\[[^\]]*\]\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\[[^\]]*\]\s+\S+",
+                             lines[0].strip()) if len(lines) == 1 else None
+        require(match is not None, "operation_failed")
+        return (int(match.group(1)) * 1024, int(match.group(2)))
+
+    def set_limits(self, project, bytes_hard, inodes_hard):
+        self._quota("limit -p bsoft=0 bhard=%dm isoft=0 ihard=%d %d" % (bytes_hard // MIB, inodes_hard, project))
+
+
+BACKEND = XFS
+
+
+def load_config(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.geteuid() and info.st_mode & 0o022 == 0
+                and info.st_size <= REQUEST_LIMIT, "unsafe_path")
+        config = json.loads(os.read(fd, REQUEST_LIMIT + 1))
+    finally:
+        os.close(fd)
+    require(type(config) is dict and set(config) == {"export_root", "mount_point"}, "unsafe_path")
+    export, mount = config["export_root"], config["mount_point"]
+    for value in (export, mount):
+        require(type(value) is str and os.path.isabs(value) and os.path.normpath(value) == value and "\0" not in value,
+                "unsafe_path")
+    control = os.path.join(mount, CONTROL_DIRECTORY)
+    require(export != mount and os.path.commonpath([export, mount]) == mount
+            and os.path.commonpath([export, control]) != control, "unsafe_path")
+    return export, mount, control
+
+
+def open_directory(name, dir_fd=None):
+    return os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dir_fd)
+
+
+def private_directory(fd, uid, device):
+    info = os.fstat(fd)
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == uid and stat.S_IMODE(info.st_mode) == 0o700
+            and info.st_dev == device, "unsafe_path")
+    return info
+
+
+def read_private(name, dir_fd, uid, limit):
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dir_fd)
+    except FileNotFoundError:
+        return None
+    try:
+        info = os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == uid and stat.S_IMODE(info.st_mode) == 0o600
+                and info.st_size <= limit, "unsafe_path")
+        return os.read(fd, limit + 1)
+    finally:
+        os.close(fd)
+
+
+def exists(name, dir_fd):
+    try:
+        os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+class Storage:
+    """The pinned export, its filesystem and the journal, under the helper lock."""
+
+    def __init__(self, config_path, create_control=False):
+        self.export, self.mount, self.control = load_config(config_path)
+        self.descriptors = []
+        try:
+            self._open(create_control)
+        except BaseException:
+            self.close()
+            raise
+
+    def directory(self, name, dir_fd=None):
+        fd = open_directory(name, dir_fd)
+        self.descriptors.append(fd)
+        return fd
+
+    def close(self):
+        for resource in reversed(self.descriptors):
+            resource.close() if isinstance(resource, sqlite3.Connection) else os.close(resource)
+        self.descriptors = []
+
+    def _open(self, create_control):
+        self.mount_fd = self.directory(self.mount)
+        self.device = os.fstat(self.mount_fd).st_dev
+        if create_control:
+            try:
+                os.mkdir(CONTROL_DIRECTORY, 0o700, dir_fd=self.mount_fd)
+            except FileExistsError:
+                pass
+        try:
+            self.control_fd = self.directory(CONTROL_DIRECTORY, self.mount_fd)
+        except FileNotFoundError:
+            raise Refused("journal_mismatch")
+        private_directory(self.control_fd, os.geteuid(), self.device)
+        self.lock_fd = os.open("lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=self.control_fd)
+        self.descriptors.append(self.lock_fd)
+        fcntl.flock(self.lock_fd, fcntl.LOCK_EX)
+        self.xfs = BACKEND(self.mount, self.lock_fd)
+        self.root_fd = self.directory(self.export)
+        info = os.fstat(self.root_fd)
+        require(stat.S_ISDIR(info.st_mode) and info.st_dev == self.device and info.st_uid != 0, "unsafe_path")
+        self.uid = info.st_uid
+        private_directory(self.root_fd, self.uid, self.device)
+        self.filesystem = self.xfs.filesystem_uuid(self.mount_fd)
+
+    def namespace(self):
+        raw = read_private(ROOT_MARKER, self.root_fd, self.uid, 64)
+        require(raw is not None and raw.endswith(b"\n"), "journal_mismatch")
+        value = raw[:-1].decode("ascii", "replace")
+        require(canonical_uuid(value), "journal_mismatch")
+        return value
+
+    def journal(self, create=False):
+        # The control directory is private to root and was verified above.
+        if not create:
+            require(exists("journal.sqlite", self.control_fd), "journal_mismatch")
+        db = sqlite3.connect(os.path.join(self.control, "journal.sqlite"), isolation_level=None, timeout=20)
+        self.descriptors.insert(0, db)
+        db.execute("PRAGMA journal_mode=DELETE")
+        db.execute("PRAGMA synchronous=FULL")
+        return db
+
+
+SCHEMA = """
+CREATE TABLE meta (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    filesystem_uuid TEXT NOT NULL, namespace_id TEXT NOT NULL,
+    projid_start INTEGER NOT NULL, projid_end INTEGER NOT NULL, next_projid INTEGER NOT NULL,
+    CHECK (0 < projid_start AND projid_start <= projid_end AND projid_end < 4294967295),
+    CHECK (projid_start <= next_projid AND next_projid <= projid_end + 1)
+);
+CREATE TABLE objects (
+    object_id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, environment_id TEXT NOT NULL,
+    configuration_id TEXT NOT NULL, capacity_mib INTEGER NOT NULL, inodes_hard INTEGER NOT NULL,
+    staging_inode INTEGER NOT NULL, staging_generation INTEGER NOT NULL,
+    projid INTEGER NOT NULL UNIQUE,
+    state TEXT NOT NULL CHECK (state IN ('allocated', 'projected', 'ready'))
+);
+"""
+
+
+def meta(storage, db, namespace):
+    row = db.execute("SELECT filesystem_uuid, namespace_id, projid_end, next_projid FROM meta").fetchone()
+    require(row is not None and row[0] == storage.filesystem and row[1] == namespace
+            and storage.namespace() == namespace, "journal_mismatch")
+    require(storage.xfs.enforced(), "enforcement_off")
+    return row
+
+
+def check(storage, request):
+    require(set(request) == {"operation", "namespace_id"} and canonical_uuid(request["namespace_id"]), "invalid_request")
+    db = storage.journal()
+    _, _, end, following = meta(storage, db, request["namespace_id"])
+    require(following <= end, "range_exhausted")
+    return {"filesystem_uuid": storage.filesystem}
+
+
+def ensure(storage, request):
+    require(set(request) == ENSURE_FIELDS and all(canonical_uuid(request[k]) for k in
+            ("namespace_id", "tenant_id", "environment_id", "object_id", "configuration_id"))
+            and bounded_int(request["capacity_mib"], 1, 4294967295)
+            and bounded_int(request["inodes_hard"], 1, (1 << 63) - 1), "invalid_request")
+    db = storage.journal()
+    meta(storage, db, request["namespace_id"])
+    reference = {k: request[k] for k in ("tenant_id", "environment_id", "object_id")}
+    capacity, inodes = request["capacity_mib"], request["inodes_hard"]
+    try:
+        objects_fd = storage.directory("objects", storage.root_fd)
+        object_fd = storage.directory(request["object_id"], objects_fd)
+        staging_fd = storage.directory("staging", object_fd)
+    except FileNotFoundError:
+        raise Refused("object_missing")
+    except OSError as error:
+        if error.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise Refused("unsafe_path")
+        raise
+    for fd in (objects_fd, object_fd, staging_fd):
+        private_directory(fd, storage.uid, storage.device)
+    raw = read_private("identity", object_fd, storage.uid, REQUEST_LIMIT)
+    require(raw is not None, "object_missing")
+    try:
+        identity = json.loads(raw)
+    except ValueError:
+        raise Refused("identity_mismatch")
+    require(identity == reference, "identity_mismatch")
+    require(not exists("deleted-marker", object_fd), "object_deleted")
+    for fd in (objects_fd, object_fd):
+        require(storage.xfs.attributes(fd) == (0, False), "foreign_project")
+    staging = os.fstat(staging_fd)
+    inode, generation = staging.st_ino, storage.xfs.generation(staging_fd)
+
+    # The helper lock serializes every journal writer.
+    row = db.execute("SELECT tenant_id, environment_id, configuration_id, capacity_mib, inodes_hard, staging_inode,"
+                     " staging_generation, projid, state FROM objects WHERE object_id = ?", (request["object_id"],)).fetchone()
+    if row is None:
+        # Never project existing user data: only a fresh empty envelope is bound.
+        require(not os.listdir(staging_fd) and not exists("live", object_fd), "nonempty_object")
+        if exists("trash", object_fd):
+            trash_fd = storage.directory("trash", object_fd)
+            require(not os.listdir(trash_fd), "nonempty_object")
+        require(storage.xfs.attributes(staging_fd) == (0, False), "foreign_project")
+        _, _, end, project = db.execute("SELECT filesystem_uuid, namespace_id, projid_end, next_projid FROM meta").fetchone()
+        require(project <= end, "range_exhausted")
+        # The allocation commits before any XFS change and is never reused.
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("UPDATE meta SET next_projid = next_projid + 1")
+            db.execute("INSERT INTO objects VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'allocated')",
+                       (request["object_id"], request["tenant_id"], request["environment_id"], request["configuration_id"],
+                        capacity, inodes, inode, generation, project))
+        row = (request["tenant_id"], request["environment_id"], request["configuration_id"], capacity, inodes, inode,
+               generation, project, "allocated")
+        step("allocated")
+    require(row[:5] == (request["tenant_id"], request["environment_id"], request["configuration_id"], capacity, inodes),
+            "binding_mismatch")
+    require(row[5:7] == (inode, generation), "object_replaced")
+    project, state = row[7], row[8]
+
+    current = storage.xfs.attributes(staging_fd)
+    if state == "allocated" and current == (0, False):
+        # A charged ID that this journal never projected belongs to someone else.
+        require(storage.xfs.usage(project) == (0, 0), "foreign_project")
+        require(not os.listdir(staging_fd), "nonempty_object")
+        storage.xfs.project(staging_fd, project)
+        step("projected-inode")
+        current = storage.xfs.attributes(staging_fd)
+    require(current == (project, True), "foreign_project")
+    if state == "allocated":
+        db.execute("UPDATE objects SET state = 'projected' WHERE object_id = ?", (request["object_id"],))
+        state = "projected"
+        step("projected")
+
+    wanted = (0, capacity * MIB, 0, inodes, 0, 0)
+    limits = storage.xfs.limits(project)
+    if state == "projected" and limits == (0, 0, 0, 0, 0, 0):
+        storage.xfs.set_limits(project, capacity * MIB, inodes)
+        step("limited")
+        limits = storage.xfs.limits(project)
+    # A ready object whose limits changed, including lost limits, is refused
+    # rather than repaired; the supported restore preserves them.
+    require(limits == wanted, "quota_mismatch")
+    if state == "projected":
+        db.execute("UPDATE objects SET state = 'ready' WHERE object_id = ?", (request["object_id"],))
+        step("ready")
+    require(not exists("deleted-marker", object_fd), "object_deleted")
+    return {"project_id": project, "bytes_hard": capacity * MIB, "inodes_hard": inodes, "filesystem_uuid": storage.filesystem}
+
+
+def serve(config_path, stdin):
+    raw = stdin.read(REQUEST_LIMIT + 1)
+    try:
+        require(len(raw) <= REQUEST_LIMIT, "invalid_request")
+        try:
+            request = json.loads(raw)
+        except ValueError:
+            raise Refused("invalid_request")
+        require(type(request) is dict and request.get("operation") in ("check", "ensure"), "invalid_request")
+        storage = Storage(config_path)
+        try:
+            return (check if request["operation"] == "check" else ensure)(storage, request)
+        finally:
+            storage.close()
+    except Refused as refused:
+        return {"error": refused.code}
+    except (OSError, sqlite3.Error, subprocess.SubprocessError, UnicodeError):
+        return {"error": "operation_failed"}
+
+
+def init(config_path, start, end):
+    require(bounded_int(start, 1, 4294967294) and bounded_int(end, start, 4294967294), "invalid_request")
+    storage = Storage(config_path, create_control=True)
+    try:
+        require(not exists("journal.sqlite", storage.control_fd), "journal_mismatch")
+        namespace = storage.namespace()
+        require(storage.xfs.enforced(), "enforcement_off")
+        db = storage.journal(create=True)
+        with db:
+            db.execute("BEGIN IMMEDIATE")
+            for statement in SCHEMA.split(";"):
+                if statement.strip():
+                    db.execute(statement)
+            db.execute("INSERT INTO meta VALUES (1, ?, ?, ?, ?, ?)", (storage.filesystem, namespace, start, end, start))
+        os.fsync(storage.control_fd)
+    finally:
+        storage.close()
+    return {"filesystem_uuid": storage.filesystem, "namespace_id": namespace, "projid_start": start, "projid_end": end}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="oac-workspace-quota")
+    parser.add_argument("--config", default="/etc/oac/workspace-quota.json")
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("serve")
+    initialize = commands.add_parser("init")
+    initialize.add_argument("--projid-start", type=int, required=True)
+    initialize.add_argument("--projid-end", type=int, required=True)
+    arguments = parser.parse_args(argv)
+    if arguments.command == "serve":
+        result = serve(arguments.config, sys.stdin.buffer)
+    else:
+        try:
+            result = init(arguments.config, arguments.projid_start, arguments.projid_end)
+        except Refused as refused:
+            result = {"error": refused.code}
+    sys.stdout.write(json.dumps(result, sort_keys=True) + "\n")
+    sys.stdout.flush()
+    return 1 if "error" in result else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

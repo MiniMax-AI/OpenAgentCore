@@ -48,7 +48,7 @@ The request has no Core address. Core derives the deployment's `core_url` from t
 | `cpus` | Integer, 1 through 255 |
 | `memory_mib` | Integer, 512 through 1048576 MiB |
 | `root_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
-| `environment_disk_mib` | microsandbox owned disk: at least 1024 MiB; external filesystem: zero requests no quota; a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
+| `environment_disk_mib` | microsandbox owned disk: at least 1024 MiB; external filesystem: each new workspace's admitted capacity, where zero requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
 
 These limits describe each sandbox. A node's `max_active` and `max_retained` are separate reservation limits, and host measurements never permit exceeding either. Native providers may reject values that pass these bounds.
 
@@ -58,7 +58,7 @@ microsandbox configures the CPUs, memory, a managed root disk and a separate own
 
 The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. Missing `workspace` preserves owned disk mode, including its existing disk bounds. Create and Resume must provide a binding exactly when the frozen generation selects external storage.
 
-To enable external storage for an existing owned deployment, select the filesystem configuration first, then update the sandbox deployment with compatible resources (`environment_disk_mib: 0` for a filesystem without quotas). Selecting the filesystem does not alter existing generations or allocations. The next sandbox update derives the external receipt; old owned allocations keep their owned disks. A filesystem selection must support the provider's declared requirements, and an already external deployment requires an equivalent declaration with compatible quota semantics.
+To enable external storage for an existing owned deployment, select the filesystem configuration first, then update the sandbox deployment with compatible resources (`environment_disk_mib: 0` for a filesystem without quotas). Selecting the filesystem does not alter existing generations or allocations. The next sandbox update derives the external receipt; old owned allocations keep their owned disks. A filesystem selection must support the provider's declared requirements. An already external deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
 
 ### Runtime release
 

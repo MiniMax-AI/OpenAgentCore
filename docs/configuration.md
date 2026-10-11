@@ -131,11 +131,60 @@ Select storage using `PUT /core/v1/workspace-storage` with the Core key as descr
     "root": "/srv/oac-workspaces",
     "namespace_id": "22222222-2222-4222-8222-222222222222",
     "uid": 65532
-  }
+  },
+  "tenant_capacity_mib": 0
 }
 ```
 
-Then create or update the microsandbox deployment through the [sandbox deployment API](../contracts/agents-api/sandbox-deployment.md#routes), setting `resources.environment_disk_mib` to `0` and retaining the required compute resources, Runtime and provider configuration. A positive value requests a quota that this adapter does not enforce and is rejected. Deployment workspace requirements and each Session's attachment are derived from the selected database configuration; do not add a filesystem field to the deployment or a second storage configuration to node files. Web has no workspace storage editor. After the filesystem and deployment are selected, use **Nodes → Add node** to enroll the prepared hosts. Connected, ready compute alone does not qualify an external filesystem; validate actual Session creation and access through each participating node before admitting application traffic. Include the independent namespace in the [stopped-write backup and restore procedure](./getting-started/operations.md#back-up).
+This configuration enforces no per-workspace quota, so `tenant_capacity_mib` must be `0`. For bounded workspaces, prepare the [quota mode storage server](#quota-mode-storage-server) and select a quota mode configuration with a [tenant capacity](#tenant-capacity) instead.
+
+Then create or update the microsandbox deployment through the [sandbox deployment API](../contracts/agents-api/sandbox-deployment.md#routes), retaining the required compute resources, Runtime and provider configuration. `resources.environment_disk_mib` is each new workspace's capacity: `0` without quota mode, where a positive value is rejected, and at least 1024 MiB in quota mode, where `0` is refused at workspace admission. Existing workspaces keep the capacity they were admitted with when the deployment changes. Deployment workspace requirements and each Session's attachment are derived from the selected database configuration; do not add a filesystem field to the deployment or a second storage configuration to node files. Web has no workspace storage editor. After the filesystem and deployment are selected, use **Nodes → Add node** to enroll the prepared hosts. Connected, ready compute alone does not qualify an external filesystem; validate actual Session creation and access through each participating node before admitting application traffic. Include the independent namespace in the [stopped-write backup and restore procedure](./getting-started/operations.md#back-up).
+
+#### Quota mode storage server
+
+Quota mode bounds each workspace's allocated bytes and inodes with an XFS project quota on the NFS server, set by the `oac-workspace-quota` command that Core calls over a restricted SSH forced command. [Quota mode](./workspace-provider.md#quota-mode) owns the protocol and enforcement semantics. Prepare the storage server as its administrator:
+
+1. Put the export on a local XFS filesystem mounted with enforcing project quotas (`prjquota`, not `pqnoenforce`). The export root must be a subdirectory of that mount, for example mount `/srv/xfs` and export `/srv/xfs/oac-workspaces`; the command keeps its journal in `/srv/xfs/.oac-quota`, outside the export. Prepare the namespace root and marker as above.
+2. Install `xfsprogs` and Python 3.9 or newer. Install `storage/oac-workspace-quota` from the matching distribution as `/usr/local/sbin/oac-workspace-quota`, owned by root with mode `0755`.
+3. Write `/etc/oac/workspace-quota.json`, owned by root and not writable by group or others: `{"export_root": "/srv/xfs/oac-workspaces", "mount_point": "/srv/xfs"}`.
+4. Reserve a project ID range that no other project on this filesystem uses, then initialize the journal once: `oac-workspace-quota --config /etc/oac/workspace-quota.json init --projid-start 100000 --projid-end 199999`. It refuses to run over an existing journal; never initialize restored storage.
+5. Generate a dedicated key pair, for example `ssh-keygen -t ed25519 -N '' -f oac-workspace-quota`. Authorize its public key for one account with a working shell, such as `oac-quota`, in that account's `authorized_keys`: `restrict,from="<Core address>",command="sudo -n /usr/local/sbin/oac-workspace-quota --config /etc/oac/workspace-quota.json serve" ssh-ed25519 AAAA...`, with the sudoers entry `oac-quota ALL=(root) NOPASSWD: /usr/local/sbin/oac-workspace-quota --config /etc/oac/workspace-quota.json serve`. Alternatively authorize the key for root with the same options and the command without `sudo -n` under `PermitRootLogin forced-commands-only`. Keep `PermitUserEnvironment no`.
+6. Read the server's public host key from `/etc/ssh/` on the server itself, not from an unauthenticated network scan.
+
+Select the quota mode configuration with the private key as its write-only credential. Delete the local private key file after a successful selection; Core keeps it encrypted with `secrets/core/credential.key`:
+
+```json
+{
+  "id": "33333333-3333-4333-8333-333333333333",
+  "adapter": "nfs",
+  "parameters": {
+    "root": "/srv/oac-workspaces",
+    "namespace_id": "22222222-2222-4222-8222-222222222222",
+    "uid": 65532,
+    "quota": {
+      "endpoint": "storage.internal:22",
+      "user": "oac-quota",
+      "host_key": "ssh-ed25519 AAAA..."
+    }
+  },
+  "credential": {
+    "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n"
+  },
+  "tenant_capacity_mib": 65536
+}
+```
+
+Selection calls the command's read-only check through the pinned host key. Then update the deployment with the per-workspace capacity in `resources.environment_disk_mib`. Until that update, an installation that switched from a configuration without quotas refuses new workspaces; existing workspaces continue with their own configuration. The credential belongs to the immutable configuration. To rotate it, authorize a new key, select a new configuration ID with it, and keep the old key authorized until no workspace bound to the old configuration is still being created.
+
+Supported recovery for quota mode is a block-level copy of the XFS filesystem; see [back up](./getting-started/operations.md#back-up).
+
+#### Tenant capacity
+
+`tenant_capacity_mib` is the installation's single tenant capacity policy, written only together with the selection by `PUT /core/v1/workspace-storage` and stored in Core's database. A positive value requires a quota mode configuration, and a quota mode configuration requires a positive value. It bounds the sum of admitted capacities of one tenant's workspaces that are not yet confirmed deleted, across configuration changes; [capability validation](./workspace-provider.md#capability-validation) owns the counting rules. A refused workspace makes Session execution unavailable; deleting Sessions frees capacity once their storage is removed. Lowering the value refuses new workspaces only.
+
+Workspaces created without quota mode remain unbounded; nothing resizes or migrates them. While one is retained, its tenant cannot admit new workspaces under a positive policy until that Session is deleted.
+
+The policy bounds what each tenant can commit, not the filesystem. Size the XFS filesystem for the number of tenants times the policy plus headroom for unbounded workspaces, identities, deletion markers, the journal and XFS metadata, or oversubscribe knowingly and monitor free space. Keep each node's `checkpoint_root` on separate storage. Capacity bounds provide no I/O fairness.
 
 ### Node capacity
 

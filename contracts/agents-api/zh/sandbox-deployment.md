@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 537ae957a77d625b3adb7828156352a661ae09270b57b174406c6db159a957bd
+source_hash: 05d854567f10ddca10d41f14423f0faa68fac4ceebca93dd1bb89129ecd6bf5c
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -50,7 +50,7 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `cpus` | 整数，1 到 255 |
 | `memory_mib` | 整数，512 到 1048576 MiB |
 | `root_disk_mib` | microsandbox：至少 1024 MiB；Docker 和 E2B：省略或为零 |
-| `environment_disk_mib` | microsandbox 自有磁盘：至少 1024 MiB；外部文件系统：零表示不请求配额；正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
+| `environment_disk_mib` | microsandbox 自有磁盘：至少 1024 MiB；外部文件系统：每个新工作区的获准容量，零表示不请求配额，正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
 
 这些限制描述每个沙箱。节点的 `max_active` 和 `max_retained` 是独立的预留限制，主机测量值绝不会允许超过其中任何一个。即使数值满足这些边界，原生提供商仍可能拒绝这些值。
 
@@ -61,7 +61,7 @@ microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environme
 
 响应中可选的 `specification.workspace` 是从所选[工作区文件系统](../../../docs/zh/workspace-provider.md)派生的不可变能力回执，不是可独立写入的设置。它仅包含 `attachment`、`user_xattr` 和 `capacity_quota`；文件系统配置、路径和凭据不进入 Sandbox specification。Core 保存前校验组合声明，保留代次校验与节点构造均使用此回执。缺失 `workspace` 时保留自有磁盘模式及现有容量边界。Create 和 Resume 必须且仅当固定代次选择外部存储时提供绑定。
 
-为现有自有磁盘部署启用外部存储时，先选择文件系统配置，再使用兼容资源更新 Sandbox 部署（不支持配额的文件系统使用 `environment_disk_mib: 0`）。选择文件系统不会改变现有代次或 allocation。下一次 Sandbox 更新派生外部能力回执；旧的自有磁盘 allocation 保留原磁盘。文件系统选择必须支持 Provider 声明的要求；已采用外部存储的部署要求等价声明及兼容配额语义。
+为现有自有磁盘部署启用外部存储时，先选择文件系统配置，再使用兼容资源更新 Sandbox 部署（不支持配额的文件系统使用 `environment_disk_mib: 0`）。选择文件系统不会改变现有代次或 allocation。下一次 Sandbox 更新派生外部能力回执；旧的自有磁盘 allocation 保留原磁盘。文件系统选择必须支持 Provider 声明的要求。已采用外部存储的部署要求相同的 `attachment` 和 `user_xattr`；选择可以更改 `capacity_quota`，此后在 Sandbox 更新设置相匹配的 `environment_disk_mib` 之前拒绝新工作区。既有工作区保持其获准时的容量。
 
 ### Runtime 发行版 {#runtime-release}
 

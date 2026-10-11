@@ -19,12 +19,9 @@ import (
 
 const rootMarker = ".oac-storage-root"
 
-func unavailable(err error) error { return fmt.Errorf("%w: %w", workspacefs.ErrUnavailable, err) }
-func unconfirmed(err error) error { return fmt.Errorf("%w: %w", workspacefs.ErrUnconfirmed, err) }
-
 // open validates the pinned directory descriptor before any namespace mutation.
 // It runs inside the process budget, including OpenRoot and every stat/read.
-func (a *Adapter) open() (*os.Root, error) {
+func (a *Filesystem) open() (*os.Root, error) {
 	r, err := os.OpenRoot(a.parameters.Root)
 	if err != nil {
 		return nil, unavailable(err)
@@ -120,7 +117,7 @@ func write(r *os.Root, name string, raw []byte) error {
 	}
 	return closeErr
 }
-func (a *Adapter) Check(ctx context.Context) error {
+func (a *Filesystem) Check(ctx context.Context) error {
 	_, err := run(ctx, func() (struct{}, error) {
 		r, err := a.open()
 		if err != nil {
@@ -151,6 +148,9 @@ func (a *Adapter) Check(ctx context.Context) error {
 		if err = unix.Fremovexattr(fd, key); err != nil {
 			return struct{}{}, unavailable(err)
 		}
+		if a.quota != nil {
+			return struct{}{}, a.quota.check(ctx, a.parameters.NamespaceID)
+		}
 		return struct{}{}, nil
 	})
 	return err
@@ -170,7 +170,7 @@ func identity(r *os.Root, name string, ref workspacefs.Reference) error {
 }
 
 // claim publishes an immutable synced identity with a no-replace hard link.
-func (a *Adapter) claim(r *os.Root, ref workspacefs.Reference) error {
+func (a *Filesystem) claim(r *os.Root, ref workspacefs.Reference) error {
 	if err := mkdir(r, "objects", a.parameters.UID); err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func live(r *os.Root, ref workspacefs.Reference) error {
 	}
 	return nil
 }
-func (a *Adapter) Observe(ctx context.Context, ref workspacefs.Reference) (workspacefs.Attachment, error) {
+func (a *Filesystem) Observe(ctx context.Context, ref workspacefs.Reference) (workspacefs.Attachment, error) {
 	if err := ref.Validate(); err != nil {
 		return workspacefs.Attachment{}, err
 	}
@@ -261,7 +261,7 @@ func (a *Adapter) Observe(ctx context.Context, ref workspacefs.Reference) (works
 		return a.observe(r, ref)
 	})
 }
-func (a *Adapter) observe(r *os.Root, ref workspacefs.Reference) (workspacefs.Attachment, error) {
+func (a *Filesystem) observe(r *os.Root, ref workspacefs.Reference) (workspacefs.Attachment, error) {
 	if err := live(r, ref); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			err = workspacefs.ErrNotFound
@@ -277,9 +277,12 @@ func (a *Adapter) observe(r *os.Root, ref workspacefs.Reference) (workspacefs.At
 	return a.attachment(ref), nil
 }
 
-func (a *Adapter) Create(ctx context.Context, ref workspacefs.Reference) (workspacefs.Attachment, error) {
+func (a *Filesystem) Create(ctx context.Context, ref workspacefs.Reference, capacityMiB uint32) (workspacefs.Attachment, error) {
 	if err := ref.Validate(); err != nil {
 		return workspacefs.Attachment{}, err
+	}
+	if capacityMiB > 0 && a.quota == nil {
+		return workspacefs.Attachment{}, fmt.Errorf("%w: capacity quota is not enforced", workspacefs.ErrUnsupported)
 	}
 	return run(ctx, func() (workspacefs.Attachment, error) {
 		r, err := a.open()
@@ -287,13 +290,23 @@ func (a *Adapter) Create(ctx context.Context, ref workspacefs.Reference) (worksp
 			return workspacefs.Attachment{}, err
 		}
 		defer r.Close()
-		if err = a.create(r, ref); err != nil {
+		var bound func() error
+		if capacityMiB > 0 {
+			bound = func() error {
+				return a.quota.ensure(ctx, ref, a.configuration.ID, a.parameters.NamespaceID, capacityMiB)
+			}
+		}
+		if err = a.create(r, ref, bound); err != nil {
 			return workspacefs.Attachment{}, err
 		}
 		return a.attachment(ref), nil
 	})
 }
-func (a *Adapter) create(r *os.Root, ref workspacefs.Reference) error {
+
+// create calls bound, when set, after staging exists and before any stage is
+// created or an existing live object is returned, so the server binds the
+// project to an empty staging root and every retry re-verifies the bound.
+func (a *Filesystem) create(r *os.Root, ref workspacefs.Reference, bound func() error) error {
 	if err := a.claim(r, ref); err != nil {
 		return unconfirmed(err)
 	}
@@ -305,15 +318,23 @@ func (a *Adapter) create(r *os.Root, ref workspacefs.Reference) error {
 	if dead {
 		return workspacefs.ErrNotFound
 	}
-	if err = live(r, ref); err == nil {
-		return nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
 	for _, dir := range []string{"staging", "trash"} {
 		if err = mkdir(r, path.Join(obj, dir), a.parameters.UID); err != nil {
 			return unconfirmed(err)
 		}
+	}
+	if bound != nil {
+		if err = syncDir(r, obj); err != nil {
+			return unconfirmed(err)
+		}
+		if err = bound(); err != nil {
+			return err
+		}
+	}
+	if err = live(r, ref); err == nil {
+		return nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
 	}
 	stage := path.Join(obj, "staging", uuid.NewString())
 	if err = r.Mkdir(stage, 0700); err != nil {
@@ -390,7 +411,7 @@ func removeEnvelope(r *os.Root, dir string, ref workspacefs.Reference, recursive
 	}
 	return nil
 }
-func (a *Adapter) Delete(ctx context.Context, ref workspacefs.Reference) error {
+func (a *Filesystem) Delete(ctx context.Context, ref workspacefs.Reference) error {
 	if err := ref.Validate(); err != nil {
 		return err
 	}
@@ -405,7 +426,7 @@ func (a *Adapter) Delete(ctx context.Context, ref workspacefs.Reference) error {
 	})
 	return err
 }
-func (a *Adapter) delete(r *os.Root, ref workspacefs.Reference) error {
+func (a *Filesystem) delete(r *os.Root, ref workspacefs.Reference) error {
 	if err := a.claim(r, ref); err != nil {
 		return unconfirmed(err)
 	}

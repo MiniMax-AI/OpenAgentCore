@@ -7,13 +7,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
-func (*Adapter) Check(context.Context) error { return workspacefs.ErrUnsupported }
-func (*Adapter) Create(context.Context, workspacefs.Reference) (workspacefs.Attachment, error) {
+func (*Filesystem) Check(context.Context) error { return workspacefs.ErrUnsupported }
+func (*Filesystem) Create(context.Context, workspacefs.Reference, uint32) (workspacefs.Attachment, error) {
 	return workspacefs.Attachment{}, workspacefs.ErrUnsupported
 }
-func (*Adapter) Observe(context.Context, workspacefs.Reference) (workspacefs.Attachment, error) {
+func (*Filesystem) Observe(context.Context, workspacefs.Reference) (workspacefs.Attachment, error) {
 	return workspacefs.Attachment{}, workspacefs.ErrUnsupported
 }
-func (*Adapter) Delete(context.Context, workspacefs.Reference) error {
+func (*Filesystem) Delete(context.Context, workspacefs.Reference) error {
 	return workspacefs.ErrUnsupported
 }

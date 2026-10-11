@@ -107,6 +107,8 @@ python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoc
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
 cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
+mkdir -p "$bundle/storage"
+install -m 0755 services/core/internal/workspacefs/nfs/quota/oac-workspace-quota "$bundle/storage/"
 cp LICENSE "$bundle/"
 
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"

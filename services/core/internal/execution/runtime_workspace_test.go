@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -29,17 +30,23 @@ type executionWorkspaceFixture struct {
 	failure                 error
 }
 
-func (f *executionWorkspaceFixture) Bind(context.Context, string, string) (workspaces.Record, error) {
+func (f *executionWorkspaceFixture) Get(context.Context, string, string) (workspaces.Record, error) {
+	return f.record, nil
+}
+func (f *executionWorkspaceFixture) Configuration(context.Context, string) (workspacefs.ConfigurationRecord, error) {
+	return workspacefs.ConfigurationRecord{}, workspaces.ErrNotFound
+}
+func (f *executionWorkspaceFixture) Bind(context.Context, string, string, string, uint32) (workspaces.Record, error) {
 	f.binds++
 	return f.record, nil
 }
-func (f *executionWorkspaceFixture) ControlForConfiguration(workspacefs.Configuration) (workspacefs.Control, error) {
+func (f *executionWorkspaceFixture) ControlForConfiguration(workspacefs.ConfigurationRecord) (workspacefs.Control, error) {
 	return f, nil
 }
 func (f *executionWorkspaceFixture) Declaration() workspacefs.Declaration {
 	return workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory}
 }
-func (f *executionWorkspaceFixture) Create(context.Context, workspacefs.Reference) (workspacefs.Attachment, error) {
+func (f *executionWorkspaceFixture) Create(context.Context, workspacefs.Reference, uint32) (workspacefs.Attachment, error) {
 	f.creates++
 	return workspacefs.Attachment{Reference: f.record.Reference, ConfigurationID: f.record.Configuration.ID, Kind: workspacefs.AttachmentHostDirectory, Native: []byte(`{}`)}, f.failure
 }
@@ -66,15 +73,15 @@ func (f *executionWorkspaceFixture) MarkDeleted(context.Context, workspacefs.Ref
 
 type workspaceControls struct{ fixture *executionWorkspaceFixture }
 
-func (c workspaceControls) Normalize(configuration workspacefs.Configuration) (workspacefs.Configuration, error) {
-	return configuration, nil
+func (c workspaceControls) Normalize(configuration workspacefs.Configuration, _ json.RawMessage) (workspacefs.ConfigurationRecord, error) {
+	return workspacefs.ConfigurationRecord{Configuration: configuration}, nil
 }
 
-func (c workspaceControls) Control(config workspacefs.Configuration) (workspacefs.Control, error) {
+func (c workspaceControls) Control(config workspacefs.ConfigurationRecord) (workspacefs.Control, error) {
 	return c.fixture.ControlForConfiguration(config)
 }
 func newExecutionWorkspaceFixture() *executionWorkspaceFixture {
-	return &executionWorkspaceFixture{record: workspaces.Record{Reference: workspacefs.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ObjectID: uuid.NewString()}, Configuration: workspacefs.Configuration{ID: uuid.NewString(), Adapter: "fixture", Parameters: []byte(`{}`)}, State: workspaces.Creating}}
+	return &executionWorkspaceFixture{record: workspaces.Record{Reference: workspacefs.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ObjectID: uuid.NewString()}, Configuration: workspacefs.ConfigurationRecord{Configuration: workspacefs.Configuration{ID: uuid.NewString(), Adapter: "fixture", Parameters: []byte(`{}`)}}, State: workspaces.Creating}}
 }
 
 func TestRuntimeWorkspaceConvergesBeforeComputeReservation(t *testing.T) {
@@ -125,10 +132,10 @@ func TestRuntimeWorkspaceScanRunsWithoutSandboxOrNodes(t *testing.T) {
 	}
 }
 
-func (f *executionWorkspaceFixture) ActiveConfiguration(context.Context) (workspacefs.Configuration, error) {
+func (f *executionWorkspaceFixture) ActiveConfiguration(context.Context) (workspacefs.ConfigurationRecord, error) {
 	return f.record.Configuration, nil
 }
-func (f *executionWorkspaceFixture) SelectConfiguration(_ context.Context, c workspacefs.Configuration) error {
+func (f *executionWorkspaceFixture) SelectConfiguration(_ context.Context, c workspacefs.ConfigurationRecord, _ uint32) error {
 	f.record.Configuration = c
 	return nil
 }
@@ -174,9 +181,9 @@ func TestConfigureWorkspaceBeforeSandboxSetup(t *testing.T) {
 	}
 	defer m.stop()
 	worker := &Worker{runtimes: m}
-	next := f.record.Configuration
+	next := f.record.Configuration.Configuration
 	next.ID = uuid.NewString()
-	got, err := worker.Configure(t.Context(), next)
+	got, err := worker.Configure(t.Context(), workspaces.SelectionInput{Selection: workspaces.Selection{Configuration: next}})
 	if err != nil || got.ID != next.ID {
 		t.Fatal("filesystem selection requires sandbox setup", err)
 	}

@@ -28,7 +28,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
 
 // testExecutorURL is the daemon URL self-hosted Sessions report unless a test
@@ -277,11 +277,11 @@ func (s strictStandIn) CancelSandboxReset(context.Context, uint64) (deployment.V
 	return deployment.View{}, nil
 }
 
-func (s strictStandIn) Configuration(context.Context) (workspacefs.Configuration, error) {
-	s.unexpected("WorkspaceStorage.Configuration")
-	return workspacefs.Configuration{}, nil
+func (s strictStandIn) Selection(context.Context) (workspaces.Selection, error) {
+	s.unexpected("WorkspaceStorage.Selection")
+	return workspaces.Selection{}, nil
 }
-func (s strictStandIn) Configure(context.Context, workspacefs.Configuration) (workspacefs.Configuration, error) {
+func (s strictStandIn) Configure(context.Context, workspaces.SelectionInput) (workspaces.Selection, error) {
 	s.unexpected("WorkspaceStorage.Configure")
-	return workspacefs.Configuration{}, nil
+	return workspaces.Selection{}, nil
 }

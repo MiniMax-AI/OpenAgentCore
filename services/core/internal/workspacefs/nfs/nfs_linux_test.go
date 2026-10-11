@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func local(t *testing.T) (*Adapter, *os.Root, workspacefs.Reference) {
+func local(t *testing.T) (*Filesystem, *os.Root, workspacefs.Reference) {
 	t.Helper()
 	dir := t.TempDir()
 	r, err := os.OpenRoot(dir)
@@ -25,14 +25,14 @@ func local(t *testing.T) (*Adapter, *os.Root, workspacefs.Reference) {
 	if err = r.Mkdir("objects", 0700); err != nil {
 		t.Fatal(err)
 	}
-	return &Adapter{parameters: parameters{UID: uint32(os.Geteuid())}}, r, workspacefs.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ObjectID: uuid.NewString()}
+	return &Filesystem{parameters: parameters{UID: uint32(os.Geteuid())}}, r, workspacefs.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ObjectID: uuid.NewString()}
 }
 func TestLifecycleConcurrentReplay(t *testing.T) {
 	a, r, ref := local(t)
 	var wg sync.WaitGroup
 	errs := make(chan error, 16)
 	for range 16 {
-		wg.Go(func() { errs <- a.create(r, ref) })
+		wg.Go(func() { errs <- a.create(r, ref, nil) })
 	}
 	wg.Wait()
 	close(errs)
@@ -45,7 +45,7 @@ func TestLifecycleConcurrentReplay(t *testing.T) {
 	if err := write(r, data, []byte("retain")); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.create(r, ref); err != nil {
+	if err := a.create(r, ref, nil); err != nil {
 		t.Fatal(err)
 	}
 	if raw, err := r.ReadFile(data); err != nil || string(raw) != "retain" {
@@ -62,7 +62,7 @@ func TestLifecycleConcurrentReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := a.create(r, ref); !errors.Is(err, workspacefs.ErrNotFound) {
+	if err := a.create(r, ref, nil); !errors.Is(err, workspacefs.ErrNotFound) {
 		t.Fatalf("retired create: %v", err)
 	}
 	if err := live(r, ref); !errors.Is(err, workspacefs.ErrNotFound) {
@@ -74,7 +74,7 @@ func TestLifecycleConcurrentReplay(t *testing.T) {
 }
 func TestForeignIdentityNeverDeletes(t *testing.T) {
 	a, r, ref := local(t)
-	if err := a.create(r, ref); err != nil {
+	if err := a.create(r, ref, nil); err != nil {
 		t.Fatal(err)
 	}
 	other := ref
@@ -88,7 +88,7 @@ func TestForeignIdentityNeverDeletes(t *testing.T) {
 }
 func TestMissingMarkerDoesNotDeleteData(t *testing.T) {
 	a, r, ref := local(t)
-	if err := a.create(r, ref); err != nil {
+	if err := a.create(r, ref, nil); err != nil {
 		t.Fatal(err)
 	}
 	dir := path.Join(object(ref), "live")
@@ -106,7 +106,7 @@ func TestMissingMarkerDoesNotDeleteData(t *testing.T) {
 	}
 }
 func TestCheckRejectsLocalFilesystem(t *testing.T) {
-	a := &Adapter{parameters: parameters{Root: t.TempDir(), UID: 65532}}
+	a := &Filesystem{parameters: parameters{Root: t.TempDir(), UID: 65532}}
 	if err := a.Check(context.Background()); !errors.Is(err, workspacefs.ErrUnavailable) {
 		t.Fatalf("local path accepted: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestCreateDoesNotReplaceUnownedLive(t *testing.T) {
 	if err := r.Mkdir(path.Join(object(ref), "live"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.create(r, ref); !errors.Is(err, workspacefs.ErrOwnership) {
+	if err := a.create(r, ref, nil); !errors.Is(err, workspacefs.ErrOwnership) {
 		t.Fatalf("unowned live: %v", err)
 	}
 }
@@ -151,7 +151,51 @@ func TestObserveAbsentObjectsDoesNotPrepareNamespace(t *testing.T) {
 	if err := a.delete(r, ref); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.create(r, ref); !errors.Is(err, workspacefs.ErrNotFound) {
+	if err := a.create(r, ref, nil); !errors.Is(err, workspacefs.ErrNotFound) {
 		t.Fatalf("deleted identity reused: %v", err)
+	}
+}
+
+func TestQuotaBoundPrecedesStageAndEveryRetry(t *testing.T) {
+	a, r, ref := local(t)
+	calls := 0
+	failure := workspacefs.ErrUnconfirmed
+	bound := func() error {
+		calls++
+		entries, err := os.ReadDir(path.Join(r.Name(), object(ref), "staging"))
+		if err != nil || len(entries) != 0 {
+			t.Fatalf("bound after a stage was created: %v %v", entries, err)
+		}
+		if _, err := r.Lstat(path.Join(object(ref), "live")); err == nil && calls == 1 {
+			t.Fatal("bound after publication")
+		}
+		return failure
+	}
+	if err := a.create(r, ref, bound); !errors.Is(err, workspacefs.ErrUnconfirmed) || calls != 1 {
+		t.Fatalf("unbounded creation continued: %v", err)
+	}
+	if _, err := r.Lstat(path.Join(object(ref), "live")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("published without a verified bound", err)
+	}
+	failure = nil
+	if err := a.create(r, ref, bound); err != nil || calls != 2 {
+		t.Fatal(err)
+	}
+	if err := a.create(r, ref, bound); err != nil || calls != 3 {
+		t.Fatal("published object retry skipped verification", err)
+	}
+	if err := a.delete(r, ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.create(r, ref, bound); !errors.Is(err, workspacefs.ErrNotFound) || calls != 3 {
+		t.Fatal("deleted object reached the quota server", err)
+	}
+}
+
+func TestCreateRejectsCapacityWithoutQuota(t *testing.T) {
+	a := &Filesystem{parameters: parameters{Root: t.TempDir(), UID: 65532}}
+	ref := workspacefs.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), ObjectID: uuid.NewString()}
+	if _, err := a.Create(context.Background(), ref, 1024); !errors.Is(err, workspacefs.ErrUnsupported) {
+		t.Fatal(err)
 	}
 }

@@ -10,58 +10,46 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs/nfs"
 )
 
-type adapter interface {
-	workspacefs.Control
-	workspacefs.Resolver
+// Registry uses the same registrations in Core and on nodes. Each registration
+// implements every workspacefs.Adapter role; Core constructs Control from a
+// credentialed record and nodes construct Resolver from public configuration.
+type Registry struct {
+	entries map[string]workspacefs.Adapter
 }
-
-type registration struct {
-	normalize func(json.RawMessage) (json.RawMessage, error)
-	open      func(workspacefs.Configuration) (adapter, error)
-}
-
-// Registry uses the same registrations for control and node resolution. A
-// registration supplies both protocol roles, never an optional side interface.
-type Registry struct{ entries map[string]registration }
 
 func New() *Registry {
-	return &Registry{entries: map[string]registration{
-		nfs.Name: {
-			normalize: nfs.CanonicalParameters,
-			open: func(c workspacefs.Configuration) (adapter, error) {
-				return nfs.New(c)
-			},
-		},
-	}}
+	return &Registry{entries: map[string]workspacefs.Adapter{nfs.Name: nfs.Registration{}}}
 }
 
-func (r *Registry) lookup(name string) (registration, error) {
+func (r *Registry) lookup(name string) (workspacefs.Adapter, error) {
 	if r != nil {
 		if value, ok := r.entries[name]; ok {
 			return value, nil
 		}
 	}
-	return registration{}, fmt.Errorf("%w: filesystem adapter is not registered", workspacefs.ErrUnsupported)
+	return nil, fmt.Errorf("%w: filesystem adapter is not registered", workspacefs.ErrUnsupported)
 }
 
-func (r *Registry) Normalize(c workspacefs.Configuration) (workspacefs.Configuration, error) {
+// Normalize canonicalizes a candidate configuration and encodes its credential input.
+func (r *Registry) Normalize(c workspacefs.Configuration, credential json.RawMessage) (workspacefs.ConfigurationRecord, error) {
 	if err := c.Validate(); err != nil {
-		return workspacefs.Configuration{}, err
+		return workspacefs.ConfigurationRecord{}, err
 	}
 	a, err := r.lookup(c.Adapter)
 	if err != nil {
-		return workspacefs.Configuration{}, err
+		return workspacefs.ConfigurationRecord{}, err
 	}
-	c.Parameters, err = a.normalize(c.Parameters)
+	record := workspacefs.ConfigurationRecord{Configuration: c}
+	record.Parameters, record.Credential, err = a.Normalize(c.Parameters, credential)
 	if err != nil {
-		return workspacefs.Configuration{}, err
+		return workspacefs.ConfigurationRecord{}, err
 	}
-	return c, nil
+	return record, nil
 }
 
-// Control constructs an adapter from its canonical retained configuration.
+// Control constructs an adapter from its canonical retained record.
 // Construction performs no filesystem operation; Check owns live qualification.
-func (r *Registry) Control(c workspacefs.Configuration) (workspacefs.Control, error) {
+func (r *Registry) Control(c workspacefs.ConfigurationRecord) (workspacefs.Control, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
@@ -69,9 +57,10 @@ func (r *Registry) Control(c workspacefs.Configuration) (workspacefs.Control, er
 	if err != nil {
 		return nil, err
 	}
-	return a.open(c)
+	return a.Control(c)
 }
 
+// Resolve validates a transient binding with the public configuration only.
 func (r *Registry) Resolve(ctx context.Context, binding workspacefs.Binding) (workspacefs.Directory, error) {
 	if err := binding.Validate(); err != nil {
 		return workspacefs.Directory{}, err
@@ -80,9 +69,9 @@ func (r *Registry) Resolve(ctx context.Context, binding workspacefs.Binding) (wo
 	if err != nil {
 		return workspacefs.Directory{}, err
 	}
-	instance, err := a.open(binding.Configuration)
+	resolver, err := a.Resolver(binding.Configuration)
 	if err != nil {
 		return workspacefs.Directory{}, err
 	}
-	return instance.Resolve(ctx, binding)
+	return resolver.Resolve(ctx, binding)
 }

@@ -1,0 +1,16 @@
+{
+  "binding_mismatch": "ownership",
+  "enforcement_off": "unavailable",
+  "foreign_project": "ownership",
+  "identity_mismatch": "ownership",
+  "invalid_request": "invalid",
+  "journal_mismatch": "unavailable",
+  "nonempty_object": "ownership",
+  "object_deleted": "not_found",
+  "object_missing": "unavailable",
+  "object_replaced": "ownership",
+  "operation_failed": "unavailable",
+  "quota_mismatch": "ownership",
+  "range_exhausted": "unavailable",
+  "unsafe_path": "ownership"
+}

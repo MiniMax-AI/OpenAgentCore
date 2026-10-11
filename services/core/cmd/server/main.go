@@ -153,7 +153,7 @@ func run(config processconfig.Config) error {
 	}
 	sandboxProviders := providers.Builtin()
 	workspaceProviders := workspaceproviders.New()
-	workspaceStore := workspacepg.New(units)
+	workspaceStore := workspacepg.New(units, credentialKey, config.InstallationID)
 	// The placement rules are built once: the provider declarations and the
 	// public URL never change while Core runs.
 	placementRules, err := placement.NewRules(sandboxProviders, config.PublicOrigin.String())
@@ -245,7 +245,7 @@ func run(config processconfig.Config) error {
 	}
 	// From this call on the Worker closes the lease, even when it fails to start.
 	worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{
-		Workspaces: workspaces.NewExecution(workspaceStore, workspacepg.NewExecution(lease), workspaceProviders, lease),
+		Workspaces: workspaces.NewExecution(workspaceStore, workspacepg.NewExecution(lease, credentialKey, config.InstallationID), workspaceProviders, lease),
 		Lease:      lease,
 		Deployment: deploymentExecution,
 		Sessions:   sessionExecution,

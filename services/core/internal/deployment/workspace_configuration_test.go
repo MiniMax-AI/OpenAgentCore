@@ -43,8 +43,13 @@ func TestWorkspaceConfigurationRejectsChangedExternalReceiptAndReadFailure(t *te
 	if err := service.ValidateWorkspaceConfiguration(t.Context(), declaration); err != nil {
 		t.Fatal(err)
 	}
+	quota := declaration
+	quota.CapacityQuota = true
+	if err := service.ValidateWorkspaceConfiguration(t.Context(), quota); err != nil {
+		t.Fatal("quota semantics change refused", err)
+	}
 	changed := declaration
-	changed.CapacityQuota = true
+	changed.UserXAttr = false
 	if err := service.ValidateWorkspaceConfiguration(t.Context(), changed); !errors.Is(err, workspacefs.ErrUnsupported) {
 		t.Fatal("changed receipt accepted", err)
 	}

@@ -305,12 +305,11 @@ func (s *Service) ValidateWorkspaceConfiguration(ctx context.Context, declaratio
 	if adapter.Policy.Workspace == nil {
 		return workspacefs.ErrUnsupported
 	}
-	capacity := uint32(0)
-	if setup.Specification.Workspace != nil {
-		if *setup.Specification.Workspace != declaration {
-			return workspacefs.ErrUnsupported
-		}
-		capacity = setup.Specification.Resources.EnvironmentDiskMiB
+	// An external deployment may change only quota semantics: workspaces keep
+	// their own admitted capacity, and new ones are validated against the
+	// selected declaration until the deployment's capacity request matches it.
+	if current := setup.Specification.Workspace; current != nil && (current.Attachment != declaration.Attachment || current.UserXAttr != declaration.UserXAttr) {
+		return workspacefs.ErrUnsupported
 	}
-	return workspacefs.ValidateCombination(*adapter.Policy.Workspace, declaration, capacity)
+	return workspacefs.ValidateCombination(*adapter.Policy.Workspace, declaration, 0)
 }

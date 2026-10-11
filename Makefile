@@ -83,6 +83,7 @@ check-core-packages:
 	go test $$packages -count=1 -timeout=20m
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/core/tests -p 'official_diagnostics_test.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/e2b/managed_init_test.py
+	PYTHONDONTWRITEBYTECODE=1 python3 services/core/internal/workspacefs/nfs/quota/helper_test.py
 
 # Integration tests run serially and include bounded lifecycle waits that together exceed Go's 10m default.
 # OAC_CORE_INTEGRATION_SHARD=INDEX/TOTAL runs one deterministic partition; unset runs them all.

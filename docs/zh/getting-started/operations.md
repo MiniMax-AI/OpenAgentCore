@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 591196d61ed9946435d07afcbbcc2f53d64b9db0cf6b4806ddfb0f85a16974ba
+source_hash: 8ce67b66748a8414ac3ee954b07e379b7d3a0a37790bb162c000c9ae556842fc
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -130,6 +130,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 - Docker 卷 `<project>_data`，包括 `database/`、`secrets/` 和 `state/`。其中保存 Project、密钥摘要、节点、默认模型、加密凭据和执行历史（含大对象）。`secrets/core/credential.key` 必须与匹配的数据库一起保留，否则存储的凭据无法解密。
 - 安装目录，包括 `.env`、`compose.yaml`、Compose 覆盖文件和管理命令。
 - 当前或保留对象所使用的每个独立工作区命名空间，即使其位于安装卷之外。备份整个根目录，包括 `.oac-storage-root`、对象标识、staging、live 数据、trash 和删除标记。保留数值所有者、权限、链接及扩展属性，包括全部 `user.*` 属性。仅复制 `live/data` 会丢失生命周期证据，并可能使已删除标识复活。[工作区存储](../workspace-provider.md#kernel-nfs-adapter)负责定义布局与所有权要求。
+- 对于[配额模式](../workspace-provider.md#quota-mode)命名空间，将承载导出的整个 XFS 文件系统作为一份块级副本备份：存储或 LVM 快照，或已冻结或已卸载设备的镜像。只有这样的副本能保持 project ID、配额限制、inode 标识、文件系统 UUID 和 `oac-workspace-quota` 日志库的一致。文件级复制、`tar`、`rsync` 或 `xfsdump` 会丢失这些信息；此时该命令会拒绝恢复后的对象，而不是在无上限状态下提供它们。
 - 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其 Provider 存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
 
 - 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、归档、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
@@ -139,7 +140,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 1. 在安装入口阻止新应用 input、实时文件访问和管理变更。等待活动执行、初始化、文件操作和原生清理完成。停止其他能够写入同一文件系统的应用或主机进程。
 2. 保持 Core 和节点可用，确认每个所属写入方均已停止，且所有 Create、Kill、快照清理及文件系统变更均已结算。节点离线、超时、实例缺失或服务停止均不足以证明这一点。确认挂起会停止源计算资源，但保留的检查点也必须纳入备份。最简单的冷恢复基线是等待符合条件的保留 Session 完成检查点到期清理、allocation 已释放，再按[冷替换契约](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)保留文件系统对象及原生历史。
 3. 停止 Core 和 Web，再停止节点控制服务，以防止新的生命周期操作。重新核实精确的原生资源，保持所有写入方停止，直到备份各部分全部完成。**停止 Core 或节点服务不会停止其沙箱。** 节点服务使用 `KillMode=process`；microVM 及其他由 Provider 管理的计算资源可能继续独立运行。
-4. 使用存储平台支持的流程将已停止写入的文件系统中的待写数据落盘，并创建其快照或导出。在同一窗口内导出 Core 数据卷、安装目录及所需的节点状态和 Provider 存储。复制 PostgreSQL 的 `database/` 文件前必须停止 PostgreSQL。一起记录版本、备份时间、组成清单和校验值，并将备份保存在被备份安装之外。
+4. 使用存储平台支持的流程将已停止写入的文件系统中的待写数据落盘，并创建其快照或导出。对于配额模式，在复制其设备期间使用 `xfs_freeze -f` 冻结 XFS 文件系统或将其卸载，完成后解冻。在同一窗口内导出 Core 数据卷、安装目录及所需的节点状态和 Provider 存储。复制 PostgreSQL 的 `database/` 文件前必须停止 PostgreSQL。一起记录版本、备份时间、组成清单和校验值，并将备份保存在被备份安装之外。
 5. 所有复制完成后才恢复服务。先恢复存储，再启动 Core 和节点，验证就绪后开放入口。不要通过重放不确定的原生操作来让备份通过。
 
 当前没有一条命令即可完成且无损的维护排空流程。归档和部署重置会改变 Session 生命周期状态，不能替代保持续接能力的备份暂停。任何写入方或变更仍然未知时，应将备份保留为未完成状态，先解决相应归属。
@@ -157,7 +158,7 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 
 恢复期间保持应用入口及 Core/节点服务关闭。暴露恢复后的文件系统前，必须隔离或关闭每一个旧写入方；旧主机不可达不代表已隔离。演练必须使用隔离的安装和存储副本，不能连接原节点，也不能共享其可写命名空间。
 
-启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和 Provider 存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
+启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和 Provider 存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
 
 已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、Provider 存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
 

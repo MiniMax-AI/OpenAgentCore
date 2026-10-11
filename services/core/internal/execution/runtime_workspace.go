@@ -8,26 +8,26 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
 
-func (w *Worker) Configuration(ctx context.Context) (workspacefs.Configuration, error) {
+func (w *Worker) Selection(ctx context.Context) (workspaces.Selection, error) {
 	if w.runtimes.workspaces == nil {
-		return workspacefs.Configuration{}, workspaces.ErrNotConfigured
+		return workspaces.Selection{}, workspaces.ErrNotConfigured
 	}
-	return w.runtimes.workspaces.Configuration(ctx)
+	return w.runtimes.workspaces.Selection(ctx)
 }
 
-func (w *Worker) Configure(ctx context.Context, configuration workspacefs.Configuration) (workspacefs.Configuration, error) {
+func (w *Worker) Configure(ctx context.Context, input workspaces.SelectionInput) (workspaces.Selection, error) {
 	m := w.runtimes
 	if m.workspaces == nil {
-		return workspacefs.Configuration{}, workspaces.ErrNotConfigured
+		return workspaces.Selection{}, workspaces.ErrNotConfigured
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	unlock, err := m.lockMutation(ctx)
 	if err != nil {
-		return workspacefs.Configuration{}, err
+		return workspaces.Selection{}, err
 	}
 	defer unlock()
-	return m.workspaces.Configure(ctx, configuration, func(declaration workspacefs.Declaration) error {
+	return m.workspaces.Configure(ctx, input, func(declaration workspacefs.Declaration) error {
 		return m.deploymentService.ValidateWorkspaceConfiguration(ctx, declaration)
 	})
 }

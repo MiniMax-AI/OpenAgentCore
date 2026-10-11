@@ -43,7 +43,7 @@ func (q *Queries) ClearActiveWorkspaceConfiguration(ctx context.Context) error {
 }
 
 const getActiveWorkspaceConfiguration = `-- name: GetActiveWorkspaceConfiguration :one
-SELECT id, adapter, parameters, active FROM workspace_fs_configurations WHERE active
+SELECT id, adapter, parameters, active, credential FROM workspace_fs_configurations WHERE active
 `
 
 func (q *Queries) GetActiveWorkspaceConfiguration(ctx context.Context) (WorkspaceFsConfiguration, error) {
@@ -54,12 +54,13 @@ func (q *Queries) GetActiveWorkspaceConfiguration(ctx context.Context) (Workspac
 		&i.Adapter,
 		&i.Parameters,
 		&i.Active,
+		&i.Credential,
 	)
 	return i, err
 }
 
 const getEnvironmentWorkspace = `-- name: GetEnvironmentWorkspace :one
-SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, c.id, c.adapter, c.parameters, c.active, s.tenant_id
+SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, w.capacity_mib, c.id, c.adapter, c.parameters, c.active, c.credential, s.tenant_id
 FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
@@ -87,33 +88,82 @@ func (q *Queries) GetEnvironmentWorkspace(ctx context.Context, arg GetEnvironmen
 		&i.EnvironmentWorkspace.ConfigurationID,
 		&i.EnvironmentWorkspace.State,
 		&i.EnvironmentWorkspace.Attachment,
+		&i.EnvironmentWorkspace.CapacityMib,
 		&i.WorkspaceFsConfiguration.ID,
 		&i.WorkspaceFsConfiguration.Adapter,
 		&i.WorkspaceFsConfiguration.Parameters,
 		&i.WorkspaceFsConfiguration.Active,
+		&i.WorkspaceFsConfiguration.Credential,
 		&i.TenantID,
 	)
 	return i, err
 }
 
+const getWorkspaceConfiguration = `-- name: GetWorkspaceConfiguration :one
+SELECT id, adapter, parameters, active, credential FROM workspace_fs_configurations WHERE id = $1
+`
+
+func (q *Queries) GetWorkspaceConfiguration(ctx context.Context, id pgtype.UUID) (WorkspaceFsConfiguration, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceConfiguration, id)
+	var i WorkspaceFsConfiguration
+	err := row.Scan(
+		&i.ID,
+		&i.Adapter,
+		&i.Parameters,
+		&i.Active,
+		&i.Credential,
+	)
+	return i, err
+}
+
+const getWorkspaceSelection = `-- name: GetWorkspaceSelection :one
+SELECT c.id, c.adapter, c.parameters, c.active, c.credential, a.tenant_capacity_mib
+FROM workspace_storage_admission a JOIN workspace_fs_configurations c ON c.active
+`
+
+type GetWorkspaceSelectionRow struct {
+	WorkspaceFsConfiguration WorkspaceFsConfiguration `json:"workspace_fs_configuration"`
+	TenantCapacityMib        int64                    `json:"tenant_capacity_mib"`
+}
+
+func (q *Queries) GetWorkspaceSelection(ctx context.Context) (GetWorkspaceSelectionRow, error) {
+	row := q.db.QueryRow(ctx, getWorkspaceSelection)
+	var i GetWorkspaceSelectionRow
+	err := row.Scan(
+		&i.WorkspaceFsConfiguration.ID,
+		&i.WorkspaceFsConfiguration.Adapter,
+		&i.WorkspaceFsConfiguration.Parameters,
+		&i.WorkspaceFsConfiguration.Active,
+		&i.WorkspaceFsConfiguration.Credential,
+		&i.TenantCapacityMib,
+	)
+	return i, err
+}
+
 const insertEnvironmentWorkspace = `-- name: InsertEnvironmentWorkspace :exec
-INSERT INTO environment_workspaces (object_id, environment_id, configuration_id)
-VALUES ($1, $2, $3)
+INSERT INTO environment_workspaces (object_id, environment_id, configuration_id, capacity_mib)
+VALUES ($1, $2, $3, $4)
 `
 
 type InsertEnvironmentWorkspaceParams struct {
 	ObjectID        pgtype.UUID `json:"object_id"`
 	EnvironmentID   pgtype.UUID `json:"environment_id"`
 	ConfigurationID pgtype.UUID `json:"configuration_id"`
+	CapacityMib     int64       `json:"capacity_mib"`
 }
 
 func (q *Queries) InsertEnvironmentWorkspace(ctx context.Context, arg InsertEnvironmentWorkspaceParams) error {
-	_, err := q.db.Exec(ctx, insertEnvironmentWorkspace, arg.ObjectID, arg.EnvironmentID, arg.ConfigurationID)
+	_, err := q.db.Exec(ctx, insertEnvironmentWorkspace,
+		arg.ObjectID,
+		arg.EnvironmentID,
+		arg.ConfigurationID,
+		arg.CapacityMib,
+	)
 	return err
 }
 
 const insertWorkspaceConfiguration = `-- name: InsertWorkspaceConfiguration :exec
-INSERT INTO workspace_fs_configurations (id, adapter, parameters) VALUES ($1, $2, $3)
+INSERT INTO workspace_fs_configurations (id, adapter, parameters, credential) VALUES ($1, $2, $3, $4)
 ON CONFLICT (id) DO NOTHING
 `
 
@@ -121,15 +171,21 @@ type InsertWorkspaceConfigurationParams struct {
 	ID         pgtype.UUID `json:"id"`
 	Adapter    string      `json:"adapter"`
 	Parameters []byte      `json:"parameters"`
+	Credential []byte      `json:"credential"`
 }
 
 func (q *Queries) InsertWorkspaceConfiguration(ctx context.Context, arg InsertWorkspaceConfigurationParams) error {
-	_, err := q.db.Exec(ctx, insertWorkspaceConfiguration, arg.ID, arg.Adapter, arg.Parameters)
+	_, err := q.db.Exec(ctx, insertWorkspaceConfiguration,
+		arg.ID,
+		arg.Adapter,
+		arg.Parameters,
+		arg.Credential,
+	)
 	return err
 }
 
 const listWorkspaceDeletionCandidates = `-- name: ListWorkspaceDeletionCandidates :many
-SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, c.id, c.adapter, c.parameters, c.active, s.tenant_id
+SELECT w.object_id, w.environment_id, w.configuration_id, w.state, w.attachment, w.capacity_mib, c.id, c.adapter, c.parameters, c.active, c.credential, s.tenant_id
 FROM environment_workspaces w
 JOIN workspace_fs_configurations c ON c.id = w.configuration_id
 JOIN environments e ON e.id = w.environment_id
@@ -163,10 +219,12 @@ func (q *Queries) ListWorkspaceDeletionCandidates(ctx context.Context, objectID 
 			&i.EnvironmentWorkspace.ConfigurationID,
 			&i.EnvironmentWorkspace.State,
 			&i.EnvironmentWorkspace.Attachment,
+			&i.EnvironmentWorkspace.CapacityMib,
 			&i.WorkspaceFsConfiguration.ID,
 			&i.WorkspaceFsConfiguration.Adapter,
 			&i.WorkspaceFsConfiguration.Parameters,
 			&i.WorkspaceFsConfiguration.Active,
+			&i.WorkspaceFsConfiguration.Credential,
 			&i.TenantID,
 		); err != nil {
 			return nil, err
@@ -177,6 +235,17 @@ func (q *Queries) ListWorkspaceDeletionCandidates(ctx context.Context, objectID 
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockWorkspaceAdmission = `-- name: LockWorkspaceAdmission :one
+SELECT tenant_capacity_mib FROM workspace_storage_admission FOR SHARE
+`
+
+func (q *Queries) LockWorkspaceAdmission(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, lockWorkspaceAdmission)
+	var tenant_capacity_mib int64
+	err := row.Scan(&tenant_capacity_mib)
+	return tenant_capacity_mib, err
 }
 
 const lockWorkspaceConfigurations = `-- name: LockWorkspaceConfigurations :exec
@@ -203,6 +272,15 @@ func (q *Queries) LockWorkspaceSession(ctx context.Context, arg LockWorkspaceSes
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const lockWorkspaceTenant = `-- name: LockWorkspaceTenant :exec
+SELECT pg_advisory_xact_lock(hashtext('oac.workspace-tenant-capacity'), hashtext($1::uuid::text))
+`
+
+func (q *Queries) LockWorkspaceTenant(ctx context.Context, tenantID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockWorkspaceTenant, tenantID)
+	return err
 }
 
 const markWorkspaceDeleted = `-- name: MarkWorkspaceDeleted :execrows
@@ -237,7 +315,7 @@ func (q *Queries) MarkWorkspaceReady(ctx context.Context, arg MarkWorkspaceReady
 }
 
 const matchWorkspaceConfiguration = `-- name: MatchWorkspaceConfiguration :one
-SELECT (adapter = $1 AND parameters = $2::jsonb)::boolean AS matches
+SELECT (adapter = $1 AND parameters = $2::jsonb)::boolean AS matches, credential
 FROM workspace_fs_configurations WHERE id = $3
 `
 
@@ -247,11 +325,46 @@ type MatchWorkspaceConfigurationParams struct {
 	ID         pgtype.UUID `json:"id"`
 }
 
-func (q *Queries) MatchWorkspaceConfiguration(ctx context.Context, arg MatchWorkspaceConfigurationParams) (bool, error) {
+type MatchWorkspaceConfigurationRow struct {
+	Matches    bool   `json:"matches"`
+	Credential []byte `json:"credential"`
+}
+
+func (q *Queries) MatchWorkspaceConfiguration(ctx context.Context, arg MatchWorkspaceConfigurationParams) (MatchWorkspaceConfigurationRow, error) {
 	row := q.db.QueryRow(ctx, matchWorkspaceConfiguration, arg.Adapter, arg.Parameters, arg.ID)
-	var matches bool
-	err := row.Scan(&matches)
-	return matches, err
+	var i MatchWorkspaceConfigurationRow
+	err := row.Scan(&i.Matches, &i.Credential)
+	return i, err
+}
+
+const setWorkspaceTenantCapacity = `-- name: SetWorkspaceTenantCapacity :exec
+UPDATE workspace_storage_admission SET tenant_capacity_mib = $1
+`
+
+func (q *Queries) SetWorkspaceTenantCapacity(ctx context.Context, tenantCapacityMib int64) error {
+	_, err := q.db.Exec(ctx, setWorkspaceTenantCapacity, tenantCapacityMib)
+	return err
+}
+
+const tenantWorkspaceCapacity = `-- name: TenantWorkspaceCapacity :one
+SELECT COALESCE(SUM(w.capacity_mib), 0)::bigint AS committed_mib,
+       COALESCE(bool_or(w.capacity_mib = 0), false)::boolean AS unbounded
+FROM environment_workspaces w
+JOIN environments e ON e.id = w.environment_id
+JOIN sessions s ON s.id = e.session_id
+WHERE s.tenant_id = $1 AND w.state <> 'deleted'
+`
+
+type TenantWorkspaceCapacityRow struct {
+	CommittedMib int64 `json:"committed_mib"`
+	Unbounded    bool  `json:"unbounded"`
+}
+
+func (q *Queries) TenantWorkspaceCapacity(ctx context.Context, tenantID pgtype.UUID) (TenantWorkspaceCapacityRow, error) {
+	row := q.db.QueryRow(ctx, tenantWorkspaceCapacity, tenantID)
+	var i TenantWorkspaceCapacityRow
+	err := row.Scan(&i.CommittedMib, &i.Unbounded)
+	return i, err
 }
 
 const workspaceComputeReleased = `-- name: WorkspaceComputeReleased :one

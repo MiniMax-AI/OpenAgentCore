@@ -1,7 +1,7 @@
 ---
 title: 工作区文件系统 Provider
 source: docs/workspace-provider.md
-source_hash: 21eb220ac59a477a8e799a6de20e01b339536901e8c9685695d2ac498b1b7bdb
+source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 ---
 
 独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有 Sandbox Provider 或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[Sandbox Provider](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
@@ -10,7 +10,9 @@ source_hash: 21eb220ac59a477a8e799a6de20e01b339536901e8c9685695d2ac498b1b7bdb
 
 `Reference` 包含 `TenantID`、`EnvironmentID` 和 `ObjectID`，均为不可变、规范小写且非零的 UUID。Core 在创建前持久化引用。对象标识永不复用，包括删除后或变更结果尚未确认时。适配器必须在暴露或删除对象前验证完整的归属元组。
 
-`Configuration` 是 Core 数据库中的不可变记录，具有规范 UUID `ID`、`Adapter` 标识和由适配器定义的 JSON 对象 `Parameters`。数据库是其唯一编写来源；更改配置须创建新的标识。Core 转发参数而不解释原生路径。现有对象始终绑定其原始配置。
+`Configuration` 是 Core 数据库中的不可变记录，具有规范 UUID `ID`、`Adapter` 标识和由适配器定义的 JSON 对象 `Parameters`。数据库是其唯一编写来源；更改配置须创建新的标识。Core 转发参数而不解释原生路径。现有对象始终绑定其原始配置。参数是公开的：会发送到节点并出现在管理员响应中。
+
+`ConfigurationRecord` 在配置之上增加由适配器编码的私有 `Credential`；参数不需要凭据时为空。凭据属于不可变配置。Core 使用安装的凭据加密密钥对其加密，并绑定安装 ID 与配置 ID，仅在 Core 中构造 `Control` 时解密。凭据绝不出现在 `Binding`、管理员响应、审计记录或日志中，节点也绝不会收到它。
 
 `Attachment` 将适配器签发的 JSON 对象 `Native` 绑定到完整引用、配置 ID 和挂载类型。它是内部归属凭证，不是应用提供的主机路径。共享验证检查信封结构以及预期引用和配置的匹配；所选适配器还必须验证参数、凭证及原生归属。结构有效本身绝不授权文件系统访问。公开 Session 载荷不得提供挂载凭证、配置参数或解析后的主机目录。
 
@@ -18,13 +20,15 @@ source_hash: 21eb220ac59a477a8e799a6de20e01b339536901e8c9685695d2ac498b1b7bdb
 
 ## 操作与结果 {#operations-and-outcomes}
 
+适配器注册一个 `Adapter` 实现，其三个角色相互独立且均为必需。`Normalize(parameters, credential)` 在不执行 I/O 的情况下验证并规范化参数、编码凭据输入；缺少必需凭据或提供参数不使用的凭据均为 `ErrInvalid`；编码后的凭据是有效输入且编码结果不变，因此 Core 可以使用已存储的凭据重新选择保留的配置。`Control(ConfigurationRecord)` 在 Core 中使用解密后的凭据构造控制适配器。`Resolver(Configuration)` 仅根据公开配置构造节点解析器。构造过程不执行文件系统或网络操作。
+
 每个控制适配器实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`；每个节点挂载适配器实现 `Resolve`。不得使用可选旁路接口、隐式替换适配器或 nil 实现回退。
 
 | 操作 | 必需语义 |
 | --- | --- |
 | `Declaration()` | 描述所选配置已经验证的挂载、用户扩展属性和配额行为。 |
 | `Check(ctx)` | 验证配置和可用性，不创建对象。 |
-| `Create(ctx, reference)` | 创建归属对象或收敛到其现有挂载凭证，不覆盖数据；重试与并发调用使用同一不可变引用。 |
+| `Create(ctx, reference, capacityMiB)` | 创建归属对象或收敛到其现有挂载凭证，不覆盖数据；重试与并发调用使用同一不可变引用和获准容量。正容量须在成功返回前实际强制执行，并在每次重试时重新验证。 |
 | `Observe(ctx, reference)` | 返回现有对象的绑定挂载凭证，不创建、修复或准备对象。 |
 | `Delete(ctx, reference)` | Core 授权删除且确认计算资源停止后，收敛到已验证归属对象的终态删除。 |
 | `Resolve(ctx, binding)` | 验证原生归属并为本地计算解析挂载。 |
@@ -37,7 +41,11 @@ source_hash: 21eb220ac59a477a8e799a6de20e01b339536901e8c9685695d2ac498b1b7bdb
 
 `Requirements` 声明计算位置的挂载类型及 `user_xattr` 需求。`Declaration` 报告文件系统适配器的挂载类型、`UserXAttr` 支持和 `CapacityQuota` 强制执行能力。`ValidateCombination` 是共享的分配前准入检查。当前挂载类型为 `host_directory`；未知类型会被拒绝。用户扩展属性能力表示挂载后的文件系统支持 Environment 准备流程使用的用户扩展属性。
 
-请求容量为零表示未请求配额。以 MiB 为单位的正容量仅在适配器实际强制执行该限制时获准；报告可用空间或接受未经检查的数字均不足够。适配器的不可变配置必须强制执行获准上限。适配器不能仅根据 Sandbox Provider 的计算磁盘大小声明配额支持。
+请求容量为零表示未请求配额。以 MiB 为单位的正容量仅在适配器实际强制执行该限制时获准；报告可用空间或接受未经检查的数字均不足够。`CapacityQuota` 表示适配器为每个以正容量创建的对象设定上限：限制对象已分配的字节（包括目录和元数据块）及其 inode 数量，而非文件的逻辑大小。超出上限的写入在 write 或 fsync 时报错，不会截断任何内容。适配器不能仅根据 Sandbox Provider 的计算磁盘大小声明配额支持。容量上限不提供任何 I/O 公平性。
+
+容量按对象准入。对于新绑定，Core 在绑定前根据部署请求验证所选配置的能力声明；随后若其他配置在此期间被选中，绑定事务以可重试的冲突拒绝。Core 将获准容量与引用一同持久化，并原样传给每次 `Create`。保留的绑定按其自身配置和获准容量验证，因此更改部署请求或选择不会调整现有存储的大小，也不会重新绑定。
+
+设置[租户容量策略](configuration.md#tenant-capacity)后，新绑定还须按租户已承诺容量准入：即该租户所有尚未确认删除的工作区的获准容量之和，跨所有配置计算。创建中、失败或结果未确认以及删除中的工作区，在适配器确认删除前均计入。没有获准容量的保留工作区视为无上限，在其被删除前阻止该租户的进一步准入。在该策略下，未请求容量的请求不受支持；会超出策略的请求在分配任何存储或计算资源前以不可用失败。既有绑定绝不重新准入，调低策略也不会驱逐任何对象。
 
 工作区仅允许单写入方访问。Core 必须串行管理计算资源归属，并在挂载替代计算资源前确认先前写入方已停止。本协议没有跨虚拟机锁能力：客户机内的 `flock` 不证明主机锁或对其他客户机的互斥。执行位置不得基于客户机本地锁宣称并发挂载安全。
 
@@ -51,13 +59,23 @@ source_hash: 21eb220ac59a477a8e799a6de20e01b339536901e8c9685695d2ac498b1b7bdb
 
 `nfs` 适配器使用由运维人员预挂载的 Linux 内核 NFS 文件系统。支持的配置是受信任 AUTH_SYS 客户端上的 NFSv4.2，启用 `root_squash`，Core 和节点使用相同导出和绝对挂载路径。适配器不挂载导出，也不管理 NFS 凭据或服务账户。其他操作系统返回 `ErrUnsupported`。[配置文档](./configuration.md#independent-workspace-storage)负责安装步骤和选择方式。
 
-参数精确包含 `root`、`namespace_id` 和 `uid`。`root` 是规范的绝对挂载路径；`namespace_id` 是非零规范 UUID；`uid` 是 Core 和节点均须使用的非零有效主机 UID。初始部署使用 65532。运维人员将挂载根目录设置为该 UID 所有、权限 `0700`，并准备同 UID 所有、权限 `0600` 的常规文件 `.oac-storage-root`，内容精确为命名空间 UUID 加一个换行符。应由导出服务端管理员在服务端存储上完成此操作；启用 root squash 的客户端不能假定有权变更所有者。根标记声明所选导出的身份，并非凭据或分布式锁。
+参数包含 `root`、`namespace_id`、`uid`，配额模式下还包含 `quota`。`root` 是规范的绝对挂载路径；`namespace_id` 是非零规范 UUID；`uid` 是 Core 和节点均须使用的非零有效主机 UID。初始部署使用 65532。运维人员将挂载根目录设置为该 UID 所有、权限 `0700`，并准备同 UID 所有、权限 `0600` 的常规文件 `.oac-storage-root`，内容精确为命名空间 UUID 加一个换行符。应由导出服务端管理员在服务端存储上完成此操作；启用 root squash 的客户端不能假定有权变更所有者。根标记声明所选导出的身份，并非凭据或分布式锁。
 
 构造函数只验证并规范化 JSON，不执行文件系统 I/O。`Check` 验证打开的根目录确实位于内核 NFS，有效 UID 与私有所有权和权限匹配，命名空间标记匹配，并且实际文件描述符上的 `user.*` xattr 设置、读取和删除成功。包括打开根目录和可用性检查在内的所有文件系统操作，共享每进程最多 32 个在途操作的预算。调用者超时后收到 `ErrUnconfirmed`；该操作仍占用名额，直到内核调用返回。预算耗尽返回 `ErrUnavailable`。相对于目录描述符的操作始终锚定已打开的根目录。挂载不可用或配置路径只是本地目录时，验证失败，不创建本地回退。
 
-能力声明为 `host_directory`、`user_xattr: true`、`capacity_quota: false`。原生挂载凭据仅包含命名空间标识；解析时根据不可变配置和文件系统所有权验证完整 binding，随后返回根目录下的 `objects/<ObjectID>/live/data`。仅此数据目录暴露给 guest。租户和应用输入都不提供主机路径。
+能力声明为 `host_directory`、`user_xattr: true`，且仅在配额模式下 `capacity_quota` 为 true。原生挂载凭据仅包含命名空间标识；解析时根据不可变配置和文件系统所有权验证完整 binding，随后返回根目录下的 `objects/<ObjectID>/live/data`。仅此数据目录暴露给 guest。租户和应用输入都不提供主机路径。
 
-NFS 适配器不实施按 Environment 或租户划分的字节或 inode 配额。单个对象可能耗尽共享文件系统，阻止其他对象写入，也可能阻止写入安全删除所需的持久终态元数据。运维人员必须监测可用字节和 inode，并为生命周期元数据和清理保留余量。对整个命名空间设置容量上限，并不提供租户或对象之间的容量隔离。
+未配置 `quota` 时，适配器不实施按 Environment 划分的字节或 inode 配额，也不需要凭据。单个对象可能耗尽共享文件系统，阻止其他对象写入，也可能阻止写入安全删除所需的持久终态元数据。运维人员必须监测可用字节和 inode，并为生命周期元数据和清理保留余量。
+
+### 配额模式 {#quota-mode}
+
+配额模式通过 NFS 服务端自身文件系统强制执行的 XFS project quota 为每个对象设定上限。`quota` 精确包含 `endpoint`（存储服务器 SSH 服务的 `host:port`）、`user`（受限账户）和 `host_key`（以 authorized-key 格式固定的服务器 OpenSSH 公共主机密钥；注释会被丢弃）。凭据为 `{"ssh_private_key": "..."}`，即一个未加密的 OpenSSH 私钥，服务器仅为 `oac-workspace-quota` 强制命令授权其公钥。服务器准备工作由[配置文档](configuration.md#quota-mode-storage-server)负责。
+
+对于正容量，`Create` 在认领标识并创建对象空的 `staging/` 和 `trash/` 之后、创建任何 stage 或返回现有 `live` 对象之前调用该命令，因此每次重试都会重新验证上限。请求携带完整引用、配置 ID、命名空间 ID、容量以及每 MiB 256 个的 inode 上限；请求无法指定任何路径、project ID、用户或命令。客户端验证固定的主机密钥，仅在内存中保存私钥，每次调用使用一个有界会话。请求发送前失败为 `ErrUnavailable`；发送后缺少或无法解析应答为 `ErrUnconfirmed`，同一引用在重试时收敛。`Check` 同样调用该命令，在选择前证明可达性、主机密钥、命名空间标记、日志库和强制执行状态。
+
+该命令在存储服务器上以 root 运行。它持有一把锁，以不跟随链接的方式相对配置的导出打开 `objects/<ObjectID>/staging`，验证服务 UID、私有权限、设备及完整标识，拒绝已删除对象，并拒绝 `objects/` 或对象目录上的 project。同一 XFS 文件系统上、导出之外的本地 SQLite 日志库记录每个对象的引用、配置、容量、inode 上限、staging inode 及其 generation，以及从运维人员预留范围分配且永不复用的 project ID。分配先于任何变更提交；随后一次 `FS_IOC_FSSETXATTR` 在仍为空的 staging 目录上同时设置 project ID 和继承标志，服务器设置字节和 inode 硬限制（软限制为零）并回读验证。Stage 继承该 project；`live` 和退役的 trash 在重命名后保持该 project。标识、删除标记、对象目录和 `trash/` 父目录不属于该 project，因此已满的对象仍可标记删除并移除。移除会释放数据占用；保留的 `staging/` inode 仍计入该 project。属于其他文件系统或命名空间的日志库、未启用强制执行、范围耗尽、已有用户数据、外来或继承的 project、被替换的 staging inode、变更的引用、配置或容量，以及就绪对象上被修改或丢失的限制，均被拒绝而非修复。没有 dquot 的 project 读作零限制，绝不视为未使用的 ID。
+
+`Create` 成功时上限即具权威性；`Resolve` 不重新证明，因此恢复就绪工作区不依赖存储服务器的 SSH 服务。存储管理员事后禁用配额或清除限制会使强制执行失效，直至按支持的流程恢复。Project ID 和限制保存在 XFS 文件系统中，因此配额模式需要为其描述的[块级备份](getting-started/operations.md#back-up)。
 
 每个对象拥有 `objects/<ObjectID>/identity`、`staging/`、`live/`、`trash/`，以及删除开始后的 `deleted-marker`。永久标识绑定租户、Environment 和对象 UUID。Create 先准备并同步唯一的私有 staging 封装目录，再原子发布其非空目录为 `live`；重放不会覆盖现有 live 数据。Delete 先持久记录对象本地的终态标记，将 live 数据退役到唯一的对象本地 trash，再先删除数据、后删除其所有权标记。并发删除者收敛。最少量的标识和删除元数据会有意保留；删除不代表所有元数据文件均消失。Create 和 Resolve 拒绝已退役标识。迟到的在途 Create 可能留下空的受控元数据，需要在其系统调用完成后重复 Delete；它不能授权新写入者或复用对象标识。清理只查看该对象的 staging 和 trash，不全量扫描命名空间，也不使用后台服务。
 

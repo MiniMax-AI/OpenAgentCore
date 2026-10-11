@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 6bfcaa201c332aa1907f6ab7b0e0ffde4c8f635b363dbea2d0633947615e7264
+source_hash: 2d0f6969acaa9383ef74c639547219e3146366f91a0ab5d42ad734569533c144
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -135,11 +135,60 @@ services:
     "root": "/srv/oac-workspaces",
     "namespace_id": "22222222-2222-4222-8222-222222222222",
     "uid": 65532
-  }
+  },
+  "tenant_capacity_mib": 0
 }
 ```
 
-随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，将 `resources.environment_disk_mib` 设为 `0`，并保留所需计算资源、Runtime 和 Provider 配置。正数表示请求配额，本适配器不实施此配额，因此会拒绝。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。Web 没有工作区存储编辑器。选择文件系统和部署后，通过 **Nodes → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
+此配置不实施单个工作区配额，因此 `tenant_capacity_mib` 必须为 `0`。如需有上限的工作区，应准备[配额模式存储服务器](#quota-mode-storage-server)，并改为选择带[租户容量](#tenant-capacity)的配额模式配置。
+
+随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，并保留所需计算资源、Runtime 和 Provider 配置。`resources.environment_disk_mib` 是每个新工作区的容量：非配额模式下为 `0`，正数会被拒绝；配额模式下至少为 1024 MiB，`0` 会在工作区准入时被拒绝。部署变更时，既有工作区保持其获准时的容量。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。Web 没有工作区存储编辑器。选择文件系统和部署后，通过 **Nodes → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
+
+#### 配额模式存储服务器 {#quota-mode-storage-server}
+
+配额模式通过 NFS 服务器上的 XFS project quota 为每个工作区的已分配字节和 inode 设定上限，由 Core 经受限 SSH 强制命令调用的 `oac-workspace-quota` 命令设置。协议和强制执行语义由[配额模式](./workspace-provider.md#quota-mode)负责。以存储服务器管理员身份完成以下准备：
+
+1. 将导出放在启用强制 project quota（`prjquota`，而非 `pqnoenforce`）挂载的本地 XFS 文件系统上。导出根目录必须是该挂载点的子目录，例如挂载 `/srv/xfs`、导出 `/srv/xfs/oac-workspaces`；该命令将日志库保存在导出之外的 `/srv/xfs/.oac-quota`。按上文准备命名空间根目录和标记。
+2. 安装 `xfsprogs` 和 Python 3.9 或更高版本。从匹配的发行包将 `storage/oac-workspace-quota` 安装为 `/usr/local/sbin/oac-workspace-quota`，所有者为 root，权限 `0755`。
+3. 写入 `/etc/oac/workspace-quota.json`，所有者为 root，组和其他用户不可写：`{"export_root": "/srv/xfs/oac-workspaces", "mount_point": "/srv/xfs"}`。
+4. 预留该文件系统上其他 project 均未使用的 project ID 范围，然后仅初始化一次日志库：`oac-workspace-quota --config /etc/oac/workspace-quota.json init --projid-start 100000 --projid-end 199999`。它拒绝在已有日志库上运行；绝不要初始化恢复后的存储。
+5. 生成专用密钥对，例如 `ssh-keygen -t ed25519 -N '' -f oac-workspace-quota`。在一个具有可用 shell 的账户（如 `oac-quota`）的 `authorized_keys` 中授权其公钥：`restrict,from="<Core address>",command="sudo -n /usr/local/sbin/oac-workspace-quota --config /etc/oac/workspace-quota.json serve" ssh-ed25519 AAAA...`，并添加 sudoers 条目 `oac-quota ALL=(root) NOPASSWD: /usr/local/sbin/oac-workspace-quota --config /etc/oac/workspace-quota.json serve`。也可以在 `PermitRootLogin forced-commands-only` 下为 root 使用相同选项授权该密钥，命令中不带 `sudo -n`。保持 `PermitUserEnvironment no`。
+6. 在服务器本机的 `/etc/ssh/` 中读取其公共主机密钥，不要通过未经认证的网络扫描获取。
+
+选择配额模式配置时，将私钥作为只写凭据提交。选择成功后删除本地私钥文件；Core 使用 `secrets/core/credential.key` 加密保存它：
+
+```json
+{
+  "id": "33333333-3333-4333-8333-333333333333",
+  "adapter": "nfs",
+  "parameters": {
+    "root": "/srv/oac-workspaces",
+    "namespace_id": "22222222-2222-4222-8222-222222222222",
+    "uid": 65532,
+    "quota": {
+      "endpoint": "storage.internal:22",
+      "user": "oac-quota",
+      "host_key": "ssh-ed25519 AAAA..."
+    }
+  },
+  "credential": {
+    "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n"
+  },
+  "tenant_capacity_mib": 65536
+}
+```
+
+选择操作会通过固定的主机密钥调用该命令的只读检查。随后在 `resources.environment_disk_mib` 中设置每个工作区的容量并更新部署。在此更新之前，从非配额配置切换过来的安装会拒绝新工作区；既有工作区继续使用其自身配置。凭据属于不可变配置。如需轮换，先授权新密钥，使用新密钥选择新的配置 ID，并在仍有绑定旧配置的工作区处于创建过程中时保留旧密钥的授权。
+
+配额模式支持的恢复方式是对 XFS 文件系统进行块级复制；参见[备份](./getting-started/operations.md#back-up)。
+
+#### 租户容量 {#tenant-capacity}
+
+`tenant_capacity_mib` 是安装唯一的租户容量策略，只能与选择一起通过 `PUT /core/v1/workspace-storage` 写入，并保存在 Core 数据库中。正值要求配额模式配置，配额模式配置也要求正值。它限制单个租户所有尚未确认删除的工作区的获准容量之和，并跨配置变更生效；计数规则由[能力验证](./workspace-provider.md#capability-validation)负责。被拒绝的工作区使 Session 执行不可用；删除 Session 后，其存储被移除时即释放容量。调低该值只拒绝新工作区。
+
+非配额模式下创建的工作区保持无上限；不会调整其大小或迁移它们。只要保留此类工作区，在正策略下其租户在删除该 Session 前无法准入新工作区。
+
+该策略限制每个租户可承诺的容量，而不限制文件系统。应按租户数乘以策略值，并为无上限工作区、标识、删除标记、日志库和 XFS 元数据预留余量来规划 XFS 文件系统大小；或者明知超额分配并监测可用空间。每个节点的 `checkpoint_root` 应放在独立存储上。容量上限不提供 I/O 公平性。
 
 ### 节点容量 {#node-capacity}
 

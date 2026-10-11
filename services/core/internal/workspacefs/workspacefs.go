@@ -34,10 +34,20 @@ type Reference struct {
 
 // Configuration is an immutable Core database record. Parameters belong to its
 // adapter; neither Core nor the public Session API interprets native paths.
+// Parameters are public: they reach nodes and administrator responses.
 type Configuration struct {
 	ID         string          `json:"id" format:"uuid" binding:"required"`
 	Adapter    string          `json:"adapter" binding:"required"`
 	Parameters json.RawMessage `json:"parameters" swaggertype:"object" binding:"required"`
+}
+
+// ConfigurationRecord is a retained Configuration with its adapter-encoded
+// private credential, empty when the parameters require none. Core encrypts
+// Credential at rest, bound to its installation and Configuration.ID. It never
+// enters a Binding, a response, an audit record or a log.
+type ConfigurationRecord struct {
+	Configuration
+	Credential []byte `json:"-"`
 }
 
 type AttachmentKind string
@@ -65,7 +75,8 @@ type Directory struct {
 }
 
 // Declaration describes verified behavior. CapacityQuota means the adapter
-// enforces the requested capacity, not merely that it can report free space.
+// enforces every positive capacity passed to Create, not merely that it can
+// report free space.
 type Declaration struct {
 	Attachment    AttachmentKind `json:"attachment" binding:"required"`
 	UserXAttr     bool           `json:"user_xattr" binding:"required"`
@@ -85,8 +96,12 @@ type Control interface {
 	Check(context.Context) error
 	// Create retries and concurrent calls for the same immutable Reference converge
 	// on one object without overwriting its data, including after ErrUnconfirmed.
-	// A terminally deleted Reference must never be recreated.
-	Create(context.Context, Reference) (Attachment, error)
+	// A terminally deleted Reference must never be recreated. capacityMiB is the
+	// admitted bound Core persisted with the Reference and passes unchanged on
+	// every retry. Zero requests no quota. A positive value requires
+	// Declaration.CapacityQuota; the object's allocated bytes and inodes are then
+	// bounded by it before Create returns, and a retry verifies that bound.
+	Create(ctx context.Context, reference Reference, capacityMiB uint32) (Attachment, error)
 	// Observe returns ErrNotFound for absence, which does not settle a mutation.
 	Observe(context.Context, Reference) (Attachment, error)
 	// Delete retries and concurrent calls for the same Reference converge on
@@ -98,6 +113,22 @@ type Control interface {
 // directory to compute. Core forwards bindings without constructing paths.
 type Resolver interface {
 	Resolve(context.Context, Binding) (Directory, error)
+}
+
+// Adapter registers one filesystem implementation. Its roles are separate and
+// all mandatory. Normalize is a pure codec. Control is constructed only in Core
+// from a retained record and its decrypted credential. Resolver is constructed
+// from public configuration alone, so nodes never receive a credential.
+// Construction performs no filesystem or network operation.
+type Adapter interface {
+	// Normalize validates and canonicalizes public parameters and encodes the
+	// credential input. Empty input encodes as an empty credential. A credential
+	// the parameters do not require, or a missing required one, is ErrInvalid.
+	// An encoded credential is valid input and encodes to itself, so Core can
+	// re-select a retained configuration with its stored credential.
+	Normalize(parameters, credential json.RawMessage) (json.RawMessage, []byte, error)
+	Control(ConfigurationRecord) (Control, error)
+	Resolver(Configuration) (Resolver, error)
 }
 
 func canonicalUUID(value string) bool {

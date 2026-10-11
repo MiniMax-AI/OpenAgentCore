@@ -116,12 +116,6 @@ export interface AdminauditPage {
 export const adminauditPageFields = ["data", "has_more", "next_cursor"] as const;
 export const attachmentKindValues = ["host_directory"] as const;
 export type AttachmentKind = (typeof attachmentKindValues)[number];
-export interface Configuration {
-  adapter: string;
-  id: string;
-  parameters: Record<string, unknown>;
-}
-export const configurationFields = ["adapter", "id", "parameters"] as const;
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
@@ -830,6 +824,13 @@ export interface SandboxResources {
 }
 export const sandboxResourcesFields = ["cpus", "environment_disk_mib", "memory_mib", "root_disk_mib"] as const;
 export const sandboxResourcesRequired = ["cpus", "memory_mib"] as const;
+export interface Selection {
+  adapter: string;
+  id: string;
+  parameters: Record<string, unknown>;
+  tenant_capacity_mib: number;
+}
+export const selectionFields = ["adapter", "id", "parameters", "tenant_capacity_mib"] as const;
 export interface ServiceState {
   execution_owner: boolean | null;
   revision: string | null;
@@ -884,6 +885,15 @@ export interface TurnDiagnostics {
   turn_id: string;
 }
 export const turnDiagnosticsFields = ["failure", "items", "items_truncated", "object", "session_id", "status", "turn_id"] as const;
+export interface WorkspaceStorageInput {
+  adapter: string;
+  credential?: Record<string, unknown>;
+  id: string;
+  parameters: Record<string, unknown>;
+  tenant_capacity_mib: number;
+}
+export const workspaceStorageInputFields = ["adapter", "credential", "id", "parameters", "tenant_capacity_mib"] as const;
+export const workspaceStorageInputRequired = ["adapter", "id", "parameters", "tenant_capacity_mib"] as const;
 export interface WriteauditAPIKey {
   id: string;
   kind: "issued";

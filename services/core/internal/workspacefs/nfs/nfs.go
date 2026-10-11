@@ -17,9 +17,10 @@ import (
 const Name = "nfs"
 
 type parameters struct {
-	Root        string `json:"root"`
-	NamespaceID string `json:"namespace_id"`
-	UID         uint32 `json:"uid"`
+	Root        string           `json:"root"`
+	NamespaceID string           `json:"namespace_id"`
+	UID         uint32           `json:"uid"`
+	Quota       *quotaParameters `json:"quota,omitempty"`
 }
 
 // CanonicalParameters rejects unknown, duplicate, missing and malformed settings.
@@ -31,6 +32,15 @@ func CanonicalParameters(raw json.RawMessage) (json.RawMessage, error) {
 	id, err := uuid.Parse(p.NamespaceID)
 	if err != nil || id == uuid.Nil || id.String() != p.NamespaceID || p.UID == 0 || p.UID > 2147483647 || !filepath.IsAbs(p.Root) || filepath.Clean(p.Root) != p.Root || bytes.IndexByte([]byte(p.Root), 0) >= 0 {
 		return nil, fmt.Errorf("%w: root, namespace_id or uid", workspacefs.ErrInvalid)
+	}
+	if p.Quota != nil {
+		var fields map[string]json.RawMessage
+		if err = json.Unmarshal(raw, &fields); err != nil {
+			return nil, fmt.Errorf("%w: parameters", workspacefs.ErrInvalid)
+		}
+		if p.Quota, err = canonicalQuota(fields["quota"]); err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(p)
 }
@@ -90,13 +100,55 @@ func strict(raw []byte, dst any) error {
 	return nil
 }
 
-// Adapter holds immutable configuration only; construction performs no filesystem I/O.
-type Adapter struct {
-	configuration workspacefs.Configuration
-	parameters    parameters
+// Registration implements every workspacefs.Adapter role for kernel NFS.
+type Registration struct{}
+
+func (Registration) Normalize(raw, credential json.RawMessage) (json.RawMessage, []byte, error) {
+	canonical, err := CanonicalParameters(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	var p parameters
+	_ = json.Unmarshal(canonical, &p)
+	encoded, err := encodeCredential(p.Quota, credential)
+	if err != nil {
+		return nil, nil, err
+	}
+	return canonical, encoded, nil
 }
 
-func New(configuration workspacefs.Configuration) (*Adapter, error) {
+// Control requires exactly the credential its parameters declare.
+func (Registration) Control(record workspacefs.ConfigurationRecord) (workspacefs.Control, error) {
+	f, err := newFilesystem(record.Configuration)
+	if err != nil {
+		return nil, err
+	}
+	if f.parameters.Quota == nil {
+		if len(record.Credential) > 0 {
+			return nil, fmt.Errorf("%w: credential without quota parameters", workspacefs.ErrInvalid)
+		}
+		return f, nil
+	}
+	if f.quota, err = newQuotaClient(*f.parameters.Quota, record.Credential); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// Resolver never receives a credential; it validates bindings and resolves paths.
+func (Registration) Resolver(configuration workspacefs.Configuration) (workspacefs.Resolver, error) {
+	return newFilesystem(configuration)
+}
+
+// Filesystem holds immutable configuration only; construction performs no I/O.
+// quota is set only for a Control constructed with the configured credential.
+type Filesystem struct {
+	configuration workspacefs.Configuration
+	parameters    parameters
+	quota         *quotaClient
+}
+
+func newFilesystem(configuration workspacefs.Configuration) (*Filesystem, error) {
 	if err := configuration.Validate(); err != nil {
 		return nil, err
 	}
@@ -108,13 +160,17 @@ func New(configuration workspacefs.Configuration) (*Adapter, error) {
 		return nil, err
 	}
 	configuration.Parameters = raw
-	a := &Adapter{configuration: configuration}
-	_ = json.Unmarshal(raw, &a.parameters)
-	return a, nil
+	f := &Filesystem{configuration: configuration}
+	_ = json.Unmarshal(raw, &f.parameters)
+	return f, nil
 }
-func (*Adapter) Declaration() workspacefs.Declaration {
-	return workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
+
+func (f *Filesystem) Declaration() workspacefs.Declaration {
+	return workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true, CapacityQuota: f.parameters.Quota != nil}
 }
+
+func unavailable(err error) error { return fmt.Errorf("%w: %w", workspacefs.ErrUnavailable, err) }
+func unconfirmed(err error) error { return fmt.Errorf("%w: %w", workspacefs.ErrUnconfirmed, err) }
 
 // Slots remain occupied until the kernel operation actually returns, even after timeout.
 var operations = make(chan struct{}, 32)
@@ -147,11 +203,11 @@ type receipt struct {
 	NamespaceID string `json:"namespace_id"`
 }
 
-func (a *Adapter) attachment(ref workspacefs.Reference) workspacefs.Attachment {
-	raw, _ := json.Marshal(receipt{a.parameters.NamespaceID})
-	return workspacefs.Attachment{Reference: ref, ConfigurationID: a.configuration.ID, Kind: workspacefs.AttachmentHostDirectory, Native: raw}
+func (f *Filesystem) attachment(ref workspacefs.Reference) workspacefs.Attachment {
+	raw, _ := json.Marshal(receipt{f.parameters.NamespaceID})
+	return workspacefs.Attachment{Reference: ref, ConfigurationID: f.configuration.ID, Kind: workspacefs.AttachmentHostDirectory, Native: raw}
 }
-func (a *Adapter) Resolve(ctx context.Context, b workspacefs.Binding) (workspacefs.Directory, error) {
+func (f *Filesystem) Resolve(ctx context.Context, b workspacefs.Binding) (workspacefs.Directory, error) {
 	if err := b.Validate(); err != nil {
 		return workspacefs.Directory{}, err
 	}
@@ -160,12 +216,12 @@ func (a *Adapter) Resolve(ctx context.Context, b workspacefs.Binding) (workspace
 		return workspacefs.Directory{}, err
 	}
 	var native receipt
-	if b.Configuration.ID != a.configuration.ID || b.Configuration.Adapter != Name || !bytes.Equal(raw, a.configuration.Parameters) || strict(b.Attachment.Native, &native) != nil || native.NamespaceID != a.parameters.NamespaceID {
+	if b.Configuration.ID != f.configuration.ID || b.Configuration.Adapter != Name || !bytes.Equal(raw, f.configuration.Parameters) || strict(b.Attachment.Native, &native) != nil || native.NamespaceID != f.parameters.NamespaceID {
 		return workspacefs.Directory{}, workspacefs.ErrOwnership
 	}
-	_, err = a.Observe(ctx, b.Attachment.Reference)
+	_, err = f.Observe(ctx, b.Attachment.Reference)
 	if err != nil {
 		return workspacefs.Directory{}, err
 	}
-	return workspacefs.Directory{Path: filepath.Join(a.parameters.Root, "objects", b.Attachment.Reference.ObjectID, "live", "data")}, nil
+	return workspacefs.Directory{Path: filepath.Join(f.parameters.Root, "objects", b.Attachment.Reference.ObjectID, "live", "data")}, nil
 }
