@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 2394633ee55b7f86d374d5ab3827d0168d3dcbae8b962115063613e288b4cfda
+source_hash: 37355fa7100a2610ef727a3bb28f028d175be1b48b2d9f81c89b40f14cf17aef
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -40,7 +40,7 @@ Go 输入投影排除 `packages.system`，保留下方记录的明确拒绝行�
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | 部分实现：只读子级工作；不支持实时子级进度或可选原生操作 | [Subagents](subagents.md) |
-| Environments | retrieve | 已实现 | [Environments](environments.md) |
+| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[Project 拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment Templates](environments.md#templates) |
 | Vaults | create, retrieve, list, delete | 已实现；没有归档操作 | [Vaults and Credentials](vaults.md) |

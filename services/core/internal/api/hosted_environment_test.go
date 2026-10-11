@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
@@ -39,6 +40,26 @@ func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
 		if _, err := decodeSessionEnvironment(json.RawMessage(`{"type":"openai_hosted",` + field + `}`)); err == nil {
 			t.Fatal("unsupported installation or invalid input accepted", field)
 		}
+	}
+}
+
+// The pinned openai_hosted input has no environment_id, so a request naming an
+// existing Environment gets the route's existing error instead of a new
+// Environment, with or without a Template.
+func TestSessionCreationRejectsExistingEnvironmentReference(t *testing.T) {
+	h, s := validationHandler(t)
+	rejected := `{"error":{"message":"Request fields have invalid types or null values.","type":"invalid_request_error","code":"invalid_request","param":null}}` + "\n"
+	for _, environment := range []string{
+		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}`,
+		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `","environment_template_id":"` + uuid.NewString() + `"}`,
+	} {
+		body := `{"agent":{"model":"m"},"environment":` + environment + `,"input":"hi"}`
+		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest || w.Body.String() != rejected {
+			t.Errorf("%s: %d %s", environment, w.Code, w.Body)
+		}
+	}
+	if s.writes != 0 {
+		t.Fatalf("an Environment reference reached storage: %d writes", s.writes)
 	}
 }
 

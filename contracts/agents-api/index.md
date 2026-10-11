@@ -37,7 +37,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](./environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](./subagents.md) |
-| Environments | retrieve | Implemented | [Environments](./environments.md) |
+| Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). The pinned contract rejects `environment.environment_id`; existing hosted Environments cannot be attached across Sessions. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](./environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](./environments.md#templates) |
 | Vaults | create, retrieve, list, delete | Implemented; no archive operation | [Vaults and Credentials](./vaults.md) |
