@@ -25,8 +25,9 @@ func (b backend) snapshotLabels(operation string, source wire.Compute) map[strin
 	return labels
 }
 
-// inspectSnapshot opens only an allocation/operation-derived selector.
-func (b backend) inspectSnapshot(ctx context.Context, operation string, source wire.Compute) (*sdk.SnapshotArtifact, wire.SnapshotIdentity, error) {
+// openSnapshot opens only an allocation/operation-derived selector and returns
+// its ownership identity without the checkpoint root, which needs Verify.
+func (b backend) openSnapshot(ctx context.Context, operation string, source wire.Compute) (*sdk.SnapshotArtifact, wire.SnapshotIdentity, error) {
 	selector := wire.SnapshotReference(b.q.Config, b.q.Reference, operation)
 	artifact, e := sdk.Snapshot.Open(ctx, selector)
 	if e != nil {
@@ -44,21 +45,35 @@ func (b backend) inspectSnapshot(ctx context.Context, operation string, source w
 			return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 		}
 	}
+	state := artifact.State()
+	if state.Checkpoint == nil || state.Checkpoint.CheckpointID == "" {
+		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
+	}
+	compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: artifact.Labels()["io.oac.artifact_domain"], ExecutionClass: artifact.Labels()["io.oac.execution_class"]}
+	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: selector, ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
+}
+
+// inspectSnapshot verifies a fresh capture before its identity is published.
+func (b backend) inspectSnapshot(ctx context.Context, operation string, source wire.Compute) (*sdk.SnapshotArtifact, wire.SnapshotIdentity, error) {
+	artifact, identity, e := b.openSnapshot(ctx, operation, source)
+	if e != nil {
+		return nil, wire.SnapshotIdentity{}, e
+	}
 	report, e := artifact.Verify(ctx)
 	if e != nil {
 		return nil, wire.SnapshotIdentity{}, e
 	}
-	state := artifact.State()
-	if report.Digest != artifact.Digest() || report.Checkpoint == nil || report.Checkpoint.Root == "" || report.Checkpoint.Kind == "" || state.Checkpoint == nil || state.Checkpoint.CheckpointID == "" {
+	if report.Digest != artifact.Digest() || report.Checkpoint == nil || report.Checkpoint.Root == "" || report.Checkpoint.Kind == "" {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
-	compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: artifact.Labels()["io.oac.artifact_domain"], ExecutionClass: artifact.Labels()["io.oac.execution_class"]}
-	identity := wire.SnapshotIdentity{Compatibility: compatibility, Reference: selector, ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, CheckpointRoot: report.Checkpoint.Root, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}
+	identity.CheckpointRoot = report.Checkpoint.Root
 	if wire.ValidateSnapshot(b.q.Config, b.q.Reference, identity) != nil {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
 	return artifact, identity, nil
 }
+
+// verifiedSnapshot recomputes payload integrity before the artifact is used.
 func (b backend) verifiedSnapshot(ctx context.Context, want wire.SnapshotIdentity) (*sdk.SnapshotArtifact, error) {
 	a, got, e := b.inspectSnapshot(ctx, want.OperationID, wire.Compute{Name: want.SourceName, ID: want.SourceID, Generation: want.SourceGeneration})
 	if e != nil {
@@ -69,13 +84,31 @@ func (b backend) verifiedSnapshot(ctx context.Context, want wire.SnapshotIdentit
 	}
 	return a, nil
 }
+
+// ownedSnapshot matches a published identity for cleanup, where payload
+// integrity is irrelevant. The SDK descriptor digest covers the checkpoint
+// root, so an equal digest binds the published root without re-hashing.
+func (b backend) ownedSnapshot(ctx context.Context, want wire.SnapshotIdentity) (*sdk.SnapshotArtifact, error) {
+	a, got, e := b.openSnapshot(ctx, want.OperationID, wire.Compute{Name: want.SourceName, ID: want.SourceID, Generation: want.SourceGeneration})
+	if e != nil {
+		return nil, e
+	}
+	if got.Digest != want.Digest {
+		return nil, sandbox.ErrOwnership
+	}
+	got.CheckpointRoot = want.CheckpointRoot
+	if got != want || wire.ValidateSnapshot(b.q.Config, b.q.Reference, got) != nil {
+		return nil, sandbox.ErrOwnership
+	}
+	return a, nil
+}
 func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State, error) {
 	receipt, receiptErr := b.receipt(q.OperationID)
 	if receiptErr == nil {
 		if receipt.Deleted || receipt.Snapshot.SourceName != q.Source.Name || receipt.Snapshot.SourceID != q.Source.ID || receipt.Snapshot.SourceGeneration != q.Source.Generation || (q.Snapshot != nil && *q.Snapshot != receipt.Snapshot) {
 			return wire.State{}, sandbox.ErrOwnership
 		}
-		return b.settleSource(ctx, q, receipt)
+		return b.settleSource(ctx, q, receipt, false)
 	} else if !errors.Is(receiptErr, os.ErrNotExist) {
 		return wire.State{}, receiptErr
 	}
@@ -143,22 +176,26 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
 		return wire.State{}, e
 	}
-	receipt, e = b.publishArchive(ctx, artifact, snap)
+	receipt, hashed, e := b.publishArchive(ctx, artifact, snap)
 	if e != nil {
 		return wire.State{}, e
 	}
-	return b.settleSource(ctx, q, receipt)
+	return b.settleSource(ctx, q, receipt, hashed)
 }
 
-func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r archiveReceipt) (wire.State, error) {
-	if e := b.verifyArchive(r); e != nil {
-		if q.ObserveOnly {
-			// Ownership comes from the durable receipt, independently of archive
-			// usability. Expose cleanup identity without authorizing source transfer,
-			// claiming its current state, or weakening the restore integrity check.
-			return wire.State{Compute: q.Source, Status: "unknown", Snapshot: &r.Snapshot}, nil
+// hashed means this process has just written and hashed the archive under the
+// allocation lock; an existing receipt is always checked against its bytes.
+func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r archiveReceipt, hashed bool) (wire.State, error) {
+	if !hashed {
+		if e := b.verifyArchive(r); e != nil {
+			if q.ObserveOnly {
+				// Ownership comes from the durable receipt, independently of archive
+				// usability. Expose cleanup identity without authorizing source transfer,
+				// claiming its current state, or weakening the restore integrity check.
+				return wire.State{Compute: q.Source, Status: "unknown", Snapshot: &r.Snapshot}, nil
+			}
+			return wire.State{}, e
 		}
-		return wire.State{}, e
 	}
 	if r.SourceStopped {
 		return wire.State{Compute: q.Source, Status: "suspended", BootstrapComplete: true, Snapshot: &r.Snapshot, SourceStopped: true}, nil
@@ -266,6 +303,9 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 		return wire.State{}, e
 	}
 	if err := qualifyWorkspace(artifact.Labels(), b.q.Workspace); err != nil {
+		return wire.State{}, err
+	}
+	if err := qualifyRuntimeImage(ctx, b.q.Config, artifact.ImageManifestDigest()); err != nil {
 		return wire.State{}, err
 	}
 	_, _, e = b.inspectOwned(ctx, q.Target)

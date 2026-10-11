@@ -3,11 +3,13 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"github.com/google/uuid"
 	"path/filepath"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
@@ -90,6 +92,27 @@ func qualifyConfiguration(config wire.Config, compute wire.Compute, raw string, 
 
 func qualifySnapshotResources(config wire.Config, labels map[string]string) error {
 	if labels[resourceProofLabel] != resourceProof(config) {
+		return sandbox.ErrInvalid
+	}
+	return nil
+}
+
+// Archives exclude the image. The restored root must resolve from this node's
+// installed image by the captured digest; a missing image record fails before
+// Restore. This metadata check cannot verify the SDK's physical image cache.
+func qualifyRuntimeImage(ctx context.Context, config wire.Config, captured string) error {
+	_, digest, _ := strings.Cut(config.Image, "@")
+	if captured != digest {
+		return sandbox.ErrInvalid
+	}
+	image, err := sdk.Image.Get(ctx, config.Image)
+	if sdk.IsKind(err, sdk.ErrImageNotFound) {
+		return sandbox.ErrInvalid
+	}
+	if err != nil {
+		return err
+	}
+	if image.ManifestDigest() != digest {
 		return sandbox.ErrInvalid
 	}
 	return nil

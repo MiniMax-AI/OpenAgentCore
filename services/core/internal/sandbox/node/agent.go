@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -71,6 +72,7 @@ type work struct {
 	provider   sandbox.SandboxProvider
 	release    func()
 	ready      bool
+	queued     time.Time
 }
 
 // Run owns one persistent node identity and reconnects its transport only. It
@@ -299,7 +301,7 @@ func (a *agent) connect(ctx context.Context) error {
 			_ = current.write(frame{Type: "response", Response: &response{ID: q.ID, ConnectionID: current.id, ErrorCode: "invalid"}})
 			continue
 		}
-		task := work{request: q, connection: current, provider: a.config.Provider, ready: a.ready.Load()}
+		task := work{request: q, connection: current, provider: a.config.Provider, ready: a.ready.Load(), queued: time.Now()}
 		if a.config.Generations != nil {
 			task.provider, task.ready, task.release, err = a.config.Generations.Acquire(q.DeploymentGeneration)
 			if err != nil {
@@ -387,8 +389,25 @@ func (a *agent) executeWork(ctx context.Context, task work) {
 	// Detached native completion retains its local provider reference across cancellation.
 	operationCtx, cancel := context.WithDeadline(context.Background(), task.request.deadline)
 	a.active.Add(1)
+	started := time.Now()
 	result := execute(operationCtx, task.provider, task.request)
+	finished := time.Now()
 	a.active.Add(-1)
 	cancel()
 	_ = task.connection.write(frame{Type: "response", Response: &result})
+	logOperation(ctx, task, started, finished, result.ErrorCode)
+}
+
+// Queue wait and execution share this node's monotonic clock. Read-only
+// observations repeat on every reconciliation tick and log at debug level.
+func logOperation(ctx context.Context, task work, started, finished time.Time, code string) {
+	level := slog.LevelInfo
+	switch task.request.Operation {
+	case "info", "renew", "initial", "new_compute", "compute", "observe":
+		if code == "" {
+			level = slog.LevelDebug
+		}
+	}
+	log.Bg().Log(ctx, level, "sandbox node operation", "operation", task.request.Operation, "allocation_id", task.request.Reference.AllocationID,
+		"queue_ms", started.Sub(task.queued).Milliseconds(), "duration_ms", finished.Sub(started).Milliseconds(), "error_code", code)
 }

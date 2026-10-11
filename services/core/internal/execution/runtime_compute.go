@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -43,8 +44,20 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 		}
 		idleTimeout = policy.IdleTimeout
 	}
-	return r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
+	next, err := r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
+	if err == nil {
+		log.Ctx(ctx).Info("Runtime compute phase saved", "allocation_id", owner.ID, "node_id", owner.NodeID, "from", owner.ComputePhase, "to", phase)
+	}
+	return next, err
 }
+
+// Durations use this Core process's monotonic clock and cover the provider or
+// daemon round trip as seen by the lifecycle, including node queueing.
+func logComputeStep(ctx context.Context, owner deployment.Allocation, step string, started time.Time, err error) {
+	log.Ctx(ctx).Info("Runtime compute step", "allocation_id", owner.ID, "node_id", owner.NodeID, "step", step,
+		"duration_ms", time.Since(started).Milliseconds(), "succeeded", err == nil)
+}
+
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
@@ -181,7 +194,9 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 
 func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
+	started := time.Now()
 	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Snapshot: state.Snapshot, ObserveOnly: observeOnly})
+	logComputeStep(ctx, owner, "suspend", started, err)
 	if err != nil {
 		return err
 	}
@@ -281,7 +296,9 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 			return err
 		}
 	}
+	started := time.Now()
 	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
+	logComputeStep(ctx, owner, "resume", started, err)
 	if err != nil {
 		return err
 	}

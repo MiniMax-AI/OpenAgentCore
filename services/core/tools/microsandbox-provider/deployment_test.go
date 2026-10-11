@@ -92,3 +92,19 @@ func TestSnapshotProofBindsResourcesWithoutChangingCleanupOwnership(t *testing.T
 		t.Fatal("missing snapshot proof accepted", err)
 	}
 }
+
+// Archives exclude the image, so Restore must find the pinned image locally.
+// The real SDK's empty local registry proves absence fails typed, without a pull.
+func TestRestoreRequiresPinnedLocalImage(t *testing.T) {
+	if !isolatedSDKTest(t) {
+		return
+	}
+	t.Setenv("MSB_HOME", t.TempDir())
+	config, _ := deploymentFixture()
+	_, digest, _ := strings.Cut(config.Image, "@")
+	for name, captured := range map[string]string{"foreign": "sha256:" + strings.Repeat("b", 64), "unrecorded": "", "absent": digest} {
+		if err := qualifyRuntimeImage(t.Context(), config, captured); !errors.Is(err, sandbox.ErrInvalid) {
+			t.Fatalf("%s image accepted: %v", name, err)
+		}
+	}
+}

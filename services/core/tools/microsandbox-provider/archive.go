@@ -152,51 +152,51 @@ func archiveDigest(path string) (string, int64, error) {
 	n, e := io.Copy(h, f)
 	return hex.EncodeToString(h.Sum(nil)), n, e
 }
-func (b backend) publishArchive(ctx context.Context, a *sdk.SnapshotArtifact, s wire.SnapshotIdentity) (archiveReceipt, error) {
+func (b backend) publishArchive(ctx context.Context, a *sdk.SnapshotArtifact, s wire.SnapshotIdentity) (archiveReceipt, bool, error) {
 	prior, e := b.receipt(s.OperationID)
 	if e == nil {
 		if prior.Snapshot != s || prior.Deleted {
-			return prior, sandbox.ErrOwnership
+			return prior, false, sandbox.ErrOwnership
 		}
-		return prior, nil
+		return prior, false, nil
 	}
 	if !errors.Is(e, os.ErrNotExist) {
-		return prior, e
+		return prior, false, e
 	}
 	dir := b.archiveDirectory(s.OperationID)
 	if e = privateDirectory(dir); e != nil {
-		return prior, e
+		return prior, false, e
 	}
 	if e = syncDirectory(b.storeDirectory()); e != nil {
-		return prior, e
+		return prior, false, e
 	}
 	archive := filepath.Join(dir, "archive.msb")
 	// A publication interrupted before its receipt can be rebuilt from the exact
 	// verified native artifact. The shared allocation lock excludes consumers.
 	if e = os.Remove(archive); e != nil && !errors.Is(e, os.ErrNotExist) {
-		return prior, e
+		return prior, false, e
 	}
-	if e = a.SaveTo(ctx, archive, sdk.SnapshotSaveOptions{WithImage: true}); e != nil {
-		return prior, e
+	if e = a.SaveTo(ctx, archive, sdk.SnapshotSaveOptions{}); e != nil {
+		return prior, false, e
 	}
 	if e = os.Chmod(archive, 0600); e != nil {
-		return prior, e
+		return prior, false, e
 	}
 	f, e := os.Open(archive)
 	if e != nil {
-		return prior, e
+		return prior, false, e
 	}
 	e = f.Sync()
 	f.Close()
 	if e != nil {
-		return prior, e
+		return prior, false, e
 	}
 	digest, size, e := archiveDigest(archive)
 	if e != nil {
-		return prior, e
+		return prior, false, e
 	}
 	r := archiveReceipt{Snapshot: s, SHA256: digest, Size: size}
-	return r, durableJSON(filepath.Join(dir, "receipt.json"), r)
+	return r, true, durableJSON(filepath.Join(dir, "receipt.json"), r)
 }
 func (b backend) importArchive(ctx context.Context, want wire.SnapshotIdentity) (*sdk.SnapshotArtifact, error) {
 	r, e := b.receipt(want.OperationID)
@@ -232,7 +232,7 @@ func (b backend) importArchive(ctx context.Context, want wire.SnapshotIdentity) 
 }
 func (b backend) deleteArchive(ctx context.Context, want wire.SnapshotIdentity) error {
 	return b.deleteArchiveWithNative(want, func() error {
-		_, err := b.verifiedSnapshot(ctx, want)
+		_, err := b.ownedSnapshot(ctx, want)
 		if err == nil {
 			err = sdk.Snapshot.Remove(ctx, want.Reference, false)
 		}

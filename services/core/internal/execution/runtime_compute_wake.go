@@ -16,7 +16,10 @@ import (
 func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	if state.Rollback {
-		if _, err := p.ResumeCompute(ctx, runtimeReference(owner), state.Current); err != nil {
+		started := time.Now()
+		_, err := p.ResumeCompute(ctx, runtimeReference(owner), state.Current)
+		logComputeStep(ctx, owner, "resume_compute", started, err)
+		if err != nil {
 			return err
 		}
 	}
@@ -27,13 +30,16 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 		}
 		// This idempotent control signal is fenced by guest PID/start time and the
 		// suspension token. It cannot execute or replay an agent request.
+		started := time.Now()
 		result, err := p.RunCommandCompute(ctx, runtimeReference(owner), state.Current, sandbox.Command{Args: []string{"oac-daemon", "resume", "--control-file", "/run/oac/daemon-suspend.json", "--environment-id", owner.EnvironmentID, "--suspend-id", state.SuspendID}})
+		logComputeStep(ctx, owner, "wake_command", started, err)
 		if err != nil {
 			return err
 		}
 		if result.ExitCode != 0 {
 			return sandbox.ErrComputeUnconfirmed
 		}
+		started = time.Now()
 		timer := time.NewTicker(100 * time.Millisecond)
 		defer timer.Stop()
 		for {
@@ -47,8 +53,11 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 			case <-timer.C:
 			}
 		}
+		logComputeStep(ctx, owner, "peer_authorized", started, nil)
 	}
+	started := time.Now()
 	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentResume, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID, Rollback: state.Rollback})
+	logComputeStep(ctx, owner, "environment_resume", started, err)
 	if err != nil {
 		return err
 	}
@@ -58,7 +67,10 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.SandboxPro
 	// The artifact has been consumed. Never restore it after this generation
 	// admits work, even if garbage collection or the final database commit fails.
 	if state.Snapshot != nil {
-		if err := ignoreComputeAbsent(p.DeleteSnapshot(ctx, runtimeReference(owner), *state.Snapshot)); err != nil {
+		started = time.Now()
+		err := ignoreComputeAbsent(p.DeleteSnapshot(ctx, runtimeReference(owner), *state.Snapshot))
+		logComputeStep(ctx, owner, "delete_snapshot", started, err)
+		if err != nil {
 			return err
 		}
 	}

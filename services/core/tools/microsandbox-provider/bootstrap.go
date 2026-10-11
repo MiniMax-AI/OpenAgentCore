@@ -58,7 +58,8 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		mount = sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})
 	}
 	live, e := sdk.CreateSandbox(ctx, c.Name,
-		sdk.WithImage(b.q.Config.Image), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
+		// Every compatible node holds the pinned image; nothing is ever pulled.
+		sdk.WithImage(b.q.Config.Image), sdk.WithPullPolicy(sdk.PullPolicyNever), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
 		sdk.WithMaxMemory(b.q.Config.MemoryMiB), sdk.WithMaxCPUs(b.q.Config.CPUs),
 		sdk.WithRootDisk(sdk.RootDisk.Managed(b.q.Config.RootDiskMiB)), sdk.WithUser("1000:1000"),
 		// The selected Environment mount keeps workspace and staging on one filesystem.
