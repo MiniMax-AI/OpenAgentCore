@@ -34,7 +34,7 @@ func readyCheckpointNode(t *testing.T, f fixture, node deployment.Enrollment, vi
 func suspendedCheckpointOwner(t *testing.T, f fixture, changes *deployment.ExecutionOperations, installation string, node deployment.Enrollment, view deployment.View) deployment.Allocation {
 	t.Helper()
 	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
-	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"snapshot":{"ID":"snapshot","Compatibility":{"artifact_domain":"fixture-archive","execution_class":"fixture-machine"}}}',compute_retained_until=clock_timestamp()+interval '24 hours',compute_wake_requested=true WHERE id=$1`, owner.ID); err != nil {
+	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"protocol_version":"1","retained":{"ID":"snapshot","Compatibility":{"artifact_domain":"fixture-archive","execution_class":"fixture-machine"}}}',compute_retained_until=clock_timestamp()+interval '24 hours',compute_wake_requested=true WHERE id=$1`, owner.ID); err != nil {
 		t.Fatal(err)
 	}
 	owner, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
