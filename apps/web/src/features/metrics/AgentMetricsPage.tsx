@@ -23,7 +23,8 @@ import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
-import { ProjectFilter, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
+import { ProjectFilter, ProjectName, useProjectCollection, useProjects, type ProjectFilterValue } from "../../lib/projects";
+import { collections } from "../../lib/queries";
 import {
   agentMetricsOutcome,
   INLINE_AGENT_ID,
@@ -96,6 +97,8 @@ export function AgentMetricsPage() {
   const { state: projectsState, byId } = useProjects();
   const [filter, setFilter] = useState<ProjectFilterValue>("");
   const [range, setRange] = useState<AgentMetricsRange>("24h");
+  const agents = useProjectCollection(collections.agents, filter);
+  const savedAgents = new Set(agents.items.filter((row) => !agents.failures.some((failure) => failure.project.id === row.project.id)).map((row) => `${row.project.id}:${row.value.id}`));
   const projects = projectsState.projects;
   const projectsReady = projectsState.status !== "loading" || projects.length > 0;
   const { state, keyUsage, refreshing, refresh } = useAgentMetricsData(projects, projectsReady, filter, range);
@@ -123,7 +126,7 @@ export function AgentMetricsPage() {
           ) : null}
           <ProjectFilter value={filter} onChange={setFilter} />
           <SegmentedControl label={t("range.label")} value={range} options={RANGES.map((value) => ({ value, label: t(`range.${value}`) }))} onChange={setRange} />
-          <RefreshButton refreshing={refreshing} updatedAt={loaded ? formatClock(loaded.loadedAt, locale) : null} onClick={refresh} />
+          <RefreshButton refreshing={refreshing} updatedAt={loaded ? formatClock(loaded.loadedAt, locale) : null} onClick={() => { refresh(); agents.refresh(); }} />
         </>}
       />
       <PageBody>
@@ -136,6 +139,7 @@ export function AgentMetricsPage() {
         ) : (
           <AgentMetricsContent
             metrics={metrics}
+            savedAgents={savedAgents}
             listFailures={loaded?.listFailures ?? []}
             showProject={!filter}
             projectOf={(id) => (id ? byId.get(id) : undefined)}
@@ -163,6 +167,7 @@ function coverageNote(loaded: Loaded, t: TFunction<"metrics">): string | null {
 
 function AgentMetricsContent({
   metrics,
+  savedAgents,
   listFailures,
   showProject,
   projectOf,
@@ -171,6 +176,7 @@ function AgentMetricsContent({
   failure,
 }: {
   metrics: AgentMetrics;
+  savedAgents: ReadonlySet<string>;
   listFailures: ProjectReadFailure[];
   showProject: boolean;
   projectOf: (id: string | null) => AdminProject | undefined;
@@ -362,8 +368,9 @@ function AgentMetricsContent({
             <tbody>
               {metrics.byAgent.map((agent) => {
                 const label = agentLabel(agent.agentId, agent.label);
-                // A saved Agent opens its page, and its failures its Sessions in the Session log; an inline Agent has neither.
-                const saved = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
+                // Snapshot IDs do not establish that a saved Agent resource exists.
+                const sessionFilter = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
+                const saved = sessionFilter && savedAgents.has(`${agent.projectId}:${agent.agentId}`) ? sessionFilter : null;
                 // The figure counts failed Turns in the range; the link lists all the Agent's Sessions, and its name and tooltip say so.
                 const openSessions = t("agent.openSessions", { count: agent.failed, agent: label });
                 return (
@@ -377,8 +384,8 @@ function AgentMetricsContent({
                     <td className="numeric">{integer(agent.sessions)}</td>
                     <td className="numeric">{integer(agent.requests)}</td>
                     <td className={agent.failed ? "numeric numeric-danger" : "numeric"}>
-                      {saved && agent.failed ? (
-                        <button type="button" className="figure-link" aria-label={openSessions} title={openSessions} onClick={() => navigate("sessions", saved, "agent-sessions")}>{integer(agent.failed)}</button>
+                      {sessionFilter && agent.failed ? (
+                        <button type="button" className="figure-link" aria-label={openSessions} title={openSessions} onClick={() => navigate("sessions", sessionFilter, "agent-sessions")}>{integer(agent.failed)}</button>
                       ) : integer(agent.failed)}
                     </td>
                     <td className="numeric">{formatPercent(agent.finished ? agent.failed / agent.finished : null, locale)}</td>

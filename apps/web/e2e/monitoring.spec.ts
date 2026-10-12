@@ -35,6 +35,29 @@ test("opens a Session's conversation from the Session log, read-only", async ({ 
   await expect(page.getByRole("textbox")).toHaveCount(0);
 });
 
+test("links Session snapshots only to saved Agents that exist", async ({ page, request }) => {
+  await openConsole(page, request, "sessions");
+  await page.getByRole("row").filter({ hasText: "Churn forecaster" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const agent = page.getByLabel("Session facts").getByRole("button", { name: /^Open Agent / });
+  await expect(agent).toBeVisible();
+  await agent.click();
+  await expect(page.getByLabel("Agent details")).toBeVisible();
+});
+
+test("keeps inline and deleted Agent snapshots readable without resource links", async ({ page, request }) => {
+  await page.route("**/core/v1/projects/*/agents?*", (route) => route.fulfill({ json: { object: "list", data: [], has_more: false, first_id: null, last_id: null } }));
+  await openConsole(page, request, "sessions");
+  await page.getByRole("row").filter({ hasText: "Churn forecaster" }).first().getByRole("button", { name: /^Open Session / }).click();
+  const facts = page.getByLabel("Session facts");
+  await expect(facts).toContainText("Churn forecaster");
+  await expect(facts.getByRole("button", { name: /^Open Agent / })).toHaveCount(0);
+  await page.getByRole("button", { name: "Agent metrics", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "By Agent", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Open Agent / })).toHaveCount(0);
+  // A snapshot ID still filters its Sessions even when it is not a saved resource.
+  await expect(page.getByRole("button", { name: /^\d+ failed Turns? — open .+'s Sessions$/ }).first()).toBeVisible();
+});
+
 test("keeps a failed Session's reason in sight in the Session log and on its page", async ({ page, request }) => {
   const reasons = /Execution could not complete\. No specific cause was reported\./;
   await page.setViewportSize({ width: 1280, height: 800 });
