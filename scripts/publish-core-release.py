@@ -302,6 +302,8 @@ def publish(assets, repository, revision, tag, mode):
     compose_files = render_compose.write_assets(assets, {
         "REVISION": revision,
         "INIT_IMAGE": images["ingress"]["digest"],
+        "CORE_IMAGE": images["core"]["digest"],
+        "WEB_IMAGE": images["web"]["digest"],
     })
     expected.update({path.name: path.stat().st_size for path in compose_files})
     parallel_each(upload, compose_files)

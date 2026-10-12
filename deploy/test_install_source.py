@@ -45,6 +45,7 @@ class SourceInstallTest(unittest.TestCase):
 
     def test_complete_compose_preserves_secrets_and_serves_whole_payload(self):
         self.install()
+        self.assertNotIn('__OAC_', (self.destination / 'compose.yaml').read_text())
         config = json.loads(subprocess.check_output(['docker', 'compose', 'config', '--format', 'json'], cwd=self.destination, text=True))
         services = config['services']
         for name in ('core', 'web', 'database', 'init'):

@@ -108,6 +108,8 @@ def main():
     rendered.write_text(render_compose.render({
         'REVISION': pins['revision'],
         'INIT_IMAGE': 'ghcr.io/minimax-ai/openagentcore/ingress@sha256:' + '0' * 64,
+        'CORE_IMAGE': 'ghcr.io/minimax-ai/openagentcore/core@sha256:' + '0' * 64,
+        'WEB_IMAGE': 'ghcr.io/minimax-ai/openagentcore/web@sha256:' + '0' * 64,
     }))
     override = directory / 'offline-init.json'
     images = build_images(directory, project.removeprefix('oac-smoke-'))

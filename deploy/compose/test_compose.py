@@ -19,6 +19,8 @@ def rendered_compose(directory):
     text = render_compose.render({
         'REVISION': 'd' * 40,
         'INIT_IMAGE': 'ghcr.io/minimax-ai/openagentcore/ingress@sha256:' + 'e' * 64,
+        'CORE_IMAGE': 'ghcr.io/minimax-ai/openagentcore/core@sha256:' + 'e' * 64,
+        'WEB_IMAGE': 'ghcr.io/minimax-ai/openagentcore/web@sha256:' + 'e' * 64,
     })
     path = Path(directory) / 'compose.yaml'
     path.write_text(text)
@@ -58,7 +60,7 @@ class ComposeTests(unittest.TestCase):
             self.assertNotIn('build', service)
             if service is not services['web']:
                 self.assertNotIn('ports', service)
-            self.assertTrue(service['image'].endswith(':latest') or service['image'] == 'postgres:16-alpine' or service['image'].endswith('@sha256:' + 'e' * 64))
+            self.assertTrue(service['image'] == 'postgres:16-alpine' or service['image'].endswith('@sha256:' + 'e' * 64))
             for volume in service.get('volumes', []):
                 self.assertNotIn('docker.sock', json.dumps(volume))
                 self.assertEqual(volume['type'], 'volume')

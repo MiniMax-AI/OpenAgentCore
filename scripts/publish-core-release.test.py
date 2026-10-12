@@ -158,6 +158,21 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
 
+    def test_compose_defaults_use_published_images_for_every_release_mode(self):
+        for tag, mode in (("v1.2.3", "publish"), ("v1.2.3-rc.1", "publish"),
+                          ("build-" + self.revision, "draft")):
+            with self.subTest(tag=tag):
+                # Each publication starts with the original build assets.
+                for name in ("compose.yaml", "compose-sha256sums.txt"):
+                    (self.assets / name).unlink(missing_ok=True)
+                self.publish(tag=tag, mode=mode)
+                compose = (self.assets / "compose.yaml").read_text()
+                for name in ("core", "web", "ingress"):
+                    self.assertIn("${OAC_IMAGE_" + name.upper() + ":-" +
+                                  self.images.return_value[name]["digest"] + "}", compose)
+                self.assertNotIn(":latest", compose)
+                self.assertNotIn("__OAC_", compose)
+
     def test_repository_rename_uses_current_identity_before_writes(self):
         self.context_repository = "MiniMax-AI/previous-name"
         self.publish()

@@ -1,5 +1,5 @@
 # Release template. The publisher pins the initialization image to this release.
-# Core and Web default to latest; OAC_IMAGE_* selects another reference.
+# Release images are pinned; OAC_IMAGE_* selects another reference.
 # Docker owns data permissions on every host platform.
 x-ingress-image: &ingress-image ${OAC_IMAGE_INGRESS:-__OAC_INIT_IMAGE__}
 services:
@@ -42,7 +42,7 @@ services:
       retries: 30
 
   core:
-    image: ${OAC_IMAGE_CORE:-ghcr.io/minimax-ai/openagentcore/core:latest}
+    image: ${OAC_IMAGE_CORE:-__OAC_CORE_IMAGE__}
     user: "65532:65532"
     restart: unless-stopped
     read_only: true
@@ -89,7 +89,7 @@ services:
         published: "${OAC_WEB_PORT:-8080}"
         host_ip: "${OAC_HOST:-127.0.0.1}"
         protocol: tcp
-    image: ${OAC_IMAGE_WEB:-ghcr.io/minimax-ai/openagentcore/web:latest}
+    image: ${OAC_IMAGE_WEB:-__OAC_WEB_IMAGE__}
     user: "65532:65532"
     restart: unless-stopped
     read_only: true

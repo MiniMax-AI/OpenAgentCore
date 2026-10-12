@@ -42,6 +42,8 @@ def install(bundle, destination, host, port, public_url):
         for name in files:
             os.chmod(Path(root) / name, 0o644)
     template = (bundle / 'compose.yaml.template').read_text().replace('__OAC_REVISION__', revision).replace('__OAC_INIT_IMAGE__', images['ingress'])
+    for name in ('core', 'web'):
+        template = template.replace('__OAC_' + name.upper() + '_IMAGE__', images[name])
     override = {'services': {name: {'image': images[image]} for name, image in
                             (('core', 'core'), ('web', 'web'), ('init', 'ingress'), ('database', 'database'))}}
     override['services']['web']['volumes'] = [{'type': 'bind', 'source': str(payload), 'target': '/node-payload', 'read_only': True}]
