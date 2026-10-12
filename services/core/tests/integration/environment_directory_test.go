@@ -23,7 +23,7 @@ func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, session
 	return directoryWorkerBeforeStart(t, nil)
 }
 
-func directoryWorkerBeforeStart(t *testing.T, before func(*dispatchHarness, sessions.Environment)) (*dispatchHarness, *execution.Worker, sessions.Environment) {
+func directoryWorkerBeforeStart(t *testing.T, before func(*dispatchHarness, sessions.Environment) *execution.Worker) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
@@ -39,10 +39,12 @@ func directoryWorkerBeforeStart(t *testing.T, before func(*dispatchHarness, sess
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.WorkspaceReadPreparation
 	})
+	var w *execution.Worker
 	if before != nil {
-		before(h, environment)
+		w = before(h, environment)
+	} else {
+		w = startWorker(t, t.Context(), h.s, h.d)
 	}
-	w := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()
@@ -286,11 +288,24 @@ func (r pausedFileInitializationReader) GetEnvironment(ctx context.Context, tena
 
 func TestEnvironmentDirectoryWaitsForConnectedInitialization(t *testing.T) {
 	observed := make(chan struct{}, 4)
-	h, w, environment := directoryWorkerBeforeStart(t, func(h *dispatchHarness, environment sessions.Environment) {
+	h, w, environment := directoryWorkerBeforeStart(t, func(h *dispatchHarness, environment sessions.Environment) *execution.Worker {
 		if _, err := h.s.pool.Exec(t.Context(), `UPDATE environments SET initialization='running' WHERE id=$1`, environment.ID); err != nil {
 			t.Fatal(err)
 		}
 		h.d.SessionsReader = pausedFileInitializationReader{Reader: h.d.SessionsReader, observed: observed}
+		_, credentials, err := fixtureVaults(h.s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.d.Credentials = credentials
+		h.d.Deployment = deploymentService(t, h.s)
+		h.d.DeploymentReader = deploymentStore(h.s)
+		h.d.ManagedRuntimes = fixtureRuntimes(t, h.s)
+		worker, err := execution.StartWorker(t.Context(), h.d, executionOwner(t, h.s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return worker
 	})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "connected before initialization", func() bool {
 		current, err := sessionAdapter(h.s).GetEnvironment(t.Context(), h.tenant, environment.ID)
