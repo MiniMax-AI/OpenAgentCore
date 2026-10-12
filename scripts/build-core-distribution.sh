@@ -9,6 +9,11 @@ runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output_dir="${CORE_DISTRIBUTION_BUILD_DIR:-$runtime_root/build/core-distribution}"
 release_base_url="${CORE_DISTRIBUTION_RELEASE_BASE_URL:-}"
 offline="${CORE_DISTRIBUTION_OFFLINE:-0}"
+platforms="${CORE_DISTRIBUTION_PLATFORMS:-linux/amd64,linux/arm64}"
+case "$platforms" in
+  linux/amd64|linux/amd64,linux/arm64) ;;
+  *) printf 'CORE_DISTRIBUTION_PLATFORMS must be linux/amd64 or linux/amd64,linux/arm64\n' >&2; exit 1 ;;
+esac
 if [[ "$offline" != 0 && "$offline" != 1 ]]; then
   printf 'CORE_DISTRIBUTION_OFFLINE must be 0 or 1\n' >&2
   exit 1
@@ -110,8 +115,11 @@ cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
 mkdir -p "$bundle/storage"
 install -m 0755 services/core/internal/workspacefs/nfs/quota/oac-workspace-quota "$bundle/storage/"
 cp LICENSE "$bundle/"
+cp deploy/install-source.py "$bundle/install.py"
+cp deploy/compose/compose.yaml "$bundle/compose.yaml.template"
 
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
+cp "$stage/core/bin/oac" "$bundle/oac"
 python3 scripts/build-microsandbox-provider.py build "$stage/core/bin/oac-microsandbox-provider"
 msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
@@ -256,6 +264,7 @@ mv "$bundle" "$output_dir/"
 
 # Core, Web and initialization also run natively in ARM64 Linux containers.
 # Node and hosted Runtime payloads above remain linux/amd64.
+if [[ "$platforms" == linux/amd64,linux/arm64 ]]; then
 export GOARCH=arm64
 arm_bundle="$stage/oac-$revision-linux-arm64"
 mkdir -p "$arm_bundle/images"
@@ -268,6 +277,7 @@ for name in core web ingress; do
 done
 python3 scripts/core-distribution-manifest.py control-archive "$arm_bundle" "$stage" "$revision" arm64
 mv "$arm_bundle.tar.gz" "$arm_bundle.tar.gz.sha256" "$output_dir/"
+fi
 
 # The launchers and operator commands use this same portable implementation.
 for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do

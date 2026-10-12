@@ -187,6 +187,7 @@ check-distribution:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/compose -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/acceptance -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install.py
+	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install_source.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/publish-core-release.test.py
 	bash -n deploy/install.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh

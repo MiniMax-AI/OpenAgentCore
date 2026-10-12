@@ -72,7 +72,7 @@ RULES = (
     (("deploy/node/", "scripts/acceptance/"), (".py", ".json", ".sh"), ("distribution",)),
     (("deploy/compose/",), (".yaml", ".toml", ".json"), ("distribution", "compose")),
     (("scripts/compose-smoke.py", "scripts/render-compose.py", "deploy/compose/test_compose.py"), (".py",), ("distribution", "compose")),
-    (("deploy/install.sh", "deploy/install.dev.sh", "deploy/test_install.py", "scripts/publish-core-release.",
+    (("deploy/install.sh", "deploy/install-source.py", "deploy/test_install.py", "scripts/publish-core-release.",
       "scripts/core-distribution-manifest.", "scripts/build-core-distribution.sh",
       "scripts/build-web.sh"), SCRIPTS, ("distribution",)),
     (("scripts/build-native-", "scripts/native-"), SCRIPTS, ("native", "backend", "distribution")),

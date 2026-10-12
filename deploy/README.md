@@ -3,6 +3,7 @@
 | Path | Contents |
 | --- | --- |
 | `install.sh`, `install.ps1` | Native command launchers published with each release |
+| `install-source.py` | Offline source-bundle installation; see [source installation](../docs/development.md#install-a-checkout-without-publishing-a-release) |
 | `compose/` | Compose template and its tests |
 | `distribution/` | Image Dockerfiles |
 | `node/` | [Node installer](node/README.md), packaged as `node-install.pyz` |

@@ -28,6 +28,7 @@ make build-core-distribution
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | Versioned HTTPS directory that will serve the generated asset file names (never `latest`). Required unless `CORE_DISTRIBUTION_OFFLINE=1` |
 | `CORE_DISTRIBUTION_OFFLINE` | `1` also builds the offline archive |
+| `CORE_DISTRIBUTION_PLATFORMS` | Default `linux/amd64,linux/arm64`; use `linux/amd64` for a [local source installation](./development.md#install-a-checkout-without-publishing-a-release) without QEMU or ARM control images |
 | `CODEX_CLI_DIR`, `MCODE_HARNESS_BUILD_DIR` | Pinned Runtime inputs from `prepare-release-runtimes.sh` |
 | `CORE_DISTRIBUTION_CODEX_IMAGE`, `CORE_DISTRIBUTION_CLAUDE_IMAGE`, `CORE_DISTRIBUTION_MCODE_IMAGE` | Use existing Harness images, given as immutable `sha256:` image IDs, instead of building them; set all three or none. Each must contain the daemon built from this commit |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | Native installer catalog directory; see [Native installers](#native-installers) |

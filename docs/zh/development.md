@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: 70dc4a684bc017d14ac9df87948220e2dd19fb82918edf44d695494ea7f62de0
+source_hash: a3e1dc325f8500863c9424344ac010e9091912e72ac1bf66cca212c3f62192e8
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -47,6 +47,48 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 私下将 `OAC_TEST_DATABASE_URL` 设置为专用 PostgreSQL 测试数据库。不要让测试套件连接安装实例或产品数据库。[测试数据库规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#test-database) 列出角色所需权限。
 
 修改原生包固定版本时，遵循[真实执行验收规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#live-acceptance)。
+
+## 不发布版本，直接安装工作副本 {#install-a-checkout-without-publishing-a-release}
+
+使用此路径体验已提交工作副本中的完整 Core、Web 和受管沙箱节点。它复用正式发版的分发构建器、Compose 服务、初始化和节点安装器。构建时需要联网获取固定的上游依赖；生成的离线包不依赖 OpenAgentCore 发版或镜像仓库。在 Linux amd64 上按[分发构建前提](maintainers.md#build-a-distribution)构建和安装。需要 Docker Engine 26+ 和 Compose 2.26+。源码必须已提交，包括本地修改。
+
+在仓库根目录一次性准备固定 Runtime 输入，然后构建和安装。如果 `~/.oac/build/release-inputs/inputs.json` 已存在，跳过第一条命令并复用它：
+
+```sh
+bash scripts/prepare-release-runtimes.sh
+inputs="$HOME/.oac/build/release-inputs/inputs.json"
+export CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
+revision="$(git rev-parse HEAD)"
+export CORE_DISTRIBUTION_BUILD_DIR="$HOME/.oac/build/source-$revision"
+export CORE_DISTRIBUTION_OFFLINE=1
+export CORE_DISTRIBUTION_PLATFORMS=linux/amd64
+unset CORE_DISTRIBUTION_RELEASE_BASE_URL
+make build-core-distribution
+bundle="$CORE_DISTRIBUTION_BUILD_DIR/oac-$revision-linux-amd64"
+python3 "$bundle/install.py" \
+  --install-dir "$HOME/.oac/local" \
+  --host 0.0.0.0 --web-port 8080 \
+  --public-url http://YOUR_CORE_HOST:8080
+```
+
+将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。需要时使用反向代理后的 HTTPS 地址；入口配置见[安装选项](getting-started/install-options.md)。安装器输出用于登录的 Core key。它创建标准 Compose 安装，以及包含该构建公共节点制品的只读 `node-payload` 目录。磁盘需同时容纳解压后的构建包和安装副本。Core、Web 均不会获得 Docker socket。
+
+构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`。可将其复制到另一台 Linux amd64 Docker 主机，解压后执行其中的 `install.py`；目标主机只需要 Python 3.9+ 和 Docker，无需源码、Go、Node 或 pnpm。安装完成前保留解压目录；安装后的服务和节点下载不再依赖它的原始位置。
+
+在 Web 中配置模型提供方，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装器目录](maintainers.md#native-installers)，否则可选的自托管原生安装器不可用，不会生成占位目录。
+
+启动失败或安装已停止时，使用保存的配置，而不是重新安装：
+
+```sh
+cd "$HOME/.oac/local"
+docker compose logs --tail 100
+# Retry without downloading release images or replacing saved configuration.
+docker compose up -d --wait --pull never
+./oac core-key --show
+```
+
+`install.py` 要求安装目录为空。若配置准备在 `compose.yaml`、`.env` 和 `oac` 三者齐备之前失败，删除该未完成目录后重试；这些文件齐备后使用 Compose 重试。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。不同源码提交需要全新安装，不支持原地升级：先删除受管资源并卸载节点，再执行 `docker compose down --volumes` 删除旧 Compose 容器和数据卷，最后删除安装目录。这会永久删除该测试安装的数据。也可以选择另一安装目录和 Web 端口。
 
 ## 构建与运行组件 {#build-and-run-components}
 

@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: f91505a6502e09cc13b5ece7cb4ba578f6d2861621d70a1f836f89dcf9299ea4
+source_hash: e575ad6ef718ce7791f9b6b1ac05467a0a98923512e17b05d3ffab2e75fcfc74
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -30,6 +30,7 @@ make build-core-distribution
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | 用于提供生成的资源文件名的带版本 HTTPS 目录（绝不能使用 `latest`）。除非 `CORE_DISTRIBUTION_OFFLINE=1`，否则为必填项 |
 | `CORE_DISTRIBUTION_OFFLINE` | 设为 `1` 时还会构建离线归档 |
+| `CORE_DISTRIBUTION_PLATFORMS` | 默认 `linux/amd64,linux/arm64`；[本地源码安装](development.md#install-a-checkout-without-publishing-a-release)使用 `linux/amd64`，无需 QEMU 或 ARM 控制面镜像 |
 | `CODEX_CLI_DIR`、`MCODE_HARNESS_BUILD_DIR` | `prepare-release-runtimes.sh` 固定的 Runtime 输入 |
 | `CORE_DISTRIBUTION_CODEX_IMAGE`、`CORE_DISTRIBUTION_CLAUDE_IMAGE`、`CORE_DISTRIBUTION_MCODE_IMAGE` | 使用现有 Harness 镜像，而不是构建这些镜像；值必须是以不可变 `sha256:` 镜像 ID 表示的现有镜像。三个变量必须全部设置或全部不设置；每个镜像都必须包含由该提交构建的守护进程 |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | 原生安装器目录；请参阅[原生安装器](#native-installers) |
