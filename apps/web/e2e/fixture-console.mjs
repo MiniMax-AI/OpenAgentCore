@@ -372,6 +372,13 @@ async function sandboxRoute(request, response, path, url) {
     const data = state.admin.runtimeObservations().map((entry) => ({ ...entry, observation: { ...entry.observation, disk: e2b && entry.observation.status === "observed" ? { usage_bytes: 3 * 2 ** 30, limit_bytes: 10 * 2 ** 30 } : null } }));
     return send(response, 200, { object: "list", data, has_more: false, first_id: data[0]?.observation.id ?? null, last_id: data.at(-1)?.observation.id ?? null });
   }
+  if (path === "/deployment" && request.method === "PATCH") {
+    const input = await body(request);
+    if (!state.deployment.suspension || state.deployment.reset) return error(response, 409, "Suspension policy is unavailable.", "sandbox_deployment_conflict");
+    if (!Number.isInteger(input.idle_seconds) || input.idle_seconds < 30 || input.idle_seconds > 86400) return error(response, 400, "Invalid idle seconds.", "invalid_request_error");
+    state.deployment.suspension.idle_seconds = input.idle_seconds;
+    return send(response, 200, state.deployment);
+  }
   if (path === "/deployment" && (request.method === "POST" || request.method === "PUT")) {
     const input = await body(request);
     const initialize = request.method === "POST";

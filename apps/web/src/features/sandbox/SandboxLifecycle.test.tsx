@@ -16,6 +16,18 @@ describe("sandbox lifecycle evidence", () => {
     expect(html).toContain("5 minutes");
     expect(html).not.toContain("3 / 14");
   });
+  it("offers policy editing only when the owner supplies controls", () => {
+    const nodes = [node("online", { active: 2, max_active: 4, retained: 5, max_retained: 8 })];
+    const html = renderToStaticMarkup(<SandboxLifecycle deployment={deployment} nodes={nodes} stale={false} controls={{ disabled: false, onSave: async () => true }} />);
+    expect(html).toContain("Capacity and suspension");
+    expect(html).toContain('id="sandbox-idle-seconds"');
+    expect(html).toContain('value="300"');
+    const readonly = renderToStaticMarkup(<SandboxLifecycle deployment={deployment} nodes={nodes} stale={false} />);
+    expect(readonly).not.toContain("sandbox-idle-seconds");
+    expect(readonly).not.toContain("Edit node");
+    const unsupported = renderToStaticMarkup(<SandboxLifecycle deployment={{ ...deployment, suspension: null }} nodes={nodes} stale={false} controls={{ disabled: true, onSave: async () => true }} />);
+    expect(unsupported).not.toContain("sandbox-idle-seconds");
+  });
   it("does not replace missing inventory with zero or claim fresh evidence after failure", () => {
     const html = renderToStaticMarkup(<SandboxLifecycle deployment={deployment} nodes={null} stale />);
     expect(html).toContain("current state is unconfirmed");

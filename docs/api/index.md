@@ -21,3 +21,5 @@ A credential used in another namespace gets 401: a Project API key on `/core/v1`
 Nodes, Runtime daemons and the self-hosted installer call `/api/v1` with their own credentials. The [machine connection API](../../contracts/agents-api/machine-api.md) lists every route, caller and credential.
 
 Operator scripts configure independent filesystem storage through Core-key-authenticated `GET` and `PUT /core/v1/workspace-storage`; see [Workspace storage](../../contracts/agents-api/admin-api.md#workspace-storage).
+
+Web and operator scripts update the sandbox idle policy through Core-key-authenticated `PATCH /core/v1/sandbox/deployment`; see [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md).

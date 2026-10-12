@@ -805,6 +805,10 @@ export interface SandboxEnrollmentTokenRequest {
 }
 export const sandboxEnrollmentTokenRequestFields = ["max_active", "max_retained"] as const;
 export const sandboxEnrollmentTokenRequestRequired = [] as const;
+export interface SandboxIdlePolicyInput {
+  idle_seconds: number;
+}
+export const sandboxIdlePolicyInputFields = ["idle_seconds"] as const;
 export interface SandboxMutationResponse {
   deleted?: boolean;
   id: string;

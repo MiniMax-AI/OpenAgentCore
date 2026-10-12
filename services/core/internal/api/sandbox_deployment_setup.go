@@ -195,3 +195,36 @@ func parseResetGeneration(r *http.Request) (uint64, error) {
 	}
 	return strconv.ParseUint(query.Get("expected_generation"), 10, 64)
 }
+
+// SandboxIdlePolicyInput changes the deployment-wide idle timeout independently of its generation.
+type SandboxIdlePolicyInput struct {
+	IdleSeconds *int64 `json:"idle_seconds" binding:"required" minimum:"30" maximum:"86400"`
+}
+
+// @Summary Update automatic suspension policy
+// @Description Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires checkpoint support and no active reset. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
+// @Tags Sandbox Manager
+// @Produce json
+// @Security DeploymentAdminAuth
+// @Accept json
+// @Param body body api.SandboxIdlePolicyInput true "Idle timeout in seconds"
+// @Success 200 {object} deployment.View
+// @Failure 400,401,409,500,503 {object} CoreErrorResponse
+// @Router /core/v1/sandbox/deployment [patch]
+func (h *Handler) updateSandboxIdlePolicy(w http.ResponseWriter, r *http.Request) {
+	raw, ok := readJSONBody(w, r)
+	if !ok {
+		return
+	}
+	var input SandboxIdlePolicyInput
+	if decodeInputObject(raw, &input, "idle_seconds") != nil || input.IdleSeconds == nil {
+		writeDeploymentError(w, r, deployment.ErrInvalidInput)
+		return
+	}
+	result, err := h.Sandboxes.Deployment.UpdateIdleSeconds(r.Context(), *input.IdleSeconds)
+	if err != nil {
+		writeDeploymentError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}

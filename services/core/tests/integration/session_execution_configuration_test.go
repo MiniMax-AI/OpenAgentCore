@@ -261,11 +261,12 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
+	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtimeSuspensionCompleted(t, pool, owner)
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '10 minutes',compute_phase_changed_at=clock_timestamp()-interval '10 minutes' WHERE id=$1`, owner.ID)
 	until := time.Now().Add(time.Hour)
 	for _, phase := range []string{"quiescing", "suspending", "suspended", "restoring", "waking", "running"} {
 		retained := &until

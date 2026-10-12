@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { type SandboxNode } from "@oac/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, Plus, Server, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState, HelpTip, RefreshButton } from "../../components/console-ui";
@@ -10,7 +10,7 @@ import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
-import { sandboxRequestError } from "../../lib/sandbox-labels";
+import { sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
 import { sandboxAdmin, sandboxConsoleConfigQuery } from "./sandbox-queries";
 import { useSandboxPageState } from "./use-sandbox-page-state";
@@ -20,6 +20,7 @@ import { SandboxLifecycle } from "./SandboxLifecycle";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
+import { writeSandboxDeployment } from "./sandbox-deployment-write";
 import { sandboxSize } from "./deployment-specification";
 import "./SandboxManagerView.css";
 
@@ -174,29 +175,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   // Rendered first in both the list and a node's page, so an open command outlives the navigation.
   const enrollment = hostedNodes && snapshot ? <NodeEnrollment key={snapshot.deployment.generation} client={client} consoleConfig={consoleConfig} deployment={snapshot.deployment} nodes={snapshot.nodes} open={adding} fresh={nodesConfirmed && !snapshot.deployment.reset} onClose={() => setAdding(false)} onRefresh={refreshNodes} /> : null;
 
-  if (params.id && hostedNodes) {
-    const back = () => goBack("nodes");
-    return <>
-      {enrollment}
-      <NodesPageHeader
-        headingRef={heading}
-        back={back}
-        title={selected ? selected.name || selected.id : params.id}
-        actions={<>
-          {refreshButton}
-          {selected ? <button type="button" className="button outline" disabled={busy || removing || !nodesConfirmed} onClick={() => setEditTarget(selected)}><Pencil size={14} aria-hidden="true" />{t("Edit node")}</button> : null}
-          {selected ? <button type="button" className="button danger" disabled={busy || removing || !nodesConfirmed} onClick={() => askRemove(selected)}><Trash2 size={14} aria-hidden="true" />{t("Remove node")}</button> : null}
-        </>}
-      />
-      <div className="console-page-body sandbox-content">
-        {status}
-        {selected ? <NodeDetail node={selected} allocations={allocations} coreUrl={snapshot?.deployment.core_url ?? ""} targetGeneration={snapshot?.deployment.generation} stale={!nodesConfirmed} suspension={snapshot?.deployment.suspension ?? null} /> : snapshot && nodesConfirmed && !loading ? (
-          <EmptyState icon={Server} title={t("Node not found")} hint={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back")}</button>} />
-        ) : null}
-      </div>
-      {dialog}
-      {cleanupDialog}
-      <NodeEditDialog
+  const editDialog = <NodeEditDialog
         key={editTarget?.id ?? "closed"}
         client={client}
         node={editTarget}
@@ -212,7 +191,40 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
           void queryClient.invalidateQueries({ queryKey: ["sandbox-fleet"] });
           if (saved) void queryClient.invalidateQueries({ queryKey: ["sandbox-node", saved.id] });
         }}
+      />;
+
+  async function saveIdle(seconds: number) {
+    if (busy || loading || !fresh || setupNeedsRefresh) return false;
+    try {
+      return await writeSandboxDeployment(queryClient, (signal) => client.updateSuspension({ idle_seconds: seconds }, { signal })) !== null;
+    } catch (error) {
+      toast.show(t(sandboxWriteUncertain(error) ? "Couldn't confirm the sandbox change" : "Core rejected the sandbox change"), { tone: "error", detail: sandboxRequestError(error, locale), key: "sandbox-write" });
+      return false;
+    }
+  }
+
+  if (params.id && hostedNodes) {
+    const back = () => goBack("nodes");
+    return <>
+      {enrollment}
+      <NodesPageHeader
+        headingRef={heading}
+        back={back}
+        title={selected ? selected.name || selected.id : params.id}
+        actions={<>
+          {refreshButton}
+          {selected ? <button type="button" className="button danger" disabled={busy || removing || !nodesConfirmed} onClick={() => askRemove(selected)}><Trash2 size={14} aria-hidden="true" />{t("Remove node")}</button> : null}
+        </>}
       />
+      <div className="console-page-body sandbox-content">
+        {status}
+        {selected ? <NodeDetail node={selected} allocations={allocations} coreUrl={snapshot?.deployment.core_url ?? ""} targetGeneration={snapshot?.deployment.generation} stale={!nodesConfirmed} suspension={snapshot?.deployment.suspension ?? null} /> : snapshot && nodesConfirmed && !loading ? (
+          <EmptyState icon={Server} title={t("Node not found")} hint={t("This node is not registered. It may have been removed.")} action={<button type="button" className="button outline" onClick={back}>{t("Back")}</button>} />
+        ) : null}
+      </div>
+      {dialog}
+      {cleanupDialog}
+
     </>;
   }
 
@@ -233,15 +245,15 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         {staleNodes.length ? <p className="sandbox-notice sandbox-address-warning" role="status">{staleNodes.length === 1
           ? t("{{name}} is still bound to an old Core address. Remove it and add it again.", { name: staleNodes[0] })
           : t("{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.", { count: staleNodes.length, names: new Intl.ListFormat(i18n.resolvedLanguage, { type: "conjunction" }).format(staleNodes) })}</p> : null}
-        {hostedNodes && suspends ? <SandboxLifecycle deployment={snapshot.deployment} nodes={compatible && (nodesConfirmed || nodes.length > 0) ? nodes : null} stale={!nodesConfirmed} /> : null}
-        {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
+        {hostedNodes ? <SandboxLifecycle deployment={snapshot.deployment} nodes={compatible && (nodesConfirmed || nodes.length > 0) ? nodes : null} stale={!nodesConfirmed} controls={{ disabled: busy || loading || !fresh || !nodesConfirmed || setupNeedsRefresh || Boolean(snapshot.deployment.reset), onSave: saveIdle }}>
           {nodes.length
-            ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!nodesConfirmed} disabled={busy || loading || removing || !nodesConfirmed} suspends={suspends} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />
+            ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!nodesConfirmed} disabled={busy || loading || removing || !nodesConfirmed} suspends={suspends} onOpen={(node) => navigate("nodes", { id: node.id })} onEdit={setEditTarget} onRemove={askRemove} />
             : nodesConfirmed ? <EmptyState icon={Server} title={t("Add your first node")} hint={t("No nodes registered. Add a node to provide hosted capacity.")} /> : null}
-        </section> : null}
+        </SandboxLifecycle> : null}
       </> : null}
     </div>
     {dialog}
     {cleanupDialog}
+    {editDialog}
   </>;
 }

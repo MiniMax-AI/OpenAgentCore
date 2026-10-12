@@ -38,6 +38,7 @@ type SandboxEnrollmentTokenRequest struct {
 // identity, generation configuration, capacity and removal.
 type Deployment interface {
 	View(ctx context.Context) (deployment.View, error)
+	UpdateIdleSeconds(context.Context, int64) (deployment.View, error)
 	ListNodes(ctx context.Context) ([]deployment.Node, error)
 	NodeDetail(ctx context.Context, id, window string) (deployment.NodeDetail, error)
 	UpdateNode(ctx context.Context, id string, update deployment.NodeUpdate) error
@@ -70,6 +71,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 	r.Get("/sandbox/deployment", h.sandboxDeployment)
 	r.Post("/sandbox/providers/{provider}/discovery", h.discoverSandboxConfiguration)
 	r.Post("/sandbox/deployment", h.initializeSandboxDeployment)
+	r.Patch("/sandbox/deployment", h.updateSandboxIdlePolicy)
 	r.Put("/sandbox/deployment", h.updateSandboxDeployment)
 	r.Post("/sandbox/deployment/reset", h.startSandboxReset)
 	r.Delete("/sandbox/deployment/reset", h.cancelSandboxReset)

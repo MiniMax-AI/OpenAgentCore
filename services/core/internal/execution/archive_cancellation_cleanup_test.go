@@ -108,7 +108,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			currentCompute := sandbox.Compute{ID: uuid.NewString(), Name: owner.ID + "-g0"}
 			if checkpoint {
 				state, _ := json.Marshal(runtimeCompute{Current: currentCompute})
-				owner, err = leased.Deployment.SetCompute(t.Context(), owner, "running", state, nil, 0)
+				owner, err = leased.Deployment.SetCompute(t.Context(), owner, "running", state, nil)
 				if err != nil {
 					t.Fatal(err)
 				}

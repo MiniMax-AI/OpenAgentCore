@@ -93,6 +93,7 @@ func (f *fakeReservationTx) InsertAllocation(allocation NewAllocation) (Allocati
 }
 
 type fakeAllocationTx struct {
+	idleSeconds          int64
 	canRetainEnvironment func(Allocation) (bool, error)
 	t                    testing.TB
 	loadActivity         func(Allocation) (Activity, error)
@@ -461,19 +462,15 @@ func TestSetComputeValidatesBeforeStorage(t *testing.T) {
 	until := time.Now().Add(time.Hour)
 	for name, call := range map[string]func(*ExecutionOperations) error{
 		"skipped phase": func(o *ExecutionOperations) error {
-			_, err := o.SetCompute(t.Context(), owner, "suspended", json.RawMessage(`{}`), &until, time.Second)
+			_, err := o.SetCompute(t.Context(), owner, "suspended", json.RawMessage(`{}`), &until)
 			return err
 		},
 		"state not object": func(o *ExecutionOperations) error {
-			_, err := o.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`[]`), &until, time.Second)
+			_, err := o.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`[]`), &until)
 			return err
 		},
 		"no retention": func(o *ExecutionOperations) error {
-			_, err := o.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), nil, time.Second)
-			return err
-		},
-		"no idle timeout": func(o *ExecutionOperations) error {
-			_, err := o.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0)
+			_, err := o.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), nil)
 			return err
 		},
 	} {
@@ -684,7 +681,7 @@ func TestSetComputeRechecksIdlePressureAndActivity(t *testing.T) {
 				current.ComputeActivityAt = now
 			}
 			pressureChecks, writes := 0, 0
-			tx := &fakeAllocationTx{t: t,
+			tx := &fakeAllocationTx{t: t, idleSeconds: 300,
 				loadAllocation: func() (Allocation, error) { return current, nil },
 				loadSessionDevice: func() (SessionDevice, bool, error) {
 					return SessionDevice{ID: owner.DeviceID, EnvironmentID: owner.EnvironmentID}, true, nil
@@ -714,7 +711,7 @@ func TestSetComputeRechecksIdlePressureAndActivity(t *testing.T) {
 				t.Fatal(err)
 			}
 			until := now.Add(time.Hour)
-			_, err = operations.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+			_, err = operations.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("SetCompute: %v, want %v", err, test.want)
 			}
@@ -753,7 +750,7 @@ func TestBeginRestoreDirectKeepsAllocationAndRetention(t *testing.T) {
 	if err != nil || restored.ID != owner.ID || restored.NodeID != "" || restored.ComputePhase != "restoring" {
 		t.Fatal("direct restore changed ownership", restored, err)
 	}
-	if _, err := operations.SetCompute(t.Context(), owner, "restoring", json.RawMessage(`{}`), &until, time.Minute); !errors.Is(err, ErrInvalidInput) {
+	if _, err := operations.SetCompute(t.Context(), owner, "restoring", json.RawMessage(`{}`), &until); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("restore bypassed capacity admission", err)
 	}
 }
@@ -762,3 +759,5 @@ func (f *fakeReservationTx) ReleaseFailedPlacement(placement.Reserved) error {
 	unexpected(f.t, "ReleaseFailedPlacement")
 	return nil
 }
+
+func (f *fakeAllocationTx) LoadIdleSeconds() (int64, error) { return f.idleSeconds, nil }

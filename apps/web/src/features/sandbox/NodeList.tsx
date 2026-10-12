@@ -56,7 +56,7 @@ export function OldAddressHint() {
   return <span className="node-status-hint">{t("Remove and add again")}</span>;
 }
 
-export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspends = false, onOpen, onRemove }: {
+export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspends = false, onOpen, onRemove, onEdit }: {
   nodes: readonly SandboxNode[];
   /** The deployment's address; a node enrolled with another one is on an old address. */
   coreUrl: string;
@@ -67,6 +67,7 @@ export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspend
   disabled: boolean;
   onOpen: (node: SandboxNode) => void;
   onRemove: (node: SandboxNode) => void;
+  onEdit?: (node: SandboxNode) => void;
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage;
@@ -113,6 +114,7 @@ export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspend
                 <td className="nodes-nowrap">{formatDateTime(epochSeconds(node.created_at), locale)}</td>
                 <td className="actions-cell">
                   <RowActions>
+                    {onEdit ? <button className="text-action" type="button" disabled={disabled} onClick={() => onEdit(node)}>{t("Edit node")}</button> : null}
                     <button className="text-action danger" type="button" disabled={disabled} aria-label={t("Remove {{name}}", { name })} onClick={() => onRemove(node)}>
                       {t("Remove")}
                     </button>

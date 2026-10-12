@@ -262,6 +262,7 @@ type RuntimeDeployment struct {
 	ResetAudit         []byte             `json:"reset_audit"`
 	ProviderConfig     []byte             `json:"provider_config"`
 	ProviderMetadata   []byte             `json:"provider_metadata"`
+	IdleSeconds        int64              `json:"idle_seconds"`
 }
 
 type RuntimeDeploymentGeneration struct {

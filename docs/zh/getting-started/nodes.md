@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 2549c792c6838d69a210be789bf969ed9e2c49b7da9bc9f0151eaa1298965184
+source_hash: dc80db64e7c4d6a021a929db027cfbca6ca8e877b47126ddaa5f48e493461d6d
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -102,6 +102,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 沙箱设置适用于整个安装，节点跟随这些设置。
 
 - **规格、Runtime 版本、E2B 密钥或模板构建。** 打开 **System** → **Manage sandbox configuration** → **Change resources**，修改并保存。已有沙箱保持其配置。每个节点继续服务旧配置，同时准备新配置；**Nodes** 展示进度：**Preparing target**、**Ready for target**，或带[原因](#readiness-codes)的 **Preparation failed**。Core 优先在已准备好新配置的节点上放置新 Session；这些节点没有容量时，会使用仍服务旧配置的节点。E2B 变更立即生效。
+- **容量与空闲挂起。** 在 **Nodes** → **Capacity and suspension** 中，通过 **Edit node** 修改各节点的活跃和保留上限；通过 **Idle before suspension (seconds)** → **Save** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
 - **后端。** 同一页面选择 **Reset deployment**。自动重置立即归档空闲托管 Session，并让运行中的工作在设定截止时间前完成；强制重置立即取消工作。离线节点必须恢复连接，让 Core 确认清理。重置完成时，Core 已撤销所有节点和未使用命令：配置新后端后重新添加节点。**Cancel reset** 停止剩余工作；已归档 Session 仍保持归档。
 
 [重置协议](../../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)描述重置会归档和保留哪些内容。归档单个托管 Session 时，使用 [Core API](../../../contracts/agents-api/zh/admin-api.md#session-archive)。

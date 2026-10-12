@@ -17,11 +17,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// RuntimeSuspensionPolicy is the idle suspension policy of a provider that
-// suspends sandboxes.
+// RuntimeSuspensionPolicy supplies snapshot retention for a provider that
+// suspends sandboxes. Deployment storage owns the mutable idle timeout.
 type RuntimeSuspensionPolicy struct {
-	IdleTimeout time.Duration
-	Retention   time.Duration
+	Retention time.Duration
 }
 
 type runtimeCompute struct {
@@ -38,15 +37,7 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	if err != nil {
 		return owner, err
 	}
-	idleTimeout := time.Duration(0)
-	if phase == "quiescing" {
-		policy := r.config.Suspension
-		if policy == nil {
-			return owner, sandbox.ErrInvalid
-		}
-		idleTimeout = policy.IdleTimeout
-	}
-	next, err := r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
+	next, err := r.deployment.SetCompute(ctx, owner, phase, raw, until)
 	if err == nil {
 		log.Ctx(ctx).Info("Runtime compute phase saved", "allocation_id", owner.ID, "node_id", owner.NodeID, "from", owner.ComputePhase, "to", phase)
 	}

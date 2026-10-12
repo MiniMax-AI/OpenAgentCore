@@ -158,8 +158,7 @@ func (s *managedSetup) configuration(setup deployment.Setup) (execution.Prepared
 		CoreURL: s.runtimeAPI, BackendFingerprint: setup.BackendFingerprint, Provider: provider,
 		Resources: setup.Specification.Resources, WorkspaceRequirements: adapter.Policy.Workspace, Workspace: setup.Specification.Workspace}
 	if setup.Suspension != nil {
-		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
-			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second}
+		selected.Suspension = &execution.RuntimeSuspensionPolicy{Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second}
 	}
 	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.publish}, nil
 }

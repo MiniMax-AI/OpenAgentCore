@@ -94,10 +94,9 @@ export function NodeEditDialog({ client, node, size, suspends, onClose, onSaved 
           {nameError ? <span id={`${id}-name-error`} className="field-error">{nameError}</span> : null}
         </label>
         <div className="field">
-          <span className="field-label-row"><label htmlFor={`${id}-active`}>{t("Sandboxes at once")}</label><HelpTip>{t("The most sandboxes Core places on this node at the same time.")}</HelpTip></span>
-          <input id={`${id}-active`} inputMode="numeric" value={active} onChange={(event) => { setActive(event.target.value); setError(null); }} aria-invalid={Boolean(activeError)} aria-errormessage={activeError ? `${id}-active-error` : undefined} aria-describedby={hostFacts ? `${id}-host` : undefined} />
+          <span className="field-label-row"><label htmlFor={`${id}-active`}>{t("Sandboxes at once")}</label><HelpTip>{t("The most sandboxes Core places on this node at the same time.")}{hostFacts ? <> {hostFacts}</> : null}</HelpTip></span>
+          <input id={`${id}-active`} inputMode="numeric" value={active} onChange={(event) => { setActive(event.target.value); setError(null); }} aria-invalid={Boolean(activeError)} aria-errormessage={activeError ? `${id}-active-error` : undefined} />
           {activeError ? <span id={`${id}-active-error`} className="field-error">{activeError}</span> : null}
-          {hostFacts ? <small id={`${id}-host`}>{hostFacts}</small> : null}
         </div>
         {suspends ? (
           <div className="field">

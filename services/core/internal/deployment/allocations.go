@@ -251,8 +251,8 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 // revision and the Session lock fence a stale lifecycle observation. Moving
 // running compute to quiescing requires idle compute and either the idle
 // timeout or capacity pressure, rechecked in the transaction.
-func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (Allocation, error) {
-	if owner.ComputePhase == "suspended" && phase == "restoring" || !computeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
+func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, phase string, state json.RawMessage, retainedUntil *time.Time) (Allocation, error) {
+	if owner.ComputePhase == "suspended" && phase == "restoring" || !computeTransition(owner.ComputePhase, phase) || !json.Valid(state) {
 		return Allocation{}, ErrInvalidInput
 	}
 	if phase != "running" && (retainedUntil == nil || retainedUntil.IsZero()) {
@@ -278,7 +278,11 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 				if current.ComputeActivityAt.After(owner.ComputeActivityAt) {
 					return Allocation{}, ErrAllocationConflict
 				}
-				if !activity.ReadyToSuspend(idleTimeout) {
+				seconds, err := tx.LoadIdleSeconds()
+				if err != nil {
+					return Allocation{}, err
+				}
+				if !activity.ReadyToSuspend(time.Duration(seconds) * time.Second) {
 					// A short quiet period also backs off a rejected daemon quiesce.
 					if !activity.ReadyToSuspend(15*time.Second) || current.NodeID == "" {
 						return Allocation{}, ErrNotIdle

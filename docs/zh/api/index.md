@@ -1,7 +1,7 @@
 ---
 title: "API 命名空间和凭据"
 source: docs/api/index.md
-source_hash: cb8f94a1fc272ce57b319fa375c9a82cc450092526492e2141d08ecca1cf42f2
+source_hash: 66a80b6c579488fe1412ede51a0f0f9c03205443bc0be935b6a79d56f0e758d4
 ---
 
 Core 提供三个命名空间。每个命名空间都有一种调用方及其独立凭据，凭据只能在其所属命名空间中使用。
@@ -23,3 +23,5 @@ Core 提供三个命名空间。每个命名空间都有一种调用方及其独
 节点、Runtime 守护进程和自托管安装程序使用各自的凭据调用 `/api/v1`。[机器连接 API](../../../contracts/agents-api/zh/machine-api.md) 列出了每个路由、调用方和凭据。
 
 运维脚本通过经 Core key 认证的 `GET` 和 `PUT /core/v1/workspace-storage` 配置独立文件系统存储；参见[工作区存储](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
+
+Web 和运维脚本通过 Core key 认证的 `PATCH /core/v1/sandbox/deployment` 更新沙箱空闲策略；参见[沙箱部署](../../../contracts/agents-api/zh/sandbox-deployment.md)。

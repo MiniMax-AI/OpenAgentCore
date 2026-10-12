@@ -31,10 +31,11 @@ func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, depl
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
+	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET created_at=clock_timestamp()-interval '10 minutes',compute_activity_at=clock_timestamp()-interval '10 minutes',compute_phase_changed_at=clock_timestamp()-interval '10 minutes' WHERE id=$1`, owner.ID)
 	return s, w, pool, owner
 }
 
@@ -54,16 +55,12 @@ func runtimeSuspensionCompleted(t *testing.T, pool *pgxpool.Pool, owner deployme
 
 func runtimeSuspensionStep(t *testing.T, w *Store, owner deployment.Allocation, phase string, until *time.Time) deployment.Allocation {
 	t.Helper()
-	idleTimeout := time.Duration(0)
-	if owner.ComputePhase == "running" && phase == "quiescing" {
-		idleTimeout = time.Nanosecond
-	}
 	var next deployment.Allocation
 	var err error
 	if phase == "restoring" {
 		next, err = deploymentExecution(t, w).BeginRestore(t.Context(), owner, sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`))
 	} else {
-		next, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, phase, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`), until, idleTimeout)
+		next, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, phase, json.RawMessage(`{"instance":"original","snapshot":"qualified"}`), until)
 	}
 	if err != nil {
 		t.Fatalf("%s -> %s: %v", owner.ComputePhase, phase, err)
@@ -104,7 +101,7 @@ func TestRuntimeSuspensionRequiresIdleAndNoPendingWork(t *testing.T) {
 				t.Fatalf("activity lost pending work: %+v", activity)
 			}
 			until := time.Now().Add(time.Hour)
-			_, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
+			_, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
 			if kind == "idle" || kind == "no_completed_turn" {
 				if err != nil {
 					t.Fatal(err)
@@ -126,7 +123,7 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"operation":"same-observation"}`), &until, time.Nanosecond)
+			_, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"operation":"same-observation"}`), &until)
 			results <- err
 		}()
 	}
@@ -152,7 +149,7 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	if current.ComputeRevision != owner.ComputeRevision+1 || current.ComputePhase != "quiescing" {
 		t.Fatal("operation intent not durable", current)
 	}
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"stale":true}`), &until, time.Nanosecond); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"stale":true}`), &until); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("stale phase overwrite", err)
 	}
 	current = runtimeSuspensionStep(t, w, current, "running", nil)
@@ -168,15 +165,15 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	if err := deploymentExecution(t, w).ClearWake(t.Context(), latest, latest.ComputeActivityAt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), observed, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), observed, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("newer activity was swallowed", err)
 	}
 	for _, invalid := range []json.RawMessage{json.RawMessage(`[]`), json.RawMessage(`null`), json.RawMessage(`false`), json.RawMessage(`{`)} {
-		if _, err := deploymentExecution(t, w).SetCompute(t.Context(), latest, "running", invalid, nil, 0); !errors.Is(err, deployment.ErrInvalidInput) {
+		if _, err := deploymentExecution(t, w).SetCompute(t.Context(), latest, "running", invalid, nil); !errors.Is(err, deployment.ErrInvalidInput) {
 			t.Fatal("non-object compute state accepted", string(invalid), err)
 		}
 	}
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), latest, "suspended", json.RawMessage(`{}`), &until, 0); !errors.Is(err, deployment.ErrInvalidInput) {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), latest, "suspended", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("running skipped snapshot protocol", err)
 	}
 }
@@ -362,18 +359,12 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
 			until := time.Now().Add(time.Hour)
-			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrNotIdle) {
+			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)
 			}
 			activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 			if err != nil || activity.Busy || activity.WakeRequested || activity.ReadyToSuspend(idleTimeout) {
 				t.Fatal("last completion did not restart idle interval", activity, err)
-			}
-			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, deployment.ErrInvalidInput) {
-				t.Fatal("missing idle timeout accepted", err)
-			}
-			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); err != nil {
-				t.Fatal("elapsed idle timeout rejected", err)
 			}
 		})
 	}
@@ -392,7 +383,7 @@ func TestRuntimeComputePhaseChangedAt(t *testing.T) {
 		return value
 	}
 	entered := changedAt()
-	owner, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"updated"}`), nil, 0)
+	owner, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"updated"}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +433,7 @@ func TestNeverStartedSessionIdleStartsAfterInitialization(t *testing.T) {
 	_, w, pool, owner := runtimeSuspensionFixture(t)
 	const timeout = 5 * time.Minute
 	until := time.Now().Add(time.Hour)
-	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '1 hour',created_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, owner.ID)
+	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase_changed_at=clock_timestamp(),compute_activity_at=clock_timestamp()-interval '1 hour',created_at=clock_timestamp()-interval '1 hour' WHERE id=$1`, owner.ID)
 	activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 	if err != nil || activity.ReadyToSuspend(timeout) {
 		t.Fatal("creation age bypassed ready-time idle clock", activity, err)
@@ -453,16 +444,16 @@ func TestNeverStartedSessionIdleStartsAfterInitialization(t *testing.T) {
 		t.Fatal("never-started initialized Session cannot idle", activity, err)
 	}
 	runtimeSuspensionSQL(t, pool, `UPDATE environments SET initialization='running' WHERE id=$1`, owner.EnvironmentID)
-	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, timeout); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("unfinished initialization admitted suspension", err)
 	}
 	runtimeSuspensionSQL(t, pool, `UPDATE environments SET initialization='complete' WHERE id=$1`, owner.EnvironmentID)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_wake_requested=true WHERE id=$1`, owner.ID)
-	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, timeout); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("wake lost to suspension", err)
 	}
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_wake_requested=false WHERE id=$1`, owner.ID)
-	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, timeout); err != nil {
+	if _, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); err != nil {
 		t.Fatal("idle Session with no Turn was blocked", err)
 	}
 }

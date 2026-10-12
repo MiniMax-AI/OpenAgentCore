@@ -474,3 +474,5 @@ Motion reports state and never makes anyone wait: the navigation chip and segmen
 Use Lucide throughout. Navigation icons are 18px with a 1.75px stroke; shared tool icons use the same stroke at their existing compact sizes. Default navigation icons use secondary ink, selected icons use primary ink. The selected row has a neutral background and a narrow indigo marker.
 
 Getting started emphasizes the first confirmed incomplete step with the primary button while leaving every step independently available. Only authoritative, successful zero-Session reads replace the activity chart with first-use guidance. Missing and failed reads retain their existing uncertainty and recovery controls.
+
+Configuration controls show concise labels, values and actions. Put necessary explanatory policy text behind a `HelpTip` question mark; do not add persistent small-print helper text or note paragraphs. Validation and request failures remain visible beside the affected action or field.

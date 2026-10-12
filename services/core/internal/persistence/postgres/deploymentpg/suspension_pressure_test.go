@@ -62,7 +62,7 @@ func TestPressureSuspensionRequiresUsefulCapacity(t *testing.T) {
 				f.connect(t, other.NodeID)
 			}
 			until := time.Now().Add(time.Hour)
-			_, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+			_, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
 			if !errors.Is(err, test.want) {
 				t.Fatalf("quiesce: %v, want %v", err, test.want)
 			}
@@ -95,7 +95,7 @@ func TestPressureSuspensionSerializesAcrossNodes(t *testing.T) {
 	for i, owner := range owners {
 		wg.Go(func() {
 			until := time.Now().Add(time.Hour)
-			_, errs[i] = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+			_, errs[i] = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
 		})
 	}
 	wg.Wait()
@@ -143,7 +143,7 @@ func TestPressureSuspensionServesRestoreOnItsOriginalNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	until := time.Now().Add(time.Hour)
-	if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute); err != nil {
+	if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); err != nil {
 		t.Fatal(err)
 	}
 	var wake bool
@@ -168,7 +168,7 @@ func TestPressureDemandScansPastIncompatiblePage(t *testing.T) {
 	}
 	pendingPressureDemand(t, f)
 	until := time.Now().Add(time.Hour)
-	result, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+	result, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,13 +205,13 @@ func TestPressureDemandRejectsUnqualifiedRetainedReceipt(t *testing.T) {
 			}
 			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
 			until := time.Now().Add(time.Hour)
-			if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute); !errors.Is(err, deployment.ErrNotIdle) {
+			if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
 				t.Fatal("unqualified receipt suspended healthy owner", err)
 			}
 			// An empty qualified page must not stop the cursor before a later
 			// valid request, even though the raw first page was nonempty.
 			pendingPressureDemand(t, f)
-			if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute); err != nil {
+			if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); err != nil {
 				t.Fatal("later valid demand was hidden", err)
 			}
 		})
@@ -276,14 +276,14 @@ func TestPressureReclamationIgnoresUnavailableNodeReceipts(t *testing.T) {
 
 			until := time.Now().Add(time.Hour)
 
-			current, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+			current, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
 			if err != nil {
 				t.Fatal("healthy suspension blocked", err)
 			}
 			// Supply healthy native quiesce/capture/stop receipts through the
 			// existing fenced phase transitions; never settle the stuck owner.
 			for _, next := range []string{"suspending", "suspended"} {
-				current, err = changes.SetCompute(t.Context(), current, next, json.RawMessage(`{}`), &until, 5*time.Minute)
+				current, err = changes.SetCompute(t.Context(), current, next, json.RawMessage(`{}`), &until)
 				if err != nil {
 					t.Fatal(err)
 				}

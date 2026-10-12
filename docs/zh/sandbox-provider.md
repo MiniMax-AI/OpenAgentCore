@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 30ee130c8e62827662f1d0867da206e911e4dbb57ed5d75fe68cffdfda55e2b3
+source_hash: ade105e47436ca60735ba9f084c370d047403ba2f867f38ff55d798d305ae196
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -186,7 +186,7 @@ placement 自动完成：Session 创建提交持久的 pending 工作，共同�
 
 ### 暂停 {#suspension}
 
-Core 用同一个共享 policy 暂停每个声明 checkpoint 支持的 provider 的空闲工作：通常在工作空闲 5 分钟（300 秒）后暂停，snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 在 initialization 完成、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input 或 file operation，且真实 activity 已空闲达到该时间后暂停。Session 无需已运行过 Turn。idle clock 不早于 allocation 进入 running compute phase 的时刻开始，包括 wake 后重新进入该 phase。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
+Core 用同一个共享 policy 暂停每个声明 checkpoint 支持的 provider 的空闲工作：[可配置的空闲时长](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)默认为 5 分钟（300 秒），snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 在 initialization 完成、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input 或 file operation，且真实 activity 已空闲达到该时间后暂停。Session 无需已运行过 Turn。idle clock 不早于 allocation 进入 running compute phase 的时刻开始，包括 wake 后重新进入该 phase。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
 
 容量压力可以让已经空闲的 node allocation 在通常超时之前暂停，但仍需经过 15 秒无活动宽限期。Session 锁内的决策重新检查 pending work、wake request 和 activity，再获取共享 deployment 容量锁并确认兼容的等待需求。它不会中断活动 Turn，也不会在普通 quiesce、capture 和 source-stop 证明完成前释放容量。压力触发的回收采用保守策略：只有进行中回收所属的节点当前有资格服务同一需求时，它才会推迟另一次回收。不可用或不兼容的节点保留其 ownership receipt，但不会阻挡健康节点的容量。如果暂停无法使容量可用，等待请求仍保留原始期限。
 

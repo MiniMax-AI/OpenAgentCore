@@ -19,3 +19,6 @@ SELECT
 (SELECT count(*) FROM environment_executor_credentials c
  LEFT JOIN environments e ON e.id = c.environment_id LEFT JOIN sessions s ON s.id = e.session_id
  WHERE c.revoked_at IS NULL AND (c.environment_id IS NULL OR s.deleted_at IS NULL))::bigint AS self_hosted_executors;
+
+-- name: UpdateSandboxIdleSeconds :exec
+UPDATE runtime_deployment SET idle_seconds = $1 WHERE singleton = true;

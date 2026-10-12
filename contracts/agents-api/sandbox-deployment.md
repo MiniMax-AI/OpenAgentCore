@@ -6,6 +6,12 @@ The sandbox deployment selects the Sandbox Provider, the per-sandbox resources a
 
 This contract owns the Core API routes below and their semantics. The [nodes guide](../../docs/getting-started/nodes.md) owns the operator workflow, the [machine connection API](./machine-api.md#node-routes) the routes nodes call, and the [sandbox node protocol](./node-generation-protocol.md) the node connection.
 
+## Suspension policy
+
+`PATCH /core/v1/sandbox/deployment` accepts `{"idle_seconds": 300}`. `idle_seconds` is a required integer from 30 to 86400 seconds, defaulting to 300, stored in Core's database. Only configured Providers declaring checkpoint support accept this change; unconfigured, unsupported or resetting deployments reject it. Success returns the deployment view with the saved `suspension.idle_seconds`.
+
+Changes apply to existing and new running allocations on the next lifecycle pass, without a Core restart, generation change or node rollout. Suspension already in progress is not cancelled; existing snapshots and the 24-hour retention period are unchanged. [Capacity-pressure reclamation](../../docs/sandbox-provider.md#suspension) can still suspend after 15 seconds of inactivity. Web manages this deployment-wide policy beside per-node capacity limits in **Nodes** → **Capacity and suspension**; the policy belongs to the deployment and capacity limits remain node-owned.
+
 ## Routes
 
 Every route requires the Core key. [Web's console server](../../docs/web/console-server.md) adds it on the server side for signed-in requests.
@@ -13,6 +19,7 @@ Every route requires the Core key. [Web's console server](../../docs/web/console
 | Route | Effect |
 | --- | --- |
 | `GET /core/v1/sandbox/deployment` | Read the safe active configuration, rollout, reset and resource counts |
+| `PATCH /core/v1/sandbox/deployment` | Update deployment-wide idle suspension without changing the configuration generation |
 | `POST /core/v1/sandbox/deployment` | Select the initial provider, resources and Runtime |
 | `PUT /core/v1/sandbox/deployment` | Change the same provider's target online |
 | `POST /core/v1/sandbox/deployment/reset` | Start or escalate a durable clear of hosted resources |

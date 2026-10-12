@@ -58,7 +58,7 @@ func translate(err error) error {
 // view never needs it. A credential the key cannot open or authenticate is an
 // internal decryption error.
 func record(d sqlc.RuntimeDeployment, cipher *credentialcrypto.Cipher, open bool) deployment.Record {
-	r := deployment.Record{InstallationID: uuidString(d.InstallationID), Provider: d.ProviderKind, BackendFingerprint: d.BackendFingerprint,
+	r := deployment.Record{IdleSeconds: d.IdleSeconds, InstallationID: uuidString(d.InstallationID), Provider: d.ProviderKind, BackendFingerprint: d.BackendFingerprint,
 		Generation: uint64(d.Generation), OwnerEpoch: uint64(d.OwnerEpoch), Mode: d.Mode, Specification: d.Specification,
 		Configuration: sandbox.ConfigurationRecord{Public: d.ProviderConfig, Metadata: d.ProviderMetadata}, CredentialStored: len(d.ProviderCredential) > 0}
 	if r.CredentialStored && open {

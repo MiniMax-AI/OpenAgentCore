@@ -93,7 +93,7 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 				if first == "quiesce" {
 					_, err = writes.ReserveEnvironmentFileWrite(ctx, owner.TenantID, owner.EnvironmentID, key)
 				} else {
-					_, err = deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
+					_, err = deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until)
 				}
 				done <- err
 			}()

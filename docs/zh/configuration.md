@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 506550dd727916c603fa2dfd713eaf190856b0536d6e4b6652a374419f2e7a4e
+source_hash: 70593bfb0249b0ff864d2b7a6062e2dad852b544ecf3274cbf8c4c9ba7eec527
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -98,7 +98,8 @@ Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` �
 | --- | --- | --- | --- |
 | 沙箱后端：Docker、microsandbox 或 E2B | **System** → **Manage sandbox configuration**：设置向导，最后点击 **Save configuration** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个后端，在首次登录后选择。要改用其他后端，必须先执行 **Reset deployment**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
 | 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web 会推荐 [Provider 声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
-| 节点及其容量 | **Nodes**：**Add node**；在节点页面上使用 **Edit node** 和 **Remove node** | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
+| 节点及其容量 | **Nodes**：**Add node**；**Capacity and suspension** → **Edit node**；在节点页面上使用 **Remove node** | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
+| 空闲挂起 | **Nodes** → **Capacity and suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
 | 项目和 API 密钥 | **Projects and keys**：**Create project**、**Rename**、**Issue key**、**Revoke**、**Archive** | `/core/v1/projects` | 密钥只显示一次；Core 存储其摘要 |
 | 每个 Harness 的默认模型 | **System** → **Default model configuration**：**Set** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
 | 自托管 Session 的执行器凭据 | **Session log**，然后进入 **Session** 页面：**Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 请参阅[自托管执行器](getting-started/self-hosted.md) |

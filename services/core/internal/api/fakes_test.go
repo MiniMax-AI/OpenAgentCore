@@ -181,6 +181,7 @@ func (f *fakeConfigurationDiscovery) DiscoverConfiguration(a0 context.Context, a
 }
 
 type fakeDeployment struct {
+	updateIdleSeconds   func(context.Context, int64) (deployment.View, error)
 	t                   testing.TB
 	view                func(context.Context) (deployment.View, error)
 	listNodes           func(context.Context) ([]deployment.Node, error)
@@ -1170,4 +1171,11 @@ func (f *fakeWriteAudit) ListWriteOperations(a0 context.Context, a1 string, a2 w
 		unexpectedCall(f.t, "ListWriteOperations")
 	}
 	return f.listWriteOperations(a0, a1, a2)
+}
+
+func (f *fakeDeployment) UpdateIdleSeconds(ctx context.Context, seconds int64) (deployment.View, error) {
+	if f.updateIdleSeconds == nil {
+		unexpectedCall(f.t, "UpdateIdleSeconds")
+	}
+	return f.updateIdleSeconds(ctx, seconds)
 }

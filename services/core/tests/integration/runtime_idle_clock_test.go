@@ -40,7 +40,7 @@ func managedIdleClockFixture(t *testing.T) (*Store, *Store, deployment.Allocatio
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
+	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +58,7 @@ func runtimeDatabaseTime(t *testing.T, s *Store) time.Time {
 func verifyManagedIdleClock(t *testing.T, s, w *Store, owner deployment.Allocation, before, after time.Time) deployment.Activity {
 	t.Helper()
 	const idleTimeout = time.Minute
+	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_deployment SET idle_seconds=60")
 	// Refresh the owner so the idle policy, rather than the stale-activity fence,
 	// must reject the recent completion.
 	owner, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
@@ -71,12 +72,12 @@ func verifyManagedIdleClock(t *testing.T, s, w *Store, owner deployment.Allocati
 		t.Fatal("idle clock did not use committed terminal ingestion", activity, before, after, err)
 	}
 	until := runtimeDatabaseTime(t, s).Add(time.Hour)
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("new completion admitted premature idle", err)
 	}
 	// Advance only the internal activity age; the remote public timestamp remains unchanged.
 	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes',compute_phase_changed_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", owner.ID)
-	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); err != nil {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); err != nil {
 		t.Fatal("remote timestamp delayed elapsed idle timer", err)
 	}
 	return activity

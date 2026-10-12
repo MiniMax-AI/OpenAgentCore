@@ -106,7 +106,7 @@ func TestPressurePreservesRetainableOwnerWhenRetainedSlotsAreFull(t *testing.T) 
 	}
 	pendingPressureDemand(t, f)
 	until := time.Now().Add(24 * time.Hour)
-	if _, err = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute); !errors.Is(err, deployment.ErrNotIdle) {
+	if _, err = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
 		t.Fatal("suspended without usable capacity", err)
 	}
 }

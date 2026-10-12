@@ -11,7 +11,7 @@ import {
   sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
   type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
   type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout, type RuntimeRelease,
-  type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
+  type SandboxIdlePolicyInput, type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
 } from "./generated/core-api";
 import type { ReadOptions } from "./types";
 
@@ -263,6 +263,9 @@ export class SandboxAdminClient {
   }
   updateDeployment(input: UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
     return this.#writeDeployment("PUT", input, options);
+  }
+  async updateSuspension(input: SandboxIdlePolicyInput, options?: ReadOptions): Promise<SandboxDeployment> {
+    return projectDeployment(await this.#core.json("/deployment", options, "PATCH", input));
   }
   async startReset(input: StartSandboxReset, options?: ReadOptions): Promise<SandboxDeployment> {
     return projectDeployment(await this.#core.json("/deployment/reset", options, "POST", input));

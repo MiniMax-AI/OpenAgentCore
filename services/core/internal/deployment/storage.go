@@ -112,6 +112,8 @@ type ReservationTx interface {
 // current, the allocation LoadAllocation returned, and returns it changed. A
 // write whose stored guard no longer holds is ErrAllocationConflict.
 type AllocationTx interface {
+	// LoadIdleSeconds locks the deployment and reads the current idle policy.
+	LoadIdleSeconds() (int64, error)
 	// CanRetainEnvironment checks the ready retained filesystem, completed
 	// initialization and selected Harness's qualified history under the Session lock.
 	CanRetainEnvironment(current Allocation) (bool, error)
@@ -294,8 +296,10 @@ type NodeReads interface {
 	GenerationKept(nodeID string, generation uint64) (bool, error)
 }
 
-// NodeTx is one node management transaction.
+// NodeTx is one node or live deployment policy management transaction.
 type NodeTx interface {
+	// SaveIdleSeconds updates the live policy without changing the generation.
+	SaveIdleSeconds(int64) error
 	NodeReads
 	ListNodes() ([]NodeRecord, error)
 	// InsertNode returns ErrNodeExists when the ID is in use, including by a
@@ -360,6 +364,7 @@ type DeploymentTx interface {
 
 // Record is the stored deployment.
 type Record struct {
+	IdleSeconds int64
 	// InstallationID is empty until Web setup claims an installation.
 	InstallationID     string
 	Provider           string

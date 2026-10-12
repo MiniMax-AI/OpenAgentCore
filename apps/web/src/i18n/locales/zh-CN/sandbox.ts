@@ -1,5 +1,9 @@
 import { firstRun } from "./first-run";
 export const sandbox = {
+  "Capacity and suspension": "容量与挂起",
+  "Idle before suspension (seconds)": "空闲多久后挂起（秒）",
+  "Deployment-wide: 30–86,400 seconds. Applies to existing and new running sandboxes without restarting them. Suspension already in progress and snapshot retention are unchanged. Capacity pressure may suspend an idle sandbox after 15 seconds.": "整个部署统一生效：30–86,400 秒。适用于现有和新建的运行中沙箱，无需重启。已经开始的挂起和快照保留期不变。容量紧张时，沙箱空闲 15 秒后可能提前挂起。",
+  "Enter a whole number from 30 to 86,400.": "请输入 30 到 86,400 之间的整数。",
   "Suspended placements across all registered nodes, including offline nodes. They do not consume an active slot.": "所有注册节点（含离线节点）上的已挂起分配，不占活跃名额。",
   "Automatic suspension": "自动挂起",
   "Active and retained limits cover online nodes. Suspended counts include all registered nodes. These are Core placement records, not CPU or memory measurements.": "活跃与保留名额统计在线节点；已挂起数量包含所有注册节点。这些是 Core 分配记录，并非 CPU 或内存实测值。",

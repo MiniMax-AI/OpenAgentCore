@@ -709,6 +709,15 @@ definitions:
         description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
         type: integer
     type: object
+  api.SandboxIdlePolicyInput:
+    properties:
+      idle_seconds:
+        maximum: 86400
+        minimum: 30
+        type: integer
+    required:
+      - idle_seconds
+    type: object
   api.SandboxMutationResponse:
     properties:
       deleted:
@@ -6830,6 +6839,49 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: Retrieve sandbox deployment
+      tags:
+        - Sandbox Manager
+    patch:
+      consumes:
+        - application/json
+      description: Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires checkpoint support and no active reset. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
+      parameters:
+        - description: Idle timeout in seconds
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/api.SandboxIdlePolicyInput'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deployment.View'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Update automatic suspension policy
       tags:
         - Sandbox Manager
     post:

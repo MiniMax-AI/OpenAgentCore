@@ -264,7 +264,7 @@ func TestCheckpointPressureSuspendsOnlyUsableDestination(t *testing.T) {
 				readyCheckpointNode(t, f, other, view, checkpointClass)
 			}
 			until := time.Now().Add(24 * time.Hour)
-			_, err := changes.SetCompute(t.Context(), active, "quiescing", json.RawMessage(`{}`), &until, 5*time.Minute)
+			_, err := changes.SetCompute(t.Context(), active, "quiescing", json.RawMessage(`{}`), &until)
 			if scenario == "waiting restore" {
 				if err != nil {
 					t.Fatal("compatible wake cannot trigger pressure suspension", err)

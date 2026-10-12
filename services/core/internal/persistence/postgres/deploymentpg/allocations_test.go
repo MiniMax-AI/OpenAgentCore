@@ -116,7 +116,7 @@ func TestAllocationWritesNeedTheLease(t *testing.T) {
 		"SettleCreation": func() error { _, err := closed.SettleCreation(t.Context(), owner); return err },
 		"RequestCleanup": func() error { _, err := closed.RequestCleanup(t.Context(), owner); return err },
 		"SetCompute": func() error {
-			_, err := closed.SetCompute(t.Context(), owner, "running", []byte(`{}`), nil, 0)
+			_, err := closed.SetCompute(t.Context(), owner, "running", []byte(`{}`), nil)
 			return err
 		},
 		"ClearWake": func() error { return closed.ClearWake(t.Context(), owner, time.Now()) },

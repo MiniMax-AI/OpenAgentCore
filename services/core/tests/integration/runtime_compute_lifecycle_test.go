@@ -288,11 +288,12 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 		}
 		server.Close()
 	})
-	f := &computeLifecycleFixture{t: t, store: s, provider: p, key: webDeployment(t, s, "microsandbox"), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour}}
+	f := &computeLifecycleFixture{t: t, store: s, provider: p, key: webDeployment(t, s, "microsandbox"), policy: execution.RuntimeSuspensionPolicy{Retention: time.Hour}}
 	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.sql(`UPDATE runtime_deployment SET idle_seconds=30`)
 	f.node = enrollNode(t, s, view, deployment.Capacity{MaxActive: maxActive, MaxRetained: maxRetained}).NodeID
 	f.start()
 	return f

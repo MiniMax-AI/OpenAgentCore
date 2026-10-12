@@ -112,7 +112,7 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second {
+		if !sandbox.SupportsCheckpoint(config.Provider) || policy.Retention < time.Second {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy

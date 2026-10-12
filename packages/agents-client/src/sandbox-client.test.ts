@@ -183,6 +183,20 @@ describe("Core sandbox credential boundaries", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("patches idle policy once through the existing deployment resource", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...docker, suspension: { idle_seconds: 60, retention_seconds: 86400 } }));
+    const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
+    expect((await admin.updateSuspension({ idle_seconds: 60 })).suspension?.idle_seconds).toBe(60);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("/core/v1/sandbox/deployment");
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ idle_seconds: 60 });
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
+    fetch.mockRejectedValue(new TypeError("Network failed"));
+    await expect(admin.updateSuspension({ idle_seconds: 60 })).rejects.toThrow("Network failed");
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("initializes using only the explicit provider with cancellation and admin credentials", async () => {
     const deployment = docker;
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(deployment));

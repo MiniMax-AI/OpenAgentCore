@@ -214,6 +214,7 @@ func (f *fakeNodeReads) GenerationKept(nodeID string, generation uint64) (bool, 
 }
 
 type fakeNodeTx struct {
+	saveIdleSeconds             func(int64) error
 	t                           testing.TB
 	loadDeployment              func() (Record, error)
 	loadNode                    func(string) (StoredNode, error)
@@ -643,4 +644,11 @@ func (f *fakeReader) PlacementDemand(context.Context, PlacementDemandCursor) ([]
 }
 func (f *fakeReader) RetainedNativeHistory(context.Context, AllocationKey) (bool, error) {
 	panic("unexpected RetainedNativeHistory")
+}
+
+func (f *fakeNodeTx) SaveIdleSeconds(seconds int64) error {
+	if f.saveIdleSeconds == nil {
+		unexpected(f.t, "SaveIdleSeconds")
+	}
+	return f.saveIdleSeconds(seconds)
 }

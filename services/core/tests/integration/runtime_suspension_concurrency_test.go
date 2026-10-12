@@ -124,7 +124,7 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
 			go func() {
-				_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "suspending", json.RawMessage(`{}`), &until, 0)
+				_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "suspending", json.RawMessage(`{}`), &until)
 				done <- err
 			}()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -193,7 +193,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 	done := make(chan error, 1)
 	go func() {
-		_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
+		_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until)
 		done <- err
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)

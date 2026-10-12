@@ -668,3 +668,8 @@ func (t *reservationTx) ReleaseFailedPlacement(p placement.Reserved) error {
 	}
 	return t.q.ReleaseFailedRuntimePlacement(t.ctx, sqlc.ReleaseFailedRuntimePlacementParams{EnvironmentID: t.environment, NodeID: node, DeploymentGeneration: pgtype.Int8{Int64: int64(p.Generation), Valid: true}})
 }
+
+func (t *allocationTx) LoadIdleSeconds() (int64, error) {
+	d, err := t.q.LockRuntimeDeployment(t.ctx)
+	return d.IdleSeconds, err
+}
