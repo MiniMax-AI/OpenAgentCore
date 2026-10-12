@@ -14,7 +14,7 @@ On Windows, download `install.ps1` and pass the same flags with `& ./install.ps1
 
 ## Docker Compose and hosting platforms
 
-Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization image and source revision in the [Compose template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml). Core and Web use the `latest` images, and PostgreSQL uses `postgres:16-alpine`. It starts PostgreSQL, Core and Web. Web forwards `/v1` and `/api/v1` to Core. Data lives in a named Docker volume. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
+Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization, Core and Web images and source revision in the [Compose template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml). PostgreSQL uses `postgres:16-alpine`. It starts PostgreSQL, Core and Web. Web forwards `/v1` and `/api/v1` to Core. Data lives in a named Docker volume. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
 
 For a local trial, download `compose.yaml` from a release into an empty directory, then run:
 

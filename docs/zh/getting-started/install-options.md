@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: 698909d30bf0ebdff2656deb6a6cb00c18181e835e2c1a7972de0d1e7ca47733
+source_hash: 7423324720152cc6c58459f3e60b3cb61f5c97ae291ff33867f1e90172831e91
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -16,7 +16,7 @@ Windows 可下载 `install.ps1`，然后使用相同参数，例如 `& ./install
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 
-在任一[支持的 Core 主机](install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会在 [Compose 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml)中固定初始化镜像及源码版本。Core 和 Web 使用 `latest` 镜像，PostgreSQL 使用 `postgres:16-alpine`。它会启动 PostgreSQL、Core 和 Web。Web 把 `/v1` 和 `/api/v1` 转发到 Core。数据保存在 Docker 命名卷中。一次性初始化服务会在该目录中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
+在任一[支持的 Core 主机](install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会在 [Compose 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml)中固定初始化、Core 和 Web 镜像及源码版本。PostgreSQL 使用 `postgres:16-alpine`。它会启动 PostgreSQL、Core 和 Web。Web 把 `/v1` 和 `/api/v1` 转发到 Core。数据保存在 Docker 命名卷中。一次性初始化服务会在该目录中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
 
 进行本地试用时，请将发行版的 `compose.yaml` 下载到一个空目录，然后运行：
 
