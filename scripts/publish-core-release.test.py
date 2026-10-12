@@ -385,7 +385,14 @@ class RegistryTests(unittest.TestCase):
             self.remote_images[ref] = {'manifests': [{'platform': {'os': 'linux', 'architecture': arch}, 'digest': self.digests[arch]} for arch in arches]}
 
     def output(self, command, **kwargs):
-        if command[1] == 'buildx': return self.index_digest
+        if command[1] == 'buildx':
+            # Buildx versions used by hosted runners treat templates beginning
+            # with {{.Manifest as a request for human-readable manifest output.
+            if command[-1].startswith('{{.Manifest'):
+                return 'Name: example/core:v1.2.3\nDigest: ' + self.index_digest + '\n'
+            self.assertEqual(command[-2:], ['--format', '{{json .Manifest}}'])
+            return json.dumps({'mediaType': 'application/vnd.oci.image.index.v1+json',
+                               'digest': self.index_digest, 'manifests': []})
         ref = command[-1]
         arch = 'arm64' if ref.endswith('arm64') else 'amd64'
         return json.dumps({'Descriptor': {'digest': self.digests[arch]}})
@@ -402,6 +409,17 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(result['ingress']['digest'], 'ghcr.io/minimax-ai/openagentcore/ingress@' + self.index_digest)
         self.assertEqual(len(self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3']['manifests']), 2)
         self.run.reset_mock(); self.publish(); self.assertEqual(self.pushes(), [])
+
+    def test_invalid_index_digest_prevents_floating_tag_updates(self):
+        for digest in ('', 'not-a-digest'):
+            with self.subTest(digest=digest):
+                self.index_digest = digest
+                self.run.reset_mock()
+                with self.assertRaisesRegex(ValueError, 'Invalid registry index digest'):
+                    self.publish(floating_latest=True)
+                self.assertFalse(any(c.args[0][1:4] == ['buildx', 'imagetools', 'create']
+                                     and c.args[0][5].endswith(':latest')
+                                     for c in self.run.call_args_list))
 
     def test_latest_updates_after_all_version_indexes(self):
         self.publish(floating_latest=True)

@@ -183,8 +183,9 @@ def publish_images(assets, repository, revision, tag, floating_latest=False):
             if registry_manifest(reference) is None:
                 subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", reference, *sources], check=True)
             verify_index(reference, registry_manifest(reference), expected)
-            digest = subprocess.check_output(["docker", "buildx", "imagetools", "inspect", reference,
-                                               "--format", "{{.Manifest.Digest}}"], text=True).strip()
+            index = json.loads(subprocess.check_output(["docker", "buildx", "imagetools", "inspect", reference,
+                                                        "--format", "{{json .Manifest}}"], text=True))
+            digest = index.get("digest", "")
             if not distribution.DIGEST.fullmatch(digest):
                 raise ValueError("Invalid registry index digest")
             pinned = reference.rsplit(":", 1)[0] + "@" + digest
