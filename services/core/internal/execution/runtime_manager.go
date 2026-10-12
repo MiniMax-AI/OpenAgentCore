@@ -98,7 +98,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1), hintDestination: m.hintDestination,
+			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination,
 		}}
 		m.nodes[id] = n
 	}
@@ -232,6 +232,7 @@ func (m *runtimeManager) retire(n *runtimeNode) {
 	// Retain the canceled entry until its last operation has actually returned;
 	// a concurrent stale placement lookup cannot create an overlapping gate.
 	r.gate <- struct{}{}
+	r.clearConnectionWatches()
 	<-r.gate
 	m.mu.Lock()
 	if m.nodes[r.nodeID] == n {
@@ -245,7 +246,7 @@ func (m *runtimeManager) runNode(n *runtimeNode) {
 	r := n.lifecycle
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	err := runRuntimeMaintenance(r.ctx, ticker.C, r.wakeHints, r.reconcile)
+	err := runRuntimeMaintenance(r.ctx, ticker.C, r.wakeHints, r.reconcile, r.pendingWake, r.provisionCommitted, r.connectionWake, r.observeAwaitingConnections)
 	if err != nil && r.ctx.Err() == nil {
 		// Provider failures are handled inside reconciliation. A failed owner
 		// check or database scan stops the single execution owner as before.
@@ -350,7 +351,17 @@ func (m *runtimeManager) stop() {
 
 // stop must precede drain. Both background loops and external provisioning or
 // manual reconciliation finish before Worker releases its unique writer lease.
-func (m *runtimeManager) drain() { m.active.Wait() }
+func (m *runtimeManager) drain() {
+	m.active.Wait()
+	// External provisioning may finish after the background lane exits. Release
+	// its watches only after every operation owned by this manager has drained.
+	for _, n := range m.snapshotNodes() {
+		r := n.lifecycle
+		r.gate <- struct{}{}
+		r.clearConnectionWatches()
+		<-r.gate
+	}
+}
 
 func (m *runtimeManager) deleteWorkspaces(ctx context.Context) error {
 	if m.workspaces == nil {

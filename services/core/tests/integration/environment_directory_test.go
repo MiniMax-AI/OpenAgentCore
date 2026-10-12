@@ -20,6 +20,11 @@ type directoryResult struct {
 
 func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
+	return directoryWorkerBeforeStart(t, nil)
+}
+
+func directoryWorkerBeforeStart(t *testing.T, before func(*dispatchHarness, sessions.Environment)) (*dispatchHarness, *execution.Worker, sessions.Environment) {
+	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
@@ -34,6 +39,9 @@ func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, session
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.WorkspaceReadPreparation
 	})
+	if before != nil {
+		before(h, environment)
+	}
 	w := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -253,4 +261,64 @@ func TestEnvironmentDirectoryObserverCancellationRetainsReadOwner(t *testing.T) 
 		t.Fatal("cancelled observer freed Session owner")
 	}
 	completeDirectoryRead(t, h, request, read, false, false)
+}
+
+// Hold the initializer scan so this test can fix the ordering between socket
+// connection, file admission and the initializer's durable completion.
+type pausedFileInitializationReader struct {
+	sessions.Reader
+	observed chan struct{}
+}
+
+func (r pausedFileInitializationReader) ListEnvironmentInitializations(context.Context, string) ([]sessions.EnvironmentInitialization, error) {
+	return nil, nil
+}
+func (r pausedFileInitializationReader) GetEnvironment(ctx context.Context, tenant, id string) (sessions.Environment, error) {
+	environment, err := r.Reader.GetEnvironment(ctx, tenant, id)
+	if err == nil && environment.Initialization == "running" {
+		select {
+		case r.observed <- struct{}{}:
+		default:
+		}
+	}
+	return environment, err
+}
+
+func TestEnvironmentDirectoryWaitsForConnectedInitialization(t *testing.T) {
+	observed := make(chan struct{}, 4)
+	h, w, environment := directoryWorkerBeforeStart(t, func(h *dispatchHarness, environment sessions.Environment) {
+		if _, err := h.s.pool.Exec(t.Context(), `UPDATE environments SET initialization='running' WHERE id=$1`, environment.ID); err != nil {
+			t.Fatal(err)
+		}
+		h.d.SessionsReader = pausedFileInitializationReader{Reader: h.d.SessionsReader, observed: observed}
+	})
+	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "connected before initialization", func() bool {
+		current, err := sessionAdapter(h.s).GetEnvironment(t.Context(), h.tenant, environment.ID)
+		return err == nil && current.Status == "connected" && current.Initialization == "running"
+	})
+	result := startDirectoryRead(t.Context(), w, environment)
+	// Ownership plus two readiness reads establish that admission is waiting,
+	// rather than merely racing the durable completion below.
+	for i := 0; i < 3; i++ {
+		select {
+		case <-observed:
+		case got := <-result:
+			t.Fatalf("connected Files failed before initialization completed: %v", got.err)
+		case <-time.After(3 * time.Second):
+			t.Fatal("readiness lookup did not run")
+		}
+	}
+	select {
+	case got := <-result:
+		t.Fatalf("Files returned before initialization completed: %v", got.err)
+	default:
+	}
+	if _, err := h.s.pool.Exec(t.Context(), `UPDATE environments SET initialization='complete' WHERE id=$1`, environment.ID); err != nil {
+		t.Fatal(err)
+	}
+	request, read := prepareDirectoryRead(t, h, environment)
+	completeDirectoryRead(t, h, request, read, false, false)
+	if got := awaitDirectoryResult(t, result); got.err != nil || len(got.value.Entries) != 1 {
+		t.Fatal("initialized read failed", got.err)
+	}
 }

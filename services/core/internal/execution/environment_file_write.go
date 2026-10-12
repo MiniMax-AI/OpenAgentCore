@@ -27,6 +27,7 @@ type fileWriteResult struct {
 }
 type fileWriteRequest struct {
 	ctx         context.Context
+	deadline    time.Time
 	environment sessions.Environment
 	path        string
 	data        []byte
@@ -39,10 +40,13 @@ func (w *Worker) WriteEnvironmentFile(ctx context.Context, environment sessions.
 	if len(data) > proto.WorkspaceWriteMaxBytes {
 		return 0, sessions.ErrInvalidInput
 	}
+	deadline := time.Now().Add(205 * time.Second)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 	if err := w.waitRuntimeAwake(ctx, environment); err != nil {
 		return 0, err
 	}
-	request := fileWriteRequest{ctx: ctx, environment: environment, path: path, data: data, result: make(chan fileWriteResult, 1)}
+	request := fileWriteRequest{ctx: ctx, deadline: deadline, environment: environment, path: path, data: data, result: make(chan fileWriteResult, 1)}
 	select {
 	case w.fileWrites <- request:
 	case <-ctx.Done():
@@ -65,7 +69,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if owner.Err() != nil || request.ctx.Err() != nil {
 		return unavailable
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(owner), 205*time.Second)
+	ctx, cancel := context.WithDeadline(context.WithoutCancel(owner), request.deadline)
 	defer cancel()
 	// The worker owns cancellation; only safe request attribution crosses this boundary.
 	if source, ok := writeaudit.FromContext(request.ctx); ok {

@@ -150,7 +150,7 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 	for {
 		owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
 		if errors.Is(err, deployment.ErrNotFound) {
-			return nil
+			return w.waitEnvironmentInitialization(ctx, environment)
 		}
 		if err != nil {
 			return err
@@ -204,7 +204,7 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 					if !found || !kind.Available {
 						return ErrExecutionUnavailable
 					}
-					return nil
+					return w.waitEnvironmentInitialization(ctx, environment)
 				}
 			} else if !errors.Is(peerErr, sessions.ErrNotFound) && !errors.Is(peerErr, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(peerErr, runtimegateway.ErrSessionClosed) {
 				return peerErr
@@ -220,6 +220,37 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 				default:
 				}
 			}
+		}
+		select {
+		case <-ctx.Done():
+			return ErrExecutionUnavailable
+		case <-w.stopped:
+			return ErrExecutionUnavailable
+		case <-ticker.C:
+		}
+	}
+}
+
+// A live socket and its capability declaration precede Environment setup. Files
+// share the caller's existing budget while waiting for that durable completion;
+// they never reserve a worker slot or send preparation during initialization.
+func (w *Worker) waitEnvironmentInitialization(ctx context.Context, environment sessions.Environment) error {
+	ticker := time.NewTicker(250 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		current, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, environment.TenantID, environment.ID)
+		if err != nil {
+			return err
+		}
+		if current.SessionID != environment.SessionID {
+			return sessions.ErrNotFound
+		}
+		switch current.Initialization {
+		case "complete":
+			return nil
+		case "pending", "running":
+		default:
+			return ErrExecutionUnavailable
 		}
 		select {
 		case <-ctx.Done():

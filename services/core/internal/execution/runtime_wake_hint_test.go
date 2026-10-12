@@ -9,19 +9,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 type maintenanceTestLoop struct {
-	t        *testing.T
-	ticks    chan time.Time
-	hints    chan struct{}
-	entered  chan int
-	release  chan struct{}
-	done     chan error
-	finished chan struct{}
-	cancel   context.CancelFunc
-	calls    atomic.Int32
+	t               *testing.T
+	ticks           chan time.Time
+	hints           chan struct{}
+	pending         chan struct{}
+	provisioned     chan struct{}
+	finishProvision chan struct{}
+	entered         chan int
+	release         chan struct{}
+	done            chan error
+	finished        chan struct{}
+	cancel          context.CancelFunc
+	calls           atomic.Int32
 }
 
 func newMaintenanceTestLoop(t *testing.T, queuedHint bool, result func(int) error) *maintenanceTestLoop {
@@ -29,7 +33,7 @@ func newMaintenanceTestLoop(t *testing.T, queuedHint bool, result func(int) erro
 	ctx, cancel := context.WithCancel(t.Context())
 	loop := &maintenanceTestLoop{
 		t: t, ticks: make(chan time.Time, 1), hints: make(chan struct{}, 1),
-		entered: make(chan int, 1), release: make(chan struct{}),
+		pending: make(chan struct{}, 1), provisioned: make(chan struct{}, 1), finishProvision: make(chan struct{}), entered: make(chan int, 1), release: make(chan struct{}),
 		done: make(chan error, 1), finished: make(chan struct{}), cancel: cancel,
 	}
 	if queuedHint {
@@ -49,7 +53,15 @@ func newMaintenanceTestLoop(t *testing.T, queuedHint bool, result func(int) erro
 				return result(call)
 			}
 			return nil
-		})
+		}, loop.pending, func(ctx context.Context) error {
+			loop.provisioned <- struct{}{}
+			select {
+			case <-loop.finishProvision:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}, nil, nil)
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -246,7 +258,7 @@ func TestRuntimeMaintenanceCancellationPrecedesNewScan(t *testing.T) {
 		err := runRuntimeMaintenance(ctx, ticks, hints, func(context.Context) error {
 			calls++
 			return nil
-		})
+		}, nil, nil, nil, nil)
 		if !errors.Is(err, context.Canceled) || calls != 0 {
 			t.Fatalf("cancelled startup: calls=%d, error=%v", calls, err)
 		}
@@ -352,7 +364,7 @@ func TestRuntimeMaintenanceCancellationAfterSuccessfulScanWinsReadyTriggers(t *t
 		hints <- struct{}{}
 		cancel()
 		return nil
-	})
+	}, nil, nil, nil, nil)
 	if !errors.Is(err, context.Canceled) || calls != 1 {
 		t.Fatalf("ready triggers bypassed cancellation: calls=%d, error=%v", calls, err)
 	}
@@ -383,4 +395,84 @@ func TestDestinationHintCreatesAndReusesOrdinaryLane(t *testing.T) {
 		t.Fatal("hint bypassed closed manager")
 	}
 	n.lifecycle.stop()
+}
+
+func TestCommittedPlacementsProgressAfterHintAllowanceSpent(t *testing.T) {
+	loop := newMaintenanceTestLoop(t, false, nil)
+	loop.expectScan(1)
+	loop.finishScan()
+	loop.hintBurst(1)
+	loop.expectScan(2)
+	// A newly committed placement arrives while the extra full scan is busy.
+	loop.pending <- struct{}{}
+	loop.finishScan()
+	for range 3 {
+		select {
+		case <-loop.provisioned:
+		case <-time.After(time.Second):
+			t.Fatal("placement waited for maintenance ticker")
+		}
+		// Coalesce a burst arriving during provisioning into one follow-up page.
+		for range 100 {
+			select {
+			case loop.pending <- struct{}{}:
+			default:
+			}
+		}
+		loop.finishProvision <- struct{}{}
+	}
+	select {
+	case <-loop.provisioned:
+	case <-time.After(time.Second):
+		t.Fatal("in-flight placement was lost")
+	}
+	loop.finishProvision <- struct{}{}
+	loop.expectIdle()
+	if loop.calls.Load() != 2 {
+		t.Fatal("placements caused unbounded full maintenance scans")
+	}
+	loop.tick()
+	loop.expectScan(3)
+	loop.finishScan()
+	loop.expectIdle()
+}
+
+func TestRegistrationPassDoesNotWaitForOrSpendMaintenanceAllowance(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	hints := make(chan struct{}, 1)
+	ticks := make(chan time.Time, 1)
+	connections := make(chan *runtimegateway.Session, 1)
+	scans := make(chan struct{}, 1)
+	observed := make(chan struct{}, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- runRuntimeMaintenance(ctx, ticks, hints, func(context.Context) error { scans <- struct{}{}; return nil }, nil, nil, connections, func(context.Context) error { observed <- struct{}{}; return nil })
+	}()
+	receive := func(ch <-chan struct{}) {
+		t.Helper()
+		select {
+		case <-ch:
+		case <-time.After(time.Second):
+			t.Fatal("expected maintenance event did not occur")
+		}
+	}
+	receive(scans)
+	connections <- nil
+	receive(observed)
+	// Registration did not spend the current period's extra maintenance scan.
+	hints <- struct{}{}
+	receive(scans)
+	// Another registration does not wait after that allowance has been spent.
+	connections <- nil
+	receive(observed)
+	select {
+	case <-scans:
+		t.Fatal("registration triggered full reconciliation")
+	default:
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
 }

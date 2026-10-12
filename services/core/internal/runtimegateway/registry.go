@@ -181,17 +181,8 @@ func (r *Registry) WaitForDevice(ctx context.Context, deviceID string, timeout t
 	// Buffer = 1 so Register's non-blocking send always lands even
 	// if we haven't yet entered the select below.
 	waiter := make(chan *Session, 1)
-	r.mu.Lock()
-	// Double-check — Register could have landed between the RUnlock
-	// above and the Lock here.
-	if sess, ok := r.byDevice[deviceID]; ok {
-		r.mu.Unlock()
-		return sess, nil
-	}
-	r.waiters[deviceID] = append(r.waiters[deviceID], waiter)
-	r.mu.Unlock()
-
-	defer r.removeWaiter(deviceID, waiter)
+	r.WatchDevice(deviceID, waiter)
+	defer r.UnwatchDevice(deviceID, waiter)
 
 	var timer *time.Timer
 	var timerC <-chan time.Time
@@ -216,9 +207,34 @@ func (r *Registry) WaitForDevice(ctx context.Context, deviceID string, timeout t
 	}
 }
 
-// removeWaiter purges a waiter channel from the pending list. Safe to
+// WatchDevice arms a one-shot registration notification without waiting. The
+// caller owns a buffered channel and must not close it while watched. Multiple
+// devices may share a channel to coalesce notifications; consumers then recheck
+// every watched device. Re-arming the same device/channel pair is idempotent.
+func (r *Registry) WatchDevice(deviceID string, ch chan *Session) {
+	if deviceID == "" || ch == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if sess, ok := r.byDevice[deviceID]; ok {
+		select {
+		case ch <- sess:
+		default:
+		}
+		return
+	}
+	for _, existing := range r.waiters[deviceID] {
+		if existing == ch {
+			return
+		}
+	}
+	r.waiters[deviceID] = append(r.waiters[deviceID], ch)
+}
+
+// UnwatchDevice purges a waiter channel from the pending list. Safe to
 // call after Register has already drained the slice. Idempotent.
-func (r *Registry) removeWaiter(deviceID string, ch chan *Session) {
+func (r *Registry) UnwatchDevice(deviceID string, ch chan *Session) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	pending, ok := r.waiters[deviceID]

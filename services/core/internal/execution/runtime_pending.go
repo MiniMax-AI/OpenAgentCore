@@ -17,9 +17,13 @@ func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(rows) == 0 {
+	if len(rows) == 0 && r.pendingCursor != "" {
+		// Refill once at EOF: newly committed IDs may precede the old cursor.
 		r.pendingCursor = ""
-		return nil
+		rows, err = r.reader.UnallocatedEnvironments(ctx, r.nodeID, "")
+		if err != nil {
+			return err
+		}
 	}
 	for _, environment := range rows {
 		r.pendingCursor = environment.ID
@@ -44,6 +48,18 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 	m.mu.Lock()
 	configuration := m.config
 	m.mu.Unlock()
+	if configuration.Mode == string(sandbox.DeploymentDirect) {
+		// Direct deployments own one lifecycle lane and need no placement row.
+		node, err := m.node("")
+		if err != nil {
+			return err
+		}
+		select {
+		case node.lifecycle.pendingWake <- struct{}{}:
+		default:
+		}
+		return nil
+	}
 	if configuration.Mode != string(sandbox.DeploymentNodes) {
 		return nil
 	}
@@ -91,7 +107,7 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 			return err
 		}
 		select {
-		case node.lifecycle.wakeHints <- struct{}{}:
+		case node.lifecycle.pendingWake <- struct{}{}:
 		default:
 		}
 		if operation.Err() != nil {
@@ -106,4 +122,18 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 		m.placementCursor = deployment.PlacementDemandCursor{}
 	}
 	return nil
+}
+
+// New placements need only a pending page, not a scan of every retained resource.
+// The same lifecycle gate and cancellation fence own both kinds of work.
+func (r *runtimeLifecycle) provisionCommitted(ctx context.Context) error {
+	ctx, finish, err := r.beginReconcile(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	// A fresh placement may sort on either side of the maintenance cursor.
+	// Successful allocations disappear from this query; start demand at its head.
+	r.pendingCursor = ""
+	return r.provisionPending(ctx)
 }

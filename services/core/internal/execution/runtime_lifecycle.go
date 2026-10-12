@@ -63,7 +63,10 @@ type runtimeLifecycle struct {
 	cursor          string
 	pendingCursor   string
 	connections     map[string]*runtimeConnection
+	awaiting        map[string]deployment.AllocationKey
+	connectionWake  chan *runtimegateway.Session
 	wakeHints       chan struct{}
+	pendingWake     chan struct{}
 	hintDestination func(string)
 }
 
@@ -310,7 +313,13 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if info.Reference != runtimeReference(owner) || info.ProviderID == "" || info.State != "running" || !info.BootstrapComplete {
 		return owner, sandbox.ErrOwnership
 	}
-	return r.deployment.ObserveRunning(ctx, owner)
+	owner, err = r.deployment.ObserveRunning(ctx, owner)
+	if err != nil {
+		return owner, err
+	}
+	// Bootstrap may already have established its authenticated Runtime connection.
+	// Publish it now rather than waiting for the next maintenance observation.
+	return owner, r.observeConnection(ctx, owner)
 }
 
 // ReconcileManagedRuntimes is also callable before serving admission. One scan
@@ -472,6 +481,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 // Environment identity owns connectivity; preparation has an independent owner.
 func (r *runtimeLifecycle) clearRuntimeState(owner deployment.Allocation) {
 	delete(r.connections, owner.EnvironmentID)
+	r.forgetAwaitingConnection(owner.DeviceID)
 }
 
 func runtimeReference(owner deployment.Allocation) sandbox.Reference {

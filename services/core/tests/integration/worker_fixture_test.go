@@ -81,7 +81,9 @@ func startOwnedWorkerErr(t testing.TB, ctx context.Context, s *Store, dispatcher
 	owned.Deployment = deployments
 	owned.DeploymentReader = deploymentStore(s)
 	owned.Sessions = service
-	owned.SessionsReader = sessionAdapter(s)
+	if owned.SessionsReader == nil {
+		owned.SessionsReader = sessionAdapter(s)
+	}
 	if owned.ManagedRuntimes == nil {
 		owned.ManagedRuntimes = fixtureRuntimes(t, s)
 	}
