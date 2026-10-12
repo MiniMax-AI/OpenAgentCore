@@ -16,6 +16,7 @@ import { sandboxAdmin, sandboxConsoleConfigQuery } from "./sandbox-queries";
 import { useSandboxPageState } from "./use-sandbox-page-state";
 import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeList, onOldAddress } from "./NodeList";
+import { SandboxLifecycle } from "./SandboxLifecycle";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEditDialog } from "./NodeEditDialog";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
@@ -57,7 +58,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const { params, navigate, back: goBack } = useConsoleNavigation();
   const client = sandboxAdmin;
   const queryClient = useQueryClient();
-  const { deploymentQuery, query, compatible, inventoryOlder, inventoryLoading, snapshot, installation, loading, busy, setupNeedsRefresh, confirmed, fresh, refetch, refresh } = useSandboxPageState();
+  const { deploymentQuery, query, compatible, inventoryOlder, inventoryLoading, snapshot, installation, loading, busy, setupNeedsRefresh, confirmed, fresh, refetch, refresh } = useSandboxPageState({ poll: true });
   const { t: tSandboxNav } = useTranslation("sandboxNavigation");
   const localOnly = installation.data?.local_only === true;
   const { t: tCommon } = useTranslation("common");
@@ -232,6 +233,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         {staleNodes.length ? <p className="sandbox-notice sandbox-address-warning" role="status">{staleNodes.length === 1
           ? t("{{name}} is still bound to an old Core address. Remove it and add it again.", { name: staleNodes[0] })
           : t("{{count}} nodes are still bound to an old Core address: {{names}}. Remove them and add them again.", { count: staleNodes.length, names: new Intl.ListFormat(i18n.resolvedLanguage, { type: "conjunction" }).format(staleNodes) })}</p> : null}
+        {hostedNodes && suspends ? <SandboxLifecycle deployment={snapshot.deployment} nodes={compatible && (nodesConfirmed || nodes.length > 0) ? nodes : null} stale={!nodesConfirmed} /> : null}
         {hostedNodes ? <section aria-label={t("Sandbox nodes")}>
           {nodes.length
             ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!nodesConfirmed} disabled={busy || loading || removing || !nodesConfirmed} suspends={suspends} onOpen={(node) => navigate("nodes", { id: node.id })} onRemove={askRemove} />

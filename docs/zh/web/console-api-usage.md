@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 3f233005176090ef87c13442f439296001950bb835262969a0b48970b51af7f4
+source_hash: 1b98b7b5f38191c9a6cedd2d25627171fca8145080e17b6bc492052c8f362f7a
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -102,8 +102,8 @@ source_hash: 3f233005176090ef87c13442f439296001950bb835262969a0b48970b51af7f4
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中的节点容量。在线节点的 `diagnostic`（一个[就绪状态码](../getting-started/nodes.md#readiness-codes)；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在上述每个页面及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
 | 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics 节点对话框：主机自最近一次心跳以来的 CPU 忙碌占比和内存使用量，以及页面所选范围内二者的历史记录。**Edit node** 读取 `host.effective_cpu_cores` 和 `host.total_memory_bytes`，用于在每个 Sandbox 大小旁显示主机容量，以及最多可容纳多少个该大小的 Sandbox |
-| 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes 页面；Sandbox metrics。在 microsandbox 下，节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间，并在分配暂停时估算 Core 回收它的时间（该时间加上部署的 `suspension.retention_seconds`）；时间为 null 时显示短横线 |
-| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
+| 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes 页面；Sandbox metrics。节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间；时间为 null 时显示短横线。它不会根据阶段时间或部署的 `suspension.retention_seconds` 推算快照到期时间 |
+| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
 | 更新节点 | `PATCH /core/v1/sandbox/nodes/{node_id}` | **Edit node**：同时修改名称和 Sandbox 限制（保留数量限制仅适用于 microsandbox；在 Docker 下，Core 会将其设为活动数量限制） |
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 Clean up the host 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | Sandbox metrics：每个项目的托管 Runtimes，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |

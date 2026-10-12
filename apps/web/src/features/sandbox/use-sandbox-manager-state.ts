@@ -4,10 +4,10 @@ import { sandboxDeploymentQuery, sandboxResetPollInterval, sandboxSnapshotMatche
 import { sandboxWriteOwnershipQuery } from "./sandbox-write-ownership";
 
 /** All pages share deployment truth. Nodes are supplemental evidence from the same lifecycle. */
-export function useSandboxManagerState() {
+export function useSandboxManagerState({ poll = false }: { poll?: boolean } = {}) {
   const ownership = useQuery(sandboxWriteOwnershipQuery);
   const deploymentQuery = useQuery({ ...sandboxDeploymentQuery, refetchOnMount: "always" });
-  const query = useQuery({ ...sandboxSnapshotQuery, refetchInterval: sandboxResetPollInterval(deploymentQuery.data) });
+  const query = useQuery({ ...sandboxSnapshotQuery, refetchInterval: sandboxResetPollInterval(deploymentQuery.data) || (poll ? 30_000 : false) });
   const inventory = query.data;
   const deployment = deploymentQuery.data;
   const compatible = Boolean(inventory && deployment && sandboxSnapshotMatchesDeployment(inventory, deployment));

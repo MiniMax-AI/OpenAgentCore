@@ -1,10 +1,10 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: dc02bedb776a48e79850afbefa7ec401a93912186ec294afb8d52d5c6d50d9cb
+source_hash: 2549c792c6838d69a210be789bf969ed9e2c49b7da9bc9f0151eaa1298965184
 ---
 
-节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
+节点是一台 Linux 主机，在沙箱后端为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
 
 添加节点的方法是在 Web 生成命令并在主机上执行。[沙箱部署协议](../../../contracts/agents-api/zh/sandbox-deployment.md)定义沙箱设置及其变更规则，[节点协议](../../../contracts/agents-api/zh/node-generation-protocol.md)定义节点如何准备和保留 Runtime 代次。
 

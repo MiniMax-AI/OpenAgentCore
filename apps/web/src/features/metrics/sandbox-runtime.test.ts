@@ -65,10 +65,12 @@ describe("hosted Runtime projections", () => {
   });
 
   it("places each Runtime on its host and derives uptime only from a current sample", () => {
-    const allocation = { id: "alloc_a", node_id: "n1", deployment_generation: 3 } as SandboxAllocation;
+    const allocation = { id: "alloc_a", node_id: "n1", deployment_generation: 3, compute_phase: "restoring" } as SandboxAllocation;
     const rows = hostedRuntimeRows(load, "", { nodes: [node("n1", { name: "core-01" })], allocations: [allocation] });
     expect(rows.map((row) => [row.observation.session_id, row.node?.name ?? null, row.uptimeSeconds])).toEqual([["a", "core-01", 600], ["b", null, 600], ["c", null, null]]);
     expect(hostedRuntimeRows(load, "", null)[0]?.node).toBeNull();
+    expect(rows.map((row) => row.allocation?.compute_phase ?? null)).toEqual(["restoring", null, null]);
+    expect(rows[0]?.observation.lifecycle_state).toBe("active");
     expect(rows.map((row) => row.deploymentGeneration)).toEqual([3, null, null]);
     expect(hostedRuntimeRows(load, "", null)[0]?.deploymentGeneration).toBeNull();
     expect(matchesRuntime(rows[0]!, "nightly")).toBe(true);

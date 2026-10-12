@@ -185,28 +185,29 @@ A node without generation management reports its provider's readiness itself: `p
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` takes `{name, max_active, max_retained}`; lowering a limit stops no running sandbox. `DELETE /core/v1/sandbox/nodes/{node_id}` refuses with 409 `runtime_node_in_use` while the node holds allocations, snapshots, reservations or pending cleanup, including while it is offline. Removal deletes no compute and retires the node's identity; the host can come back only as a new node. There is no node drain.
 
-`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased allocations. Each item's `compute_phase_changed_at` is when the allocation entered its current `compute_phase`, or null when unknown. For a suspended microsandbox allocation, that time plus `suspension.retention_seconds` tells roughly when Core reclaims it.
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased allocations. Each item's `compute_phase_changed_at` is when the allocation entered its current `compute_phase`, or null when unknown. This is a phase transition time, not a snapshot expiry. The snapshot deadline is not exposed by this response and must not be inferred from `suspension.retention_seconds`.
 
 ## What each field means per sandbox provider
 
 Some fields keep one name across providers but differ in meaning, or do not apply. Deployment fields come from `GET /core/v1/sandbox/deployment`, node and allocation fields from the node routes, and Runtime fields from the [Runtime telemetry API](./runtime-observability-api.md), where `disk` appears only in the observation list and history is described under [Session Runtime history](./runtime-observability-api.md#session-runtime-history).
 
-| Field | E2B | Docker | microsandbox |
+| Field | microsandbox | E2B | Docker |
 | --- | --- | --- | --- |
-| Deployment `specification.resources` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` |
-| Deployment `specification.runtime` | Absent; `configuration.template` selects the build | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
-| Deployment `metadata.template_build` | The build as Core read it when the selection was saved | Absent: `metadata` is empty | Absent: `metadata` is empty |
-| Deployment `suspension` | `null`; Core does not suspend E2B sandboxes | `null` | `{idle_seconds, retention_seconds}` |
-| Deployment `resources.allocations`, `resources.pending` | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes | Totals across all nodes |
-| Enrollment-token `max_active`, `max_retained` | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` | Both limits apply |
-| Node list and detail | Empty list; detail returns 404 | Enrolled nodes | Enrolled nodes |
-| Node `retained`, `snapshots`, `max_retained` | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` | Suspended sandboxes are `retained` minus `active` |
-| Node `host.available_disk_bytes` | Not applicable | Free space on the filesystem of the node state directory, not a container's disk | Free space on the filesystem of the node state directory; sandbox disks have their own quotas |
-| Allocation `compute_phase`, `compute_phase_changed_at` | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation | Includes `suspended`; its time plus `suspension.retention_seconds` tells roughly when Core reclaims the snapshot |
-| Runtime observation `cpu`, `memory` | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
-| Runtime observation `disk` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota | `null` |
-| Runtime observation `lifecycle_state: sleeping` | Never | Never | While suspended |
-| Runtime history CPU | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time | Derived from cumulative CPU time |
+| Independent workspace filesystem | [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter); configured separately from compute | Unsupported | Unsupported |
+| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota |
+| Deployment `specification.runtime` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` | Absent; `configuration.template` selects the build | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` |
+| Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved | Absent: `metadata` is empty |
+| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `null`; Core does not suspend E2B sandboxes | `null` |
+| Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes |
+| Enrollment-token `max_active`, `max_retained` | Both limits apply | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` |
+| Node list and detail | Enrolled nodes | Empty list; detail returns 404 | Enrolled nodes |
+| Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` |
+| Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable | Free space on the filesystem of the node state directory, not a container's disk |
+| Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation |
+| Runtime observation `cpu`, `memory` | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
+| Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota |
+| Runtime observation `lifecycle_state: sleeping` | While suspended | Never | Never |
+| Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time |
 
 ## Errors
 

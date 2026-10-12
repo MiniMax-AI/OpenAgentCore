@@ -4,8 +4,8 @@ import { installationQuery } from "../../lib/installation";
 import { useSandboxManagerState } from "./use-sandbox-manager-state";
 
 /** Shared observations and write admission survive navigation through the query cache. */
-export function useSandboxPageState() {
-  const state = useSandboxManagerState();
+export function useSandboxPageState(options: { poll?: boolean } = {}) {
+  const state = useSandboxManagerState(options);
   const queryClient = useQueryClient();
   const installation = useQuery(installationQuery);
   const { ownership, deploymentQuery, deployment, query } = state;

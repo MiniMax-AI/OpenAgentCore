@@ -93,8 +93,10 @@ Web's **Overview** tracks these steps in a **Getting started** checklist.
 
 ## Add sandbox capacity
 
-Sessions need somewhere to run:
+The installer selects no sandbox backend. Choose the deployment that fits your infrastructure:
 
-- Choose the backend in **System** → **Manage sandbox configuration**, then [add a node](./nodes.md) from **Nodes**. The installer selects none.
+- **Recommended: microsandbox with independent workspace storage.** Prepare the [NFS filesystem and service accounts](../configuration.md#independent-workspace-storage) first, then choose **Own machines** and **microsandbox** in **System** → **Manage sandbox configuration**, and [add Linux nodes](./nodes.md) from **Nodes**. The [nodes guide](./nodes.md#before-you-add-a-node) also covers the private checkpoint store needed for memory recovery across compatible nodes.
+- **Managed compute: E2B.** Select E2B and configure its credential and template through the same sandbox configuration flow. No execution nodes are needed; see [deployment setup](../../contracts/agents-api/sandbox-deployment.md#initial-setup-and-same-provider-changes).
+- **Other supported placements.** Docker nodes remain available. Applications can also connect [self-hosted machines](./self-hosted.md). The [provider comparison](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider) distinguishes filesystem and suspension support.
 
 Day-to-day operation, backups and upgrades are in [Operations](./operations.md).

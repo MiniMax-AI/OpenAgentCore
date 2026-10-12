@@ -18,12 +18,12 @@ OpenAgentCore runs AI agents on your own infrastructure behind the [OpenAI Agent
 
 - **Same API as OpenAI.** Point the [OpenAI Agent API](https://developers.openai.com/api/docs/guides/agents/sdk), or plain HTTP, at your installation. No new client to learn.
 - **Your choice of agent.** Each [Session](https://openagentcore.dev/docs/api/public-agent-api) runs a [native harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding): [Codex](https://github.com/openai/codex), [Claude Code](https://code.claude.com/docs/en/overview) or [MiniMax Code](https://github.com/MiniMax-AI/minimax-code), with the [model provider you configure](https://openagentcore.dev/contracts/agents-api/model-execution).
-- **Your choice of machine.** Agents work in a [managed sandbox](https://openagentcore.dev/contracts/agents-api/sandbox-deployment) ([Docker](https://www.docker.com/), [microsandbox](https://github.com/zerocore-ai/microsandbox) or [E2B](https://e2b.dev/)), or on your own Linux, macOS or Windows machine.
-- **Every part is replaceable.** [Sandboxes](https://openagentcore.dev/docs/sandbox-provider), [harnesses](https://openagentcore.dev/contracts/agents-api/harness-onboarding) and [model providers](https://openagentcore.dev/contracts/agents-api/model-execution) plug in through [defined protocols](AGENTS.md#protocols-at-every-boundary).
+- **Reusable compute, persistent workspaces.** We recommend [microsandbox](https://github.com/zerocore-ai/microsandbox) with [independent workspace storage](https://openagentcore.dev/docs/workspace-provider): idle sandboxes suspend, release compute and resume on compatible nodes. [E2B](https://e2b.dev/) is the managed alternative; Docker and your own Linux, macOS or Windows machine remain supported execution choices.
+- **Every part is replaceable.** [Sandboxes](https://openagentcore.dev/docs/sandbox-provider), [workspace filesystems](https://openagentcore.dev/docs/workspace-provider), [harnesses](https://openagentcore.dev/contracts/agents-api/harness-onboarding) and [model providers](https://openagentcore.dev/contracts/agents-api/model-execution) plug in through [defined protocols](AGENTS.md#protocols-at-every-boundary).
 
 ## How it fits together
 
-![OpenAgentCore architecture](docs/assets/architecture.png)
+![OpenAgentCore architecture](docs/assets/architecture.svg)
 
 Applications and operators use these Core APIs:
 

@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 375d6245441e9f484af64798fb23c665d0ec712eb9a5088e7a41e3293374680a
+source_hash: 2e624be0f71b9fa6cd0d8bdc453aa2e5023e70115d50f3ff79e30233f510c13d
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -21,11 +21,11 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | Monitor | Overview | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自提供弹出概览；需要关注的 Session；按 Project 统计的用量 |
 | Monitor | Core metrics | Core 进程：CPU 与常驻内存及其限制、执行槽位与 Turn 队列、已连接守护进程、数据库延迟与连接池、后台任务 |
 | Monitor | Agent metrics | 1 小时、6 小时、24 小时或 7 天的请求、错误、耗时、token、模型、工具、Agent 和 API 密钥 |
-| Monitor | Sandbox metrics | 节点容量及各 Project 的托管 Runtime CPU 与内存 |
+| Monitor | Sandbox metrics | 节点容量；支持时显示 **Automatic suspension**；**Recorded compute** 生命周期状态与各 Project 的托管 Runtime CPU、内存观测分开展示 |
 | Monitor | Session log | 全部 Session；各 Session 的只读对话、跟踪、Turn 和失败分类原因；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | Resources | Agents、Environment templates、Skills、Files、Vaults | 检查和允许的删除操作，显示各资源所属 Project 及创建密钥 |
 | Platform | Projects and keys | 创建、重命名和归档 Project；签发与撤销密钥；各 Project 的用量、写入历史和 API 调用方法 |
-| Platform | Nodes | 添加、编辑和移除 Docker 或 microsandbox 节点；各节点的就绪状态、容量和分配 |
+| Platform | Nodes | 添加、编辑和移除 microsandbox 或 Docker 节点；各节点的就绪状态、容量和分配，以及支持时的自动挂起策略、活跃与保留名额、各计算阶段的已用时间 |
 | Platform | System | 安装的公开地址、API 基础 URL、ID 和源码提交；各 Harness 默认模型；**Sandbox configuration**；Core 加载的启动设置，只读 |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。
@@ -35,7 +35,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | 任务 | 位置 |
 | --- | --- |
 | 为安装设置 HTTPS 地址 | 设置 `OAC_PUBLIC_URL`，并把反向代理指向 Web；参阅[使 Core 可访问](../getting-started/install.md#configure-the-domain-and-https) |
-| 选择沙箱后端（Docker、microsandbox 或 E2B）、规格和 Runtime，或重置后端 | **System → Sandbox configuration**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| 选择沙箱后端（microsandbox、E2B 或 Docker）、规格和 Runtime，或重置后端 | **System → Sandbox configuration**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | 添加或移除执行节点 | **Nodes**；参阅[节点指南](../getting-started/nodes.md) |
 | 设置 Harness 默认模型 | **System → Default model configuration**；参阅[默认模型](../configuration.md#default-models) |
 | 创建 Project 并签发 API 密钥 | **Projects and keys**；参阅 [Project 和 API 密钥](../getting-started/operations.md#projects-and-api-keys) |

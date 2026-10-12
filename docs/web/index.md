@@ -19,11 +19,11 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 | Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Sessions needing attention; usage by Project |
 | Monitor | Core metrics | The Core process: CPU and resident memory against their limits, execution slots and the Turn queue, connected daemons, database latency and pool, background jobs |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
-| Monitor | Sandbox metrics | Node capacity and hosted Runtime CPU and memory across Projects |
+| Monitor | Sandbox metrics | Node capacity; **Automatic suspension** when supported; **Recorded compute** lifecycle state shown separately from hosted Runtime CPU and memory observations across Projects |
 | Monitor | Session log | Every Session, and each Session's read-only conversation, trace and Turns with the classified reason of a failure; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
-| Platform | Nodes | Add, edit and remove Docker or microsandbox nodes; each node's readiness, capacity and allocations |
+| Platform | Nodes | Add, edit and remove microsandbox or Docker nodes; each node's readiness, capacity and allocations, with the automatic suspension policy when supported, active and retained slots, and elapsed time in each compute phase |
 | Platform | System | The installation's public address, API base URL, ID and source commit; each harness's default model; **Sandbox configuration**; the startup settings Core loaded, read-only |
 
 Missing data is shown as missing (—), never as zero. [Console API usage](./console-api-usage.md) lists what each page reads and how its figures are bounded.
@@ -33,7 +33,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 | Task | Where |
 | --- | --- |
 | Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
-| Choose the sandbox backend (Docker, microsandbox or E2B), the sandbox size and Runtime, or reset the backend | **System → Sandbox configuration**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| Choose the sandbox backend (microsandbox, E2B or Docker), the sandbox size and Runtime, or reset the backend | **System → Sandbox configuration**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add or remove execution nodes | **Nodes**; see the [nodes guide](../getting-started/nodes.md) |
 | Set the default model of a harness | **System → Default model configuration**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |

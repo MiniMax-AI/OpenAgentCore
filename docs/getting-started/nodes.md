@@ -2,7 +2,7 @@
 title: "Add and manage nodes"
 ---
 
-A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is Docker or microsandbox. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes.
+A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is microsandbox (recommended) or Docker. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes.
 
 You add a node by generating a command in Web and running it on the host. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
 

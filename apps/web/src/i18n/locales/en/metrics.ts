@@ -285,9 +285,11 @@ export const metrics = {
     tokens: "Tokens",
     tokenSplit: "Input {{input}} · output {{output}}",
     untitled: "Untitled Session",
+    recordedCompute: "Recorded compute",
+    recordedComputeHelp: "Core’s recorded compute phase, read separately from the Runtime observation. Refreshes can briefly differ.",
     lifecycle: {
       active: "Active",
-      sleeping: "Sleeping",
+      sleeping: "Suspended",
       transitioning: "Changing state",
       pending: "Waiting for allocation",
       stopped: "Stopped",
@@ -306,7 +308,7 @@ export const metrics = {
     runtimeMeta: "{{n}} · CPU {{cpu}} · memory {{memory}}",
     runtimeMetaSuspended: "{{n}} · {{sleeping}} suspended · CPU {{cpu}} · memory {{memory}}",
     suspended: "Suspended",
-    suspendedHelp: "Sandboxes the node holds as snapshots; they resume on their Session's next Turn and count toward the retained limit, not the active one.",
+    suspendedHelp: "Core-recorded suspended placements. Their next Turn requests a resume when compatible capacity is available; they count toward the retained limit, not the active one.",
     reason: {
       allocation_pending: "Allocation pending",
       runtime_not_running: "Not running",

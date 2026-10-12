@@ -285,9 +285,11 @@ export const metrics = {
     tokens: "Token",
     tokenSplit: "输入 {{input}} · 输出 {{output}}",
     untitled: "未命名 Session",
+    recordedCompute: "记录的计算状态",
+    recordedComputeHelp: "Core 记录的计算阶段，与 Runtime 观测分别读取，刷新时可能短暂不同。",
     lifecycle: {
       active: "活跃",
-      sleeping: "休眠",
+      sleeping: "已挂起",
       transitioning: "切换中",
       pending: "等待分配",
       stopped: "已停止",
@@ -306,7 +308,7 @@ export const metrics = {
     runtimeMeta: "{{n}} 个 · CPU {{cpu}} · 内存 {{memory}}",
     runtimeMetaSuspended: "{{n}} 个 · {{sleeping}} 个挂起 · CPU {{cpu}} · 内存 {{memory}}",
     suspended: "挂起",
-    suspendedHelp: "节点以快照保存的沙箱；Session 的下一个 Turn 时恢复，占用保留上限，不占用同时运行上限。",
+    suspendedHelp: "Core 记录的已挂起分配。下一个 Turn 会请求恢复，需要兼容的可用容量；占用保留名额，不占活跃名额。",
     reason: {
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",

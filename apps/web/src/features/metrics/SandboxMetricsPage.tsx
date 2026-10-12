@@ -25,13 +25,15 @@ import { ListToolbar, listSummary, NameCell, SearchField } from "../../component
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDateTime, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
+import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
-import { capacitySummary, nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
+import { nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
 import { nodeDetailQuery } from "../fleet/fleet-queries";
+import { SandboxLifecycle } from "../sandbox/SandboxLifecycle";
 import { NodeRolloutStatus } from "../sandbox/NodeRolloutStatus";
 import { FleetReadNotice, fleetObservationStale } from "../fleet/FleetReadNotice";
 import { SandboxResetNotice } from "../fleet/SandboxResetNotice";
@@ -98,7 +100,6 @@ export function SandboxMetricsPage() {
   const { state: fleetState, refresh: refreshFleet, deployment } = useSandboxFleet({ allocations: true });
   const { state: runtimeState, refresh: refreshRuntime, stale: runtimeStale } = useHostedRuntimes();
   const fleet = fleetSnapshot(fleetState);
-  const capacity = fleet ? capacitySummary(fleet.nodes) : null;
   const now = Math.floor(Date.now() / 1000);
   const refreshing = runtimeState.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = runtimeState.load?.loadedAt ?? fleet?.loadedAt ?? null;
@@ -132,6 +133,7 @@ export function SandboxMetricsPage() {
       <PageBody>
         <SandboxResetNotice deployment={deployment.data} failed={deployment.isError} onRetry={() => void deployment.refetch()} />
         <FleetReadNotice state={fleetState} onRetry={refreshFleet} />
+        {fleet && suspends ? <SandboxLifecycle deployment={fleet.deployment} nodes={fleet.nodes} stale={fleetObservationStale(fleetState)} /> : null}
         {cloud && fleet ? <CloudSection deployment={fleet.deployment} /> : <Section
           headingId="node-capacity-heading"
           title={t("sandbox.node")}
@@ -208,7 +210,7 @@ export function SandboxMetricsPage() {
         suspends={suspends}
         onClose={() => setOpenNode(null)}
       />
-      <RuntimeDialog row={rows.find((row) => row.observation.session_id === openRuntime) ?? null} showNode={!cloud} onClose={() => setOpenRuntime(null)} />
+      <RuntimeDialog row={rows.find((row) => row.observation.session_id === openRuntime) ?? null} showNode={!cloud} showCompute={suspends} onClose={() => setOpenRuntime(null)} />
     </section>
   );
 }
@@ -311,7 +313,7 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
         {durable ? <RuntimeCharts samples={durable.samples} resolutionSeconds={durable.resolutionSeconds} />
           : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
             : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p> : null}
-        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject showNode={fleet?.deployment.mode !== "direct"} onOpen={onOpen} />
+        <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject showNode={fleet?.deployment.mode !== "direct"} showCompute={Boolean(fleet?.deployment.suspension)} onOpen={onOpen} />
       </>
     );
   }
@@ -360,7 +362,7 @@ function lifecycleLabel(row: HostedRuntimeRow, t: TFunction<"metrics">): string 
   return t(`sandbox.lifecycle.${row.observation.lifecycle_state ?? "stopped"}`);
 }
 
-function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRuntimeRow[]; showProject: boolean; showNode: boolean; onOpen: (sessionId: string) => void }) {
+function RuntimeTable({ rows, showProject, showNode, showCompute, onOpen }: { rows: HostedRuntimeRow[]; showProject: boolean; showNode: boolean; showCompute: boolean; onOpen: (sessionId: string) => void }) {
   const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
@@ -380,6 +382,7 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
               {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
               {showNode ? <th scope="col">{t("sandbox.node")}</th> : null}
               <th scope="col">{t("sandbox.status")}</th>
+              {showCompute ? <th scope="col"><span className="column-help">{t("sandbox.recordedCompute")}<HelpTip>{t("sandbox.recordedComputeHelp")}</HelpTip></span></th> : null}
               <th scope="col">{t("sandbox.cpu")}</th>
               <th scope="col">{t("sandbox.memory")}</th>
               <th scope="col" className="numeric">{t("sandbox.uptime")}</th>
@@ -401,6 +404,7 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
                   {showNode ? <td>{row.node ? row.node.name || row.node.id : <span className="table-muted">{MISSING}</span>}</td> : null}
                   <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
+                  {showCompute ? <td>{row.allocation ? sandboxStateLabel(row.allocation.compute_phase, locale?.startsWith("zh") ? "zh-CN" : "en") : MISSING}</td> : null}
                   <td>
                     {cpu?.usage_cores != null ? (
                       <span className="table-meter">
@@ -537,8 +541,8 @@ function NodeDialog({ node, rows, load, range, stale, suspends, onClose }: {
 }
 
 /** A hosted sandbox in a dialog: where it runs, and its Session's Runtime state and history. */
-function RuntimeDialog({ row, showNode, onClose }: { row: HostedRuntimeRow | null; showNode: boolean; onClose: () => void }) {
-  const { t } = useTranslation("metrics");
+function RuntimeDialog({ row, showNode, showCompute, onClose }: { row: HostedRuntimeRow | null; showNode: boolean; showCompute: boolean; onClose: () => void }) {
+  const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const { navigate } = useConsoleNavigation();
   const { byId } = useProjects();
@@ -558,6 +562,7 @@ function RuntimeDialog({ row, showNode, onClose }: { row: HostedRuntimeRow | nul
             <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={byId.get(observation.project_id)} /></dd></div>
             {showNode ? <div><dt>{t("sandbox.node")}</dt><dd>{shown.node ? shown.node.name || shown.node.id : MISSING}</dd></div> : null}
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
+            {showCompute && shown.allocation ? <div><dt>{t("sandbox.recordedCompute")}</dt><dd>{sandboxStateLabel(shown.allocation.compute_phase, i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en")}</dd></div> : null}
             <div><dt>{t("sandbox.configurationGeneration")}</dt><dd>{shown.deploymentGeneration ?? MISSING}</dd></div>
             <div><dt>{t("sandbox.uptime")}</dt><dd>{formatDuration(shown.uptimeSeconds)}</dd></div>
             {/* Only E2B reports a sandbox's disk. */}

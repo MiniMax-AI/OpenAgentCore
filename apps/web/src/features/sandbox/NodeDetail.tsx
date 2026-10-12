@@ -24,17 +24,11 @@ function Diagnostic({ value }: { value: string }) {
   return <span className="node-diagnostic">{message.label}<HelpTip label={message.label}>{message.advice}</HelpTip></span>;
 }
 
-/** How long the allocation has been in its compute phase and, while suspended, about when Core reclaims it. */
-function PhaseTime({ allocation, retentionSeconds, now }: { allocation: SandboxAllocation; retentionSeconds: number; now: number }) {
-  const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage;
-  const timing = phaseTiming(allocation.compute_phase, allocation.compute_phase_changed_at, retentionSeconds, now);
-  if (!timing) return <td>{MISSING}</td>;
-  const elapsed = formatSpan(timing.elapsed, locale);
-  const text = timing.reclaimIn === null ? t("Since {{time}}", { time: formatRelative(timing.since, now, locale) })
-    : timing.reclaimIn > 0 ? t("Suspended for {{elapsed}} · reclaimed in about {{remaining}}", { elapsed, remaining: formatSpan(timing.reclaimIn, locale) })
-      : t("Suspended for {{elapsed}} · reclaim due", { elapsed });
-  return <td className="nodes-nowrap" title={formatDateTime(timing.since, locale)}>{text}</td>;
+/** Elapsed time is independent of later changes to the deployment's retention policy. */
+function PhaseTime({ allocation, now }: { allocation: SandboxAllocation; now: number }) {
+  const { i18n } = useTranslation("sandbox");
+  const timing = phaseTiming(allocation.compute_phase_changed_at, now);
+  return <td className="nodes-nowrap" title={timing ? formatDateTime(timing.since, i18n.resolvedLanguage) : undefined}>{timing ? formatSpan(timing.elapsed, i18n.resolvedLanguage) : MISSING}</td>;
 }
 
 export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale, suspension }: {
@@ -88,7 +82,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
         <KpiStrip label={t("Capacity")}>
           <Kpi label={t("Active / limit")} help={t("Sandboxes Core has placed on this node, against the most it places here at once.")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
-          {suspends ? <Kpi label={t("Suspended")} help={t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
+          {suspends ? <Kpi label={t("Suspended")} help={t("Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
           {suspends ? <Kpi label={t("Retained / limit")} help={t("Sandboxes this node holds, active and suspended, against its retained limit.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
           {suspends ? <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} /> : null}
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
@@ -109,7 +103,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
                   <th scope="col">{t("Recorded state")}</th>
                   <th scope="col">{t("Recorded compute")}</th>
                   {/* Only a Provider with a suspension policy changes compute phase; elsewhere it is always disabled. */}
-                  {suspension ? <th scope="col"><span className="column-help">{t("In this state")}<HelpTip>{t("How long the sandbox has been in its compute state. For a suspended one, the reclaim time is estimated from when it was suspended and the deployment's retention; Core reclaims it around then. Older allocations show a dash until their state next changes.")}</HelpTip></span></th> : null}
+                  {suspension ? <th scope="col"><span className="column-help">{t("In this state")}<HelpTip>{t("Time since Core recorded this compute phase. The snapshot expiry time is not available here.")}</HelpTip></span></th> : null}
                   <th scope="col">{t("Issue")}</th>
                   <th scope="col">{t("Created")}</th>
                 </tr>
@@ -121,7 +115,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
                     <td>{allocation.deployment_generation}</td>
                     <td>{sandboxStateLabel(allocation.state, shortLocale)}</td>
                     <td>{allocation.compute_phase ? sandboxStateLabel(allocation.compute_phase, shortLocale) : MISSING}</td>
-                    {suspension ? <PhaseTime allocation={allocation} retentionSeconds={suspension.retention_seconds} now={now} /> : null}
+                    {suspension ? <PhaseTime allocation={allocation} now={now} /> : null}
                     <td>{allocation.diagnostic ? <Diagnostic value={allocation.diagnostic} /> : MISSING}</td>
                     <td className="nodes-nowrap">{formatDateTime(epochSeconds(allocation.created_at), locale)}</td>
                   </tr>

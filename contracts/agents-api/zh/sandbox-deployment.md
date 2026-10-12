@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: a806af7b78ceb630d1f2d1af0184b54967bd20f221d288e25c82965f0a1d73ef
+source_hash: fabf8ff55b54d16e603a21ece74162ff9cecc441dbcab6216c0a9e807ebe7dce
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -190,28 +190,29 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` 接受 `{name, max_active, max_retained}`；降低限制不会停止任何正在运行的沙箱。当节点仍持有分配、快照、预留或待处理清理时，包括节点离线期间，`DELETE /core/v1/sandbox/nodes/{node_id}` 会拒绝操作并返回 409 `runtime_node_in_use`。移除操作不会删除任何计算资源，并且会停用该节点的身份；该主机只能作为新节点重新加入。不存在节点排空过程。
 
-`GET /core/v1/sandbox/nodes/{node_id}/allocations` 列出节点尚未释放的分配。每个项的 `compute_phase_changed_at` 表示该分配进入当前 `compute_phase` 的时间；未知时为 null。对于已暂停的 microsandbox 分配，该时间加上 `suspension.retention_seconds` 可大致确定 Core 回收它的时间。
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` 列出节点尚未释放的分配。每个项的 `compute_phase_changed_at` 表示该分配进入当前 `compute_phase` 的时间；未知时为 null。该时间是阶段切换时间，不是快照到期时间。此响应不提供快照截止时间，不应根据 `suspension.retention_seconds` 推算。
 
 ## 各沙箱提供商中的字段含义 {#what-each-field-means-per-sandbox-provider}
 
 某些字段在不同提供商中保持同一名称，但含义不同或不适用。部署字段来自 `GET /core/v1/sandbox/deployment`，节点和分配字段来自节点路由，Runtime 字段来自 [Runtime 遥测 API](runtime-observability-api.md)；其中 `disk` 仅出现在观测列表中，历史则在 [Session Runtime 历史](runtime-observability-api.md#session-runtime-history)下说明。
 
-| 字段 | E2B | Docker | microsandbox |
+| 字段 | microsandbox | E2B | Docker |
 | --- | --- | --- | --- |
-| 部署 `specification.resources` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` |
-| 部署 `specification.runtime` | 不存在；`configuration.template` 用于选择构建 | 完整的[发行版](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 | 完整的[发行版](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 |
-| 部署 `metadata.template_build` | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 | 不存在：`metadata` 为空 |
-| 部署 `suspension` | `null`；Core 不暂停 E2B 沙箱 | `null` | `{idle_seconds, retention_seconds}` |
-| 部署 `resources.allocations`、`resources.pending` | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 | 所有节点的总数 |
-| 注册令牌 `max_active`、`max_retained` | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` | 两个限制均适用 |
-| 节点列表和详情 | 空列表；详情返回 404 | 已注册节点 | 已注册节点 |
-| 节点 `retained`、`snapshots`、`max_retained` | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` | 已暂停沙箱数为 `retained` 减去 `active` |
-| 节点 `host.available_disk_bytes` | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 |
-| 分配 `compute_phase`、`compute_phase_changed_at` | 不适用：没有节点分配 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 | 包含 `suspended`；该时间加上 `suspension.retention_seconds` 可大致确定 Core 回收快照的时间 |
-| Runtime 观测 `cpu`、`memory` | 来自 E2B 指标：`cpu.utilization_ratio` 和 `capacity_cores`、内存使用量和限制；无累计 CPU 时间 | 来自 Docker stats：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 来自 VM：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 |
-| Runtime 观测 `disk` | E2B `diskUsed` 和 `diskTotal`；模板未报告时为 `null` | `null`：无磁盘配额 | `null` |
-| Runtime 观测 `lifecycle_state: sleeping` | 从不 | 从不 | 暂停期间 |
-| Runtime 历史 CPU | 每个时间桶中 E2B 所报告使用率比值的平均值 | 根据累计 CPU 时间派生 | 根据累计 CPU 时间派生 |
+| 独立工作区文件系统 | [Kernel NFS adapter](../../../docs/zh/workspace-provider.md#kernel-nfs-adapter)；与计算资源分开配置 | 不支持 | 不支持 |
+| 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 |
+| 部署 `specification.runtime` | 完整的[发行版](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 | 不存在；`configuration.template` 用于选择构建 | 完整的[发行版](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 |
+| 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 |
+| 部署 `suspension` | `{idle_seconds, retention_seconds}` | `null`；Core 不暂停 E2B 沙箱 | `null` |
+| 部署 `resources.allocations`、`resources.pending` | 所有节点的总数 | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 |
+| 注册令牌 `max_active`、`max_retained` | 两个限制均适用 | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` |
+| 节点列表和详情 | 已注册节点 | 空列表；详情返回 404 | 已注册节点 |
+| 节点 `retained`、`snapshots`、`max_retained` | 已暂停沙箱数为 `retained` 减去 `active`；`snapshots` 还包含恢复或清理期间保留的快照 | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` |
+| 节点 `host.available_disk_bytes` | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 |
+| 分配 `compute_phase`、`compute_phase_changed_at` | 包含 `suspended`；时间表示当前阶段的起点，不是快照到期时间 | 不适用：没有节点分配 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 |
+| Runtime 观测 `cpu`、`memory` | 来自 VM：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 来自 E2B 指标：`cpu.utilization_ratio` 和 `capacity_cores`、内存使用量和限制；无累计 CPU 时间 | 来自 Docker stats：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 |
+| Runtime 观测 `disk` | `null` | E2B `diskUsed` 和 `diskTotal`；模板未报告时为 `null` | `null`：无磁盘配额 |
+| Runtime 观测 `lifecycle_state: sleeping` | 暂停期间 | 从不 | 从不 |
+| Runtime 历史 CPU | 根据累计 CPU 时间派生 | 每个时间桶中 E2B 所报告使用率比值的平均值 | 根据累计 CPU 时间派生 |
 
 ## 错误 {#errors}
 

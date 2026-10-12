@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 1366a76858085e015480c48c18891987397cdc1da0d859182da3685ed77355be
+source_hash: 5ea5b4443e7c6c26aacd41d136169a8ea73dc4fed68c2e6a55ce1c9afef4af62
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -95,8 +95,10 @@ Web 的 **Overview** 通过 **Getting started** 清单跟踪这些步骤。
 
 ## 添加沙箱容量 {#add-sandbox-capacity}
 
-Session 需要执行位置：
+安装程序不选择沙箱后端。根据你的基础设施选择部署方案：
 
-- 在 **System** → **Manage sandbox configuration** 选择后端，然后在 **Nodes** 页面[添加节点](nodes.md)。安装程序不选择后端。
+- **推荐：microsandbox 配合独立工作区存储。** 先准备 [NFS 文件系统和服务账户](../configuration.md#independent-workspace-storage)，再在 **System** → **Manage sandbox configuration** 选择 **Own machines** 和 **microsandbox**，通过 **Nodes** [添加 Linux 节点](./nodes.md)。[节点指南](./nodes.md#before-you-add-a-node)同时说明了跨兼容节点恢复内存所需的私有检查点存储。
+- **托管计算：E2B。** 在同一个沙箱配置流程中选择 E2B 并配置凭据和模板。不需要执行节点；参阅[部署设置](../../../contracts/agents-api/zh/sandbox-deployment.md#initial-setup-and-same-provider-changes)。
+- **其他支持的执行位置。** Docker 节点仍然可用，应用也可以连接[自托管机器](./self-hosted.md)。[提供商对照表](../../../contracts/agents-api/zh/sandbox-deployment.md#what-each-field-means-per-sandbox-provider)区分各方案的文件系统和挂起支持。
 
 日常操作、备份和升级见[运维](operations.md)。

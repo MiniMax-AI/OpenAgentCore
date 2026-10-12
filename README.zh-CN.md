@@ -14,7 +14,7 @@ OpenAI Agents API 的开源实现，支持多种原生执行引擎，可部署�
 
 ## 组件关系
 
-![OpenAgentCore 架构](docs/assets/architecture.png)
+![OpenAgentCore 架构](docs/assets/architecture.svg)
 
 应用和管理员使用以下 Core API：
 
@@ -31,8 +31,8 @@ OpenAgentCore 在你自己的基础设施上运行 AI Agent，对外提供 [Open
 
 - **与 OpenAI 相同的 API。** [官方 OpenAI SDK](https://developers.openai.com/api/docs/guides/agents/sdk) 或直接 HTTP 调用，改一下地址即可，无需学习新客户端。
 - **自选 Agent。** 每个 [Session](https://openagentcore.dev/zh/docs/api/public-agent-api) 运行一个[原生 Harness](https://openagentcore.dev/zh/contracts/agents-api/harness-onboarding)：[Codex](https://github.com/openai/codex)、[Claude Code](https://code.claude.com/docs/en/overview) 或 [MiniMax Code](https://github.com/MiniMax-AI/minimax-code)， 使用[你配置的模型供应商](https://openagentcore.dev/zh/contracts/agents-api/model-execution)。
-- **自选机器。** Agent 可以在[托管沙箱](https://openagentcore.dev/zh/contracts/agents-api/sandbox-deployment)（[Docker](https://www.docker.com/)、[microsandbox](https://github.com/zerocore-ai/microsandbox) 或 [E2B](https://e2b.dev/)）里工作， 也可以在你自己的 Linux、macOS 或 Windows 机器上工作。
-- **每个部件都可替换。** [沙箱](https://openagentcore.dev/zh/docs/sandbox-provider)、[Harness](https://openagentcore.dev/zh/contracts/agents-api/harness-onboarding) 和[模型供应商](https://openagentcore.dev/zh/contracts/agents-api/model-execution)都通过[既定协议](AGENTS.md#protocols-at-every-boundary)接入。
+- **计算可复用，工作区持久化。** 推荐 [microsandbox](https://github.com/zerocore-ai/microsandbox) 配合[独立工作区存储](https://openagentcore.dev/zh/docs/workspace-provider)：空闲沙箱挂起、释放计算资源，并在兼容节点上恢复。[E2B](https://e2b.dev/) 是托管计算的另一选择；也支持 Docker 和你自己的 Linux、macOS 或 Windows 机器。
+- **每个部件都可替换。** [沙箱](https://openagentcore.dev/zh/docs/sandbox-provider)、[工作区文件系统](https://openagentcore.dev/zh/docs/workspace-provider)、[Harness](https://openagentcore.dev/zh/contracts/agents-api/harness-onboarding) 和[模型供应商](https://openagentcore.dev/zh/contracts/agents-api/model-execution)都通过[既定协议](AGENTS.md#protocols-at-every-boundary)接入。
 
 ## 界面预览
 

@@ -14,7 +14,7 @@
 
 ## コンポーネントの関係
 
-![OpenAgentCore のアーキテクチャ](docs/assets/architecture.png)
+![OpenAgentCore のアーキテクチャ](docs/assets/architecture.svg)
 
 アプリケーションと管理者は、次の Core API を使用します。
 
@@ -31,8 +31,8 @@ OpenAgentCore は、自分のインフラ上で AI エージェントを実行�
 
 - **OpenAI と同じ API。** [公式 OpenAI SDK](https://developers.openai.com/api/docs/guides/agents/sdk) または直接の HTTP リクエストで、接続先を変更するだけで利用できます。新しいクライアントを覚える必要はありません。
 - **エージェントを選択可能。** 各 [Session](https://openagentcore.dev/docs/api/public-agent-api) は、[Codex](https://github.com/openai/codex)、[Claude Code](https://code.claude.com/docs/en/overview)、[MiniMax Code](https://github.com/MiniMax-AI/minimax-code) のいずれかの[ネイティブ Harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding) を実行し、[設定したモデルプロバイダー](https://openagentcore.dev/contracts/agents-api/model-execution)を使用します。
-- **実行するマシンを選択可能。** エージェントは、[マネージドサンドボックス](https://openagentcore.dev/contracts/agents-api/sandbox-deployment)（[Docker](https://www.docker.com/)、[microsandbox](https://github.com/zerocore-ai/microsandbox)、[E2B](https://e2b.dev/)）でも、自分の Linux、macOS、Windows マシンでも動作します。
-- **すべてのコンポーネントを置き換え可能。** [サンドボックス](https://openagentcore.dev/docs/sandbox-provider)、[Harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding)、[モデルプロバイダー](https://openagentcore.dev/contracts/agents-api/model-execution)は、[定義されたプロトコル](AGENTS.md#protocols-at-every-boundary)を通じて接続されます。
+- **計算資源を再利用し、ワークスペースを永続化。** [microsandbox](https://github.com/zerocore-ai/microsandbox) と[独立したワークスペースストレージ](https://openagentcore.dev/docs/workspace-provider)の組み合わせを推奨します。アイドル状態のサンドボックスは休止して計算資源を解放し、互換性のあるノードで再開できます。[E2B](https://e2b.dev/) はマネージド環境の選択肢です。Docker や自分の Linux、macOS、Windows マシンでの実行もサポートします。
+- **すべてのコンポーネントを置き換え可能。** [サンドボックス](https://openagentcore.dev/docs/sandbox-provider)、[ワークスペースファイルシステム](https://openagentcore.dev/docs/workspace-provider)、[Harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding)、[モデルプロバイダー](https://openagentcore.dev/contracts/agents-api/model-execution)は、[定義されたプロトコル](AGENTS.md#protocols-at-every-boundary)を通じて接続されます。
 
 ## スクリーンショット
 

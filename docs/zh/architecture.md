@@ -1,12 +1,12 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: 061593c891cc4dd8b9077311bec8b8b93051c1cba9e387fb7db40a7ffc3a3de5
+source_hash: ed19d090bf0b65d33895ff59ee2f134916b03df74536ffb9b2659a3d3cb952c9
 ---
 
 OpenAgentCore 是 Agent 运行平台，通过可替换的协议实现统一组织 Harness、模型、工具、Session 和执行环境。它将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。Sandbox Provider 管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
 
-推荐的部署选择是 E2B 托管计算，以及 microsandbox 配合独立持久化工作区存储的自部署方案。两者使用相同的 Core 编排和能力检查。Docker 仍是可用的 Provider。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。具体契约和支持能力见 [Sandbox Provider](./sandbox-provider.md) 和[工作区文件系统 Provider](./workspace-provider.md)。
+推荐的自部署方案是 microsandbox 配合独立持久化工作区存储，当前由 kernel NFS adapter 提供。E2B 是托管计算的另一选择。两者使用相同的 Core 编排和能力检查。Docker 仍是可用的 Provider。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。具体契约和支持能力见 [Sandbox Provider](./sandbox-provider.md) 和[工作区文件系统 Provider](./workspace-provider.md)。
 
 ```mermaid
 flowchart TB
@@ -14,7 +14,10 @@ flowchart TB
     Web["Web administrator console"] <-->|"Core API /core/v1"| Core
     Core["Core: authorization, configuration snapshots,<br/>orchestration and durable state"]
     Core --- DB[("PostgreSQL")]
-    Core -->|"Sandbox Provider protocol"| SP["Sandbox Provider: Docker / E2B / microsandbox"]
+    Core -->|"Sandbox Provider protocol"| SP["Sandbox Provider:<br/>microsandbox / E2B / Docker"]
+    Core -->|"Workspace filesystem protocol"| FS["Workspace filesystem adapter: NFS"]
+    SP -->|"Resolve external attachment"| FS
+    FS -->|"Own durable storage"| Store[("Independent Environment storage")]
     SP -.->|"Provision compute and bootstrap Runtime"| R
     User["User-machine installer"] -.->|"Start Runtime"| R
     Core <-->|"Core–Runtime protocol:<br/>preparation, execution, events and receipts"| R
@@ -24,6 +27,7 @@ flowchart TB
         A <-->|"Native SDK or protocol"| H["Native Harness: model and tool loop"]
         H <--> F["Workspace, tools and artifacts"]
     end
+    F <-->|"Mount when the combination supports external storage"| Store
     H <-->|"Model API"| Model["Model provider"]
     H <-->|"MCP"| MCP["Local or remote MCP servers"]
 ```
@@ -43,6 +47,8 @@ flowchart TB
 | Model provider | 提供 Harness 选定的模型协议 | [模型执行](../../contracts/agents-api/zh/model-execution.md) |
 | Web | 让管理员通过服务端 Core API 连接配置与观察安装实例 | [控制台服务端](web/console-server.md) |
 
+Harness 负责原生 Agent loop 和上下文管理。应用负责业务工作流、Reviewer 策略和质量评估；这些能力不会成为 Core 执行路径。
+
 [仓库地图](development.md#repository-map) 标出这些组件的位置。[概念](concepts.md) 解释 Project 边界、管理员权限和工具隔离。
 
 ## Session 的完整流程 {#a-session-end-to-end}
@@ -50,5 +56,7 @@ flowchart TB
 应用通过 Agents API 创建 Session。Core 解析其配置与执行位置。托管 Session 通过选定的 Sandbox Provider 获取计算资源；自托管 Session 等待用户运行安装命令。`environment: none` 的 Session 使用已连接的执行设备，不提供工作区。[应用指南](api/public-agent-api.md#create-a-session) 说明这些选项。
 
 daemon 连接后，Core 检查可用 Harness 和请求的能力。Runtime 准备工作区 Environment 及其能力快照，然后准备或复用 Session Executor。每个 Turn 通过原生 Harness 运行。Core 持久化输出、工具交互和回执，供应用读取和接收事件。完成或取消使 Turn 结算；健康的 Executor 可以在同一 Environment 中执行下一个 Turn。
+
+对于支持检查点的计算资源，Core 自动挂起空闲工作，并在确认快照捕获及源计算停止后释放活跃计算容量。新工作在符合条件的兼容节点上恢复保留的内存；独立工作区存储始终属于同一 Environment 标识。[检查点生命周期](./sandbox-provider.md#suspension)负责空闲准入、唤醒与保留规则，[检查点转移](./sandbox-provider.md#checkpoint-transfer)定义共享存储和兼容性要求。仅凭节点失联不能授权替代写入者。
 
 执行、计算资源和独立工作区存储拥有不同的生命周期。关闭 Executor 本身不会删除存储。[工作区文件系统契约](workspace-provider.md#lifetime-and-filesystem-scope) 负责持久存储保留及显式删除规则；计算快照到期不授权回收工作区存储。准备、连接和执行就绪具有不同状态。[Environment 契约](../../contracts/agents-api/zh/environments.md) 负责准备规则，[Core–Runtime 协议](runtime-protocol.md) 负责顺序、回执和故障处理。
