@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 5ea5b4443e7c6c26aacd41d136169a8ea73dc4fed68c2e6a55ce1c9afef4af62
+source_hash: 3dab6f5604de00a1d8498b40b26e2993d3081ccd10ed6049f4d6ea21b9d978f6
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -84,7 +84,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 ## 设置默认模型 {#set-a-default-model}
 
-没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。在 **System** 的 **Default model configuration** 下，找到标记为 **Default** 的 Harness（除非修改了 `core.default_harness`，否则为 Codex），选择 **Set**。输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。MiniMax Code 还需要上下文窗口和最大输出 token 数。参阅[默认模型](../configuration.md#default-models)。
+没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。在 **Settings → Models and credentials** 的 **Default model configuration** 下，找到标记为 **Default** 的 Harness（除非修改了 `core.default_harness`，否则为 Codex），选择 **Set**。输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。MiniMax Code 还需要上下文窗口和最大输出 token 数。参阅[默认模型](../configuration.md#default-models)。
 
 ## 签发 Project API 密钥 {#issue-a-project-api-key}
 
@@ -97,7 +97,7 @@ Web 的 **Overview** 通过 **Getting started** 清单跟踪这些步骤。
 
 安装程序不选择沙箱后端。根据你的基础设施选择部署方案：
 
-- **推荐：microsandbox 配合独立工作区存储。** 先准备 [NFS 文件系统和服务账户](../configuration.md#independent-workspace-storage)，再在 **System** → **Manage sandbox configuration** 选择 **Own machines** 和 **microsandbox**，通过 **Nodes** [添加 Linux 节点](./nodes.md)。[节点指南](./nodes.md#before-you-add-a-node)同时说明了跨兼容节点恢复内存所需的私有检查点存储。
+- **推荐：microsandbox 配合独立工作区存储。** 先准备 [NFS 文件系统和服务账户](../configuration.md#independent-workspace-storage)，再在 **Settings** → **Sandbox and scheduling** 选择 **Own machines** 和 **microsandbox**，通过 **Settings → Sandbox and scheduling** [添加 Linux 节点](./nodes.md)。[节点指南](./nodes.md#before-you-add-a-node)同时说明了跨兼容节点恢复内存所需的私有检查点存储。
 - **托管计算：E2B。** 在同一个沙箱配置流程中选择 E2B 并配置凭据和模板。不需要执行节点；参阅[部署设置](../../../contracts/agents-api/zh/sandbox-deployment.md#initial-setup-and-same-provider-changes)。
 - **其他支持的执行位置。** Docker 节点仍然可用，应用也可以连接[自托管机器](./self-hosted.md)。[提供商对照表](../../../contracts/agents-api/zh/sandbox-deployment.md#what-each-field-means-per-sandbox-provider)区分各方案的文件系统和挂起支持。
 

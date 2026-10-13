@@ -5,12 +5,12 @@ import { PageBody, PageHeader, RefreshButton, Section } from "../../components/c
 import { ErrorState } from "../../components/ErrorState";
 import { CopyableId } from "../../components/list-ui";
 import { TableSkeleton } from "../../components/Skeleton";
-import { useConsoleNavigation } from "../../lib/console-navigation";
+
 import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
-import { DefaultModelsSection } from "./DefaultModelsSection";
+import { SettingsTabs } from "../settings/SettingsTabs";
 import { Fact } from "./Fact";
-import { harnessesQuery } from "./harness-queries";
+
 import { StartupSettings } from "./StartupSettings";
 import "./system.css";
 
@@ -28,15 +28,12 @@ function FactsSkeleton({ facts }: { facts: number }) {
   );
 }
 
-/** System owns installation settings and the entry to sandbox configuration. */
+/** Service settings display installation facts and the effective process configuration. */
 export function SystemPage() {
   const { t } = useTranslation("system");
-  const { t: tSandboxNav } = useTranslation("sandboxNavigation");
   const { t: tNav } = useTranslation("navigation");
-  const { navigate } = useConsoleNavigation();
   const installation = useQuery(installationQuery);
-  const harnesses = useQuery(harnessesQuery);
-  const refresh = () => { void installation.refetch(); void harnesses.refetch(); };
+  const refresh = () => { void installation.refetch();  };
 
   const about = installation.data;
   const facts = about ? (
@@ -53,26 +50,22 @@ export function SystemPage() {
   ) : installation.isError && !installation.isFetching
     ? <ErrorState title={t("installation.failed")} onRetry={() => void installation.refetch()} />
     : <FactsSkeleton facts={4} />;
-  // One announcement while either first read is still out; each slot shows only its own placeholder.
-  const reading = (!about && !(installation.isError && !installation.isFetching)) ||
-    (!harnesses.data && !(harnesses.isError && !harnesses.isFetching));
+  // Announce the initial installation read once.
+  const reading = (!about && !(installation.isError && !installation.isFetching));
 
   return (
     <section className="page-section console-page system-page" aria-labelledby="system-heading">
       <PageHeader
         headingId="system-heading"
-        title={tNav("views.system")}
+        title={tNav("settings.service")}
         help={t("help")}
-        actions={<RefreshButton onClick={refresh} refreshing={installation.isFetching || harnesses.isFetching} label={t("refresh")} />}
+        actions={<RefreshButton onClick={refresh} refreshing={installation.isFetching} label={t("refresh")} />}
       />
+      <SettingsTabs active="service" />
       <PageBody>
         <InstallationNotice installation={about} />
         {reading ? <p className="visually-hidden" role="status">{t("loading")}</p> : null}
         {facts}
-        <DefaultModelsSection />
-        <Section headingId="system-sandbox-heading" title={tSandboxNav("title")} help={tSandboxNav("help")}>
-          <button className="button outline" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{tSandboxNav("open")}</button>
-        </Section>
         {about ? <StartupSettings configuration={about.configuration} /> : installation.isError ? null : <TableSkeleton rows={4} columns={3} />}
       </PageBody>
     </section>

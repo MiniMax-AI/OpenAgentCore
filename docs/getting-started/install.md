@@ -82,7 +82,7 @@ Applications, nodes and sandboxes reach Core at one address, the public URL. HTT
 
 ## Set a default model
 
-Core-hosted Sessions without their own model provider use their harness's default model. On **System**, under **Default model configuration**, find the harness marked **Default** (Codex unless you changed `core.default_harness`) and choose **Set**. Enter the model ID, the protocol, and the provider's base URL and API key. MiniMax Code also needs the context window and max output tokens. See [default models](../configuration.md#default-models).
+Core-hosted Sessions without their own model provider use their harness's default model. In **Settings → Models and credentials**, under **Default model configuration**, find the harness marked **Default** (Codex unless you changed `core.default_harness`) and choose **Set**. Enter the model ID, the protocol, and the provider's base URL and API key. MiniMax Code also needs the context window and max output tokens. See [default models](../configuration.md#default-models).
 
 ## Issue a Project API key
 
@@ -95,7 +95,7 @@ Web's **Overview** tracks these steps in a **Getting started** checklist.
 
 The installer selects no sandbox backend. Choose the deployment that fits your infrastructure:
 
-- **Recommended: microsandbox with independent workspace storage.** Prepare the [NFS filesystem and service accounts](../configuration.md#independent-workspace-storage) first, then choose **Own machines** and **microsandbox** in **System** → **Manage sandbox configuration**, and [add Linux nodes](./nodes.md) from **Nodes**. The [nodes guide](./nodes.md#before-you-add-a-node) also covers the private checkpoint store needed for memory recovery across compatible nodes.
+- **Recommended: microsandbox with independent workspace storage.** Prepare the [NFS filesystem and service accounts](../configuration.md#independent-workspace-storage) first, then choose **Own machines** and **microsandbox** in **Settings** → **Sandbox and scheduling**, and [add Linux nodes](./nodes.md) from **Settings → Sandbox and scheduling**. The [nodes guide](./nodes.md#before-you-add-a-node) also covers the private checkpoint store needed for memory recovery across compatible nodes.
 - **Managed compute: E2B.** Select E2B and configure its credential and template through the same sandbox configuration flow. No execution nodes are needed; see [deployment setup](../../contracts/agents-api/sandbox-deployment.md#initial-setup-and-same-provider-changes).
 - **Other supported placements.** Docker nodes remain available. Applications can also connect [self-hosted machines](./self-hosted.md). The [provider comparison](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider) distinguishes filesystem and suspension support.
 

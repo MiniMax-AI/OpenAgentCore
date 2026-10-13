@@ -185,13 +185,13 @@ export function SandboxMetricsPage() {
                 icon={Server}
                 title={t("sandbox.noNodesTitle")}
                 hint={t("sandbox.noNodesDescription")}
-                action={<button className="button primary" type="button" onClick={() => navigate("nodes", {}, "add-node")}>{t("sandbox.addNode")}</button>}
+                action={<button className="button primary" type="button" onClick={() => navigate("settings", { id: "sandbox" }, "add-node")}>{t("sandbox.addNode")}</button>}
               />
             ) : (
               <EmptyState
                 icon={Server}
                 title={t("sandbox.notSetUpTitle")}
-                action={<button className="button primary" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{t("sandbox.setUp")}</button>}
+                action={<button className="button primary" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{t("sandbox.setUp")}</button>}
               />
             )
           ) : fleetState.status === "loading"
@@ -245,7 +245,7 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
       headingId="cloud-heading"
       title={t("sandbox.cloud.title")}
       help={t("sandbox.cloud.help")}
-      actions={<button className="button outline" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{t("sandbox.cloud.manage")}</button>}
+      actions={<button className="button outline" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{t("sandbox.cloud.manage")}</button>}
     >
       <p className="detail-note">{t("sandbox.cloud.counts")}</p>
       <KpiStrip label={t("sandbox.cloud.title")}>

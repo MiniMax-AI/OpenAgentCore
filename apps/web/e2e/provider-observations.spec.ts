@@ -13,7 +13,7 @@ test("default provider observations are optional details and recover only on Cor
     for (const harness of data.data) if (harness.model_configuration) Object.assign(harness.model_configuration, observation);
     await route.fulfill({ response, json: data });
   });
-  await openConsole(page, request, "system");
+  await openConsole(page, request, "settings?id=models");
   const card = page.getByRole("article", { name: "Codex", exact: true });
   await expect(card).not.toContainText("Last successful use");
   await card.getByRole("button", { name: "Usage details", exact: true }).click();

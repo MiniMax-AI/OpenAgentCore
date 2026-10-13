@@ -18,14 +18,14 @@ export type ConsoleView =
   | "vaults"
   | "projects"
   | "nodes"
-  | "system";
+  | "settings";
 
 export type ConsoleNavGroup = "monitor" | "resources" | "platform";
 
 export const consoleNavGroups: ReadonlyArray<{ id: ConsoleNavGroup; views: readonly ConsoleView[] }> = [
   { id: "monitor", views: ["overview", "core-metrics", "agent-metrics", "sandbox-metrics", "sessions"] },
   { id: "resources", views: ["agents", "templates", "skills", "files", "vaults"] },
-  { id: "platform", views: ["projects", "nodes", "system"] },
+  { id: "platform", views: ["projects", "nodes", "settings"] },
 ];
 
 /**

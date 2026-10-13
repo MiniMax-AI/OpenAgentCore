@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxDeployment, type StartSandboxReset } from "@oac/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { TableSkeleton } from "../../components/Skeleton";
 import { HelpTip, RefreshButton } from "../../components/console-ui";
@@ -18,20 +17,21 @@ import { writeSandboxDeployment } from "./sandbox-deployment-write";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import "./SandboxManagerView.css";
+import { SettingsTabs } from "../settings/SettingsTabs";
+import { SandboxCapacitySettings } from "./SandboxCapacitySettings";
 
 function DeploymentHeader({ actions }: { actions?: ReactNode }) {
   const { t } = useTranslation("sandboxNavigation");
-  const { navigate } = useConsoleNavigation();
+  const { t: tNav } = useTranslation("navigation");
   return <header className="page-header">
     <div className="console-page-heading">
-      <button type="button" className="icon-button ghost back-button" aria-label={t("back")} title={t("back")} onClick={() => navigate("system")}><ArrowLeft size={16} strokeWidth={1.6} aria-hidden="true" /></button>
-      <h1>{t("title")}</h1><HelpTip>{t("help")}</HelpTip>
+      <h1>{tNav("settings.sandbox")}</h1><HelpTip>{t("help")}</HelpTip>
     </div>
     {actions ? <div className="page-actions">{actions}</div> : null}
   </header>;
 }
 
-/** System's secondary page is the sole owner of deployment configuration controls. */
+/** Settings owns deployment changes, lifecycle policy and node capacity. */
 export function SandboxDeploymentPage() {
   const { i18n } = useTranslation("sandbox");
   return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en"}>
@@ -80,7 +80,7 @@ function DeploymentConfiguration() {
     return false;
   }
   async function initialize(input: InitializeSandboxDeployment) {
-    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
+    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("settings", { id: "sandbox" }, "add-node");
   }
   async function update(input: UpdateSandboxDeployment) {
     return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true, true);
@@ -97,6 +97,7 @@ function DeploymentConfiguration() {
       {snapshot?.deployment.mode === "nodes" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
       <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy} label={t("Refresh sandbox state")} />
     </>} />
+    <SettingsTabs active="sandbox" />
     <div className="console-page-body sandbox-content">
       <InstallationNotice installation={installation.data} />
       {!snapshot && (loading || deploymentQuery.isPending) ? <TableSkeleton label={t("Loading sandbox state…")} rows={3} columns={2} /> : null}
@@ -106,6 +107,7 @@ function DeploymentConfiguration() {
       {!snapshot && error !== null ? <ErrorState title={t("Sandbox state couldn't be read")} detail={sandboxRequestError(error, locale)} onRetry={refresh} /> : null}
       {snapshot && !snapshot.deployment.provider && !snapshot.deployment.reset ? <SandboxSetupWizard key={configurationKey} coreUrl={snapshot.deployment.core_url} expectedGeneration={snapshot.deployment.generation} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
       {snapshot?.deployment.provider || snapshot?.deployment.reset ? <SandboxDeploymentSettings key={configurationKey} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onReset={startReset} onCancelReset={cancelReset} onUpdate={update} onRefresh={refreshByUser} refreshing={loading} pending={busy} writeFailure={writeFailure?.editing ? unknownWrite : null} /> : null}
+      <SandboxCapacitySettings />
     </div>
     <ErrorDialog action={{ label: t("Refresh sandbox state"), onClick: refreshByUser }} open={Boolean(writeFailure?.open && !writeFailure.editing)} title={t("Couldn't confirm the sandbox change")} onClose={() => setWriteFailure((failure) => failure && { ...failure, open: false })}>
       {unknownWrite}

@@ -387,7 +387,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
             <dd>
               {address ? <code>{address}</code> : "—"}
-              <span className="wizard-review-sub">{t("Managed in System")}</span>
+              <span className="wizard-review-sub">{t("Managed in Settings")}</span>
               {installation.data?.local_only ? <span className="wizard-review-caution">{t("Set a public address before connecting remote nodes; E2B sandboxes need an HTTPS one.")}</span> : null}
             </dd>
           </div>
@@ -396,7 +396,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           <div className="wizard-rejection" role="alert">
             <p>{rejection}</p>
             {resetRequired ? <p>{t("Cancel editing to use Reset deployment. This change requires an explicit reset; the saved configuration is unchanged.")}</p> : null}
-            {addressRejected ? <button className="text-action" type="button" onClick={() => navigate("system")}>{t("Managed in System")}</button> : null}
+            {addressRejected ? <button className="text-action" type="button" onClick={() => navigate("settings", { id: "service" })}>{t("Managed in Settings")}</button> : null}
           </div>
         ) : null}
         {/* Initial setup needs the cleared key re-entered; updates may keep the saved key. */}

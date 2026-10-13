@@ -1,3 +1,4 @@
+import { nodeCapacity, NodeCapacityFields } from "./NodeCapacityFields";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@oac/agents-client";
@@ -110,14 +111,11 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         : null;
   // Core takes whole numbers from 1 to a million, with the retained limit at least the active one.
   const suspends = deployment.suspension !== null;
-  const whole = (value: string) => (/^\d+$/.test(value.trim()) ? Number(value.trim()) : null);
-  const inRange = (limit: number | null): limit is number => limit !== null && limit >= 1 && limit <= 1_000_000;
-  const activeLimit = whole(active);
-  const retainedLimit = suspends ? whole(retained) : activeLimit;
-  const activeProblem = inRange(activeLimit) ? null : t("Enter a whole number from 1 to 1,000,000.");
-  const retainedProblem = !suspends ? null
-    : !inRange(retainedLimit) ? t("Enter a whole number from 1 to 1,000,000.")
-    : inRange(activeLimit) && retainedLimit < activeLimit ? t("Enter at least the number of sandboxes at once.") : null;
+  const limits = nodeCapacity(active, suspends ? retained : active);
+  const activeLimit = limits.active;
+  const retainedLimit = limits.retained;
+  const activeProblem = limits.activeError ? t(limits.activeError) : null;
+  const retainedProblem = suspends && limits.retainedError ? t(limits.retainedError) : null;
   const activeError = coreFieldError(error, "max_active", tCommon) ?? activeProblem;
   const retainedError = coreFieldError(error, "max_retained", tCommon) ?? retainedProblem;
   const limitsReady = !activeProblem && !retainedProblem;
@@ -273,18 +271,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
       : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
           <p>{t("Set the sandbox limits for the host you want to add.")}</p>
-          <div className="field">
-            <span className="field-label-row"><label htmlFor={`${id}-active`}>{t("Sandboxes at once")}</label><HelpTip>{t("The most sandboxes Core places on this node at the same time.")}</HelpTip></span>
-            <input id={`${id}-active`} inputMode="numeric" autoComplete="off" autoFocus={open} value={active} onChange={(event) => { setActive(event.target.value); setError(null); }} aria-invalid={Boolean(activeError)} aria-errormessage={activeError ? `${id}-active-error` : undefined} />
-            {activeError ? <span id={`${id}-active-error`} className="field-error">{activeError}</span> : null}
-          </div>
-          {suspends ? (
-            <div className="field">
-              <span className="field-label-row"><label htmlFor={`${id}-retained`}>{t("Retained sandboxes")}</label><HelpTip>{t("Sandboxes kept on this node for resuming, the running ones included. At least the number at once.")}</HelpTip></span>
-              <input id={`${id}-retained`} inputMode="numeric" autoComplete="off" value={retained} onChange={(event) => { setRetained(event.target.value); setError(null); }} aria-invalid={Boolean(retainedError)} aria-errormessage={retainedError ? `${id}-retained-error` : undefined} />
-              {retainedError ? <span id={`${id}-retained-error`} className="field-error">{retainedError}</span> : null}
-            </div>
-          ) : null}
+          <NodeCapacityFields id={id} active={active} retained={retained} suspends={suspends} activeError={activeError} retainedError={retainedError} autoFocus={open} onActive={(value) => { setActive(value); setError(null); }} onRetained={(value) => { setRetained(value); setError(null); }} />
           {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}</p> : null}
           {requirements}
         </form>
@@ -305,8 +292,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         </div>
         {next ? <p className="sandbox-next-step">
           <span>{t(next === "default-model" ? "Next: set a default model provider." : "Next: finish Getting started.")}</span>
-          <button className="text-action" type="button" onClick={() => { close(); if (next === "default-model") navigate("system", {}, "default-model"); else navigate("overview"); }}>
-            {t(next === "default-model" ? "Open System" : "Open Overview")}
+          <button className="text-action" type="button" onClick={() => { close(); if (next === "default-model") navigate("settings", { id: "models" }, "default-model"); else navigate("overview"); }}>
+            {t(next === "default-model" ? "Open Settings" : "Open Overview")}
           </button>
         </p> : null}
         {problem && !ready ? <div className="sandbox-enrollment-problem" role="alert">

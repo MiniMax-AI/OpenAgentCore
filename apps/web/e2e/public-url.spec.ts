@@ -7,12 +7,12 @@ test.afterEach(async ({ request }) => expectManagementBoundary(request));
 test("sets up sandboxes with Core's address read-only, never sending it", async ({ page, request }) => {
   const bodies: string[] = [];
   page.on("request", (sent) => { if (sent.url().includes("/core/v1/sandbox/deployment")) bodies.push(sent.postData() ?? ""); });
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await page.getByRole("button", { name: "Own machines" }).click();
   await page.getByRole("button", { name: "microsandbox Recommended" }).click();
   await page.getByRole("button", { name: /^Standard/ }).click();
   const review = page.getByRole("definition").filter({ hasText: "https://core.example.com" });
-  await expect(review).toContainText("Managed in System");
+  await expect(review).toContainText("Managed in Settings");
   await expect(page.getByRole("textbox", { name: "Core address" })).toHaveCount(0);
   await page.getByRole("button", { name: "Save configuration" }).click();
   // Saved: own machines continue straight to Add node.
@@ -23,7 +23,7 @@ test("sets up sandboxes with Core's address read-only, never sending it", async 
 });
 
 test("explains an E2B rejection in the wizard, with a link to domain setup", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none", installation: "local" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none", installation: "local" });
   await page.getByRole("button", { name: "E2B cloud" }).click();
   await selectFixtureE2BBuild(page);
   await page.getByRole("button", { name: "Next" }).click();
@@ -32,7 +32,7 @@ test("explains an E2B rejection in the wizard, with a link to domain setup", asy
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
   await expect(rejection).toContainText("E2B sandboxes need a public HTTPS address.");
-  await expect(rejection.getByRole("button", { name: "Managed in System" })).toBeVisible();
+  await expect(rejection.getByRole("button", { name: "Managed in Settings" })).toBeVisible();
   // Nothing was saved and nothing is uncertain: no dialog, and the wizard stays on its review.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
@@ -43,7 +43,7 @@ test("explains an E2B rejection in the wizard, with a link to domain setup", asy
 });
 
 test("lists the startup settings on System", async ({ page, request }) => {
-  await openConsole(page, request, "system");
+  await openConsole(page, request, "settings?id=service");
   const installation = page.getByRole("region", { name: "Installation" });
   await expect(installation).toContainText("https://core.example.com/v1");
   const startup = page.getByRole("region", { name: "Startup settings" });

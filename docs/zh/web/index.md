@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 2e624be0f71b9fa6cd0d8bdc453aa2e5023e70115d50f3ff79e30233f510c13d
+source_hash: 5c8449387651e26ac24cc62008693fb71eafed3dc6e07a83d780da145865db91
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -25,8 +25,8 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | Monitor | Session log | 全部 Session；各 Session 的只读对话、跟踪、Turn 和失败分类原因；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | Resources | Agents、Environment templates、Skills、Files、Vaults | 检查和允许的删除操作，显示各资源所属 Project 及创建密钥 |
 | Platform | Projects and keys | 创建、重命名和归档 Project；签发与撤销密钥；各 Project 的用量、写入历史和 API 调用方法 |
-| Platform | Nodes | 添加、编辑和移除 microsandbox 或 Docker 节点；各节点的就绪状态、容量和分配，以及支持时的自动挂起策略、活跃与保留名额、各计算阶段的已用时间 |
-| Platform | System | 安装的公开地址、API 基础 URL、ID 和源码提交；各 Harness 默认模型；**Sandbox configuration**；Core 加载的启动设置，只读 |
+| Platform | Nodes | 查看和移除 microsandbox 或 Docker 节点；各节点的就绪状态、容量和分配，以及支持时的自动挂起策略、活跃与保留名额、各计算阶段的已用时间 |
+| Platform | Settings | **Sandbox and scheduling**、**Workspace storage**、**Models and credentials** 和 **Service and deployment**；参阅[配置](../configuration.md#runtime-settings-web) |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。
 
@@ -35,9 +35,9 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | 任务 | 位置 |
 | --- | --- |
 | 为安装设置 HTTPS 地址 | 设置 `OAC_PUBLIC_URL`，并把反向代理指向 Web；参阅[使 Core 可访问](../getting-started/install.md#configure-the-domain-and-https) |
-| 选择沙箱后端（microsandbox、E2B 或 Docker）、规格和 Runtime，或重置后端 | **System → Sandbox configuration**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
-| 添加或移除执行节点 | **Nodes**；参阅[节点指南](../getting-started/nodes.md) |
-| 设置 Harness 默认模型 | **System → Default model configuration**；参阅[默认模型](../configuration.md#default-models) |
+| 选择沙箱后端（microsandbox、E2B 或 Docker）、规格和 Runtime，或重置后端 | **Settings → Sandbox and scheduling**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| 添加或移除执行节点 | **Settings → Sandbox and scheduling → Add node**；移除仍在 **Nodes**；参阅[节点指南](../getting-started/nodes.md) |
+| 设置 Harness 默认模型 | **Settings → Models and credentials**；参阅[默认模型](../configuration.md#default-models) |
 | 创建 Project 并签发 API 密钥 | **Projects and keys**；参阅 [Project 和 API 密钥](../getting-started/operations.md#projects-and-api-keys) |
 | 签发、轮换或撤销自托管执行器凭据，或复制安装命令 | **Session log** 中的 Session 页面；参阅[自托管执行器](../getting-started/self-hosted.md) |
 | 删除资源，例如泄露的 Credential | 资源列表行或资源页面；Files 从 Files 列表删除。适用公开删除规则 |

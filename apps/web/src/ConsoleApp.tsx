@@ -12,12 +12,11 @@ import { SandboxMetricsPage } from "./features/metrics/SandboxMetricsPage";
 import { ConsoleTourContext, ConsoleTourScreen } from "./features/onboarding/ConsoleTour";
 import { withTransition } from "./features/onboarding/view-transition";
 import { OverviewPage } from "./features/overview/OverviewPage";
-import { SandboxDeploymentPage } from "./features/sandbox/SandboxDeploymentPage";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SessionLogPage } from "./features/sessions/SessionLogPage";
 import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
-import { SystemPage } from "./features/system/SystemPage";
+import { SettingsPage } from "./features/settings/SettingsPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
 import { consoleDepth, ConsoleNavigationContext, useConsoleNavigation, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
@@ -41,7 +40,6 @@ function readLocation(): { view: ConsoleView; params: RouteParams; intent: Conso
 }
 
 function ConsolePage({ view }: { view: ConsoleView }) {
-  const { params } = useConsoleNavigation();
   switch (view) {
     case "overview": return <OverviewPage />;
     case "core-metrics": return <CoreMetricsPage />;
@@ -56,7 +54,7 @@ function ConsolePage({ view }: { view: ConsoleView }) {
     case "vaults": return <VaultsPage />;
     case "projects": return <ProjectsPage />;
     case "nodes": return <SandboxManagerView />;
-    case "system": return params.id === "sandbox" ? <SandboxDeploymentPage /> : <SystemPage />;
+    case "settings": return <SettingsPage />;
   }
 }
 

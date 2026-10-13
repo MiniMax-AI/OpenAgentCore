@@ -334,10 +334,10 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
         </div>
         {fleetState.status === "ready" ? (
           !fleet?.deployment.provider
-            ? <button className="button outline" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{t("fleet.setUp")}</button>
+            ? <button className="button outline" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{t("fleet.setUp")}</button>
             : cloud || hosts.length
-              ? <button className="button outline" type="button" onClick={() => cloud ? navigate("system", { id: "sandbox" }) : navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : t("fleet.manageNodes")}</button>
-              : <button className="button outline" type="button" onClick={() => navigate("nodes", {}, localOnly ? undefined : "add-node")}>{t(localOnly ? "fleet.manageNodes" : "fleet.addNode")}</button>
+              ? <button className="button outline" type="button" onClick={() => cloud ? navigate("settings", { id: "sandbox" }) : navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : t("fleet.manageNodes")}</button>
+              : <button className="button outline" type="button" onClick={() => localOnly ? navigate("nodes") : navigate("settings", { id: "sandbox" }, "add-node")}>{t(localOnly ? "fleet.manageNodes" : "fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
@@ -345,7 +345,7 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
           nodes={hosts}
           cloud={cloud}
           suspends={Boolean(fleet?.deployment.suspension)}
-          onOpenBackend={() => navigate("system", { id: "sandbox" })}
+          onOpenBackend={() => navigate("settings", { id: "sandbox" })}
           coreLabel={t(`coreStatus.${core}`)}
           coreTone={coreTone[core]}
           stale={fleetObservationStale(fleetState)}

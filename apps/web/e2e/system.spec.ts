@@ -8,7 +8,7 @@ const KEY = "sk-fixture-default-model-canary";
 
 test("sets, replaces and clears a harness's default model configuration, and keeps its key out of the browser", async ({ page, request }) => {
   // A fresh install: no harness has a default model configuration yet.
-  await openConsole(page, request, "system", { fresh: true });
+  await openConsole(page, request, "settings?id=models", { fresh: true });
   const section = page.getByRole("region", { name: "Default model configuration" });
   const codex = section.getByRole("article", { name: "Codex" });
   const mcode = section.getByRole("article", { name: "MiniMax Code" });
@@ -130,7 +130,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
 });
 
 test("reports an unconfirmed save, reads the default model configurations again once and never repeats the write", async ({ page, request }) => {
-  await openConsole(page, request, "system", { fresh: true });
+  await openConsole(page, request, "settings?id=models", { fresh: true });
   const codex = page.getByRole("region", { name: "Default model configuration" }).getByRole("article", { name: "Codex" });
   await codex.getByRole("button", { name: "Set the default model configuration for Codex" }).click();
   const set = page.getByRole("dialog", { name: "Set default model configuration for Codex" });
@@ -157,7 +157,7 @@ test("requires an explicit supported protocol choice for an older default config
     codex.model_configuration.harness_config = { model_reasoning_effort: "high" };
     await route.fulfill({ response, json: data });
   });
-  await openConsole(page, request, "system");
+  await openConsole(page, request, "settings?id=models");
   const codex = page.getByRole("region", { name: "Default model configuration" }).getByRole("article", { name: "Codex" });
   await expect(codex).toContainText("OpenAI Chat Completions");
   await codex.getByRole("button", { name: "Replace the default model configuration for Codex" }).click();

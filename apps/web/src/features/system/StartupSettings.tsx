@@ -14,7 +14,7 @@ function isDefault(setting: CoreInstallationSetting): boolean {
 }
 
 /**
- * Platform › System: the process settings Core loaded, read-only. A
+ * Settings › Service and deployment: the process settings Core loaded, read-only. A
  * sensitive setting shows whether it is set, never its value.
  */
 export function StartupSettings({ configuration }: { configuration: CoreInstallationConfiguration }) {

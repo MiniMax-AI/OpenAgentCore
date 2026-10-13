@@ -9,7 +9,7 @@ describe("console routes", () => {
     expect(consoleNavGroups.flatMap((group) => group.views)).toEqual([
       "overview", "core-metrics", "agent-metrics", "sandbox-metrics", "sessions",
       "agents", "templates", "skills", "files", "vaults",
-      "projects", "nodes", "system",
+      "projects", "nodes", "settings",
     ]);
   });
 
@@ -24,7 +24,7 @@ describe("console routes", () => {
     expect(consoleViewFromHash("#api-keys")).toBe("projects");
     expect(consoleViewFromHash("#unknown")).toBe("overview");
     expect(consoleHashForView("overview")).toBe("");
-    expect(consoleHashForView("system")).toBe("#system");
+    expect(consoleHashForView("settings")).toBe("#settings");
   });
 
   it("highlights a Session under the Session log", () => {
@@ -34,6 +34,7 @@ describe("console routes", () => {
 
   it("carries only well-formed project and resource parameters", () => {
     expect(routeParamsFromHash("#session?project=proj_1&id=s-1")).toEqual({ project: "proj_1", id: "s-1" });
+    expect(routeParamsFromHash("#settings?id=sandbox&node=node-1")).toEqual({ project: undefined, id: "sandbox", node: "node-1" });
     expect(routeParamsFromHash("#session?project=bad%20id")).toEqual({ project: undefined, id: undefined });
     expect(hashWithParams("#session", { project: "proj_1", id: "s1" })).toBe("#session?project=proj_1&id=s1");
     expect(hashWithParams("#files")).toBe("#files");

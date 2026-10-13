@@ -9,10 +9,10 @@ import {
 import { projectExecutionConfiguration } from "./execution-configuration-projection";
 import { projectAgentTurn, projectSessionItem, projectHistoryPage } from "./history-projection";
 import { projectRuntimeHistory } from "./runtime-history-projection";
-import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
+import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord } from "./response-projection";
 import { CoreRequester } from "./core-request";
 import { projectSkill, projectSkillDeleted, projectSkillVersion, projectSkillVersionDeleted } from "./skill-projection";
-import { keyPageFields, projectsPageFields } from "./generated/core-api";
+import { keyPageFields, projectsPageFields, selectionFields } from "./generated/core-api";
 import {
   invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted, projectAdminSessionArchive,
   projectResourcePage, projectSavedAgent, projectArtifact, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
@@ -27,6 +27,15 @@ import type {
   IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
   ExecutorCredentialList, IssueExecutorCredentialInput, IssuedExecutorCredential, CoreInstallation,
 } from "./admin-types";
+
+import type { Selection, WorkspaceStorageInput } from "./generated/core-api";
+
+function projectWorkspaceStorage(value: unknown): Selection {
+  if (!isRecord(value) || !exactFields(value, selectionFields) || typeof value.id !== "string" || canonicalUuid(value.id) !== value.id ||
+      typeof value.adapter !== "string" || !value.adapter || !isRecord(value.parameters) ||
+      !isNonnegativeInteger(value.tenant_capacity_mib) || value.tenant_capacity_mib > 4_294_967_295) return invalidAdminResponse();
+  return { id: value.id as string, adapter: value.adapter, parameters: value.parameters, tenant_capacity_mib: value.tenant_capacity_mib };
+}
 
 function segment(value: string): string {
   // Dot segments are normalized by fetch before the server sees the request.
@@ -73,6 +82,14 @@ export class AdminClient {
   async #content(path: string, options?: ReadOptions): Promise<AdminContent> {
     const response = await this.#response(path, options);
     return { blob: await response.blob(), contentType: response.headers.get("Content-Type"), contentDisposition: response.headers.get("Content-Disposition") };
+  }
+
+  async retrieveWorkspaceStorage(options?: ReadOptions): Promise<Selection> {
+    return projectWorkspaceStorage(await this.#json("/workspace-storage", options));
+  }
+  async configureWorkspaceStorage(input: WorkspaceStorageInput, options?: ReadOptions): Promise<Selection> {
+    const { id, adapter, parameters, tenant_capacity_mib, credential } = input;
+    return projectWorkspaceStorage(await this.#json("/workspace-storage", options, "PUT", { id, adapter, parameters, tenant_capacity_mib, ...(credential === undefined ? {} : { credential }) }));
   }
 
   /** Installation facts and process settings; readable before any sandbox deployment exists. */

@@ -87,7 +87,8 @@ test("local-only address links to System on other pages and blocks Add node", as
   await expect(notice).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();
   await expect(page.getByText("Add node is unavailable while the public address is local only.")).toBeVisible();
-  await page.getByRole("button", { name: "System", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Service and deployment", exact: true }).click();
   await expect(notice).toBeVisible();
   await expect(notice.getByRole("button", { name: "Review the public address" })).toHaveCount(0);
   expect(await writes(request)).toEqual([]);

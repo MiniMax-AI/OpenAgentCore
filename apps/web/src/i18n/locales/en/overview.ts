@@ -34,7 +34,7 @@ export const overview = {
     model: {
       title: "Set a default model configuration",
       body: "Set the model service address and API key for the default harness so Agents can call a model. Applications can override this provider in a request or on an Agent.",
-      open: "Open System",
+      open: "Open Settings",
     },
     key: {
       title: "Create a project and issue a key",

@@ -109,13 +109,13 @@ test("leads from Getting started to the default model configuration, and counts 
   await openConsole(page, request, "overview", { fresh: true });
   const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Set a default model configuration" });
   await expect(step).toContainText("To do");
-  await step.getByRole("button", { name: "Open System" }).click();
-  await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeVisible();
+  await step.getByRole("button", { name: "Open Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Models and credentials", level: 1 })).toBeVisible();
   // It arrives on the default harness's action.
   const set = page.getByRole("button", { name: "Set the default model configuration for Codex" });
   await expect(set).toBeFocused();
   // Only the page body scrolls to it: the page header stays in view.
-  await expect(page.getByRole("heading", { name: "System", level: 1 })).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Models and credentials", level: 1 })).toBeInViewport();
   await set.click();
   const form = page.getByRole("dialog", { name: "Set default model configuration for Codex" });
   await form.getByLabel("Base URL").fill("https://model.example/v1");
@@ -131,10 +131,10 @@ test("shows every page empty on a fresh install, and Getting started hides, come
   await openConsole(page, request, "overview", { fresh: true, sandbox: "none", nodes: "none" });
   // What each page shows once its reads are done: an empty state, Core's own figures, or sandbox setup.
   const loaded = (view: string) => view === "core-metrics" ? page.locator(".kpi-strip").first()
-    : view === "nodes" ? page.getByText("Set up sandbox hosting in System before adding nodes.")
-    : view === "system" ? page.getByRole("button", { name: "Manage sandbox configuration" })
+    : view === "nodes" ? page.getByText("Set up sandbox hosting in Settings before adding nodes.")
+    : view === "settings" ? page.getByRole("heading", { name: "Where should sandboxes run?" })
     : page.locator(".console-empty").first();
-  for (const view of ["core-metrics", "agent-metrics", "sandbox-metrics", "sessions", "agents", "templates", "skills", "files", "vaults", "projects", "nodes", "system", "overview"]) {
+  for (const view of ["core-metrics", "agent-metrics", "sandbox-metrics", "sessions", "agents", "templates", "skills", "files", "vaults", "projects", "nodes", "settings", "overview"]) {
     await page.goto(`/#${view}`);
     await expect(loaded(view)).toBeVisible();
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
@@ -154,7 +154,7 @@ test("shows every page empty on a fresh install, and Getting started hides, come
   const step = checklist.getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
   await expect(step).toContainText("To do");
   await step.getByRole("button", { name: "Set up sandboxes" }).click();
-  await expect(page).toHaveURL(/#system\?id=sandbox$/);
+  await expect(page).toHaveURL(/#settings\?id=sandbox$/);
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
 });
 
@@ -163,7 +163,7 @@ test("opens Add node from Getting started when no node has joined", async ({ pag
   const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
   await expect(step).toContainText("To do");
   await step.getByRole("button", { name: "Add node" }).click();
-  await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sandbox and scheduling", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
 });
 

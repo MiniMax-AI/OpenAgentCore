@@ -12,7 +12,7 @@ export function SandboxLifecycle({ deployment, nodes, stale, controls, children 
   const [draft, setDraft] = useState<string | null>(null);
   const idle = draft ?? String(policy?.idle_seconds ?? 300);
   const valid = /^\d+$/.test(idle) && Number(idle) >= 30 && Number(idle) <= 86400;
-  if (!policy && !controls) return null;
+  if (!policy && !controls) return <>{children}</>;
   const count = (value: number) => formatInteger(value, i18n.resolvedLanguage);
   const capacity = nodes ? capacitySummary(nodes) : null;
   return <Section headingId="sandbox-lifecycle-heading" title={t(controls ? "Capacity and suspension" : "Automatic suspension")} help={t("Active and retained limits cover online nodes. Suspended counts include all registered nodes. These are Core placement records, not CPU or memory measurements.")}>

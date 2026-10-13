@@ -1,5 +1,6 @@
 import { firstRun } from "./first-run";
 export const sandbox = {
+  "Current usage exceeds a saved limit. Existing sandboxes are preserved; new placements wait for capacity.": "当前用量超过已保存上限。已有沙箱保留；新的分配需等待容量。",
   "Capacity and suspension": "容量与挂起",
   "Idle before suspension (seconds)": "空闲多久后挂起（秒）",
   "Deployment-wide: 30–86,400 seconds. Applies to existing and new running sandboxes without restarting them. Suspension already in progress and snapshot retention are unchanged. Capacity pressure may suspend an idle sandbox after 15 seconds.": "整个部署统一生效：30–86,400 秒。适用于现有和新建的运行中沙箱，无需重启。已经开始的挂起和快照保留期不变。容量紧张时，沙箱空闲 15 秒后可能提前挂起。",
@@ -190,7 +191,7 @@ export const sandbox = {
   "{{name}} · Connected": "{{name}} · 已连接",
   "Next: set a default model provider.": "下一步：设置默认模型服务。",
   "Next: finish Getting started.": "下一步：完成新手引导。",
-  "Open System": "打开系统",
+  "Open Settings": "打开设置",
   "Open Overview": "打开概览",
   "Rerun only on {{name}} if asked": "仅在 {{name}} 上按需重跑",
   "Waiting for registration": "等待注册",
@@ -427,7 +428,7 @@ export const sandbox = {
   "Save configuration": "保存配置",
   "Change the sandbox configuration": "修改沙箱配置",
   "The address nodes and sandboxes use to reach Core.": "节点和沙箱访问 Core 使用的地址。",
-  "Managed in System": "在系统中管理",
+  "Managed in Settings": "在设置中管理",
   "Set a public address before connecting remote nodes; E2B sandboxes need an HTTPS one.": "连接远程节点前，请先设置公开地址；E2B 沙箱需要 HTTPS 地址。",
   "Enter the E2B key again to save.": "请重新输入 E2B key 后再保存。",
   "Enter the key": "输入 key",

@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: dc80db64e7c4d6a021a929db027cfbca6ca8e877b47126ddaa5f48e493461d6d
+source_hash: f7906681af84df121337df42d45505f5d21f2a6ce5b3a1896e7fbc8fa5cf2754
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -11,7 +11,7 @@ source_hash: dc80db64e7c4d6a021a929db027cfbca6ca8e877b47126ddaa5f48e493461d6d
 ## 添加节点前 {#before-you-add-a-node}
 
 - **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 控制台下载文件，并通过 `public_url` 连接 Core。设置前，Add node 显示 *Set a public address other machines can reach before adding nodes*；参阅[配置公开地址](install.md#configure-the-domain-and-https)。
-- **沙箱配置已保存。** 打开 **System** → **Manage sandbox configuration**，选择 **Own machines**、后端和沙箱规格，最后选择 **Save configuration**。要更改已保存的配置，先选择 **Reset deployment**。同一安装的所有节点使用同一后端。
+- **沙箱配置已保存。** 打开 **Settings** → **Sandbox and scheduling**，选择 **Own machines**、后端和沙箱规格，最后选择 **Save configuration**。要更改后端，先选择 **Reset deployment**。同一安装的所有节点使用同一后端。
 - **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，Add node 显示 *This console has no node files for …*。
 
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
@@ -24,7 +24,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 
 ## 添加节点 {#add-a-node}
 
-1. 在 Web 打开 **Nodes**，选择 **Add node**。
+1. 在 Web 打开 **Settings → Sandbox and scheduling**，选择 **Add node**。
 2. 设置 **Sandboxes at once**，使用 microsandbox 时还设置 **Retained sandboxes**，即节点[容量](../configuration.md#node-capacity)。之后可以通过 **Edit node** 修改。
 3. 选择 **Generate command** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 10 分钟内执行；Web 显示倒计时，过期后提供 **Generate new command**。
 4. 在主机上执行。Web 跟踪节点从注册、连接到就绪的过程。
@@ -35,7 +35,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 
 ### 命令 {#the-command}
 
-从 **Nodes → Add node** 复制当前命令，其中已填入本安装的地址、校验和与注册令牌。命令先检查 Linux amd64、Python 3.9+ 和必要工具，再下载文件；临时网络故障最多尝试三次。校验失败时，从 Web 复制新命令重试。
+从 **Settings → Sandbox and scheduling → Add node** 复制当前命令，其中已填入本安装的地址、校验和与注册令牌。命令先检查 Linux amd64、Python 3.9+ 和必要工具，再下载文件；临时网络故障最多尝试三次。校验失败时，从 Web 复制新命令重试。
 
 - 下载到当前账号的私有 `~/.oac/node-bootstrap` 目录，检查 SHA-256，再通过 `sudo` 执行；root shell 中则直接执行。每次持锁清理下载残片后重试，已验证的 `<sha256>.pyz` 保留供安装程序使用。
 - 令牌通过标准输入传给安装程序，不出现在进程参数、环境变量或 sudo 日志中。
@@ -95,14 +95,14 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 安装结束时输出节点日志命令（`Logs: …`）。节点报告问题，或注册约一分钟后仍未连接且就绪时，Add node 对话框也会展示它。
 
-运行 `sudo journalctl -u oac-node-<installation-id>.service`。root shell 中省略 `sudo`。安装 ID 位于命令的 `--installation-id` 参数和 **System** 页面。
+运行 `sudo journalctl -u oac-node-<installation-id>.service`。root shell 中省略 `sudo`。安装 ID 位于命令的 `--installation-id` 参数和 **Settings → Service and deployment** 页面。
 
 ## 修改沙箱配置 {#change-the-sandbox-configuration}
 
 沙箱设置适用于整个安装，节点跟随这些设置。
 
-- **规格、Runtime 版本、E2B 密钥或模板构建。** 打开 **System** → **Manage sandbox configuration** → **Change resources**，修改并保存。已有沙箱保持其配置。每个节点继续服务旧配置，同时准备新配置；**Nodes** 展示进度：**Preparing target**、**Ready for target**，或带[原因](#readiness-codes)的 **Preparation failed**。Core 优先在已准备好新配置的节点上放置新 Session；这些节点没有容量时，会使用仍服务旧配置的节点。E2B 变更立即生效。
-- **容量与空闲挂起。** 在 **Nodes** → **Capacity and suspension** 中，通过 **Edit node** 修改各节点的活跃和保留上限；通过 **Idle before suspension (seconds)** → **Save** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
+- **规格、Runtime 版本、E2B 密钥或模板构建。** 打开 **Settings** → **Sandbox and scheduling** → **Change resources**，修改并保存。已有沙箱保持其配置。每个节点继续服务旧配置，同时准备新配置；**Nodes** 展示进度：**Preparing target**、**Ready for target**，或带[原因](#readiness-codes)的 **Preparation failed**。Core 优先在已准备好新配置的节点上放置新 Session；这些节点没有容量时，会使用仍服务旧配置的节点。E2B 变更立即生效。
+- **容量与空闲挂起。** 在 **Settings** → **Sandbox and scheduling** 中，通过 **Sandbox nodes** → **Edit node** 修改各节点的活跃和保留上限；通过 **Capacity and suspension** → **Idle before suspension (seconds)** → **Save** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
 - **后端。** 同一页面选择 **Reset deployment**。自动重置立即归档空闲托管 Session，并让运行中的工作在设定截止时间前完成；强制重置立即取消工作。离线节点必须恢复连接，让 Core 确认清理。重置完成时，Core 已撤销所有节点和未使用命令：配置新后端后重新添加节点。**Cancel reset** 停止剩余工作；已归档 Session 仍保持归档。
 
 [重置协议](../../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)描述重置会归档和保留哪些内容。归档单个托管 Session 时，使用 [Core API](../../../contracts/agents-api/zh/admin-api.md#session-archive)。

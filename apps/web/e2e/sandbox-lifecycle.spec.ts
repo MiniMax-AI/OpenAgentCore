@@ -15,9 +15,9 @@ test("shows automatic suspension policy, retained capacity and elapsed phase tim
     await route.fulfill({ response, json: { data: data.map((node: Record<string, unknown>) => ({ ...node, provider: "microsandbox", retained: Number(node.active) + 2 })) } });
   });
   await openConsole(page, request, "nodes");
-  await expect(page.getByRole("heading", { name: "Capacity and suspension" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Automatic suspension" })).toBeVisible();
   await expect(page.getByText("5 minutes", { exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Capacity and suspension" }).getByRole("columnheader", { name: "Retained / limit" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Automatic suspension" }).getByRole("columnheader", { name: "Retained / limit" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("nodes-en.png"), fullPage: true });
   await page.getByRole("button", { name: "Open core-01", exact: true }).click();
   const allocations = page.getByRole("table", { name: "Sandbox allocations" });
@@ -44,7 +44,7 @@ test("hides suspension policy when the provider declares no suspension support",
 
 
 test("edits deployment idle time beside node limits without changing generation", async ({ page, request }) => {
-  await openConsole(page, request, "nodes");
+  await openConsole(page, request, "settings?id=sandbox");
   const deployment = await setDeployment(request, { suspension: { idle_seconds: 300, retention_seconds: 86400 } });
   await setDeployment(request, { provider: "microsandbox", specification: { ...deployment.specification!, resources: { ...deployment.specification!.resources, root_disk_mib: 8192, environment_disk_mib: 8192 } } });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();

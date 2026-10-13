@@ -1,5 +1,5 @@
 export const system = {
-  help: "This installation's addresses, each harness's default model configuration and the settings every project shares. Use the sandbox backend page to change sandboxes, and config.json to change startup settings.",
+  help: "Installation addresses and effective startup settings. Process settings are managed in the installation configuration, not edited in this console.",
   refresh: "Refresh system configuration",
   loading: "Loading…",
   installation: {
@@ -39,7 +39,7 @@ export const system = {
     enabled: "Enabled",
     disabled: "Disabled",
     default: "Default",
-    startupHelp: "Which harnesses are enabled, and the default one, are set in config.json and applied with oac apply.",
+    startupHelp: "Which harnesses are enabled, and the default one, are managed in the installation configuration.",
     harness: "Harness",
     provider: "Model provider",
     notSet: "Not set",

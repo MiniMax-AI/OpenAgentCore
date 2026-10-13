@@ -30,15 +30,15 @@ function cache(provider: SandboxDeployment["provider"]) {
 const render = (page: ReactElement, client: QueryClient) => renderToStaticMarkup(<QueryClientProvider client={client}>{page}</QueryClientProvider>);
 
 describe("sandbox page ownership", () => {
-  it("keeps setup in System's secondary page and sends empty Nodes there", () => {
+  it("keeps setup in Settings and sends empty Nodes there", () => {
     const client = cache("");
     const nodes = render(<SandboxManagerView />, client);
     expect(nodes).not.toContain("setup-flow");
-    expect(nodes).toContain("Set up sandbox hosting in System before adding nodes.");
+    expect(nodes).toContain("Set up sandbox hosting in Settings before adding nodes.");
     expect(nodes).toContain("Manage sandbox configuration");
     const configuration = render(<SandboxDeploymentPage />, client);
     expect(configuration).toContain("setup-flow");
-    expect(configuration).toContain("Back to System");
+    expect(configuration).toContain("Sandbox and scheduling");
     expect(configuration).not.toContain("node-enrollment");
   });
 
@@ -48,7 +48,7 @@ describe("sandbox page ownership", () => {
     expect(cloud).toContain("There are no nodes to manage.");
     expect(cloud).not.toContain("Change resources");
     const hosts = render(<SandboxManagerView />, cache("docker"));
-    expect(hosts).toContain("node-enrollment");
+    expect(hosts).not.toContain("node-enrollment");
     expect(hosts).toContain("Add your first node");
     expect(hosts).not.toContain("Reset deployment");
   });
@@ -60,7 +60,7 @@ describe("sandbox page ownership", () => {
     expect(configuration).toContain("Reset deployment");
     expect(configuration).not.toContain("setup-flow");
     const system = render(<SystemPage />, client);
-    expect(system).toContain("Manage sandbox configuration");
+    expect(system).toContain("Service and deployment");
     expect(system).not.toContain("Change resources");
     expect(system).not.toContain("Reset deployment");
   });

@@ -36,7 +36,7 @@ export const onboarding = {
         points: [
           "Projects and keys: create projects, issue project API keys shown once, revoke or archive.",
           "Nodes: add your machines with one command and watch their capacity.",
-          "System: installation addresses, default model configurations and read-only startup settings.",
+          "Settings: sandbox scheduling, workspace storage, model credentials and service configuration.",
         ],
       },
     },

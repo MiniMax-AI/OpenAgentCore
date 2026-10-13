@@ -36,7 +36,7 @@ const viewIcons: Record<ConsoleView, LucideIcon> = {
   vaults: Vault,
   projects: FolderKanban,
   nodes: Server,
-  system: Settings2,
+  settings: Settings2,
 };
 
 export function ConsoleSidebar({

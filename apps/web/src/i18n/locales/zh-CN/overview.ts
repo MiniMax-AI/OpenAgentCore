@@ -34,7 +34,7 @@ export const overview = {
     model: {
       title: "设置默认模型配置",
       body: "为默认执行框架设置模型服务地址和 API key，让 Agent 可以调用模型。应用也可以在请求或 Agent 上指定其他模型服务。",
-      open: "打开系统",
+      open: "打开设置",
     },
     key: {
       title: "创建项目并签发 key",

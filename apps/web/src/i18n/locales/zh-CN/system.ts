@@ -1,7 +1,7 @@
 import type { system as english } from "../en/system";
 type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : TranslationShape<T[K]> };
 export const system: TranslationShape<typeof english> = {
-  help: "这个安装的地址、每个执行框架的默认模型配置，以及所有项目共用的设置。沙箱在对应的后端页面修改，启动设置在 config.json 中修改。",
+  help: "安装地址和当前生效的启动设置。进程设置由安装配置管理，不在控制台编辑。",
   refresh: "刷新系统配置",
   loading: "正在加载…",
   installation: {
@@ -41,7 +41,7 @@ export const system: TranslationShape<typeof english> = {
     enabled: "已启用",
     disabled: "未启用",
     default: "默认",
-    startupHelp: "启用哪些执行框架、默认用哪个，都在 config.json 中设置，并用 oac apply 生效。",
+    startupHelp: "启用哪些执行框架、默认用哪个，由安装配置管理。",
     harness: "执行框架",
     provider: "模型服务",
     notSet: "未设置",

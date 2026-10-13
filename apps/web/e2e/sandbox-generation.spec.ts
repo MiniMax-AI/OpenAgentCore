@@ -54,7 +54,7 @@ test("online configuration retains existing resources and stops rapid polling wh
   page.on("request", (sent) => { if (sent.method() === "GET" && sent.url().endsWith(deploymentPath)) pending.add(sent); });
   page.on("requestfinished", (sent) => pending.delete(sent));
   page.on("requestfailed", (sent) => pending.delete(sent));
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(rollout(page)).toBeVisible();
   const before = await inventory(page);
   expect(before.allocations.length).toBeGreaterThan(0);
@@ -108,7 +108,7 @@ test("online configuration retains existing resources and stops rapid polling wh
 test("unknown target preparation preserves live old-generation service while an offline pin stays offline", async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await openConsole(page, request, "system?id=sandbox", { fresh: true });
+  await openConsole(page, request, "settings?id=sandbox", { fresh: true });
   await setDeployment(request, { generation: 2 });
   await setNode(request, { id: "node-local", online: true, provider_ready: true, rollout: { state: "unknown", ready_generation: 1 } });
   await setNode(request, { id: "node-edge", online: false, provider_ready: true, rollout: { state: "unknown", ready_generation: 1 } });
@@ -132,16 +132,14 @@ test("unknown target preparation preserves live old-generation service while an 
   const setup = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
   await expect(setup).toContainText("Done");
   await expect(rollout(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "System", exact: true }).click();
-  await expect(rollout(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "Manage sandbox configuration", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await inspectRollout(page, { "Target generation": "2", "Target readiness unknown": "2", "Node software incompatible": "1" });
   await capture(page, info, "generation-configuration-summary-en", rollout(page));
   expect(await writes(request)).toEqual([]);
 });
 
 test("a generation-only change preserves mixed allocation ownership through failed inventory reads", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(rollout(page)).toBeVisible();
   let expected: { session: string; generation: string }[] = [];
   await page.route("**/core/v1/sandbox/nodes/node-local/allocations", async (route) => {
@@ -176,7 +174,7 @@ test("a generation-only change preserves mixed allocation ownership through fail
 });
 
 test("E2B omitted-key updates keep the saved key while explicit same-key replacements each advance generation", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "e2b" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "e2b" });
   await expect(rollout(page)).toBeVisible();
   const initial = await deploymentRead(page);
   await editE2B(page);
@@ -208,7 +206,7 @@ test("E2B omitted-key updates keep the saved key while explicit same-key replace
 });
 
 test("a different E2B team leaves the committed configuration intact and requires a deliberate reset", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "e2b" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "e2b" });
   await expect(rollout(page)).toBeVisible();
   const before = await deploymentRead(page);
   await editE2B(page, "fixture-other-team-key");
@@ -234,7 +232,7 @@ test("a different E2B team leaves the committed configuration intact and require
 
 
 test("uncertain configuration refresh and inventory retry preserve a draft until its generation changes", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(rollout(page)).toBeVisible();
   const initial = await deploymentRead(page);
   const committedSize = await fact(page.getByRole("region", { name: "Deployment provider", exact: true }), "Each sandbox").first().innerText();
@@ -284,7 +282,7 @@ test("uncertain configuration refresh and inventory retry preserve a draft until
 
 
 test("an observed installation change discards the old reset confirmation even at the same generation", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(rollout(page)).toBeVisible();
   // A genuine preparing projection enables normal five-second observation while
   // the confirmation is open; the test never clicks through a modal overlay.
@@ -307,7 +305,7 @@ test("an observed installation change discards the old reset confirmation even a
 
 
 test("closing an uncertain edit preserves the shared write block until a successful read", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await page.getByRole("button", { name: "Change resources", exact: true }).click();
   const edit = page.getByRole("dialog", { name: "Change resources", exact: true });
   await edit.getByRole("button", { name: /^Large/ }).click();

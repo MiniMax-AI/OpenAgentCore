@@ -17,3 +17,5 @@ export { adminResourceTypes } from "./admin-types";
 export type { AdminClientOptions, AdminProject, CreateAdminProjectInput, RenameAdminProjectInput, AdminAPIKey, AdminIssuedAPIKey, IssueAdminAPIKeyInput, AdminPage, AdminDeleted, AdminContent, AdminResourceType, AdminKeyProvenance, AdminResourceOwner, AdminWriteOperation, AdminWriteOperationOptions, AdminWriteOperationPage, AdminSummaryOptions, AdminSummaryEntry, AdminSummary, AdminRuntimeObservation, AdminAuditOptions, AdminAuditEntry, AdminAuditPage, ExecutorCredential, ExecutorConnection, ExecutorCredentialList, IssueExecutorCredentialInput, IssuedExecutorCredential, CoreInstallation, CoreInstallationConfiguration, CoreInstallationSetting, CoreAddressBindings } from "./admin-types";
 
 export type { DiagnosticFailureCode, ConnectionFailureParams, ProvisioningFailureParams, DiagnosticFailure, SessionDiagnosticFailure, SessionDiagnostics, ItemDiagnosticTiming, TurnDiagnostics } from "./session-diagnostics";
+
+export type { Selection as WorkspaceStorageSelection, WorkspaceStorageInput } from "./generated/core-api";

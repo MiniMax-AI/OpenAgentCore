@@ -115,16 +115,16 @@ export function GettingStarted({ fleet, sessions, localOnly, sandboxReset, onRet
   const nextStep = states.findIndex((state) => state === "todo") + 1;
   const sandbox = steps.sandboxes;
   const sandboxAction = sandboxReset === true
-    ? { label: t("reset.view"), run: () => navigate("system", { id: "sandbox" }) }
+    ? { label: t("reset.view"), run: () => navigate("settings", { id: "sandbox" }) }
     : localOnly === "failed"
     ? { label: t("actions.retry", { ns: "common" }), run: onRetryInstallation }
     : localOnly === true
-    ? { label: t("installationNotice.configure", { ns: "common" }), run: () => navigate("system") }
+    ? { label: t("installationNotice.configure", { ns: "common" }), run: () => navigate("settings", { id: "service" }) }
     : sandbox.action === "setup"
-    ? { label: t("gettingStarted.sandboxes.setup"), run: () => navigate("system", { id: "sandbox" }) }
+    ? { label: t("gettingStarted.sandboxes.setup"), run: () => navigate("settings", { id: "sandbox" }) }
     : sandbox.action === "add-node"
-      ? { label: t("gettingStarted.sandboxes.addNode"), run: () => navigate("nodes", {}, "add-node") }
-      : { label: t(sandbox.cloud ? "gettingStarted.sandboxes.backend" : "gettingStarted.sandboxes.nodes"), run: () => sandbox.cloud ? navigate("system", { id: "sandbox" }) : navigate("nodes") };
+      ? { label: t("gettingStarted.sandboxes.addNode"), run: () => navigate("settings", { id: "sandbox" }, "add-node") }
+      : { label: t(sandbox.cloud ? "gettingStarted.sandboxes.backend" : "gettingStarted.sandboxes.nodes"), run: () => sandbox.cloud ? navigate("settings", { id: "sandbox" }) : navigate("nodes") };
   const keyProject = steps.key.project;
   const keyAction = keyProject
     ? { label: t("gettingStarted.key.issue"), run: () => navigate("projects", { id: keyProject.id }, "issue-key") }
@@ -151,7 +151,7 @@ export function GettingStarted({ fleet, sessions, localOnly, sandboxReset, onRet
       </header>
       <ol className="getting-started-steps">
         <Step primary={nextStep === 1} index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={sandboxReset === true ? t("reset.body") : localOnly === "failed" ? t("gettingStarted.sandboxes.addressFailed") : localOnly ? t("gettingStarted.sandboxes.localOnly") : t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
-        <Step primary={nextStep === 2} index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("system", {}, "default-model") }} />
+        <Step primary={nextStep === 2} index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("settings", { id: "models" }, "default-model") }} />
         <Step primary={nextStep === 3} index={3} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
         <Step primary={nextStep === 4} index={4} state={steps.session.state} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={sessionAction} />
       </ol>

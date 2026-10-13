@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 70593bfb0249b0ff864d2b7a6062e2dad852b544ecf3274cbf8c4c9ba7eec527
+source_hash: 7341dde58d8b2bdaa44ad64689e57a3e7a7853017448ea616dc7841f05b8163b
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -12,7 +12,7 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 | [机密信息](#compose-installations) | 数据库密码、凭据加密密钥、安装 ID、Core 密钥及由其派生的 Core 密钥摘要 | Compose 数据卷中的 `secrets/`，每项一份 | 初始化时一次性生成；`oac rotate-core-key` 替换 Core 密钥及其摘要 | `oac rotate-core-key` 会重启 Core 和 Web |
 | [运行时设置](#runtime-settings-web) | 沙箱后端和大小、节点、项目和密钥、默认模型、执行器凭据 | Core 的 PostgreSQL 数据库 | 在 Web 中修改，或使用 Core 密钥调用 Core API（`/core/v1`） | 保存时无需重启 Core；节点会异步准备 Runtime 变更 |
 
-Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置，并在 **Startup settings** 下以只读方式显示 Core 加载的进程设置。没有任何配置文件定义项目或 API 密钥。
+**Settings** 是 Web 中平台配置的唯一入口，包含 **Sandbox and scheduling**、**Workspace storage**、**Models and credentials** 和 **Service and deployment** 四组。每项设置只有一个编辑位置；监控和节点页面跳转到对应设置。各表单通过所属 API 独立保存，不做跨资源整体保存。**Service and deployment** 显示安装地址和 Core 已加载的进程设置；进程设置在 Web 中仍为只读。项目、API 密钥和 Session 执行器凭据仍在各自资源页面管理。没有任何配置文件定义项目或 API 密钥。
 
 ## 进程设置 {#process-settings}
 
@@ -96,15 +96,16 @@ Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` �
 
 | 设置 | Web 中的位置 | Core API | 注意事项 |
 | --- | --- | --- | --- |
-| 沙箱后端：Docker、microsandbox 或 E2B | **System** → **Manage sandbox configuration**：设置向导，最后点击 **Save configuration** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个后端，在首次登录后选择。要改用其他后端，必须先执行 **Reset deployment**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
-| 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **System** → **Manage sandbox configuration** → **Change resources** | `/core/v1/sandbox/deployment` | Web 会推荐 [Provider 声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
-| 节点及其容量 | **Nodes**：**Add node**；**Capacity and suspension** → **Edit node**；在节点页面上使用 **Remove node** | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
-| 空闲挂起 | **Nodes** → **Capacity and suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
+| 沙箱后端：Docker、microsandbox 或 E2B | **Settings** → **Sandbox and scheduling**：设置向导，最后点击 **Save configuration** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个后端，在首次登录后选择。要改用其他后端，必须先执行 **Reset deployment**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
+| 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web 会推荐 [Provider 声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
+| 节点及其容量 | **Settings → Sandbox and scheduling**：**Add node**；**Sandbox nodes** → **Edit node**。移除操作仍在节点页面 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
+| 空闲挂起 | **Settings** → **Sandbox and scheduling** → **Capacity and suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
+| 独立工作区存储和租户容量 | **Settings → Workspace storage** | `/core/v1/workspace-storage` | 参阅[独立工作区存储](#independent-workspace-storage)；现有工作区保留自身配置 |
 | 项目和 API 密钥 | **Projects and keys**：**Create project**、**Rename**、**Issue key**、**Revoke**、**Archive** | `/core/v1/projects` | 密钥只显示一次；Core 存储其摘要 |
-| 每个 Harness 的默认模型 | **System** → **Default model configuration**：**Set** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
+| 每个 Harness 的默认模型 | **Settings** → **Models and credentials**：**Set** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
 | 自托管 Session 的执行器凭据 | **Session log**，然后进入 **Session** 页面：**Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 请参阅[自托管执行器](getting-started/self-hosted.md) |
 
-哪些 Harness 已启用以及默认 Harness 属于进程设置（`core.harnesses`、`core.default_harness`）；System 会以只读方式显示它们。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
+哪些 Harness 已启用以及默认 Harness 属于进程设置（`core.harnesses`、`core.default_harness`）；**Settings → Models and credentials** 会以只读方式显示它们。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
 
 ### 独立工作区存储 {#independent-workspace-storage}
 
@@ -126,7 +127,7 @@ services:
           create_host_path: false
 ```
 
-按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core key 调用 `PUT /core/v1/workspace-storage` 选择存储。首次设置时，分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构。恢复时保留已有标识。选择操作会在 Core 中运行适配器的可用性、所有权和 xattr 检查；它不证明每个节点均能解析该挂载：
+在 **Settings → Workspace storage → Select new configuration** 中选择存储，或按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core key 调用 `PUT /core/v1/workspace-storage`。首次设置时，分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构。恢复时保留已有标识。选择操作会在 Core 中运行适配器的可用性、所有权和 xattr 检查；它不证明每个节点均能解析该挂载：
 
 ```json
 {
@@ -143,7 +144,11 @@ services:
 
 此配置不实施单个工作区配额，因此 `tenant_capacity_mib` 必须为 `0`。如需有上限的工作区，应准备[配额模式存储服务器](#quota-mode-storage-server)，并改为选择带[租户容量](#tenant-capacity)的配额模式配置。
 
-随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，并保留所需计算资源、Runtime 和 Provider 配置。`resources.environment_disk_mib` 是每个新工作区的容量：非配额模式下为 `0`，正数会被拒绝；配额模式下至少为 1024 MiB，`0` 会在工作区准入时被拒绝。部署变更时，既有工作区保持其获准时的容量。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。Web 没有工作区存储编辑器。选择文件系统和部署后，通过 **Nodes → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
+随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，并保留所需计算资源、Runtime 和 Provider 配置。`resources.environment_disk_mib` 是每个新工作区的容量：非配额模式下为 `0`，正数会被拒绝；配额模式下至少为 1024 MiB，`0` 会在工作区准入时被拒绝。部署变更时，既有工作区保持其获准时的容量。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。
+
+存储表单接受 adapter 标识、JSON 对象形式的参数和可选的只写凭据 JSON 对象。Core 验证这些由 adapter 定义的值；Web 不定义 Provider 专属存储字段。**Edit tenant capacity** 保留已选的不可变配置。选择另一份配置需要新的 ID，不会迁移现有工作区。
+
+选择文件系统和部署后，通过 **Settings → Sandbox and scheduling → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
 
 #### 配额模式存储服务器 {#quota-mode-storage-server}
 
@@ -195,13 +200,13 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 
 ### 节点容量 {#node-capacity}
 
-生成 **Add node** 命令时，Core 会批准节点容量：**Sandboxes at once**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **Retained sandboxes**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可使用 **Edit node** 修改这些值。预留和尚未确认的清理操作都会占用容量；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
+生成 **Add node** 命令时，Core 会批准节点容量：**Sandboxes at once**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **Retained sandboxes**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **Settings → Sandbox and scheduling → Sandbox nodes** 使用 **Edit node** 修改这些值。预留和尚未确认的清理操作都会占用容量；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
 
 `core.execution_concurrency` 与此无关：它限制 Core 中并发执行的工作量。
 
 ### 默认模型 {#default-models}
 
-在 **System** → **Default model configuration** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/core/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
+在 **Settings** → **Models and credentials** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/core/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
 
 ## Compose 安装 {#compose-installations}
 

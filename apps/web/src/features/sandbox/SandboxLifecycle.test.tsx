@@ -28,6 +28,11 @@ describe("sandbox lifecycle evidence", () => {
     const unsupported = renderToStaticMarkup(<SandboxLifecycle deployment={{ ...deployment, suspension: null }} nodes={nodes} stale={false} controls={{ disabled: true, onSave: async () => true }} />);
     expect(unsupported).not.toContain("sandbox-idle-seconds");
   });
+  it("keeps node inventory visible when suspension is unsupported", () => {
+    const html = renderToStaticMarkup(<SandboxLifecycle deployment={{ ...deployment, suspension: null }} nodes={[]} stale={false}><table><tbody><tr><td>node-inventory</td></tr></tbody></table></SandboxLifecycle>);
+    expect(html).toContain("node-inventory");
+    expect(html).not.toContain("sandbox-idle-seconds");
+  });
   it("does not replace missing inventory with zero or claim fresh evidence after failure", () => {
     const html = renderToStaticMarkup(<SandboxLifecycle deployment={deployment} nodes={null} stale />);
     expect(html).toContain("current state is unconfirmed");
