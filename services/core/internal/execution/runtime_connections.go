@@ -3,6 +3,9 @@ package execution
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 
 	"github.com/google/uuid"
 
@@ -23,6 +26,7 @@ type runtimeConnection struct {
 func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner deployment.Allocation) error {
 	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
 	if errors.Is(err, sessions.ErrNotFound) {
+		r.forgetAwaitingConnection(owner.DeviceID)
 		return nil
 	}
 	if err != nil {
@@ -32,12 +36,24 @@ func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner deployme
 		return sessions.ErrDeviceBindingConflict
 	}
 	if !owner.CreateSettled || owner.State != "running" {
+		r.forgetAwaitingConnection(owner.DeviceID)
 		return nil
 	}
 	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	connected := err == nil
 	if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 		return err
+	}
+	if errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && r.connectionWake != nil {
+		if r.awaiting == nil {
+			r.awaiting = make(map[string]deployment.AllocationKey)
+		}
+		r.awaiting[owner.DeviceID] = owner.Key()
+		r.registry.WatchDevice(owner.DeviceID, r.connectionWake)
+	} else {
+		// A registered closed or unauthorized peer is not a missing registration.
+		// Watching it would signal immediately and spin until it deregisters.
+		r.forgetAwaitingConnection(owner.DeviceID)
 	}
 	return observeRuntimeConnection(ctx, r.sessionExecution, r.connections, owner.TenantID, owner.EnvironmentID, peer, connected)
 }
@@ -91,6 +107,52 @@ func (w *Worker) observeEnrolledRuntimes(ctx context.Context) error {
 				current.peer.Close("Environment is no longer available")
 			}
 			delete(w.enrolledConnections, id)
+		}
+	}
+	return nil
+}
+
+func (r *runtimeLifecycle) forgetAwaitingConnection(device string) {
+	if _, found := r.awaiting[device]; !found {
+		return
+	}
+	delete(r.awaiting, device)
+	r.registry.UnwatchDevice(device, r.connectionWake)
+}
+
+func (r *runtimeLifecycle) clearConnectionWatches() {
+	for device := range r.awaiting {
+		r.forgetAwaitingConnection(device)
+	}
+}
+
+// Registration signals coalesce, so recheck every outstanding device under the
+// existing lifecycle owner. This pass never calls the Sandbox Provider.
+func (r *runtimeLifecycle) observeAwaitingConnections(parent context.Context) error {
+	ctx, finish, err := r.beginReconcile(parent)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	for device, key := range r.awaiting {
+		operation, stop := context.WithTimeout(ctx, 5*time.Second)
+		owner, err := r.reader.EnvironmentAllocation(operation, key)
+		switch {
+		case err == nil && owner.DeviceID == device && owner.ProviderKey == r.config.InstallationID && owner.NodeID == r.nodeID && owner.State == "running" && owner.CreateSettled && !owner.SessionDeleted && !owner.Expired && (owner.ComputePhase == "disabled" || owner.ComputePhase == "running"):
+			err = r.observeConnection(operation, owner)
+		case err == nil || errors.Is(err, deployment.ErrNotFound):
+			r.forgetAwaitingConnection(device)
+			err = nil
+		}
+		stop()
+		if err != nil {
+			if ownership := r.lease.CheckOwnership(ctx); ownership != nil {
+				return ownership
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			log.Ctx(ctx).Warn("managed Runtime connection observation incomplete", "environment_id", key.EnvironmentID)
 		}
 	}
 	return nil

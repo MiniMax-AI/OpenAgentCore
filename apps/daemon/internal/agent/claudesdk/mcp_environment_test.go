@@ -73,7 +73,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 }
 
 func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
-	start := startRequest{Workspace: &workspaceProfile{MCP: []environmentMCPServer{{mcpHTTPServer: mcpHTTPServer{ServerLabel: "installed"}}}}, observeFunctions: true}
+	start := startRequest{Workspace: &workspaceProfile{MCP: []environmentMCPServer{{mcpHTTPServer: mcpHTTPServer{ServerLabel: "installed"}}}}}
 	state := mcpState{calls: map[string]proto.ToolObservation{}}
 	observation := proto.ToolObservation{Kind: "mcp", Name: "echo", Server: "installed", Status: "in_progress", Arguments: json.RawMessage(`{}`), Output: json.RawMessage(`null`), Error: json.RawMessage(`null`)}
 	var emitted []proto.ToolCallPayload
@@ -81,7 +81,7 @@ func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
 	if err := state.receive(bridgeEvent{ID: "native-call", Stage: "before", Observation: &observation}, start, emit); err != nil {
 		t.Fatal(err)
 	}
-	state.close(start, emit)
+	state.close(emit)
 	if len(emitted) != 2 || emitted[1].ID != "native-call" || emitted[1].Observation.Status != "incomplete" {
 		t.Fatal("interrupted environment call lost identity")
 	}

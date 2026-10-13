@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultSandboxResources, distributionRuntime, sandboxesThatFit, savedSpecification, validSandboxResources } from "./deployment-specification";
-import { isRuntimeReleaseField } from "./runtime-release";
-import standardSizes from "./standard-sizes.json";
-import type { SandboxSpecification } from "@oac/agents-client";
+import { defaultSandboxResources, distributionRuntime, isRuntimeReleaseField, sandboxesThatFit, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { deploymentContract, type SandboxProvider, type SandboxSpecification } from "@oac/agents-client";
 
 const manifest = { platform: "linux/amd64", source_commit: "0".repeat(40), images: { runtime: `sha256:${"a".repeat(64)}` },
   image_manifest_digests: { runtime: `sha256:${"b".repeat(64)}` }, runtime_ref: `oac-runtime@sha256:${"b".repeat(64)}`,
@@ -28,20 +26,18 @@ describe("deployment resources and Runtime", () => {
     expect(savedSpecification("e2b", "docker", current)).toBeNull();
     expect(savedSpecification("e2b", "e2b", { resources: current.resources })).toEqual({ resources: current.resources });
   });
-  it("keeps the installer's Standard sizes structure", () => {
-    expect(Object.keys(standardSizes).sort()).toEqual(["docker", "microsandbox"]);
-    expect(Object.keys(standardSizes.docker).sort()).toEqual(["cpus", "memory_mib"]);
-    expect(Object.keys(standardSizes.microsandbox).sort()).toEqual(["cpus", "environment_disk_mib", "memory_mib", "root_disk_mib"]);
-    for (const provider of ["docker", "microsandbox"] as const) {
-      for (const value of Object.values(standardSizes[provider])) expect(Number.isInteger(value) && value > 0).toBe(true);
+  it("proposes a copy of each declared default size, which the declared bounds accept", () => {
+    for (const provider of Object.keys(deploymentContract.providers) as SandboxProvider[]) {
+      const declared = deploymentContract.providers[provider].default_resources;
       const resources = defaultSandboxResources(provider);
-      expect(resources).toEqual(standardSizes[provider]);
-      expect(resources).not.toBe(standardSizes[provider]);
-      expect(validSandboxResources(provider, resources)).toBe(true);
+      expect(resources).toEqual(declared);
+      if (resources) {
+        expect(resources).not.toBe(declared);
+        expect(validSandboxResources(provider, resources)).toBe(true);
+      }
     }
   });
   it("respects CPU, memory and supported disk bounds", () => {
-    for (const provider of ["docker", "microsandbox", "e2b"] as const) expect(validSandboxResources(provider, defaultSandboxResources(provider))).toBe(true);
     expect(validSandboxResources("docker", { cpus: 0, memory_mib: 2048 })).toBe(false);
     expect(validSandboxResources("e2b", { cpus: 256, memory_mib: 2048 })).toBe(false);
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 511 })).toBe(false);
@@ -49,14 +45,25 @@ describe("deployment resources and Runtime", () => {
     expect(validSandboxResources("e2b", { cpus: 2, memory_mib: 2048, root_disk_mib: 1024 })).toBe(false);
     expect(validSandboxResources("microsandbox", { cpus: 2, memory_mib: 2048, root_disk_mib: 1023, environment_disk_mib: 8192 })).toBe(false);
   });
-  it("accepts any well-formed Runtime image name in the Runtime reference", async () => {
+  it("validates external storage without fabricating a disk quota or weakening root disk bounds", () => {
+    const workspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
+    const resources = defaultSandboxResources("microsandbox", workspace)!;
+    expect(resources.environment_disk_mib).toBe(0);
+    expect(validSandboxResources("microsandbox", resources, workspace)).toBe(true);
+    expect(validSandboxResources("microsandbox", resources)).toBe(false);
+    expect(validSandboxResources("microsandbox", { ...resources, root_disk_mib: 0 }, workspace)).toBe(false);
+    expect(validSandboxResources("microsandbox", { ...resources, environment_disk_mib: 8192 }, workspace)).toBe(false);
+    expect(validSandboxResources("microsandbox", resources, { ...workspace, user_xattr: false })).toBe(false);
+    expect(validSandboxResources("docker", { cpus: 2, memory_mib: 2048 }, workspace)).toBe(false);
+    expect(validSandboxResources("microsandbox", { ...resources, environment_disk_mib: 8192 }, { ...workspace, capacity_quota: true })).toBe(true);
+  });
+  it("accepts only Core's Runtime image in the Runtime reference", async () => {
     const digest = "b".repeat(64);
-    for (const runtime_ref of [`oac-runtime@sha256:${digest}`, `custom-runtime@sha256:${digest}`]) {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
-      expect((await distributionRuntime(new AbortController().signal)).microsandbox_ref).toBe(runtime_ref);
-      expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(true);
-    }
-    for (const runtime_ref of [`oac-runtime:${digest}`, `oac-runtime@sha256:${"b".repeat(63)}`, `oac-runtime@sha256:${"B".repeat(64)}`, `@sha256:${digest}`]) {
+    const runtime_ref = `oac-runtime@sha256:${digest}`;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
+    expect((await distributionRuntime(new AbortController().signal)).microsandbox_ref).toBe(runtime_ref);
+    expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(true);
+    for (const runtime_ref of [`custom-runtime@sha256:${digest}`, `oac-runtime:${digest}`, `oac-runtime@sha256:${"b".repeat(63)}`, `oac-runtime@sha256:${"B".repeat(64)}`, `@sha256:${digest}`]) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ ...manifest, runtime_ref }))));
       await expect(distributionRuntime(new AbortController().signal)).rejects.toThrow();
       expect(isRuntimeReleaseField("microsandbox_ref", runtime_ref)).toBe(false);

@@ -7,6 +7,7 @@ export const navigation = {
     platform: "Platform",
   },
   views: {
+    "request-log": "Request log",
     overview: "Overview",
     "core-metrics": "Core metrics",
     "agent-metrics": "Agent metrics",
@@ -21,8 +22,9 @@ export const navigation = {
     projects: "Projects and keys",
     nodes: "Nodes",
     sandboxBackend: "Sandbox backend",
-    system: "System",
+    settings: "Settings",
   },
+  settings: {"sandbox": "Sandbox and scheduling", "storage": "Workspace storage", "models": "Models and credentials", "service": "Service and deployment"},
   showGettingStarted: "Show Getting started",
   skipToContent: "Skip to main content",
   configureCore: "Configure OpenAgentCore connection",

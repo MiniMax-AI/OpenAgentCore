@@ -9,7 +9,7 @@ import (
 )
 
 func (m *runtimeManager) lockMutation(ctx context.Context) (func(), error) {
-	if m == nil || m.loadDeployment == nil {
+	if m == nil {
 		return nil, deployment.ErrConflict
 	}
 	m.mu.Lock()
@@ -115,7 +115,7 @@ func (m *runtimeManager) activateDeployment(ctx context.Context, expected deploy
 		m.publishEmptyDeployment(expected.InstallationID, expected.Generation)
 		return nil
 	}
-	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != expected.Mode || config.ProviderKind != expected.Provider || config.loadDeployment != nil || config.LocalNodeID != "" {
+	if config == nil || config.InstallationID != expected.InstallationID || config.Generation != expected.Generation || config.Mode != string(expected.Mode) || config.ProviderKind != expected.Provider || config.loadDeployment != nil {
 		return sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)
@@ -144,6 +144,10 @@ func (w *Worker) UpdateSandboxDeployment(ctx context.Context, input sandbox.Sele
 	}
 	defer unlock()
 	m := w.runtimes
+	input, err = m.workspaceSelection(ctx, input)
+	if err != nil {
+		return deployment.View{}, err
+	}
 	input, unchanged, err := m.deployment.ClassifyChange(ctx, m.setupInstallationID, input)
 	if err != nil {
 		return deployment.View{}, err

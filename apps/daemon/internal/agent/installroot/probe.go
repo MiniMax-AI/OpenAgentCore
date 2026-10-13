@@ -1,3 +1,4 @@
+// Package installroot probes native adapter installations.
 package installroot
 
 import (
@@ -14,7 +15,7 @@ import (
 func Probe(parent context.Context, binary string, args, env []string, dir string) (string, error) {
 	ctx, cancel := context.WithTimeout(parent, 25*time.Second)
 	defer cancel()
-	p, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args, Env: env, Dir: dir, OwnProcessGroup: true, KillTimeout: 250 * time.Millisecond})
+	p, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args, Env: env, Dir: dir, KillTimeout: 250 * time.Millisecond})
 	if err != nil {
 		return "", errors.New("native component failed to start")
 	}

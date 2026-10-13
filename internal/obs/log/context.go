@@ -66,10 +66,6 @@ type ctxLogger struct {
 	ctx context.Context
 }
 
-func (l ctxLogger) Debug(msg string, args ...any) {
-	slog.Default().DebugContext(l.ctx, msg, args...)
-}
-
 func (l ctxLogger) Info(msg string, args ...any) {
 	slog.Default().InfoContext(l.ctx, msg, args...)
 }
@@ -80,10 +76,4 @@ func (l ctxLogger) Warn(msg string, args ...any) {
 
 func (l ctxLogger) Error(msg string, args ...any) {
 	slog.Default().ErrorContext(l.ctx, msg, args...)
-}
-
-// With returns a slog.Logger with the supplied attrs bound. Ctx-derived
-// trace attrs still apply on subsequent InfoContext calls.
-func (l ctxLogger) With(args ...any) *slog.Logger {
-	return slog.Default().With(args...)
 }

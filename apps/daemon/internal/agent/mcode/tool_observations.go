@@ -11,19 +11,17 @@ func (s *Session) emitToolStage(update toolUpdate, stage string) error {
 	if stage == "after" {
 		payload.Result = map[string]any{"output": update.RawOutput, "status": update.Status}
 	}
-	if s.req.ObserveToolObservations {
-		payload.Observation = workspaceToolObservation(update, stage)
-		if payload.Observation == nil {
-			var err error
-			payload.Observation, err = environmentMCPObservation(update, stage)
-			if err != nil {
-				return err
-			}
+	payload.Observation = workspaceToolObservation(update, stage)
+	if payload.Observation == nil {
+		var err error
+		payload.Observation, err = environmentMCPObservation(update, stage)
+		if err != nil {
+			return err
 		}
-		// Native task/skill bookkeeping has no qualified public item mapping.
-		if payload.Observation == nil {
-			return nil
-		}
+	}
+	// Native task/skill bookkeeping has no qualified public item mapping.
+	if payload.Observation == nil {
+		return nil
 	}
 	s.emit(proto.TypeToolCall, payload)
 	return nil

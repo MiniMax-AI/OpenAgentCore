@@ -41,6 +41,9 @@ func ValidateConfiguration(c *DeploymentConfiguration) error {
 // NormalizeSelection accepts omitted candidate resources only until live build
 // discovery. Persistence requires ValidateSpecification after preparation.
 func NormalizeSelection(s sandbox.Selection) (sandbox.Selection, error) {
+	if s.Workspace != nil {
+		return s, sandbox.ErrInvalid
+	}
 	if s.Resources == (sandbox.Resources{}) {
 		if s.Runtime != nil {
 			return s, &sandbox.ValidationError{Param: "runtime", Message: sandbox.ErrInvalid.Error() + ": " + Policy().RuntimeError}
@@ -70,25 +73,29 @@ func WithTemplateBuild(input sandbox.Selection, build *DeploymentBuild) sandbox.
 }
 
 // DiscoverSelection checks the immutable native build without allocating compute.
-func (p *Provider) DiscoverSelection(ctx context.Context, s sandbox.Selection) (sandbox.Selection, error) {
+func (ConfigurationAdapter) DiscoverSelection(ctx context.Context, c sandbox.DirectConfig) (sandbox.Selection, error) {
+	p, err := newDirect(c)
+	if err != nil {
+		return sandbox.Selection{}, err
+	}
 	build, err := p.ValidateDeployment(ctx)
 	if err != nil {
 		if errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
-			return s, err
+			return sandbox.Selection{}, err
 		}
 		if errors.Is(err, sandbox.ErrInvalid) {
-			return s, sandbox.ErrConfigurationSelection
+			return sandbox.Selection{}, sandbox.ErrConfigurationSelection
 		}
-		return s, sandbox.ErrConfigurationUnconfirmed
+		return sandbox.Selection{}, sandbox.ErrConfigurationUnconfirmed
 	}
 	recorded := &DeploymentBuild{Status: build.Status, CPUs: int32(build.CPUs), MemoryMiB: int32(build.MemoryMiB)}
 	if build.RootDiskMiB != nil && *build.RootDiskMiB <= math.MaxInt32 {
 		disk := int32(*build.RootDiskMiB)
 		recorded.RootDiskMiB = &disk
 	}
-	s = WithTemplateBuild(s, recorded)
+	s := WithTemplateBuild(c.Selection, recorded)
 	if err := ValidateSpecification(s.DeploymentSpec); err != nil {
-		return s, &sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}
+		return sandbox.Selection{}, &sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}
 	}
 	return s, nil
 }

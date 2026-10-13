@@ -25,9 +25,9 @@ func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ strin
 	return sessions.Page{Sessions: []sessions.Session{f.session}}, nil
 }
 
-func (f *environmentHTTPFixture) UpdateSessionMetadata(ctx context.Context, tenant, session string, metadata map[string]string) (sessions.Session, error) {
-	value, err := f.GetSession(ctx, tenant, session)
-	value.Metadata = metadata
+func (f *environmentHTTPFixture) UpdateSessionMetadata(ctx context.Context, command sessions.UpdateSessionMetadataCommand) (sessions.Session, error) {
+	value, err := f.GetSession(ctx, command.TenantID, command.SessionID)
+	value.Metadata = command.Metadata
 	return value, err
 }
 
@@ -48,9 +48,8 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: session.TenantID,
 	}).ResolveAPIKey
 	fixture.serve(fakes)
-	fakes.sessions.listSessions, fakes.sessions.updateSessionMetadata = fixture.ListSessions, fixture.UpdateSessionMetadata
-	// Self-hosted Sessions report the executor URL of the enabled Execution.
-	deps.Execution = fakes.execution()
+	fakes.sessionsReader.listSessions, fakes.sessions.updateSessionMetadata = fixture.ListSessions, fixture.UpdateSessionMetadata
+	// Self-hosted Sessions report the executor URL.
 	deps.Execution.ExecutorURL = environmentOrigin
 	handler := newTestHandler(t, deps)
 	want, err := sessionResponse(session, environmentOrigin)

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/authoring"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
@@ -72,8 +71,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 	run := func(index int, prompt, resume string, callFunction, cancelOnText bool) execution {
 		t.Helper()
 		reg := agent.NewRegistry()
-		registerAgentKinds(reg, discovery, "https://product.invalid")
-		reg = authoringRegistry(reg, authoring.New(nil))
+		registerAgentKinds(reg, discovery)
 		sender := make(registeredSDKSender, 256)
 		router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
 		if err != nil {
@@ -88,14 +86,14 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		}()
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
-		id := uuid.NewString()
-		request := proto.PromptRequestPayload{RunID: id, AgentKind: "claude_sdk", Input: proto.TextInput(prompt), AgentStateKey: "registered-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": nil}}
+		id, prepare := uuid.NewString(), uuid.NewString()
+		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: "agents-api-registered-acceptance", AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": nil}}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}
-		handle := func(kind string, payload any) {
+		send := func(kind, envelopeID string, payload any) {
 			t.Helper()
-			env, err := proto.NewEnvelope(kind, id, payload)
+			env, err := proto.NewEnvelope(kind, envelopeID, payload)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -103,7 +101,21 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 				t.Fatal("registered router request failed", err)
 			}
 		}
-		handle(proto.TypePromptRequest, request)
+		handle := func(kind string, payload any) { send(kind, id, payload) }
+		send(proto.TypeExecutionPrepare, prepare, proto.ExecutionPreparePayload{SessionID: "registered-acceptance", Configuration: request})
+		var ready proto.PreparationStatusPayload
+		for ready.State != "ready" {
+			var event proto.Envelope
+			select {
+			case event = <-sender:
+			case <-ctx.Done():
+				t.Fatal("registered preparation timed out", ctx.Err())
+			}
+			if event.Type != proto.TypePreparationStatus || event.ID != prepare || event.DecodePayload(&ready) != nil || ready.State != "preparing" && ready.State != "ready" {
+				t.Fatalf("registered preparation failed: %s", event.Payload)
+			}
+		}
+		send(proto.TypeExecutionStart, prepare, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: id, Input: proto.TextInput(prompt)})
 		proof := execution{}
 		defer func() {
 			data, _ := json.MarshalIndent(proof, "", "  ")
@@ -118,6 +130,13 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 			case event = <-sender:
 			case <-ctx.Done():
 				t.Fatal("registered execution timed out", ctx.Err())
+			}
+			if event.Type == proto.TypePreparationStatus && event.ID == prepare {
+				var status proto.PreparationStatusPayload
+				if event.DecodePayload(&status) != nil || status.RunID != id || status.State != "starting" && status.State != "started" {
+					t.Fatalf("registered start failed: %s", event.Payload)
+				}
+				continue
 			}
 			if event.ID != id {
 				t.Fatal("event identity changed")
@@ -182,7 +201,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 	if third.Outcome.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(third.Outcome.Content, nonce) {
 		t.Fatal("registered cold continuation lost identity or history")
 	}
-	data, _ := json.MarshalIndent(map[string]any{"scope": "SDK-only readiness and production registration/authoring registry -> daemon router -> pinned SDK/native -> real MiniMax; function receipt, cancellation and cold continuation; public API admission remains separate", "descriptor": discovery[0].runtime.Info, "entrypoint": entrypoint, "verification_value": nonce, "executions": []execution{first, second, third}}, "", "  ")
+	data, _ := json.MarshalIndent(map[string]any{"scope": "SDK-only readiness and production registration -> daemon router -> pinned SDK/native -> real MiniMax; function receipt, cancellation and cold continuation; public API admission remains separate", "descriptor": discovery[0].runtime.Info, "entrypoint": entrypoint, "verification_value": nonce, "executions": []execution{first, second, third}}, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, "proof.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}

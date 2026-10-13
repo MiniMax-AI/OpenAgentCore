@@ -19,9 +19,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // Deployment defaults are deployment-wide, so every test opens its own
@@ -81,11 +81,11 @@ func (f fixture) list(t *testing.T) []modelconfiguration.Configuration {
 	return configurations
 }
 
-// observed is a codex default and one Session that froze it. Store builds the
-// Session; Turns are committed rows written directly.
+// observed is a codex default and one Session that froze it. The Session
+// service builds the Session; Turns are committed rows written directly.
 type observed struct {
 	fixture
-	sessions *store.Store
+	sessions *sessions.Service
 	tenant   string
 	input    sessions.CreateSession
 	session  sessions.Session
@@ -106,19 +106,21 @@ func newObserved(t *testing.T) observed {
 			ModelProvider: v1.ExecutionProviderSelection{Source: "deployment"},
 		},
 	}
-	sessions := store.NewWithCredentialCipher(f.pool, f.cipher)
-	// cmd/server gives the store its placement rules; hosted creation needs them.
-	rules, err := placement.NewRules(providers.Builtin(), "")
+	// Hosted creation needs placement rules, as cmd/server gives them.
+	rules, err := placement.NewRules(providers.Builtin(), "https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessions.SetPlacement(rules)
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(f.pool), f.cipher), rules)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tenant := uuid.NewString()
-	session, err := sessions.CreateSession(t.Context(), tenant, input)
+	created, err := service.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return observed{f, sessions, tenant, input, session}
+	return observed{f, service, tenant, input, created.Session}
 }
 
 // terminal commits a root Turn with the outcome fields the observation reads.

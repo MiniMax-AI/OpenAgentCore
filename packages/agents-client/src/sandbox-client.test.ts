@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
 import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, sandboxNodeDiagnostics, type SandboxNode } from "./sandbox-client";
 
+import { deploymentContract } from "./deployment-contract";
 import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testdata/node-diagnostics.json";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
@@ -18,7 +19,7 @@ const node = {
 };
 /** Never heard from, enrolled before Core recorded enrollment IDs, with a fixed readiness code. */
 const unready = {
-  ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false, diagnostic: "kvm_unavailable",
+  ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false, diagnostic: "host_unsupported",
   cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, last_seen_at: null, active: 0, retained: 0, enrollment_id: null,
 };
 const detail = {
@@ -52,6 +53,9 @@ const microsandbox = {
   ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 }, runtime },
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
+const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
+const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification,
+  resources: { ...microsandbox.specification.resources, environment_disk_mib: 0 }, workspace: externalWorkspace } };
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
   ...docker, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },
@@ -73,11 +77,15 @@ const { specification_digest: _digest, ...undigested } = docker;
 const { compute_phase_changed_at: _changed, ...unphased } = allocation;
 
 describe("strict sandbox administration projections", () => {
+  it.each([null, {}, { ...externalWorkspace, capacity_quota: "false" }, { ...externalWorkspace, attachment: "arbitrary_path" }, { ...externalWorkspace, path: "/host" }])("rejects an invalid workspace receipt %j", async (workspace) => {
+    await expect(read("deployment", { ...externalDeployment, specification: { ...externalDeployment.specification, workspace } })).rejects.toMatchObject({ code: "invalid_admin_response" });
+  });
+
   it.each([
     ["nodes", "ready and unready", { data: [node, unready] }], ["nodes", "empty", { data: [] }],
     ["detail", "observed", detail], ["unobserved", "never observed", unobserved],
     ["allocations", "known and unknown phase times", { data: [allocation, { ...allocation, compute_phase: "suspended", compute_phase_changed_at: created, diagnostic: "node_unavailable" }] }],
-    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "E2B", e2bDeployment],
+    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
   ])("accepts %s as Core serializes it: %s", async (name, _, body) => {
     expect(await read(name, body)).toEqual(body);
   });
@@ -156,8 +164,8 @@ describe("Core sandbox credential boundaries", () => {
   it("returns the node's fixed readiness diagnostic unchanged and reads an unknown code as provider_unavailable", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [unready, { ...unready, diagnostic: "future_code" }, node] }));
     const { data } = await new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch }).listNodes();
-    expect(data.map((entry) => entry.diagnostic)).toEqual(["kvm_unavailable", "provider_unavailable", undefined]);
-    expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<undefined | "" | "provider_unavailable" | "docker_unavailable" | "docker_limits_unsupported" | "runtime_download_failed" | "runtime_image_unavailable" | "kvm_unavailable" | "microsandbox_artifacts_unavailable" | "capacity_insufficient">();
+    expect(data.map((entry) => entry.diagnostic)).toEqual(["host_unsupported", "provider_unavailable", undefined]);
+    expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<undefined | "provider_unavailable" | "host_unsupported" | "artifacts_unavailable" | "runtime_download_failed" | "runtime_image_unavailable" | "capacity_insufficient">();
   });
   it("requires each node's enrollment ID: a string, or null for nodes enrolled before Core recorded it", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [node, unready] }));
@@ -173,6 +181,20 @@ describe("Core sandbox credential boundaries", () => {
     const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
     await expect(client.createEnrollment()).rejects.toThrow("Network failed");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("patches idle policy once through the existing deployment resource", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...docker, suspension: { idle_seconds: 60, retention_seconds: 86400 } }));
+    const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
+    expect((await admin.updateSuspension({ idle_seconds: 60 })).suspension?.idle_seconds).toBe(60);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe("/core/v1/sandbox/deployment");
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ idle_seconds: 60 });
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
+    fetch.mockRejectedValue(new TypeError("Network failed"));
+    await expect(admin.updateSuspension({ idle_seconds: 60 })).rejects.toThrow("Network failed");
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("initializes using only the explicit provider with cancellation and admin credentials", async () => {

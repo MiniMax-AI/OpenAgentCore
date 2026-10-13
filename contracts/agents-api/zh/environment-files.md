@@ -1,7 +1,7 @@
 ---
 title: "Environment 文件与 Artifact"
 source: contracts/agents-api/environment-files.md
-source_hash: 1b58aa02aaccddb9675ef41ebfe2506a6fba0bb12139efb67e0da378d879aee7
+source_hash: 957cca18ef63a95a01ff682ff8adffb0d63d34e520c197ed9f6c8d08c4fd6c5d
 ---
 
 Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/environments/{environment_id}/files` 列出一个工作区目录，并在其中创建文件。Turn 完成时，Core 将工作区 `outputs/` 目录中的文件复制为不可变 Artifact，通过 `/agents/sessions/{session_id}/artifacts` 读取。Artifact 的生命周期长于 Environment；工作区文件则不是。
@@ -14,6 +14,7 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 - 公开路径从 `/workspace` 开始，代表 Environment 在机器上实际位置的工作区目录。
 - 首先在调用方 Project 查找 Environment；不存在或属于其他范围的 ID 返回 404。
 - 仍为 `pending` 的 `openai_hosted` Environment，两种操作均返回 400 `the hosted environment is still provisioning; wait until it is connected before accessing files`。此检查在请求验证之后、任何源 File 查询之前执行。其他状态继续处理，Runtime 不可达时返回 503。
+- 文件操作在现有请求期限内等待 Environment 初始化完成；`connected` 本身不表示已就绪，初始化失败或执行容量耗尽仍返回 503。
 - 列表和写入不启动 Turn，也不向模型发送输入。
 
 ## 列出文件 {#list-files}
@@ -79,7 +80,7 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 
 - 发送任何字节之前，Core 在 Session 锁下记录写入。输入待处理、Turn 运行或较早写入未结算时，新写入返回 409 `turn_conflict`。未结算写入也使 Session 新消息返回 409。
 - Runtime 在创建任何内容前根据摘要检查完整正文，因此不完整输入不创建内容。后续失败的写入可能留下新建空父目录。
-- 仅 Runtime 的确定回执将写入结算为已提交或已拒绝。被拒绝写入不改变内容并释放 Session。连接断开、请求超时或无回执时，返回 503，写入持续未结算，Core 重启后仍如此。Core 不重发，也无自动恢复，因此 Session 不再接受写入或消息。读取仍可用。
+- 仅 Runtime 的确定回执将写入结算为已提交或已拒绝。被拒绝写入不会发布目标文件，并释放 Session；新建的空父目录可能保留。确认在发布前发生的存储或配额耗尽返回 503，格式错误的输入和目标冲突仍保持原有错误。连接断开、请求超时或无回执时，返回 503，写入持续未结算，Core 重启后仍如此。Core 不重发，也无自动恢复，因此 Session 不再接受写入或消息。读取仍可用。
 - 源 File 字节读取后，删除该 File 不影响副本。
 
 ## Artifact {#artifacts}

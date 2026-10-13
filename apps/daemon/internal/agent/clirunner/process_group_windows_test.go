@@ -21,7 +21,7 @@ func TestWindowsOwnedTree(t *testing.T) {
 			dir := t.TempDir()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			p, err := Start(StartOptions{Parent: ctx, Binary: os.Args[0], Args: []string{"-test.run=^TestWindowsTreeHelper$", "--", "leader", mode, dir}, Env: append(os.Environ(), "OAC_TREE_HELPER=1"), OwnProcessGroup: true})
+			p, err := Start(StartOptions{Parent: ctx, Binary: os.Args[0], Args: []string{"-test.run=^TestWindowsTreeHelper$", "--", "leader", mode, dir}, Env: append(os.Environ(), "OAC_TREE_HELPER=1")})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,7 +129,7 @@ func TestWindowsTreeHelper(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	case "owner":
-		p, err := Start(StartOptions{Parent: context.Background(), Binary: os.Args[0], Args: []string{"-test.run=^TestWindowsTreeHelper$", "--", "leader", mode, dir}, Env: os.Environ(), OwnProcessGroup: true})
+		p, err := Start(StartOptions{Parent: context.Background(), Binary: os.Args[0], Args: []string{"-test.run=^TestWindowsTreeHelper$", "--", "leader", mode, dir}, Env: os.Environ()})
 		if err != nil {
 			os.Exit(3)
 		}

@@ -36,7 +36,7 @@ func NewExecutorFactory(config Config) agent.ExecutorFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+		if req.RunID != "" || len(req.Input) != 0 {
 			return nil, errors.New("claudesdk: Executor preparation cannot submit input")
 		}
 		start, env, err := prepareConfiguration(config, req)
@@ -90,9 +90,6 @@ func validateExecutorFeatures(info RuntimeInfo, start startRequest) error {
 	}
 	if start.Subagents != nil && !info.SupportsSubagents() {
 		return errors.New("claudesdk: subagent resources are unavailable")
-	}
-	if start.Workspace != nil && start.observeFunctions && !info.supportsWorkspaceCommands() {
-		return errors.New("claudesdk: packaged runtime does not support workspace command observations")
 	}
 	if start.Workspace != nil && len(start.Functions) > 0 && !info.SupportsWorkspaceFunctions() {
 		return errors.New("claudesdk: workspace functions are unavailable")

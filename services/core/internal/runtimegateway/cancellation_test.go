@@ -58,7 +58,7 @@ func TestArchivedReceiptTracksDeliveryBeyondDoneAndRejectsNewWork(t *testing.T) 
 	if _, err := peer.TrackExecutionDelivery("new-run"); err == nil {
 		t.Fatal("new delivery admitted while draining")
 	}
-	for _, kind := range []string{proto.TypePromptRequest, proto.TypePromptSteer, proto.TypeExecutionPrepare, proto.TypeRuntimePrepare, proto.TypeWorkspaceWrite, proto.TypeWorkspaceRead} {
+	for _, kind := range []string{proto.TypeExecutionStart, proto.TypePromptSteer, proto.TypeExecutionPrepare, proto.TypeRuntimePrepare, proto.TypeWorkspaceWrite, proto.TypeWorkspaceRead} {
 		env, _ := proto.NewEnvelope(kind, "run", nil)
 		if err := peer.Send(t.Context(), env); err == nil {
 			t.Fatal("drain permitted new operation", kind)

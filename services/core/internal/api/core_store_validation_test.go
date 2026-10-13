@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
@@ -21,11 +22,11 @@ import (
 func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	// The deployment validates these inputs before it reaches storage, so
 	// storage without a database is enough.
-	rules, err := placement.NewRules(providers.Builtin(), "")
+	rules, err := placement.NewRules(providers.Builtin(), "https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}
-	nodes, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), rules)
+	nodes, err := deployment.NewService(deploymentpg.New(nil, pgtest.CredentialKey(t)), deploymentpg.New(nil, pgtest.CredentialKey(t)), providers.Builtin(), rules)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +41,7 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		publicMessage, publicCode string
 		write                     func(http.ResponseWriter, *http.Request, error)
 	}{
-		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration", nil},
+		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration", writeOperationError},
 		{&projects.NameError{MaxLength: projects.ProjectNameMaxLength}, "invalid_name", "name", map[string]any{"max_length": float64(128)}, "Invalid resource identifier or request limits.", "invalid_request", writeProjectsError},
 		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
 		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
@@ -50,12 +51,8 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		if tc.err == nil {
 			t.Fatal("missing validator error")
 		}
-		write := tc.write
-		if write == nil {
-			write = func(w http.ResponseWriter, r *http.Request, err error) { writeStoreError(w, r, err) }
-		}
 		for _, core := range []bool{false, true} {
-			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { write(w, r, fmt.Errorf("wrapped: %w", tc.err)) }))
+			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { tc.write(w, r, fmt.Errorf("wrapped: %w", tc.err)) }))
 			if core {
 				handler = coreErrorResponses(handler)
 			}

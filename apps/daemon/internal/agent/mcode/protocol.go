@@ -50,18 +50,3 @@ type sessionUpdate struct {
 		toolUpdate
 	} `json:"update"`
 }
-
-type permissionRequest struct {
-	SessionID string     `json:"sessionId"`
-	ToolCall  toolUpdate `json:"toolCall"`
-	Options   []struct {
-		ID   string `json:"optionId"`
-		Kind string `json:"kind"`
-	} `json:"options"`
-}
-
-type pendingPermission struct {
-	RPCID json.RawMessage
-	Allow string
-	Deny  string
-}

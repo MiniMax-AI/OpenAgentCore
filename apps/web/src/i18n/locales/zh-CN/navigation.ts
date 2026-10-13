@@ -7,6 +7,7 @@ export const navigation = {
     platform: "平台",
   },
   views: {
+    "request-log": "请求日志",
     overview: "概览",
     "core-metrics": "Core 监控",
     "agent-metrics": "Agent 监控",
@@ -21,8 +22,9 @@ export const navigation = {
     projects: "项目与 key",
     nodes: "节点",
     sandboxBackend: "沙箱后端",
-    system: "系统",
+    settings: "设置",
   },
+  settings: {"sandbox": "沙箱与调度", "storage": "工作区存储", "models": "模型与凭据", "service": "服务与部署"},
   showGettingStarted: "显示新手引导",
   skipToContent: "跳到主要内容",
   configureCore: "配置 OpenAgentCore 连接",

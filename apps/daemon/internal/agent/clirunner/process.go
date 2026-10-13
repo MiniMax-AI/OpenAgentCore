@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"runtime"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -19,8 +17,6 @@ type StartOptions struct {
 	Env         []string
 	NeedStdin   bool
 	KillTimeout time.Duration
-	// OwnProcessGroup bounds the lifetime of subprocess descendants on Unix.
-	OwnProcessGroup bool
 }
 
 type Process struct {
@@ -29,13 +25,11 @@ type Process struct {
 	Stdout io.ReadCloser
 	Stderr io.ReadCloser
 
-	ctx       context.Context
-	cancel    context.CancelFunc
-	done      chan struct{}
-	killAfter time.Duration
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
 
 	cancelOnce    sync.Once
-	waitOnce      sync.Once
 	cancelProcess func() error
 	waitProcess   func() error
 }
@@ -51,54 +45,9 @@ func Start(opts StartOptions) (*Process, error) {
 		opts.KillTimeout = 3 * time.Second
 	}
 
-	if opts.OwnProcessGroup || runtime.GOOS == "windows" {
-		return startProcessGroup(opts)
-	}
-
-	ctx, cancel := context.WithCancel(opts.Parent)
-	cmd := exec.CommandContext(ctx, opts.Binary, opts.Args...)
-	cmd.Dir = opts.Dir
-	if len(opts.Env) > 0 {
-		cmd.Env = append([]string{}, opts.Env...)
-	}
-
-	var stdin io.WriteCloser
-	var err error
-	if opts.NeedStdin {
-		stdin, err = cmd.StdinPipe()
-		if err != nil {
-			cancel()
-			return nil, fmt.Errorf("clirunner: stdin pipe: %w", err)
-		}
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		closePipe(stdin)
-		cancel()
-		return nil, fmt.Errorf("clirunner: stdout pipe: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		closePipe(stdin)
-		cancel()
-		return nil, fmt.Errorf("clirunner: stderr pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		closePipe(stdin)
-		cancel()
-		return nil, fmt.Errorf("clirunner: start %q: %w", opts.Binary, err)
-	}
-
-	return &Process{
-		Cmd:       cmd,
-		Stdin:     stdin,
-		Stdout:    stdout,
-		Stderr:    stderr,
-		ctx:       ctx,
-		cancel:    cancel,
-		done:      make(chan struct{}),
-		killAfter: opts.KillTimeout,
-	}, nil
+	// Every child owns its process group (a Job object on Windows), bounding the
+	// lifetime of its descendants.
+	return startProcessGroup(opts)
 }
 
 func (p *Process) Context() context.Context {
@@ -118,41 +67,20 @@ func (p *Process) Done() <-chan struct{} {
 }
 
 func (p *Process) Cancel() {
-	if p == nil {
+	if p == nil || p.cancelProcess == nil {
 		return
 	}
 	p.cancelOnce.Do(func() {
-		if p.cancelProcess != nil {
-			_ = p.cancelProcess()
-			p.cancel()
-			return
-		}
-		if p.Cmd != nil && p.Cmd.Process != nil {
-			_ = p.Cmd.Process.Signal(syscall.SIGTERM)
-			go func() {
-				select {
-				case <-p.done:
-				case <-time.After(p.killAfter):
-					_ = p.Cmd.Process.Signal(syscall.SIGKILL)
-				}
-			}()
-		}
-		if p.cancel != nil {
-			p.cancel()
-		}
+		_ = p.cancelProcess()
+		p.cancel()
 	})
 }
 
 func (p *Process) Wait() error {
-	if p == nil || p.Cmd == nil {
+	if p == nil || p.waitProcess == nil {
 		return nil
 	}
-	if p.waitProcess != nil {
-		return p.waitProcess()
-	}
-	err := p.Cmd.Wait()
-	p.waitOnce.Do(func() { close(p.done) })
-	return err
+	return p.waitProcess()
 }
 
 func closePipe(p io.Closer) {

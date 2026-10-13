@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -44,7 +45,7 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) 
 
 // Keep the ordinary ticker as the recovery guarantee. Hints allow at most one
 // extra scan per normal cycle, including when clients repeatedly retry an input.
-func runRuntimeMaintenance(ctx context.Context, ticks <-chan time.Time, hints <-chan struct{}, reconcile func(context.Context) error) error {
+func runRuntimeMaintenance(ctx context.Context, ticks <-chan time.Time, hints <-chan struct{}, reconcile func(context.Context) error, pending <-chan struct{}, provision func(context.Context) error, connections <-chan *runtimegateway.Session, observeConnections func(context.Context) error) error {
 	drainRuntimeWakeHint(hints)
 	if err := ctx.Err(); err != nil {
 		return err
@@ -62,6 +63,22 @@ func runRuntimeMaintenance(ctx context.Context, ticks <-chan time.Time, hints <-
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-connections:
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := observeConnections(ctx); err != nil {
+				return err
+			}
+			continue
+		case <-pending:
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := provision(ctx); err != nil {
+				return err
+			}
+			continue
 		case <-ticks:
 			normal = true
 		case <-readyHints:

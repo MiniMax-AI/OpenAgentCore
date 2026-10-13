@@ -48,9 +48,9 @@ func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) responseHeaders(next http.Handler) http.Handler {
-	return responseHeadersWithErrors(next, func(code string) {
+	return responseHeadersWithLog(next, func(code string) {
 		if code == "execution_unavailable" {
 			h.Metrics.RecordUnavailable()
 		}
-	})
+	}, h.requestLogs)
 }

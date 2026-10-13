@@ -9,6 +9,11 @@ runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
 output_dir="${CORE_DISTRIBUTION_BUILD_DIR:-$runtime_root/build/core-distribution}"
 release_base_url="${CORE_DISTRIBUTION_RELEASE_BASE_URL:-}"
 offline="${CORE_DISTRIBUTION_OFFLINE:-0}"
+platforms="${CORE_DISTRIBUTION_PLATFORMS:-linux/amd64,linux/arm64}"
+case "$platforms" in
+  linux/amd64|linux/amd64,linux/arm64) ;;
+  *) printf 'CORE_DISTRIBUTION_PLATFORMS must be linux/amd64 or linux/amd64,linux/arm64\n' >&2; exit 1 ;;
+esac
 if [[ "$offline" != 0 && "$offline" != 1 ]]; then
   printf 'CORE_DISTRIBUTION_OFFLINE must be 0 or 1\n' >&2
   exit 1
@@ -44,7 +49,7 @@ case "$build_network" in
   default|host|none) ;;
   *) printf 'CORE_DISTRIBUTION_BUILD_NETWORK must be default, host, or none\n' >&2; exit 1 ;;
 esac
-# Build one Linux amd64 image and write the ID the local image store gives it to
+# Build one selected Linux architecture image and write the ID the local image store gives it to
 # $stage/NAME.id. BuildKit's --iidfile reports the config digest, which is the
 # image ID only in Docker's classic store; the containerd store (Docker 29's
 # default) uses the manifest digest and cannot resolve the config digest. The
@@ -58,14 +63,14 @@ build_image() {
   # declaration persists the operator's network configuration in the images.
   # The metadata file omits build provenance, so it does not record them either.
   BUILDX_METADATA_PROVENANCE=disabled docker build --network "$build_network" \
-    --platform linux/amd64 --provenance=false --metadata-file "$stage/$name.build.json" \
+    --platform "linux/$GOARCH" --provenance=false --metadata-file "$stage/$name.build.json" \
     --label "org.opencontainers.image.revision=$revision" \
     --build-arg HTTP_PROXY --build-arg HTTPS_PROXY --build-arg ALL_PROXY --build-arg NO_PROXY \
     --build-arg "http_proxy=${http_proxy:-${HTTP_PROXY:-}}" \
     --build-arg "https_proxy=${https_proxy:-${HTTPS_PROXY:-}}" \
     --build-arg "all_proxy=${all_proxy:-${ALL_PROXY:-}}" \
     --build-arg "no_proxy=${no_proxy:-${NO_PROXY:-}}" "$@"
-  python3 scripts/core-distribution-manifest.py built-image "$stage/$name.build.json" > "$stage/$name.id"
+  python3 scripts/core-distribution-manifest.py built-image "$stage/$name.build.json" "$GOARCH" > "$stage/$name.id"
 }
 
 require_clean_source() {
@@ -107,19 +112,20 @@ python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoc
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
 cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
+mkdir -p "$bundle/storage"
+install -m 0755 services/core/internal/workspacefs/nfs/quota/oac-workspace-quota "$bundle/storage/"
 cp LICENSE "$bundle/"
+cp deploy/install-source.py "$bundle/install.py"
+cp deploy/compose/compose.yaml "$bundle/compose.yaml.template"
 
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
-(
-  cd services/core/tools/microsandbox-provider
-  GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
-    -o "$stage/core/bin/oac-microsandbox-provider" .
-)
-msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz}"
+cp "$stage/core/bin/oac" "$bundle/oac"
+python3 scripts/build-microsandbox-provider.py build "$stage/core/bin/oac-microsandbox-provider"
+msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
   mkdir -p "$(dirname "$msb_archive")"
   curl --fail --location --proto '=https' --tlsv1.2 \
-    https://github.com/superradcompany/microsandbox/releases/download/v0.7.2/microsandbox-linux-x86_64.tar.gz \
+    https://github.com/superradcompany/microsandbox/releases/download/v0.7.8/microsandbox-linux-x86_64.tar.gz \
     --output "$stage/microsandbox.download"
   python3 scripts/core-distribution-manifest.py extract-runtime "$stage/microsandbox.download" "$stage/core/microsandbox"
   mv "$stage/microsandbox.download" "$msb_archive"
@@ -144,7 +150,7 @@ docker run --rm --network none --entrypoint /bin/sh \
 
 OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
 pnpm --filter @oac/web... install --frozen-lockfile
-OAC_WEB_OPENAI_HOSTED_SESSIONS=1 OAC_WEB_ENVIRONMENT_FILES=1 pnpm build:web
+pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
 cp services/web/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"
@@ -160,14 +166,12 @@ if [[ -n "$codex_image$claude_image$mcode_image" ]]; then
     exit 1
   fi
 else
-  : "${AGENTS_RUNTIME_CODEX_PACKAGE:?Set the extracted pinned Codex Linux x64 package directory}"
+  : "${CODEX_CLI_DIR:?Set the extracted pinned Codex Linux x64 package directory}"
   : "${MCODE_HARNESS_BUILD_DIR:?Set the existing built pinned MiniMax Code companion directory}"
   export CLAUDE_SDK_BUILD_DIR="$stage/claude-sdk"
   scripts/build-claude-sdk-runtime.sh
   for harness in codex claude mcode; do
-    script="scripts/build-$harness-runtime.sh"
-    if [[ "$harness" == codex ]]; then script=scripts/build-agents-runtime.sh; fi
-    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "$script"
+    AGENTS_RUNTIME_BUILD_DIR="$stage/$harness" bash "scripts/build-$harness-runtime.sh"
     build_image "$harness" "$stage/$harness"
   done
   codex_image="$(cat "$stage/codex.id")"
@@ -257,3 +261,30 @@ fi
 mv "$stage/artifacts/"* "$output_dir/"
 if [[ -d "$stage/native-artifacts" ]]; then mv "$stage/native-artifacts/"* "$output_dir/"; fi
 mv "$bundle" "$output_dir/"
+
+# Core, Web and initialization also run natively in ARM64 Linux containers.
+# Node and hosted Runtime payloads above remain linux/amd64.
+if [[ "$platforms" == linux/amd64,linux/arm64 ]]; then
+export GOARCH=arm64
+arm_bundle="$stage/oac-$revision-linux-arm64"
+mkdir -p "$arm_bundle/images"
+OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
+OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
+cp "$stage/core/bin/oac" "$stage/ingress/oac"
+for name in core web ingress; do
+  build_image "$name" "$stage/$name"
+  docker image save --output "$arm_bundle/images/$name.tar" "$(cat "$stage/$name.id")"
+done
+python3 scripts/core-distribution-manifest.py control-archive "$arm_bundle" "$stage" "$revision" arm64
+mv "$arm_bundle.tar.gz" "$arm_bundle.tar.gz.sha256" "$output_dir/"
+fi
+
+# The launchers and operator commands use this same portable implementation.
+for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64; do
+  extension=""
+  if [[ "$platform" == windows-* ]]; then extension=.exe; fi
+  asset="oac-$platform$extension"
+  GOOS="${platform%-*}" GOARCH="${platform#*-}" CGO_ENABLED=0 go build -mod=readonly -trimpath \
+    -ldflags "-X main.buildRevision=$revision" -o "$output_dir/$asset" ./services/core/cmd/oac
+  (cd "$output_dir" && sha256sum "$asset" > "$asset.sha256")
+done

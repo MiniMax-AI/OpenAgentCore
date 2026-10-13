@@ -15,8 +15,8 @@ import (
 )
 
 // HeartbeatTouch is the persistence interface the gateway uses to
-// bump last_heartbeat_at / promote pending_pairing -> online when a
-// daemon connects.
+// bump last_heartbeat_at and mark the runtime online when a daemon
+// connects.
 type HeartbeatTouch interface {
 	TouchRuntimeHeartbeat(ctx context.Context, runtimeID string) (runtimedevice.HeartbeatStatus, error)
 	TouchAgentDaemonHeartbeat(ctx context.Context, input runtimedevice.Heartbeat) (runtimedevice.HeartbeatStatus, error)
@@ -32,7 +32,7 @@ type HandlerConfig struct {
 
 	Registry *Registry
 
-	// Heartbeat flips pending_pairing -> online and keeps
+	// Heartbeat marks the runtime online and keeps
 	// last_heartbeat_at fresh. nil tracks liveness in-process only.
 	Heartbeat HeartbeatTouch
 
@@ -133,7 +133,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.cfg.Heartbeat != nil {
-		// First inbound action — promote pending_pairing -> online.
+		// First inbound action — mark the runtime online.
 		// Best-effort; a transient DB blip shouldn't refuse the
 		// upgrade since we already accepted the credential.
 		if _, hbErr := h.cfg.Heartbeat.TouchRuntimeHeartbeat(r.Context(), auth.DeviceID); hbErr != nil {
@@ -179,7 +179,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	sess.Start()
 }
 
-// Bootstrap is the daemon's first HTTP call after pairing. Validating
+// Bootstrap is the daemon's first HTTP call with its credential. Validating
 // the bearer in a separate HTTP step (rather than folded into the WS
 // upgrade) lets the daemon fail fast on credential problems with a
 // real HTTP status rather than the opaque WS close code.

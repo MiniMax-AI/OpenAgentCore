@@ -1,10 +1,11 @@
+import type { AdminProject, AgentSession } from "@oac/agents-client";
 import { MessageSquareText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ReadFailure } from "../../components/ReadFailure";
 import { useFailureToast } from "../../components/Toast";
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
+import { EmptyState, PageBody, PageHeader, RefreshButton, SegmentedControl } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleIntent, useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatDateTime, formatInteger, formatRelative, MISSING } from "../../lib/format";
@@ -19,14 +20,11 @@ import {
   initialSessionLogFilters,
   isDeletable,
   isLogTruncated,
-  readSessionLog,
   sessionStatuses,
   statusCounts,
-  type SessionLogEntry,
   type SessionLogFilters,
 } from "./session-log";
 import "./sessions.css";
-import { type Project } from "../../lib/admin-view";
 import { collections, queryClient } from "../../lib/queries";
 import { forgetDeleted } from "../resources/detail-queries";
 import { sessionKey } from "./session-queries";
@@ -39,8 +37,8 @@ const PAGE_SIZE = 50;
 /** Filters survive a visit to a Session and back within the same page load. */
 let remembered: { project: ProjectFilterValue; filters: SessionLogFilters } = { project: "", filters: initialSessionLogFilters };
 
-function rowKey(row: Owned<SessionLogEntry>): string {
-  return `${row.project.id}:${row.value.kind === "session" ? row.value.session.id : row.value.key}`;
+function rowKey(row: Owned<AgentSession>): string {
+  return `${row.project.id}:${row.value.id}`;
 }
 
 /** Monitor › Session log: every Session of one project or of all projects, read-only with deletion of idle ones. */
@@ -81,7 +79,7 @@ export function SessionLogPage() {
   const counts = useMemo(() => statusCounts(rows, filters), [filters, rows]);
   const agents = useMemo(() => agentOptions(rows, t("common.untitledAgent")), [rows, t]);
   const visible = useMemo(() => filtered.slice(0, limit), [filtered, limit]);
-  const creatorRows = useMemo(() => visible.flatMap((row) => (row.value.kind === "session" ? [{ projectId: row.project.id, id: row.value.session.id }] : [])), [visible]);
+  const creatorRows = useMemo(() => visible.map((row) => ({ projectId: row.project.id, id: row.value.id })), [visible]);
   const creators = useCreators("session", creatorRows);
   const allProjects = selected === "";
   const loading = collection.status === "loading" || (projects.status === "loading" && !projects.projects.length);
@@ -233,48 +231,17 @@ function SessionLogRow({
   onOpen,
   onDelete,
 }: {
-  row: Owned<SessionLogEntry>;
+  row: Owned<AgentSession>;
   allProjects: boolean;
   creators: Creators;
   now: number;
   locale: string | undefined;
   onOpen: (projectId: string, sessionId: string) => void;
-  onDelete: (target: { project: Project; sessionId: string }) => void;
+  onDelete: (target: { project: AdminProject; sessionId: string }) => void;
 }) {
   const { t } = useTranslation("sessions");
   const projectCell = allProjects ? <td><ProjectName project={row.project} /></td> : null;
-  const entry = row.value;
-
-  if (entry.kind === "unrecognized") {
-    const name = (
-      <span className="column-help">
-        <span className="muted">{t("log.unrecognized")}</span>
-        <HelpTip>{t("log.unrecognizedHelp")}</HelpTip>
-      </span>
-    );
-    return (
-      <tr>
-        <th scope="row">{entry.id ? <NameCell name={null} id={entry.id} fallback={t("log.unrecognized")}><HelpTip>{t("log.unrecognizedHelp")}</HelpTip></NameCell> : <span className="name-cell">{name}</span>}</th>
-        {projectCell}
-        <td className="table-muted">{MISSING}</td>
-        <td className="table-muted">{MISSING}</td>
-        <td className="table-muted">{MISSING}</td>
-        <td className="numeric table-muted">{MISSING}</td>
-        <td className="table-muted">{MISSING}</td>
-        <td className="numeric table-muted">{MISSING}</td>
-        <td className="numeric table-muted">{MISSING}</td>
-        <td className="actions-cell">
-          {entry.id ? (
-            <RowActions>
-              <button className="text-action danger" type="button" aria-label={t("delete.actionLabel", { id: entry.id })} onClick={() => onDelete({ project: row.project, sessionId: entry.id! })}>{t("delete.action")}</button>
-            </RowActions>
-          ) : null}
-        </td>
-      </tr>
-    );
-  }
-
-  const session = entry.session;
+  const session = row.value;
   const open = () => onOpen(row.project.id, session.id);
   return (
     <tr className="clickable-row" onClick={open}>

@@ -21,7 +21,7 @@ import (
 )
 
 // creationStreamFixture serves one Session through both creation paths: the
-// execution upsert (CreateSessionStream) and recorded-intent retry lookup. Like
+// execution upsert (CreateSession) and recorded-intent retry lookup. Like
 // the Store, it commits events with ordered sequences together with the state
 // they describe.
 type creationStreamFixture struct {
@@ -102,13 +102,12 @@ func (f *creationStreamFixture) FindSessionCreation(context.Context, string, str
 }
 
 // AuditSessionOperation accepts the audit of a replayed creation.
-func (f *creationStreamFixture) AuditSessionOperation(context.Context, string, string, string) error {
+func (f *creationStreamFixture) AuditSessionOperation(context.Context, sessions.AuditSessionOperationCommand) error {
 	return nil
 }
 
-// CreateSessionStream is the Worker's streamed admission: it returns the
-// prepared creation.
-func (f *creationStreamFixture) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
+// CreateSession is the Worker's admission: it returns the prepared creation.
+func (f *creationStreamFixture) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	return f.creation, nil
 }
 
@@ -146,12 +145,11 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: tenant,
 	}).ResolveAPIKey
-	fakes.sessions.getSession, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.AuditSessionOperation
+	fakes.sessionsReader.getSession, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.AuditSessionOperation
 	fakes.sessionCreation.findSessionCreation = fixture.FindSessionCreation
 	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = fixture.SessionEventCursor, fixture.SessionStreamSnapshot, fixture.ListSessionEvents
 	fakes.modelProviders.resolve = noDeploymentModelProvider
-	deps.Execution = fakes.execution()
-	fakes.sessionAdmission.createSessionStream = fixture.CreateSessionStream
+	fakes.sessionAdmission.createSession = fixture.CreateSession
 	handler := newTestHandler(t, deps)
 	h := &creationStreamHarness{t: t, fixture: fixture}
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,7 @@ import (
 // intentionally exhaustive; new fields stay unspecified until decided here.
 func Profile(change func(*engine.Profile)) engine.Profile {
 	p := engine.Profile{
+		RetainedNativeHistory:          proto.CapabilityUnsupported,
 		ProgrammaticToolCallingDisable: proto.CapabilityUnsupported,
 		WebSearchControl:               proto.CapabilityUnsupported,
 		TextVerbosity:                  proto.CapabilityUnsupported,

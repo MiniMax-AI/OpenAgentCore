@@ -16,6 +16,7 @@ var ErrInvalidInput = errors.New("invalid engine configuration")
 
 // Profile records qualified public behavior, independently of Runtime advertisements.
 type Profile struct {
+	RetainedNativeHistory                      proto.CapabilitySupport
 	ProgrammaticToolCallingDisable             proto.CapabilitySupport
 	Placements                                 []string
 	MCPOrigins                                 []string

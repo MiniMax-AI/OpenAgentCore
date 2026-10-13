@@ -108,7 +108,6 @@ export const keys = {
     loading: "Reading the API address",
     failed: "The API address couldn't be read.",
     localOnly: "For access from other machines, set OAC_PUBLIC_URL to an address they can reach.",
-    noAddress: "Core has no public API address yet. Set OAC_PUBLIC_URL.",
     model: "Replace {{model}} with a model name your model provider serves, or remove the model field to use this deployment's default model configuration. Running an Agent needs a model provider: pass one in each request, save one on the Agent, or rely on the deployment default. Self-hosted Sessions never use the deployment default.",
     keyPlaceholder: "<project API key>",
     projectKey: "Set OPENAI_API_KEY to an API key issued for this project. A key is shown only once, when it is issued; if it's lost, issue a new one.",
@@ -173,12 +172,11 @@ export const keys = {
   },
   operations: {
     title: "Write operations",
-    help: "Every successful write in this project, with the key that made it, recorded by Core, newest first. Reads are not recorded; request bodies and secrets are never stored. Unknown: an administrator copy or no recorded key.",
+    help: "Every successful write in this project, with the key that made it, recorded by Core, newest first. Reads are not recorded; request bodies and secrets are never stored.",
     filterLabel: "Filter write operations",
     allTypes: "All resources",
     allKeys: "All keys",
     revokedKeyOption: "{{name}} · revoked",
-    unknownKey: "Unknown",
     columns: {
       time: "Time",
       action: "Action",

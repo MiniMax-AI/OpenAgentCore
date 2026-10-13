@@ -151,3 +151,28 @@ func (q *Queries) ListSourceFiles(ctx context.Context, arg ListSourceFilesParams
 	}
 	return items, nil
 }
+
+const lockSourceFile = `-- name: LockSourceFile :one
+SELECT id, tenant_id, filename, purpose, body_oid, size_bytes, sha256, created_at FROM source_files WHERE tenant_id = $1 AND id = $2 FOR SHARE
+`
+
+type LockSourceFileParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) LockSourceFile(ctx context.Context, arg LockSourceFileParams) (SourceFile, error) {
+	row := q.db.QueryRow(ctx, lockSourceFile, arg.TenantID, arg.ID)
+	var i SourceFile
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Filename,
+		&i.Purpose,
+		&i.BodyOid,
+		&i.SizeBytes,
+		&i.Sha256,
+		&i.CreatedAt,
+	)
+	return i, err
+}

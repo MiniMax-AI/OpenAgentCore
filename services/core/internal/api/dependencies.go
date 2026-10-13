@@ -28,6 +28,7 @@ type Dependencies struct {
 	// InstallationBindings counts what is bound to the current public URL.
 	Installation         Installation
 	InstallationBindings InstallationBindings
+	WorkspaceStorage     WorkspaceStorage
 
 	Projects             Projects
 	ProjectsReader       ProjectsReader
@@ -43,6 +44,7 @@ type Dependencies struct {
 	Agents               Agents
 	AgentsReader         AgentsReader
 	Sessions             Sessions
+	SessionsReader       SessionsReader
 	SessionCreation      SessionCreation
 	SessionEvents        SessionEvents
 	Turns                Turns
@@ -63,14 +65,8 @@ type Dependencies struct {
 
 	EnvironmentTemplatesReader EnvironmentTemplatesReader
 
-	// Execution is nil when this Core runs without a Runtime gateway, and so
-	// without an execution Worker. Work that needs one then answers 503
-	// execution_unavailable.
-	Execution *Execution
-	// Sandboxes is nil when this Core has no managed sandbox installation. The
-	// sandbox node and manager routes are then absent, and openai_hosted
-	// Sessions answer 503 execution_unavailable. It requires Execution.
-	Sandboxes *Sandboxes
+	Execution Execution
+	Sandboxes Sandboxes
 }
 
 // Execution is the execution Worker's surface. Every field is required unless
@@ -100,7 +96,8 @@ type Sandboxes struct {
 
 type Handler struct {
 	Dependencies
-	harnesses map[string]bool
+	harnesses   map[string]bool
+	requestLogs *requestLogs
 }
 
 // NewHandler builds the HTTP handler from complete dependencies.
@@ -125,6 +122,7 @@ func (d Dependencies) validate() error {
 	}
 	if err := required(
 		field{"InstallationBindings", d.InstallationBindings},
+		field{"WorkspaceStorage", d.WorkspaceStorage},
 		field{"Projects", d.Projects}, field{"ProjectsReader", d.ProjectsReader},
 		field{"Vaults", d.Vaults}, field{"VaultsReader", d.VaultsReader},
 		field{"ModelProviders", d.ModelProviders}, field{"ModelProvidersReader", d.ModelProvidersReader},
@@ -132,7 +130,7 @@ func (d Dependencies) validate() error {
 		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"EnvironmentTemplatesReader", d.EnvironmentTemplatesReader},
 		field{"Skills", d.Skills}, field{"SkillsReader", d.SkillsReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
-		field{"Sessions", d.Sessions},
+		field{"Sessions", d.Sessions}, field{"SessionsReader", d.SessionsReader},
 		field{"SessionCreation", d.SessionCreation},
 		field{"SessionEvents", d.SessionEvents},
 		field{"Turns", d.Turns},
@@ -146,35 +144,24 @@ func (d Dependencies) validate() error {
 	); err != nil {
 		return err
 	}
-	if e := d.Execution; e != nil {
-		if e.ExecutorURL == "" {
-			return errors.New("api: Execution.ExecutorURL is required")
-		}
-		if e.NativeInstaller != nil && e.NativeInstaller.Version == "" {
-			return errors.New("api: Execution.NativeInstaller.Version is required")
-		}
-		if err := required(
-			field{"Execution.SessionAdmission", e.SessionAdmission},
-			field{"Execution.InputAdmission", e.InputAdmission},
-			field{"Execution.SessionArchive", e.SessionArchive},
-			field{"Execution.Workspaces", e.Workspaces},
-		); err != nil {
-			return err
-		}
+	e, s := d.Execution, d.Sandboxes
+	if e.ExecutorURL == "" {
+		return errors.New("api: Execution.ExecutorURL is required")
 	}
-	if s := d.Sandboxes; s != nil {
-		if d.Execution == nil {
-			return errors.New("api: Sandboxes requires Execution")
-		}
-		return required(
-			field{"Sandboxes.Deployment", s.Deployment},
-			field{"Sandboxes.NodeAllocations", s.NodeAllocations},
-			field{"Sandboxes.DeploymentChanges", s.DeploymentChanges},
-			field{"Sandboxes.DeploymentReset", s.DeploymentReset},
-			field{"Sandboxes.ConfigurationDiscovery", s.ConfigurationDiscovery},
-		)
+	if e.NativeInstaller != nil && (e.NativeInstaller.Version == "" || e.NativeInstaller.Base == "") {
+		return errors.New("api: Execution.NativeInstaller.Version and Base are required")
 	}
-	return nil
+	return required(
+		field{"Execution.SessionAdmission", e.SessionAdmission},
+		field{"Execution.InputAdmission", e.InputAdmission},
+		field{"Execution.SessionArchive", e.SessionArchive},
+		field{"Execution.Workspaces", e.Workspaces},
+		field{"Sandboxes.Deployment", s.Deployment},
+		field{"Sandboxes.NodeAllocations", s.NodeAllocations},
+		field{"Sandboxes.DeploymentChanges", s.DeploymentChanges},
+		field{"Sandboxes.DeploymentReset", s.DeploymentReset},
+		field{"Sandboxes.ConfigurationDiscovery", s.ConfigurationDiscovery},
+	)
 }
 
 type field struct {
@@ -189,13 +176,4 @@ func required(fields ...field) error {
 		}
 	}
 	return nil
-}
-
-// executorURL is the daemon URL self-hosted Sessions report, or empty when
-// this Core cannot execute.
-func (h *Handler) executorURL() string {
-	if h.Execution == nil {
-		return ""
-	}
-	return h.Execution.ExecutorURL
 }

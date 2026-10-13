@@ -1,11 +1,6 @@
 import { exactFields, isRecord } from "./response-projection";
+import { environmentPackagesResourceFields, environmentResourceOpenaiHostedFields, networkPolicyResourceFields } from "./generated/public-api";
 import type { OpenAIHostedAgentEnvironment } from "./types";
-
-const hostedSessionEnvironmentFields = new Set([
-  "type", "id", "capability_directories", "network", "packages", "files", "plugins", "skills",
-]);
-const environmentNetworkFields = new Set(["access", "allowed_domains"]);
-const environmentPackagesFields = new Set(["npm", "python", "system"]);
 
 function strings(list: unknown): list is string[] {
   return Array.isArray(list) && list.every((entry) => typeof entry === "string");
@@ -27,14 +22,14 @@ export function projectOpenAIHostedSessionEnvironment(value: unknown): OpenAIHos
   const network = value.network;
   const packages = value.packages;
   if (
-    !exactFields(value, hostedSessionEnvironmentFields) ||
+    !exactFields(value, environmentResourceOpenaiHostedFields) ||
     typeof value.id !== "string" || value.id.trim() === "" ||
     !strings(value.capability_directories) ||
-    !isRecord(network) || !exactFields(network, environmentNetworkFields) ||
+    !isRecord(network) || !exactFields(network, networkPolicyResourceFields) ||
     !strings(network.allowed_domains) ||
     !(((network.access === "enabled" || network.access === "disabled") && network.allowed_domains.length === 0) ||
       (network.access === "restricted" && network.allowed_domains.length > 0)) ||
-    !isRecord(packages) || !exactFields(packages, environmentPackagesFields) ||
+    !isRecord(packages) || !exactFields(packages, environmentPackagesResourceFields) ||
     !strings(packages.npm) || !strings(packages.python) || !strings(packages.system) ||
     !records(value.files) || !records(value.plugins) || !records(value.skills)
   ) return null;

@@ -1,14 +1,14 @@
 package daemonize
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"io"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
 // TailOptions configures Tail.
@@ -147,27 +147,6 @@ func EnsureLogFile(path string) error {
 		return fmt.Errorf("daemonize.EnsureLogFile: %w", err)
 	}
 	return f.Close()
-}
-
-// MustWriteLine appends one line to path with 0o600 mode, adding a
-// trailing newline if missing. Returns errors despite the name —
-// kept short because it's used in startup hot paths.
-func MustWriteLine(path string, line string) error {
-	f, err := openPrivateLog(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	bw := bufio.NewWriter(f)
-	if _, err := bw.WriteString(line); err != nil {
-		return err
-	}
-	if len(line) == 0 || line[len(line)-1] != '\n' {
-		if _, err := bw.WriteString("\n"); err != nil {
-			return err
-		}
-	}
-	return bw.Flush()
 }
 
 func openPrivateLog(path string) (*os.File, error) {

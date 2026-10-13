@@ -12,7 +12,7 @@ import (
 const invalidNameMessage = "The name exceeds its length limit or contains invalid characters."
 
 // writeCoreValidationError is deliberately gated by the router marker. Shared
-// store validators must retain the public and machine routes' existing errors.
+// domain validators must retain the public and machine routes' existing errors.
 func writeCoreValidationError(w http.ResponseWriter, err error) bool {
 	if !isCoreErrorWriter(w) {
 		return false

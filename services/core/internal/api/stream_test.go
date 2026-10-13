@@ -61,7 +61,7 @@ func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor
 
 // serve answers Session reads and the event stream from f.
 func (f *streamFixture) serve(fakes *testFakes) {
-	fakes.sessions.getSession = f.GetSession
+	fakes.sessionsReader.getSession = f.GetSession
 	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = f.SessionEventCursor, f.SessionStreamSnapshot, f.ListSessionEvents
 }
 

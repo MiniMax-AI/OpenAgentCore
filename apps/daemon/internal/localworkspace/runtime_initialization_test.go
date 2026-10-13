@@ -74,7 +74,7 @@ func TestRuntimeInitializationPackageTargets(t *testing.T) {
 	}
 	packages, _ := PackageDirectory()
 	for _, action := range []string{"npm", "python"} {
-		if err = b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: action, Network: "enabled", Packages: []string{"name with spaces", "second"}}); err != nil {
+		if err = b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: action, Packages: []string{"name with spaces", "second"}}); err != nil {
 			t.Fatal(action, err)
 		}
 		raw, err := os.ReadFile(receipt)
@@ -242,7 +242,7 @@ func TestRuntimeInitializationSetupUsesBashAndPhysicalWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(b.workspace, "proof.sh"), []byte("printf skill-proof"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "setup", Network: "enabled", CWD: "/workspace/sub", Command: `. ../proof.sh > proof; printf '%s' "$VALUE" > value`})
+	err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "setup", CWD: "/workspace/sub", Command: `. ../proof.sh > proof; printf '%s' "$VALUE" > value`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,13 +261,13 @@ func TestRuntimeInitializationMissingDependenciesAndInvalidRequests(t *testing.T
 	if err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "configure"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, input := range []proto.RuntimeInitialization{{Action: "setup", Network: "enabled", Command: "true"}, {Action: "npm", Network: "enabled", Packages: []string{"valid"}}, {Action: "python", Network: "enabled", Packages: []string{"valid"}}} {
+	for _, input := range []proto.RuntimeInitialization{{Action: "setup", Command: "true"}, {Action: "npm", Packages: []string{"valid"}}, {Action: "python", Packages: []string{"valid"}}} {
 		var failed *InitializationFailure
 		if err := b.initializeRuntime(t.Context(), input); !errors.As(err, &failed) || !strings.Contains(err.Error(), "requires") {
 			t.Fatal("missing dependency was not explicit", input.Action, err)
 		}
 	}
-	for _, input := range []proto.RuntimeInitialization{{Action: "system"}, {Action: "setup", Network: "enabled", Command: "true", CWD: "/workspace/../outside"}, {Action: "npm", Network: "enabled", Packages: []string{"--unsafe"}}} {
+	for _, input := range []proto.RuntimeInitialization{{Action: "system"}, {Action: "setup", Command: "true", CWD: "/workspace/../outside"}, {Action: "npm", Packages: []string{"--unsafe"}}} {
 		if !errors.Is(b.initializeRuntime(t.Context(), input), agentcapabilities.ErrInvalid) {
 			t.Fatal("invalid request accepted", input.Action)
 		}
@@ -348,7 +348,7 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(nil)
-	input := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
+	input := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
 		Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/file"}, SHA256: hex.EncodeToString(digest[:])}
 	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted file", err)
@@ -359,5 +359,27 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 	input.Initialization = &proto.RuntimeInitialization{Action: "configure", Env: map[string]string{}}
 	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted initialize", err)
+	}
+}
+
+func TestRuntimeInitializationDeadlineStopsDescendants(t *testing.T) {
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := t.TempDir()
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	env := append(initializationEnvironment(nil), "OAC_INITIALIZATION_FIXTURE=parent", "OAC_INITIALIZATION_FIXTURE_DIR="+directory)
+	err = runInitializationProcess(ctx, binary, []string{"-test.run=^TestRuntimeInitializationChild$"}, directory, env)
+	if !errors.Is(err, ErrInitializationUnconfirmed) || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		t.Fatal("deadline outcome", err, ctx.Err())
+	}
+	if _, err := os.Stat(filepath.Join(directory, "started")); err != nil {
+		t.Fatal("fixture did not start", err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(directory, "late")); !os.IsNotExist(err) {
+		t.Fatal("descendant survived deadline")
 	}
 }

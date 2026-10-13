@@ -22,19 +22,17 @@ func writeDeploymentError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
 	case errors.Is(err, deployment.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.")
-	case errors.Is(err, deployment.ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)
 	}
 }
 
-// writeSandboxError reports a sandbox deployment, node or Sandbox Provider
-// error and returns false for any other error. Session and Environment
-// admission report the same errors through writeStoreError.
+// writeSandboxError reports a sandbox deployment, node, placement or Sandbox
+// Provider error and returns false for any other error. Session operations that meet
+// the deployment report the same errors through writeOperationError.
 func writeSandboxError(w http.ResponseWriter, err error) bool {
 	// Adapter discovery and persisted configuration share the same public error.
 	var validation *sandbox.ValidationError
@@ -86,6 +84,10 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "sandbox_not_configured", "The sandbox deployment is not configured.")
 	case errors.As(err, &deploymentConfiguration):
 		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", deploymentConfiguration.Message)
+	case errors.Is(err, placement.ErrResetAdmission):
+		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
+	case errors.Is(err, placement.ErrAdmissionClosed):
+		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
 	case errors.Is(err, placement.ErrPublicURLUnreachable):
 		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
 	case errors.Is(err, deployment.ErrNodeAddressMismatch):
@@ -100,12 +102,12 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusUnauthorized, "invalid_node_credential", "A valid sandbox node enrollment or node credential is required.")
 	case errors.Is(err, deployment.ErrNodeInUse):
 		writeError(w, http.StatusConflict, "runtime_node_in_use", "The sandbox node retains allocations, snapshots, reservations or pending cleanup.")
-	case errors.Is(err, deployment.ErrLocalNodeConfigured):
-		writeError(w, http.StatusConflict, "runtime_local_node_configured", "The local sandbox node is enabled in deployment configuration. Drain it with the previous release and remove its file-managed configuration before replacing it.")
 	case errors.Is(err, placement.ErrNodesPreparing):
 		writeError(w, http.StatusServiceUnavailable, "sandbox_nodes_preparing", "Sandbox nodes are preparing the requested Runtime.")
 	case errors.Is(err, placement.ErrNodeUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity.")
+	case errors.Is(err, deployment.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
 		return false
 	}

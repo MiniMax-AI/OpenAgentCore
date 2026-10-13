@@ -15,7 +15,7 @@ import (
 // testHandler serves, so any access fails the test.
 func forbidSessionAccess(_ *Dependencies, f *testFakes) {
 	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = nil, nil
-	f.sessions.getSession, f.sessions.listSessions = nil, nil
+	f.sessionsReader.getSession, f.sessionsReader.listSessions = nil, nil
 	f.modelProviders.resolve = nil
 }
 
@@ -28,7 +28,7 @@ func TestSessionAdmissionRejectsBeforeResourceOrExecutionAccess(t *testing.T) {
 				}
 				t.Run(fmt.Sprintf("%s/%s/stream=%t", environment, input, stream), func(t *testing.T) {
 					// Any resource access, including creation retry lookup, fails the test.
-					handler, _, _ := testHandler(t, forbidSessionAccess, func(d *Dependencies, f *testFakes) { d.Execution = f.execution() })
+					handler, _, _ := testHandler(t, forbidSessionAccess)
 					body := fmt.Sprintf(`{"agent":{"model":"example"},"environment":{"type":%q},"stream":%t%s}`, environment, stream, input)
 					for _, token := range []string{"test-api-key", "invalid"} {
 						request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))

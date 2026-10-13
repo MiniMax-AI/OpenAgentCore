@@ -182,7 +182,7 @@ func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (Initi
 
 	process, err := clirunner.Start(clirunner.StartOptions{
 		Parent: ctx, Binary: c.cfg.Binary, Args: args, Dir: c.cfg.Cwd, Env: c.cfg.Env,
-		NeedStdin: true, OwnProcessGroup: true, KillTimeout: 250 * time.Millisecond,
+		NeedStdin: true, KillTimeout: 250 * time.Millisecond,
 	})
 	if err != nil {
 		return InitializeResult{}, fmt.Errorf("codex rpc: spawn %q: %w", c.cfg.Binary, err)

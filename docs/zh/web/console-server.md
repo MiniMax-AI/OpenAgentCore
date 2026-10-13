@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: b0302f0cf27ccd116c4bbb9477d5853f4ae1bf6cea34c9a4e21af72d25656557
+source_hash: 2cc4b562301d95640d2b653ec522a5407a70a98e1f4e3c1fe89bd246ffd1199e
 ---
 
 控制台服务器（`services/web`、`oac-web` 进程）提供构建后的控制台，使用 Core 密钥认证管理员，并将已登录浏览器的 `/core/v1` 请求携带该密钥转发到 Core。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
@@ -44,7 +44,7 @@ flowchart LR
 
 除 `/healthz`、`/v1`、`/api/v1` 和 `/docs` 外，每个请求首先必须通过这些检查：
 
-1. **Host 与来源。** `Host` 请求头必须等于 `OAC_WEB_ORIGIN` 的主机。存在 `Origin` 时必须等于该来源，`Sec-Fetch-Site` 必须为 `same-origin` 或 `none`。写请求既无 `Origin` 又无 `Sec-Fetch-Site: same-origin` 时，需要同源 `Referer`。否则控制台返回 403。`/node-install/*` 仅检查主机和路径。
+1. **Host 与来源。** `Host` 请求头必须等于 `OAC_PUBLIC_URL` 的主机。存在 `Origin` 时必须等于该来源，`Sec-Fetch-Site` 必须为 `same-origin` 或 `none`。写请求既无 `Origin` 又无 `Sec-Fetch-Site: same-origin` 时，需要同源 `Referer`。否则控制台返回 403。`/node-install/*` 仅检查主机和路径。
 2. **安全请求。** 路径必须以 `/` 开头，不含 `%`、反斜杠、NUL、点路径段或空路径段。绝对形式请求目标、`CONNECT` 和 `TRACE` 返回 400。`Upgrade` 头返回 400，但 `/v1`、`/api/v1` 和 `/docs` 在这些检查之前就被转发。因此 `/core/v1` 请求无法离开该前缀。
 3. **登录。** 需要登录的路径在无有效会话 cookie 时返回 401。
 
@@ -77,7 +77,7 @@ flowchart LR
 管理员使用部署的 [Core 密钥](../getting-started/operations.md#core-key)登录。没有控制台账号、用户名或设置步骤，登录授予整个控制台访问权限。
 
 - 控制台以恒定时间比较提交密钥与配置密钥的 SHA-256 摘要，不记录或返回密钥。
-- 会话 cookie `core_console_session` 为 HttpOnly、`SameSite=Strict`，`OAC_WEB_ORIGIN` 为 HTTPS 时还设置 `Secure`。有效期 12 小时。
+- 会话 cookie `core_console_session` 为 HttpOnly、`SameSite=Strict`，`OAC_PUBLIC_URL` 为 HTTPS 时还设置 `Secure`。有效期 12 小时。
 - 会话仅存在控制台内存中，最多同时 64 个，先移除最旧的。重启控制台或轮换 Core 密钥会让所有用户退出登录。
 - 同时最多执行两次登录检查；额外尝试返回 429 和 `Retry-After: 1`。
 - 失败尝试共享每分钟 10 次预算；超出后，错误密钥返回 429 和 `Retry-After: 60`。正确密钥始终可以登录，因此控制台拒绝使用少于 32 字符的 Core 密钥启动。
@@ -100,7 +100,7 @@ flowchart LR
 
 ## 公开地址 {#public-address}
 
-控制台不配置域名，也不申请证书。运维人员的反向代理或托管平台终止 HTTPS 并把流量转到控制台，`OAC_PUBLIC_URL` 记录应用、节点和执行器使用的源地址。控制台只接受 `OAC_WEB_ORIGIN` 的主机，因此 DNS 重绑定不能访问它。
+控制台不配置域名，也不申请证书。运维人员的反向代理或托管平台终止 HTTPS 并把流量转到控制台，`OAC_PUBLIC_URL` 记录浏览器、应用、节点和执行器使用的源地址。控制台只接受该地址的主机，因此 DNS 重绑定不能访问它。
 
 ## 验证 {#verification}
 

@@ -4,14 +4,14 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // WithOAuthCredential holds the Credential's row lock, once loaded, until
@@ -64,7 +64,7 @@ func (t *oauthTx) ApplyOAuthReplacement(ctx context.Context, grant vaults.OAuthG
 	if err != nil {
 		return vaults.Credential{}, err
 	}
-	if err := auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, "update", "credential", updated.ID, updated.VaultID); err != nil {
+	if err := auditpg.RecordWriteAudit(ctx, t.q, t.tenantID, writeaudit.ActionUpdate, writeaudit.ResourceCredential, updated.ID, updated.VaultID); err != nil {
 		return vaults.Credential{}, translate(err)
 	}
 	return updated, nil

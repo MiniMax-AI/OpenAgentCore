@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 // Service reads the deployment and manages its nodes. It grants no execution
@@ -44,7 +45,7 @@ func (s *Service) View(ctx context.Context) (View, error) {
 // view reports the public URL as the deployment's read-only core_url.
 func (s *Service) view(snapshot Snapshot) (View, error) {
 	d := snapshot.Record
-	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: d.Mode, Rollout: snapshot.Rollout, Resources: snapshot.Resources}
+	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: sandbox.DeploymentMode(d.Mode), Rollout: snapshot.Rollout, Resources: snapshot.Resources}
 	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(d.Specification, &spec) == nil {
@@ -64,16 +65,12 @@ func (s *Service) view(snapshot Snapshot) (View, error) {
 		result.Configuration = configurationJSON(record.Public)
 		result.Metadata = configurationJSON(record.Metadata)
 		result.CredentialConfigured = d.CredentialStored
-		checkpoint, err := s.registry.SupportsCheckpoint(d.Provider)
-		if err != nil {
+		if result.Suspension, err = s.suspension(d.Provider, d.IdleSeconds); err != nil {
 			return View{}, err
-		}
-		if checkpoint {
-			result.Suspension = &Suspension{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 		}
 	}
 	if d.Reset != nil {
-		result.Reset = &Reset{Clear: d.Reset.Clear, RequestedAt: d.Reset.RequestedAt, DeadlineAt: d.Reset.DeadlineAt, ForcedAt: d.Reset.ForcedAt, Remaining: snapshot.Remaining}
+		result.Reset = &Reset{Clear: ResetMode(d.Reset.Clear), RequestedAt: d.Reset.RequestedAt, DeadlineAt: d.Reset.DeadlineAt, ForcedAt: d.Reset.ForcedAt, Remaining: snapshot.Remaining}
 	}
 	return result, nil
 }
@@ -88,10 +85,10 @@ func (s *Service) Setup(ctx context.Context) (Setup, error) {
 }
 
 func (s *Service) setup(d Record) (Setup, error) {
-	if !d.WebManaged {
+	if d.InstallationID == "" {
 		return Setup{}, ErrConflict
 	}
-	result := Setup{InstallationID: d.InstallationID, Provider: d.Provider, BackendFingerprint: d.BackendFingerprint, Generation: d.Generation, Mode: d.Mode, AdmissionPaused: d.AdmissionPaused}
+	result := Setup{InstallationID: d.InstallationID, Provider: d.Provider, BackendFingerprint: d.BackendFingerprint, Generation: d.Generation, Mode: d.Mode}
 	if err := json.Unmarshal(d.Specification, &result.Specification); err != nil {
 		return Setup{}, err
 	}
@@ -111,23 +108,23 @@ func (s *Service) setup(d Record) (Setup, error) {
 	if err != nil {
 		return Setup{}, ErrConflict
 	}
-	return s.describe(result, d.IdleSeconds, d.RetentionSeconds)
+	result, err = s.describe(result)
+	if result.Suspension != nil {
+		result.Suspension.IdleSeconds = d.IdleSeconds
+	}
+	return result, err
 }
 
 // describe adds the provider's declared operations, suspension policy and
 // credential use.
-func (s *Service) describe(setup Setup, idleSeconds, retentionSeconds int64) (Setup, error) {
+func (s *Service) describe(setup Setup) (Setup, error) {
 	adapter, err := s.registry.Lookup(setup.Provider)
 	if err != nil {
 		return Setup{}, err
 	}
 	setup.Operations = adapter.Operations()
-	checkpoint, err := s.registry.SupportsCheckpoint(setup.Provider)
-	if err != nil {
+	if setup.Suspension, err = s.suspension(setup.Provider, 300); err != nil {
 		return Setup{}, err
-	}
-	if checkpoint {
-		setup.Suspension = &Suspension{IdleSeconds: idleSeconds, RetentionSeconds: retentionSeconds}
 	}
 	setup.UsesCredential, err = s.registry.UsesCredential(setup.Provider)
 	if err != nil {
@@ -212,7 +209,7 @@ func (s *Service) GenerationPage(ctx context.Context, after int64) ([]Setup, err
 		if err != nil {
 			return nil, err
 		}
-		v.Mode, v.Operations = adapter.Mode, adapter.Operations()
+		v.Mode, v.Operations = string(adapter.Mode), adapter.Operations()
 		result = append(result, v)
 	}
 	return result, nil
@@ -253,8 +250,18 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 	if err := s.rules.CheckPublicOrigin(input.Provider); err != nil {
 		return Setup{}, err
 	}
-	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}
-	return s.describe(result, description.IdleSeconds, description.RetentionSeconds)
+	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: string(description.Mode), Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}
+	return s.describe(result)
+}
+
+// suspension returns Core's idle suspension policy for a provider that
+// declares checkpoint support, and nil for any other provider.
+func (s *Service) suspension(provider string, idleSeconds int64) (*Suspension, error) {
+	checkpoint, err := s.registry.SupportsCheckpoint(provider)
+	if err != nil || !checkpoint {
+		return nil, err
+	}
+	return &Suspension{IdleSeconds: idleSeconds, RetentionSeconds: 24 * 60 * 60}, nil
 }
 
 // validateSelection rejects a selection its provider cannot normalize.
@@ -283,4 +290,61 @@ func (s *Service) selectionEqual(d Record, input sandbox.Selection) (bool, error
 		return false, nil
 	}
 	return s.registry.Equal(input.Provider, previous.Configuration, normalized.Configuration)
+}
+
+// ValidateWorkspaceConfiguration qualifies a filesystem selection against the
+// stored generation without constructing a native Sandbox Provider.
+func (s *Service) ValidateWorkspaceConfiguration(ctx context.Context, declaration workspacefs.Declaration) error {
+	setup, err := s.Setup(ctx)
+	if err != nil {
+		return err
+	}
+	if setup.Provider == "" {
+		return nil
+	}
+	adapter, err := s.registry.Lookup(setup.Provider)
+	if err != nil {
+		return err
+	}
+	if adapter.Policy.Workspace == nil {
+		return workspacefs.ErrUnsupported
+	}
+	// An external deployment may change only quota semantics: workspaces keep
+	// their own admitted capacity, and new ones are validated against the
+	// selected declaration until the deployment's capacity request matches it.
+	if current := setup.Specification.Workspace; current != nil && (current.Attachment != declaration.Attachment || current.UserXAttr != declaration.UserXAttr) {
+		return workspacefs.ErrUnsupported
+	}
+	return workspacefs.ValidateCombination(*adapter.Policy.Workspace, declaration, 0)
+}
+
+// UpdateIdleSeconds changes only the shared idle policy, without a new generation.
+func (s *Service) UpdateIdleSeconds(ctx context.Context, seconds int64) (View, error) {
+	if seconds < 30 || seconds > 86400 {
+		return View{}, ErrInvalidInput
+	}
+	err := s.storage.WithNodes(ctx, func(tx NodeTx) error {
+		d, err := tx.LoadDeployment()
+		if err != nil {
+			return err
+		}
+		if d.Provider == "" {
+			return ErrNotConfigured
+		}
+		if d.Reset != nil {
+			return ErrResetInProgress
+		}
+		supported, err := s.registry.SupportsCheckpoint(d.Provider)
+		if err != nil {
+			return err
+		}
+		if !supported {
+			return ErrInvalidInput
+		}
+		return tx.SaveIdleSeconds(seconds)
+	})
+	if err != nil {
+		return View{}, err
+	}
+	return s.View(ctx)
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, type CoreProjectReader, type Skill, type SkillList, type SkillVersion, type SkillVersionList } from "@oac/agents-client";
+import { AgentCoreError, type Skill, type SkillList, type SkillVersion, type SkillVersionList } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import i18n from "../../i18n";
 import {
   downloadSkillArchive,
@@ -94,7 +95,7 @@ describe("Skill list helpers", () => {
     const core = {
       downloadSkill: vi.fn(async () => content),
       downloadSkillVersion: vi.fn(async () => content),
-    } satisfies Pick<CoreProjectReader, "downloadSkill" | "downloadSkillVersion">;
+    } satisfies Pick<ProjectClient, "downloadSkill" | "downloadSkillVersion">;
     const save = vi.fn();
     const skill = skillFixture({ default_version: "2", latest_version: "3" });
 

@@ -186,9 +186,9 @@ func TestRecvDeliversServerSentFrames(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// Server pushes a prompt_request down to the daemon.
+	// Server pushes a prompt_cancel down to the daemon.
 	serverConn := <-gw.connCh
-	pushed, _ := proto.NewEnvelope("prompt_request", "run_abc", map[string]string{"prompt": "hi"})
+	pushed, _ := proto.NewEnvelope(proto.TypePromptCancel, "run_abc", proto.PromptCancelPayload{DeliveryID: "cancel"})
 	raw, _ := json.Marshal(pushed)
 	if err := serverConn.WriteMessage(websocket.TextMessage, raw); err != nil {
 		t.Fatalf("server write: %v", err)
@@ -196,8 +196,8 @@ func TestRecvDeliversServerSentFrames(t *testing.T) {
 
 	select {
 	case env := <-conn.Recv():
-		if env.Type != "prompt_request" || env.ID != "run_abc" {
-			t.Errorf("received %+v, want prompt_request/run_abc", env)
+		if env.Type != proto.TypePromptCancel || env.ID != "run_abc" {
+			t.Errorf("received %+v, want prompt_cancel/run_abc", env)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("never received the server-pushed frame")

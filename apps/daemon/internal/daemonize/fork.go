@@ -42,10 +42,6 @@ type ReExecOptions struct {
 	// child identity here before returning; existing files are replaced
 	// atomically.
 	PIDPath string
-
-	// ExtraEnv is appended to the child's environment in addition to
-	// parent environ + BackgroundSentinelEnv.
-	ExtraEnv []string
 }
 
 // Spawn re-execs the current binary in the background. argv is the
@@ -89,7 +85,6 @@ func Spawn(argv []string, opts ReExecOptions) (int, error) {
 
 	env := append([]string(nil), os.Environ()...)
 	env = append(env, BackgroundSentinelEnv+"=1")
-	env = append(env, opts.ExtraEnv...)
 
 	cmd := exec.Command(exe, argv[1:]...)
 	cmd.Env = env

@@ -18,71 +18,47 @@ type Turns interface {
 	ListTurns(context.Context, string, string, string, int, bool) (sessions.TurnPage, error)
 }
 
-// @Summary Retrieve an execution Turn
-// @Description Returns a root Turn of this Session. A Subagent Turn ID returns the same not found error as a missing Turn; read it through the Subagent Turn routes.
-// @Tags Turns
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param turn_id path string true "Turn ID"
-// @Success 200 {object} v1.Turn
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
 	turn, err := h.Turns.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
-	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response, err := turnResponse(session, turn)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
 }
 
-// @Summary List execution Turns
-// @Description Returns the Session's root Turns in creation order; Subagent Turns are listed through the Subagent Turn routes. The cursor belongs to the same Session and tenant; any other after value, including a malformed one or a Subagent Turn ID, returns not found. Usage contains the latest recorded complete token breakdown; missing measurements remain null.
-// @Tags Turns
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param after query string false "Last Turn ID from the previous page"
-// @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
-// @Success 200 {object} v1.TurnList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/turns [get]
 func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	options, ok := readPage(w, r)
 	if !ok {
 		return
 	}
 	sessionID := chi.URLParam(r, "session_id")
-	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	page, err := h.Turns.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response := v1.TurnList{Data: make([]v1.Turn, 0, len(page.Turns)), HasMore: page.NextCursor != ""}
 	for _, turn := range page.Turns {
 		item, err := turnResponse(session, turn)
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 			return
 		}
 		response.Data = append(response.Data, item)

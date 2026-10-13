@@ -7,8 +7,6 @@ package sqlc
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const countAddressBindings = `-- name: CountAddressBindings :one
@@ -36,10 +34,13 @@ func (q *Queries) CountAddressBindings(ctx context.Context, publicUrl string) (C
 const countRuntimeDeploymentResources = `-- name: CountRuntimeDeploymentResources :one
 SELECT
 (SELECT count(*) FROM runtime_allocations WHERE state <> 'released')::bigint AS allocations,
-(SELECT count(*) FROM environments e JOIN sessions s ON s.id = e.session_id
- WHERE s.deleted_at IS NULL AND e.status = 'pending'
+((SELECT count(*) FROM environments e JOIN sessions s ON s.id = e.session_id
+ WHERE s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+ AND ((e.status = 'pending' AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))
+      OR EXISTS (SELECT 1 FROM runtime_placements p WHERE p.environment_id = e.id AND p.released_at IS NULL))
  AND s.configuration->'environment'->>'type' = 'openai_hosted'
- AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id))::bigint AS pending
+ AND NOT EXISTS (SELECT 1 FROM runtime_allocations a WHERE a.environment_id = e.id AND a.state <> 'released'))::bigint
+ + (SELECT count(*) FROM runtime_reset_retained_environments)::bigint)::bigint AS pending
 `
 
 type CountRuntimeDeploymentResourcesRow struct {
@@ -55,7 +56,7 @@ func (q *Queries) CountRuntimeDeploymentResources(ctx context.Context) (CountRun
 }
 
 const lockRuntimeDeployment = `-- name: LockRuntimeDeployment :one
-SELECT singleton, installation_id, backend_fingerprint, admission_paused, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, idle_seconds, retention_seconds, generation, mode, provider_credential, specification, reset_clear, reset_requested_at, reset_deadline_at, reset_forced_at, reset_audit, provider_config, provider_metadata FROM runtime_deployment WHERE singleton = true FOR UPDATE
+SELECT singleton, installation_id, backend_fingerprint, updated_at, provider_kind, owner_epoch, generation, mode, provider_credential, specification, reset_clear, reset_requested_at, reset_deadline_at, reset_forced_at, reset_audit, provider_config, provider_metadata, idle_seconds FROM runtime_deployment WHERE singleton = true FOR UPDATE
 `
 
 func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment, error) {
@@ -65,14 +66,9 @@ func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment,
 		&i.Singleton,
 		&i.InstallationID,
 		&i.BackendFingerprint,
-		&i.AdmissionPaused,
 		&i.UpdatedAt,
 		&i.ProviderKind,
-		&i.LocalNodeID,
 		&i.OwnerEpoch,
-		&i.WebManaged,
-		&i.IdleSeconds,
-		&i.RetentionSeconds,
 		&i.Generation,
 		&i.Mode,
 		&i.ProviderCredential,
@@ -84,22 +80,16 @@ func (q *Queries) LockRuntimeDeployment(ctx context.Context) (RuntimeDeployment,
 		&i.ResetAudit,
 		&i.ProviderConfig,
 		&i.ProviderMetadata,
+		&i.IdleSeconds,
 	)
 	return i, err
 }
 
-const setRuntimeDeployment = `-- name: SetRuntimeDeployment :exec
-UPDATE runtime_deployment SET installation_id = $1, backend_fingerprint = $2,
-admission_paused = $3, updated_at = clock_timestamp() WHERE singleton = true
+const updateSandboxIdleSeconds = `-- name: UpdateSandboxIdleSeconds :exec
+UPDATE runtime_deployment SET idle_seconds = $1 WHERE singleton = true
 `
 
-type SetRuntimeDeploymentParams struct {
-	InstallationID     pgtype.UUID `json:"installation_id"`
-	BackendFingerprint string      `json:"backend_fingerprint"`
-	AdmissionPaused    bool        `json:"admission_paused"`
-}
-
-func (q *Queries) SetRuntimeDeployment(ctx context.Context, arg SetRuntimeDeploymentParams) error {
-	_, err := q.db.Exec(ctx, setRuntimeDeployment, arg.InstallationID, arg.BackendFingerprint, arg.AdmissionPaused)
+func (q *Queries) UpdateSandboxIdleSeconds(ctx context.Context, idleSeconds int64) error {
+	_, err := q.db.Exec(ctx, updateSandboxIdleSeconds, idleSeconds)
 	return err
 }

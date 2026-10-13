@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 5e0b9ab1938ccd0ee7b22b1482a365bd54285c8c09fc4cb1ca172e34ab122ce2
+source_hash: eacb0d566f9d787f393c1d462351023a1ca6fe97ffb32773c8f23139833f5762
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -85,7 +85,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 }
 ```
 
-- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据、查询或片段的绝对 HTTP 或 HTTPS URL。非空 `headers` 和 `request_metadata` 被拒绝。
+- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据、查询或片段的绝对 HTTP 或 HTTPS URL。非空 `headers`、`request_metadata` 和内联 `authorization` 被拒绝。
 - [公开 MCP 连接来源](environments.md#public-mcp-connection-origin)定义来源默认值、部署位置和凭据权限；[Harness 能力](harness-capabilities.md#tools)定义各 Harness 支持范围。
 - 省略或 null 的 `allowed_tools` 允许所有服务器工具；`[]` 不允许任何工具。
 - `required: true` 使原生线程创建和冷恢复等待服务器初始化；失败会停止执行，不替换保留历史。它要求 Runtime 的 `mcp_http_required` 能力。等待期间公开工作可被接受或排队。

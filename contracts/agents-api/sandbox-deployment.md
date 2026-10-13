@@ -2,9 +2,15 @@
 title: "Sandbox deployment"
 ---
 
-The sandbox deployment selects the Sandbox Provider, the per-sandbox resources and the immutable Runtime release for Core-managed `openai_hosted` execution. PostgreSQL holds one active selection per installation; Web and the Core API write the same configuration. A node's files hold an installed copy of it plus host-specific paths and cannot override its resources or Runtime. The selection is independent of the Harness, and a deployment can stay unconfigured, with no nodes and no hosted admission.
+The sandbox deployment selects the Sandbox Provider, the per-sandbox resources and the immutable Runtime release for Core-managed `openai_hosted` execution. PostgreSQL holds one active selection per installation; Web and the Core API write the same configuration. A node's files hold an installed copy of it plus host-specific paths and cannot override its resources or Runtime. The selection is independent of the Harness. A deployment can stay unconfigured, with no nodes; it then refuses hosted admission.
 
 This contract owns the Core API routes below and their semantics. The [nodes guide](../../docs/getting-started/nodes.md) owns the operator workflow, the [machine connection API](./machine-api.md#node-routes) the routes nodes call, and the [sandbox node protocol](./node-generation-protocol.md) the node connection.
+
+## Suspension policy
+
+`PATCH /core/v1/sandbox/deployment` accepts `{"idle_seconds": 300}`. `idle_seconds` is a required integer from 30 to 86400 seconds, defaulting to 300, stored in Core's database. Only configured Providers declaring checkpoint support accept this change; unconfigured, unsupported or resetting deployments reject it. Success returns the deployment view with the saved `suspension.idle_seconds`.
+
+Changes apply to existing and new running allocations on the next lifecycle pass, without a Core restart, generation change or node rollout. Suspension already in progress is not cancelled; existing snapshots and the 24-hour retention period are unchanged. [Capacity-pressure reclamation](../../docs/sandbox-provider.md#suspension) can still suspend after 15 seconds of inactivity. Web manages this deployment-wide policy in **Settings** → **Sandbox and scheduling** → **Capacity and suspension**. The adjacent **Sandbox nodes** section owns per-node capacity editing; the policy belongs to the deployment and capacity limits remain node-owned.
 
 ## Routes
 
@@ -13,6 +19,7 @@ Every route requires the Core key. [Web's console server](../../docs/web/console
 | Route | Effect |
 | --- | --- |
 | `GET /core/v1/sandbox/deployment` | Read the safe active configuration, rollout, reset and resource counts |
+| `PATCH /core/v1/sandbox/deployment` | Update deployment-wide idle suspension without changing the configuration generation |
 | `POST /core/v1/sandbox/deployment` | Select the initial provider, resources and Runtime |
 | `PUT /core/v1/sandbox/deployment` | Change the same provider's target online |
 | `POST /core/v1/sandbox/deployment/reset` | Start or escalate a durable clear of hosted resources |
@@ -48,13 +55,17 @@ The request has no Core address. Core derives the deployment's `core_url` from t
 | `cpus` | Integer, 1 through 255 |
 | `memory_mib` | Integer, 512 through 1048576 MiB |
 | `root_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
-| `environment_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
+| `environment_disk_mib` | microsandbox owned disk: at least 1024 MiB; external filesystem: each new workspace's admitted capacity, where zero requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
 
 These limits describe each sandbox. A node's `max_active` and `max_retained` are separate reservation limits, and host measurements never permit exceeding either. Native providers may reject values that pass these bounds.
 
 Docker applies the CPU and memory limits and checks the running container's limits and exact image; it has no hard root or workspace disk quota. E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. Neither provider accepts a disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
 
 microsandbox configures the CPUs, memory, a managed root disk and a separate owned disk at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
+
+The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. Missing `workspace` preserves owned disk mode, including its existing disk bounds. Create and Resume must provide a binding exactly when the frozen generation selects external storage.
+
+To enable external storage for an existing owned deployment, select the filesystem configuration first, then update the sandbox deployment with compatible resources (`environment_disk_mib: 0` for a filesystem without quotas). Selecting the filesystem does not alter existing generations or allocations. The next sandbox update derives the external receipt; old owned allocations keep their owned disks. A filesystem selection must support the provider's declared requirements. An already external deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
 
 ### Runtime release
 
@@ -86,11 +97,11 @@ For E2B, post `{"configuration": {"api_url": "…", "domain": "…"}, "credentia
 GET and successful writes return `installation_id`, `provider`, `core_url` (read-only: the installation public URL, present even before configuration), `mode`, `generation`, `owner_epoch`, `reset`, `rollout`, `suspension`, `resources` and `credential_configured`. A configured deployment also returns `specification`, `specification_digest`, `configuration` and `metadata`: the adapter's public projection of its selectors and of the observations it recorded, never raw stored values or secrets. E2B returns `configuration.template`, `configuration.api_url`, `configuration.domain` and, once recorded, `metadata.template_build`. Docker and microsandbox return empty `configuration` and `metadata` objects and `credential_configured: false`; an unconfigured deployment has neither object.
 
 - `metadata.template_build` is `{status, resources: {cpus, memory_mib, root_disk_mib}}`: the build as Core read it through the pinned SDK when the selection was saved. GET never calls E2B, so it stays cheap during an E2B outage. Validation admits only a `ready` build whose CPU count and memory equal the selected values; `root_disk_mib` is the build's native disk size, which Core does not enforce. Unknown values are null, `metadata: {}` means no observation was recorded, and an identical PUT without a credential does not refresh it.
-- `suspension` is `{idle_seconds, retention_seconds}` for microsandbox, the only provider Core suspends (currently 300 and 86400); Docker, E2B and unconfigured deployments return null.
+- `suspension` is `{idle_seconds, retention_seconds}`, Core's [suspension policy](../../docs/sandbox-provider.md#suspension), when the selected Provider declares checkpoint support; any other deployment, including an unconfigured one, returns null.
 - Request `resources` and response `specification.resources` are per-sandbox limits. Response `resources.allocations` and `resources.pending` count unreleased allocations and pending hosted Environments without an allocation.
 - An unconfigured deployment has an empty provider and no specification. Docker and microsandbox use `mode: nodes`; E2B uses `mode: direct`, without a synthetic node.
 - `generation` identifies the saved selection. `owner_epoch` fences the execution owner and node connections; it does not replace `expected_generation`.
-- `specification_digest` is the server's identity of the provider, limits and Runtime release; enrollment echoes it unchanged.
+- `specification_digest` is the server's identity of the provider, limits, Runtime release and derived workspace capability receipt; enrollment echoes it unchanged.
 
 The typed `SandboxAdminClient` in `packages/agents-client` checks the deployment, node list, node detail and allocation responses against exactly these shapes. An unknown or missing member, or a wrong type, rejects the whole response with a 502 `invalid_admin_response` error. A node's `diagnostic` is absent or a code, never empty, and the client reads an unknown code as `provider_unavailable`.
 
@@ -118,7 +129,7 @@ No provider text or credential is returned. The write and its `change` or `repla
 
 ## Generation ownership and rollout
 
-`runtime_deployment` holds the current specification. Superseded rows keep only immutable specification, build and endpoint metadata, never another E2B key. An E2B allocation binds its generation at reservation; a node placement binds at Session admission, and its allocation copies that generation, even across later updates. Inspection, renewal, commands and cleanup use the allocation's original specification and endpoint with the current key; a missing generation never falls back to the current specification. Released generation identifiers stay reserved.
+`runtime_deployment` holds the current specification. Superseded rows keep only immutable specification, build and endpoint metadata, never another E2B key. An E2B allocation binds its generation at reservation; a node placement binds when the scheduler reserves compatible capacity, and its allocation copies that generation, even across later updates. Inspection, renewal, commands and cleanup use the allocation's original specification and endpoint with the current key; a missing generation never falls back to the current specification. Released generation identifiers stay reserved.
 
 A generation is retained while it is current, referenced by an unreleased allocation or placement, or pinned by a node that is not removed. A node's durable serving pin survives offline periods and zero resources and is separate from its current readiness. Collection shares the deployment lock with updates and admission and deletes at most 32 eligible generation rows per pass. Reset retires pins and clears superseded rows only after confirmed release.
 
@@ -138,7 +149,7 @@ A node is online while it is connected under the current owner epoch with a hear
 
 Each node adds `rollout: {state, ready_generation, diagnostic?}`, where `ready_generation` is the nullable durable serving pin and `diagnostic` a fixed code for the target generation; allocation items add `deployment_generation`. Poll every five seconds only while `rollout.state` is `preparing` or `reset` is not null; old Sessions and failed, update-required or offline nodes alone do not keep polling active.
 
-New admission filters nodes by online presence, exact serving-generation readiness, address and shared capacity before it prefers the newest qualifying pin, so a full newest node never hides a free older one. Without a candidate, admission creates no provisional Session or placement: an online node that is actually preparing with free capacity gives 503 `sandbox_nodes_preparing`, and a full or offline fleet gives `runtime_node_unavailable`.
+Node-backed creation validates the target deployment and commits the Session, pending Environment and any initial input without reserving compute. A full, offline or preparing fleet leaves that accepted work waiting; an unconfigured deployment, reset or unsupported combination still rejects admission. The common scheduler uses bounded rotating scans of unplaced demand, with pages ordered by recorded time and Environment ID and a fixed time boundary for each scan so continuous arrivals cannot prevent it from revisiting older work. It checks online presence, exact serving-generation readiness, address, shared capacity and the selected generation's Harness/filesystem compatibility, then prefers the newest qualifying pin. Placement is immutable once reserved until confirmed release or a settled checkpoint transfer. A bounded scan skips temporarily unavailable demand and resumes after a restart. If preparation fails before a new allocation is reserved, Core releases only that attempt’s node reservation, retaining any filesystem identity. Its next placement demand is ordered no earlier than release time, behind already-waiting work; successful retries use the newly selected generation’s specification. An allocation with an unknown compute outcome keeps its reservation. Existing suspended allocations reserve eligible checkpoint capacity through the same lock under the [checkpoint transfer contract](../../docs/sandbox-provider.md#checkpoint-transfer); this is not a global fairness guarantee across hot restores and unplaced work. Input retains its [original five-minute deadline](./environments.md#reservations), including time waiting for capacity.
 
 ## Reset
 
@@ -177,33 +188,33 @@ Node capacity is approved by the administrator, separately from the deployment s
 
 `GET /core/v1/sandbox/nodes` returns `{data: [...]}` with, for each node: `id`, `name`, `provider`, `online`, `last_seen_at`, `created_at`, `max_active`, `max_retained`, the counts `active`, `reserved`, `running`, `retained`, `snapshots` and `cleanup_pending`, `provider_ready`, `diagnostic`, the host measurements `cpu_count`, `available_memory_bytes` and `available_disk_bytes`, `rollout`, `enrollment_id` and `core_url`. `enrollment_id` is the handle of the command that registered the node, or null when Core has none. `core_url` is the installation public URL at enrollment; a node whose `core_url` differs from the current public URL receives no new placements. Work already placed on it finishes there, including a placed Environment that has no allocation yet, and its retained sandboxes can still resume while the old address reaches Core. Remove it and add it again.
 
-A node without generation management reports its provider's readiness itself: `provider_ready`, and when it is unready one fixed `diagnostic` code. A node added with Web's command manages generations, so its readiness follows its serving generation and its fixed code for the target generation appears in `rollout.diagnostic`. The node classifies the first failed readiness check and sends only the code; Core stores any other value as `provider_unavailable` and never stores or returns probe text or host paths. The codes are `docker_unavailable`, `docker_limits_unsupported`, `runtime_download_failed`, `runtime_image_unavailable`, `kvm_unavailable`, `microsandbox_artifacts_unavailable`, `capacity_insufficient` and `provider_unavailable`. `runtime_download_failed` means the exact Runtime artifacts could not be transferred or verified; it never contains artifact URLs, credentials or transport output. [Readiness codes](../../docs/getting-started/nodes.md#readiness-codes) gives causes and operator actions. Core and nodes must come from the same distribution.
+A node without generation management reports its provider's readiness itself: `provider_ready`, and when it is unready one fixed `diagnostic` code. A node added with Web's command manages generations, so its readiness follows its serving generation and its fixed code for the target generation appears in `rollout.diagnostic`. The node classifies the first failed readiness check and sends only its code; a frame with any other value is invalid, and Core never stores or returns probe text or host paths. The codes are Provider-neutral classes: `provider_unavailable`, `host_unsupported`, `artifacts_unavailable`, `runtime_download_failed`, `runtime_image_unavailable` and `capacity_insufficient`. `runtime_download_failed` means the exact Runtime artifacts could not be transferred or verified; it never contains artifact URLs, credentials or transport output. [Readiness codes](../../docs/getting-started/nodes.md#readiness-codes) gives causes and operator actions. Core and nodes must come from the same distribution.
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` takes `{name, max_active, max_retained}`; lowering a limit stops no running sandbox. `DELETE /core/v1/sandbox/nodes/{node_id}` refuses with 409 `runtime_node_in_use` while the node holds allocations, snapshots, reservations or pending cleanup, including while it is offline. Removal deletes no compute and retires the node's identity; the host can come back only as a new node. There is no node drain.
 
-`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased allocations. Each item's `compute_phase_changed_at` is when the allocation entered its current `compute_phase`, or null when unknown. For a suspended microsandbox allocation, that time plus `suspension.retention_seconds` tells roughly when Core reclaims it.
+`GET /core/v1/sandbox/nodes/{node_id}/allocations` lists the node's unreleased allocations. Each item's `compute_phase_changed_at` is when the allocation entered its current `compute_phase`, or null when unknown. This is a phase transition time, not a snapshot expiry. The snapshot deadline is not exposed by this response and must not be inferred from `suspension.retention_seconds`.
 
 ## What each field means per sandbox provider
 
 Some fields keep one name across providers but differ in meaning, or do not apply. Deployment fields come from `GET /core/v1/sandbox/deployment`, node and allocation fields from the node routes, and Runtime fields from the [Runtime telemetry API](./runtime-observability-api.md), where `disk` appears only in the observation list and history is described under [Session Runtime history](./runtime-observability-api.md#session-runtime-history).
 
-| Field | E2B | Docker | microsandbox |
+| Field | microsandbox | E2B | Docker |
 | --- | --- | --- | --- |
-| Deployment `specification.resources` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` |
-| Deployment `specification.runtime` | Absent; `configuration.template` selects the build | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
-| Deployment `metadata.template_build` | The build as Core read it when the selection was saved | Absent: `metadata` is empty | Absent: `metadata` is empty |
-| Deployment `suspension` | `null`; Core does not suspend E2B sandboxes | `null` | `{idle_seconds, retention_seconds}` |
-| Deployment `resources.allocations`, `resources.pending` | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes | Totals across all nodes |
-| Enrollment-token `max_active`, `max_retained` | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` | Both limits apply |
-| Node list and detail | Empty list; detail returns 404 | Enrolled nodes | Enrolled nodes |
-| Node `retained`, `snapshots`, `max_retained` | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` | Suspended sandboxes are `retained` minus `active` |
-| Node `diagnostic` codes | Not applicable | `docker_unavailable`, `docker_limits_unsupported`, `runtime_download_failed`, `runtime_image_unavailable`, `capacity_insufficient` or `provider_unavailable` | `kvm_unavailable`, `microsandbox_artifacts_unavailable`, `runtime_download_failed`, `capacity_insufficient` or `provider_unavailable` |
-| Node `host.available_disk_bytes` | Not applicable | Free space on the filesystem of the node state directory, not a container's disk | Free space on the filesystem of the node state directory; sandbox disks have their own quotas |
-| Allocation `compute_phase`, `compute_phase_changed_at` | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation | Includes `suspended`; its time plus `suspension.retention_seconds` tells roughly when Core reclaims the snapshot |
-| Runtime observation `cpu`, `memory` | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
-| Runtime observation `disk` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota | `null` |
-| Runtime observation `lifecycle_state: sleeping` | Never | Never | While suspended |
-| Runtime history CPU | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time | Derived from cumulative CPU time |
+| Independent workspace filesystem | [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter); configured separately from compute | Unsupported | Unsupported |
+| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota |
+| Deployment `specification.runtime` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` | Absent; `configuration.template` selects the build | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` |
+| Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved | Absent: `metadata` is empty |
+| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `null`; Core does not suspend E2B sandboxes | `null` |
+| Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes |
+| Enrollment-token `max_active`, `max_retained` | Both limits apply | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` |
+| Node list and detail | Enrolled nodes | Empty list; detail returns 404 | Enrolled nodes |
+| Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` |
+| Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable | Free space on the filesystem of the node state directory, not a container's disk |
+| Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation |
+| Runtime observation `cpu`, `memory` | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
+| Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota |
+| Runtime observation `lifecycle_state: sleeping` | While suspended | Never | Never |
+| Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time |
 
 ## Errors
 
@@ -218,12 +229,11 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | 409 | `sandbox_deployment_conflict` | Another state the change cannot apply to |
 | 409 | `runtime_node_in_use` | Node removal while it holds resources |
 | 503 | `execution_unavailable` | Provider preparation is unavailable |
-| 503 | `credential_storage_unavailable` | Core has no credential encryption key |
 
 Storage and credential failures stay errors: an empty or failed read never proves cleanup. The [machine connection API](./machine-api.md#node-route-errors) lists the errors of the node routes.
 
 ## Canonical node specification
 
-`sandbox/deployment_contract.go` owns the resource bounds, provider requirements, release patterns and canonical field order; `sandbox/deployment.go` applies them in Core. The installer consumes the generated declaration in `deploy/node/node_spec.py`, so there is no second set of limits or patterns. Regenerate it from the repository root with `go run ./services/core/cmd/specification-contract -write`; the sandbox Go tests, part of `make check`, reject a stale projection.
+`sandbox/deployment_contract.go` owns the resource bounds, release patterns and canonical field order, and each registered Provider's `sandbox.DeploymentPolicy` declares its requirements; `sandbox/deployment.go` applies them in Core. The installer consumes the generated declaration in `deploy/node/node_spec.py`, and the TypeScript client and Web the generated bounds, patterns and Provider declarations in `packages/agents-client/src/deployment-contract.ts`, so there is no second set of limits, patterns or providers. Regenerate both from the repository root with `go run ./services/core/cmd/specification-contract -write`; the sandbox Go tests, part of `make check`, reject a stale projection.
 
-The specification digest is the SHA-256 of compact UTF-8 JSON with `provider` first, then `resources`, then `runtime` when the provider requires it. Resource and Runtime fields follow the contract's declaration order; zero optional disk fields are omitted and required fields stay present. Release identities are lowercase ASCII, and the digest never depends on the incoming field order or whitespace. `services/core/internal/sandbox/testdata/deployment-contract.json` holds shared acceptance cases, exact canonical bytes and digests that both the Go and Python tests consume.
+The specification digest is the SHA-256 of compact UTF-8 JSON with `provider` first, then `resources`, then `runtime` when the provider requires it, then `workspace` when external storage is selected. Workspace fields follow the filesystem declaration order (`attachment`, `user_xattr`, `capacity_quota`); its Boolean fields remain present. Resource and Runtime fields follow the contract's declaration order; zero optional disk fields are omitted and required fields stay present. Release identities are lowercase ASCII, and the digest never depends on the incoming field order or whitespace. `services/core/internal/sandbox/testdata/deployment-contract.json` holds shared acceptance cases, exact canonical bytes and digests that both the Go and Python tests consume.

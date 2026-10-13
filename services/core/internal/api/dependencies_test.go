@@ -15,6 +15,7 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // testFakes holds one strict fake per Dependencies area.
 type testFakes struct {
+	workspaceStorage       *fakeWorkspaceStorage
 	projects               *fakeProjects
 	projectsReader         *fakeProjectsReader
 	vaults                 *fakeVaults
@@ -29,6 +30,7 @@ type testFakes struct {
 	agents                 *fakeAgents
 	agentsReader           *fakeAgentsReader
 	sessions               *fakeSessions
+	sessionsReader         *fakeSessionsReader
 	sessionCreation        *fakeSessionCreation
 	sessionEvents          *fakeSessionEvents
 	turns                  *fakeTurns
@@ -62,13 +64,13 @@ type testFakes struct {
 
 // testDependencies returns Dependencies in which every area is a strict fake.
 // A test sets the funcs it expects on the returned fakes; any other call fails
-// it. Engine is "codex", CoreKeys accepts "Bearer admin", and Execution and
-// Sandboxes are disabled until the test sets fakes.execution() or
-// fakes.sandboxes().
+// it. Engine is "codex", CoreKeys accepts "Bearer admin", and Execution reports
+// testExecutorURL without a native installer.
 func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	f := &testFakes{
-		projects: &fakeProjects{t: t}, projectsReader: &fakeProjectsReader{t: t},
+		workspaceStorage: &fakeWorkspaceStorage{t: t},
+		projects:         &fakeProjects{t: t}, projectsReader: &fakeProjectsReader{t: t},
 		modelProviders: &fakeModelProviders{t: t}, modelProvidersReader: &fakeModelProvidersReader{t: t},
 		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
 		environmentTemplates: &fakeEnvironmentTemplates{t: t}, environmentTemplatesReader: &fakeEnvironmentTemplatesReader{t: t},
@@ -76,6 +78,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		skills: &fakeSkills{t: t}, skillsReader: &fakeSkillsReader{t: t},
 		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t},
 		sessions:        &fakeSessions{t: t},
+		sessionsReader:  &fakeSessionsReader{t: t},
 		sessionCreation: &fakeSessionCreation{t: t},
 		sessionEvents:   &fakeSessionEvents{t: t},
 		turns:           &fakeTurns{t: t},
@@ -94,7 +97,8 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		configurationDiscovery: &fakeConfigurationDiscovery{t: t},
 	}
 	return Dependencies{
-		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
+		WorkspaceStorage: f.workspaceStorage,
+		Engine:           "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
 		Projects: f.projects, ProjectsReader: f.projectsReader,
 		ModelProviders: f.modelProviders, ModelProvidersReader: f.modelProvidersReader,
 		Vaults: f.vaults, VaultsReader: f.vaultsReader,
@@ -103,6 +107,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		Skills: f.skills, SkillsReader: f.skillsReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
 		Sessions:        f.sessions,
+		SessionsReader:  f.sessionsReader,
 		SessionCreation: f.sessionCreation,
 		SessionEvents:   f.sessionEvents,
 		Turns:           f.turns,
@@ -113,31 +118,21 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		SessionAdmin:    f.sessionAdmin,
 		Environments:    f.environments, EnvironmentsReader: f.environmentsReader, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,
+		Execution: Execution{
+			ExecutorURL:      testExecutorURL,
+			SessionAdmission: f.sessionAdmission,
+			InputAdmission:   f.inputAdmission,
+			SessionArchive:   f.sessionArchive,
+			Workspaces:       f.workspaces,
+		},
+		Sandboxes: Sandboxes{
+			Deployment:             f.deployment,
+			NodeAllocations:        f.nodeAllocations,
+			DeploymentChanges:      f.deploymentChanges,
+			DeploymentReset:        f.deploymentReset,
+			ConfigurationDiscovery: f.configurationDiscovery,
+		},
 	}, f
-}
-
-// execution is an Execution group backed by f's strict fakes, reporting
-// testExecutorURL and without a native installer.
-func (f *testFakes) execution() *Execution {
-	return &Execution{
-		ExecutorURL:      testExecutorURL,
-		SessionAdmission: f.sessionAdmission,
-		InputAdmission:   f.inputAdmission,
-		SessionArchive:   f.sessionArchive,
-		Workspaces:       f.workspaces,
-	}
-}
-
-// sandboxes is a Sandboxes group backed by f's strict fakes. It requires
-// Execution.
-func (f *testFakes) sandboxes() *Sandboxes {
-	return &Sandboxes{
-		Deployment:             f.deployment,
-		NodeAllocations:        f.nodeAllocations,
-		DeploymentChanges:      f.deploymentChanges,
-		DeploymentReset:        f.deploymentReset,
-		ConfigurationDiscovery: f.configurationDiscovery,
-	}
 }
 
 // coreKeys accepts each token as a Core key.
@@ -171,13 +166,11 @@ func noDeploymentModelProvider(context.Context, string) (*modelconfiguration.Sna
 }
 
 func TestNewHandlerAcceptsCompleteDependencies(t *testing.T) {
-	deps, f := testDependencies(t)
+	deps, _ := testDependencies(t)
 	if _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
-	deps.Execution = f.execution()
-	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build"}
-	deps.Sandboxes = f.sandboxes()
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/"}
 	if _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)
 	}
@@ -191,33 +184,18 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		{"default Harness", func(d *Dependencies, _ *testFakes) { d.Engine = "" }},
 		{"CoreKeys", func(d *Dependencies, _ *testFakes) { d.CoreKeys = nil }},
 		{"InstallationBindings", func(d *Dependencies, _ *testFakes) { d.InstallationBindings = nil }},
+		{"WorkspaceStorage", func(d *Dependencies, _ *testFakes) { d.WorkspaceStorage = nil }},
 		{"Projects", func(d *Dependencies, _ *testFakes) { d.Projects = nil }},
 		{"Sessions", func(d *Dependencies, _ *testFakes) { d.Sessions = nil }},
 		{"SessionCreation", func(d *Dependencies, _ *testFakes) { d.SessionCreation = nil }},
 		{"Turns", func(d *Dependencies, _ *testFakes) { d.Turns = nil }},
 		{"Items", func(d *Dependencies, _ *testFakes) { d.Items = nil }},
 		{"RuntimeHistory", func(d *Dependencies, _ *testFakes) { d.RuntimeHistory = nil }},
-		{"Execution.ExecutorURL", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.ExecutorURL = ""
-		}},
-		{"Execution.SessionAdmission", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.SessionAdmission = nil
-		}},
-		{"Execution.InputAdmission", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.InputAdmission = nil
-		}},
-		{"Execution.NativeInstaller.Version", func(d *Dependencies, f *testFakes) {
-			d.Execution = f.execution()
-			d.Execution.NativeInstaller = &NativeInstaller{}
-		}},
-		{"Sandboxes requires Execution", func(d *Dependencies, f *testFakes) { d.Sandboxes = f.sandboxes() }},
-		{"Sandboxes.ConfigurationDiscovery", func(d *Dependencies, f *testFakes) {
-			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
-			d.Sandboxes.ConfigurationDiscovery = nil
-		}},
+		{"Execution.ExecutorURL", func(d *Dependencies, _ *testFakes) { d.Execution.ExecutorURL = "" }},
+		{"Execution.SessionAdmission", func(d *Dependencies, _ *testFakes) { d.Execution.SessionAdmission = nil }},
+		{"Execution.InputAdmission", func(d *Dependencies, _ *testFakes) { d.Execution.InputAdmission = nil }},
+		{"Execution.NativeInstaller.Version", func(d *Dependencies, _ *testFakes) { d.Execution.NativeInstaller = &NativeInstaller{} }},
+		{"Sandboxes.ConfigurationDiscovery", func(d *Dependencies, _ *testFakes) { d.Sandboxes.ConfigurationDiscovery = nil }},
 	} {
 		t.Run(test.missing, func(t *testing.T) {
 			deps, f := testDependencies(t)

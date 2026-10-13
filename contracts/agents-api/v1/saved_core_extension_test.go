@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestSavedProviderSafeView(t *testing.T) {
@@ -32,7 +34,7 @@ func TestSavedProviderExplicitHarnessCompatibility(t *testing.T) {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(harness+"/"+protocol, func(t *testing.T) {
 				x := &SavedAgentCoreInput{Harness: harness, ModelProvider: &ModelProviderInput{
-					Protocol: protocol, BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: 100, MaxOutputTokens: 20,
+					Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: 100, MaxOutputTokens: 20,
 				}}
 				native := harness == "" || harness == "mcode" || (harness == "codex" && protocol == "responses") || (harness == "claude_sdk" && protocol == "anthropic")
 				if err := x.Validate(); (err == nil) != native {
@@ -49,7 +51,7 @@ func TestSavedProviderExplicitHarnessCompatibility(t *testing.T) {
 	for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 		for _, limits := range [][2]int32{{0, 0}, {100, 0}, {0, 20}} {
 			x := &SavedAgentCoreInput{Harness: "mcode", ModelProvider: &ModelProviderInput{
-				Protocol: protocol, BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: limits[0], MaxOutputTokens: limits[1],
+				Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: limits[0], MaxOutputTokens: limits[1],
 			}}
 			if x.Validate() == nil || x.SafeView().ModelProvider.ValidateHarness("mcode") == nil {
 				t.Fatal("MiniMax limits must be complete for every upstream protocol")

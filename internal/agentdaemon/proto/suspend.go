@@ -17,6 +17,10 @@ type EnvironmentSuspendPayload struct {
 	SuspendID     string `json:"suspend_id"`
 }
 
+// An accepted quiesce confirms closed admission, drained work and receipts,
+// and retention of settled idle native Executors with idle expiry fenced until
+// exact authenticated resume. It does not confirm a filesystem checkpoint or
+// that provider-owned compute has stopped.
 type EnvironmentSuspendResultPayload struct {
 	EnvironmentID string `json:"environment_id"`
 	SuspendID     string `json:"suspend_id"`

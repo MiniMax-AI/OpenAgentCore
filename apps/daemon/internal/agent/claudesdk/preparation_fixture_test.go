@@ -106,10 +106,6 @@ func runPreparationHelper() {
 	_ = json.Unmarshal(fields["turn_id"], &turnID)
 	emit, finish := helperTurnOutput(scanner, turnID)
 	defer finish()
-	if mode == "cancellation" {
-		runCancellationHelper(request, "cancellation-wait", scanner, emit)
-		return
-	}
 	if strings.HasPrefix(mode, "commands") {
 		runCommandsHelper(request, mode, scanner, emit)
 		return

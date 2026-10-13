@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
@@ -23,10 +24,10 @@ func TestStaticCredentialsPersistEncryptedAndRemainScoped(t *testing.T) {
 	store, pool := openStore(t)
 	ctx := t.Context()
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
-	keyless := newService(t, pool, nil, nil)
+	replaced := newService(t, pool, pgtest.CredentialKey(t), nil)
 	var owned []vaults.Vault
 	for _, owner := range []string{tenant, tenant, foreignTenant} {
-		owned = append(owned, createVault(t, keyless, owner))
+		owned = append(owned, createVault(t, replaced, owner))
 	}
 	key, randomToken := make([]byte, 32), make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -60,9 +61,6 @@ func TestStaticCredentialsPersistEncryptedAndRemainScoped(t *testing.T) {
 		t.Fatal("separate creates reused a credential identity")
 	}
 	valid := vaults.CreateStaticCredential{TenantID: tenant, VaultID: owned[0].ID, Name: "Rejected", MCPServerURL: "https://mcp.example/tools", Token: opaque}
-	if _, err := keyless.CreateStaticCredential(ctx, valid); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("missing encryption key did not fail writes closed")
-	}
 	for _, target := range []struct{ tenant, vault string }{{tenant, owned[2].ID}, {foreignTenant, owned[0].ID}, {tenant, uuid.NewString()}, {tenant, "invalid"}} {
 		command := valid
 		command.TenantID, command.VaultID = target.tenant, target.vault
@@ -137,7 +135,7 @@ func TestStaticCredentialsPersistEncryptedAndRemainScoped(t *testing.T) {
 	}
 }
 
-func TestCredentialListFilteringOwnershipAndKeylessReconnect(t *testing.T) {
+func TestCredentialListFilteringOwnershipAndReplacedKeyReconnect(t *testing.T) {
 	store, pool := openStore(t)
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
@@ -255,7 +253,7 @@ func TestCredentialListFilteringOwnershipAndKeylessReconnect(t *testing.T) {
 	pool.Close()
 	reopened, pool := openStore(t)
 	if got := read(reopened, true, nil, 20); !reflect.DeepEqual(got, all) || snapshot() != before {
-		t.Fatal("keyless reads/restart changed metadata, classification or ciphertext")
+		t.Fatal("reads or a restart under a replaced key changed metadata, classification or ciphertext")
 	}
 }
 
@@ -400,7 +398,7 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	key := bytes.Repeat([]byte{41}, 32)
 	service := newService(t, pool, newCipher(t, key), nil)
-	keyless := newService(t, pool, nil, nil)
+	replaced := newService(t, pool, pgtest.CredentialKey(t), nil)
 	vault, wrong := createVault(t, service, tenant), createVault(t, service, tenant)
 	original := createStatic(t, service, tenant, vault.ID, "original", "https://mcp.example/tools", "original-secret")
 	attached := []string{vault.ID}
@@ -417,12 +415,12 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 		{foreign, vault.ID, original.ID}, {tenant, wrong.ID, original.ID},
 		{tenant, vault.ID, uuid.NewString()}, {tenant, "invalid", original.ID}, {tenant, vault.ID, "invalid"},
 	} {
-		if _, err := remove(keyless, scope.tenant, scope.vault, scope.id); !errors.Is(err, vaults.ErrNotFound) {
+		if _, err := remove(replaced, scope.tenant, scope.vault, scope.id); !errors.Is(err, vaults.ErrNotFound) {
 			t.Fatal("foreign or invalid delete was accepted", err)
 		}
 	}
 	// An actual database write failure must leave the resource and token intact.
-	_, deletionErr := remove(newService(t, readOnlyPool(t, pool), nil, nil), tenant, vault.ID, original.ID)
+	_, deletionErr := remove(newService(t, readOnlyPool(t, pool), pgtest.CredentialKey(t), nil), tenant, vault.ID, original.ID)
 	if !isReadOnlyFailure(deletionErr) {
 		t.Fatal("failed mutation was accepted or translated", deletionErr)
 	}
@@ -432,12 +430,12 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 	if token, err := bearerToken(t.Context(), service, tenant, attached, selected[0]); err != nil || token != retained {
 		t.Fatal("rejected deletion changed the stored token")
 	}
-	// Delete without a key, even if the stored payload is damaged.
+	// Delete under a replaced key, even if the stored payload is damaged.
 	if _, err := pool.Exec(t.Context(), "UPDATE vault_credentials SET token_ciphertext=decode('00','hex') WHERE id=$1", original.ID); err != nil {
 		t.Fatal(err)
 	}
-	if id, err := remove(keyless, tenant, vault.ID, original.ID); err != nil || id != original.ID {
-		t.Fatal("keyless deletion failed", err)
+	if id, err := remove(replaced, tenant, vault.ID, original.ID); err != nil || id != original.ID {
+		t.Fatal("deletion under a replaced key failed", err)
 	}
 	var count int
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM vault_credentials WHERE id=$1", original.ID).Scan(&count); err != nil || count != 0 {

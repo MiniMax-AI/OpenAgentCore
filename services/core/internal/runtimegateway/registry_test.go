@@ -171,3 +171,54 @@ func TestWaitForDevice_MultipleWaitersSameDevice(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchDeviceImmediateDeferredAndUnwatch(t *testing.T) {
+	r := NewRegistry()
+	ch := make(chan *Session, 1)
+	for range 10 {
+		r.WatchDevice("late", ch)
+	}
+	if len(r.PendingWaiters("late")) != 1 {
+		t.Fatal("rearming duplicated watch")
+	}
+	s := NewSession(newFakeConn(), "late", "workspace", "0.1.0", r, nil)
+	r.Register(s)
+	if got := <-ch; got != s {
+		t.Fatal("wrong registration")
+	}
+	if len(r.PendingWaiters("late")) != 0 {
+		t.Fatal("registration retained watch")
+	}
+	r.WatchDevice("late", ch)
+	if got := <-ch; got != s {
+		t.Fatal("already registered device did not signal")
+	}
+	r.WatchDevice("removed", ch)
+	r.UnwatchDevice("removed", ch)
+	r.UnwatchDevice("removed", ch)
+	r.Register(NewSession(newFakeConn(), "removed", "workspace", "0.1.0", r, nil))
+	select {
+	case <-ch:
+		t.Fatal("removed watch fired")
+	default:
+	}
+}
+
+func TestWatchDeviceSharedChannelCoalescesWithoutBlockingRegistration(t *testing.T) {
+	r := NewRegistry()
+	ch := make(chan *Session, 1)
+	for _, id := range []string{"a", "b"} {
+		r.WatchDevice(id, ch)
+	}
+	for _, id := range []string{"a", "b"} {
+		r.Register(NewSession(newFakeConn(), id, "workspace", "0.1.0", r, nil))
+	}
+	if len(ch) != 1 || len(r.PendingWaiters("a")) != 0 || len(r.PendingWaiters("b")) != 0 {
+		t.Fatal("coalesced registrations retained waiter state")
+	}
+	for _, id := range []string{"a", "b"} {
+		if _, err := r.LookupDevice(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

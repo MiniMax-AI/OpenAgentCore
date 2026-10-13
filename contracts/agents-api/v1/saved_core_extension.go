@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // SavedAgentCoreInput carries defaults for future Sessions. The provider bundle
@@ -24,11 +25,11 @@ type SavedAgentCore struct {
 }
 
 type ModelProviderView struct {
-	Protocol         string `json:"protocol" enums:"anthropic,responses,chat_completions" binding:"required"`
-	BaseURL          string `json:"base_url" binding:"required"`
-	ContextWindow    int32  `json:"context_window,omitempty"`
-	MaxOutputTokens  int32  `json:"max_output_tokens,omitempty"`
-	APIKeyConfigured bool   `json:"api_key_configured" binding:"required"`
+	Protocol         modelprovider.Protocol `json:"protocol" binding:"required"`
+	BaseURL          string                 `json:"base_url" binding:"required"`
+	ContextWindow    int32                  `json:"context_window,omitempty"`
+	MaxOutputTokens  int32                  `json:"max_output_tokens,omitempty"`
+	APIKeyConfigured bool                   `json:"api_key_configured" binding:"required"`
 }
 
 func (x *SavedAgentCoreInput) Validate() error {
@@ -78,5 +79,5 @@ func (p *ModelProviderView) ValidateHarnessWithRegistry(harness string, registry
 	if p == nil {
 		return errors.New("model_provider is required")
 	}
-	return registry.Validate(harness, p.Protocol, p.ContextWindow, p.MaxOutputTokens)
+	return registry.Validate(harness, string(p.Protocol), p.ContextWindow, p.MaxOutputTokens)
 }

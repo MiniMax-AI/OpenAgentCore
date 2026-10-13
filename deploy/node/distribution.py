@@ -9,7 +9,7 @@ import re
 import socket
 import stat
 import subprocess
-import tempfile
+from contextlib import contextmanager
 import time
 import urllib.error
 import urllib.request
@@ -114,11 +114,8 @@ class ArtifactRedirect(urllib.request.HTTPRedirectHandler):
         safe_url(newurl)
         if urlsplit(newurl).scheme != 'https' or request.get_method() not in ('GET', 'HEAD'):
             raise ArtifactError('Artifact redirects require HTTPS')
-        # Carry resume headers, never credentials or cookies, to a release/CDN host.
-        forwarded = {name: value for name, value in request.header_items()
-                     if name.lower() in ('range', 'if-range')}
-        return urllib.request.Request(newurl, headers=forwarded,
-                                      method=request.get_method(), unverifiable=True)
+        # Artifact redirects carry no credentials, cookies or custom headers.
+        return urllib.request.Request(newurl, method=request.get_method(), unverifiable=True)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -162,47 +159,42 @@ def obtain_artifact(manifest, logical_path, destination, offline_root=None):
     if not isinstance(base, str) or not base or urlsplit(base).query:
         raise ArtifactError('No downloadable artifact source; use the matching offline bundle')
     url = safe_url(base.rstrip('/') + '/' + entry['filename'])
-    # A private partial file survives interruptions and reruns; the next attempt asks
-    # for the missing bytes only. The complete file is still verified as a whole.
+    with temporary_file(target) as partial:
+        for attempt in range(3):
+            try:
+                download_artifact(url, partial, entry, logical_path)
+                break
+            except urllib.error.HTTPError as error:
+                if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+                    raise ArtifactError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check the console and retry.') from None
+            except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
+                if attempt == 2:
+                    raise ArtifactError('Artifact transfer interrupted: ' + logical_path + '. Check network access and rerun.') from None
+            time.sleep(attempt + 1)
+        if digest(partial) != entry['sha256']:
+            raise ArtifactError('Artifact checksum mismatch: ' + logical_path)
+        os.chmod(partial, 0o700 if logical_path.startswith('native/') else 0o600)
+        os.replace(partial, target)
+        return target
+
+
+@contextmanager
+def temporary_file(target):
+    """Clear unfinished work under the caller's installation lock."""
     partial = target.with_name('.' + target.name + '.partial')
-    for attempt in range(3):
-        try:
-            download_partial(url, partial, entry, logical_path)
-            break
-        except urllib.error.HTTPError as error:
-            if error.code == 416:
-                discard_partial(partial)
-            elif error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                raise ArtifactError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check the console and retry.') from None
-        except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
-            if attempt == 2:
-                raise ArtifactError('Artifact transfer interrupted: ' + logical_path + '. Check network access and rerun; '
-                                        'the download resumes where it stopped.') from None
-        time.sleep(attempt + 1)
-    else:
-        raise ArtifactError('Artifact download did not complete')
-    if digest(partial) != entry['sha256']:
-        discard_partial(partial)
-        raise ArtifactError('Artifact checksum mismatch: ' + logical_path)
-    os.chmod(partial, 0o700 if logical_path.startswith('native/') else 0o600)
-    os.replace(partial, target)
-    validator_path(partial).unlink(missing_ok=True)
-    return target
-
-
-def validator_path(partial):
-    return partial.with_name(partial.name + '.validator')
-
-
-def discard_partial(partial):
+    if partial.is_symlink() or (partial.exists() and
+            (not partial.is_file() or partial.stat().st_uid != os.getuid())):
+        raise DistributionError('Temporary file must be an owned regular file: ' + str(target))
     partial.unlink(missing_ok=True)
-    validator_path(partial).unlink(missing_ok=True)
+    try:
+        yield partial
+    finally:
+        partial.unlink(missing_ok=True)
 
 
 def copy_artifact(source, target, entry, logical_path):
-    fd, temporary = tempfile.mkstemp(prefix='.artifact-', dir=target.parent)
-    try:
-        with os.fdopen(fd, 'wb') as output, source.open('rb') as stream:
+    with temporary_file(target) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as output, source.open('rb') as stream:
             count = 0
             for block in iter(lambda: stream.read(1024 * 1024), b''):
                 count += len(block)
@@ -214,52 +206,20 @@ def copy_artifact(source, target, entry, logical_path):
         os.chmod(temporary, 0o700 if logical_path.startswith('native/') else 0o600)
         os.replace(temporary, target)
         return target
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
 
 
-# A download that brings fewer bytes than this in a window stops; a rerun resumes it.
+# Stop downloads that bring fewer bytes than this in a window.
 SLOW_SECONDS, SLOW_BYTES = 60, 64 * 1024
 
 
-def download_partial(url, partial, entry, logical_path):
-    """Complete the partial file, asking only for the bytes it is missing."""
+def download_artifact(url, partial, entry, logical_path):
+    """Download a complete artifact into a disposable file."""
     size = entry['size']
-    offset = 0
-    if partial.is_symlink() or (partial.exists() and not partial.is_file()):
-        raise DistributionError('Partial download must be a regular file: ' + logical_path)
-    if partial.exists():
-        info = partial.stat()
-        if info.st_uid != os.getuid():
-            raise DistributionError('Partial download must be owned by this user: ' + logical_path)
-        offset = info.st_size if info.st_size <= size else 0
-    if offset == size:
-        return
-    headers = {}
-    if offset:
-        headers['Range'] = f'bytes={offset}-'
-        # If-Range makes a server whose file changed since the partial began send it whole.
-        try:
-            validator = validator_path(partial).read_text().strip()
-        except OSError:
-            validator = ''
-        if validator:
-            headers['If-Range'] = validator
-    request = urllib.request.Request(url, headers=headers)
-    with urllib.request.build_opener(ArtifactRedirect()).open(request, timeout=30) as stream:
-        if offset and (stream.status != 206 or not stream.headers.get('Content-Range', '').startswith(f'bytes {offset}-')):
-            offset = 0  # The server sent the whole file; start over.
-        if not offset:
-            validator = stream.headers.get('ETag') or stream.headers.get('Last-Modified') or ''
-            if validator and all(32 <= ord(c) < 127 for c in validator) and len(validator) < 200:
-                with os.fdopen(os.open(validator_path(partial), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600), 'w') as note:
-                    note.write(validator)
-            else:
-                validator_path(partial).unlink(missing_ok=True)
-        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_APPEND if offset else os.O_TRUNC)
-        with os.fdopen(os.open(partial, flags, 0o600), 'ab' if offset else 'wb') as output:
-            count, reported = offset, offset * 10 // size
+    opener = urllib.request.build_opener(ArtifactRedirect())
+    with opener.open(url, timeout=60) as stream:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_TRUNC
+        with os.fdopen(os.open(partial, flags, 0o600), 'wb') as output:
+            count, reported = 0, 0
             window, window_count = time.monotonic(), 0
             while True:
                 block = stream.read1(1024 * 1024)
@@ -267,16 +227,13 @@ def download_partial(url, partial, entry, logical_path):
                     break
                 count += len(block)
                 if count > size:
-                    output.close()
-                    discard_partial(partial)
                     raise ArtifactError('Artifact exceeds published size: ' + logical_path)
                 output.write(block)
                 window_count += len(block)
                 if time.monotonic() - window >= SLOW_SECONDS:
                     if window_count < SLOW_BYTES:
                         raise ArtifactError(f'Artifact download stalled (under {SLOW_BYTES // 1024} KiB in {SLOW_SECONDS} s): '
-                                                f'{logical_path}. The downloaded part is kept; check the network, then rerun '
-                                                'the command to resume.')
+                                                f'{logical_path}. Check the network, then rerun the command.')
                     window, window_count = time.monotonic(), 0
                 if size >= 50 * 1024 * 1024 and count * 10 // size > reported:
                     reported = count * 10 // size
@@ -303,23 +260,21 @@ def runtime_archive(manifest, cache_root, offline_root=None):
             raise ArtifactError('Cached Runtime archive differs; preserve state and inspect it')
         return target
     archive = obtain_artifact(manifest, 'images/runtime.tar.gz', root / 'images/runtime.tar.gz', offline_root)
-    fd, temporary = tempfile.mkstemp(prefix='.runtime-', dir=target.parent)
-    try:
-        with os.fdopen(fd, 'wb') as output, gzip.open(archive, 'rb') as stream:
-            count = 0
-            for block in iter(lambda: stream.read(1024 * 1024), b''):
-                count += len(block)
-                if count > expanded['size']:
-                    raise ArtifactError('Runtime archive exceeds published unpacked size')
-                output.write(block)
-        if not matches(Path(temporary), expanded):
-            raise ArtifactError('Unpacked Runtime checksum mismatch')
-        os.replace(temporary, target)
-    except (gzip.BadGzipFile, EOFError):
-        raise ArtifactError('Invalid compressed Runtime archive') from None
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    with temporary_file(target) as temporary:
+        try:
+            with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as output, gzip.open(archive, 'rb') as stream:
+                count = 0
+                for block in iter(lambda: stream.read(1024 * 1024), b''):
+                    count += len(block)
+                    if count > expanded['size']:
+                        raise ArtifactError('Runtime archive exceeds published unpacked size')
+                    output.write(block)
+            if not matches(temporary, expanded):
+                raise ArtifactError('Unpacked Runtime checksum mismatch')
+            os.replace(temporary, target)
+        except (gzip.BadGzipFile, EOFError):
+            raise ArtifactError('Invalid compressed Runtime archive') from None
+
     return target
 
 

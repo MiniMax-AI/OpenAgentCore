@@ -11,7 +11,11 @@ import (
 
 func TestProcessRecordIdentity(t *testing.T) {
 	path := filepath.Join(privateTempDir(t), "connect.pid")
-	if err := WritePIDFile(path, os.Getpid()); err != nil {
+	record, err := identifyProcess(os.Getpid())
+	if err == nil {
+		err = writeIdentity(path, record)
+	}
+	if err != nil {
 		t.Fatal(err)
 	}
 	pid, err := ReadPIDFile(path)
@@ -34,7 +38,7 @@ func TestProcessRecordIdentity(t *testing.T) {
 	if err = StopPIDFile(path, time.Second); !errors.Is(err, ErrStaleOrCorrupt) {
 		t.Fatal("stale identity was accepted", err)
 	}
-	if err = IsAlive(os.Getpid()); err != nil {
+	if _, err = identifyProcess(os.Getpid()); err != nil {
 		t.Fatal("unrelated process was affected", err)
 	}
 	if _, err = os.Stat(path); err != nil {
@@ -66,7 +70,8 @@ func TestProcessRecordRejectsOldAndMalformed(t *testing.T) {
 func TestStopTimeoutRetainsProcessRecord(t *testing.T) {
 	dir := privateTempDir(t)
 	path := filepath.Join(dir, "connect.pid")
-	pid, err := Spawn([]string{"daemon", "child"}, ReExecOptions{LogPath: filepath.Join(dir, "log"), PIDPath: path, ExtraEnv: []string{spawnTestChildEnv + "=ignore"}})
+	t.Setenv(spawnTestChildEnv, "ignore")
+	pid, err := Spawn([]string{"daemon", "child"}, ReExecOptions{LogPath: filepath.Join(dir, "log"), PIDPath: path})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
 import { NameCell, RowActions } from "../../components/list-ui";
-import { formatDateTime, formatRelative } from "../../lib/format";
-import type { MessageKey } from "../../lib/locale-strings";
+import { epochSeconds, formatDateTime, formatRelative } from "../../lib/format";
+import type { ParseKeys } from "i18next";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { nodeHealth, suspendedSandboxes } from "../fleet/fleet-model";
@@ -15,11 +15,10 @@ export type NodeState = "unconfirmed" | "old_address" | "offline" | "degraded" |
 
 /**
  * Whether a node enrolled with another Core address than the deployment's
- * `coreUrl`. An empty address is unknown, not old: a node Core did not enroll,
- * such as a file-managed local one, reports none.
+ * `coreUrl`. While the deployment is unknown, no node is on an old address.
  */
 export function onOldAddress(node: SandboxNode, coreUrl: string): boolean {
-  return Boolean(node.core_url && coreUrl && node.core_url !== coreUrl);
+  return coreUrl !== "" && node.core_url !== coreUrl;
 }
 
 /**
@@ -37,7 +36,7 @@ export function nodeState(node: SandboxNode, allocations: readonly SandboxAlloca
 }
 
 const stateTone: Record<NodeState, Tone> = { unconfirmed: "neutral", old_address: "warning", offline: "danger", degraded: "warning", attention: "warning", available: "ok" };
-const stateLabel: Record<NodeState, MessageKey> = {
+const stateLabel: Record<NodeState, ParseKeys<"sandbox">> = {
   unconfirmed: "Status unconfirmed",
   old_address: "Old address",
   offline: "Offline",
@@ -57,23 +56,18 @@ export function OldAddressHint() {
   return <span className="node-status-hint">{t("Remove and add again")}</span>;
 }
 
-export function seconds(value: string | null): number | null {
-  if (!value) return null;
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
-}
-
-export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspends = false, onOpen, onRemove }: {
+export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspends = false, onOpen, onRemove, onEdit }: {
   nodes: readonly SandboxNode[];
   /** The deployment's address; a node enrolled with another one is on an old address. */
   coreUrl: string;
-  /** microsandbox: sandboxes sleep as snapshots, so the list also shows suspended counts. */
+  /** Whether the deployment declares checkpoint support. */
   suspends?: boolean;
   allocations: readonly SandboxAllocation[];
   stale: boolean;
   disabled: boolean;
   onOpen: (node: SandboxNode) => void;
   onRemove: (node: SandboxNode) => void;
+  onEdit?: (node: SandboxNode) => void;
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage;
@@ -86,7 +80,8 @@ export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspend
             <th scope="col">{t("Node")}</th>
             <th scope="col">{t("Status")}</th>
             <th scope="col" className="numeric">{t("Active / limit")}</th>
-            {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Suspended")}<HelpTip>{t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")}</HelpTip></span></th> : null}
+            {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Suspended")}<HelpTip>{t("Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.")}</HelpTip></span></th> : null}
+            {suspends ? <th scope="col" className="numeric">{t("Retained / limit")}</th> : null}
             <th scope="col" className="numeric">{t("Last seen")}</th>
             <th scope="col">{t("Added")}</th>
             <th scope="col"><span className="visually-hidden">{t("Actions")}</span></th>
@@ -112,12 +107,14 @@ export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspend
                 </td>
                 <td className="numeric">{node.active} / {node.max_active}</td>
                 {suspends ? <td className="numeric">{suspendedSandboxes(node)}</td> : null}
-                <td className="numeric" title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
-                  {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}
+                {suspends ? <td className="numeric">{node.retained} / {node.max_retained}</td> : null}
+                <td className="numeric" title={node.last_seen_at ? formatDateTime(epochSeconds(node.last_seen_at), locale) : undefined}>
+                  {node.last_seen_at ? formatRelative(epochSeconds(node.last_seen_at), now, locale) : t("Never")}
                 </td>
-                <td className="nodes-nowrap">{formatDateTime(seconds(node.created_at), locale)}</td>
+                <td className="nodes-nowrap">{formatDateTime(epochSeconds(node.created_at), locale)}</td>
                 <td className="actions-cell">
                   <RowActions>
+                    {onEdit ? <button className="text-action" type="button" disabled={disabled} onClick={() => onEdit(node)}>{t("Edit node")}</button> : null}
                     <button className="text-action danger" type="button" disabled={disabled} aria-label={t("Remove {{name}}", { name })} onClick={() => onRemove(node)}>
                       {t("Remove")}
                     </button>

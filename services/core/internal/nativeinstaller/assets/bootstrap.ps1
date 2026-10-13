@@ -4,6 +4,8 @@ param(
   [Parameter(ValueFromRemainingArguments=$true)][string[]]$InstallArguments
 )
 $ErrorActionPreference = 'Stop'
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (!(Test-Path -LiteralPath $tar -PathType Leaf)) { throw 'Windows tar.exe is required. Install the Windows archive tools, then rerun this command.' }
 Add-Type -AssemblyName System.Net.Http
 if (!("OacNativeDownloadSpace" -as [type])) {
   Add-Type -TypeDefinition @'
@@ -158,7 +160,7 @@ try {
   $bundle = Join-Path $work 'bundle'
   [IO.Directory]::CreateDirectory($bundle) | Out-Null
   Write-Host 'Extracting the installer...'
-  & (Join-Path $env:SystemRoot 'System32\tar.exe') -xzf $archive -C $bundle
+  & $tar -xzf $archive -C $bundle
   if ($LASTEXITCODE -ne 0) { throw 'Installer extraction failed. Check disk space, quota and filesystem permissions.' }
   $endpoint = $Base -replace '/install/[^/]+$', '/installation'
   Write-Host 'Starting installation...'

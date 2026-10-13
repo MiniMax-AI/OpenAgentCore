@@ -23,7 +23,7 @@ import (
 )
 
 // resource names Templates in credential bindings and audit rows.
-const resource = "environment_template"
+const resource = string(writeaudit.ResourceEnvironmentTemplate)
 
 // Store implements environmenttemplates.Storage and environmenttemplates.Reader.
 type Store struct {
@@ -36,9 +36,8 @@ var (
 	_ environmenttemplates.Reader  = (*Store)(nil)
 )
 
-// New returns a Store. Without a credential key (cipher nil), writes and
-// resolutions that seal or open confidential configuration fail with
-// credentialcrypto.ErrUnavailable; safe metadata stays readable.
+// New returns a Store that seals and opens confidential configuration with
+// cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -63,7 +62,7 @@ func (s *Store) Create(ctx context.Context, tenantID string, in environmenttempl
 		if result, err = template(metadataRow(row)); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", resource, result.ID, "", writeaudit.Resource{Type: resource, ID: result.ID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionCreate, writeaudit.ResourceEnvironmentTemplate, result.ID, "", writeaudit.Resource{Type: writeaudit.ResourceEnvironmentTemplate, ID: result.ID})
 	})
 	return result, storageError(err)
 }
@@ -91,7 +90,7 @@ func (s *Store) Update(ctx context.Context, tenantID, templateID string, in envi
 		if result, err = template(metadataRow(row)); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "update", resource, result.ID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionUpdate, writeaudit.ResourceEnvironmentTemplate, result.ID, "")
 	})
 	return result, storageError(err)
 }
@@ -109,7 +108,7 @@ func (s *Store) Delete(ctx context.Context, tenantID, templateID string) (string
 			return err
 		}
 		deleted = uuid.UUID(id.Bytes).String()
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", resource, deleted, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceEnvironmentTemplate, deleted, "")
 	})
 	if err != nil {
 		return "", storageError(err)
@@ -169,8 +168,10 @@ func (s *Store) List(ctx context.Context, tenantID string, query environmenttemp
 }
 
 // Resolve reads one row, so the metadata and every confidential field come
-// from the same committed version. Stored Skill and Plugin metadata must match
-// the sealed archives they describe. Any malformed ID resolves to ErrNotFound.
+// from the same committed version. Stored data that does not decode or match
+// its sealed contents is corrupt, an internal error; configuration that decodes
+// but fails current validation is ErrInvalidInput. Any malformed ID resolves to
+// ErrNotFound.
 func (s *Store) Resolve(ctx context.Context, tenantID, templateID string) (environmenttemplates.Resolved, error) {
 	tenant, err := pgunit.ParseID(tenantID)
 	if err != nil {
@@ -203,23 +204,26 @@ func (s *Store) Resolve(ctx context.Context, tenantID, templateID string) (envir
 			return environmenttemplates.Resolved{}, err
 		}
 	}
-	if !matches(metadata.Skills, resolved.Setup.SkillMetadata()) || !matches(metadata.Plugins, resolved.Setup.PluginMetadata()) || resolved.Setup.Validate() != nil {
+	if !matches(metadata.Skills, resolved.Setup.SkillMetadata()) || !matches(metadata.Plugins, resolved.Setup.PluginMetadata()) {
+		return environmenttemplates.Resolved{}, errors.New("stored environment template metadata does not match its sealed setup")
+	}
+	if resolved.Setup.Validate() != nil {
 		return environmenttemplates.Resolved{}, environmenttemplates.ErrInvalidInput
 	}
 	if len(row.FileContents) == 0 {
 		if len(metadata.Files) > 0 {
-			return environmenttemplates.Resolved{}, environmenttemplates.ErrInvalidInput
+			return environmenttemplates.Resolved{}, errors.New("stored environment template files have no contents")
 		}
 		return resolved, nil
-	}
-	if s.cipher == nil {
-		return environmenttemplates.Resolved{}, credentialcrypto.ErrUnavailable
 	}
 	plaintext, err := s.cipher.OpenEnvironmentFile(row.FileContents, fileBinding(tenant, id))
 	if err != nil {
 		return environmenttemplates.Resolved{}, err
 	}
-	if json.Unmarshal(plaintext, &resolved.Files) != nil || environmentconfig.ValidateInitialFiles(resolved.Files) != nil {
+	if json.Unmarshal(plaintext, &resolved.Files) != nil {
+		return environmenttemplates.Resolved{}, errors.New("invalid stored environment template files")
+	}
+	if environmentconfig.ValidateInitialFiles(resolved.Files) != nil {
 		return environmenttemplates.Resolved{}, environmenttemplates.ErrInvalidInput
 	}
 	return resolved, nil
@@ -246,7 +250,7 @@ func template(row metadataRow) (environmenttemplates.Template, error) {
 		result.Name = &row.Name.String
 	}
 	if json.Unmarshal(row.Files, &result.Files) != nil || environmentconfig.Decode(row.Packages, &result.Packages) != nil || json.Unmarshal(row.Skills, &result.Skills) != nil || json.Unmarshal(row.Plugins, &result.Plugins) != nil {
-		return environmenttemplates.Template{}, environmenttemplates.ErrInvalidInput
+		return environmenttemplates.Template{}, errors.New("invalid stored environment template metadata")
 	}
 	return result, nil
 }

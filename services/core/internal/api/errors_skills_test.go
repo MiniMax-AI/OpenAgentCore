@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -41,8 +40,6 @@ func TestWriteSkillsError(t *testing.T) {
 			`{"error":{"message":"` + unstorableTextMessage + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`},
 		{"audit source", "/v1/skills", fmt.Errorf("record: %w", writeaudit.ErrInvalidSource), http.StatusBadRequest,
 			`{"error":{"message":"` + invalidInputMessage + `","type":"invalid_request_error","code":"invalid_request","param":null}}`},
-		{"credential key missing", "/v1/skills", credentialcrypto.ErrUnavailable, http.StatusServiceUnavailable,
-			`{"error":{"message":"Credential encryption is not configured on this service.","type":"server_error","code":"credential_storage_unavailable","param":null}}`},
 		{"unknown", "/v1/skills", errors.New("connection reset"), http.StatusInternalServerError,
 			`{"error":{"message":"The operation could not be completed.","type":"server_error","code":"internal_error","param":null}}`},
 	} {

@@ -21,8 +21,6 @@ describe("node state", () => {
     expect(nodeState(node("a", { online: false }), [], true, core)).toBe("unconfirmed");
     expect(nodeState(node("a", { core_url: "https://core-old.example" }), [], false, core)).toBe("old_address");
     expect(nodeState(node("a", { online: false, core_url: "https://core-old.example" }), [], false, core)).toBe("old_address");
-    // A node Core did not enroll, such as a file-managed local one, reports no address: unknown, not old.
-    expect(nodeState(node("a", { core_url: "" }), [], false, core)).toBe("available");
     expect(nodeState(node("a", { online: false, cleanup_pending: 2 }), [], false, core)).toBe("offline");
     expect(nodeState(node("a", { provider_ready: false }), [], false, core)).toBe("degraded");
   });

@@ -34,7 +34,7 @@ export const overview = {
     model: {
       title: "设置默认模型配置",
       body: "为默认执行框架设置模型服务地址和 API key，让 Agent 可以调用模型。应用也可以在请求或 Agent 上指定其他模型服务。",
-      open: "打开系统",
+      open: "打开设置",
     },
     key: {
       title: "创建项目并签发 key",
@@ -146,7 +146,6 @@ export const overview = {
     more: "另有 {{count}} 个节点，在节点页查看",
     more_one: "另有 {{count}} 个节点，在节点页查看",
     more_other: "另有 {{count}} 个节点，在节点页查看",
-    unconfigured: "此控制台未配置沙箱管理。",
     loading: "正在加载节点…",
     failed: "无法加载节点。",
     noNodes: "还没有沙箱节点。托管 Session 至少需要一个。",

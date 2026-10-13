@@ -12,12 +12,20 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+func newFunctionTestSession(rpc *JSONRPCClient) (*Session, <-chan proto.Envelope) {
+	out := make(chan proto.Envelope, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &Session{runID: "run-test", out: out, rpc: rpc, cancelCtx: ctx, cancelFn: cancel}
+	s.registerHandlers()
+	return s, out
+}
+
 func TestFunctionCallWaitsAndRepliesOnce(t *testing.T) {
 	for _, success := range []bool{true, false} {
 		t.Run(map[bool]string{true: "success", false: "failure"}[success], func(t *testing.T) {
 			tc, srv, cleanup := NewTestClient()
 			defer cleanup()
-			s, out := newInteractionTestSession(tc.JSONRPCClient)
+			s, out := newFunctionTestSession(tc.JSONRPCClient)
 			var err error
 			s.functions, err = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}})
 			if err != nil {
@@ -88,7 +96,7 @@ func TestFunctionCallWaitsAndRepliesOnce(t *testing.T) {
 func TestFunctionCallRejectsUnregisteredAndClosedRuns(t *testing.T) {
 	tc, _, cleanup := NewTestClient()
 	defer cleanup()
-	s, _ := newInteractionTestSession(tc.JSONRPCClient)
+	s, _ := newFunctionTestSession(tc.JSONRPCClient)
 	s.setThreadID("thread")
 	s.startSteering("thread", "turn")
 	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}})

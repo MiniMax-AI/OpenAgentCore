@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -30,7 +29,7 @@ func TestRuntimePreparationUnavailablePreventsNativeExecutor(t *testing.T) {
 			}
 			sender := &recSender{}
 			var calls atomic.Int32
-			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
 				calls.Add(1)
 				return nil, errors.New("native factory must not be reached")
 			})

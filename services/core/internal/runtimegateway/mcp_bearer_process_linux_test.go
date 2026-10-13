@@ -197,7 +197,7 @@ func mcpBearerReleased(t *testing.T, root string) int {
 			return launches
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("Done did not release the owned native process")
+			t.Fatal("the owned native process was not released")
 		}
 		time.Sleep(25 * time.Millisecond)
 	}

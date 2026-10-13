@@ -22,44 +22,8 @@ func (q *Queries) AdminAuditCursor(ctx context.Context, id pgtype.UUID) (pgtype.
 	return created_at, err
 }
 
-const getAdminResourceOwners = `-- name: GetAdminResourceOwners :many
-SELECT resource_id,audit_id FROM admin_resource_owners
-WHERE tenant_id=$1 AND resource_type=$2 AND resource_id=ANY($3::text[])
-`
-
-type GetAdminResourceOwnersParams struct {
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	ResourceType string      `json:"resource_type"`
-	Column3      []string    `json:"column_3"`
-}
-
-type GetAdminResourceOwnersRow struct {
-	ResourceID string      `json:"resource_id"`
-	AuditID    pgtype.UUID `json:"audit_id"`
-}
-
-func (q *Queries) GetAdminResourceOwners(ctx context.Context, arg GetAdminResourceOwnersParams) ([]GetAdminResourceOwnersRow, error) {
-	rows, err := q.db.Query(ctx, getAdminResourceOwners, arg.TenantID, arg.ResourceType, arg.Column3)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetAdminResourceOwnersRow{}
-	for rows.Next() {
-		var i GetAdminResourceOwnersRow
-		if err := rows.Scan(&i.ResourceID, &i.AuditID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listAdminAuditLog = `-- name: ListAdminAuditLog :many
-SELECT id, tenant_id, project_id, admin_credential_id, actor_label, action, resource_type, resource_id, result_ids, request_id, trace_id, created_at FROM admin_audit_log
+SELECT id, tenant_id, project_id, admin_credential_id, actor_label, action, resource_type, resource_id, request_id, trace_id, created_at FROM admin_audit_log
 WHERE ($1::text='' OR project_id::text=$1)
  AND ($2::text='' OR resource_type=$2)
  AND ($3::text='' OR resource_id=$3)
@@ -110,7 +74,6 @@ func (q *Queries) ListAdminAuditLog(ctx context.Context, arg ListAdminAuditLogPa
 			&i.Action,
 			&i.ResourceType,
 			&i.ResourceID,
-			&i.ResultIds,
 			&i.RequestID,
 			&i.TraceID,
 			&i.CreatedAt,

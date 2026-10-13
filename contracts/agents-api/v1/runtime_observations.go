@@ -10,7 +10,7 @@ type RuntimeObservation struct {
 	Instance            RuntimeInstance           `json:"instance" binding:"required"`
 	LifecycleState      *string                   `json:"lifecycle_state" extensions:"x-nullable" binding:"required" enums:"active,sleeping,transitioning,pending,stopped"`
 	Status              string                    `json:"status" enums:"observed,unsupported,unavailable" binding:"required"`
-	Reason              *string                   `json:"reason" extensions:"x-nullable" binding:"required" enums:"runtime_mode_not_observable,allocation_pending,runtime_not_running,source_not_configured,sample_timeout,sample_unavailable"`
+	Reason              *string                   `json:"reason" extensions:"x-nullable" binding:"required" enums:"runtime_mode_not_observable,allocation_pending,runtime_not_running,sample_timeout,sample_unavailable"`
 	AllocationCreatedAt *int64                    `json:"allocation_created_at" extensions:"x-nullable" binding:"required" minimum:"0"`
 	ResolvedAt          int64                     `json:"resolved_at" binding:"required" minimum:"0"`
 	ObservedAt          *int64                    `json:"observed_at" extensions:"x-nullable" binding:"required" minimum:"0"`

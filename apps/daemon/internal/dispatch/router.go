@@ -1,8 +1,6 @@
 // Package dispatch wires inbound WebSocket frames to the agent layer.
-// It owns one Session per active RunID, a per-session pump goroutine
-// that forwards the agent's events to the transport, and a
-// permission_id → run_id index so permission_decision frames route
-// back to the right session.
+// It owns one Turn per active RunID and a per-Turn output goroutine that
+// forwards the agent's events to the transport.
 //
 // Concurrency: Handle is safe for one goroutine (typically the read
 // loop). Each session runs its own goroutine. Internal state is
@@ -37,11 +35,8 @@ type Router struct {
 	admission           sync.RWMutex
 	suspension          *proto.EnvironmentSuspendPayload
 	mu                  sync.Mutex
-	sessions            map[string]*sessionState // RunID → state
-	idle                map[string]map[*sessionState]struct{}
-	permIndex           map[string]string // permID  → RunID
-	askIndex            map[string]string // askID   → RunID
-	applied             map[string]appliedInteractionDecision
+	sessions            map[string]*sessionState         // RunID → state
+	applied             map[string]appliedFunctionResult // RunID and call ID → applied result
 	shutdownAttempt     *shutdownAttempt
 	shutdownCh          chan struct{} // closed by Shutdown
 	shutdownWG          dispatchWork  // waits for all pump goroutines
@@ -58,39 +53,28 @@ type Router struct {
 	localWorkspace      *localworkspace.Binding
 }
 
-type appliedInteractionDecision struct {
-	requestID   string
-	kind        string
+type appliedFunctionResult struct {
 	fingerprint [32]byte
 	recordedAt  time.Time
 }
 
 // sessionState is the dispatcher's per-run bookkeeping. The agent
-// owns the close of out; the dispatcher cancels ctxCancel to wind
-// down. traceparent captures the prompt_request's W3C trace so every
-// outbound frame stamps env.Trace with the same value, completing
+// owns the close of out; preparedHandoff owns release. traceparent
+// captures the execution_start's W3C trace so every outbound frame
+// stamps env.Trace with the same value, completing
 // frontend → server → daemon → agent → server attribution.
 type sessionState struct {
-	capabilities        proto.AgentKindCapabilities
-	runID               string
-	environmentID       string
-	stateKey            string
-	session             agent.Session
-	out                 chan proto.Envelope
-	ctx                 context.Context
-	ctxCancel           context.CancelFunc
-	pendingIDs          map[string]struct{}
-	pendingAsks         map[string]struct{}
-	traceparent         string
-	idleTimer           *time.Timer
-	idleLease           uint64
-	retain              bool
-	releaseOnCompletion bool
-	steering            map[string]steeringReceipt
-	steerBusy           bool
-	steeringClosed      bool
-	steeringDone        chan struct{}
-	preparedHandoff     *preparedHandoff
+	capabilities    proto.AgentKindCapabilities
+	runID           string
+	environmentID   string
+	session         agent.Turn
+	out             chan proto.Envelope
+	ctx             context.Context
+	traceparent     string
+	steering        map[string]steeringReceipt
+	steerBusy       bool
+	steeringClosed  bool
+	preparedHandoff *preparedHandoff
 }
 
 // Config is the constructor input. Registry and Sender are required;
@@ -132,10 +116,7 @@ func New(cfg Config) (*Router, error) {
 		sender:              cfg.Sender,
 		log:                 log,
 		sessions:            make(map[string]*sessionState),
-		idle:                make(map[string]map[*sessionState]struct{}),
-		permIndex:           make(map[string]string),
-		askIndex:            make(map[string]string),
-		applied:             make(map[string]appliedInteractionDecision),
+		applied:             make(map[string]appliedFunctionResult),
 		shutdownCh:          make(chan struct{}),
 		idleTimeout:         idleTimeout,
 		executors:           make(map[string]*executorState),
@@ -160,7 +141,7 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	if r.suspension != nil && env.Type != proto.TypeDeviceShutdown {
+	if r.suspension != nil {
 		r.mu.Unlock()
 		return ErrRouterQuiesced
 	}
@@ -183,20 +164,12 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 		return r.handleExecutionStart(ctx, env)
 	case proto.TypeExecutionRelease:
 		return r.handleExecutionRelease(ctx, env)
-	case proto.TypePromptRequest:
-		return r.handlePromptRequest(ctx, env)
 	case proto.TypePromptCancel:
 		return r.handlePromptCancel(ctx, env)
 	case proto.TypeFunctionResult:
 		return r.handleFunctionResult(ctx, env)
 	case proto.TypePromptSteer:
 		return r.handlePromptSteer(ctx, env)
-	case proto.TypePermissionDecision:
-		return r.handlePermissionDecision(ctx, env)
-	case proto.TypePromptForUserChoiceDecision:
-		return r.handlePromptForUserChoiceDecision(ctx, env)
-	case proto.TypeDeviceShutdown:
-		return r.handleDeviceShutdown(ctx, env)
 	default:
 		// Unknown types are logged and dropped — keeps the daemon
 		// forward-compatible with server-side additions.
@@ -214,7 +187,7 @@ func adoptEnvelopeTrace(ctx context.Context, env proto.Envelope) context.Context
 			return obslog.WithTrace(ctx, carrier)
 		}
 	}
-	ctx, _ = obslog.StartBackgroundTrace(ctx, "daemon.envelope")
+	ctx, _ = obslog.StartBackgroundTrace(ctx)
 	return ctx
 }
 
@@ -237,95 +210,10 @@ func (r *Router) drain(ch <-chan proto.Envelope) {
 	}
 }
 
-// cleanupSession removes the session from registry maps. Called from
-// pump's defer so it runs exactly once.
+// cleanupSession removes the session from registry maps. Called once
+// when its prepared release settles.
 func (r *Router) cleanupSession(s *sessionState) {
 	r.mu.Lock()
 	delete(r.sessions, s.runID)
-	for permID := range s.pendingIDs {
-		delete(r.permIndex, permID)
-	}
-	for askID := range s.pendingAsks {
-		delete(r.askIndex, askID)
-	}
-	if !s.retain || s.session == nil || s.stateKey == "" || r.closed {
-		r.mu.Unlock()
-		return
-	}
-	states := r.idle[s.stateKey]
-	if states == nil {
-		states = make(map[*sessionState]struct{})
-		r.idle[s.stateKey] = states
-	}
-	states[s] = struct{}{}
-	r.scheduleIdleLocked(s)
 	r.mu.Unlock()
-}
-
-func sessionStateKey(req proto.PromptRequestPayload) string {
-	return req.AgentStateKey
-}
-
-func (r *Router) touchIdleLocked(stateKey string) {
-	if stateKey == "" {
-		return
-	}
-	for state := range r.idle[stateKey] {
-		r.scheduleIdleLocked(state)
-	}
-}
-
-func (r *Router) scheduleIdleLocked(state *sessionState) {
-	if state.idleTimer != nil {
-		state.idleTimer.Stop()
-	}
-	state.idleLease++
-	lease := state.idleLease
-	state.idleTimer = time.AfterFunc(r.idleTimeout, func() {
-		r.expireIdle(state, lease)
-	})
-}
-
-func (r *Router) expireIdle(state *sessionState, lease uint64) {
-	r.mu.Lock()
-	states := r.idle[state.stateKey]
-	if _, ok := states[state]; !ok || state.idleLease != lease || r.suspension != nil {
-		r.mu.Unlock()
-		return
-	}
-	r.shutdownWG.Add(1)
-	defer r.shutdownWG.Done()
-	delete(states, state)
-	if len(states) == 0 {
-		delete(r.idle, state.stateKey)
-	}
-	state.retain = false
-	r.mu.Unlock()
-
-	state.ctxCancel()
-	if err := state.session.Cancel(context.Background()); err != nil {
-		r.log.Warn("idle session cancel failed", "run_id", state.runID, "state_key", state.stateKey, "err", err)
-	}
-}
-
-// emitTerminalError synthesises error + done for a run that couldn't
-// even be started. Stamps env.Trace from ctx so the gateway can
-// attribute these frames to the same trace_id.
-func (r *Router) emitTerminalError(ctx context.Context, runID, msg string) {
-	traceparent := ""
-	if carrier, ok := obslog.TraceFromContext(ctx); ok {
-		traceparent = carrier.String()
-	}
-	errEnv, err := proto.NewEnvelopeWithTrace(proto.TypeError, runID, proto.ErrorPayload{Error: msg}, traceparent)
-	if err == nil {
-		if sendErr := r.sender.Send(ctx, errEnv); sendErr != nil {
-			r.log.ErrorContext(ctx, "emit terminal error frame failed", "run_id", runID, "err", sendErr)
-		}
-	}
-	doneEnv, err := proto.NewEnvelopeWithTrace(proto.TypeDone, runID, proto.DonePayload{}, traceparent)
-	if err == nil {
-		if sendErr := r.sender.Send(ctx, doneEnv); sendErr != nil {
-			r.log.ErrorContext(ctx, "emit terminal done frame failed", "run_id", runID, "err", sendErr)
-		}
-	}
 }

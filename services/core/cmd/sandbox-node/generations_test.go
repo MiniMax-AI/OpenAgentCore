@@ -7,15 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	providerconfig "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 func TestGenerationJournalRestartIdentity(t *testing.T) {
-	config := providerconfig.Config{InstallationID: "installation", Generation: 9, Provider: "docker"}
+	config := sandbox.NodeConfig{InstallationID: "installation", Generation: 9, Provider: "docker"}
 	stateDir := t.TempDir()
 	directory := filepath.Join(stateDir, "generations")
 	if err := os.Mkdir(directory, 0700); err != nil {
@@ -118,7 +118,7 @@ func TestGenerationHelperUsesOnlyTypedExit(t *testing.T) {
 }
 
 func TestUnresolvedPreparationRemainsRecoveryOnly(t *testing.T) {
-	config := providerconfig.Config{InstallationID: "installation", Generation: 2, Provider: "docker"}
+	config := sandbox.NodeConfig{InstallationID: "installation", Generation: 2, Provider: "docker"}
 	stateDir := t.TempDir()
 	directory := filepath.Join(stateDir, "generations")
 	if err := os.Mkdir(directory, 0700); err != nil {
@@ -141,6 +141,22 @@ func TestUnresolvedPreparationRemainsRecoveryOnly(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(directory, "2.json")); !os.IsNotExist(err) {
 			t.Fatal("unresolved plan published")
 		}
+	}
+}
+
+// Preparation may resolve native state, such as the digest a containerd image
+// store names the loaded Runtime image by; the envelope stays fixed.
+func TestGenerationPlanFixesOnlyTheEnvelope(t *testing.T) {
+	release := sandbox.RuntimeRelease{ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64)}
+	plan := sandbox.NodeConfig{InstallationID: "installation", Generation: 2, Provider: "docker", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, Runtime: &release}, Native: json.RawMessage(`{"image":"` + release.ImageID + `"}`)}
+	final := plan
+	final.Native = json.RawMessage(`{"image":"` + release.ImageManifestDigest + `"}`)
+	if !sameGenerationPlan(final, plan) {
+		t.Fatal("refused a resolved native image")
+	}
+	final.Specification.Resources.CPUs = 4
+	if sameGenerationPlan(final, plan) {
+		t.Fatal("accepted a different specification")
 	}
 }
 
@@ -170,7 +186,7 @@ func TestGenerationStateDirectoryOwnership(t *testing.T) {
 				}
 				stateDir = link
 			}
-			_, err := generationLocalState(providerconfig.Config{Generation: 1}, stateDir)
+			_, err := generationLocalState(sandbox.NodeConfig{Generation: 1}, stateDir)
 			if mode == "private" && err != nil || mode != "private" && !errors.Is(err, sandbox.ErrOwnership) {
 				t.Fatalf("directory ownership: %v", err)
 			}

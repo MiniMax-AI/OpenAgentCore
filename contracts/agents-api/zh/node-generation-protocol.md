@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 1ee43dfcdd0eec0806ea3bc8a4c1227e10bd8ac5e69486505cb113a98e3f548a
+source_hash: fb446e91c3df3c9e397e5e9abb794245b0ae11d81176879207718680e8ab4173
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
@@ -19,7 +19,7 @@ source_hash: 1ee43dfcdd0eec0806ea3bc8a4c1227e10bd8ac5e69486505cb113a98e3f548a
 
 只要节点在当前所有者 epoch 下保持连接，并且最近一次心跳距今不足 45 秒，Core 就会将该节点计为在线。心跳会确立 Provider 的就绪状态和最近的主机测量值，但绝不表示 Session 活动。
 
-健康报告包含 `provider_ready`、可选的固定 `diagnostic`、`observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。未启用代次管理的节点每次报告时都会探测其 Provider；未就绪的 Provider 会报告一个固定诊断代码，该代码根据类型化探测错误进行分类；探测文本和主机路径保留在节点上。Core 会将未知代码存储为 `provider_unavailable`。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些代码及其原因。支持代次管理的节点则按下文所述按代次报告就绪状态。
+健康报告包含 `provider_ready`、可选的固定 `diagnostic`、`observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。未启用代次管理的节点每次报告时都会探测其 Provider；未就绪的 Provider 会报告其首个失败检查所属的、与 Provider 无关的就绪类别，该类别取自探测所包装的类别错误；探测文本、厂商细节和主机路径保留在节点上。节点或代次健康状态中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。支持代次管理的节点则按下文所述按代次报告就绪状态。
 
 ## Provider 请求 {#provider-requests}
 
@@ -75,9 +75,9 @@ Core 发送包含以下内容的 `request` 帧：
 
 ## 代次控制 {#generation-control}
 
-未启用代次管理的节点只服务其登记的代次，配置固定，并且不会收到准备或保留帧。支持代次管理的节点会准备 Core 在 `welcome` 和 `heartbeat_ack` 中通告的目标代次，并在此期间继续服务其持久化的服务代次；目标代次的准备独立于服务 Provider 的就绪状态。
+未启用代次管理的节点只服务其登记的代次，配置固定，并且不会收到准备或保留帧。它可以在 `Health.Generations` 报告该精确代次；支持检查点的 Provider 必须报告，并包含已验证的检查点资格。`provider_ready` 必须与报告的状态一致。支持代次管理的节点会准备 Core 在 `welcome` 和 `heartbeat_ack` 中通告的目标代次，并在此期间继续服务其持久化的服务代次；目标代次的准备独立于服务 Provider 的就绪状态。
 
-节点的 `hello` 和心跳最多携带八条代次观察记录。每条记录指定一个正值的有符号 64 位代次编号、其小写 SHA-256 规范摘要、`ready`、`preparing` 或 `failed` 状态，以及可选的固定诊断信息。目标代次和服务代次的记录排在前面，其余记录公平轮换。八条记录限制的是单条消息，而不是节点可保留的代次数量。省略某条观察记录绝不会授权删除，也不会暗示不存在。
+节点的 `hello` 和心跳最多携带八条代次观察记录。每条记录指定一个正值的有符号 64 位代次编号、其小写 SHA-256 规范摘要、`ready`、`preparing` 或 `failed` 状态，以及可选的固定诊断信息。目标代次和服务代次的记录排在前面，其余记录公平轮换。八条记录限制的是单条消息，而不是节点可保留的代次数量。省略某条观察记录绝不会授权删除，也不会暗示不存在。 支持检查点的 ready 代次携带 `checkpoint`，包含非空且不透明的 `artifact_domain` 和 `execution_class` token，各最多 256 字节。不支持的 Provider 省略该字段；preparing 或 failed 代次不声明它。Core 将声明与已认证连接和代次一起持久化，仅在当前在线连接的该代次仍 ready 时使用。[Provider 契约](../../../docs/zh/sandbox-provider.md#checkpoint-transfer) 定义归档与执行兼容性。
 
 保留使用独立且有界的交换。`retention` 请求最多指定八个本地 `(generation, specification_digest)` 引用、一个 UUID、一个每次递增 1 的 `sequence`、当前 `connection_id` 和所有者 epoch。`retention_ack` 必须与完整的待处理请求匹配，包括条目顺序和身份信息，并为每个条目给出显式布尔值 `keep`。每条连接只能有一个交换处于待处理状态，断连会将其丢弃。任何未经请求、重放、过期、不完整或混合的确认都不会删除任何内容。保留流量从不使用 Provider 请求队列。
 
@@ -121,6 +121,8 @@ Runtime 字节缺失时，绝不将固定的放置实例迁移到当前 Runtime�
 
 下载中断后，只会修复原始路径中缺失的字节。如果在任何导入尝试之前执行回收，准备日志会证明该代次没有已导入的原生镜像。如果某代次的原生可执行文件缺失，且导入可能已经开始，该代次仍会保留：文件缺失永远不能证明原生制品不存在，而空的原生清单也永远不能抹除回执或存储历史。
 
-诊断代码编写于 `services/core/internal/sandbox/node_diagnostic.go`。共享的 `services/core/internal/sandbox/testdata/node-diagnostics.json` 测试夹具检查 Go 映射、OpenAPI 源注释和生成的枚举，以及 TypeScript 客户端声明。Web 使用客户端规范化器，并检查每个已声明代码的本地化消息。代码变更时要同步更新这些投影；未知代码会规范化为 `provider_unavailable`。
+就绪类别编写于 `services/core/internal/sandbox/node_diagnostic.go`，每个类别对应一个导出错误和一个代码。共享的 `services/core/internal/sandbox/testdata/node-diagnostics.json` 测试夹具检查 Go 映射、OpenAPI 源注释和生成的枚举，以及 TypeScript 客户端声明。Web 使用客户端规范化器，并检查每个已声明代码的本地化消息。代码变更时要同步更新这些投影；客户端将未知代码读作 `provider_unavailable`。
 
 准备诊断使用固定的类型化原因。只有制品传输、校验和或版本来源验证失败才会报告 `runtime_download_failed`；私有准备器通过退出类别指示这一类失败，Core 和节点都不解析 stderr。Provider 故障、所有权故障、取消和未分类故障保留其类型化代码，或使用 `provider_unavailable`。协议中不会传输任何 Provider 原始文本。
+
+当前线协议版本为 5。Create 引导和 Resume 请求可携带可选的工作区文件系统绑定。节点在转发前校验其租户及 Environment 与分配引用一致、ObjectID 不可变且有效，以及挂载配置 ID 与所传配置一致。文件系统解析器负责适配器原生所有权校验。未提供绑定时选择自有存储；已提供绑定时不得回退。错误响应仅可保留原生 ID 非空且名称、代次、快照来源均匹配请求的 Resume 目标；这仅为清理证据，不代表恢复成功。

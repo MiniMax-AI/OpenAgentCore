@@ -7,6 +7,7 @@ import (
 
 func codexProfile() Profile {
 	return Profile{
+		RetainedNativeHistory:          proto.CapabilitySupported,
 		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
 		Placements:                     []string{"none", "self_hosted", "openai_hosted"},
 		MCPOrigins:                     []string{"service", "environment"},

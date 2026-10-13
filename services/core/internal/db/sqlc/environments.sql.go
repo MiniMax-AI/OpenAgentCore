@@ -28,7 +28,8 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
-SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration
+SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration,
+       EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = $1 AND e.id = $2 AND s.deleted_at IS NULL
 `
@@ -39,9 +40,10 @@ type GetEnvironmentParams struct {
 }
 
 type GetEnvironmentRow struct {
-	Environment   Environment `json:"environment"`
-	TenantID      pgtype.UUID `json:"tenant_id"`
-	Configuration []byte      `json:"configuration"`
+	Environment       Environment `json:"environment"`
+	TenantID          pgtype.UUID `json:"tenant_id"`
+	Configuration     []byte      `json:"configuration"`
+	ExternalWorkspace bool        `json:"external_workspace"`
 }
 
 func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) (GetEnvironmentRow, error) {
@@ -58,12 +60,14 @@ func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) 
 		&i.Environment.Initialization,
 		&i.TenantID,
 		&i.Configuration,
+		&i.ExternalWorkspace,
 	)
 	return i, err
 }
 
 const getSessionEnvironment = `-- name: GetSessionEnvironment :one
-SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration
+SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration,
+       EXISTS (SELECT 1 FROM environment_workspaces w WHERE w.environment_id = e.id)::boolean AS external_workspace
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
 `
@@ -74,9 +78,10 @@ type GetSessionEnvironmentParams struct {
 }
 
 type GetSessionEnvironmentRow struct {
-	Environment   Environment `json:"environment"`
-	TenantID      pgtype.UUID `json:"tenant_id"`
-	Configuration []byte      `json:"configuration"`
+	Environment       Environment `json:"environment"`
+	TenantID          pgtype.UUID `json:"tenant_id"`
+	Configuration     []byte      `json:"configuration"`
+	ExternalWorkspace bool        `json:"external_workspace"`
 }
 
 func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvironmentParams) (GetSessionEnvironmentRow, error) {
@@ -93,6 +98,7 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 		&i.Environment.Initialization,
 		&i.TenantID,
 		&i.Configuration,
+		&i.ExternalWorkspace,
 	)
 	return i, err
 }

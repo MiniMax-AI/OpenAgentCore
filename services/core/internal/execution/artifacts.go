@@ -17,7 +17,7 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	}
 	owner, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
-	err := d.Store.BeginTurnArtifactCapture(owner, session.TenantID, session.ID, turnID, result.AppliedThrough)
+	err := d.sessionExecution.BeginTurnArtifactCapture(owner, session.TenantID, session.ID, turnID, result.AppliedThrough)
 	if err == nil {
 		err = d.withPreparedWorkspace(owner, peer, session, environment, bound, func(ctx context.Context, handle string) error {
 			return peer.ExportWorkspaceOutputs(ctx, proto.WorkspaceExportPayload{Handle: handle, EnvironmentID: environment.ID}, func(body io.Reader) error {
@@ -36,7 +36,7 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	status = sessions.TurnFailed
 	check, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
-	if turn, err := d.Store.GetTurn(check, session.TenantID, session.ID, turnID); err == nil && !turn.CancelRequestedAt.IsZero() {
+	if turn, err := d.SessionsReader.GetTurn(check, session.TenantID, session.ID, turnID); err == nil && !turn.CancelRequestedAt.IsZero() {
 		status = sessions.TurnCancelled
 	}
 	return result, status

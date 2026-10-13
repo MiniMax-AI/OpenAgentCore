@@ -28,13 +28,12 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal("private provider options unavailable")
 	}
-	req := executionRequest(t)
-	req.ReleaseOnCompletion = false
-	req.RunID, req.Input, req.ConversationID = "", nil, ""
+	req := testRequest(t)
+	req.RunID, req.Input = "", nil
 	if json.Unmarshal(raw, &req.AgentOptions) != nil {
 		t.Fatal("invalid private provider options")
 	}
-	value, err := NewExecutorFactory(nil)(ctx, req)
+	value, err := NewExecutorFactory(testStateRoot(t), nil)(ctx, req)
 	if err != nil {
 		t.Fatal("native Executor preparation failed")
 	}
@@ -154,7 +153,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 		}
 		cleanupStop()
 		req.AgentSessionID = nativeID
-		recovered, recoverErr := NewExecutorFactory(nil)(ctx, req)
+		recovered, recoverErr := NewExecutorFactory(testStateRoot(t), nil)(ctx, req)
 		if recoverErr != nil || recovered == nil {
 			t.Fatal("exact native history recovery failed")
 		}

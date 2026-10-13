@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -25,30 +23,6 @@ func (s *cancelReceiptSession) CancellationOutcome() proto.DonePayload {
 	return s.outcome
 }
 
-func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-	sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{})}
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-		sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
-		return sess, nil
-	})
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "release", proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "stable", ReleaseOnCompletion: true})); err != nil {
-		t.Fatal(err)
-	}
-	sess.out <- mustEnv(t, proto.TypeDone, "release", proto.DonePayload{Content: "Finished"})
-	<-sess.entered
-	if len(h.sender.snapshot()) != 0 {
-		t.Fatal("completion acknowledged before native writer was released")
-	}
-	close(sess.release)
-	waitFor(t, func() bool { return h.router.ActiveRuns() == 0 }, "release completion")
-	frames := h.sender.snapshot()
-	if len(frames) != 1 || frames[0].Type != proto.TypeDone || sess.cancels() != 1 {
-		t.Fatal("completion or native release missing")
-	}
-}
-
 func (s *cancelReceiptSession) Cancel(ctx context.Context) error {
 	if s.entered != nil {
 		close(s.entered)
@@ -57,6 +31,31 @@ func (s *cancelReceiptSession) Cancel(ctx context.Context) error {
 	}
 	_ = s.fakeSession.Cancel(ctx)
 	return s.err
+}
+
+func registerCancelReceiptKind(h *harness, sess *cancelReceiptSession) {
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+		sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
+		return sess, nil
+	}))
+}
+
+func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+	sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{})}
+	registerCancelReceiptKind(h, sess)
+	startRun(t, h.router, h.sender, "release", proto.PromptRequestPayload{AgentKind: "codex"})
+	sess.out <- mustEnv(t, proto.TypeDone, "release", proto.DonePayload{Content: "Finished"})
+	<-sess.entered
+	if len(h.sender.typesFor("release")) != 0 {
+		t.Fatal("completion acknowledged before native writer was released")
+	}
+	close(sess.release)
+	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypeDone, "release") }, "release completion")
+	if frames := h.sender.typesFor("release"); len(frames) != 1 || frames[0] != proto.TypeDone || sess.cancels() != 1 {
+		t.Fatal("completion or native release missing")
+	}
 }
 
 func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
@@ -76,47 +75,31 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{}), outcome: test.outcome, err: test.err}
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-				sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
-				return sess, nil
-			})
-			if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
+			registerCancelReceiptKind(h, sess)
+			startRun(t, h.router, h.sender, "run", proto.PromptRequestPayload{AgentKind: "codex"})
+			if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel-1"})); err != nil {
 				t.Fatal(err)
 			}
-			done := make(chan error, 1)
-			go func() {
-				done <- h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel-1"}))
-			}()
 			<-sess.entered
-			for _, env := range h.sender.snapshot() {
-				if env.Type == proto.TypeInteractionDecisionAck {
-					t.Fatal("cancellation acknowledged before adapter returned")
-				}
+			if len(cancellationAcks(h.sender)) != 0 {
+				t.Fatal("cancellation acknowledged before adapter returned")
 			}
 			close(sess.release)
-			if err := <-done; err != nil {
-				t.Fatal(err)
+			waitFor(t, func() bool { return len(cancellationAcks(h.sender)) != 0 }, "cancellation receipt")
+			acks := cancellationAcks(h.sender)
+			if len(acks) != 1 {
+				t.Fatalf("cancellation receipts: %+v", acks)
 			}
-			found := false
-			for _, env := range h.sender.snapshot() {
-				if env.Type == proto.TypeInteractionDecisionAck {
-					found = true
-					var ack proto.InteractionDecisionAckPayload
-					_ = env.DecodePayload(&ack)
-					if ack.Applied != (test.err == nil) || ack.DeliveryID != "cancel-1" {
-						t.Fatalf("wrong receipt: %+v", ack)
-					}
-					if test.err == nil {
-						if ack.ErrorCode != "" || ack.Outcome == nil || !reflect.DeepEqual(*ack.Outcome, test.outcome) {
-							t.Fatalf("cancellation receipt changed observed evidence: %+v", ack)
-						}
-					} else if ack.ErrorCode != "cancel_failed" || ack.Outcome != nil {
-						t.Fatalf("failed cancellation supplied a success outcome: %+v", ack)
-					}
+			ack := acks[0]
+			if ack.Applied != (test.err == nil) || ack.DeliveryID != "cancel-1" {
+				t.Fatalf("wrong receipt: %+v", ack)
+			}
+			if test.err == nil {
+				if ack.ErrorCode != "" || ack.Outcome == nil || !reflect.DeepEqual(*ack.Outcome, test.outcome) {
+					t.Fatalf("cancellation receipt changed observed evidence: %+v", ack)
 				}
-			}
-			if !found {
-				t.Fatal("missing cancellation receipt")
+			} else if ack.ErrorCode != "cancel_failed" || ack.Outcome != nil {
+				t.Fatalf("failed cancellation supplied a success outcome: %+v", ack)
 			}
 		})
 	}
@@ -125,14 +108,13 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 func TestLegacyCancellationDoesNotEmitNewFrames(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "legacy", proto.PromptRequestPayload{AgentKind: "fake_alpha"})); err != nil {
-		t.Fatal(err)
-	}
+	startRun(t, h.router, h.sender, "legacy", proto.PromptRequestPayload{AgentKind: "fake_alpha"})
 	sess := <-h.gotSess
 	sess.closeOutOnCancel = true
 	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptCancel, "legacy", proto.PromptCancelPayload{})); err != nil {
 		t.Fatal(err)
 	}
+	waitFor(t, func() bool { return hasFrame(h.sender, proto.TypeDone, "legacy") }, "cancellation settlement")
 	for _, env := range h.sender.snapshot() {
 		if env.Type == proto.TypeInteractionDecisionAck {
 			t.Fatal("legacy cancellation emitted new receipt")

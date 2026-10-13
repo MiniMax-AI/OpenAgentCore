@@ -46,7 +46,7 @@ class GenerationReviewRegressions(unittest.TestCase):
             with mock.patch.object(node_generations, 'atomic_json', side_effect=interrupted):
                 with self.assertRaises(OSError):
                     node_generations.prepare(case.args, installer)
-            self.assertEqual(installer.private_json(path)['docker']['image'], case.manifest['image_manifest_digests']['runtime'])
+            self.assertEqual(installer.private_json(path)['native']['image'], case.manifest['image_manifest_digests']['runtime'])
             self.assertTrue(installer.private_json(path.with_suffix('.preparing'))['import_started'])
             node_generations.prepare(case.args, installer)
             saved = path.read_bytes()
@@ -217,7 +217,7 @@ class GenerationReviewRegressions(unittest.TestCase):
             changed=json.loads(json.dumps(original)); changed['configuration'][field]=value
             node_generations.atomic_json(path,changed)
             with self.assertRaises(installer.InstallError): node_generations.retained_configs(case.root,installer)
-        changed=json.loads(json.dumps(original)); changed['configuration']['docker']['seccomp_file']=str(case.home/'foreign')
+        changed=json.loads(json.dumps(original)); changed['configuration']['native']['seccomp_file']=str(case.home/'foreign')
         node_generations.atomic_json(path,changed)
         with self.assertRaises(installer.InstallError): node_generations.collect(case.args,installer)
         self.assertFalse((case.root/'state/node/generations/2.dropped').exists())
@@ -259,7 +259,7 @@ class GenerationReviewRegressions(unittest.TestCase):
         with mock.patch.object(installer.node_spec,'fetch',return_value=cfg),mock.patch.object(node_generations,'image_available',side_effect=available):
             node_generations.prepare(case.args,installer)
         final=installer.private_json(case.root/'state/node/generations/2.json')
-        self.assertNotEqual(final['microsandbox']['helper_path'],original['microsandbox']['helper_path'])
+        self.assertNotEqual(final['native']['helper_path'],original['native']['helper_path'])
         self.assertIn(1,node_generations.retained_configs(case.root,installer))
 
     def test_operator_update_refuses_before_download_or_update(self):

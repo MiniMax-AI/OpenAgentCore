@@ -27,7 +27,7 @@ func (s *emptyEventSessionStore) GetSession(_ context.Context, tenant, id string
 	return sessions.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *emptyEventSessionStore) AuditSessionOperation(context.Context, string, string, string) error {
+func (s *emptyEventSessionStore) AuditSessionOperation(context.Context, sessions.AuditSessionOperationCommand) error {
 	return nil
 }
 
@@ -37,7 +37,7 @@ func TestEmptyEventBatchAuthorizesWithoutExecutionEffects(t *testing.T) {
 			recorder := &inputRecorder{}
 			sessions := &emptyEventSessionStore{}
 			h, _, tenant := testHandler(t, func(d *Dependencies, f *testFakes) {
-				f.sessions.getSession, f.sessions.auditSessionOperation = sessions.GetSession, sessions.AuditSessionOperation
+				f.sessionsReader.getSession, f.sessions.auditSessionOperation = sessions.GetSession, sessions.AuditSessionOperation
 				if executor {
 					recorder.admit(d, f)
 				}

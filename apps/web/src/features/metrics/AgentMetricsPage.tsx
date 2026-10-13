@@ -1,3 +1,4 @@
+import type { AdminProject } from "@oac/agents-client";
 import { AlertTriangle } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
@@ -22,7 +23,8 @@ import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
-import { ProjectFilter, ProjectName, useProjects, type ProjectFilterValue } from "../../lib/projects";
+import { ProjectFilter, ProjectName, useProjectCollection, useProjects, type ProjectFilterValue } from "../../lib/projects";
+import { collections } from "../../lib/queries";
 import {
   agentMetricsOutcome,
   INLINE_AGENT_ID,
@@ -39,7 +41,7 @@ import { type ProjectReadFailure } from "./project-sessions";
 import { type KeyUsageRow } from "./key-usage";
 import { useStableColors } from "./use-stable-colors";
 import "./MetricsView.css";
-import { type KeyRef, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
 
 const RANGES: readonly AgentMetricsRange[] = ["1h", "6h", "24h", "7d"];
 
@@ -67,7 +69,7 @@ function bucketLabel(seconds: number, t: TFunction<"metrics">): string {
  * Agent metrics and usage by key through the query cache. A changed project
  * filter or range keeps the last figures on screen until the new ones arrive.
  */
-function useAgentMetricsData(projects: readonly Project[], projectsReady: boolean, filter: ProjectFilterValue, range: AgentMetricsRange) {
+function useAgentMetricsData(projects: readonly AdminProject[], projectsReady: boolean, filter: ProjectFilterValue, range: AgentMetricsRange) {
   const targets = useMemo(() => projects.filter((project) => !filter || project.id === filter), [filter, projects]);
   const metricsQuery = useQuery({ ...agentMetricsQuery(targets, filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
   const keyQuery = useQuery({ ...keyUsageQuery(filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
@@ -95,6 +97,8 @@ export function AgentMetricsPage() {
   const { state: projectsState, byId } = useProjects();
   const [filter, setFilter] = useState<ProjectFilterValue>("");
   const [range, setRange] = useState<AgentMetricsRange>("24h");
+  const agents = useProjectCollection(collections.agents, filter);
+  const savedAgents = new Set(agents.items.filter((row) => !agents.failures.some((failure) => failure.project.id === row.project.id)).map((row) => `${row.project.id}:${row.value.id}`));
   const projects = projectsState.projects;
   const projectsReady = projectsState.status !== "loading" || projects.length > 0;
   const { state, keyUsage, refreshing, refresh } = useAgentMetricsData(projects, projectsReady, filter, range);
@@ -122,7 +126,7 @@ export function AgentMetricsPage() {
           ) : null}
           <ProjectFilter value={filter} onChange={setFilter} />
           <SegmentedControl label={t("range.label")} value={range} options={RANGES.map((value) => ({ value, label: t(`range.${value}`) }))} onChange={setRange} />
-          <RefreshButton refreshing={refreshing} updatedAt={loaded ? formatClock(loaded.loadedAt, locale) : null} onClick={refresh} />
+          <RefreshButton refreshing={refreshing} updatedAt={loaded ? formatClock(loaded.loadedAt, locale) : null} onClick={() => { refresh(); agents.refresh(); }} />
         </>}
       />
       <PageBody>
@@ -135,6 +139,7 @@ export function AgentMetricsPage() {
         ) : (
           <AgentMetricsContent
             metrics={metrics}
+            savedAgents={savedAgents}
             listFailures={loaded?.listFailures ?? []}
             showProject={!filter}
             projectOf={(id) => (id ? byId.get(id) : undefined)}
@@ -153,7 +158,6 @@ function coverageNote(loaded: Loaded, t: TFunction<"metrics">): string | null {
   const { coverage } = loaded.metrics;
   const parts: string[] = [];
   if (loaded.truncatedLists.length) parts.push(t("coverage.listTruncated", { names: loaded.truncatedLists.map((project) => project.name).join(", ") }));
-  if (loaded.unrecognizedSessions) parts.push(t("coverage.unrecognized", { count: loaded.unrecognizedSessions }));
   if (coverage.skippedSessions) parts.push(t("coverage.skipped", { loaded: coverage.loadedSessions, total: coverage.candidateSessions }));
   if (coverage.truncatedSessions) parts.push(t("coverage.truncated", { count: coverage.truncatedSessions }));
   if (coverage.failedSessions) parts.push(t("coverage.failed", { count: coverage.failedSessions }));
@@ -163,6 +167,7 @@ function coverageNote(loaded: Loaded, t: TFunction<"metrics">): string | null {
 
 function AgentMetricsContent({
   metrics,
+  savedAgents,
   listFailures,
   showProject,
   projectOf,
@@ -171,9 +176,10 @@ function AgentMetricsContent({
   failure,
 }: {
   metrics: AgentMetrics;
+  savedAgents: ReadonlySet<string>;
   listFailures: ProjectReadFailure[];
   showProject: boolean;
-  projectOf: (id: string | null) => Project | undefined;
+  projectOf: (id: string | null) => AdminProject | undefined;
   modelColor: (id: string) => string;
   toolColor: (id: string) => string;
   failure: string | null;
@@ -362,8 +368,9 @@ function AgentMetricsContent({
             <tbody>
               {metrics.byAgent.map((agent) => {
                 const label = agentLabel(agent.agentId, agent.label);
-                // A saved Agent opens its page, and its failures its Sessions in the Session log; an inline Agent has neither.
-                const saved = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
+                // Snapshot IDs do not establish that a saved Agent resource exists.
+                const sessionFilter = agent.projectId !== null && !isInlineAgent(agent.agentId) ? { project: agent.projectId, id: agent.agentId } : null;
+                const saved = sessionFilter && savedAgents.has(`${agent.projectId}:${agent.agentId}`) ? sessionFilter : null;
                 // The figure counts failed Turns in the range; the link lists all the Agent's Sessions, and its name and tooltip say so.
                 const openSessions = t("agent.openSessions", { count: agent.failed, agent: label });
                 return (
@@ -377,8 +384,8 @@ function AgentMetricsContent({
                     <td className="numeric">{integer(agent.sessions)}</td>
                     <td className="numeric">{integer(agent.requests)}</td>
                     <td className={agent.failed ? "numeric numeric-danger" : "numeric"}>
-                      {saved && agent.failed ? (
-                        <button type="button" className="figure-link" aria-label={openSessions} title={openSessions} onClick={() => navigate("sessions", saved, "agent-sessions")}>{integer(agent.failed)}</button>
+                      {sessionFilter && agent.failed ? (
+                        <button type="button" className="figure-link" aria-label={openSessions} title={openSessions} onClick={() => navigate("sessions", sessionFilter, "agent-sessions")}>{integer(agent.failed)}</button>
                       ) : integer(agent.failed)}
                     </td>
                     <td className="numeric">{formatPercent(agent.finished ? agent.failed / agent.finished : null, locale)}</td>
@@ -395,13 +402,8 @@ function AgentMetricsContent({
   );
 }
 
-function keyLabel(key: KeyRef | null, t: TFunction<"metrics">): string {
-  if (!key) return t("keys.unknown");
-  return key.name ?? (key.prefix ? `${key.prefix}…` : t("keys.unknown"));
-}
-
 /** Usage by the API key that created each Session, from Core's summary for the range. */
-function KeyUsageSection({ state, window, showProject, projectOf }: { state: KeyUsageState; window: MetricsWindow; showProject: boolean; projectOf: (id: string) => Project | undefined }) {
+function KeyUsageSection({ state, window, showProject, projectOf }: { state: KeyUsageState; window: MetricsWindow; showProject: boolean; projectOf: (id: string) => AdminProject | undefined }) {
   const { t, i18n } = useTranslation("metrics");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
@@ -435,13 +437,13 @@ function KeyUsageSection({ state, window, showProject, projectOf }: { state: Key
   );
 }
 
-function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: ProjectSummary; showProject: boolean; project: Project | undefined; now: number; locale: string | undefined }) {
+function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: ProjectSummary; showProject: boolean; project: AdminProject | undefined; now: number; locale: string | undefined }) {
   const { t } = useTranslation("metrics");
   const key = row.key;
   return (
     <tr>
       <th scope="row">
-        <span className={key ? "table-primary" : "table-primary table-muted"} title={key?.prefix ? `${key.prefix}…` : t("keys.unknownHelp")}>{keyLabel(key, t)}</span>
+        <span className={key ? "table-primary" : "table-primary table-muted"} title={key ? `${key.prefix}…` : t("keys.unknownHelp")}>{key ? key.name : t("keys.unknown")}</span>
         {key?.revoked_at ? <span className="pill">{t("keys.revoked")}</span> : null}
       </th>
       {showProject ? <td><ProjectName project={project} /></td> : null}
@@ -449,8 +451,8 @@ function KeyUsageTableRow({ row, showProject, project, now, locale }: { row: Pro
       <td className="numeric">{formatInteger(row.sessions.in_progress, locale)}</td>
       <td className={row.sessions.failed ? "numeric numeric-danger" : "numeric"}>{formatInteger(row.sessions.failed, locale)}</td>
       <td className="numeric">{row.usage ? formatCompact(row.usage.total_tokens, locale) : MISSING}</td>
-      <td className="numeric" title={row.coverage.sessions ? t("keys.coverageDetail", { reported: row.coverage.reported, total: row.coverage.sessions }) : undefined}>
-        {formatPercent(row.coverage.sessions ? row.coverage.reported / row.coverage.sessions : null, locale)}
+      <td className="numeric" title={row.coverage.total_sessions ? t("keys.coverageDetail", { reported: row.coverage.measured_sessions, total: row.coverage.total_sessions }) : undefined}>
+        {formatPercent(row.coverage.ratio, locale)}
       </td>
       <td className="numeric">{formatRelative(row.last_active_at, now, locale)}</td>
     </tr>

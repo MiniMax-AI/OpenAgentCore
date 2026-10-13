@@ -1,5 +1,4 @@
-import { AgentCoreError } from "@oac/agents-client";
-import { type AdminIssuedKey, type AdminKey, type Project } from "../../lib/admin-view";
+import { type AdminAPIKey, type AdminIssuedAPIKey, type AdminProject, AgentCoreError } from "@oac/agents-client";
 
 /**
  * Pure state for projects and their named API keys. A project owns the assets
@@ -46,7 +45,7 @@ export function isUsableName(value: string, problem: NameProblem | null): boolea
  * project's loaded key list shows more (it may be newer, for example after a
  * key was issued and the project list could not be read again).
  */
-export function archiveKeyCount(project: Pick<Project, "id" | "active_key_count">, keys: readonly AdminKey[] | null | undefined): number {
+export function archiveKeyCount(project: Pick<AdminProject, "id" | "active_key_count">, keys: readonly AdminAPIKey[] | null | undefined): number {
   const listed = keys ? keys.filter((key) => key.project_id === project.id && key.revoked_at === null).length : 0;
   return Math.max(project.active_key_count, listed);
 }
@@ -87,16 +86,16 @@ export function isAbort(error: unknown): boolean {
 export type KeyFlow =
   | { step: "idle" }
   /** Issue a named key for an active project. */
-  | { step: "issue"; project: Project; name: string; busy: boolean; error: FlowError | null }
+  | { step: "issue"; project: AdminProject; name: string; busy: boolean; error: FlowError | null }
   /** The plaintext is on screen until the operator confirms it was saved. */
-  | { step: "issued"; project: Project; issued: AdminIssuedKey; open: boolean };
+  | { step: "issued"; project: AdminProject; issued: AdminIssuedAPIKey; open: boolean };
 
 export type KeyFlowEvent =
-  | { type: "openIssue"; project: Project }
+  | { type: "openIssue"; project: AdminProject }
   | { type: "setName"; name: string }
   | { type: "started" }
   | { type: "failed"; error: FlowError }
-  | { type: "issued"; projectId: string; key: AdminIssuedKey }
+  | { type: "issued"; projectId: string; key: AdminIssuedAPIKey }
   | { type: "hideIssued" }
   | { type: "saved" }
   | { type: "cancel" };
@@ -107,7 +106,7 @@ export function keyFlowReducer(flow: KeyFlow, event: KeyFlowEvent): KeyFlow {
   switch (event.type) {
     case "openIssue":
       // Never start a second issuance while a plaintext key is waiting to be saved.
-      if (flow.step !== "idle" || event.project.status !== "active") return flow;
+      if (flow.step !== "idle" || event.project.archived_at !== null) return flow;
       return { step: "issue", project: event.project, name: "", busy: false, error: null };
     case "setName":
       return flow.step === "issue" && !flow.busy ? { ...flow, name: event.name, error: null } : flow;
@@ -131,16 +130,16 @@ export function keyFlowReducer(flow: KeyFlow, event: KeyFlowEvent): KeyFlow {
 }
 
 /** The plaintext currently held by a flow, if any. */
-export function pendingPlaintext(flow: KeyFlow): AdminIssuedKey | null {
+export function pendingPlaintext(flow: KeyFlow): AdminIssuedAPIKey | null {
   return flow.step === "issued" ? flow.issued : null;
 }
 
 /** Active keys first, then newest first. */
-export function sortKeys(keys: readonly AdminKey[]): AdminKey[] {
-  return [...keys].sort((a, b) => Number(a.revoked_at !== null) - Number(b.revoked_at !== null) || b.created_at - a.created_at || a.id.localeCompare(b.id));
+export function sortKeys(keys: readonly AdminAPIKey[]): AdminAPIKey[] {
+  return [...keys].sort((a, b) => Number(a.revoked_at !== null) - Number(b.revoked_at !== null) || Date.parse(b.created_at) - Date.parse(a.created_at) || a.id.localeCompare(b.id));
 }
 
-export function activeKeyNames(keys: readonly AdminKey[] | null | undefined): string[] {
+export function activeKeyNames(keys: readonly AdminAPIKey[] | null | undefined): string[] {
   return (keys ?? []).filter((key) => key.revoked_at === null).map((key) => key.name);
 }
 
@@ -149,7 +148,7 @@ export function prefixLabel(prefix: string | null | undefined): string {
   return prefix ? `${prefix}…` : "—";
 }
 
-export function matchesProject(project: Project, query: string): boolean {
+export function matchesProject(project: AdminProject, query: string): boolean {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return true;
   return [project.name, project.id].some((value) => value.toLocaleLowerCase().includes(needle));

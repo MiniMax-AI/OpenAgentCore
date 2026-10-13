@@ -10,10 +10,12 @@ const mcp = (label, url, allowed = null, credential = null) => ({
   ...(credential ? { x_agents_core: { credential_id: credential } } : {}),
 });
 const str = (description) => ({ type: "string", description });
+/** Core reports both reasoning members, null when unset. */
+const reasoning = (effort = null, summary = null) => ({ effort, summary });
 
 export const agentDefinitions = [
   {
-    name: "Incident responder", model: "gpt-5.1-codex", harness: "codex", reasoning: { effort: "high", summary: "auto" },
+    name: "Incident responder", model: "gpt-5.1-codex", harness: "codex", reasoning: reasoning("high", "auto"),
     instructions: "You are the on-call assistant for the web platform.\n\nWhen an alert arrives:\n1. Read the alert and the linked dashboard.\n2. Check recent deploys and error logs for the affected service.\n3. Propose the smallest safe mitigation and wait for approval before acting.\n4. Write a short incident note: impact, timeline, cause, next steps.",
     tools: [
       fn("lookup_deploys", "List deploys of a service in a time window.", { service: str("Service name"), since: str("ISO-8601 start") }),
@@ -23,7 +25,7 @@ export const agentDefinitions = [
     metadata: { team: "sre", tier: "production", runbook: "RB-0142" },
   },
   {
-    name: "Support triage", model: "claude-sonnet-5", harness: "claude_sdk", reasoning: {},
+    name: "Support triage", model: "claude-sonnet-5", harness: "claude_sdk", reasoning: reasoning(),
     instructions: "Classify each incoming support ticket by product area and severity.\nAsk one clarifying question when the report lacks steps to reproduce.\nNever promise dates. Link the matching help-center article when one exists.",
     tools: [
       fn("search_help_center", "Search published help-center articles.", { query: str("Search text") }),
@@ -32,13 +34,13 @@ export const agentDefinitions = [
     metadata: { team: "support", queue: "tier-1" },
   },
   {
-    name: "Code reviewer", model: "gpt-5.1-codex", harness: "codex", reasoning: { effort: "medium" },
+    name: "Code reviewer", model: "gpt-5.1-codex", harness: "codex", reasoning: reasoning("medium"),
     instructions: "Review pull requests for correctness first, then clarity.\nComment only on issues that matter; group nits into one comment.\nFlag missing tests for changed behaviour.",
     tools: [mcp("github", "https://mcp.example.com/github", ["get_pull_request", "list_files", "create_review"])],
     metadata: { team: "platform", repo_scope: "monorepo" },
   },
   {
-    name: "Data analyst", model: "MiniMax-M2", harness: "mcode", reasoning: {},
+    name: "Data analyst", model: "MiniMax-M2", harness: "mcode", reasoning: reasoning(),
     instructions: "Answer questions about product metrics using the warehouse.\nShow the SQL you ran and state the time range and filters explicitly.\nIf data is missing, say so instead of estimating.",
     tools: [
       fn("run_sql", "Run a read-only SQL query against the analytics warehouse.", { sql: str("SELECT statement") }),
@@ -47,37 +49,37 @@ export const agentDefinitions = [
     metadata: { team: "data", warehouse: "analytics" },
   },
   {
-    name: "Contract checker", model: "gpt-5.1-mini", harness: "codex", reasoning: {},
+    name: "Contract checker", model: "gpt-5.1-mini", harness: "codex", reasoning: reasoning(),
     instructions: "Compare a supplier contract against the standard template.\nList every deviation with the clause number, the template wording and the contract wording.\nMark liability, termination and data-protection deviations as high priority.",
     tools: [fn("fetch_template", "Fetch the current standard contract template.", { kind: str("Contract type") })],
     metadata: { team: "legal" },
   },
   {
-    name: "Release notes writer", model: "claude-sonnet-5", harness: "claude_sdk", reasoning: {},
+    name: "Release notes writer", model: "claude-sonnet-5", harness: "claude_sdk", reasoning: reasoning(),
     instructions: "Draft release notes from merged pull requests since the last tag.\nGroup by user-visible change; leave out refactors and CI changes.",
     tools: [mcp("github", "https://mcp.example.com/github", ["list_merged_pull_requests", "get_release"])],
     metadata: { team: "platform", channel: "stable" },
   },
   {
-    name: "Onboarding guide", model: "gpt-5.1-mini", harness: "codex", reasoning: {},
+    name: "Onboarding guide", model: "gpt-5.1-mini", harness: "codex", reasoning: reasoning(),
     instructions: "Help new employees find internal documentation and set up their accounts.\nKeep answers short and link the source page.",
     tools: [mcp("docs", "https://mcp.internal.example/docs", null)],
     metadata: { team: "people-ops" },
   },
   {
-    name: "Churn forecaster", model: "MiniMax-M2", harness: "mcode", reasoning: { effort: "high" },
+    name: "Churn forecaster", model: "MiniMax-M2", harness: "mcode", reasoning: reasoning("high"),
     instructions: "Estimate 90-day churn risk per account from usage and support signals.\nExplain the top three drivers for each high-risk account.",
     tools: [fn("run_sql", "Run a read-only SQL query against the analytics warehouse.", { sql: str("SELECT statement") })],
     metadata: { team: "data", model_version: "2026-09" },
   },
   {
-    name: "Log summarizer", model: "gpt-5.1-codex", harness: "codex", reasoning: {},
+    name: "Log summarizer", model: "gpt-5.1-codex", harness: "codex", reasoning: reasoning(),
     instructions: "Summarise error logs for the last hour: top error signatures, first seen, count, affected hosts.",
     tools: [mcp("observability", "https://mcp.internal.example/observability", ["query_logs"])],
     metadata: { team: "sre" },
   },
   {
-    name: "Staging smoke tester", model: "gpt-5.1-mini", harness: "codex", reasoning: {},
+    name: "Staging smoke tester", model: "gpt-5.1-mini", harness: "codex", reasoning: reasoning(),
     instructions: "Run the staging smoke checklist after each deploy and report failures with request IDs.",
     tools: [fn("http_check", "Call an endpoint and return status and latency.", { url: str("Absolute URL") })],
     metadata: { team: "qa", environment: "staging" },
@@ -91,13 +93,13 @@ export const agentDefinitions = [
  */
 export const providerAgentDefinitions = [
   {
-    id: "agent_11c4f2a8", name: "Spec drafter", model: "MiniMax-M2", reasoning: {},
+    id: "agent_11c4f2a8", name: "Spec drafter", model: "MiniMax-M2", reasoning: reasoning(),
     instructions: "Draft a product spec from the linked discussion: problem, users, scope, open questions.",
     tools: [], metadata: { team: "product" },
     x_agents_core: { model_provider: { protocol: "anthropic", base_url: "https://api.minimaxi.com/anthropic", api_key_configured: true, context_window: 204800, max_output_tokens: 65536 } },
   },
   {
-    id: "agent_12d7e3b9", name: "Research assistant", model: "kimi-k2", reasoning: {},
+    id: "agent_12d7e3b9", name: "Research assistant", model: "kimi-k2", reasoning: reasoning(),
     instructions: "Answer research questions with cited sources and a one-paragraph summary.",
     tools: [], metadata: { team: "research" },
     x_agents_core: { harness: "codex", model_provider: { protocol: "responses", base_url: "https://api.moonshot.cn/v1", api_key_configured: true } },

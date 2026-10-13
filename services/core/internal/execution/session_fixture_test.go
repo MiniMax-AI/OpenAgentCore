@@ -12,11 +12,11 @@ import (
 )
 
 // testSessions builds the pooled Session adapter on pool with cipher and the
-// Session service on it, as cmd/server does.
+// Session service on it under fixtureRules, as cmd/server does.
 func testSessions(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) (*sessionpg.Store, *sessions.Service) {
 	t.Helper()
 	adapter := sessionpg.New(pgunit.NewPool(pool), cipher)
-	service, err := sessions.NewService(adapter)
+	service, err := sessions.NewService(adapter, fixtureRules(t))
 	if err != nil {
 		t.Fatal(err)
 	}

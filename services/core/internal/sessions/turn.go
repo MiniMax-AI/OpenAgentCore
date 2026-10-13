@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 )
@@ -53,6 +54,8 @@ func ValidTransition(from, to string) bool {
 	}
 }
 
+// TurnTransition asks to move a Turn from ExpectedStatus to Status. Only a
+// Turn that ends carries an outcome.
 type TurnTransition struct {
 	ExpectedStatus string
 	Status         string
@@ -90,4 +93,23 @@ type ExecutionBinding struct {
 	Device          ExecutionDevice
 	NativeSessionID string
 	HasStartedTurn  bool
+}
+
+// TurnReader reads root Turns. Subagent Turns are not Session Turns;
+// SubagentReader reads them.
+type TurnReader interface {
+	// GetTurn reads the tenant's root Turn of the Session. A malformed tenant
+	// is ErrInvalidInput; a malformed Session or Turn ID, a Subagent Turn ID
+	// and a missing Turn are ErrNotFound.
+	GetTurn(ctx context.Context, tenant, session, turn string) (Turn, error)
+	// ListTurns pages the root Turns of the tenant's Session that was not
+	// publicly deleted by creation time and ID, after the Turn cursor names.
+	// A page size outside 1..100 is ErrInvalidInput; a missing Session or
+	// cursor Turn is ErrNotFound.
+	ListTurns(ctx context.Context, tenant, session, cursor string, limit int, ascending bool) (TurnPage, error)
+	// ListExecutionWork lists, in ID order after the Turn after names, up to
+	// 100 root Turns in statuses across tenants; the queued Turns of a publicly
+	// deleted Session are not work. With connectedDevices not nil, it lists
+	// only the Turns of tenants that own one of those devices, unrevoked.
+	ListExecutionWork(ctx context.Context, after string, statuses, connectedDevices []string) ([]ExecutionWork, error)
 }

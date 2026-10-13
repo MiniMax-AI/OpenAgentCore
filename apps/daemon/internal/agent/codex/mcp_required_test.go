@@ -1,13 +1,13 @@
 package codex
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -17,7 +17,6 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 	for _, mode := range []string{"new ready", "new failed", "resume ready", "resume failed"} {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
-			req.StrictResume = true
 			req.AgentOptions = map[string]any{"model": "fixture-model"}
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp", Required: true}}
 			req.MCPHTTPServers = &servers
@@ -35,17 +34,20 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 			t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", config)
 			gate := filepath.Join(root, "required-initialization")
 			t.Setenv("OAC_TEST_PREPARATION_THREAD_GATE", gate)
-			p, err := newPreparation(t.Context(), req, cfg)
+			e, err := testExecutor(t, "complete", req, cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer p.Close()
 			out := make(chan proto.Envelope, 16)
-			s, err := p.start(t.Context(), "required-run", proto.TextInput("actual prompt"), out)
-			if err != nil {
-				t.Fatal(err)
+			type started struct {
+				turn agent.Turn
+				err  error
 			}
-			defer s.Cancel(context.Background())
+			result := make(chan started, 1)
+			go func() {
+				turn, err := e.StartTurn(t.Context(), "required-run", proto.TextInput("actual prompt"), out)
+				result <- started{turn, err}
+			}()
 			waitPreparationMethod(t, root, method)
 			time.Sleep(100 * time.Millisecond)
 			assertNoTurn := func() {
@@ -68,19 +70,23 @@ func TestRequiredMCPWaitsForNativeThreadAndNeverRestartsFailedResume(t *testing.
 			if err := os.WriteFile(gate, []byte(state), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if state == "ready" {
-				waitPreparationMethod(t, root, "turn/start")
-				return
-			}
+			var start started
 			select {
-			case <-s.waitDone:
+			case start = <-result:
 			case <-time.After(4 * time.Second):
-				t.Fatal("failed initialization did not terminate")
+				t.Fatal("native initialization did not finish")
+			}
+			if (start.err == nil) != (state == "ready") {
+				t.Fatal("native initialization outcome changed", start.err)
+			}
+			frames := settledFrames(t, start.turn, out)
+			if state == "ready" {
+				return
 			}
 			assertNoTurn()
 			failed := false
-			for len(out) > 0 {
-				failed = (<-out).Type == proto.TypeError || failed
+			for _, frame := range frames {
+				failed = frame.Type == proto.TypeError || failed
 			}
 			if !failed {
 				t.Fatal("native initialization failure was not reported")

@@ -1,10 +1,9 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -12,21 +11,36 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
 
+// assertPreparationOutcome waits for the terminal admission status of id. An
+// admitted request fails in the controlled factory; a rejected one sends only
+// its rejection.
+func assertPreparationOutcome(t *testing.T, sender *recSender, id string, admitted bool) proto.PreparationStatusPayload {
+	t.Helper()
+	state, frames := "rejected", 1
+	if admitted {
+		state, frames = "failed", 2
+	}
+	status := waitPreparationStatus(t, sender, id, state, "")
+	if got := sender.typesFor(id); len(got) != frames {
+		t.Fatalf("preparation %s frames = %v, want %d status frames", id, got, frames)
+	}
+	return status
+}
+
 func TestNoEnvironmentRejectsOtherEngineBeforeFactory(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
-	called := false
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		called = true
-		return nil, nil
+	var called atomic.Bool
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		called.Store(true)
+		return nil, errors.New("controlled factory stop")
 	})
-	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "none", proto.PromptRequestPayload{AgentKind: "fake_alpha", DisableExecutionEnvironment: true}))
-	if err == nil || called {
-		t.Fatal("unsupported engine was started", err)
+	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypeExecutionPrepare, "none", noEnvironmentPreparation("none", proto.PromptRequestPayload{AgentKind: "fake_alpha"})))
+	if err == nil {
+		t.Fatal("unsupported engine was admitted")
 	}
-	frames := h.sender.snapshot()
-	if len(frames) != 2 || frames[0].Type != proto.TypeError || frames[1].Type != proto.TypeDone {
-		t.Fatal(frames)
+	if status := assertPreparationOutcome(t, h.sender, "none", false); status.ErrorCode != "unsupported_configuration" || called.Load() {
+		t.Fatalf("unsupported engine was started: status=%+v called=%t", status, called.Load())
 	}
 }
 
@@ -34,14 +48,15 @@ func TestNoEnvironmentUsesAvailableCapability(t *testing.T) {
 	for _, available := range []bool{false, true} {
 		h := newHarness(t)
 		defer h.router.Shutdown(context.Background())
-		called := false
-		h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-			called = true
+		var called atomic.Bool
+		registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "claude_sdk", Available: available, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+			called.Store(true)
 			return nil, errors.New("controlled factory stop")
 		})
-		_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "sdk", proto.PromptRequestPayload{AgentKind: "claude_sdk", DisableExecutionEnvironment: true}))
-		if called != available {
-			t.Fatalf("factory called=%t, available=%t", called, available)
+		_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "sdk", noEnvironmentPreparation("sdk", proto.PromptRequestPayload{AgentKind: "claude_sdk"})))
+		assertPreparationOutcome(t, h.sender, "sdk", available)
+		if called.Load() != available {
+			t.Fatalf("factory called=%t, available=%t", called.Load(), available)
 		}
 	}
 }
@@ -51,26 +66,26 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			h := localPreparationHarness(t)
 			defer h.router.Shutdown(context.Background())
-			called := false
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: mode != "unavailable",
+			var called atomic.Bool
+			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: mode != "unavailable",
 				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(mode != "unsupported")})},
-				harnessconfig.Configuration{}, func(_ context.Context, req proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
-					called = true
+				func(_ context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+					called.Store(true)
 					if req.LocalEnvironment == nil || req.LocalEnvironment.ID != preparationEnvironmentID {
 						t.Error("local descriptor lost before factory")
 					}
 					return nil, errors.New("controlled factory stop")
 				})
-			req := preparationRequest().Configuration
-			req.AgentKind = "codex"
-			req.DisableExecutionEnvironment = mode == "none conflict"
-			_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "local", req))
-			if called != (mode == "supported") {
-				t.Fatalf("unexpected factory call for %s", mode)
+			req := preparationRequest()
+			req.Configuration.AgentKind = "codex"
+			req.Configuration.DisableExecutionEnvironment = mode == "none conflict"
+			err := h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "local", req))
+			if (err == nil) != (mode == "supported") {
+				t.Fatalf("wrong admission for %s: %v", mode, err)
 			}
-			frames := h.sender.snapshot()
-			if len(frames) != 2 || frames[0].Type != proto.TypeError || frames[1].Type != proto.TypeDone {
-				t.Fatal("missing terminal error frames")
+			assertPreparationOutcome(t, h.sender, "local", mode == "supported")
+			if called.Load() != (mode == "supported") {
+				t.Fatalf("unexpected factory call for %s", mode)
 			}
 		})
 	}

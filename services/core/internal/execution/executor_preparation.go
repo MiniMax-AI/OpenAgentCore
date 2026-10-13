@@ -18,7 +18,6 @@ func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegatew
 	if err != nil {
 		return nil, err
 	}
-	request.RunID, request.ConversationID, request.Input = "", "", nil
 	if err = send(ctx, peer, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session, Configuration: request}); err == nil {
 		err = d.awaitTurnExecutor(ctx, tenant, session, turn, expectedStatus, prepared)
 	}
@@ -37,7 +36,7 @@ func (d *Dispatcher) awaitTurnExecutor(ctx context.Context, tenant, session, tur
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			current, err := d.Store.GetTurn(ctx, tenant, session, turn)
+			current, err := d.SessionsReader.GetTurn(ctx, tenant, session, turn)
 			if err != nil {
 				return err
 			}

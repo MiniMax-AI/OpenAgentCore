@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // WithFileWriteReservation reads the Environment in the transaction before it
@@ -160,7 +159,7 @@ func (t *fileWriteTx) RecordFileWriteAudit(ctx context.Context, write string) er
 	if err := json.Unmarshal(row.EnvironmentFileWrite.AuditSource, &source); err != nil {
 		return err
 	}
-	return auditpg.RecordWriteAudit(writeaudit.WithSource(ctx, source), t.q, optionalID(t.tenant), "upload_file", "environment", optionalID(t.environment), optionalID(t.session))
+	return auditpg.RecordWriteAudit(writeaudit.WithSource(ctx, source), t.q, optionalID(t.tenant), writeaudit.ActionUploadFile, writeaudit.ResourceEnvironment, optionalID(t.environment), optionalID(t.session))
 }
 
 func fileWriteFromRow(row sqlc.EnvironmentFileWrite, session pgtype.UUID) sessions.EnvironmentFileWrite {

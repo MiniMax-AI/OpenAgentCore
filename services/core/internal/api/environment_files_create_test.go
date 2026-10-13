@@ -48,7 +48,6 @@ func environmentFileCreateHandler(t *testing.T, configure ...func(*Dependencies,
 		APIKey{OrganizationID: "org", ProjectID: "other", SubjectKind: "user", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential("other-key"), TenantID: uuid.NewString()},
 	).ResolveAPIKey
 	fakes.environmentsReader.getEnvironment = f.GetEnvironment
-	deps.Execution = fakes.execution()
 	fakes.workspaces.readEnvironmentDirectory, fakes.workspaces.writeEnvironmentFile = f.ReadEnvironmentDirectory, f.WriteEnvironmentFile
 	for _, c := range configure {
 		c(&deps, fakes)

@@ -45,7 +45,7 @@ export function requestReturned(id: string, operation: string) {
   if (value?.operation === operation)
     write(id, { ...value, responseMs: timingNow() - value.startedAt });
 }
-export function firstTextArrived(id: string, turnId?: string) {
+export function firstTextArrived(id: string, turnId?: string | null) {
   const value = read(id);
   if (
     value &&

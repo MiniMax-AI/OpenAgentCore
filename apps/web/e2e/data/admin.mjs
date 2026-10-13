@@ -52,7 +52,7 @@ export function buildAdmin(now, base, resources) {
     const cacheKey = `${type}:${id}`;
     if (!creators.has(cacheKey)) {
       turn += 1;
-      creators.set(cacheKey, turn % 11 === 0 ? { copy: true } : turn % 7 === 0 ? null : keyRef(project, project.keys[turn % project.keys.length]));
+      creators.set(cacheKey, turn % 7 === 0 ? null : keyRef(project, project.keys[turn % project.keys.length]));
     }
     return creators.get(cacheKey);
   };
@@ -62,7 +62,6 @@ export function buildAdmin(now, base, resources) {
     const list = [];
     const push = (at, action, type, id, parent = "", creatorType = type) => {
       const creator = action === "create" ? creatorFor(project, creatorType, id) : keyRef(project, project.keys[list.length % project.keys.length]);
-      if (creator?.copy) return; // Administrator copies are in the audit log, not in key write history.
       list.push({ id: `op_${project.id.slice(5)}_${list.length}`, created_at: iso(at), api_key: creator, action, resource_type: type, resource_id: id, parent_id: parent, request_id: `req_${list.length}`, trace_id: `${list.length}`.padStart(32, "0") });
     };
     for (const agent of own.agents) { push(agent.created_at, "create", "agent", agent.id); if (agent.updated_at > agent.created_at) push(agent.updated_at, "update", "agent", agent.id); }
@@ -81,11 +80,7 @@ export function buildAdmin(now, base, resources) {
   function resourceOwners(project, url) {
     const type = url.searchParams.get("resource_type");
     const ids = (url.searchParams.get("resource_ids") ?? "").split(",").filter(Boolean).slice(0, 100);
-    return { data: ids.map((id) => {
-      const creator = creatorFor(project, type, id);
-      if (creator?.copy) return { resource_id: id, api_key: null, source: "admin_copy", admin_audit_id: `audit_${id.slice(-8)}` };
-      return creator ? { resource_id: id, api_key: creator, source: "api_key", admin_audit_id: null } : { resource_id: id, api_key: null, source: null, admin_audit_id: null };
-    }) };
+    return { data: ids.map((id) => ({ resource_id: id, api_key: creatorFor(project, type, id) })) };
   }
 
   function summarize(sessions) {
@@ -143,7 +138,7 @@ export function buildAdmin(now, base, resources) {
   const auditLog = () => {
     const entries = [];
     let n = 0;
-    const add = (at, action, project, type, id, results = []) => entries.push({ id: `audit_${String(++n).padStart(4, "0")}`, created_at: iso(at), admin_credential_id: "a1b2c3d4", actor_label: "admin", action, project_id: project.id, resource_type: type, resource_id: id, result_ids: results, request_id: `req_admin_${n}`, trace_id: `${n}`.padStart(32, "a") });
+    const add = (at, action, project, type, id) => entries.push({ id: `audit_${String(++n).padStart(4, "0")}`, created_at: iso(at), admin_credential_id: "a1b2c3d4", actor_label: "admin", action, project_id: project.id, resource_type: type, resource_id: id, request_id: `req_admin_${n}`, trace_id: `${n}`.padStart(32, "a") });
     for (const project of projects) {
       add(project.created_at, "create_project", project, "project", project.id);
       for (const k of project.keys) { add(k.created_at, "issue_key", project, "api_key", k.id); if (k.revoked_at) add(k.revoked_at, "revoke_key", project, "api_key", k.id); }

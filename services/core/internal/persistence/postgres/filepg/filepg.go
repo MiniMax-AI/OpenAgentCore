@@ -7,15 +7,14 @@ import (
 	"errors"
 	"io"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Store struct{ pool *pgunit.Pool }
@@ -61,7 +60,7 @@ func (s *Store) Create(ctx context.Context, tenantID string, write func(io.Write
 			return err
 		}
 		created = fileFromRow(row)
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "create", "file", created.ID, "", writeaudit.Resource{Type: "file", ID: created.ID})
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionCreate, writeaudit.ResourceFile, created.ID, "", writeaudit.Resource{Type: writeaudit.ResourceFile, ID: created.ID})
 	})
 	if err != nil {
 		return files.File{}, err
@@ -157,6 +156,39 @@ func (s *Store) Read(ctx context.Context, tenantID, fileID string, consume func(
 	})
 }
 
+// ReadSourceForCopy reads, in the caller's transaction, the content of the
+// tenant's File for a copy of at most limit bytes. It holds a share lock on
+// the File until that transaction ends, so a Delete waits for the copy. A
+// malformed or missing File is files.ErrNotFound and a larger one
+// files.ErrTooLarge; content that does not match its recorded size is an
+// internal error.
+func ReadSourceForCopy(ctx context.Context, tx pgx.Tx, tenant pgtype.UUID, id string, limit int64) ([]byte, error) {
+	key, ok := files.ParseID(id)
+	if !ok {
+		return nil, files.ErrNotFound
+	}
+	row, err := sqlc.New(tx).LockSourceFile(ctx, sqlc.LockSourceFileParams{TenantID: tenant, ID: pgtype.UUID{Bytes: key, Valid: true}})
+	if err != nil {
+		return nil, rowError(err)
+	}
+	if row.SizeBytes > limit {
+		return nil, files.ErrTooLarge
+	}
+	objects := tx.LargeObjects()
+	body, err := objects.Open(ctx, row.BodyOid.Uint32, pgx.LargeObjectModeRead)
+	if err != nil {
+		return nil, err
+	}
+	content, err := io.ReadAll(io.LimitReader(body, row.SizeBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(content)) != row.SizeBytes {
+		return nil, errors.New("stored File does not match its recorded size")
+	}
+	return content, body.Close()
+}
+
 // Delete removes the row and its large object and records the write audit in
 // one transaction.
 func (s *Store) Delete(ctx context.Context, tenantID, fileID string) error {
@@ -174,7 +206,7 @@ func (s *Store) Delete(ctx context.Context, tenantID, fileID string) error {
 		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "file", fileID, "")
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceFile, fileID, "")
 	})
 }
 

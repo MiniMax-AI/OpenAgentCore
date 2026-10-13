@@ -7,7 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
 
 // Ownership is the execution lease as the Worker uses it. *pgunit.Lease implements it.
@@ -17,11 +17,11 @@ type Ownership interface {
 	Close(context.Context) error
 }
 
-// Owner is everything bound to one execution lease. Later cutovers add one explicit
-// field per domain's execution operations and delete the matching store calls.
+// Owner is everything bound to one execution lease: one field per domain's
+// execution operations.
 type Owner struct {
+	Workspaces *workspaces.ExecutionOperations
 	Lease      Ownership
-	Store      *store.Store                    // the remaining store execution operations, built by store.NewExecution(s, lease)
 	Deployment *deployment.ExecutionOperations // sandbox deployment changes on the lease-bound deploymentpg storage
 	Sessions   *sessions.ExecutionOperations   // Session execution operations on the lease-bound sessionpg storage
 }
@@ -29,14 +29,10 @@ type Owner struct {
 // Bind returns a copy of d bound to owner's execution operations. StartWorker
 // binds through it; a Dispatcher that runs Turns outside a Worker binds the same way.
 func (d *Dispatcher) Bind(owner Owner) (*Dispatcher, error) {
-	if owner.Store == nil {
-		return nil, errors.New("execution requires the execution Store")
-	}
 	if owner.Sessions == nil {
 		return nil, errors.New("execution requires the Session execution operations")
 	}
 	owned := *d
-	owned.Store = owner.Store
 	owned.sessionExecution = owner.Sessions
 	return &owned, nil
 }

@@ -3,31 +3,10 @@ package log
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
 )
-
-func TestInfoEmitsTraceID(t *testing.T) {
-	carrier, _ := ParseTraceparent("00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(NewContextHandler(slog.NewJSONHandler(&buf, nil))))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	Info(WithTrace(context.Background(), carrier), "hello", "k", "v")
-	var got map[string]any
-	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
-		t.Fatalf("unmarshal: %v\nraw=%s", err, buf.String())
-	}
-	if got[AttrTraceID] != "0af7651916cd43dd8448eb211c80319c" {
-		t.Fatalf("trace_id: %v", got[AttrTraceID])
-	}
-	if got["k"] != "v" {
-		t.Fatalf("user attr lost: %v", got["k"])
-	}
-}
 
 // TestBgOmitsTraceID: Bg().Info must not emit trace_id — that's how
 // "log line came from outside a request" stays distinguishable.

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 2a4be7b081286e5a95c14380acc517d2d4b4ba955c0bd61338b0977d84c9df16
+source_hash: b5bc17e6fe3870240abf18f62dcaecc4f8ccc92b0828550e374011c17e8667dd
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -71,39 +71,47 @@ source_hash: 2a4be7b081286e5a95c14380acc517d2d4b4ba955c0bd61338b0977d84c9df16
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 资源所有者 | `GET /core/v1/projects/{project_id}/resource-owners` | 每个资源列表的 Creator 列和详情页的创建者信息，每批最多处理 100 个 ID：创建密钥的名称；来源为 `admin_copy` 的所有者显示 **Admin copy**；Core 无记录时显示 **Unknown** |
+| 资源所有者 | `GET /core/v1/projects/{project_id}/resource-owners` | 每个资源列表的 Creator 列和详情页的创建者信息，每批最多处理 100 个 ID：创建密钥的名称；Core 无记录时显示 **Unknown** |
 | 写入操作 | `GET /core/v1/projects/{project_id}/write-operations` | 项目的写入历史，按最新优先，可按密钥和资源类型筛选，每页 50 条 |
 | 汇总 | `GET /core/v1/summary` | Overview（按项目）、Agents 列表（`group_by=agent`）、项目页面（按项目并使用 `group_by=key`）、Agent 指标（跳过空闲项目，并统计从范围开始以来按创建密钥划分的使用量）、Projects 列表（最近活动） |
-| 安装 | `GET /core/v1/installation` | System 的 Installation 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 Startup 设置（`path` 下的 `configuration.settings`，以及 `apply_command` 和 `applied_at`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）；Core 拒绝的 Sandbox 配置旁的 `path` 和 `apply_command`。如果敏感设置包含值，或存在未知成员，读取会失败；`configuration: null` 会显示一条说明 |
+| 安装 | `GET /core/v1/installation` | Settings → Service and deployment 的 Installation 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 Startup 设置（`configuration.settings`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）。如果敏感设置包含值，或存在未知成员，读取会失败 |
 | Core 指标 | `GET /core/v1/metrics?range=` | Core 指标页面；Overview 上的 Core 弹出内容。不存在该路由的 Core（404）会显示为未报告数据，此时弹出内容仅显示 Core 状态。[Core metrics contract](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
 
-如果为 `local_only`，或者没有 `public_url`，Add node 将无法签发命令，Clean up the host 也无法提供命令。随后 Overview、Nodes 和 System 会显示醒目警告，其中 Core 的配置路径和 apply command 为可复制值；当 `configuration` 为 null 时，它们会说明路径和命令不可用。Nodes 会禁用 Add node 并显示明确原因，Getting started 则将 sandbox 步骤保留为待办项。
+如果为 `local_only`，或者没有 `public_url`，Add node 将无法签发命令，Clean up the host 也无法提供命令。随后 Overview、Nodes 和 Settings 会显示醒目警告，并通过 Review the public address 前往 Settings → Service and deployment。Nodes 会禁用 Add node 并显示明确原因，Getting started 则将 sandbox 步骤保留为待办项。
 
 无论是在显示新密钥时，还是在活动项目页面没有显示任何密钥时，控制台都会提供 `OPENAI_BASE_URL`（安装的 `api_base_url`）和 `OPENAI_API_KEY`（新密钥，或项目密钥的占位符）的 shell 导出变量，以及针对 `GET /v1/agents` 和 `POST /v1/agents/sessions` 的 `curl` 和 Python 示例，但不会发送其中任何调用。当安装为 `local_only` 时，控制台会说明 API 只能在 Core 所在计算机上访问；当缺少 `api_base_url` 时，则会提示设置 `public_url`。
 
 汇总数值按 Session 累计，并不是计费记录。未报告使用量的 Session 会计入覆盖率，但不会计入 token 总量；控制台会将缺失值显示为缺失，绝不会显示为零。
 
+## 请求日志 {#request-log}
+
+**Request log** 通过 `AdminClient` 读取 `GET /core/v1/request-logs`，按应用或管理入口、精确请求 ID 和请求结果筛选，并按需刷新。列表和本地详情对话框共用一次响应，打开条目不会发出额外请求。读取失败保留上一次响应并明确提示数据已过期。[请求日志契约](../../../contracts/agents-api/zh/admin-api.md#request-log)定义采集、容量限制及响应语义。说明放在问号提示中，不补造缺失的状态或错误数据。
+
 ## 默认模型 {#default-models}
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 列出 Harnesses | `GET /core/v1/harnesses` | System 的 Default model 卡片：每个 Harness 的只读 `enabled` 和 `default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 上的默认模型；如果没有默认模型，则为任意已启用 Harness 上的默认模型） |
-| 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** 或 **Replace**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息，503 `credential_storage_unavailable` 表示 Core 没有凭据加密密钥；随后再次读取列表 |
+| 列出 Harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials 的 Default model 卡片：每个 Harness 的只读 `enabled` 和 `default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 上的默认模型；如果没有默认模型，则为任意已启用 Harness 上的默认模型） |
+| 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** 或 **Replace**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息；随后再次读取列表 |
 | 清除 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**，需确认，随后再次读取列表 |
 
 列表会返回每个 Harness 的配置，因此控制台不会读取 `GET /core/v1/harnesses/{harness}/model-configuration`。
+
+## 工作区存储 {#workspace-storage}
+
+**Settings → Workspace storage** 通过 `GET`、`PUT /core/v1/workspace-storage` 读取和选择配置，并更新租户容量。参数和只写凭据由 adapter 验证；Web 不定义 Provider 专属字段。表单不回显凭据，也不自动重试结果不确定的写入。完整语义见[管理 API](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
 
 ## Sandbox 管理 {#sandbox-administration}
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并同时显示安装的配置文件和 apply command，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 System、Sandbox 配置摘要和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 System 和 Nodes 摘要中 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 Managed in Settings 前往 Settings → Service and deployment，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 Settings → Sandbox and scheduling 和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 Settings → Sandbox and scheduling 和 Nodes 摘要中 |
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
-| Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中的节点容量。在线节点的 `diagnostic`（`docker_unavailable`、`docker_limits_unsupported`、`runtime_image_unavailable`、`kvm_unavailable`、`microsandbox_artifacts_unavailable`、`capacity_insufficient`、`provider_unavailable`；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在上述每个页面及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态；如果 `core_url` 为空（Core 未注册该节点），则状态为未知，而不是旧地址。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
+| Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中的节点容量。在线节点的 `diagnostic`（一个[就绪状态码](../getting-started/nodes.md#readiness-codes)；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在上述每个页面及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
 | 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics 节点对话框：主机自最近一次心跳以来的 CPU 忙碌占比和内存使用量，以及页面所选范围内二者的历史记录。**Edit node** 读取 `host.effective_cpu_cores` 和 `host.total_memory_bytes`，用于在每个 Sandbox 大小旁显示主机容量，以及最多可容纳多少个该大小的 Sandbox |
-| 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes 页面；Sandbox metrics。在 microsandbox 下，节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间，并在分配暂停时估算 Core 回收它的时间（该时间加上部署的 `suspension.retention_seconds`）；时间为 null 时显示短横线 |
-| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
+| 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes 页面；Sandbox metrics。节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间；时间为 null 时显示短横线。它不会根据阶段时间或部署的 `suspension.retention_seconds` 推算快照到期时间 |
+| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
 | 更新节点 | `PATCH /core/v1/sandbox/nodes/{node_id}` | **Edit node**：同时修改名称和 Sandbox 限制（保留数量限制仅适用于 microsandbox；在 Docker 下，Core 会将其设为活动数量限制） |
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 Clean up the host 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | Sandbox metrics：每个项目的托管 Runtimes，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |
@@ -145,4 +153,4 @@ Agent 指标具有以下限制：
 - 任何 `/v1/**` 路由，包括 Session 创建、Session 事件及其流、消息输入、函数结果和取消操作。
 - Agents、Environment templates、Skills、Files、Vaults 或 Credentials 的创建或更新，包括上传和 Credential 令牌替换。
 - 单个 Turn 读取、Artifacts、Session 执行配置、Environment Files 和管理端 Session 归档。
-- 管理员审计日志（`GET /core/v1/audit-log`）。System 会改为显示安装信息、每个 Harness 的默认模型和 Sandbox 部署。
+- 管理员审计日志（`GET /core/v1/audit-log`）。Settings 会改为显示安装信息、每个 Harness 的默认模型和 Sandbox 部署。

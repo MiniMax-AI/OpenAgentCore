@@ -66,7 +66,7 @@ class BuildValidationTest(unittest.TestCase):
         self.config.update(APIURL='https://sandbox-test.sandbase.ai', Domain='sandbox-test.sandbase.ai')
         metrics.return_value = SimpleNamespace(status_code=503, parsed=None)
         with self.assertRaises(Failure):
-            read_metrics(self.config, ['owned-id'], lambda: 5)
+            read_metrics(self.config, 'owned-id', lambda: 5)
         configuration = client.call_args.args[0]
         self.assertEqual((configuration.api_url, configuration.domain),
                          (self.config['APIURL'], self.config['Domain']))

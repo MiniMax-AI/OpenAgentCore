@@ -346,7 +346,7 @@ func projectSubagentItem(ctx context.Context, tx ProjectionTx, raw json.RawMessa
 // the Session stream carries root work, and child history is read through the
 // Subagent routes.
 func putChildItem(ctx context.Context, tx SubagentProjectionTx, turn ChildTurn, position int32, item v1.Item) error {
-	payload, err := item.MarshalStored()
+	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}

@@ -11,39 +11,12 @@ import (
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-// Prepare connects the native harness without creating a thread or starting model
-// work. req supplies configuration and a stable state key, but no RunID or Prompt.
-// owner owns the entire harness lifetime, including the eventual Session; it must
-// not be a disposable readiness-request context. Initialization/readiness use their
-// existing operation-local deadlines. Close an unused preparation explicitly.
-func Prepare(owner context.Context, req proto.PromptRequestPayload) (*Prepared, error) {
-	return newPreparation(owner, req, defaultSessionConfig())
-}
-
-func newSession(parent context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope, cfg sessionConfig) (*Session, error) {
-	if out == nil {
-		return nil, errors.New("codex: nil out channel")
-	}
-	runID, prompt := req.RunID, req.Input
-	req.AgentStateKey = effectiveAgentStateKey(req)
-	req.RunID, req.Input = "", nil
-	prepared, err := newPreparation(parent, req, cfg)
-	if err != nil {
-		return nil, err
-	}
-	defer prepared.Close()
-	return prepared.start(parent, runID, prompt, out)
-}
-
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		return nil, errors.New("codex: structured output is not qualified")
 	}
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
-	}
-	if req.RequireExistingNativeSession && (!req.StrictResume || req.AgentStateKey == "" || req.WorkspaceReadOnly) {
-		return nil, errors.New("codex: native-session recovery requires strict private state")
 	}
 	if req.RunID != "" || len(req.Input) != 0 {
 		return nil, errors.New("codex: preparation does not accept a run identity or prompt")
@@ -61,9 +34,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if err != nil {
 		return nil, err
 	}
-	req.AgentStateKey = effectiveAgentStateKey(req)
-
-	req.AgentOptions = executionOptions(req)
 	plan, skillRoots, err := prepareSessionPlan(parent, req, cfg)
 	if err != nil {
 		return nil, err
@@ -87,11 +57,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	rpc := NewJSONRPCClient(rpcCfg)
 
 	s := &Session{
-		nativeHome:      nativeHomeFromPlan(plan),
-		functions:       functions,
-		observeMessages: req.ObserveMessages,
-
-		observeToolObservations:   req.ObserveToolObservations,
+		nativeHome:                nativeHomeFromPlan(plan),
+		functions:                 functions,
+		observeMessages:           req.ObserveMessages,
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,
 		rpc:                       rpc,
@@ -101,12 +69,11 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		cleanup:                   sync.OnceFunc(plan.Cleanup),
 		bufs:                      NewItemBuffers(),
 		resolvedModel:             plan.Model,
-		interactions:              newPendingCodexInteractions(),
 	}
 	plan.Cleanup = s.cleanup
 	p := &Prepared{
 		session: s, plan: plan,
-		resumeID: req.AgentSessionID, strictResume: req.StrictResume, requireExistingNativeSession: req.RequireExistingNativeSession,
+		resumeID: req.AgentSessionID, requireExistingNativeSession: req.RequireExistingNativeSession,
 		transferred: make(chan struct{}),
 	}
 

@@ -1,5 +1,5 @@
 export const system = {
-  help: "This installation's addresses, each harness's default model configuration and the settings every project shares. Use the sandbox backend page to change sandboxes, and config.json to change startup settings.",
+  help: "Installation addresses and effective startup settings. Process settings are managed in the installation configuration, not edited in this console.",
   refresh: "Refresh system configuration",
   loading: "Loading…",
   installation: {
@@ -11,7 +11,6 @@ export const system = {
     apiBaseUrlHelp: "Applications use it as OPENAI_BASE_URL, with a Project API key as OPENAI_API_KEY.",
     copyApiBaseUrl: "Copy API base URL",
     localOnly: "Only reachable on the Core machine",
-    notSet: "Not set",
     id: "Installation ID",
     sourceCommit: "Source commit",
     unknown: "Unknown",
@@ -19,12 +18,6 @@ export const system = {
   startup: {
     title: "Startup settings",
     help: "Core reports the process settings it loaded. A sensitive setting shows only whether it is set.",
-    none: "Core did not report startup settings.",
-    effective: "These are the settings this Core process loaded.",
-    where: "Change these in <path/>, then run <command/>",
-    copyPath: "Copy path",
-    copyCommand: "Copy command",
-    appliedAt: "Last applied {{time}}",
     columns: {
       key: "Setting",
       value: "Value",
@@ -45,8 +38,7 @@ export const system = {
     enabled: "Enabled",
     disabled: "Disabled",
     default: "Default",
-    startupHelp: "Which harnesses are enabled, and the default one, are set in config.json and applied with oac apply.",
-    harness: "Harness",
+    startupHelp: "Which harnesses are enabled, and the default one, are managed in the installation configuration.",
     provider: "Model provider",
     notSet: "Not set",
     model: "Default model ID",
@@ -92,7 +84,6 @@ export const system = {
       save: "Save",
       saving: "Saving…",
       uncertain: "Core did not confirm the change. The default model configurations were read again; check them before trying again.",
-      noCredentialKey: "Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set OAC_CREDENTIAL_KEY_FILE for Core.",
     },
     clearDialog: {
       title: "Clear default model configuration",

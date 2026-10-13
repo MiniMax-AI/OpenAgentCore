@@ -31,7 +31,7 @@ func (w *confirmedResultWriter) Close() error { w.once.Do(func() { close(w.close
 func TestFunctionConfirmedReceiptDuringWriteDeadline(t *testing.T) {
 	client, _, cleanup := NewTestClient()
 	defer cleanup()
-	s, out := newInteractionTestSession(client.JSONRPCClient)
+	s, out := newFunctionTestSession(client.JSONRPCClient)
 	s.setThreadID("thread")
 	s.startSteering("thread", "turn")
 	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}})
@@ -64,7 +64,7 @@ func TestFunctionConfirmedReceiptDuringWriteDeadline(t *testing.T) {
 func TestFunctionUnconfirmedWriteDeadlineClosesNative(t *testing.T) {
 	client, _, cleanup := NewTestClient()
 	defer cleanup()
-	s, out := newInteractionTestSession(client.JSONRPCClient)
+	s, out := newFunctionTestSession(client.JSONRPCClient)
 	s.setThreadID("thread")
 	s.startSteering("thread", "turn")
 	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}})

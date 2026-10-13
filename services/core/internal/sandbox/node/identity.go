@@ -140,14 +140,6 @@ func initIdentity(dir, coreURL string, identity Identity) (StoredIdentity, error
 	}
 	return stored, nil
 }
-func LoadIdentity(dir string) (StoredIdentity, error) {
-	release, err := lockDirectory(dir)
-	if err != nil {
-		return StoredIdentity{}, err
-	}
-	defer release()
-	return readIdentity(dir)
-}
 
 func endpoint(raw, path string) (string, error) {
 	u, err := url.Parse(raw)

@@ -8,14 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type AdminAssetCopy struct {
-	TargetTenantID pgtype.UUID `json:"target_tenant_id"`
-	IdempotencyKey string      `json:"idempotency_key"`
-	RequestHash    []byte      `json:"request_hash"`
-	Result         []byte      `json:"result"`
-	AuditID        pgtype.UUID `json:"audit_id"`
-}
-
 type AdminAuditLog struct {
 	ID                pgtype.UUID        `json:"id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
@@ -25,18 +17,9 @@ type AdminAuditLog struct {
 	Action            string             `json:"action"`
 	ResourceType      string             `json:"resource_type"`
 	ResourceID        string             `json:"resource_id"`
-	ResultIds         []byte             `json:"result_ids"`
 	RequestID         string             `json:"request_id"`
 	TraceID           string             `json:"trace_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-}
-
-type AdminResourceOwner struct {
-	TenantID     pgtype.UUID `json:"tenant_id"`
-	ResourceType string      `json:"resource_type"`
-	ResourceID   string      `json:"resource_id"`
-	ParentID     string      `json:"parent_id"`
-	AuditID      pgtype.UUID `json:"audit_id"`
 }
 
 type Agent struct {
@@ -81,6 +64,7 @@ type Device struct {
 	EnvironmentID       pgtype.UUID        `json:"environment_id"`
 	ExecutorKeyID       pgtype.UUID        `json:"executor_key_id"`
 	ArchiveCancelTurnID pgtype.UUID        `json:"archive_cancel_turn_id"`
+	SupportedAgentKinds []byte             `json:"supported_agent_kinds"`
 }
 
 type Environment struct {
@@ -161,6 +145,15 @@ type EnvironmentTemplate struct {
 	CapabilityDirectories []string           `json:"capability_directories"`
 }
 
+type EnvironmentWorkspace struct {
+	ObjectID        pgtype.UUID `json:"object_id"`
+	EnvironmentID   pgtype.UUID `json:"environment_id"`
+	ConfigurationID pgtype.UUID `json:"configuration_id"`
+	State           string      `json:"state"`
+	Attachment      []byte      `json:"attachment"`
+	CapacityMib     int64       `json:"capacity_mib"`
+}
+
 type ExecutionProjectScope struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	OrganizationID string      `json:"organization_id"`
@@ -238,7 +231,6 @@ type RuntimeAllocation struct {
 	State                 string             `json:"state"`
 	CreateSettled         bool               `json:"create_settled"`
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
-	KeptAt                pgtype.Timestamptz `json:"kept_at"`
 	ReleasedAt            pgtype.Timestamptz `json:"released_at"`
 	ComputePhase          string             `json:"compute_phase"`
 	ComputeRevision       int64              `json:"compute_revision"`
@@ -256,14 +248,9 @@ type RuntimeDeployment struct {
 	Singleton          bool               `json:"singleton"`
 	InstallationID     pgtype.UUID        `json:"installation_id"`
 	BackendFingerprint string             `json:"backend_fingerprint"`
-	AdmissionPaused    bool               `json:"admission_paused"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ProviderKind       string             `json:"provider_kind"`
-	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
 	OwnerEpoch         int64              `json:"owner_epoch"`
-	WebManaged         bool               `json:"web_managed"`
-	IdleSeconds        int64              `json:"idle_seconds"`
-	RetentionSeconds   int64              `json:"retention_seconds"`
 	Generation         int64              `json:"generation"`
 	Mode               string             `json:"mode"`
 	ProviderCredential []byte             `json:"provider_credential"`
@@ -275,6 +262,7 @@ type RuntimeDeployment struct {
 	ResetAudit         []byte             `json:"reset_audit"`
 	ProviderConfig     []byte             `json:"provider_config"`
 	ProviderMetadata   []byte             `json:"provider_metadata"`
+	IdleSeconds        int64              `json:"idle_seconds"`
 }
 
 type RuntimeDeploymentGeneration struct {
@@ -356,6 +344,7 @@ type RuntimeNodeGenerationStatus struct {
 	State               string             `json:"state"`
 	Diagnostic          string             `json:"diagnostic"`
 	ObservedAt          pgtype.Timestamptz `json:"observed_at"`
+	Checkpoint          []byte             `json:"checkpoint"`
 }
 
 type RuntimePlacement struct {
@@ -364,6 +353,13 @@ type RuntimePlacement struct {
 	ReservedAt           pgtype.Timestamptz `json:"reserved_at"`
 	ReleasedAt           pgtype.Timestamptz `json:"released_at"`
 	DeploymentGeneration pgtype.Int8        `json:"deployment_generation"`
+}
+
+type RuntimeResetRetainedEnvironment struct {
+	EnvironmentID        pgtype.UUID `json:"environment_id"`
+	SessionID            pgtype.UUID `json:"session_id"`
+	TenantID             pgtype.UUID `json:"tenant_id"`
+	DeploymentGeneration pgtype.Int8 `json:"deployment_generation"`
 }
 
 type Session struct {
@@ -563,6 +559,19 @@ type VaultCredential struct {
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Status          string             `json:"status"`
 	OauthMetadata   []byte             `json:"oauth_metadata"`
+}
+
+type WorkspaceFsConfiguration struct {
+	ID         pgtype.UUID `json:"id"`
+	Adapter    string      `json:"adapter"`
+	Parameters []byte      `json:"parameters"`
+	Active     bool        `json:"active"`
+	Credential []byte      `json:"credential"`
+}
+
+type WorkspaceStorageAdmission struct {
+	Singleton         bool  `json:"singleton"`
+	TenantCapacityMib int64 `json:"tenant_capacity_mib"`
 }
 
 type WriteAuditOperation struct {

@@ -22,6 +22,7 @@ Paths are relative to `/core/v1`.
 | Routes | Purpose | Contract |
 | --- | --- | --- |
 | `installation` | Public URL, API base URL, source commit, the installer's process settings and what is bound to the public URL | [Installation facts](#installation-facts) |
+| `workspace-storage` | Read or select independent workspace filesystem configuration | [Workspace storage](#workspace-storage) |
 | `projects`, `projects/{project_id}`, `projects/{project_id}/archive`, `projects/{project_id}/keys[/{key_id}]` | Projects and their API keys | [Projects and keys](#projects-and-keys) |
 | `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | Resource reads and deletion, Session history and Artifacts | [Resource reads and deletion](#resource-reads-and-deletion) |
 | `projects/{project_id}/sessions/{session_id}/archive` | Archive one hosted Session | [Session archive](#session-archive) |
@@ -33,11 +34,32 @@ Paths are relative to `/core/v1`.
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials of a `self_hosted` Environment | [Executor credentials](./environment-executor-credentials.md#core-key-routes) |
 | `projects/{project_id}/resource-owners`, `projects/{project_id}/write-operations` | Which API key created a resource and each key's writes | [Write provenance](#write-provenance) |
 | `harnesses`, `harnesses/{harness}/model-configuration` | Enabled Harnesses and each Harness's deployment default model | [Deployment defaults](./model-execution.md#deployment-defaults) |
-| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](./sandbox-deployment.md#routes) |
+| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, idle suspension policy, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](./sandbox-deployment.md#routes) |
 | `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](./sandbox-deployment.md), [node host history](./runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
 | `metrics` | Core's own process, execution, database and job metrics | [Core metrics](./core-metrics.md) |
+| `request-logs` | Recent public or administration HTTP requests and their response metadata | [Request log](#request-log) |
 | `audit-log` | Administrator writes | [Audit log](#audit-log) |
+
+## Request log
+
+`GET /core/v1/request-logs` is a Core-key-only diagnostic read for Web's **Request log** and operator scripts. It observes HTTP requests that reach Core's `/v1` and `/core/v1` APIs, including rejected authentication and unsuccessful responses. The log read itself, health and documentation endpoints, Web sign-in/proxy failures before Core, machine transports and background execution are outside this view. It is not an audit archive or a distributed execution trace.
+
+Each API instance retains the most recent 1,000 started requests for each surface independently: `public` for `/v1`, `admin` for `/core/v1`. Administration polling cannot evict application requests. Older entries, including long-lived requests, are overwritten when their surface fills. Restart clears the rings. `instance_id` and `instance_started_at` identify the serving API instance; a load balancer can return another instance's window. Core also emits each request's completion metadata through its existing structured logger; retention of that output belongs to the operator's log system, not this endpoint.
+
+Query parameters are `surface=public|admin` (default `public`), `limit` (1–200, default 100), optional exact `request_id`, `outcome=all|errors|active` (default `all`) and optional `method`. Supported method values are `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `CONNECT`, `TRACE` and `OTHER`; other incoming methods are recorded as `OTHER`. Unsupported, repeated or malformed query parameters return 400. `errors` includes HTTP status 400 or above and aborted requests. Filtering scans only the retained window and returns newest-started first. `retained_count` describes that surface's retained window, `total_matching` counts retained matches, and `has_more` means the response limit omitted matches; it does not promise older evicted history is available.
+
+The response has `object: "core.request_log.list"`, instance identity, `surface`, `capacity`, coverage counts and `data`. Each entry contains `request_id`, `trace_id`, `started_at`, `method`, `route`, `state`, `status`, `duration_ms`, `response_bytes` and nullable `error_code`. `route` is a registered route template, a partially matched authentication prefix or `(unmatched)`, never the raw resource path or query. `status` is null until final response headers are committed. `state` distinguishes `active`, `completed` and `aborted`; duration and bytes describe the observation so far for active requests. `response_bytes` counts bytes accepted by the response writer, excluding headers and transport framing; it is not a network transfer measurement. An SSE response remains active until its handler ends. HTTP status and completion do not establish the outcome of an asynchronous Agent Turn; use [Session diagnostics](./session-diagnostics.md) and the Session's recorded history for that outcome.
+
+Bodies, header values, credentials, prompts, file contents, raw paths, query values and error messages are not captured. Only the API's safe error code is retained. The returned request ID corresponds to `X-Request-Id` and can be used to find related existing process log entries. Trace IDs are correlation metadata, not proof of a complete component trace.
+
+## Workspace storage
+
+**Settings → Workspace storage** and operator scripts use `GET /core/v1/workspace-storage` and `PUT /core/v1/workspace-storage` with a Core key. The successful response is the selection: `{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`. The request has the same required fields and an optional write-only `credential` object. `parameters` and `credential` are adapter-owned JSON objects; the selected adapter validates them. Unknown top-level fields are rejected.
+
+GET returns the selected configuration and tenant capacity policy, or 404 `workspace_storage_not_found` when none is configured. It never returns a credential. PUT validates and selects an immutable configuration together with [`tenant_capacity_mib`](../../docs/configuration.md#tenant-capacity) and returns the selection with 200. A positive `tenant_capacity_mib` requires a configuration that enforces capacity quotas, and such a configuration requires a positive value; otherwise PUT returns 400 `workspace_operation_unsupported`. Core encrypts the credential and never returns, logs or audits it. Reusing an ID requires identical adapter, parameters and credential; omitting `credential` keeps the stored one, and an explicit `null` is invalid. Changing its meaning or conflicting with retained ownership returns 409 `workspace_storage_conflict`. Configuration changes are serialized with workspace ownership changes, and successful mutations carry the same administrator audit provenance as other deployment settings. The [workspace filesystem protocol](../../docs/workspace-provider.md) owns identity, attachment, admission and retention semantics.
+
+Invalid configuration returns 400 `invalid_workspace_configuration`; unsupported adapters or combinations return 400 `workspace_operation_unsupported`. Unavailable storage or an unconfirmed operation returns 503 `workspace_storage_unavailable`. Error messages do not expose native paths or adapter error text. The endpoint configures storage independently of Sandbox Provider selection; it does not create or delete a Session workspace.
 
 ## Projects and keys
 
@@ -132,12 +154,12 @@ Core writes this record in the same transaction that creates the Session. Later 
 | Field | Meaning |
 | --- | --- |
 | `object` | `core.installation` |
-| `installation_id` | The installation ID from `state.json` ([installation directory](../../docs/configuration.md#installation-directory)); null when Core runs without the sandbox manager |
-| `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset |
-| `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys. Null when `public_url` is null |
+| `installation_id` | The installation ID from `OAC_INSTALLATION_ID_FILE` ([Compose installations](../../docs/configuration.md#compose-installations)) |
+| `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use |
+| `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
 | `source_commit` | The full source commit Core was built from; null for development builds |
-| `configuration` | The process settings Core loaded from its environment. `path` and `apply_command` are empty, and `applied_at` is null |
+| `configuration` | The process settings Core loaded from its environment, under `settings` |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |
 
 `configuration.settings` has one entry per setting Core loaded, with its dotted `key`, effective `value`, `default`, whether it is `changeable`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).
@@ -181,12 +203,12 @@ Both routes accept only the parameters listed; an unknown, repeated or empty par
 
 ```json
 {"data":[
-  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null},"source":"api_key","admin_audit_id":null},
-  {"resource_id":"id2","api_key":null,"source":null,"admin_audit_id":null}
+  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null}},
+  {"resource_id":"id2","api_key":null}
 ]}
 ```
 
-`api_key` and `source` are null when Core has no creation record, including for resources in another Project. `source: "admin_copy"` with an `admin_audit_id` marks a resource recorded by a `copy` entry in the audit log; no current route writes one.
+`api_key` is null when Core has no creation record, including for resources in another Project.
 
 `GET /projects/{project_id}/write-operations` lists writes newest first by `(created_at, id)`. Filters: `key_id`, `resource_type`, `resource_id`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50. Pass the previous `next_cursor` as `after` with unchanged filters. The response is `{data, has_more, next_cursor}`; each entry has `id`, `created_at`, `api_key`, `action`, `resource_type`, `resource_id`, `parent_id` (empty when absent), `request_id` and `trace_id`.
 
@@ -217,7 +239,7 @@ The [Runtime telemetry API](./runtime-observability-api.md) owns current observa
 
 `GET /audit-log` lists administrator writes newest first. Filters: `project_id`, `resource_type`, `resource_id`, `action`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50, with the opaque `after` cursor. The response is `{data, has_more, next_cursor}`.
 
-Each entry has `id`, `created_at`, `admin_credential_id` (the first 8 hex characters of the Core key digest), `actor_label`, `action`, `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id` and `trace_id`. `result_ids` is an empty array except on `copy` entries. Deployment-wide entries have `project_id: null`, and a `project_id` filter excludes them.
+Each entry has `id`, `created_at`, `admin_credential_id` (the first 8 hex characters of the Core key digest), `actor_label`, `action`, `project_id`, `resource_type`, `resource_id`, `request_id` and `trace_id`. Deployment-wide entries have `project_id: null`, and a `project_id` filter excludes them.
 
 | `resource_type` | `action` | `resource_id` |
 | --- | --- | --- |

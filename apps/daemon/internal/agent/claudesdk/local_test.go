@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
 func TestLocalWorkspaceBindingNetworkAndRequiredHistory(t *testing.T) {
@@ -80,5 +81,27 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 		if _, _, err := prepare(config, req); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("unsafe provider accepted or disclosed")
 		}
+	}
+}
+
+func TestLocalHistorySurvivesChangingInstanceRoot(t *testing.T) {
+	config := workspaceFixture(t)
+	retained, instance := t.TempDir(), t.TempDir()
+	first, err := ConfigureLocal(config, retained, instance, config.Workspace.Directory, agentnetwork.Policy{Access: "enabled"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := ConfigureLocal(config, retained, t.TempDir(), config.Workspace.Directory, agentnetwork.Policy{Access: "enabled"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.StateDir != second.StateDir || first.StateDir != filepath.Join(retained, "runtime", "claude-sdk", "history") {
+		t.Fatal("history moved with compute")
+	}
+	if first.Workspace.HomeDir == second.Workspace.HomeDir || first.Workspace.ScratchDir == second.Workspace.ScratchDir {
+		t.Fatal("instance HOME or scratch retained across compute")
+	}
+	if _, err := ConfigureLocal(config, "relative", instance, config.Workspace.Directory, agentnetwork.Policy{Access: "enabled"}); err == nil {
+		t.Fatal("invalid state root accepted")
 	}
 }

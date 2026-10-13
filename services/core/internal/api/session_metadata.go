@@ -10,21 +10,10 @@ import (
 	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary Update execution Session metadata
-// @Description The metadata field is required in an update body. Send null or {} to clear it, or supply an object to replace all pairs. Up to 16 string pairs, with keys at most 64 characters and values at most 512 characters; violations and non-string values return invalid_request_error with a metadata or metadata.<key> param. U+0000 is rejected as a local storage limit. Malformed, missing and foreign Session IDs share the not-found response. Execution configuration and activity are unchanged. Returns the same safe Environment and pending-input activity projection as Session retrieval.
-// @Tags Sessions
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param body body v1.UpdateSessionRequest true "Session metadata"
-// @Success 200 {object} v1.Session
-// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id} [post]
 func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
 	if !ok {
@@ -59,9 +48,9 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), values)
+	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), sessions.UpdateSessionMetadataCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), Metadata: values})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	h.respondSession(w, r, session)

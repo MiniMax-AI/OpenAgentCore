@@ -1,7 +1,7 @@
 ---
 title: "运行第一个 Session"
 source: docs/getting-started/quickstart.md
-source_hash: 8270c0ded9adbd5a31f2a29c8bc801fe3a857ca3d1a940cc9ee469f99c3d04f2
+source_hash: 8c44adf64e32f23578128c60f401b38de809954ceec79540acd10e353c32d6b4
 ---
 
 本教程从 Project API 密钥开始，让 Agent 创建一个文件并汇报结果。你需要：
@@ -19,7 +19,7 @@ Core 提供 OpenAI Agents API，因此无需修改官方 OpenAI SDK。SDK 读取
 
 | 变量 | 值 |
 | --- | --- |
-| `OPENAI_BASE_URL` | API 基础 URL：公开 URL 加 `/v1`，例如 `https://core.example/v1`。Web 的 **System** 页面会显示它 |
+| `OPENAI_BASE_URL` | API 基础 URL：公开 URL 加 `/v1`，例如 `https://core.example/v1`。Web 的 **Settings → Service and deployment** 页面会显示它 |
 | `OPENAI_API_KEY` | 你的 Project API 密钥 |
 
 ```sh

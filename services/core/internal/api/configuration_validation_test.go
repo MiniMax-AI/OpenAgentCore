@@ -83,6 +83,7 @@ func TestAgentConfigurationProtocolErrorsUseOfficialFields(t *testing.T) {
 		{"F03", `"tools":[{"type":"function","name":"lookup","description":"Look up a value."}]`, "{p}tools[0].parameters", "Missing required parameter: '{p}tools[0].parameters'."},
 		{"F04", `"tools":[` + lookupTool("lookup", `,"strict":true`) + `]`, "{p}tools[0].strict", "Unknown parameter: '{p}tools[0].strict'."},
 		{"F05", `"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]`, "{p}tools[0].description", "Missing required parameter: '{p}tools[0].description'."},
+		{"function order", `"tools":[{"type":"function","parameters":{"type":"object"}}]`, "{p}tools[0].name", "Missing required parameter: '{p}tools[0].name'."},
 		{"U01", `"tools":[{"type":"code_interpreter"}]`, "{p}tools[0].type", "Invalid value: 'code_interpreter'. Supported values are: 'function'" + tools},
 		{"U02", `"tools":[{"type":"bogus_tool"}]`, "{p}tools[0].type", "Invalid value: 'bogus_tool'. Supported values are: 'function'" + tools},
 		{"W03", `"tools":[{"type":"web_search","mode":"bogus"}]`, "{p}tools[0].mode", "Invalid value: 'bogus'. Supported values are: 'disabled', 'cached', and 'live'."},
@@ -110,6 +111,10 @@ func TestAgentConfigurationProtocolErrorsUseOfficialFields(t *testing.T) {
 		{"null enabled", `"tools":[{"type":"programmatic_tool_calling","enabled":null}]`, "{p}tools[0].enabled", "Invalid type for '{p}tools[0].enabled': expected a boolean, but got null instead."},
 		{"mcp origin", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"http","server_url":"https://example.invalid"},"connection_origin":"bogus"}]`, "{p}tools[0].connection_origin", "Invalid value: 'bogus'. Supported values are: 'service' and 'environment'."},
 		{"mcp transport", `"tools":[{"type":"mcp","server_label":"x"}]`, "{p}tools[0].transport", "Missing required parameter: '{p}tools[0].transport'."},
+		{"stdio cwd", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"stdio","command":"run"}}]`, "{p}tools[0].transport.cwd", "Missing required parameter: '{p}tools[0].transport.cwd'."},
+		{"http url", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"http"}}]`, "{p}tools[0].transport.server_url", "Missing required parameter: '{p}tools[0].transport.server_url'."},
+		{"transport type", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"ws"}}]`, "{p}tools[0].transport.type", "Invalid value: 'ws'. Supported values are: 'http' and 'stdio'."},
+		{"header value", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"http","server_url":"https://example.invalid","headers":{"h":1}}}]`, "{p}tools[0].transport.headers.h", "Invalid type for '{p}tools[0].transport.headers.h': expected a string, but got an integer instead."},
 		{"verbosity", `"text":{"verbosity":"verbose"}`, "{p}text.verbosity", "Invalid value: 'verbose'. Supported values are: 'low', 'medium', and 'high'."},
 		{"text member", `"text":{"unknown":true}`, "{p}text.unknown", "Unknown parameter: '{p}text.unknown'."},
 		{"format type", `"text":{"format":{}}`, "{p}text.format.type", "Missing required parameter: '{p}text.format.type'."},
@@ -193,6 +198,9 @@ func TestSessionAgentProtocolErrors(t *testing.T) {
 	}
 	for _, path := range []string{"/v1/agents", "/v1/agents/" + uuid.NewString()} {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, path, `{"model":4}`), "invalid_request_error", param("model"), "Invalid type for 'model': expected a string, but got an integer instead.")
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, path, `{"model":"m","metadata":5}`), "invalid_request_error", param("metadata"), "Invalid type for 'metadata': expected an object with string keys and string values, but got an integer instead.")
+		// Inline authorization is a Session-only transport member.
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, path, `{"model":"m","tools":[{"type":"mcp","server_label":"x","transport":{"type":"http","server_url":"https://example.invalid","authorization":"x"}}]}`), "invalid_request_error", param("tools[0].transport.authorization"), "Unknown parameter: 'tools[0].transport.authorization'.")
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, path, `{"model":"m","model":"n"}`), "invalid_request_error", nil, "Invalid body: duplicate JSON key 'model' at 'model'. Duplicate JSON keys are not supported.")
 	}
 	// Saved Agent creation requires a model; updates and Session overrides do not.
@@ -266,6 +274,9 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	}
 	for _, op := range configurationOperations()[:2] {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"multi_agent":{"enabled":true,"max_concurrent_subagents":4294967296}`)), "unsupported_or_invalid_configuration", nil, "max_concurrent_subagents must be an integer from 1 to 4294967295.")
+	}
+	for _, op := range configurationOperations()[:3] {
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"tools":[{"type":"mcp","server_label":"x","transport":{"type":"stdio","command":"run","cwd":"/"}}]`)), "unsupported_or_invalid_configuration", nil, "MCP currently supports HTTP transport only.")
 	}
 	if s.writes != 0 {
 		t.Fatal("rejected configuration reached storage")

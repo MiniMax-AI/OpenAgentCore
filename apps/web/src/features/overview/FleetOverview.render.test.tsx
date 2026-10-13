@@ -10,6 +10,7 @@ describe("fleet overview popovers", () => {
     const html = renderToStaticMarkup(
       <FleetOverview
         nodes={[node("a", { name: "worker-a" }), node("b", { online: false })]}
+        suspends={false}
         coreLabel="Running"
         coreTone="ok"
         stale={false}

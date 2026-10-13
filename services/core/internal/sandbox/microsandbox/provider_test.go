@@ -14,7 +14,7 @@ type callerFunc func(context.Context, Request) (Response, error)
 
 func (f callerFunc) Call(c context.Context, q Request) (Response, error) { return f(c, q) }
 func testConfig() Config {
-	return Config{
+	return Config{CheckpointRoot: "/private-checkpoints",
 		InstallationID: "11111111-1111-4111-8111-111111111111", HelperPath: "/helper", RuntimeHome: "/private/msb", RuntimePath: "/private/bin/msb", FirmwarePath: "/private/lib/libkrunfw.so",
 		RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), Image: "registry/runtime@sha256:" + strings.Repeat("c", 64),
 		MemoryMiB: 2048, CPUs: 2, RootDiskMiB: 4096, EnvironmentDiskMiB: 2048, Network: NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny", Rules: []NetworkRule{{Action: "allow", Direction: "egress", Destination: "host"}}},
@@ -26,7 +26,7 @@ func testRef() sandbox.Reference {
 func testSnapshot() SnapshotIdentity {
 	c, r := testConfig(), testRef()
 	op := "55555555-5555-4555-8555-555555555555"
-	return SnapshotIdentity{Reference: SnapshotReference(c, r, op), ID: "snap_exact", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: op, SourceName: Name(c, r, 0), SourceID: "local:4"}
+	return SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "domain", ExecutionClass: "class"}, Reference: SnapshotReference(c, r, op), ID: "snap_exact", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: op, SourceName: Name(c, r, 0), SourceID: "local:4"}
 }
 func deadline(t *testing.T) context.Context {
 	t.Helper()

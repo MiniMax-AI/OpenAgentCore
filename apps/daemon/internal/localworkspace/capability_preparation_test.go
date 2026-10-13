@@ -40,12 +40,11 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 		t.Fatalf("first preparation: %v", err)
 	}
 	writeSourceSkill(t, source, "second")
-	reconnect, err := New(b.environment, b.capabilityIdentity().SessionID, b.workspace)
+	reconnect, err := NewWithCapabilityDirectory(b.environment, b.capabilityIdentity().SessionID, b.workspace, b.capabilityRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reconnect.networkAccess = b.networkAccess
-	reconnect.capabilityRoot = b.capabilityRoot
 	again, err := reconnect.Prepare(t.Context(), configured)
 	if err != nil || len(again.LocalEnvironment.Skills) != 1 {
 		t.Fatalf("reconnection: %v", err)
@@ -206,11 +205,11 @@ func TestPreparationFreezesToolOnlyEnvironmentAcrossReconnect(t *testing.T) {
 			if err := os.WriteFile(source, []byte(`{"LOCAL_ONLY":"changed"}`), 0600); err != nil {
 				t.Fatal(err)
 			}
-			reconnect, err := New(b.environment, b.capabilityIdentity().SessionID, b.workspace)
+			reconnect, err := NewWithCapabilityDirectory(b.environment, b.capabilityIdentity().SessionID, b.workspace, b.capabilityRoot)
 			if err != nil {
 				t.Fatal(err)
 			}
-			reconnect.networkAccess, reconnect.capabilityRoot = b.networkAccess, b.capabilityRoot
+			reconnect.networkAccess = b.networkAccess
 			if _, err := reconnect.Prepare(t.Context(), configured); err != nil {
 				t.Fatal(err)
 			}

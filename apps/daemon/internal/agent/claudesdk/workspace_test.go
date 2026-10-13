@@ -76,7 +76,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 }
 
 func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
-	for _, name := range []string{"none", "workspace-root", "mcp", "caller-policy", "relative", "missing", "ambient-setting", "duplicate-env", "bad-env"} {
+	for _, name := range []string{"none", "workspace-root", "mcp", "relative", "missing", "ambient-setting", "duplicate-env", "bad-env"} {
 		t.Run(name, func(t *testing.T) {
 			config := workspaceFixture(t)
 			req := workspaceRequest()
@@ -88,8 +88,6 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 				req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.ScratchDir}
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
-			case "caller-policy":
-				req.AgentOptions["workspace"] = "override"
 			case "relative":
 				config.Workspace.Directory = "relative"
 			case "missing":

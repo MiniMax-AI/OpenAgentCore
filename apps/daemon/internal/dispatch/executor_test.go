@@ -69,17 +69,25 @@ func (t *reusableTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlemen
 	}
 }
 
+// noEnvironmentPreparation prepares config for session without an execution environment.
+func noEnvironmentPreparation(session string, config proto.PromptRequestPayload) proto.ExecutionPreparePayload {
+	config.AgentStateKey, config.DisableExecutionEnvironment = "agents-api-"+session, true
+	return proto.ExecutionPreparePayload{SessionID: session, Configuration: config}
+}
 func executorRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: "session", Configuration: proto.PromptRequestPayload{AgentKind: "reusable", AgentStateKey: "agents-api-session", StrictResume: true, DisableExecutionEnvironment: true}}
+	return noEnvironmentPreparation("session", proto.PromptRequestPayload{AgentKind: "reusable"})
+}
+
+// registerExecutorKind registers info for prepared execution only.
+func registerExecutorKind(reg *agent.Registry, info proto.SupportedAgentKind, factory agent.ExecutorFactory) {
+	reg.RegisterKind(info, harnessconfig.Configuration{})
+	reg.RegisterExecutor(info.Kind, factory)
 }
 func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (*dispatch.Router, *recSender, *atomic.Int32) {
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("ordinary factory is forbidden")
-	})
-	reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})
@@ -220,9 +228,7 @@ func TestExecutorPreInputFailureConfirmsCloseBeforeRetrySignal(t *testing.T) {
 func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, *recSender) {
 	t.Helper()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		return nil, errors.New("unexpected legacy factory")
-	})
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 	registry.RegisterExecutor("reusable", factory)
 	sender := &recSender{}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, IdleTimeout: time.Minute})
@@ -294,6 +300,25 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 }
 
+func TestExecutorRejectsUnsupportedConfigurationBeforeFactory(t *testing.T) {
+	for name, change := range map[string]func(*proto.PromptRequestPayload){
+		"no environment":       func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },
+		"unknown agent option": func(r *proto.PromptRequestPayload) { r.AgentOptions = map[string]any{"mode": "plan"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, s, calls := executorRouter(t, &reusableExecutor{}, time.Minute)
+			req := executorRequest()
+			change(&req.Configuration)
+			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", req)); err == nil {
+				t.Fatal("unsupported configuration accepted")
+			}
+			if status := waitPreparationStatus(t, s, "request", "rejected", ""); status.ErrorCode != "unsupported_configuration" || calls.Load() != 0 {
+				t.Fatalf("status=%+v factory calls=%d", status, calls.Load())
+			}
+		})
+	}
+}
+
 func TestExecutorRejectsOutputFromAnotherTurn(t *testing.T) {
 	e := &reusableExecutor{starts: make(chan *reusableTurn, 1)}
 	r, s, _ := executorRouter(t, e, time.Minute)
@@ -316,4 +341,53 @@ func TestExecutorRejectsOutputFromAnotherTurn(t *testing.T) {
 
 func (*reusableTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	return agent.ErrSteeringRejected
+}
+
+func TestExecutorResumesSameOwnerAndNextTurnAfterSuspension(t *testing.T) {
+	owner := &reusableExecutor{starts: make(chan *reusableTurn, 2)}
+	var factories atomic.Int32
+	registry := agent.NewRegistry()
+	registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		factories.Add(1)
+		return owner, nil
+	})
+	sender := &recSender{}
+	r, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, LocalWorkspace: preparationWorkspace(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := r.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	first := executorAdmission(t, r, sender, "first", preparationRequest())
+	startExecutorTurn(t, r, sender, "first", "one", first)
+	(<-owner.starts).finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "first Turn settled")
+	request := proto.EnvironmentSuspendPayload{EnvironmentID: preparationEnvironmentID, SuspendID: "suspension"}
+	if err := r.Quiesce(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	resumedSender := &recSender{}
+	if err := r.Resume(request, resumedSender); err != nil {
+		t.Fatal(err)
+	}
+	req := preparationRequest()
+	req.Configuration.AgentSessionID = "native-session"
+	conflict := req
+	conflict.Configuration.AgentOptions = map[string]any{"model": "changed"}
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "conflict", conflict)); err == nil {
+		t.Fatal("suspension relaxed the fixed configuration")
+	}
+	second := executorAdmission(t, r, resumedSender, "second", req)
+	if !second.Reused || first.ExecutorID != second.ExecutorID || first.Handle == second.Handle || factories.Load() != 1 || owner.closes.Load() != 0 {
+		t.Fatal("suspension replaced the resident native owner")
+	}
+	startExecutorTurn(t, r, resumedSender, "second", "two", second)
+	(<-owner.starts).finish()
+	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "resumed Turn settled")
+	if owner.closes.Load() != 0 {
+		t.Fatal("resumed Turn retired its healthy native owner")
+	}
 }

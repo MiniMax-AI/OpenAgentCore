@@ -3,15 +3,14 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { AgentCoreError } from "@oac/agents-client";
+import { type AdminIssuedAPIKey, type AdminProject, AgentCoreError } from "@oac/agents-client";
 import { flowError, keyFlowReducer, type KeyFlow } from "./key-flows";
 import { KeyFlowDialogs, PendingKeyNotice } from "./KeyFlowDialogs";
 import type { KeyFlowControls } from "./use-key-flow";
-import { type AdminIssuedKey, type Project } from "../../lib/admin-view";
 
-const project: Project = { id: "proj_7f3a91c2", name: "Production", status: "active", created_at: 100, archived_at: null, active_key_count: 1 };
+const project: AdminProject = { id: "proj_7f3a91c2", name: "Production", created_at: "1970-01-01T00:01:40Z", archived_at: null, active_key_count: 1 };
 const secret = "pc_live_" + "s".repeat(40);
-const issued: AdminIssuedKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", project_id: "proj_7f3a91c2", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: 300, revoked_at: null, key: secret };
+const issued: AdminIssuedAPIKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", project_id: "proj_7f3a91c2", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: "1970-01-01T00:05:00Z", revoked_at: null, key: secret };
 const controls = (flow: KeyFlow): KeyFlowControls => ({ flow, dispatch: () => undefined, submit: async () => undefined });
 // The how-to-call card under a new key reads the installation through the query cache.
 const render = (element: ReactElement) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{element}</QueryClientProvider>);

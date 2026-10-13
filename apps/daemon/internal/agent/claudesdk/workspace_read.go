@@ -39,22 +39,7 @@ type workspaceReadEvent struct {
 	Error     string  `json:"error"`
 }
 
-var _ agent.WorkspaceReader = (*prepared)(nil)
 var _ agent.WorkspaceReader = (*session)(nil)
-
-func (p *prepared) ReadWorkspaceFile(ctx context.Context, path string, maxBytes int) (agent.WorkspaceReadResult, error) {
-	p.mu.Lock()
-	if p.closed || p.binding != nil {
-		p.mu.Unlock()
-		return agent.WorkspaceReadResult{}, agent.ErrWorkspaceReadUnavailable
-	}
-	read, err := p.session.admitWorkspaceRead(ctx, path, maxBytes)
-	p.mu.Unlock()
-	if err != nil {
-		return agent.WorkspaceReadResult{}, err
-	}
-	return p.session.awaitWorkspaceRead(ctx, read)
-}
 
 func (s *session) ReadWorkspaceFile(ctx context.Context, path string, maxBytes int) (agent.WorkspaceReadResult, error) {
 	if s.owner != nil {

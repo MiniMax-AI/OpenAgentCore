@@ -48,7 +48,7 @@ export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "http
       const turnOutput = Math.floor(200 + rand() * 4000);
       const turnId = uuid();
       const turn = {
-        id: turnId, agent_id: agent.id, session_id: id, object: "agent.session.turn",
+        id: turnId, agent_id: agent.id, subagent_id: null, session_id: id, object: "agent.session.turn",
         status: running ? "in_progress" : failed ? "failed" : rand() < 0.03 ? "cancelled" : "completed",
         created_at: cursor, started_at: cursor + Math.floor(rand() * 4), completed_at: running ? null : cursor + duration,
         error: failed ? { code: "internal_error", message: "The execution could not complete." } : null,
@@ -57,15 +57,15 @@ export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "http
       if (!running) { input += turnInput; output += turnOutput; cached += Math.floor(turnInput * 0.4); reasoning += Math.floor(turnOutput * 0.3); }
       sessionTurns.push(turn);
       const exchange = (agentConversations[agent.name] ?? [["Investigate", "Done"]])[t % (agentConversations[agent.name]?.length ?? 1)];
-      sessionItems.push({ id: uuid(), turn_id: turnId, type: "message", status: "completed", role: "user", content: [{ type: "input_text", text: exchange[0] }] });
+      sessionItems.push({ id: uuid(), turn_id: turnId, type: "message", status: "completed", role: "user", phase: null, content: [{ type: "input_text", text: exchange[0] }] });
       const calls = Math.floor(rand() * 6);
       for (let c = 0; c < calls; c += 1) {
         const kind = pick(["function", "function", "mcp", "command", "command", "web"]);
         const itemFailed = rand() < 0.06;
         if (kind === "function") sessionItems.push({ id: uuid(), turn_id: turnId, type: "function_call", status: itemFailed ? "failed" : "completed", call_id: uuid(), name: pick(["apply_patch", "read_file", "search_docs"]), arguments: {} });
         if (kind === "mcp") sessionItems.push({ id: uuid(), turn_id: turnId, type: "mcp_call", status: itemFailed ? "failed" : "completed", server_label: pick(["github", "linear"]), name: pick(["search_issues", "get_file"]), arguments: {}, output: null, error: null });
-        if (kind === "command") sessionItems.push({ id: uuid(), turn_id: turnId, type: "command_execution", status: "completed", command: "pytest -q", exit_code: itemFailed ? 1 : 0, duration_ms: 1200 });
-        if (kind === "web") sessionItems.push({ id: uuid(), turn_id: turnId, type: "web_search_call", status: "completed" });
+        if (kind === "command") sessionItems.push({ id: uuid(), turn_id: turnId, type: "command_execution", status: "completed", command: "pytest -q", cwd: "/workspace", output: itemFailed ? "1 failed, 41 passed" : "42 passed", exit_code: itemFailed ? 1 : 0, duration_ms: 1200 });
+        if (kind === "web") sessionItems.push({ id: uuid(), turn_id: turnId, type: "web_search_call", status: "completed", action: null });
       }
       if (!running && !failed) sessionItems.push({ id: uuid(), turn_id: turnId, type: "message", status: "completed", role: "assistant", phase: "final_answer", content: [{ type: "output_text", text: exchange[1] }] });
     }
@@ -85,7 +85,7 @@ export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "http
   sessions.sort((a, b) => b.created_at - a.created_at);
   const nodes = [
     { rollout: { state: "ready", ready_generation: 1 }, id: "node-local", name: "core-01", provider: "docker", online: true, provider_ready: true, cpu_count: 16, available_memory_bytes: 38 * 2 ** 30, available_disk_bytes: 410 * 2 ** 30, running: 5, snapshots: 2, last_seen_at: new Date((now - 8) * 1000).toISOString(), max_active: 8, max_retained: 16, active: 5, reserved: 1, retained: 2, cleanup_pending: 0, created_at: new Date((now - 86400 * 30) * 1000).toISOString() },
-    { rollout: { state: "failed", ready_generation: null, diagnostic: "docker_limits_unsupported" }, id: "node-gpu", name: "gpu-worker-02", provider: "docker", online: true, provider_ready: false, diagnostic: "docker_limits_unsupported", cpu_count: 32, available_memory_bytes: 12 * 2 ** 30, available_disk_bytes: 96 * 2 ** 30, running: 7, snapshots: 5, last_seen_at: new Date((now - 12) * 1000).toISOString(), max_active: 8, max_retained: 16, active: 7, reserved: 0, retained: 5, cleanup_pending: 1, created_at: new Date((now - 86400 * 12) * 1000).toISOString() },
+    { rollout: { state: "failed", ready_generation: null, diagnostic: "host_unsupported" }, id: "node-gpu", name: "gpu-worker-02", provider: "docker", online: true, provider_ready: false, diagnostic: "host_unsupported", cpu_count: 32, available_memory_bytes: 12 * 2 ** 30, available_disk_bytes: 96 * 2 ** 30, running: 7, snapshots: 5, last_seen_at: new Date((now - 12) * 1000).toISOString(), max_active: 8, max_retained: 16, active: 7, reserved: 0, retained: 5, cleanup_pending: 1, created_at: new Date((now - 86400 * 12) * 1000).toISOString() },
     { rollout: { state: "unknown", ready_generation: 1 }, id: "node-edge", name: "edge-03", provider: "docker", online: false, provider_ready: false, cpu_count: 8, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: new Date((now - 5400) * 1000).toISOString(), max_active: 4, max_retained: 8, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date((now - 86400 * 3) * 1000).toISOString() },
   ];
   const hosted = sessions.filter((session) => session.environment.type === "openai_hosted");

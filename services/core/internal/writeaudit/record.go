@@ -1,8 +1,6 @@
 package writeaudit
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,14 +15,44 @@ import (
 // vocabulary. The write it belongs to fails closed.
 var ErrInvalidSource = errors.New("invalid write audit source")
 
+type ResourceType string
+
+const (
+	ResourceAgent               ResourceType = "agent"
+	ResourceSession             ResourceType = "session"
+	ResourceEnvironment         ResourceType = "environment"
+	ResourceEnvironmentTemplate ResourceType = "environment_template"
+	ResourceSkill               ResourceType = "skill"
+	ResourceSkillVersion        ResourceType = "skill_version"
+	ResourceFile                ResourceType = "file"
+	ResourceVault               ResourceType = "vault"
+	ResourceCredential          ResourceType = "credential"
+	ResourceArtifact            ResourceType = "artifact"
+)
+
+type Action string
+
+const (
+	ActionCreate               Action = "create"
+	ActionUpdate               Action = "update"
+	ActionDelete               Action = "delete"
+	ActionSendEvents           Action = "send_events"
+	ActionUploadFile           Action = "upload_file"
+	ActionUploadVersion        Action = "upload_version"
+	ActionUpdateDefaultVersion Action = "update_default_version"
+)
+
 // Resource identifies a resource genuinely created by the current transaction.
-type Resource struct{ Type, ID, ParentID string }
+type Resource struct {
+	Type         ResourceType
+	ID, ParentID string
+}
 
 // ValidResourceType reports whether value is an audited resource type. The list
 // is closed; recording and owner queries share it.
 func ValidResourceType(value string) bool {
-	switch value {
-	case "agent", "session", "environment", "environment_template", "skill", "skill_version", "file", "vault", "credential", "artifact":
+	switch ResourceType(value) {
+	case ResourceAgent, ResourceSession, ResourceEnvironment, ResourceEnvironmentTemplate, ResourceSkill, ResourceSkillVersion, ResourceFile, ResourceVault, ResourceCredential, ResourceArtifact:
 		return true
 	}
 	return false
@@ -35,13 +63,6 @@ func ValidResourceType(value string) bool {
 // audit string passes it.
 func ValidText(value string, max int, required bool) bool {
 	return (!required || value != "") && utf8.ValidString(value) && utf8.RuneCountInString(value) <= max && !strings.ContainsFunc(value, unicode.IsControl)
-}
-
-// ValidKeyDigest reports whether digest is the lowercase hexadecimal SHA-256
-// digest that identifies a Project key.
-func ValidKeyDigest(digest string) bool {
-	decoded, err := hex.DecodeString(digest)
-	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == digest
 }
 
 // Validate checks that s is well-formed provenance of a write in tenant.
@@ -55,17 +76,17 @@ func (s Source) Validate(tenant string) error {
 // ValidateRecord checks a write record in tenant: source must be well-formed
 // provenance from tenant, action an audited write action, and every resource
 // an audited resource.
-func ValidateRecord(source Source, tenant, action string, resources []Resource) error {
+func ValidateRecord(source Source, tenant string, action Action, resources []Resource) error {
 	if err := source.Validate(tenant); err != nil {
 		return err
 	}
 	switch action {
-	case "create", "update", "delete", "send_events", "upload_file", "upload_version", "update_default_version":
+	case ActionCreate, ActionUpdate, ActionDelete, ActionSendEvents, ActionUploadFile, ActionUploadVersion, ActionUpdateDefaultVersion:
 	default:
 		return fmt.Errorf("%w: invalid action", ErrInvalidSource)
 	}
 	for _, resource := range resources {
-		if !ValidResourceType(resource.Type) || !ValidText(resource.ID, 256, true) || !ValidText(resource.ParentID, 256, false) {
+		if !ValidResourceType(string(resource.Type)) || !ValidText(resource.ID, 256, true) || !ValidText(resource.ParentID, 256, false) {
 			return fmt.Errorf("%w: invalid resource", ErrInvalidSource)
 		}
 	}
@@ -75,21 +96,14 @@ func ValidateRecord(source Source, tenant, action string, resources []Resource) 
 func (s Source) valid(tenant string) bool {
 	actual, err := parseID(s.TenantID)
 	expected, expectedErr := parseID(tenant)
-	valid := err == nil && expectedErr == nil && actual == expected &&
+	_, idErr := parseID(s.KeyID)
+	valid := err == nil && expectedErr == nil && actual == expected && s.Kind == "issued" && idErr == nil &&
+		len(s.Prefix) == 11 && strings.HasPrefix(s.Prefix, "pc_") &&
 		ValidText(s.Name, 80, false) && ValidText(s.RequestID, 128, true) && ValidText(s.TraceID, 128, true)
-	switch s.Kind {
-	case "static", "console":
-		digest := strings.TrimPrefix(s.KeyID, "static:")
-		return valid && strings.HasPrefix(s.KeyID, "static:") && ValidKeyDigest(digest) && s.Prefix == digest[:min(len(digest), 8)]
-	case "issued":
-		_, idErr := parseID(s.KeyID)
-		valid = valid && idErr == nil && len(s.Prefix) == 11 && strings.HasPrefix(s.Prefix, "pc_")
-		for _, c := range strings.TrimPrefix(s.Prefix, "pc_") {
-			valid = valid && (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-')
-		}
-		return valid
+	for _, c := range strings.TrimPrefix(s.Prefix, "pc_") {
+		valid = valid && (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-')
 	}
-	return false
+	return valid
 }
 
 func parseID(value string) (uuid.UUID, error) {

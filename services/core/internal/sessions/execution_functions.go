@@ -1,6 +1,9 @@
 package sessions
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // FunctionCallMatch is what a Turn's stored call shows about a reported call.
 type FunctionCallMatch struct {
@@ -28,9 +31,9 @@ type FunctionTx interface {
 	// ApplyFunctionResult records the application receipt of the call's
 	// result.
 	ApplyFunctionResult(ctx context.Context, turn, call string) error
-	// ApplyFunctionTurnStatus moves the Turn from expected to status and
-	// returns it as stored. A Turn no longer in expected is ErrTurnConflict.
-	ApplyFunctionTurnStatus(ctx context.Context, turn, expected, status string) (Turn, error)
+	// ApplyTurnStatus moves the Turn as change decides and returns it as
+	// stored. A Turn no longer in the expected status is ErrTurnConflict.
+	ApplyTurnStatus(ctx context.Context, turn string, change TurnStatusChange) (Turn, error)
 }
 
 // FunctionExecution is the lease-bound storage of function calls.
@@ -150,7 +153,7 @@ func settleFunctionState(ctx context.Context, tx FunctionTx, turn Turn) error {
 		status = TurnWaiting
 	}
 	if turn.Status != status {
-		if turn, err = tx.ApplyFunctionTurnStatus(ctx, turn.ID, turn.Status, status); err != nil {
+		if turn, err = tx.ApplyTurnStatus(ctx, turn.ID, TurnStatusChange{Expected: turn.Status, Status: status, Outcome: json.RawMessage(`{}`)}); err != nil {
 			return err
 		}
 		if err := tx.AppendChanges(ctx, TurnChanges(turn, false)...); err != nil {

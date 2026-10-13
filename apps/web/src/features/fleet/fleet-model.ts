@@ -29,14 +29,15 @@ export interface CapacitySummary {
   maxRetained: number;
   reserved: number;
   cleanupPending: number;
-  /** Sandboxes held suspended (microsandbox only): placed, but not counted as active. */
+  /** Sandboxes held suspended (where the Provider declares checkpoint support): placed, but not counted as active. */
   suspended: number;
 }
 
 /**
  * Sandboxes a node holds suspended: Core counts every unreleased placement as
  * retained and only the ones not suspended as active, so the difference is
- * what sleeps as a snapshot. Only microsandbox suspends; elsewhere it is 0.
+ * what sleeps as a snapshot. Only a Provider that declares checkpoint support
+ * suspends; elsewhere it is 0.
  */
 export function suspendedSandboxes(node: SandboxNode): number {
   return Math.max(0, node.retained - node.active);

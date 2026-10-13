@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -133,9 +134,6 @@ func (s *Service) RemoveNode(ctx context.Context, id string) error {
 			if n.Retained != 0 || n.CleanupPending != 0 {
 				return ErrNodeInUse
 			}
-			if d.LocalNodeID == nodeID {
-				return ErrLocalNodeConfigured
-			}
 			return tx.RemoveNode(nodeID)
 		}
 		return ErrNotFound
@@ -165,7 +163,7 @@ func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (Enro
 		if d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused {
+		if d.Mode != string(sandbox.DeploymentNodes) {
 			return ErrConflict
 		}
 		if _, err := s.specification(d); err != nil {
@@ -214,7 +212,7 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 		if d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused || input.Provider != d.Provider {
+		if d.Mode != string(sandbox.DeploymentNodes) || input.Provider != d.Provider {
 			return ErrInvalidInput
 		}
 		spec, err := s.specification(d)
@@ -281,7 +279,7 @@ func (s *Service) AuthenticateNode(ctx context.Context, nodeID, credential strin
 		if err != nil {
 			return placement.ErrNodeUnavailable
 		}
-		if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
+		if n.InstallationID != d.InstallationID || d.Mode != string(sandbox.DeploymentNodes) {
 			return ErrNodeCredential
 		}
 		if err := s.checkEnrollmentIdentity(tx, d, n); err != nil {
@@ -400,7 +398,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		if node == nil && d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" {
+		if d.Mode != string(sandbox.DeploymentNodes) {
 			return ErrConflict
 		}
 		if node != nil {
@@ -425,9 +423,6 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		spec, err := s.generationSpecification(tx, d, selected)
 		if err != nil {
 			return err
-		}
-		if node == nil && d.AdmissionPaused {
-			return ErrConflict
 		}
 		limit, err := s.registry.RetainedLimit(d.Provider, active, retained)
 		if err != nil {
@@ -455,7 +450,7 @@ func (s *Service) connection(tx NodeReads, d Record, nodeID, connectionID string
 	if err != nil {
 		return StoredNode{}, err
 	}
-	if n.ConnectionID != connectionID || n.ConnectedEpoch != epoch || epoch == 0 || epoch > math.MaxInt64 || d.OwnerEpoch != epoch || n.InstallationID != d.InstallationID || d.Mode != "nodes" {
+	if n.ConnectionID != connectionID || n.ConnectedEpoch != epoch || epoch == 0 || epoch > math.MaxInt64 || d.OwnerEpoch != epoch || n.InstallationID != d.InstallationID || d.Mode != string(sandbox.DeploymentNodes) {
 		return StoredNode{}, ErrNodeCredential
 	}
 	return n, nil
@@ -522,8 +517,8 @@ func (s *Service) NodeRetention(ctx context.Context, nodeID, connectionID string
 
 // Heartbeat records a protocol 1 node's health, which reports readiness of its
 // enrollment generation only.
-func (s *Service) Heartbeat(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth) error {
-	return s.heartbeat(ctx, nodeID, connectionID, epoch, health, nil, 1)
+func (s *Service) Heartbeat(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth, statuses []sandbox.GenerationStatus) error {
+	return s.heartbeat(ctx, nodeID, connectionID, epoch, health, statuses, 1)
 }
 
 // HeartbeatGenerations records a node's health and the preparation state of
@@ -564,20 +559,33 @@ func (s *Service) heartbeat(ctx context.Context, nodeID, connectionID string, ep
 		if !current {
 			return ErrNodeCredential
 		}
-		if protocol == 1 {
+		if protocol == 1 && len(statuses) > 0 {
+			if len(statuses) != 1 || statuses[0].Generation != n.DeploymentGeneration || statuses[0].SpecificationDigest != n.SpecificationDigest || (statuses[0].State == "ready") != health.ProviderReady {
+				return ErrInvalidInput
+			}
+		}
+		if protocol == 1 && len(statuses) == 0 {
 			state := "failed"
 			if health.ProviderReady {
 				state = "ready"
 			}
-			statuses = []sandbox.GenerationStatus{{Generation: n.DeploymentGeneration, SpecificationDigest: n.SpecificationDigest, State: state, Diagnostic: health.Diagnostic}}
+			statuses = []sandbox.GenerationStatus{{Generation: n.DeploymentGeneration, SpecificationDigest: n.SpecificationDigest, State: state, Diagnostic: string(health.Diagnostic)}}
 		}
 		return s.recordGenerations(tx, d, n, statuses, protocol)
 	})
 }
 
 func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses []sandbox.GenerationStatus, protocol int) error {
+	adapter, err := s.registry.Lookup(d.Provider)
+	if err != nil {
+		return err
+	}
+	checkpointSupported := adapter.Operations()["Initial"].State == providercontract.Supported
 	seen := map[uint64]bool{}
 	for _, status := range statuses {
+		if status.Checkpoint != nil && (status.State != "ready" || !checkpointSupported || status.Checkpoint.Validate() != nil) || status.State == "ready" && checkpointSupported && status.Checkpoint == nil {
+			return ErrInvalidInput
+		}
 		if !validGeneration(status.Generation) || !validDigest(status.SpecificationDigest) || seen[status.Generation] || (status.State != "ready" && status.State != "preparing" && status.State != "failed") || status.State == "ready" && status.Diagnostic != "" {
 			return ErrInvalidInput
 		}
@@ -598,7 +606,7 @@ func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses 
 		if spec.Digest(d.Provider) != status.SpecificationDigest {
 			return ErrSpecificationMismatch
 		}
-		if err := tx.UpsertGenerationStatus(GenerationStatusRecord{NodeID: n.ID, ConnectionID: n.ConnectionID, Generation: status.Generation, SpecificationDigest: status.SpecificationDigest, OwnerEpoch: d.OwnerEpoch, State: status.State, Diagnostic: sandbox.NormalizeNodeDiagnostic(status.Diagnostic)}); err != nil {
+		if err := tx.UpsertGenerationStatus(GenerationStatusRecord{NodeID: n.ID, ConnectionID: n.ConnectionID, Generation: status.Generation, SpecificationDigest: status.SpecificationDigest, OwnerEpoch: d.OwnerEpoch, State: status.State, Diagnostic: sandbox.NormalizeNodeDiagnostic(status.Diagnostic), Checkpoint: status.Checkpoint}); err != nil {
 			return err
 		}
 		if status.State == "ready" && status.Generation == d.Generation {

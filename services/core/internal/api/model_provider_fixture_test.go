@@ -27,6 +27,3 @@ func fixtureDeploymentProvider(_ context.Context, harness string) (*modelconfigu
 
 // fixtureSessionProvider is a top-level Session request member for Codex.
 const fixtureSessionProvider = `"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://model.fixture.example/v1","api_key":"fixture-model-key"}}`
-
-// fixtureAnthropicSessionProvider is the Claude Code and MiniMax Code equivalent.
-const fixtureAnthropicSessionProvider = `"x_agents_core":{"model_provider":{"protocol":"anthropic","base_url":"https://model.fixture.example/anthropic","api_key":"fixture-model-key","context_window":200000,"max_output_tokens":8000}}`

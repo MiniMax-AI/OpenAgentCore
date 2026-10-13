@@ -1,14 +1,14 @@
 ---
-title: "管理你的安装"
+title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 5ac3e57f943b8bb3fadbf9cda0a72399317ad101416ec28ca4037eea07703a82
+source_hash: f3f9b2f23898a4e39201ce12cf1f7a199aa39ecc0afd34fd964596a98d2b709a
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
 
 ## oac 命令 {#the-oac-command}
 
-每个安装目录中都有自己的管理命令，无需发行包或 root：
+每个安装目录都有自己的原生管理命令：Unix 使用 `oac`，Windows 使用 `oac.exe`。命令需要 Docker 访问权限，不需要 root：
 
 ```sh
 docker compose -f ~/.oac/core/compose.yaml ps
@@ -20,11 +20,11 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose start` | 启动服务 |
 | `docker compose stop` | 停止服务。保留数据、节点和沙箱 |
 | `oac apply` | 先运行 `oac-core check-config`，再执行 `docker compose up -d --wait`。校验失败时不改动任何服务 |
-| `oac core-key [--show]` | 打印 Core 密钥路径；加上 `--show` 时打印密钥本身 |
+| `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web |
 | `docker compose down` | 移除容器。数据保留；要删除数据，请[卸载](#uninstall) |
 
-第二个安装使用自己的目录，例如 `~/.oac/second`。
+示例使用默认安装目录。Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用管理命令，后接相同参数。使用自定义安装目录时，替换各命令中的路径。
 
 ## 服务健康状态 {#service-health}
 
@@ -50,6 +50,10 @@ docker compose -f "$HOME/.oac/core/compose.yaml" logs --timestamps init
 
 不要将 `docker compose config`、`docker inspect` 或原始日志粘贴到公开问题报告。
 
+## 请求诊断 {#request-diagnosis}
+
+打开 **Monitor → Request log** 查看近期请求，并复制请求 ID 与 Core 服务日志关联。[请求日志](../../../contracts/agents-api/zh/admin-api.md#request-log)定义范围、隐私及有限的内存保留方式。请求接受了异步 Turn 时，请到 **Session log** 查看执行结果；HTTP 接受不等于任务成功。跨重启或 Core 实例的留存使用已有日志采集系统。
+
 ## 停止与重启 {#stop-and-restart}
 
 计划重启前，先等待活动工作结束：
@@ -65,13 +69,13 @@ Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退
 
 ## Core 密钥 {#core-key}
 
-每个安装有一个管理员凭据，即 Core 密钥。安装程序在 `data/secrets/web/core.key` 生成以 `oac_admin_` 为前缀、后接 64 个随机小写十六进制字符的密钥。用 `oac core-key --show` 读取；该文件属于容器用户。Core 密钥：
+每个安装有一个管理员凭据，即 Core 密钥。安装程序在 `secrets/web/core.key` 生成以 `oac_admin_` 为前缀、后接 64 个随机小写十六进制字符的密钥。用 `oac core-key --show` 读取；该文件属于容器用户。Core 密钥：
 
 - 用于登录 Web。浏览器获得 HttpOnly 会话 cookie，不持有密钥；
 - 通过 `Authorization: Bearer <Core key>` 授权 Core API（`/core/v1`）请求；
 - 不授权 Agents API（`/v1`）。应用使用 Project API 密钥，后者也不能调用 `/core/v1`。
 
-请保密。Web 读取 `data/secrets/web/core.key`。Core 只读取 `data/secrets/core/core-key-digests.json` 中的 SHA-256。Core 密钥至少 32 字符且不含空白。Web 限制失败登录。
+请保密。Web 读取 `secrets/web/core.key`。Core 只读取 `secrets/core/core-key-digests.json` 中的 SHA-256。Core 密钥至少 32 字符且不含空白。Web 限制失败登录。
 
 ### 用脚本调用 Core API {#script-the-core-api}
 
@@ -105,7 +109,7 @@ core() (  # core METHOD PATH [JSON body]
 ~/.oac/core/oac rotate-core-key
 ```
 
-它把新密钥写入 `data/secrets/web/core.key`，重新生成 `data/secrets/core/core-key-digests.json`，并重启 Core 和 Web。Core 重启后旧密钥立即失效，所有控制台会话结束：重新登录并更新脚本。
+它在初始化容器中更新数据卷内的 `secrets/web/core.key` 和 `secrets/core/core-key-digests.json`，然后重启 Core 与 Web。Core 重启后旧密钥立即失效，控制台会话也会结束；请重新登录并更新脚本。
 
 ## Project 和 API 密钥 {#projects-and-api-keys}
 
@@ -123,40 +127,62 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 ## 备份 {#back-up}
 
-一起备份这些内容；恢复时全部需要：
+可恢复的备份必须是一组在停止写入期间取得的一致数据。仅数据库转储或 Core 卷导出不包含独立工作区存储及节点计算状态。恢复时使用相同版本；参见[安装版本策略](#installation-version-policy)。
 
-- PostgreSQL 卷 `<project>_database`。其中包含 Project、密钥摘要、节点、默认模型、加密凭据和全部执行历史（含大对象）。逻辑备份：
+### 备份内容 {#backup-contents}
 
-  ```sh
-  docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
-    pg_dump -U agents_api agents_api > oac-backup.sql
-  ```
+- Docker 卷 `<project>_data`，包括 `database/`、`secrets/` 和 `state/`。其中保存 Project、密钥摘要、节点、默认模型、加密凭据和执行历史（含大对象）。`secrets/core/credential.key` 必须与匹配的数据库一起保留，否则存储的凭据无法解密。
+- 安装目录，包括 `.env`、`compose.yaml`、Compose 覆盖文件和管理命令。
+- 当前或保留对象所使用的每个独立工作区命名空间，即使其位于安装卷之外。备份整个根目录，包括 `.oac-storage-root`、对象标识、staging、live 数据、trash 和删除标记。保留数值所有者、权限、链接及扩展属性，包括全部 `user.*` 属性。仅复制 `live/data` 会丢失生命周期证据，并可能使已删除标识复活。[工作区存储](../workspace-provider.md#kernel-nfs-adapter)负责定义布局与所有权要求。
+- 对于[配额模式](../workspace-provider.md#quota-mode)命名空间，将承载导出的整个 XFS 文件系统作为一份块级副本备份：存储或 LVM 快照，或已冻结或已卸载设备的镜像。只有这样的副本能保持 project ID、配额限制、inode 标识、文件系统 UUID 和 `oac-workspace-quota` 日志库的一致。文件级复制、`tar`、`rsync` 或 `xfsdump` 会丢失这些信息；此时该命令会拒绝恢复后的对象，而不是在无上限状态下提供它们。
+- 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其 Provider 存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
 
-- 安装目录，尤其是 `data/`。`data/secrets/core/credential.key` 必须与数据库一起保留，否则无法解密存储的凭据。
+- 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、归档、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
 
-先 `docker compose stop`，打包安装目录，再 `docker compose start`。
-- 各节点主机上的状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及提供商存储：Docker 卷或 microsandbox 存储。恢复方法见[节点主机故障时](nodes.md#when-a-node-host-fails)。
-- 安装所使用的发行包，用于修复同一版本。
+### 建立停止写入窗口 {#establish-a-stopped-write-window}
 
-不要通过清理 Docker 卷或删除原生 Harness 历史来让重试成功。Session 已删除不证明所有提供商资源已回收。
+1. 在安装入口阻止新应用 input、实时文件访问和管理变更。等待活动执行、初始化、文件操作和原生清理完成。停止其他能够写入同一文件系统的应用或主机进程。
+2. 保持 Core 和节点可用，确认每个所属写入方均已停止，且所有 Create、Kill、快照清理及文件系统变更均已结算。节点离线、超时、实例缺失或服务停止均不足以证明这一点。确认挂起会停止源计算资源，但保留的检查点也必须纳入备份。最简单的冷恢复基线是等待符合条件的保留 Session 完成检查点到期清理、allocation 已释放，再按[冷替换契约](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)保留文件系统对象及原生历史。
+3. 停止 Core 和 Web，再停止节点控制服务，以防止新的生命周期操作。重新核实精确的原生资源，保持所有写入方停止，直到备份各部分全部完成。**停止 Core 或节点服务不会停止其沙箱。** 节点服务使用 `KillMode=process`；microVM 及其他由 Provider 管理的计算资源可能继续独立运行。
+4. 使用存储平台支持的流程将已停止写入的文件系统中的待写数据落盘，并创建其快照或导出。对于配额模式，在复制其设备期间使用 `xfs_freeze -f` 冻结 XFS 文件系统或将其卸载，完成后解冻。在同一窗口内导出 Core 数据卷、安装目录及所需的节点状态和 Provider 存储。复制 PostgreSQL 的 `database/` 文件前必须停止 PostgreSQL。一起记录版本、备份时间、组成清单和校验值，并将备份保存在被备份安装之外。
+5. 所有复制完成后才恢复服务。先恢复存储，再启动 Core 和节点，验证就绪后开放入口。不要通过重放不确定的原生操作来让备份通过。
+
+当前没有一条命令即可完成且无损的维护排空流程。归档和部署重置会改变 Session 生命周期状态，不能替代保持续接能力的备份暂停。任何写入方或变更仍然未知时，应将备份保留为未完成状态，先解决相应归属。
+
+若在停止写入窗口中进行数据库逻辑复制，仅保持 database 服务运行，执行：
+
+```sh
+docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
+  pg_dump -U agents_api agents_api > oac-backup.sql
+```
+
+逻辑转储仍然需要匹配的 secrets、state、独立文件系统及所需节点资源。Docker Desktop 的 **Volumes** 导出可用于复制已停止的数据卷，但不会协调这些其他部分。
+
+### 恢复与演练 {#restore-and-rehearse}
+
+恢复期间保持应用入口及 Core/节点服务关闭。暴露恢复后的文件系统前，必须隔离或关闭每一个旧写入方；旧主机不可达不代表已隔离。演练必须使用隔离的安装和存储副本，不能连接原节点，也不能共享其可写命名空间。
+
+启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和 Provider 存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
+
+已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、Provider 存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
+
+恢复依赖全部完整后才启动 database、Core 和节点服务；检查期间保持入口受限。在隔离演练中，验证保留 Session 的文件和具备资格时在新计算资源上的原生续接，确认已删除对象无法重新打开，并检查旧写入方均无法访问恢复后的命名空间。在依赖备份进行恢复前记录结果。
 
 ## 卸载 {#uninstall}
 
 ```sh
 cd ~/.oac/core
-docker compose down --remove-orphans
-docker compose run --rm --no-deps --entrypoint find init /data -mindepth 1 -delete
-docker compose down --rmi all
+docker compose down --volumes --remove-orphans --rmi all
 cd && rm -rf ~/.oac/core
 ```
 
-`data/` 归容器所有，因此由 `init` 镜像删除其内容；随后 `down --rmi all` 移除镜像，`rm` 删除安装目录。只有确定要删数据时才执行这些命令。
+`down --volumes` 会删除安装数据卷。之后删除安装目录；Windows 使用 `Remove-Item -Recurse "$HOME/.oac/core"`。
 
 全部数据随之删除：Project 和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 
 卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成；命令展示 Core 正在使用的沙箱数量。
 
-其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装目录删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。安装 ID 在 `data/secrets/core/installation.id`。
+其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装目录删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。安装 ID 在数据卷的 `secrets/core/installation.id` 中。
 
 ## 安装版本策略 {#installation-version-policy}
 
@@ -164,24 +190,19 @@ cd && rm -rf ~/.oac/core
 
 迁移到新版本时，安装到全新的空目录，使用独立数据库、Core 密钥和节点，并从新 Web 添加节点。保留旧安装、数据和节点，直到工作完成。节点运行添加它的控制台所提供的程序，不原地升级；Core 仅接受使用自身节点协议的节点。
 
-`install.sh` 拒绝非空目录。首次启动失败时，它删除自己创建的目录，同一命令可以再运行。已经启动的安装会保留。
+中断的安装可以[沿用已保存配置继续](install.md#install)。与本安装无关的非空目录会被拒绝。
 
-会修改状态的 `oac` 命令持有 `.oac.lock`。其他命令持有锁时，等待其结束后重试。不要删除 `.oac.lock` 来绕过忙碌安装。
+安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)。其他命令正在运行时，等待其结束后重试。
 
 ## 问题排查 {#troubleshooting}
 
 | 症状 | 原因与解决方法 |
 | --- | --- |
-| `Core installation requires Linux amd64 with Docker access` | 使用 Linux amd64 和有 Docker 访问权限的账号；支持 root 和普通用户 |
-| `Installation failed: inspect prerequisites and private deployment files` | 前置条件失败但未单独报告，通常是 Docker：检查此用户能运行 `docker info` 和 `docker compose version` |
-| `Docker Compose 2.26.0 or newer is required …` | 更新 Docker Compose 插件 |
 | `Port N is already in use.` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口 |
-| `Installation directory is not empty` | 使用空的 `--install-dir`，或先[卸载](#uninstall)现有安装 |
+| `Directory is not a complete Core installation` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
 | `Docker Compose 2.26 or newer is required` | 更新 Docker Compose 插件 |
-| `The services did not start: …` | 新安装首次启动失败，安装程序[删除了所创建内容](install.md#install)。上方输出 Compose 或 Core 错误；修复后执行同一命令 |
-| `Removal did not finish. Left: …` | 首次启动失败后没能删干净。执行输出的命令移除残留，或修复原因后重新执行原命令 |
-| `This installation did not finish installing …` | 安装程序在报告服务运行前停止。重新执行安装命令，[清理残留](install.md#install)后重新安装，或[卸载](#uninstall) |
+| `Installation and data retained at …` | 查看上方服务日志，修复原因，再[继续安装](install.md#install)；不要删除数据 |
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
 | 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |

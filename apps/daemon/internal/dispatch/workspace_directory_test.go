@@ -18,7 +18,7 @@ func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		return &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}, nil
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	for _, name := range []string{"file", "second"} {
 		if err := os.WriteFile(filepath.Join(os.Getenv("OAC_RUNTIME_WORKSPACE"), name), []byte("abc"), 0600); err != nil {
 			t.Fatal(err)

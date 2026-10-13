@@ -6,18 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const fixturePublicURL = "https://core.example"
@@ -77,7 +77,7 @@ func (f fixture) execution(t *testing.T) (*deployment.ExecutionOperations, *pgun
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher))
+	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher), engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,8 +145,22 @@ func (f fixture) connect(t *testing.T, nodeID string) string {
 	if err := f.service.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.Heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := f.heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
 		t.Fatal(err)
 	}
 	return connection
+}
+
+// heartbeat reports the fixture's verified generation alongside static readiness.
+func (f fixture) heartbeat(ctx context.Context, nodeID, connection string, epoch uint64, health deployment.NodeHealth, _ []sandbox.GenerationStatus) error {
+	var generation uint64
+	var digest, provider string
+	if err := f.pool.QueryRow(ctx, "SELECT n.deployment_generation, n.specification_digest, d.provider_kind FROM runtime_nodes n CROSS JOIN runtime_deployment d WHERE n.id=$1", nodeID).Scan(&generation, &digest, &provider); err != nil {
+		return err
+	}
+	var statuses []sandbox.GenerationStatus
+	if health.ProviderReady && provider == "microsandbox" {
+		statuses = []sandbox.GenerationStatus{{Generation: generation, SpecificationDigest: digest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}
+	}
+	return f.service.Heartbeat(ctx, nodeID, connection, epoch, health, statuses)
 }

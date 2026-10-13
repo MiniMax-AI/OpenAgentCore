@@ -21,7 +21,7 @@ function message(error: unknown): string {
 }
 
 /**
- * System owns each harness's deployment default model configuration.
+ * Settings owns each harness's deployment default model configuration.
  * New Core-hosted Sessions and Sessions without an environment inherit it
  * when no explicit Session or Agent model configuration takes precedence.
  * Self-hosted Sessions bring their own configuration. Whether a harness is enabled, and

@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 3fc6573b19b9c78ca8a3b275122793b1a99e31f739d83ff25ff56624013dc428
+source_hash: dbc53b9e7d6df095b7131238cddc5af0553504152ddae037c56f885174f30f77
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -24,6 +24,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 | 路由 | 用途 | 契约 |
 | --- | --- | --- |
 | `installation` | 公共 URL、API 基础 URL、源代码提交、安装器的进程设置，以及绑定到公共 URL 的内容 | [安装信息](#installation-facts) |
+| `workspace-storage` | 读取或选择独立工作区文件系统配置 | [工作区存储](#workspace-storage) |
 | `projects`、`projects/{project_id}`、`projects/{project_id}/archive`、`projects/{project_id}/keys[/{key_id}]` | Project 及其 API 密钥 | [Project 与密钥](#projects-and-keys) |
 | `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | 资源读取和删除、Session 历史及 Artifact | [资源读取和删除](#resource-reads-and-deletion) |
 | `projects/{project_id}/sessions/{session_id}/archive` | 归档一个托管 Session | [Session 归档](#session-archive) |
@@ -35,11 +36,32 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | `self_hosted` Environment 的执行器凭据 | [执行器凭据](environment-executor-credentials.md#core-key-routes) |
 | `projects/{project_id}/resource-owners`、`projects/{project_id}/write-operations` | 创建资源的 API 密钥以及每个密钥执行的写入 | [写入溯源](#write-provenance) |
 | `harnesses`、`harnesses/{harness}/model-configuration` | 已启用的 Harness 及各 Harness 的部署默认模型 | [部署默认值](model-execution.md#deployment-defaults) |
-| `sandbox/deployment`、`sandbox/deployment/reset`、`sandbox/providers/{provider}/discovery` | 沙箱提供商、资源和 Runtime、重置，以及提供商配置发现，例如 E2B 模板 | [沙箱部署](sandbox-deployment.md#routes) |
+| `sandbox/deployment`、`sandbox/deployment/reset`、`sandbox/providers/{provider}/discovery` | 沙箱提供商、资源和 Runtime、空闲挂起策略、重置，以及提供商配置发现，例如 E2B 模板 | [沙箱部署](sandbox-deployment.md#routes) |
 | `sandbox/enrollment-tokens`、`sandbox/nodes[/{node_id}[/allocations]]` | 节点注册令牌、节点及其分配和主机历史 | [节点指南](../../../docs/zh/getting-started/nodes.md)、[沙箱部署](sandbox-deployment.md)、[节点主机历史](runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | 按 Project、Agent 或密钥统计的 Session 数量和使用情况 | [汇总](#summary) |
 | `metrics` | Core 自身的进程、执行、数据库和作业指标 | [Core 指标](core-metrics.md) |
+| `request-logs` | 近期应用或管理 HTTP 请求及其响应元数据 | [请求日志](#request-log) |
 | `audit-log` | 管理员写入 | [审计日志](#audit-log) |
+
+## 请求日志 {#request-log}
+
+`GET /core/v1/request-logs` 是仅供 Core 密钥调用的诊断读取，由 Web 的 **Request log** 和运维脚本使用。它观察到达 Core `/v1` 与 `/core/v1` API 的 HTTP 请求，包括认证拒绝和失败响应。日志读取本身、健康检查与文档端点、到达 Core 前的 Web 登录或代理失败、机器传输和后台执行不在此视图中。它不是审计档案或分布式执行追踪。
+
+每个 API 实例按入口分别保留最近开始的 1,000 个请求：`public` 对应 `/v1`，`admin` 对应 `/core/v1`。管理页面轮询不会挤掉应用请求。各自容量用尽后覆盖较旧条目，包括长连接请求；重启清空记录。`instance_id` 和 `instance_started_at` 标识提供响应的 API 实例；负载均衡可能返回另一个实例的窗口。Core 同时通过现有结构化日志输出请求结束时的元数据，其保留由运维日志系统负责，不属于本端点。
+
+查询参数包括 `surface=public|admin`（默认 `public`）、`limit`（1–200，默认 100）、可选的精确 `request_id`、`outcome=all|errors|active`（默认 `all`）及可选 `method`。支持的方法值为 `GET`、`HEAD`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS`、`CONNECT`、`TRACE` 和 `OTHER`；其他入站方法记为 `OTHER`。不支持、重复或格式错误的查询参数返回 400。`errors` 包括 HTTP 状态为 400 及以上的请求和已中断的请求。筛选仅扫描保留窗口，按开始时间从新到旧返回。`retained_count` 表示该入口的保留条目数，`total_matching` 是保留条目中匹配的数量，`has_more` 表示响应条数限制省略了匹配项，不代表仍能读取已被覆盖的历史。
+
+响应包含 `object: "core.request_log.list"`、实例标识、`surface`、`capacity`、覆盖数量及 `data`。每条记录包含 `request_id`、`trace_id`、`started_at`、`method`、`route`、`state`、`status`、`duration_ms`、`response_bytes` 和可为空的 `error_code`。`route` 是注册路由模板、认证时部分匹配的前缀或 `(unmatched)`，不会包含原始资源路径或查询。最终响应头提交前，`status` 为 null。`state` 区分 `active`、`completed` 和 `aborted`；活跃请求的耗时和字节数是读取时的观测值。`response_bytes` 统计响应写入器接受的字节数，不包括响应头和传输封装，不是网络传输量测量。SSE 响应在处理函数结束前保持活跃。HTTP 状态及结束不代表异步 Agent Turn 的执行结果；执行结果以 [Session 诊断](./session-diagnostics.md)和该 Session 已记录的历史为准。
+
+不采集正文、请求头值、凭据、提示词、文件内容、原始路径、查询值或错误消息，只保留 API 的安全错误码。返回的请求 ID 对应 `X-Request-Id`，可用于查找已有进程日志的关联条目。Trace ID 仅供关联，不表示完整组件链路已经被追踪。
+
+## 工作区存储 {#workspace-storage}
+
+**Settings → Workspace storage** 和运维脚本使用 Core key 调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。成功响应为选择结果：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`。请求包含相同的必需字段，以及可选的只写 `credential` 对象。`parameters` 和 `credential` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
+
+GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspace_storage_not_found`。它绝不返回凭据。PUT 验证并选择不可变配置，同时设置 [`tenant_capacity_mib`](../../../docs/zh/configuration.md#tenant-capacity)，以 200 返回选择结果。正的 `tenant_capacity_mib` 要求实施容量配额的配置，此类配置也要求正值；否则 PUT 返回 400 `workspace_operation_unsupported`。Core 加密凭据，绝不返回、记录日志或审计凭据。复用 ID 要求适配器、参数和凭据完全一致；省略 `credential` 会保留已存储的凭据，显式 `null` 无效。更改其含义或与保留归属冲突会返回 409 `workspace_storage_conflict`。配置更改与工作区归属变更串行执行，成功变更携带与其他部署设置相同的管理员审计来源。[工作区文件系统协议](../../../docs/zh/workspace-provider.md) 规定标识、挂载、准入和保留语义。
+
+无效配置返回 400 `invalid_workspace_configuration`；不支持的适配器或组合返回 400 `workspace_operation_unsupported`。存储不可用或操作尚未确认返回 503 `workspace_storage_unavailable`。错误消息不暴露原生路径或适配器错误文本。此端点独立于 Sandbox Provider 选择配置存储，不创建或删除 Session 工作区。
 
 ## Project 与密钥 {#projects-and-keys}
 
@@ -134,12 +156,12 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | 字段 | 含义 |
 | --- | --- |
 | `object` | `core.installation` |
-| `installation_id` | `state.json` 中的安装 ID（[安装目录](../../../docs/zh/configuration.md#installation-directory)）；Core 在不使用沙箱管理器运行时为 null |
-| `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址。未设置时为 null |
-| `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL`。当 `public_url` 为 null 时为 null |
+| `installation_id` | `OAC_INSTALLATION_ID_FILE` 中的安装 ID（[Compose 安装](../../../docs/zh/configuration.md#compose-installations)） |
+| `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址 |
+| `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL` |
 | `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
 | `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
-| `configuration` | Core 从环境加载的进程设置。`path` 和 `apply_command` 为空，`applied_at` 为 null |
+| `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
 | `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |
 
 `configuration.settings` 为 Core 加载的每项设置一条记录，包含以点分隔的 `key`、生效的 `value`、`default`、是否 `changeable`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`、`database`）。
@@ -183,12 +205,12 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 ```json
 {"data":[
-  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null},"source":"api_key","admin_audit_id":null},
-  {"resource_id":"id2","api_key":null,"source":null,"admin_audit_id":null}
+  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null}},
+  {"resource_id":"id2","api_key":null}
 ]}
 ```
 
-当 Core 没有创建记录时，`api_key` 和 `source` 为 null，这包括另一个 Project 中的资源。带有 `admin_audit_id` 的 `source: "admin_copy"` 表示该资源由审计日志中的 `copy` 条目记录；当前没有路由会写入此类记录。
+当 Core 没有创建记录时，`api_key` 为 null，这包括另一个 Project 中的资源。
 
 `GET /projects/{project_id}/write-operations` 按 `(created_at, id)` 从新到旧列出写入记录。过滤条件包括：`key_id`、`resource_type`、`resource_id`、包含起始时间的 `created_after` 和不包含结束时间的 `created_before`（RFC 3339）。`limit` 为 1–100，默认值为 50。在过滤条件不变的情况下，将上一个 `next_cursor` 作为 `after` 传入。响应为 `{data, has_more, next_cursor}`；每个条目包含 `id`、`created_at`、`api_key`、`action`、`resource_type`、`resource_id`、`parent_id`（不存在时为空）、`request_id` 和 `trace_id`。
 
@@ -219,7 +241,7 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 `GET /audit-log` 按从新到旧的顺序列出管理员写入。过滤条件包括 `project_id`、`resource_type`、`resource_id`、`action`、包含起始时间的 `created_after` 和不包含结束时间的 `created_before`（RFC 3339）。`limit` 为 1–100，默认值为 50，并使用不透明的 `after` 游标。响应为 `{data, has_more, next_cursor}`。
 
-每个条目包含 `id`、`created_at`、`admin_credential_id`（Core 密钥摘要的前 8 个十六进制字符）、`actor_label`、`action`、`project_id`、`resource_type`、`resource_id`、`result_ids`、`request_id` 和 `trace_id`。除 `copy` 条目外，`result_ids` 都是空数组。部署范围条目为 `project_id: null`，使用 `project_id` 过滤时会排除这些条目。
+每个条目包含 `id`、`created_at`、`admin_credential_id`（Core 密钥摘要的前 8 个十六进制字符）、`actor_label`、`action`、`project_id`、`resource_type`、`resource_id`、`request_id` 和 `trace_id`。部署范围条目为 `project_id: null`，使用 `project_id` 过滤时会排除这些条目。
 
 | `resource_type` | `action` | `resource_id` |
 | --- | --- | --- |

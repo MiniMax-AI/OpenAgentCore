@@ -25,8 +25,11 @@ func (f *fixtureSource) Live() Live { return f.live }
 func fixtureService(t *testing.T) (*Service, *fixtureSource, time.Time) {
 	t.Helper()
 	now := time.Date(2026, 9, 25, 12, 0, 20, 0, time.UTC)
-	source := &fixtureSource{history: History{Buckets: map[time.Time]*float64{}}, live: Live{ExecutionOwner: ptr(true), SlotsInUse: ptr(int64(2)), SlotsTotal: ptr(int64(4))}}
-	service := New(now.Add(-2*time.Hour), strings.Repeat("a", 40), source)
+	source := &fixtureSource{history: History{Buckets: map[time.Time]*float64{}}, live: Live{ExecutionOwner: ptr(true), SlotsInUse: 2, SlotsTotal: 4}}
+	service, err := New(now.Add(-2*time.Hour), strings.Repeat("a", 40), source, Periodic{ID: "runtime_sampler"}, Periodic{ID: "history_cleanup"}, Periodic{ID: "audit_cleanup"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	service.now = func() time.Time { return now }
 	return service, source, now
 }
@@ -121,17 +124,17 @@ func TestAllRangesAndBoundedRetention(t *testing.T) {
 func TestJobResultsAndConcurrentReads(t *testing.T) {
 	s, _, now := fixtureService(t)
 	s.record(Sample{At: now, Healthy: true})
-	s.ReportJob("audit_cleanup", now, ptr(int64(12)), ptr(int64(0)), nil)
+	s.reportJob("audit_cleanup", now, ptr(int64(12)), ptr(int64(0)), nil)
 	got, _ := s.Read(t.Context(), "1h")
 	if got.Service.Status != "running" || *got.Jobs[3].Processed != 12 {
 		t.Fatal(got.Service, got.Jobs)
 	}
-	s.ReportJob("audit_cleanup", now, ptr(int64(2)), ptr(int64(1)), errors.New("failure"))
+	s.reportJob("audit_cleanup", now, ptr(int64(2)), ptr(int64(1)), errors.New("failure"))
 	got, _ = s.Read(t.Context(), "1h")
 	if got.Service.Status != "degraded" {
 		t.Fatal(got.Service)
 	}
-	s.StopJob("audit_cleanup")
+	s.stopJob("audit_cleanup")
 	got, _ = s.Read(t.Context(), "1h")
 	if got.Jobs[3].Status != "stopped" {
 		t.Fatal(got.Jobs)
@@ -143,7 +146,7 @@ func TestJobResultsAndConcurrentReads(t *testing.T) {
 			defer wg.Done()
 			for range 20 {
 				s.RecordUnavailable()
-				s.ReportJob("history_cleanup", now, ptr(int64(0)), ptr(int64(0)), nil)
+				s.reportJob("history_cleanup", now, ptr(int64(0)), ptr(int64(0)), nil)
 				if _, err := s.Read(context.Background(), "1h"); err != nil {
 					t.Error(err)
 				}
@@ -152,10 +155,48 @@ func TestJobResultsAndConcurrentReads(t *testing.T) {
 	}
 	wg.Wait()
 }
+func TestPeriodicJobsRunUntilStopped(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	run := func(context.Context) (*int64, int64, error) {
+		cancel()
+		return nil, 1, errors.New("failure")
+	}
+	if _, err := New(time.Now(), "", &fixtureSource{}, Periodic{ID: "audit_cleanup", Run: run}); err == nil {
+		t.Fatal("accepted a job without an interval")
+	}
+	s, err := New(time.Now(), "", &fixtureSource{}, Periodic{ID: "runtime_sampler"}, Periodic{ID: "audit_cleanup", Every: time.Hour, Run: run})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Run(ctx)
+	if strings.Join(s.jobIDs, ",") != "scheduler,runtime_sampler,audit_cleanup" || s.jobs["runtime_sampler"].Status != "stopped" {
+		t.Fatal(s.jobIDs, s.jobs)
+	}
+	if job := s.jobs["audit_cleanup"]; job.Status != "stopped" || job.LastRunAt == nil || job.Processed != nil || *job.Failed != 1 {
+		t.Fatal(job)
+	}
+}
+func TestPeriodicJobSurvivesAPanic(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	passes := 0
+	s, err := New(time.Now(), "", &fixtureSource{}, Periodic{ID: "audit_cleanup", Every: time.Millisecond, Run: func(context.Context) (*int64, int64, error) {
+		if passes++; passes == 1 {
+			panic("test")
+		}
+		cancel()
+		return ptr(int64(3)), 0, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Run(ctx)
+	if job := s.jobs["audit_cleanup"]; passes != 2 || job.Processed == nil || *job.Processed != 3 || *job.Failed != 0 {
+		t.Fatal(passes, job)
+	}
+}
 func TestRevisionMustBeCommit(t *testing.T) {
 	for _, revision := range []string{"", "unknown", "secret-value"} {
-		s := New(time.Now(), revision, &fixtureSource{})
-		if s.revision != nil {
+		if s, _ := New(time.Now(), revision, &fixtureSource{}); s.revision != nil {
 			t.Fatal("unverified build revision exposed")
 		}
 	}

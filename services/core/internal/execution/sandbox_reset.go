@@ -8,7 +8,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func (w *Worker) StartSandboxReset(ctx context.Context, input deployment.ResetRequest) (deployment.View, error) {
@@ -65,9 +64,6 @@ func (m *runtimeManager) committedView(ctx context.Context) (deployment.View, er
 // enter m.active, hold a Session/deployment transaction, or call a provider while
 // waiting for a deployment drain. Each page has both a row and time bound.
 func (m *runtimeManager) resetStep(parent context.Context) error {
-	if m.loadDeployment == nil {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	return m.resetPage(parent, ctx)
@@ -106,9 +102,9 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		if ctx.Err() != nil {
 			return nil
 		}
-		_, err := m.store.ArchiveSandboxResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
+		_, err := m.deployment.ArchiveResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
 		m.resetCursor = candidate.SessionID
-		if err != nil && !errors.Is(err, store.ErrSandboxResetSessionBusy) && !errors.Is(err, sessions.ErrNotFound) {
+		if err != nil && !errors.Is(err, deployment.ErrSandboxResetSessionBusy) && !errors.Is(err, sessions.ErrNotFound) {
 			// Do not log a provider body, request, credential or stored provenance.
 			log.Warn(ctx, "Sandbox reset archive remains pending", "session_id", candidate.SessionID)
 		}

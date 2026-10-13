@@ -70,7 +70,7 @@ func TestMCPOmittedOriginIsService(t *testing.T) {
 	}
 	// Other transports report the transport restriction with any origin.
 	for _, origin := range []string{"", `,"connection_origin":null`, `,"connection_origin":"service"`} {
-		input := `{"type":"mcp","server_label":"records"` + origin + `,"transport":{"type":"stdio","command":"run"}}`
+		input := `{"type":"mcp","server_label":"records"` + origin + `,"transport":{"type":"stdio","command":"run","cwd":"/"}}`
 		if _, err := resolveMCPTool(json.RawMessage(input), true); err == nil || err.Error() != "MCP currently supports HTTP transport only." {
 			t.Fatalf("stdio origin %q: %v", origin, err)
 		}
@@ -85,6 +85,7 @@ func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 		}
 		input["allowed_tools"] = json.RawMessage(allowed)
 		input["credential_id"], input["request_metadata"], input["required"] = json.RawMessage("null"), json.RawMessage("null"), json.RawMessage("false")
+		input["transport"] = json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test/tools","authorization":null,"headers":null}`)
 		encoded, _ := json.Marshal(input)
 		resolved, err := resolveMCPTool(encoded, false)
 		if err != nil {
@@ -97,24 +98,18 @@ func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 	}
 }
 
+// The pinned shape is checked at decode; these inputs match it.
 func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 	for name, replacement := range map[string]map[string]json.RawMessage{
-		"unknown origin":       {"connection_origin": json.RawMessage(`"unknown"`)},
-		"stdio origin missing": {"connection_origin": nil, "transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
-		"stdio origin null":    {"connection_origin": json.RawMessage("null"), "transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
-		"origin missing, case": {"connection_origin": nil, "transport": json.RawMessage(`{"Type":"http","server_url":"https://mcp.example.test"}`)},
-		"required type":        {"required": json.RawMessage(`"true"`)},
-		"required null":        {"required": json.RawMessage("null")},
+		"stdio origin missing": {"connection_origin": nil, "transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
+		"stdio origin null":    {"connection_origin": json.RawMessage("null"), "transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
 		"empty credential":     {"credential_id": json.RawMessage(`""`)},
-		"credential type":      {"credential_id": json.RawMessage(`3`)},
 		"metadata":             {"request_metadata": json.RawMessage(`{"private-marker":"value"}`)},
-		"null tool name":       {"allowed_tools": json.RawMessage(`[null]`)},
-		"wrong allow-list":     {"allowed_tools": json.RawMessage(`"lookup"`)},
 		"inline authorization": {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","authorization":"private-marker"}`)},
 		"headers":              {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"Authorization":"private-marker"}}`)},
 		"URL credentials":      {"transport": json.RawMessage(`{"type":"http","server_url":"https://private-marker@mcp.example.test"}`)},
 		"URL query":            {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test/?token=private-marker"}`)},
-		"stdio":                {"transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
+		"stdio":                {"transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var input map[string]json.RawMessage

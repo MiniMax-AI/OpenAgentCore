@@ -16,7 +16,6 @@ func disableProgrammaticTools(plan *SessionPlan, controls *proto.ExecutionContro
 		return
 	}
 	for _, feature := range programmaticFeatures {
-		plan.EnableFeatures = slices.DeleteFunc(plan.EnableFeatures, func(value string) bool { return value == feature })
 		if !slices.Contains(plan.DisableFeatures, feature) {
 			plan.DisableFeatures = append(plan.DisableFeatures, feature)
 		}

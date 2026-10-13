@@ -16,17 +16,15 @@ self-hosted: tenant_id -> session_id -> environment_id -> device_id + connection
 none:        tenant_id -> session_id (no Session-owned Runtime instance)
 ```
 
-The resolver (`internal/runtimeobs/storeresolver`) reads the Session, its Environment, the current allocation and the Session's measured usage from the store. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
+The resolver (`services/core/internal/deployment/observation.go`) reads the Session, its Environment, the current allocation and the Session's measured usage from the database. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
 
 Managed Docker, microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
 
-The allocation's persisted `provider_key` selects exactly one configured source, which verifies the allocation's labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, `cleanup_pending` or `released` gives `runtime_not_running`, and a provider key without a source gives `source_not_configured`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
+Every managed allocation is read through the deployment's selected Sandbox Provider, which verifies the allocation's installation (`provider_key`) and labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, and `cleanup_pending` or `released` gives `runtime_not_running`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
 
-The observation boundary is declared in `services/core/internal/runtimeobs/source.go`. Each registered `SourceResolver` declares supported `ResolveObservationSource`; registration validates this declaration without loading configuration or reading the database. Core resolves each provider key once per page, then validates the returned `Source` and uses that same immutable source for every read of the key on that page. An unconfigured resolver returns typed `ErrUnavailable`, which produces `sample_unavailable` without a provider type. Other resolution errors follow the provider-read error rules above.
+`Observe` belongs to the [Sandbox Provider protocol](../../docs/sandbox-provider.md); `services/core/internal/runtimeobs/source.go` owns the observation types and the `Source` view of a Provider. Core loads the selected Provider and its registered kind once per page and uses that same immutable Provider for every read on that page, reading each running target with `Observe`. Without a selection the load returns typed `ErrUnavailable`, which produces `sample_unavailable` without a provider type. Other load errors follow the provider-read error rules above.
 
-A source declares supported `ObservationProviderType`, which returns its immutable telemetry identity: a lowercase letter followed by at most 31 lowercase letters, digits or underscores. Empty identities are invalid. Provider registration and every resolved binding validate the identity and operation declarations before any sample or export. Reconfiguration affects later source resolutions; it cannot change the identity or provider selected for an in-flight page. Generation routers continue to resolve each allocation through its recorded deployment generation.
-
-A source implements `Observe` and declares `ObserveBatch` in its provider operations. When `ObserveBatch` is declared supported, one call reads up to 100 targets of that provider; when it is declared unsupported, Core reads each target with `Observe`. A failed batch read is never retried target by target. The [Sandbox Provider guide](../../docs/sandbox-provider.md) describes the operation declarations.
+An observation's provider type is that registered kind: `docker`, `microsandbox` or `e2b`. Reconfiguration affects later pages; it cannot change the provider type or Provider selected for an in-flight page. Generation routers continue to resolve each allocation through its recorded deployment generation.
 
 ## Sample semantics
 
@@ -56,7 +54,7 @@ Cumulative vCPU time, guest memory usage and the effective memory limit come fro
 
 ### E2B
 
-One helper `observe` request reads a page of at most 100 allocations: E2B's batch metrics for the sandboxes named in the private receipts, and a labelled listing of the installation's running sandboxes that confirms each one. The [E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
+Core reads each allocation with one helper `observe` request: E2B's metrics for the sandbox named in its private receipt, and a listing of running sandboxes with the allocation's labels that confirms it. The [E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
 
 | E2B value | Sample field |
 | --- | --- |
@@ -65,11 +63,11 @@ One helper `observe` request reads a page of at most 100 allocations: E2B's batc
 | `memUsed`, `memTotal` | Memory usage and limit |
 | `diskUsed`, `diskTotal` | Disk usage and capacity, kept only when both are present and the total is nonzero |
 
-E2B reports no cumulative CPU time, so CPU seconds stay null. `observed_at` is E2B's point time; a point up to 30 seconds ahead of Core's clock is recorded at Core's time, and a larger lead is `sample_unavailable`. A sandbox missing from the running listing is `runtime_not_running`. A missing or malformed point, an ambiguous listing and an E2B API failure, a rejected key included, are `sample_unavailable`; a malformed point affects only its own row.
+E2B reports no cumulative CPU time, so CPU seconds stay null. `observed_at` is E2B's point time; a point up to 30 seconds ahead of Core's clock is recorded at Core's time, and a larger lead is `sample_unavailable`. A sandbox missing from the running listing is `runtime_not_running`. A missing or malformed point, an ambiguous listing and an E2B API failure, a rejected key included, are `sample_unavailable`.
 
 ## Read budgets
 
-A current list read handles one page of up to 100 Sessions (default 20) with at most eight concurrent provider reads. Each provider read has two seconds, a batch read at least five, and the whole list request ten; beyond that the list returns 503. A single-Session read has two seconds. No provider call is retried within a request, and Core keeps no observation cache.
+A current list read handles one page of up to 100 Sessions (default 20) with at most eight concurrent provider reads. Each provider read has two seconds and the whole list request ten; beyond that the list returns 503. A single-Session read has two seconds. No provider call is retried within a request, and Core keeps no observation cache.
 
 ## Durations
 
@@ -79,17 +77,17 @@ These durations answer different questions and stay separate:
 - compute uptime: the sample's `started_at` to `observed_at`;
 - busy Turn duration: `turns.started_at` to `completed_at`, or now.
 
-CPU quietness, heartbeat age, connection state and keepalive time are not idle time.
+CPU quietness, heartbeat age and connection state are not idle time.
 
 ## Retained history and optional export
 
 ### Periodic sampling
 
-Periodic collection runs only with the execution worker (Core started with `OAC_PUBLIC_URL`; see the [Core environment](../../docs/configuration.md#appendix-core-environment-without-the-installer)) and under the worker's database lease. A Core without it stores no history and answers every history read with 503; current reads work on either.
+Periodic collection runs in the execution Worker, under its database lease.
 
 The sampler sweeps once at startup and again each sampling interval after the previous sweep ends. A sweep is a keyset scan, in Session ID order, of the Sessions that are not deleted, are `openai_hosted` and have no released allocation. It reads pages of 32 Sessions through the same resolver and sources as current reads, with eight concurrent reads and two seconds per source. The sampler checks the lease before each page and every 100 ms during a sweep, cancels in-flight reads when ownership is lost, and checks it again before handing each record to export. A failed row does not stop the sweep, and an incomplete sweep is repeated at the next interval.
 
-Every observation, current or periodic, is marked with its collection source, `on_read` or `periodic`, and handed to each exporter's bounded queue. A full queue drops the record, which becomes a missing sample, never a zero. The PostgreSQL history store and the optional OTLP exporter have independent queues, so an exporter outage cannot delay local history or execution. The [`core.runtime_history` settings](../../docs/configuration.md#settings) set the interval, queue capacity, timeout and OTLP destination.
+Every observation, current or periodic, is marked with its collection source, `on_read` or `periodic`, and handed to each exporter's bounded queue. A full queue drops the record, which becomes a missing sample, never a zero. The PostgreSQL history store and the optional OTLP exporter have independent queues, so an exporter outage cannot delay local history or execution. The [Runtime history file](../../docs/configuration.md#runtime-history-file) sets the interval, queue capacity, timeout and OTLP destination.
 
 ### Stored history
 
@@ -97,7 +95,7 @@ The PostgreSQL store keeps only periodic `openai_hosted` records, so API reads c
 
 The history service resolves the Project, Session and Environment before it queries; the query always carries that scope and bounded times, never provider identity. The store keeps seven days. A read covers at most 24 hours, reads at most 20,000 raw samples, starts two sampling intervals before the range to find CPU baselines, and returns at most 1,000 buckets per array, 64 series and 10,000 points in total. Results outside the requested scope, range or limits fail the read. The API's [Series](./runtime-observability-api.md#series) section describes the aggregation.
 
-`runtimehistory.Capabilities` states the collection mode, interval, seven-day retention, minimum bucket width (30 seconds or the interval, whichever is longer), 24-hour range and point limits; the history route answers 503 unless they are valid and periodic.
+`runtimehistory.Capabilities` states the sampling interval, seven-day retention, minimum bucket width (30 seconds or the interval, whichever is longer), 24-hour range and point limits; Core does not start unless they are valid.
 
 A cleanup loop runs every minute, even without active Runtimes. Each pass has at most two seconds and deletes expired Runtime and node host rows in batches of 256 per table, at most 16 batches. Reads never return rows older than the retention.
 
@@ -123,7 +121,7 @@ With an OTLP endpoint configured, Core exports every record, both `on_read` and 
 | `agents.session.tokens.input` | Gauge, tokens | Measured Session input tokens |
 | `agents.session.tokens.output` | Gauge, tokens | Measured Session output tokens |
 | `agents.runtime.sample` | Monotonic delta sum | One per validated result, unavailable and unsupported included |
-| `agents.runtime.sample.duration` | Delta histogram, seconds | Provider read duration; a batch read counts once |
+| `agents.runtime.sample.duration` | Delta histogram, seconds | Provider read duration |
 
 CPU and memory points are exported only when the sample has `started_at`; a missing measurement produces no point. Attributes are `agents.tenant.id`, `agents.session.id`, `agents.environment.id`, `agents.runtime.allocation.id`, `agents.runtime.mode`, `agents.runtime.provider.type`, `agents.runtime.status`, `agents.runtime.reason`, `agents.runtime.collection.source` and nanosecond `agents.runtime.resolved_at_unix_nano`, `agents.runtime.observed_at_unix_nano` and `agents.runtime.compute.started_at_unix_nano`. The nanosecond times keep records joinable when a backend stores event time at lower precision. Provider keys, receipts, native identifiers, raw errors, paths and credentials are never attributes.
 

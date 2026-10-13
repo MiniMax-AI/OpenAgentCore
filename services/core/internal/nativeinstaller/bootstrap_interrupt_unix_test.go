@@ -101,7 +101,7 @@ func TestBootstrapCommandDiscardsTimedOutResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 	catalog := Catalog{Version: "test"}
-	command := exec.Command("bash", "-c", catalog.Commands(server.URL, "fixture-grant")["posix"])
+	command := exec.Command("bash", "-c", catalog.Commands(server.URL+"/api/v1/agent-daemon/install/", "fixture-grant")["posix"])
 	command.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 	output, err := command.CombinedOutput()
 	if err != nil || !bytes.Contains(output, []byte("entry-success")) || bytes.Contains(output, []byte("incomplete response")) || requests.Load() != 2 {

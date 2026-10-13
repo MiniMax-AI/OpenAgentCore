@@ -14,9 +14,6 @@ type projectKeyDigests interface {
 
 // ValidateCredentialSeparation rejects Core key collisions with persisted API keys.
 func ValidateCredentialSeparation(ctx context.Context, admin *DeploymentAuthenticator, keys projectKeyDigests) error {
-	if admin == nil {
-		return errors.New("OAC_CORE_KEY_DIGESTS_FILE is required; Core needs the Core key digest")
-	}
 	for digest := range admin.digests {
 		exists, err := keys.APIKeyDigestExists(ctx, digest)
 		if err != nil {

@@ -38,7 +38,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		{"wrong local constructor", func(a *Adapter) { a.Mode = "direct" }},
 		{"missing direct constructor", func(a *Adapter) { a.Mode = "direct"; a.BuildLocal = nil }},
 		{"both constructors", func(a *Adapter) {
-			a.BuildDirect = func(DirectConfig) (sandbox.SandboxProvider, error) {
+			a.BuildDirect = func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
 				t.Fatal("called direct constructor")
 				return nil, nil
 			}
@@ -47,7 +47,6 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		{"missing resource validator", func(a *Adapter) { a.ValidateResources = nil }},
 		{"missing configuration", func(a *Adapter) { a.Configuration = nil }},
 		{"typed nil configuration", func(a *Adapter) { var c *registrationConfiguration; a.Configuration = c }},
-		{"missing discovery implementation", func(a *Adapter) { a.Configuration = missingConfigurationDiscovery{a.Configuration} }},
 		{"missing configuration requirement", func(a *Adapter) { a.Configuration = registrationConfiguration{} }},
 		{"invalid credential requirement", func(a *Adapter) {
 			r := a.Configuration.Requirements()
@@ -65,7 +64,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := registry.adapters["docker"]
-			a.BuildLocal = func(Config, LocalOptions, *Built) (func(), error) {
+			a.BuildLocal = func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error) {
 				t.Fatal("called local constructor")
 				return nil, nil
 			}
@@ -97,14 +96,14 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				{"resolve change", func() error { _, err := registry.ResolveChange(selection, selection); return err }},
 				{"credential", func() error { _, err := registry.WithCredential(selection, selection); return err }},
 				{"local build", func() error {
-					_, _, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, LocalOptions{Standalone: true})
+					_, _, err := registry.Build(sandbox.NodeConfig{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: selection.DeploymentSpec}, sandbox.LocalOptions{Standalone: true})
 					return err
 				}},
-				{"direct build", func() error { _, err := registry.BuildDirect(DirectConfig{Selection: selection}); return err }},
+				{"direct build", func() error { _, err := registry.BuildDirect(sandbox.DirectConfig{Selection: selection}); return err }},
 				{"binding", func() error { return ValidateBinding(a, &docker.Provider{}) }},
 				{"projection", func() error {
-					text, err := registry.PythonDeploymentContract()
-					if text != "" {
+					python, typescript, err := registry.DeploymentContract()
+					if python != "" || typescript != "" {
 						t.Fatal("partial invalid projection")
 					}
 					return err
@@ -130,9 +129,9 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	}
 	const kind = "new-test-provider"
 	calls, closes := 0, 0
-	options := LocalOptions{GenerationStateDirectory: t.TempDir()}
+	options := sandbox.LocalOptions{GenerationStateDirectory: t.TempDir()}
 	a := registry.adapters["docker"]
-	a.BuildLocal = func(_ Config, got LocalOptions, built *Built) (func(), error) {
+	a.BuildLocal = func(_ sandbox.NodeConfig, got sandbox.LocalOptions, built *sandbox.Built) (func(), error) {
 		calls++
 		if got != options {
 			t.Fatalf("construction options = %+v, want %+v", got, options)
@@ -141,7 +140,7 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 		return func() { closes++ }, nil
 	}
 	registry.adapters[kind] = a
-	built, closeProvider, err := registry.Build(Config{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options)
+	built, closeProvider, err := registry.Build(sandbox.NodeConfig{Provider: kind, Generation: 1, InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options)
 	if err != nil || built.Provider == nil || calls != 1 {
 		t.Fatalf("node build: %v calls=%d", err, calls)
 	}
@@ -152,49 +151,34 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	// Direct providers may legitimately need no remote credential or extra
 	// selection state; registration must not require irrelevant callback stubs.
 	a.Mode, a.BuildLocal, a.NodeArtifacts = "direct", nil, nil
-	a.BuildDirect = func(DirectConfig) (sandbox.SandboxProvider, error) {
+	a.BuildDirect = func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
 		calls++
 		return &docker.Provider{}, nil
 	}
 	registry.adapters[kind] = a
-	p, err := registry.BuildDirect(DirectConfig{Selection: sandbox.Selection{Provider: kind}})
+	p, err := registry.BuildDirect(sandbox.DirectConfig{Selection: sandbox.Selection{Provider: kind}})
 	if err != nil || p == nil || calls != 2 {
 		t.Fatalf("credential-free direct build: %v calls=%d", err, calls)
 	}
-	if _, err := registry.PythonDeploymentContract(); err != nil {
+	if _, _, err := registry.DeploymentContract(); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Idle time is measured before suspension, retention after suspension. Neither
-// duration needs to be greater than the other.
-func TestRegistrationCheckpointPolicy(t *testing.T) {
+func TestRegistrationRejectsInvalidDefaultResources(t *testing.T) {
+	a := Builtin().adapters["docker"]
+	a.Policy.DefaultResources = &sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024}
+	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
+		t.Fatal(err)
+	}
+}
+
+// Only a nodes registration may declare checkpoint support.
+func TestRegistrationCheckpointRequiresNodes(t *testing.T) {
 	registry := Builtin()
-	for _, tc := range []struct {
-		name            string
-		kind            string
-		idle, retention int64
-		direct, valid   bool
-	}{
-		{"negative idle", "microsandbox", -1, 20, false, false},
-		{"missing idle", "microsandbox", 0, 20, false, false},
-		{"missing retention", "microsandbox", 20, 0, false, false},
-		{"overflow", "microsandbox", 1<<63 - 1, 20, false, false},
-		{"direct suspension", "microsandbox", 20, 20, true, false},
-		{"unsupported suspension", "docker", 20, 20, false, false},
-		{"independent durations", "microsandbox", 300, 30, false, true},
-		{"no suspension", "docker", 0, 0, false, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			a := registry.adapters[tc.kind]
-			a.IdleSeconds, a.RetentionSeconds = tc.idle, tc.retention
-			if tc.direct {
-				a.Mode, a.BuildLocal, a.BuildDirect = "direct", nil, registry.adapters["e2b"].BuildDirect
-			}
-			err := ValidateRegistration(a)
-			if (err == nil) != tc.valid || err != nil && !errors.Is(err, providercontract.ErrContract) {
-				t.Fatal(err)
-			}
-		})
+	a := registry.adapters["microsandbox"]
+	a.Mode, a.BuildLocal, a.NodeArtifacts, a.BuildDirect = "direct", nil, nil, registry.adapters["e2b"].BuildDirect
+	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) || !strings.Contains(err.Error(), "checkpoint") {
+		t.Fatal("direct checkpoint registration accepted", err)
 	}
 }

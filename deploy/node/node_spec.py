@@ -27,14 +27,22 @@ def release(manifest):
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"disk\":false,\"runtime\":true},\"e2b\":{\"disk\":false,\"runtime\":false},\"microsandbox\":{\"disk\":true,\"runtime\":true}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
 def canonical_spec(provider, specification, validate=True):
     rules = _CONTRACT["providers"][provider]
-    if validate and (not isinstance(specification, dict) or set(specification) != ({"resources", "runtime"} if rules["runtime"] else {"resources"})):
+    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != ({"resources", "runtime"} if rules["runtime"] else {"resources"})):
         raise ValueError("Invalid specification fields")
+    workspace = specification.get("workspace")
+    requirements = rules.get("workspace")
+    if validate and workspace is not None:
+        if (not isinstance(workspace, dict) or set(workspace) - set(_CONTRACT["workspace_fields"])
+                or not requirements or workspace.get("attachment") != requirements["attachment"]
+                or any(workspace.get(field) is not None and type(workspace[field]) is not bool for field in _CONTRACT["workspace_fields"] if field != "attachment")
+                or requirements["user_xattr"] and not workspace.get("user_xattr", False)):
+            raise ValueError("Invalid workspace declaration")
     resources = specification["resources"]
     if validate and (not isinstance(resources, dict) or set(resources) - {rule["name"] for rule in _CONTRACT["resources"]}):
         raise ValueError("Invalid resource fields")
@@ -45,6 +53,11 @@ def canonical_spec(provider, specification, validate=True):
         minimum, maximum = rule["min"], rule["max"]
         if rule["omit_zero"]:
             minimum, maximum = (_CONTRACT["minimum_disk"], maximum) if rules["disk"] else (0, 0)
+        if workspace is not None and name == "environment_disk_mib":
+            if validate and value and not workspace.get("capacity_quota", False):
+                raise ValueError("Workspace does not enforce requested quota")
+            if value == 0:
+                minimum = 0
         if validate and (type(value) is not int or not minimum <= value <= maximum):
             raise ValueError("Invalid resource value")
         if value or not rule["omit_zero"]:
@@ -61,6 +74,8 @@ def canonical_spec(provider, specification, validate=True):
                 raise ValueError("Invalid release identity")
             ordered_runtime[rule["name"]] = value
         result["runtime"] = ordered_runtime
+    if workspace is not None:
+        result["workspace"] = {field: workspace[field] if field == "attachment" else bool(workspace.get(field, False)) for field in _CONTRACT["workspace_fields"]}
     return result
 
 
@@ -77,7 +92,7 @@ def validate(data, args):
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) != {"resources", "runtime"}
+                or set(spec) - {"workspace"} != {"resources", "runtime"}
                 or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
                 or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
             raise ValueError()
@@ -158,14 +173,5 @@ def verify_provider(stored, configuration, runtime_image):
             or stored.get("generation") != configuration["generation"]
             or stored.get("core_url") != configuration["core_url"] + "/api/v1"):
         raise SpecificationError("Retained node configuration differs from Core; preserve its state")
-    if provider == "docker":
-        if stored.get("docker", {}).get("image") != runtime_image:
-            raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")
-    else:
-        micro = stored.get("microsandbox", {})
-        if any(key in micro for key in ("max_active", "max_retained", "idle_seconds", "retention_seconds")):
-            raise SpecificationError("Node capacity and lifecycle policy belong to Core; regenerate the stale provider file")
-        expected = dict(spec["resources"], image=spec["runtime"]["microsandbox_ref"],
-                        runtime_sha256=spec["runtime"]["runtime_sha256"], firmware_sha256=spec["runtime"]["firmware_sha256"])
-        if any(micro.get(key) != value for key, value in expected.items()):
-            raise SpecificationError("Retained microsandbox configuration differs from Core; preserve its state")
+    if provider == "docker" and stored.get("native", {}).get("image") != runtime_image:
+        raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")

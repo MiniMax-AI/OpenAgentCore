@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -47,23 +45,21 @@ func TestShutdownCancelsCompletionErrorSend(t *testing.T) {
 	sender := &shutdownAllSendsBlockSender{entered: make(chan struct{}), terminal: make(chan context.Context, 1), rescue: make(chan struct{})}
 	registry := agent.NewRegistry()
 	var session *fakeSession
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true}
 		return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error { return nil }}, nil
-	})
+	}))
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "shutdown-terminal", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
-		t.Fatal(err)
-	}
+	startRun(t, router, &sender.recSender, "shutdown-terminal", proto.PromptRequestPayload{AgentKind: "codex"})
 	if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown-terminal", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {
 		t.Fatal(err)
 	}
 	<-sender.entered
 	session.out <- mustEnv(t, proto.TypeDone, "shutdown-terminal", proto.DonePayload{})
-	waitFor(t, func() bool { return router.SteeringClosedForTest("shutdown-terminal") }, "completion barrier")
+	waitFor(t, func() bool { return router.SteeringClosedForTest("shutdown-terminal") }, "receipt join")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	shutdownErr := router.Shutdown(ctx)

@@ -1,5 +1,5 @@
 import type { AgentSession } from "@oac/agents-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +11,7 @@ import { CopyableId } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatDateTime, formatInteger, MISSING } from "../../lib/format";
 import { CreatorCell, ProjectName, useCreators, useProjects } from "../../lib/projects";
-import { collections } from "../../lib/queries";
+import { collectionQuery, collections } from "../../lib/queries";
 import { forgetDeleted } from "../resources/detail-queries";
 import { ExecutorCredentialsSection } from "./ExecutorCredentialsSection";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
@@ -78,10 +78,13 @@ export function SessionPage() {
     </button>
   );
   const session = history.history?.session ?? null;
+  const agents = useQuery({ ...collectionQuery(collections.agents, projectId ?? ""), enabled: Boolean(projectId && session) });
+  const savedAgent = !agents.isError && agents.data?.some((agent) => agent.id === session?.agent.id);
   const loadedAt = history.history?.loadedAt ?? null;
   const refresh = () => {
     setRefreshToken((value) => value + 1);
     history.refresh();
+    if (projectId && session) void agents.refetch();
     if (projectId && sessionId) void queryClient.invalidateQueries({ queryKey: [...sessionKey(projectId, sessionId), "diagnostics"] });
     if (projectId && sessionId) void queryClient.invalidateQueries({ queryKey: [...sessionKey(projectId, sessionId), "executor-credentials"] });
   };
@@ -130,9 +133,9 @@ export function SessionPage() {
           <div>
             <dt>{t("detail.agent")}</dt>
             <dd className="session-fact-stack">
-              <button type="button" className="session-link" onClick={() => navigate("agents", { project: projectId, id: session.agent.id })} aria-label={t("detail.openAgent", { name: session.agent.name || session.agent.id })}>
+              {savedAgent ? <button type="button" className="session-link" onClick={() => navigate("agents", { project: projectId, id: session.agent.id })} aria-label={t("detail.openAgent", { name: session.agent.name || session.agent.id })}>
                 {session.agent.name?.trim() || t("common.untitledAgent")}
-              </button>
+              </button> : <span>{session.agent.name?.trim() || t("common.untitledAgent")}</span>}
               <CopyableId id={session.agent.id} compact />
             </dd>
           </div>

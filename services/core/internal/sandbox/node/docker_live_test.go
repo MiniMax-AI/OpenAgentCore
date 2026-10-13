@@ -76,7 +76,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
+	proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
 	r := reference()
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -140,7 +140,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	}
 	running = false
 	wait(t, func() bool { return !hub.Online(id.NodeID) })
-	persisted, err := LoadIdentity(dir)
+	persisted, err := readIdentity(dir)
 	if err != nil || persisted.Credential != credential || persisted.Identity.NodeID != id.NodeID {
 		t.Fatal("node restart changed identity", err)
 	}

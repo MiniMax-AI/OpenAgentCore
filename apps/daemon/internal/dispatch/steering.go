@@ -98,12 +98,7 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 	}
 	session := state.session
 	steerer, supportsSteering := session.(agent.Steerer)
-	if input.DurableReceipt {
-		if _, ok := session.(agent.DurableSteerer); !ok || (!state.releaseOnCompletion && state.preparedHandoff == nil) {
-			ack.ErrorCode, ack.Error = "unsupported", "Durable input receipts require a supported Turn settlement contract."
-			return &ack
-		}
-	} else if !supportsSteering {
+	if !input.DurableReceipt && !supportsSteering {
 		ack.ErrorCode, ack.Error = "unsupported", "This engine does not support active-turn input."
 		return &ack
 	}
@@ -120,8 +115,6 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 	ack.ErrorCode, ack.Error = "in_flight", "This input is awaiting an engine receipt."
 	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
 	state.steerBusy = true
-	finished := make(chan struct{})
-	state.steeringDone = finished
 	r.shutdownWG.Add(1)
 	go func() {
 		defer r.shutdownWG.Done()
@@ -129,7 +122,6 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 		defer func() {
 			r.mu.Lock()
 			state.steerBusy = false
-			close(finished)
 			r.mu.Unlock()
 		}()
 		ctx, stop := r.shutdownContext(ctx)
@@ -179,26 +171,4 @@ func (r *Router) shutdownContext(parent context.Context) (context.Context, conte
 		}
 	}()
 	return ctx, cancel
-}
-
-// Close admission before taking the last worker: its lifetime includes the
-// receipt send, so a durable Done cannot close the gateway subscription first.
-func (r *Router) finishSteering(state *sessionState) error {
-	r.mu.Lock()
-	state.steeringClosed = true
-	finished := state.steeringDone
-	r.mu.Unlock()
-	if finished == nil {
-		return nil
-	}
-	timer := time.NewTimer(steeringCallTimeout + steeringSendTimeout)
-	defer timer.Stop()
-	select {
-	case <-finished:
-		return nil
-	case <-r.shutdownCh:
-		return context.Canceled
-	case <-timer.C:
-		return context.DeadlineExceeded
-	}
 }

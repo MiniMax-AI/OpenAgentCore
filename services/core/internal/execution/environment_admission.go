@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 var (
@@ -33,9 +34,6 @@ func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string
 			return sessions.ErrInvalidInput
 		}
 	case "openai_hosted":
-		if w.runtimes == nil {
-			return ErrExecutionUnavailable
-		}
 		ready, err := w.runtimes.ensureDeployment(ctx)
 		if err != nil {
 			return err
@@ -60,6 +58,11 @@ func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSess
 		var snapshot Snapshot
 		if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
 			return sessions.ErrInvalidInput
+		}
+		if snapshot.Environment.Type == "openai_hosted" {
+			if err := w.runtimes.validateWorkspaceAdmission(ctx); err != nil {
+				return err
+			}
 		}
 		if len(input.InitialInputs) == 0 && snapshot.Environment.Type == "self_hosted" {
 			return nil
@@ -87,17 +90,10 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.S
 		// Neither kind creates a Turn. The Session lock preserves target and retry identity.
 		return w.admitInputs(ctx, session.TenantID, session.ID, key, inputs)
 	}
-	// Messages start work. A Session from before deployment defaults moved into
-	// Core may have no frozen provider; reject it here instead of queueing work
-	// its harness cannot run. Cancellation and results above stay available.
-	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured {
-		return nil, ErrModelProviderRequired
-	}
 	changed, unsubscribe := w.dispatcher.notifications.subscribe(session.TenantID, session.ID)
 	defer unsubscribe()
 	reserve, cancel := context.WithTimeout(ctx, 5*time.Second)
-	reservation, err := w.admission.ReserveEnvironmentInput(reserve, session.TenantID, session.ID, key, inputs)
+	reservation, err := w.dispatcher.Sessions.ReserveEnvironmentInput(reserve, session.TenantID, session.ID, key, inputs)
 	cancel()
 	if err != nil {
 		return nil, err
@@ -140,9 +136,9 @@ func (w *Worker) environmentInputOutcome(ctx context.Context, session sessions.S
 	defer cancel()
 	// The database rechecks its clock under the Session lock before settlement.
 	if !time.Now().Before(reservation.Deadline) {
-		return w.admission.ExpireEnvironmentInput(read, session.TenantID, session.ID, reservation.ID)
+		return w.dispatcher.Sessions.ExpireEnvironmentInput(read, session.TenantID, session.ID, reservation.ID)
 	}
-	return w.admission.GetEnvironmentInputReservation(read, session.TenantID, session.ID, reservation.ID)
+	return w.dispatcher.SessionsReader.GetEnvironmentInputReservation(read, session.TenantID, session.ID, reservation.ID)
 }
 
 func (w *Worker) checkAdmissionOwnership(ctx context.Context) error {
@@ -155,4 +151,27 @@ func (w *Worker) checkAdmissionOwnership(ctx context.Context) error {
 		return ErrExecutionUnavailable
 	}
 	return nil
+}
+
+func (m *runtimeManager) validateWorkspaceAdmission(ctx context.Context) error {
+	m.mu.Lock()
+	config := m.config
+	m.mu.Unlock()
+	if config.Workspace == nil {
+		return nil
+	}
+	if m.workspaces == nil {
+		return workspacefs.ErrUnavailable
+	}
+	declaration, err := m.workspaces.Declaration(ctx)
+	if err != nil {
+		return err
+	}
+	if declaration == nil {
+		return workspacefs.ErrUnavailable
+	}
+	if config.WorkspaceRequirements == nil {
+		return workspacefs.ErrUnsupported
+	}
+	return workspacefs.ValidateCombination(*config.WorkspaceRequirements, *declaration, config.Resources.EnvironmentDiskMiB)
 }

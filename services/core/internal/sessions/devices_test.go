@@ -14,8 +14,9 @@ import (
 // identify it, then runs its func; a method whose func is unset fails the
 // test.
 type fakeStorage struct {
-	t     *testing.T
-	calls []string
+	t              *testing.T
+	calls          []string
+	heartbeatKinds []runtimedevice.SupportedAgentKind
 
 	createDevice             func(DeviceRegistration) (ExecutionDevice, error)
 	revokeDevice             func() error
@@ -40,6 +41,17 @@ type fakeStorage struct {
 	// credentials is the transaction the executor credential With methods
 	// apply in, with locked.
 	credentials *fakeTx
+	// deletion is the transaction WithSessionDeletion applies in, with
+	// locked.
+	deletion       *fakeTx
+	updateMetadata func(encoded string) (Session, error)
+	auditOperation func() error
+	// inputTx is the transaction WithInputs applies in.
+	inputTx *fakeInputTx
+	// creation is the transaction WithCreation applies in.
+	creation     *fakeCreationTx
+	fingerprint  func(secret string) (string, error)
+	findCreation func() (CreationRecord, error)
 }
 
 func (s *fakeStorage) record(name string, set bool, detail ...string) {
@@ -65,14 +77,30 @@ func (s *fakeStorage) TouchDevice(_ context.Context, device string) (bool, error
 	return s.touchDevice()
 }
 
-func (s *fakeStorage) TouchAuthenticatedDevice(_ context.Context, device, credentialHash string) (bool, error) {
+func (s *fakeStorage) TouchAuthenticatedDevice(_ context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error) {
 	s.record("TouchAuthenticatedDevice", s.touchAuthenticatedDevice != nil, device, credentialHash)
+	s.heartbeatKinds = kinds
 	return s.touchAuthenticatedDevice()
 }
 
 func (s *fakeStorage) WithEnrollment(ctx context.Context, environment, credentialHash string, apply func(context.Context, EnrollmentTx, Environment, LockedSession) error) error {
 	s.record("WithEnrollment", s.enrollment != nil, environment, credentialHash)
 	return apply(ctx, s.enrollment, s.environment, s.locked)
+}
+
+func (s *fakeStorage) WithSessionDeletion(ctx context.Context, tenant, session string, apply func(context.Context, LockedSession, SessionDeletionTx) error) error {
+	s.record("WithSessionDeletion", s.deletion != nil, tenant, session)
+	return apply(ctx, s.locked, s.deletion)
+}
+
+func (s *fakeStorage) UpdateSessionMetadata(_ context.Context, tenant, session string, encoded []byte) (Session, error) {
+	s.record("UpdateSessionMetadata", s.updateMetadata != nil, tenant, session, string(encoded))
+	return s.updateMetadata(string(encoded))
+}
+
+func (s *fakeStorage) AuditSessionOperation(_ context.Context, tenant, session, action string) error {
+	s.record("AuditSessionOperation", s.auditOperation != nil, tenant, session, action)
+	return s.auditOperation()
 }
 
 func (s *fakeStorage) WithArtifactStaging(context.Context, ArtifactStagingKey, func(context.Context, ArtifactStagingTx) error) error {
@@ -87,7 +115,7 @@ func (s *fakeStorage) DeleteSessionArtifact(context.Context, string, string, str
 
 func deviceService(t *testing.T, storage *fakeStorage) *Service {
 	t.Helper()
-	service, err := NewService(storage)
+	service, err := NewService(storage, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,5 +233,18 @@ func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
 			}
 			assertCalls(t, &tx, test.calls...)
 		})
+	}
+}
+
+func TestHeartbeatPassesRetainedHistoryDeclarationToAuthenticatedStorage(t *testing.T) {
+	storage := &fakeStorage{t: t, touchAuthenticatedDevice: returns(true)}
+	kinds := []runtimedevice.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: runtimedevice.KindCapabilities{RetainedNativeHistory: true}}}
+	_, err := deviceService(t, storage).TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: "device", CredentialHash: credentialDigest, SupportedAgentKinds: kinds})
+	if err != nil || len(storage.heartbeatKinds) != 1 || !storage.heartbeatKinds[0].Capabilities.RetainedNativeHistory {
+		t.Fatalf("declaration lost: %v", err)
+	}
+	_, err = deviceService(t, storage).TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: "device", CredentialHash: credentialDigest})
+	if err != nil || len(storage.heartbeatKinds) != 0 {
+		t.Fatalf("removed declaration retained: %v", err)
 	}
 }

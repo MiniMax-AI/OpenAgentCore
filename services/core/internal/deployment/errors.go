@@ -20,16 +20,23 @@ var (
 	ErrNotConfigured         = errors.New("the sandbox deployment is not configured")
 	ErrNodeInUse             = errors.New("sandbox node retains resources")
 	ErrNodeCredential        = errors.New("invalid sandbox node credential")
-	ErrLocalNodeConfigured   = errors.New("local sandbox node is enabled in deployment configuration")
+	// ErrCredentialUnreadable reports a stored credential the credential key
+	// cannot open or authenticate, such as after the key was replaced.
+	ErrCredentialUnreadable = errors.New("sandbox deployment credential decryption failed")
 	// ErrAllocationConflict rejects an allocation change whose owner no longer
 	// matches the stored allocation, device binding, state or compute revision,
 	// or a replay for another installation.
 	ErrAllocationConflict = errors.New("the sandbox allocation changed")
+	// ErrNotIdle means neither idle expiry nor current demand requires suspension.
+	ErrNotIdle = errors.New("sandbox compute is not ready to suspend")
 	// ErrNodeAddressMismatch rejects an enrollment whose Core address is not
 	// the installation public URL. The token stays unconsumed.
 	ErrNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")
 	// ErrNodeExists rejects an enrollment whose node ID is already in use.
 	ErrNodeExists = errors.New("sandbox node ID is already enrolled")
+	// ErrSandboxResetSessionBusy reports a hosted Session an automatic reset
+	// does not archive yet because it has active work.
+	ErrSandboxResetSessionBusy = errors.New("the hosted Session is busy")
 )
 
 // GenerationStaleError rejects a change whose expected generation is not the

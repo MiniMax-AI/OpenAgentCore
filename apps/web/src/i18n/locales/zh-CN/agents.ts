@@ -68,7 +68,7 @@ export const agents: TranslationShape<typeof english> = {
     title: "用量", rangeLabel: "Session 创建时间", ranges: { all: "全部", "7d": "近 7 天", "30d": "近 30 天" },
     help: "用量是 Core 报告的每个 Session 的累计值，不按天拆分。Session 按创建时间归入时间范围，其全部用量都计入该范围。",
     caveat: "数据来自 Core 报告的 Session 累计用量，不包含未报告的部分，不能作为计费依据。",
-    reading: "正在读取 Session…已读取 {{formattedCount}} 个", unrecognized_one: "{{formattedCount}} 个 Session 无法识别", unrecognized_other: "{{formattedCount}} 个 Session 无法识别", unrecognizedUpTo_one: "最多 {{formattedCount}} 个 Session 无法识别", unrecognizedUpTo_other: "最多 {{formattedCount}} 个 Session 无法识别", unrecognizedHelp: "Core 返回的这些 Session 格式无法识别，没有计入任何合计，也不会当作 0。选择时间范围时无法确定它们的创建时间，所以数量是上限。", cancel: "取消", cancelled_one: "已在读取 {{formattedCount}} 个 Session 后停止。", cancelled_other: "已在读取 {{formattedCount}} 个 Session 后停止。", continue: "继续", failed: "无法读取 Session。", retry: "重试",
+    reading: "正在读取 Session…已读取 {{formattedCount}} 个", cancel: "取消", cancelled_one: "已在读取 {{formattedCount}} 个 Session 后停止。", cancelled_other: "已在读取 {{formattedCount}} 个 Session 后停止。", continue: "继续", failed: "无法读取 Session。", retry: "重试",
     large: "Session 超过 {{formattedCount}} 个，统计可能较慢。建议先缩小时间范围。", largeShortest: "Session 超过 {{formattedCount}} 个，统计可能较慢。",
     sessions: "Session", tokens: "Token", coverage: "覆盖率", lastActive: "最近活跃", noData: "无数据", cardLabel: "{{name}} 的用量",
     coverageHelp: "Core 报告了用量的 Session 占范围内全部 Session 的比例。没有报告用量的 Session 不计入 Token 合计，也不按 0 计算。",

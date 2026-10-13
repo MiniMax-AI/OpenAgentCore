@@ -27,7 +27,7 @@ func TestUsageTransportPreservesSnapshotOnFailureAndDone(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
-			s, err := NewFactory(config)(ctx, request, out)
+			s, err := startSingleTurn(ctx, config, request, out)
 			if err != nil {
 				t.Fatal(err)
 			}

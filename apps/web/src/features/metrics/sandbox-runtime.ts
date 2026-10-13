@@ -1,5 +1,6 @@
-import type { AgentSession, CoreProjectReader, SandboxAllocation, SandboxNode } from "@oac/agents-client";
+import type { AgentSession, SandboxAllocation, SandboxNode } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 
@@ -14,7 +15,7 @@ import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 export const HOSTED_SESSION_LIMIT = 100;
 const SESSION_READ_CONCURRENCY = 6;
 
-export type SessionReader = Pick<CoreProjectReader, "retrieveSession">;
+export type SessionReader = Pick<ProjectClient, "retrieveSession">;
 
 export interface HostedRuntimeLoad {
   observations: OwnedRuntimeObservation[];
@@ -130,6 +131,8 @@ export interface HostedRuntimeRow {
   session: AgentSession | null;
   /** The host of the Runtime's allocation, when the fleet lists it. */
   node: SandboxNode | null;
+  /** Core's allocation record, joined only by the observation's allocation ID. */
+  allocation: SandboxAllocation | null;
   /** Ownership generation from a matching allocation, never the deployment target or node pin. */
   deploymentGeneration: number | null;
   /** Seconds from the Runtime's start to its last sample. */
@@ -142,19 +145,22 @@ export function hostedRuntimeRows(
   fleet: { nodes: readonly SandboxNode[]; allocations: readonly SandboxAllocation[] } | null,
 ): HostedRuntimeRow[] {
   const nodes = new Map((fleet?.nodes ?? []).map((node) => [node.id, node]));
-  const generations = new Map((fleet?.allocations ?? []).map((allocation) => [allocation.id, allocation.deployment_generation]));
-  const nodeOfAllocation = new Map((fleet?.allocations ?? []).map((allocation) => [allocation.id, nodes.get(allocation.node_id) ?? null]));
+  const allocations = new Map((fleet?.allocations ?? []).map((allocation) => [allocation.id, allocation]));
   return load.observations
     .filter((observation) => !projectId || observation.project_id === projectId)
-    .map((observation) => ({
-      observation,
-      session: load.sessions.get(observation.session_id) ?? null,
-      node: observation.instance.allocation_id ? nodeOfAllocation.get(observation.instance.allocation_id) ?? null : null,
-      deploymentGeneration: observation.instance.allocation_id ? generations.get(observation.instance.allocation_id) ?? null : null,
-      uptimeSeconds: observation.status === "observed" && observation.started_at !== null && observation.observed_at !== null && observation.observed_at >= observation.started_at
-        ? observation.observed_at - observation.started_at
-        : null,
-    }));
+    .map((observation) => {
+      const allocation = observation.instance.allocation_id ? allocations.get(observation.instance.allocation_id) ?? null : null;
+      return {
+        observation,
+        allocation,
+        session: load.sessions.get(observation.session_id) ?? null,
+        node: allocation ? nodes.get(allocation.node_id) ?? null : null,
+        deploymentGeneration: allocation?.deployment_generation ?? null,
+        uptimeSeconds: observation.status === "observed" && observation.started_at !== null && observation.observed_at !== null && observation.observed_at >= observation.started_at
+          ? observation.observed_at - observation.started_at
+          : null,
+      };
+    });
 }
 
 export function sessionTitle(session: AgentSession | null): string | null {

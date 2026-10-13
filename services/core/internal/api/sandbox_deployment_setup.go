@@ -51,7 +51,7 @@ type DeploymentReset interface {
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; differing selections and file-managed deployments reject. This does not create compute or execute work.
+// @Description Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -108,6 +108,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		writeDeploymentError(w, r, err)
 		return
 	}
+	setAdminAuditSource(r, "")
 	result, err := h.Sandboxes.DeploymentChanges.UpdateSandboxDeployment(r.Context(), selection)
 	if err != nil {
 		writeDeploymentError(w, r, err)
@@ -132,9 +133,9 @@ func (h *Handler) startSandboxReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		ExpectedGeneration *uint64 `json:"expected_generation"`
-		Clear              string  `json:"clear"`
-		DeadlineSeconds    *int32  `json:"deadline_seconds"`
+		ExpectedGeneration *uint64              `json:"expected_generation"`
+		Clear              deployment.ResetMode `json:"clear"`
+		DeadlineSeconds    *int32               `json:"deadline_seconds"`
 	}
 	if decodeInputObject(raw, &input, "expected_generation", "clear", "deadline_seconds") != nil || input.ExpectedGeneration == nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "A current expected_generation is required.", "expected_generation")
@@ -193,4 +194,37 @@ func parseResetGeneration(r *http.Request) (uint64, error) {
 		return 0, deployment.ErrInvalidInput
 	}
 	return strconv.ParseUint(query.Get("expected_generation"), 10, 64)
+}
+
+// SandboxIdlePolicyInput changes the deployment-wide idle timeout independently of its generation.
+type SandboxIdlePolicyInput struct {
+	IdleSeconds *int64 `json:"idle_seconds" binding:"required" minimum:"30" maximum:"86400"`
+}
+
+// @Summary Update automatic suspension policy
+// @Description Changes the Core idle timeout for every running allocation without a restart or generation rollout. Requires checkpoint support and no active reset. Already-started suspensions and snapshot expiry are unchanged. Capacity pressure can still suspend quiet idle compute earlier.
+// @Tags Sandbox Manager
+// @Produce json
+// @Security DeploymentAdminAuth
+// @Accept json
+// @Param body body api.SandboxIdlePolicyInput true "Idle timeout in seconds"
+// @Success 200 {object} deployment.View
+// @Failure 400,401,409,500,503 {object} CoreErrorResponse
+// @Router /core/v1/sandbox/deployment [patch]
+func (h *Handler) updateSandboxIdlePolicy(w http.ResponseWriter, r *http.Request) {
+	raw, ok := readJSONBody(w, r)
+	if !ok {
+		return
+	}
+	var input SandboxIdlePolicyInput
+	if decodeInputObject(raw, &input, "idle_seconds") != nil || input.IdleSeconds == nil {
+		writeDeploymentError(w, r, deployment.ErrInvalidInput)
+		return
+	}
+	result, err := h.Sandboxes.Deployment.UpdateIdleSeconds(r.Context(), *input.IdleSeconds)
+	if err != nil {
+		writeDeploymentError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }

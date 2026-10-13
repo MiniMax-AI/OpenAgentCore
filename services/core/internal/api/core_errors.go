@@ -15,8 +15,8 @@ type CoreErrorResponse struct {
 type CoreAPIError struct {
 	Message string  `json:"message" binding:"required"`
 	Type    string  `json:"type" binding:"required"`
-	Code    *string `json:"code" extensions:"x-nullable"`
-	Param   *string `json:"param" extensions:"x-nullable"`
+	Code    *string `json:"code" binding:"required" extensions:"x-nullable"`
+	Param   *string `json:"param" binding:"required" extensions:"x-nullable"`
 	// Details contains only documented, Core-owned facts: string, finite number,
 	// boolean, null or string array values. Never include request echoes, secrets
 	// or native/provider error text. Empty or invalid details are omitted.

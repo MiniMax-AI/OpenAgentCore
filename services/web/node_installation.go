@@ -35,13 +35,9 @@ var optionalPayloadFiles = func() map[string]bool {
 
 var payloadRevision = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
-// activePayloadPrefix reads one atomic pointer per request. Legacy flat payloads
-// remain readable until the installer publishes its first versioned release.
+// activePayloadPrefix reads the installer's atomic release pointer once per request.
 func activePayloadPrefix(root *os.Root) (string, error) {
 	raw, err := root.ReadFile("active.json")
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
 	if err != nil || len(raw) > 256 {
 		return "", errors.New("invalid active node payload")
 	}
@@ -55,7 +51,7 @@ func activePayloadPrefix(root *os.Root) (string, error) {
 }
 
 func (h *console) resolveNodePayload(name string) (string, bool) {
-	prefix := ""
+	var prefix string
 	if strings.HasPrefix(name, "releases/") {
 		parts := strings.SplitN(name, "/", 3)
 		if len(parts) != 3 || !payloadRevision.MatchString(parts[1]) {
@@ -68,9 +64,6 @@ func (h *console) resolveNodePayload(name string) (string, bool) {
 		if err != nil {
 			return "", false
 		}
-	}
-	if prefix == "" && nodePayloadFiles[name] {
-		return name, true
 	}
 	if !nodePayloadFiles[name] && (!strings.HasPrefix(name, "artifacts/") || strings.Contains(strings.TrimPrefix(name, "artifacts/"), "/")) {
 		return "", false

@@ -11,7 +11,7 @@ test("keeps rollout summary brief and opens all Core observations in details", a
     const deployment = await response.json();
     await route.fulfill({ response, json: { ...deployment, generation: 4, resources: { allocations: 8, pending: 0 }, rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, update_required: 3, unknown: 4 } } } });
   });
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   const summary = page.getByRole("region", { name: "Configuration rollout", exact: true });
   await expect(summary).toContainText("Needs attention");
   await expect(summary.locator("dl")).toHaveCount(0);
@@ -37,7 +37,7 @@ test("labels unknown target readiness without declaring settled nodes ready", as
     const deployment = await response.json();
     await route.fulfill({ response, json: { ...deployment, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 1 } } } });
   });
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   const summary = page.getByRole("region", { name: "Configuration rollout", exact: true });
   await expect(summary).toContainText("Target readiness unknown");
   await expect(summary).not.toContainText("No active preparation");

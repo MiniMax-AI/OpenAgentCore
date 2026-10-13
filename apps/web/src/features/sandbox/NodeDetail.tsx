@@ -4,13 +4,13 @@ import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
-import { formatDateTime, formatInteger, formatRelative, formatSpan, MISSING } from "../../lib/format";
+import { epochSeconds, formatDateTime, formatInteger, formatRelative, formatSpan, MISSING } from "../../lib/format";
 import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sandbox-diagnostic";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { NodeRolloutStatus } from "./NodeRolloutStatus";
 import { phaseTiming } from "./allocation-phase";
-import { nodeState, NodeStatus, OldAddressHint, seconds } from "./NodeList";
+import { nodeState, NodeStatus, OldAddressHint } from "./NodeList";
 
 /** Why a node is not serving: disconnected, or the reason its provider is not ready. */
 function nodeDiagnostic(node: SandboxNode): string {
@@ -19,22 +19,16 @@ function nodeDiagnostic(node: SandboxNode): string {
 
 function Diagnostic({ value }: { value: string }) {
   const { i18n } = useTranslation("sandbox");
-  const message = sandboxDiagnosticMessage(value, i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en");
+  const message = sandboxDiagnosticMessage(value, i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en");
   if (!message) return <>{MISSING}</>;
   return <span className="node-diagnostic">{message.label}<HelpTip label={message.label}>{message.advice}</HelpTip></span>;
 }
 
-/** How long the allocation has been in its compute phase and, while suspended, about when Core reclaims it. */
-function PhaseTime({ allocation, retentionSeconds, now }: { allocation: SandboxAllocation; retentionSeconds: number; now: number }) {
-  const { t, i18n } = useTranslation("sandbox");
-  const locale = i18n.resolvedLanguage;
-  const timing = phaseTiming(allocation.compute_phase, allocation.compute_phase_changed_at, retentionSeconds, now);
-  if (!timing) return <td>{MISSING}</td>;
-  const elapsed = formatSpan(timing.elapsed, locale);
-  const text = timing.reclaimIn === null ? t("Since {{time}}", { time: formatRelative(timing.since, now, locale) })
-    : timing.reclaimIn > 0 ? t("Suspended for {{elapsed}} · reclaimed in about {{remaining}}", { elapsed, remaining: formatSpan(timing.reclaimIn, locale) })
-      : t("Suspended for {{elapsed}} · reclaim due", { elapsed });
-  return <td className="nodes-nowrap" title={formatDateTime(timing.since, locale)}>{text}</td>;
+/** Elapsed time is independent of later changes to the deployment's retention policy. */
+function PhaseTime({ allocation, now }: { allocation: SandboxAllocation; now: number }) {
+  const { i18n } = useTranslation("sandbox");
+  const timing = phaseTiming(allocation.compute_phase_changed_at, now);
+  return <td className="nodes-nowrap" title={timing ? formatDateTime(timing.since, i18n.resolvedLanguage) : undefined}>{timing ? formatSpan(timing.elapsed, i18n.resolvedLanguage) : MISSING}</td>;
 }
 
 export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale, suspension }: {
@@ -44,17 +38,17 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
   coreUrl: string;
   targetGeneration?: number;
   stale: boolean;
-  /** The deployment's idle suspension policy; only microsandbox has one. */
+  /** The deployment's idle suspension policy; null unless its Provider declares checkpoint support. */
   suspension: SandboxDeployment["suspension"];
 }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage;
-  const shortLocale = locale?.startsWith("zh") ? "zh" : "en";
+  const shortLocale = locale?.startsWith("zh") ? "zh-CN" : "en";
   const now = Math.floor(Date.now() / 1000);
   const own = allocations.filter((allocation) => allocation.node_id === node.id);
   const reporting = !stale && node.online;
-  // Only microsandbox suspends sandboxes into snapshots; Docker retains nothing.
-  const suspends = node.provider === "microsandbox";
+  // Only a Provider that declares checkpoint support suspends sandboxes; the node shares the deployment's.
+  const suspends = suspension !== null;
   const state = nodeState(node, own, stale, coreUrl);
   // As in the list, an old address is the status to act on; the node's health would only distract.
   const diagnostic = stale || state === "old_address" ? "" : nodeDiagnostic(node);
@@ -73,14 +67,14 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
         </div>
         <div>
           <dt>{t("Last seen")}</dt>
-          <dd title={node.last_seen_at ? formatDateTime(seconds(node.last_seen_at), locale) : undefined}>
-            {node.last_seen_at ? formatRelative(seconds(node.last_seen_at), now, locale) : t("Never")}
+          <dd title={node.last_seen_at ? formatDateTime(epochSeconds(node.last_seen_at), locale) : undefined}>
+            {node.last_seen_at ? formatRelative(epochSeconds(node.last_seen_at), now, locale) : t("Never")}
           </dd>
         </div>
         <div><dt>{t("Target generation")}</dt><dd>{targetGeneration ?? MISSING}</dd></div>
         <div><dt>{t("Target preparation")}</dt><dd><NodeRolloutStatus node={node} stale={stale} /></dd></div>
         <div><dt>{t("Serving generation")}<HelpTip>{t("The saved serving generation is not proof that this node is online, ready or has free capacity.")}</HelpTip></dt><dd>{node.rollout.ready_generation ?? MISSING}</dd></div>
-        <div><dt>{t("Added")}</dt><dd>{formatDateTime(seconds(node.created_at), locale)}</dd></div>
+        <div><dt>{t("Added")}</dt><dd>{formatDateTime(epochSeconds(node.created_at), locale)}</dd></div>
       </dl>
 
       {/* Cleanup and host resources are on Sandbox metrics; the node's limit is here as well, beside Edit node that sets it. */}
@@ -88,7 +82,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
         <KpiStrip label={t("Capacity")}>
           <Kpi label={t("Active / limit")} help={t("Sandboxes Core has placed on this node, against the most it places here at once.")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
-          {suspends ? <Kpi label={t("Suspended")} help={t("Suspended sandboxes keep their state as a snapshot on the node and resume on the Session's next Turn. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
+          {suspends ? <Kpi label={t("Suspended")} help={t("Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
           {suspends ? <Kpi label={t("Retained / limit")} help={t("Sandboxes this node holds, active and suspended, against its retained limit.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
           {suspends ? <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} /> : null}
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
@@ -108,8 +102,8 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
                   <th scope="col">{t("Configuration generation")}</th>
                   <th scope="col">{t("Recorded state")}</th>
                   <th scope="col">{t("Recorded compute")}</th>
-                  {/* Only microsandbox changes compute phase; under Docker it is always disabled. */}
-                  {suspension ? <th scope="col"><span className="column-help">{t("In this state")}<HelpTip>{t("How long the sandbox has been in its compute state. For a suspended one, the reclaim time is estimated from when it was suspended and the deployment's retention; Core reclaims it around then. Older allocations show a dash until their state next changes.")}</HelpTip></span></th> : null}
+                  {/* Only a Provider with a suspension policy changes compute phase; elsewhere it is always disabled. */}
+                  {suspension ? <th scope="col"><span className="column-help">{t("In this state")}<HelpTip>{t("Time since Core recorded this compute phase. The snapshot expiry time is not available here.")}</HelpTip></span></th> : null}
                   <th scope="col">{t("Issue")}</th>
                   <th scope="col">{t("Created")}</th>
                 </tr>
@@ -121,9 +115,9 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
                     <td>{allocation.deployment_generation}</td>
                     <td>{sandboxStateLabel(allocation.state, shortLocale)}</td>
                     <td>{allocation.compute_phase ? sandboxStateLabel(allocation.compute_phase, shortLocale) : MISSING}</td>
-                    {suspension ? <PhaseTime allocation={allocation} retentionSeconds={suspension.retention_seconds} now={now} /> : null}
+                    {suspension ? <PhaseTime allocation={allocation} now={now} /> : null}
                     <td>{allocation.diagnostic ? <Diagnostic value={allocation.diagnostic} /> : MISSING}</td>
-                    <td className="nodes-nowrap">{formatDateTime(seconds(allocation.created_at), locale)}</td>
+                    <td className="nodes-nowrap">{formatDateTime(epochSeconds(allocation.created_at), locale)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -13,11 +13,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 4
+const ProtocolVersion = 6
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -179,9 +180,11 @@ func errorCode(err error) string {
 		return "observation_unavailable"
 	case errors.Is(err, runtimeobs.ErrNotRunning):
 		return "runtime_not_running"
-	case errors.Is(err, sandbox.ErrInvalid):
+	case errors.Is(err, workspacefs.ErrUnsupported):
+		return "workspace_unsupported"
+	case errors.Is(err, sandbox.ErrInvalid), errors.Is(err, workspacefs.ErrInvalid):
 		return "invalid"
-	case errors.Is(err, sandbox.ErrOwnership):
+	case errors.Is(err, sandbox.ErrOwnership), errors.Is(err, workspacefs.ErrOwnership):
 		return "ownership"
 	case errors.Is(err, sandbox.ErrExists):
 		return "exists"
@@ -209,6 +212,8 @@ func responseError(out response) error {
 	switch out.ErrorCode {
 	case "":
 		return nil
+	case "workspace_unsupported":
+		return workspacefs.ErrUnsupported
 	case "observation_unavailable":
 		return runtimeobs.ErrUnavailable
 	case "runtime_not_running":
@@ -249,7 +254,7 @@ func (q request) validate() error {
 			return nil
 		}
 	case "create":
-		if count == 1 && q.Bootstrap != nil && q.Bootstrap.Reference == q.Reference {
+		if count == 1 && q.Bootstrap != nil && q.Bootstrap.Reference == q.Reference && sandbox.ValidateWorkspaceBinding(q.Reference, q.Bootstrap.Workspace) == nil {
 			return nil
 		}
 	case "info", "renew", "kill", "initial":
@@ -277,7 +282,7 @@ func (q request) validate() error {
 			return nil
 		}
 	case "resume":
-		if count == 1 && q.Resume != nil && q.Resume.Reference == q.Reference {
+		if count == 1 && q.Resume != nil && q.Resume.Reference == q.Reference && sandbox.ValidateWorkspaceBinding(q.Reference, q.Resume.Workspace) == nil {
 			return nil
 		}
 	case "delete_snapshot":
@@ -307,7 +312,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 	switch q.Operation {
 	case "observe":
 		var sample runtimeobs.Sample
-		sample, err = observeProvider(ctx, p, *q.Observation)
+		sample, err = p.Observe(ctx, *q.Observation)
 		out.Sample = &sample
 	case "create":
 		info, err = p.Create(ctx, *q.Bootstrap)
@@ -324,38 +329,33 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
 	default:
-		cp, checkpointErr := sandbox.Checkpoint(p)
-		if checkpointErr != nil {
-			err = checkpointErr
-			break
-		}
 		var state sandbox.ComputeState
 		var compute sandbox.Compute
 		switch q.Operation {
 		case "initial":
-			compute, err = cp.Initial(ctx, q.Reference)
+			compute, err = p.Initial(ctx, q.Reference)
 			out.Compute = &compute
 		case "new_compute":
-			compute, err = cp.NewCompute(ctx, q.Reference, q.Generation, q.Snapshot)
+			compute, err = p.NewCompute(ctx, q.Reference, q.Generation, q.Snapshot)
 			out.Compute = &compute
 		case "compute":
-			state, err = cp.GetCompute(ctx, q.Reference, *q.Compute)
+			state, err = p.GetCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "suspend":
-			state, err = cp.Suspend(ctx, *q.Suspend)
+			state, err = p.Suspend(ctx, *q.Suspend)
 			out.State = &state
 		case "resume":
-			state, err = cp.Resume(ctx, *q.Resume)
+			state, err = p.Resume(ctx, *q.Resume)
 			out.State = &state
 		case "kill_compute":
-			err = cp.KillCompute(ctx, q.Reference, *q.Compute)
+			err = p.KillCompute(ctx, q.Reference, *q.Compute)
 		case "delete_snapshot":
-			err = cp.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
+			err = p.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
 		case "resume_compute":
-			state, err = cp.ResumeCompute(ctx, q.Reference, *q.Compute)
+			state, err = p.ResumeCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "command_compute":
-			command, err = cp.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)
+			command, err = p.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)
 			out.Command = &command
 		default:
 			err = sandbox.ErrInvalid
@@ -371,7 +371,9 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		if !creationSettled(out.Info, q.Reference) {
 			out.Info = nil
 		}
-		out.State = nil
+		if !resumePartial(q, out.State) {
+			out.State = nil
+		}
 		out.Command = nil
 		out.Compute = nil
 	}
@@ -402,4 +404,13 @@ func (q *request) receive(now time.Time) error {
 	}
 	q.deadline = now.Add(time.Duration(q.TimeoutMillis) * time.Millisecond)
 	return nil
+}
+
+// Partial restore evidence carries cleanup ownership, never success or readiness.
+func resumePartial(q request, state *sandbox.ComputeState) bool {
+	if q.Operation != "resume" || q.Resume == nil || state == nil {
+		return false
+	}
+	got, want := state.Compute, q.Resume.Target
+	return got.ID != "" && got.Name == want.Name && got.Generation == want.Generation && (want.ID == "" || want.ID == got.ID) && got.RestoredFrom != nil && want.RestoredFrom != nil && *got.RestoredFrom == *want.RestoredFrom
 }

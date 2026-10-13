@@ -43,8 +43,6 @@ export const sessions = {
     waitingLabel: "Session 在等待什么",
     exactTokens: "{{tokens}} 个 Token",
     open: "打开 Session {{id}}",
-    unrecognized: "无法识别的 Session",
-    unrecognizedHelp: "Core 列出了一个控制台无法读取的 Session，例如带有未知字段。除 ID 外不显示其他内容。",
     more: "显示更多",
   },
   detail: {
@@ -137,7 +135,6 @@ export const sessions = {
       runtime_mode_not_observable: "无法观测",
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",
-      source_not_configured: "未配置指标来源",
       sample_timeout: "采样超时",
       sample_unavailable: "采样不可用",
     },

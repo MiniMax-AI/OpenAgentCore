@@ -42,7 +42,6 @@ func (s *Session) cancelNativeWork() {
 	defer close(s.cancelReady)
 	s.stopFunctionCalls()
 	turnID, active := s.stopSteering()
-	s.stopCodexInteractionTimers()
 	// Best effort: a known Turn must use its native identity. An explicit
 	// empty ID invokes native startup cancellation before turn/started.
 	if threadID := s.currentThreadID(); threadID != "" && active {

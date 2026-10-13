@@ -64,7 +64,7 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 			if input.Agent != nil && input.Agent.Model != nil {
 				value = *input.Agent.Model
 			}
-			if value != tc.model || string(input.resolvedHarnessConfig) != tc.native || input.harnessConfigSource != tc.source {
+			if value != tc.model || string(input.resolvedHarnessConfig) != tc.native || string(input.harnessConfigSource) != tc.source {
 				t.Fatalf("model=%s native=%s source=%s", value, input.resolvedHarnessConfig, input.harnessConfigSource)
 			}
 		})

@@ -1,7 +1,8 @@
-import { coreErrors } from "./core-errors";
+import { coreErrorDetails, coreErrors } from "./core-errors";
 
 export const common = {
   coreErrors,
+  coreErrorDetails,
   readFailure: {
     title: "Could not read the data",
     partial: "Some reads failed. Any figures and rows shown cover only data already read; they may be incomplete or out of date.",
@@ -47,10 +48,8 @@ export const common = {
     column: "Creator",
     help: "The API key that created this asset, as recorded by Core for every write.",
     unknown: "Unknown",
-    unknownHelp: "Core has no creation record: the asset predates recording or an administrator copied it.",
+    unknownHelp: "Core has no creation record: the asset predates recording.",
     revoked: "Revoked",
-    adminCopy: "Admin copy",
-    adminCopyHelp: "An administrator copied this asset from another project.",
   },
   list: {
     search: "Search",

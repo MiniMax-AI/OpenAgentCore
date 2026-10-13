@@ -9,9 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 const DefaultExecutionConcurrency = 4
@@ -21,7 +19,6 @@ type Worker struct {
 	concurrency         int
 	metrics             workerMetricsState
 	dispatcher          *Dispatcher
-	admission           *store.Store
 	lease               Ownership
 	directoryReads      chan directoryReadRequest
 	fileWrites          chan fileWriteRequest
@@ -68,6 +65,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.SessionsReader == nil {
 		return nil, errors.New("execution worker requires the Session reader")
 	}
+	if dispatcher.ManagedRuntimes == nil {
+		return nil, errors.New("execution worker requires the sandbox runtime provider")
+	}
 	owned, err := dispatcher.Bind(owner)
 	if err != nil {
 		return nil, err
@@ -76,32 +76,20 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
 	owned.notifications = &executionNotifications{}
-	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
+	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err
 	}
-	if worker.runtimes != nil {
-		defer func() {
-			if err != nil {
-				worker.runtimes.stop()
-			}
-		}()
-	}
-	var process *deployment.ProcessDeployment
-	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
-		config := worker.runtimes.config
-		process = &deployment.ProcessDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
-	}
-	if worker.runtimes != nil && worker.runtimes.loadDeployment != nil {
-		err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID)
-		if err == nil {
-			_, err = worker.runtimes.ensureDeployment(ctx)
+	defer func() {
+		if err != nil {
+			worker.runtimes.stop()
 		}
-	} else {
-		err = owner.Deployment.ConfigureProcess(ctx, process)
+	}()
+	if err = owner.Deployment.Claim(ctx, worker.runtimes.setupInstallationID); err != nil {
+		return nil, err
 	}
-	if err != nil {
+	if _, err = worker.runtimes.ensureDeployment(ctx); err != nil {
 		return nil, err
 	}
 	if err = owned.sessionExecution.ReconcileEnvironmentConnections(ctx); err != nil {
@@ -122,7 +110,7 @@ func (w *Worker) CheckOwnership(ctx context.Context) error {
 }
 
 func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
-	value, err := w.admission.GetSession(ctx, tenant, session)
+	value, err := w.dispatcher.SessionsReader.GetSession(ctx, tenant, session)
 	if err != nil {
 		return nil, err
 	}
@@ -138,25 +126,20 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	return w.admitInputs(ctx, tenant, session, key, inputs)
 }
 
-// CreateSession validates execution support before reserving or admitting initial work.
-func (w *Worker) CreateSession(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
-	if err := w.validateCreation(ctx, input); err != nil {
-		return sessions.Session{}, err
-	}
-	session, err := w.admission.CreateSession(ctx, tenant, input)
-	if err == nil && len(input.InitialInputs) > 0 {
-		w.wakeScheduler()
-	}
-	return session, err
-}
-
-// CreateSessionStream applies the same execution admission before creating a stream.
-func (w *Worker) CreateSessionStream(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
+// CreateSession validates execution support before the pooled Session
+// creation reserves or admits initial work, and wakes the scheduler once that
+// creation commits.
+func (w *Worker) CreateSession(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	if err := w.validateCreation(ctx, input); err != nil {
 		return sessions.Creation{}, err
 	}
-	creation, err := w.admission.CreateSessionStream(ctx, tenant, input)
-	if err == nil && len(input.InitialInputs) > 0 {
+	profile, ok := w.dispatcher.Engines.Lookup(input.Engine)
+	if !ok {
+		return sessions.Creation{}, sessions.ErrInvalidInput
+	}
+	input.SupportsRetainedNativeHistory = profile.RetainedNativeHistory.IsSupported()
+	creation, err := w.dispatcher.Sessions.CreateSession(ctx, tenant, input)
+	if err == nil {
 		w.wakeScheduler()
 	}
 	return creation, err
@@ -170,14 +153,10 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	defer func() {
 		w.observeWorkerStop(runErr, ctx.Err())
 		cancel()
-		if w.runtimes != nil {
-			w.runtimes.stop()
-		}
+		w.runtimes.stop()
 		running.Wait()
-		if w.runtimes != nil {
-			// Drain an external provisioning caller before releasing the writer lease.
-			w.runtimes.drain()
-		}
+		// Drain an external provisioning caller before releasing the writer lease.
+		w.runtimes.drain()
 		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
 	active := make(map[string]bool)
@@ -191,13 +170,11 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	running.Add(1)
 	go func() { defer running.Done(); preparationDone <- w.runEnvironmentInitializations(ctx) }()
 	lifecycleDone := make(chan error, 1)
-	if w.runtimes != nil {
-		running.Add(1)
-		go func() {
-			defer running.Done()
-			lifecycleDone <- w.runManagedRuntimes(ctx)
-		}()
-	}
+	running.Add(1)
+	go func() {
+		defer running.Done()
+		lifecycleDone <- w.runManagedRuntimes(ctx)
+	}()
 	type readCompletion struct {
 		id      string
 		request directoryReadRequest
@@ -303,7 +280,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			return err
 		}
 		if maintenance {
-			if _, err := w.dispatcher.Store.ExpireEnvironmentInputs(ctx); err != nil {
+			if _, err := w.dispatcher.sessionExecution.ExpireEnvironmentInputs(ctx); err != nil {
 				w.observeSchedulerPoll(0, err)
 				return err
 			}
@@ -352,7 +329,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 func (w *Worker) reconcile(ctx context.Context) error {
 	cursor := ""
 	for {
-		work, err := w.dispatcher.Store.ListExecutionWork(ctx, cursor, []string{sessions.TurnInProgress, sessions.TurnWaiting}, nil)
+		work, err := w.dispatcher.SessionsReader.ListExecutionWork(ctx, cursor, []string{sessions.TurnInProgress, sessions.TurnWaiting}, nil)
 		if err != nil {
 			return err
 		}
@@ -360,7 +337,7 @@ func (w *Worker) reconcile(ctx context.Context) error {
 			return nil
 		}
 		for _, item := range work {
-			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: item.Status, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
+			_, err := w.dispatcher.sessionExecution.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: item.Status, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
 			if err != nil && !errors.Is(err, sessions.ErrTurnConflict) {
 				return err
 			}
@@ -377,12 +354,9 @@ func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) erro
 	var rejection *preparationRejection
 	capacityRejected := errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare && rejection.code == "preparation_capacity"
 	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
-	if errors.Is(err, ErrModelProviderRequired) {
-		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
-	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	turn, err := w.dispatcher.Store.GetTurn(finish, item.TenantID, item.SessionID, item.TurnID)
+	turn, err := w.dispatcher.SessionsReader.GetTurn(finish, item.TenantID, item.SessionID, item.TurnID)
 	if err != nil {
 		return err
 	}
@@ -395,7 +369,7 @@ func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) erro
 		return nil
 	}
 	log.Ctx(ctx).Error("oac-core dispatch did not complete", "turn_id", item.TurnID)
-	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: turn.Status, Status: sessions.TurnFailed, Outcome: outcome})
+	_, err = w.dispatcher.sessionExecution.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: turn.Status, Status: sessions.TurnFailed, Outcome: outcome})
 	if errors.Is(err, sessions.ErrTurnConflict) {
 		return nil
 	}

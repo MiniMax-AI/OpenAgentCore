@@ -1,3 +1,4 @@
+import { type AdminAPIKey, type AdminKeyProvenance, type AdminResourceType, adminResourceTypes } from "@oac/agents-client";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -7,28 +8,22 @@ import { useTranslation } from "react-i18next";
 import { useFailureToast } from "../../components/Toast";
 import { EmptyState, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary } from "../../components/list-ui";
-import { formatDateTime, shortId } from "../../lib/format";
+import { epochSeconds, formatDateTime, shortId } from "../../lib/format";
 import { admin } from "../../lib/projects";
 import { prefixLabel } from "./key-flows";
 import { writeOperationsQuery } from "./project-queries";
-import { type AdminKey, type KeyRef, type OwnerResourceType, ownerResourceTypes } from "../../lib/admin-view";
 import { TableSkeleton } from "../../components/Skeleton";
 import { ConsoleSelect } from "../../components/console-select";
 
-export const operationActions = ["create", "update", "delete", "send_events", "upload_file", "upload_version", "update_default_version"] as const;
-type OperationAction = (typeof operationActions)[number];
+const isType = (value: string): value is AdminResourceType => (adminResourceTypes as readonly string[]).includes(value);
 
-const isType = (value: string): value is OwnerResourceType => (ownerResourceTypes as readonly string[]).includes(value);
-const isAction = (value: string): value is OperationAction => (operationActions as readonly string[]).includes(value);
-
-/** The recorded key of a write: its name, else its prefix; "unknown" when none was recorded. */
-export function OperationKey({ value }: { value: KeyRef | null }) {
+/** The recorded key of a write, by name. */
+export function OperationKey({ value }: { value: AdminKeyProvenance }) {
   const { t } = useTranslation("keys");
-  if (!value) return <span className="table-muted">{t("operations.unknownKey")}</span>;
   const revoked = value.revoked_at !== null;
   return (
-    <span className={revoked ? "operation-key revoked" : "operation-key"} title={[value.prefix ? prefixLabel(value.prefix) : null, revoked ? t("detail.keyStatus.revoked") : null].filter(Boolean).join(" · ") || undefined}>
-      {value.name ?? prefixLabel(value.prefix)}
+    <span className={revoked ? "operation-key revoked" : "operation-key"} title={[prefixLabel(value.prefix), revoked ? t("detail.keyStatus.revoked") : null].filter(Boolean).join(" · ")}>
+      {value.name}
     </span>
   );
 }
@@ -37,11 +32,11 @@ export function OperationKey({ value }: { value: KeyRef | null }) {
  * Every successful write made in one project, newest first, with cursor
  * paging (`next_cursor`). Filters go to Core; nothing is inferred.
  */
-export function WriteOperations({ projectId, keys }: { projectId: string; keys: readonly AdminKey[] | null }) {
+export function WriteOperations({ projectId, keys }: { projectId: string; keys: readonly AdminAPIKey[] | null }) {
   const { t, i18n } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  const [type, setType] = useState<OwnerResourceType | "">("");
+  const [type, setType] = useState<AdminResourceType | "">("");
   const [keyId, setKeyId] = useState("");
   const query = useInfiniteQuery(writeOperationsQuery(projectId, { keyId, type }));
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } = query;
@@ -55,8 +50,7 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
     void fetchNextPage();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
-  const actionLabel = (action: string) => (isAction(action) ? t(`operations.actions.${action}`) : action);
-  const typeLabel = (value: string) => (isType(value) ? t(`operations.types.${value}`) : value);
+  const typeLabel = (value: AdminResourceType) => t(`operations.types.${value}`);
 
   useFailureToast(Boolean(entries) && query.isRefetchError && !query.isFetching, t("operations.failed"), "write-operations-refresh");
   useFailureToast(moreFailed, t("operations.moreFailed"), "write-operations-more");
@@ -89,9 +83,9 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
             <tbody>
               {entries.map((entry) => (
                 <tr key={entry.id}>
-                  <td className="operations-time">{formatDateTime(entry.created_at, locale)}</td>
+                  <td className="operations-time">{formatDateTime(epochSeconds(entry.created_at), locale)}</td>
                   <td><OperationKey value={entry.api_key} /></td>
-                  <td>{actionLabel(entry.action)}</td>
+                  <td>{t(`operations.actions.${entry.action}`)}</td>
                   <td>{typeLabel(entry.resource_type)}</td>
                   <td>
                     <span className="operations-resource">
@@ -136,7 +130,7 @@ export function WriteOperations({ projectId, keys }: { projectId: string; keys: 
           onChange={(value) => setType(isType(value) ? value : "")}
           options={[
             { value: "", label: t("operations.allTypes") },
-            ...ownerResourceTypes.map((value) => ({ value, label: typeLabel(value) })),
+            ...adminResourceTypes.map((value) => ({ value, label: typeLabel(value) })),
           ]}
         />
       </ListToolbar>

@@ -13,6 +13,7 @@ import (
 // providers reject text without non-whitespace characters.
 func claudeProfile() Profile {
 	return Profile{
+		RetainedNativeHistory:          proto.CapabilitySupported,
 		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
 		MCPOrigins:                     []string{"service", "environment"},
 		Placements:                     []string{"none", "openai_hosted", "self_hosted"},

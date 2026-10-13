@@ -51,7 +51,7 @@ def verify_credential_rotation(client, other, invalid, peer, saved_vaults, saved
         response = credentials.with_raw_response.update(original.id, vault_id=vault.id, **replacement)
         current = metadata(response.http_response, original)
         assert response.parse() == current
-        # The public boundary accepts opaque values; private Store tests verify
+        # The public boundary accepts opaque values; Core's Go tests verify
         # their bytes. The final value also supplies a log-scan canary.
         for token in (" ", " \t" + canary + "\n雪 ", canary + "final"):
             response = raw.post(endpoint, headers=headers, json={"auth": {"type": "static_bearer", "token": token}})

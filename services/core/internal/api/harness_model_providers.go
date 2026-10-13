@@ -34,10 +34,10 @@ type HarnessModelConfiguration struct {
 	Object  string `json:"object" enums:"core.model_configuration" binding:"required"`
 	Harness string `json:"harness" binding:"required"`
 	v1.ModelConfigurationView
-	LastUsedAt    *time.Time `json:"last_used_at" format:"date-time" extensions:"x-nullable" binding:"required"`
-	LastErrorCode *string    `json:"last_error_code" extensions:"x-nullable" binding:"required" enums:"authentication_error,connection_failed,rate_limit_exceeded,usage_limit_exceeded,server_overloaded,server_error,resource_not_found,request_timeout,invalid_request"`
-	LastErrorAt   *time.Time `json:"last_error_at" format:"date-time" extensions:"x-nullable" binding:"required"`
-	UpdatedAt     time.Time  `json:"updated_at" binding:"required"`
+	LastUsedAt    *time.Time                            `json:"last_used_at" format:"date-time" extensions:"x-nullable" binding:"required"`
+	LastErrorCode *modelconfiguration.ProviderErrorCode `json:"last_error_code" extensions:"x-nullable" binding:"required"`
+	LastErrorAt   *time.Time                            `json:"last_error_at" format:"date-time" extensions:"x-nullable" binding:"required"`
+	UpdatedAt     time.Time                             `json:"updated_at" binding:"required"`
 }
 
 // CoreHarness describes one harness this build supports. Enabled and default

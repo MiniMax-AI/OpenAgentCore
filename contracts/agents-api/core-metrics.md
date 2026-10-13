@@ -25,19 +25,19 @@ title: "Core operational metrics"
 
 ## Fields
 
-The response has `object: "core.metrics"`, `range`, `service`, `execution`, `database`, `jobs` and `process`. Every numeric value and `service.execution_owner` is nullable; each `series` always lists every complete bucket of the range.
+The response has `object: "core.metrics"`, `range`, `service`, `execution`, `database`, `jobs` and `process`. Every numeric value except `execution.slots_in_use`, `execution.slots_total` and `execution.connected_daemons` is nullable, as is `service.execution_owner`; each `series` always lists every complete bucket of the range.
 
 | Field | Meaning |
 | --- | --- |
-| `service.status` | `running`, or `degraded` when a measurement or job fails, the latest sample is missing or stale, or execution ownership is unknown or Core has execution slots but does not hold the execution lease. A sandbox reset is reported by the [deployment](./sandbox-deployment.md), not here |
+| `service.status` | `running`, or `degraded` when a measurement or job fails, the latest sample is missing or stale, or execution ownership is unknown or Core does not hold the execution lease. A sandbox reset is reported by the [deployment](./sandbox-deployment.md), not here |
 | `service.revision` | The full source commit injected at build time; null for builds without one |
 | `service.started_at` | When the process initialized |
 | `service.execution_owner` | Whether this process holds the execution worker's database lease |
-| `execution.slots_in_use`, `execution.slots_total` | Active Session reservations of the execution worker, and its capacity: [`core.execution_concurrency`](../../docs/configuration.md#settings), 4 by default. Environment input, Turns and file work share the slots; native Harness subprocesses are not counted. Without a worker both are 0 |
+| `execution.slots_in_use`, `execution.slots_total` | Active Session reservations of the execution worker, and its capacity: [`core.execution_concurrency`](../../docs/configuration.md#settings), 4 by default. Environment input, Turns and file work share the slots; native Harness subprocesses are not counted |
 | `execution.queued_turns`, `execution.in_progress_turns` | Root Turns in those states, including Turns of deleted Sessions. Subagent Turns and input reserved for a preparing Environment are not counted |
-| `execution.waiting_for_daemon` | Queued Turns whose Session's device is not connected; null without a gateway |
+| `execution.waiting_for_daemon` | Queued Turns whose Session's device is not connected |
 | `execution.oldest_queued_seconds` | Age of the oldest queued Turn, from its `created_at` |
-| `execution.connected_daemons` | Runtime daemons connected to Core's gateway; null without a gateway |
+| `execution.connected_daemons` | Runtime daemons connected to Core's gateway |
 | `execution.queue_wait_ms` | p50 and p95 of `started_at - created_at` for Turns started in the interval, by PostgreSQL `percentile_cont` |
 | `execution.interrupted` | Failed Turns with error code `execution_interrupted`, by `completed_at` in the interval |
 | `execution.unavailable` | HTTP responses sent with error code `execution_unavailable`, counted once each. Other 503 codes and errors after a stream started are not counted |

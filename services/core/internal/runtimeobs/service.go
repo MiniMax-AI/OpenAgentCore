@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -30,14 +29,17 @@ const (
 
 type Service struct {
 	resolver TargetResolver
-	sources  map[string]SourceResolver
+	source   func(context.Context) (Source, string, error)
 	now      func() time.Time
 	exports  []*exportDispatcher
 }
 
-func NewService(resolver TargetResolver, sources map[string]SourceResolver, options ...ServiceOption) (*Service, error) {
-	if resolver == nil {
-		return nil, errors.New("Runtime observation resolver is required")
+// NewService reads managed Runtimes through source, which returns the Sandbox
+// Provider of the deployment's current selection and its registered kind, or
+// ErrUnavailable while none is selected.
+func NewService(resolver TargetResolver, source func(context.Context) (Source, string, error), options ...ServiceOption) (*Service, error) {
+	if resolver == nil || source == nil {
+		return nil, errors.New("Runtime observation resolver and source are required")
 	}
 	config := serviceOptions{}
 	for _, option := range options {
@@ -48,20 +50,7 @@ func NewService(resolver TargetResolver, sources map[string]SourceResolver, opti
 			return nil, err
 		}
 	}
-	copySources := make(map[string]SourceResolver, len(sources))
-	for key, source := range sources {
-		if key == "" || source == nil {
-			return nil, errors.New("invalid Runtime observation source")
-		}
-		if err := providercontract.Validate(source, reflect.TypeFor[SourceResolver]()); err != nil {
-			return nil, err
-		}
-		if err := providercontract.Require(source, "ResolveObservationSource"); err != nil {
-			return nil, fmt.Errorf("%w: observation source resolution must be supported", providercontract.ErrContract)
-		}
-		copySources[key] = source
-	}
-	service := &Service{resolver: resolver, sources: copySources, now: time.Now}
+	service := &Service{resolver: resolver, source: source, now: time.Now}
 	for _, export := range config.exporters {
 		service.exports = append(service.exports, newExportDispatcher(export.exporter, export.exportOptions))
 	}
@@ -109,14 +98,12 @@ func (s *Service) ObserveSessionForHistory(ctx context.Context, tenantID, sessio
 type PageOptions struct {
 	// Concurrency bounds identity resolution and per-target provider reads.
 	Concurrency int
-	// SourceTimeout bounds each provider read, including one batch read.
+	// SourceTimeout bounds each provider read.
 	SourceTimeout time.Duration
 }
 
-// ObserveSessions observes one page of Sessions. Running targets of a source
-// that explicitly supports BatchSource share one provider read per MaxBatchTargets;
-// other sources are read per target, exactly as ObserveSession reads them.
-// Results and errors are aligned with sessions.
+// ObserveSessions observes one page of Sessions, reading each running target
+// exactly as ObserveSession reads it. Results and errors are aligned with sessions.
 func (s *Service) ObserveSessions(ctx context.Context, sessions []SessionIdentity, options PageOptions) ([]Observation, []error) {
 	return s.observeSessions(ctx, sessions, CollectionSourceOnRead, nil, options)
 }
@@ -141,8 +128,6 @@ func (s *Service) observeSession(ctx context.Context, tenantID, sessionID string
 // sourceRead is a resolved running managed target awaiting its provider sample.
 type sourceRead struct {
 	index        int
-	key          string
-	source       Source
 	target       Target
 	providerType string
 }
@@ -162,117 +147,39 @@ func (s *Service) observeSessions(ctx context.Context, sessions []SessionIdentit
 		}
 		observations[index], errs[index] = observation, err
 	})
-	// A provider key selects one source; keep page order within each group.
-	var keys []string
-	groups := map[string][]*sourceRead{}
+	var pending []*sourceRead
 	for _, read := range reads {
-		if read == nil {
-			continue
-		}
-		if _, ok := groups[read.key]; !ok {
-			keys = append(keys, read.key)
-		}
-		groups[read.key] = append(groups[read.key], read)
-	}
-	for _, key := range keys {
-		group := groups[key]
-		sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
-		source, err := s.sources[key].ResolveObservationSource(sourceCtx)
-		stop()
-		if err == nil {
-			err = ValidateSource(source)
-		}
-		if err != nil {
-			for _, read := range group {
-				observations[read.index], errs[read.index] = s.complete(ctx, read, Sample{}, err, 0, collectionSource, owner)
-			}
-			continue
-		}
-		providerType := source.ObservationProviderType()
-		for _, read := range group {
-			read.source, read.providerType = source, providerType
-		}
-		for start := 0; start < len(group); start += MaxBatchTargets {
-			chunk := group[start:min(start+MaxBatchTargets, len(group))]
-			if s.readBatch(ctx, chunk, observations, errs, collectionSource, owner, options.SourceTimeout) {
-				continue
-			}
-			parallel(len(chunk), options.Concurrency, func(index int) {
-				read := chunk[index]
-				sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
-				started := time.Now()
-				var sample Sample
-				err := providercontract.Require(read.source, "Observe")
-				if err == nil {
-					sample, err = read.source.Observe(sourceCtx, read.target)
-				}
-				stop()
-				observations[read.index], errs[read.index] = s.complete(ctx, read, sample, err, time.Since(started), collectionSource, owner)
-			})
+		if read != nil {
+			pending = append(pending, read)
 		}
 	}
-	return observations, errs
-}
-
-// readBatch reports false, without results, when the source has no batch read
-// for its current provider.
-func (s *Service) readBatch(ctx context.Context, chunk []*sourceRead, observations []Observation, errs []error, collectionSource CollectionSource, owner OwnershipChecker, sourceTimeout time.Duration) bool {
-	batch, ok := chunk[0].source.(BatchSource)
-	if !ok { // NewService rejects this; never treat malformed registration as unsupported.
-		for _, read := range chunk {
-			errs[read.index] = providercontract.ErrContract
-		}
-		return true
+	if len(pending) == 0 {
+		return observations, errs
 	}
-	if err := providercontract.Require(chunk[0].source, "ObserveBatch"); err != nil {
-		if errors.Is(err, providercontract.ErrUnsupported) {
-			return false
-		}
-		for _, read := range chunk {
-			errs[read.index] = err
-		}
-		return true
-	}
-	targets := make([]Target, len(chunk))
-	for index, read := range chunk {
-		targets[index] = read.target
-	}
-	// One batch read replaces up to MaxBatchTargets single reads, so it may take
-	// longer than one of them without exceeding the page's overall cost.
-	if sourceTimeout > 0 {
-		sourceTimeout = max(sourceTimeout, minBatchSourceTimeout)
-	}
-	sourceCtx, stop := sourceContext(ctx, sourceTimeout)
-	started := time.Now()
-	results, batchErr := batch.ObserveBatch(sourceCtx, targets)
+	// One source serves the whole page.
+	sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
+	source, providerType, err := s.source(sourceCtx)
 	stop()
-	if _, unsupported := providercontract.UnsupportedReason(batchErr, "ObserveBatch"); unsupported {
-		return false
-	}
-	if errors.Is(batchErr, providercontract.ErrUnsupported) {
-		batchErr = providercontract.ErrContract
-	}
-	if batchErr != nil {
-		for _, read := range chunk {
-			observations[read.index], errs[read.index] = s.complete(ctx, read, Sample{}, batchErr, 0, collectionSource, owner)
+	if err != nil {
+		for _, read := range pending {
+			observations[read.index], errs[read.index] = s.complete(ctx, read, Sample{}, err, 0, collectionSource, owner)
 		}
-		return true
+		return observations, errs
 	}
-	duration := time.Since(started)
-	for index, read := range chunk {
-		if len(results) != len(chunk) {
-			errs[read.index] = errors.New("Runtime observation batch returned mismatched results")
-			continue
+	parallel(len(pending), options.Concurrency, func(index int) {
+		read := pending[index]
+		read.providerType = providerType
+		sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
+		started := time.Now()
+		var sample Sample
+		err := providercontract.Require(source, "Observe")
+		if err == nil {
+			sample, err = source.Observe(sourceCtx, read.target)
 		}
-		// The rows share one provider read; only the first carries its duration,
-		// so sample-duration telemetry counts each read once.
-		rowDuration := time.Duration(0)
-		if index == 0 {
-			rowDuration = duration
-		}
-		observations[read.index], errs[read.index] = s.complete(ctx, read, results[index].Sample, results[index].Err, rowDuration, collectionSource, owner)
-	}
-	return true
+		stop()
+		observations[read.index], errs[read.index] = s.complete(ctx, read, sample, err, time.Since(started), collectionSource, owner)
+	})
+	return observations, errs
 }
 
 // resolve returns either a finished observation or a pending provider read.
@@ -317,11 +224,7 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 	default:
 		return Observation{}, nil, errors.New("invalid managed Runtime allocation state")
 	}
-	_, ok := s.sources[target.Instance.ProviderKey]
-	if !ok {
-		return Observation{Target: target, Status: StatusUnavailable, Reason: "source_not_configured", ResolvedAt: resolvedAt}, nil, nil
-	}
-	return Observation{}, &sourceRead{key: target.Instance.ProviderKey, target: target}, nil
+	return Observation{}, &sourceRead{target: target}, nil
 }
 
 // complete classifies one provider result and hands it to history export.
@@ -351,8 +254,6 @@ func (s *Service) complete(ctx context.Context, read *sourceRead, sample Sample,
 	observation.ResolvedAt = s.now()
 	return s.finish(ctx, observation, collectionSource, owner)
 }
-
-const minBatchSourceTimeout = 5 * time.Second
 
 func sourceContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout > 0 {

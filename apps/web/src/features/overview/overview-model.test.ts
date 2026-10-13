@@ -8,7 +8,6 @@ import {
   activityStart,
   attentionCount,
   attentionSessions,
-  coverageRatio,
   isGatewayOrNetworkFailure,
   overviewReadDone,
   projectUsageRows,
@@ -19,12 +18,10 @@ import {
   webApiReachable,
 } from "./overview-model";
 
-const usage = (total: number) => ({ input_tokens: total, output_tokens: 0, total_tokens: total, cached_tokens: 0, reasoning_tokens: 0 });
-
 describe("project usage rows", () => {
   it("joins every project with its summary row, active and recent first, missing rows as null", () => {
     const rows = projectUsageRows(
-      [project("old"), project("archived", { status: "archived" }), project("recent"), project("silent")],
+      [project("old"), project("archived", { archived_at: "1970-01-01T00:00:02Z" }), project("recent"), project("silent")],
       [
         summary("old", { last_active_at: 100 }),
         summary("recent", { last_active_at: 500 }),
@@ -37,22 +34,14 @@ describe("project usage rows", () => {
     expect(rows.find((row) => row.project.id === "silent")?.summary).toBeNull();
   });
 
-  it("adds up Session counts and keeps usage unknown when no project reported any", () => {
-    const withUsage = summaryTotals([
-      summary("a", { sessions: { total: 3, idle: 1, in_progress: 1, requires_action: 0, failed: 1 }, usage: usage(10), coverage: { sessions: 3, reported: 2 } }),
-      summary("b", { sessions: { total: 2, idle: 1, in_progress: 0, requires_action: 1, failed: 0 }, coverage: { sessions: 2, reported: 0 } }),
-      summary("a", { agent_id: "agent_a", sessions: { total: 50, idle: 50, in_progress: 0, requires_action: 0, failed: 0 }, usage: usage(99) }),
+  it("adds up the Session counts of project rows", () => {
+    const totals = summaryTotals([
+      summary("a", { sessions: { total: 3, idle: 1, in_progress: 1, requires_action: 0, failed: 1 } }),
+      summary("b", { sessions: { total: 2, idle: 1, in_progress: 0, requires_action: 1, failed: 0 } }),
+      summary("a", { agent_id: "agent_a", sessions: { total: 50, idle: 50, in_progress: 0, requires_action: 0, failed: 0 } }),
     ]);
-    expect(withUsage.sessions).toEqual({ total: 5, idle: 2, in_progress: 1, requires_action: 1, failed: 1 });
-    expect(withUsage.usage?.total_tokens).toBe(10);
-    expect(withUsage.coverage).toEqual({ sessions: 5, reported: 2 });
-    expect(attentionCount(withUsage.sessions)).toBe(2);
-    expect(summaryTotals([summary("b")]).usage).toBeNull();
-  });
-
-  it("reports coverage only when there are Sessions", () => {
-    expect(coverageRatio({ sessions: 4, reported: 3 })).toBe(0.75);
-    expect(coverageRatio({ sessions: 0, reported: 0 })).toBeNull();
+    expect(totals).toEqual({ total: 5, idle: 2, in_progress: 1, requires_action: 1, failed: 1 });
+    expect(attentionCount(totals)).toBe(2);
   });
 });
 

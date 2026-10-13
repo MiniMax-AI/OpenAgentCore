@@ -4,5 +4,11 @@
   "sdk_version": "3.13.0",
   "resource_path": "src/openai/resources/beta/agents",
   "type_path": "src/openai/types/beta",
-  "beta_header": "agents=v1"
+  "beta_header": "agents=v1",
+  "openapi": {
+    "repository": "https://github.com/openai/openai-openapi",
+    "commit": "046a2a0f325bf11f97966f2729219f27281ba71e",
+    "path": "openapi.json",
+    "sha256": "c96d974b164ff4750fa5ea5a1727f7ce6691540e257c177db02b660b0db58f26"
+  }
 }

@@ -11,8 +11,11 @@ import (
 
 // ConfigureLocal selects the qualified, dedicated Runtime layout. The shared
 // localworkspace binding still authorizes every request against its Session.
-func ConfigureLocal(config Config, root, workspace string, network agentnetwork.Policy) (Config, error) {
-	config.StateDir = filepath.Join(root, "runtime", "claude-sdk", "history")
+func ConfigureLocal(config Config, stateRoot, root, workspace string, network agentnetwork.Policy) (Config, error) {
+	if !filepath.IsAbs(stateRoot) || filepath.Clean(stateRoot) != stateRoot {
+		return Config{}, fmt.Errorf("claudesdk: state root must be a clean absolute directory")
+	}
+	config.StateDir = filepath.Join(stateRoot, "runtime", "claude-sdk", "history")
 	config.Workspace = &WorkspaceConfig{
 		Directory: workspace, PublicDirectory: workspace, NetworkAccess: network.Access, AllowedDomains: network.Hosts(),
 		HomeDir:    filepath.Join(root, "runtime", "claude-sdk", "home"),

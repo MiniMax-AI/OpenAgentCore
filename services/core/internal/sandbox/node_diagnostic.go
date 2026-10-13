@@ -1,61 +1,84 @@
 package sandbox
 
-import "errors"
-
-// Node readiness failures. A node probe returns or wraps the one matching its
-// first failed check. Only the fixed code crosses the node transport; the error
-// text and any wrapped detail, such as host paths or daemon messages, stay local.
-var (
-	ErrRuntimeDownloadFailed            = errors.New("Runtime preparation failed")
-	ErrDockerUnavailable                = errors.New("Docker daemon is unavailable")
-	ErrDockerLimitsUnsupported          = errors.New("Docker host does not enforce CPU and memory limits")
-	ErrRuntimeImageUnavailable          = errors.New("pinned Runtime image is unavailable")
-	ErrKVMUnavailable                   = errors.New("KVM is unavailable to sandbox node")
-	ErrMicrosandboxArtifactsUnavailable = errors.New("pinned microsandbox artifacts are unavailable")
-	ErrCapacityInsufficient             = errors.New("node cannot provide one sandbox of the deployment specification")
+import (
+	"errors"
+	"fmt"
 )
 
-// NodeProviderUnavailable reports every readiness failure without a fixed cause.
-const NodeProviderUnavailable = "provider_unavailable"
-const NodeRuntimeDownloadFailed = "runtime_download_failed"
+// Node readiness classes. A node probe returns or wraps the class of its first
+// failed check and keeps the Provider's detail, such as host paths or daemon
+// messages, in the local error text. Only the class code crosses the node
+// transport.
+var (
+	// The Provider's native service is unreachable or does not answer.
+	ErrProviderUnavailable = errors.New("sandbox provider unavailable")
+	// The host lacks a capability the Provider requires.
+	ErrHostUnsupported = errors.New("host lacks a capability the sandbox provider requires")
+	// A pinned native artifact is missing or fails its integrity check.
+	ErrArtifactsUnavailable = errors.New("pinned provider artifacts are unavailable")
+	// The exact Runtime artifacts could not be transferred or verified.
+	ErrRuntimeDownloadFailed = errors.New("Runtime preparation failed")
+	// The pinned Runtime image is not available to the Provider.
+	ErrRuntimeImageUnavailable = errors.New("pinned Runtime image is unavailable")
+	// The host cannot hold one sandbox of the deployment specification.
+	ErrCapacityInsufficient = errors.New("node cannot provide one sandbox of the deployment specification")
+)
+
+// CheckCapacity reports whether a host can hold one sandbox of the given resources.
+func CheckCapacity(r Resources, cpus int, memory uint64) error {
+	if cpus < int(r.CPUs) || memory < uint64(r.MemoryMiB)*1024*1024 {
+		return fmt.Errorf("%w: one sandbox requires %d CPUs and %d MiB memory; available host capacity is %d CPUs and %d MiB", ErrCapacityInsufficient, r.CPUs, r.MemoryMiB, cpus, memory/1024/1024)
+	}
+	return nil
+}
+
+type NodeDiagnosticCode string
+
+const (
+	NodeProviderUnavailable     NodeDiagnosticCode = "provider_unavailable"
+	NodeHostUnsupported         NodeDiagnosticCode = "host_unsupported"
+	NodeArtifactsUnavailable    NodeDiagnosticCode = "artifacts_unavailable"
+	NodeRuntimeDownloadFailed   NodeDiagnosticCode = "runtime_download_failed"
+	NodeRuntimeImageUnavailable NodeDiagnosticCode = "runtime_image_unavailable"
+	NodeCapacityInsufficient    NodeDiagnosticCode = "capacity_insufficient"
+)
 
 var nodeDiagnostics = []struct {
 	err  error
-	code string
+	code NodeDiagnosticCode
 }{
+	{ErrProviderUnavailable, NodeProviderUnavailable},
+	{ErrHostUnsupported, NodeHostUnsupported},
+	{ErrArtifactsUnavailable, NodeArtifactsUnavailable},
 	{ErrRuntimeDownloadFailed, NodeRuntimeDownloadFailed},
-	{ErrDockerUnavailable, "docker_unavailable"},
-	{ErrDockerLimitsUnsupported, "docker_limits_unsupported"},
-	{ErrRuntimeImageUnavailable, "runtime_image_unavailable"},
-	{ErrKVMUnavailable, "kvm_unavailable"},
-	{ErrMicrosandboxArtifactsUnavailable, "microsandbox_artifacts_unavailable"},
-	{ErrCapacityInsufficient, "capacity_insufficient"},
+	{ErrRuntimeImageUnavailable, NodeRuntimeImageUnavailable},
+	{ErrCapacityInsufficient, NodeCapacityInsufficient},
 }
 
-// NodeDiagnostic maps a readiness probe result to its fixed code: empty when
-// ready and provider_unavailable when no classified cause is wrapped.
+// NodeDiagnostic maps a readiness probe result to its class code: empty when
+// ready and provider_unavailable when no class is wrapped.
 func NodeDiagnostic(err error) string {
 	if err == nil {
 		return ""
 	}
 	for _, d := range nodeDiagnostics {
 		if errors.Is(err, d.err) {
-			return d.code
+			return string(d.code)
 		}
 	}
-	return NodeProviderUnavailable
+	return string(NodeProviderUnavailable)
 }
 
 // NormalizeNodeDiagnostic keeps an empty or known code. Any other reported value
 // becomes provider_unavailable, so Core never stores node-supplied text.
 func NormalizeNodeDiagnostic(code string) string {
-	if code == "" || code == NodeProviderUnavailable {
+	if code == "" {
 		return code
 	}
 	for _, d := range nodeDiagnostics {
-		if code == d.code {
+		if code == string(d.code) {
 			return code
 		}
 	}
-	return NodeProviderUnavailable
+	return string(NodeProviderUnavailable)
 }

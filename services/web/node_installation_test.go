@@ -35,7 +35,8 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
 	dist, payload := t.TempDir(), t.TempDir()
-	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(payload, "node-install.pyz"), "print('installer')"}, {filepath.Join(payload, "self-hosted-install.pyz"), "print('self-hosted')"}, {filepath.Join(payload, "caller.key"), "must-not-be-served"}} {
+	release := activeRelease(t, payload, map[string]any{})
+	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(release, "node-install.pyz"), "print('installer')"}, {filepath.Join(release, "self-hosted-install.pyz"), "print('self-hosted')"}, {filepath.Join(release, "caller.key"), "must-not-be-served"}} {
 		if err := os.WriteFile(file.path, []byte(file.value), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -89,8 +90,7 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 		// Web verifies each downloaded installer against these digests before running it.
 		nodeDigest := sha256.Sum256([]byte("print('installer')"))
 		if tc.path == "/console/config" && tc.status == 200 && (!strings.Contains(body, `"node_installer":true`) ||
-			!strings.Contains(body, `"node_installer_sha256":"`+hex.EncodeToString(nodeDigest[:])+`"`) || strings.Contains(body, "self_hosted_installer") ||
-			strings.Contains(body, "sandbox_admin") || strings.Contains(body, "api_keys")) {
+			!strings.Contains(body, `"node_installer_sha256":"`+hex.EncodeToString(nodeDigest[:])+`"`) || strings.Contains(body, "self_hosted_installer")) {
 			t.Fatalf("console configuration = %s", body)
 		}
 	}

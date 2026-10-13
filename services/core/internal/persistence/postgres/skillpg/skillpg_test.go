@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -37,9 +39,11 @@ func newFixture(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Ciphe
 	return fixture{pool: pool, store: store, service: service}
 }
 
-func testCipher(t *testing.T, seed byte) *credentialcrypto.Cipher {
+// otherKey is a credential key other than pgtest.CredentialKey, for a test that
+// a replaced key cannot open content.
+func otherKey(t *testing.T) *credentialcrypto.Cipher {
 	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{seed}, 32))
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{0x5a}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +99,7 @@ func (f fixture) rowCounts(t *testing.T, skill uuid.UUID) (skillRows, versionRow
 }
 
 func TestOwnershipEncryptionAndVersions(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 41))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	bundle := proofArchive(t, "confidential-skill-canary")
@@ -104,9 +108,9 @@ func TestOwnershipEncryptionAndVersions(t *testing.T) {
 	if created.DefaultVersion != 1 || created.LatestVersion != 1 {
 		t.Fatal("initial pointers", created)
 	}
-	metadata, err := skillpg.New(pgunit.NewPool(f.pool), nil).Skill(ctx, tenant, id)
+	metadata, err := skillpg.New(pgunit.NewPool(f.pool), pgtest.CredentialKey(t)).Skill(ctx, tenant, id)
 	if err != nil || metadata.Name != "proof" {
-		t.Fatal("metadata requires no content key", err)
+		t.Fatal("metadata required the content key", err)
 	}
 	var contents []byte
 	if err = f.pool.QueryRow(ctx, "SELECT contents FROM skill_versions WHERE tenant_id=$1", tenant).Scan(&contents); err != nil {
@@ -227,7 +231,7 @@ func TestOwnershipEncryptionAndVersions(t *testing.T) {
 
 // A zero page is empty; HasMore reports whether a resource follows the cursor.
 func TestListsAcceptLimitZero(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 43))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	bundle := proofArchive(t, "limit-zero")
@@ -285,9 +289,9 @@ func TestListsAcceptLimitZero(t *testing.T) {
 
 func TestMetadataTracksDefaultVersion(t *testing.T) {
 	pool := pgtest.Open(t)
-	f := newFixture(t, pool, testCipher(t, 74))
-	// Metadata reads and default changes need no content key.
-	metadataOnly := newFixture(t, pool, nil)
+	f := newFixture(t, pool, otherKey(t))
+	// Metadata reads and default changes work under a replaced key.
+	replaced := newFixture(t, pool, pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	names := []string{"first-proof", "second-proof", "third-proof"}
@@ -306,12 +310,12 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 	}
 	assertStored := func(version, latest int64) {
 		t.Helper()
-		value, err := metadataOnly.store.Skill(ctx, tenant, id)
+		value, err := replaced.store.Skill(ctx, tenant, id)
 		if err != nil {
 			t.Fatal("metadata read without content key", err)
 		}
 		assertMetadata(value, version, latest)
-		page, err := metadataOnly.service.ListSkills(ctx, skills.ListSkills{TenantID: tenant, Limit: 10, Ascending: true})
+		page, err := replaced.service.ListSkills(ctx, skills.ListSkills{TenantID: tenant, Limit: 10, Ascending: true})
 		if err != nil || len(page.Skills) != 1 {
 			t.Fatal("metadata list without content key", page, err)
 		}
@@ -327,28 +331,23 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 	}
 	assertStored(1, 2)
 	for _, version := range []string{"2", "1"} {
-		updated, err := metadataOnly.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: version})
+		updated, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: version})
 		if err != nil {
 			t.Fatal("default update without content key", err)
 		}
 		assertMetadata(updated, updated.DefaultVersion, 2)
 		assertStored(updated.DefaultVersion, 2)
 	}
-	if _, err := metadataOnly.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: foreign, SkillID: id, Version: "2"}); !errors.Is(err, skills.ErrNotFound) {
+	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: foreign, SkillID: id, Version: "2"}); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("foreign default update", err)
 	}
-	if _, err := metadataOnly.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrNotFound) {
+	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("missing default update", err)
 	}
 	assertStored(1, 2)
-	// Uploads and content reads need the key; the failed upload stores nothing.
-	if _, err := metadataOnly.service.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: id, Archive: archives[2]}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("upload without content key", err)
+	if _, err := replaced.service.ReadDefaultVersion(ctx, skills.ReadDefaultVersion{TenantID: tenant, SkillID: id}); err == nil || errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("a replaced key opened content", err)
 	}
-	if _, err := metadataOnly.service.ReadDefaultVersion(ctx, skills.ReadDefaultVersion{TenantID: tenant, SkillID: id}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("content read without content key", err)
-	}
-	assertStored(1, 2)
 	if _, err := f.service.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: id, Archive: archives[2], MakeDefault: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -363,7 +362,7 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 
 // Deleting the sole version deletes the Skill and all its rows in one commit.
 func TestSoleVersionDeletionRemovesSkill(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 63))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	skill := f.create(t, tenant, proofArchive(t, "sole-version"))
@@ -413,7 +412,7 @@ func TestSoleVersionDeletionRemovesSkill(t *testing.T) {
 // commits first makes the default undeletable, and a deletion that commits
 // first makes the later upload miss the Skill. Neither loses acknowledged data.
 func TestSoleVersionDeletionSerializesWithUpload(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 63))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	for _, uploadFirst := range []bool{true, false} {
@@ -469,6 +468,42 @@ func TestSoleVersionDeletionSerializesWithUpload(t *testing.T) {
 	}
 }
 
+// LockSkills locks each named Skill of the tenant once, and
+// ReadVersionForFreeze opens a version only with the key that sealed it.
+func TestFreezeReads(t *testing.T) {
+	cipher := pgtest.CredentialKey(t)
+	f := newFixture(t, pgtest.Open(t), cipher)
+	ctx := t.Context()
+	tenant := uuid.NewString()
+	content := proofArchive(t, "freeze-first")
+	first := f.create(t, tenant, content)
+	second := f.create(t, tenant, archive(t, "other", "Another Skill.", "freeze-second"))
+	tenantID := pgtype.UUID{Bytes: uuid.MustParse(tenant), Valid: true}
+	q := sqlc.New(f.pool)
+	locked, err := skillpg.LockSkills(ctx, q, tenantID, []string{second.ID, first.ID, second.ID})
+	if err != nil || len(locked) != 2 || locked[first.ID].ID != first.ID || locked[second.ID].DefaultVersion != 1 {
+		t.Fatal("locked Skills", locked, err)
+	}
+	for _, ids := range [][]string{{first.ID, "skill_" + uuid.NewString()}, {"malformed"}} {
+		if _, err := skillpg.LockSkills(ctx, q, tenantID, ids); !errors.Is(err, skills.ErrNotFound) {
+			t.Fatal("missing Skill", ids, err)
+		}
+	}
+	if _, err := skillpg.LockSkills(ctx, q, pgtype.UUID{Bytes: uuid.New(), Valid: true}, []string{first.ID}); !errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("foreign Skill", err)
+	}
+	read, err := skillpg.ReadVersionForFreeze(ctx, q, cipher, tenantID, first.ID, 1)
+	if err != nil || read.Version.Version != 1 || !bytes.Equal(read.Archive, content) {
+		t.Fatal("frozen version", err)
+	}
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, cipher, tenantID, first.ID, 2); !errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("missing version", err)
+	}
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, otherKey(t), tenantID, first.ID, 1); err == nil || errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("another key opened the version", err)
+	}
+}
+
 // waitForLockWaiters waits until count sessions queue behind holder.
 func waitForLockWaiters(t *testing.T, pool *pgxpool.Pool, holder int32, count int) {
 	t.Helper()
@@ -494,7 +529,7 @@ func waitForLockWaiters(t *testing.T, pool *pgxpool.Pool, holder int32, count in
 // Text PostgreSQL cannot store, here a YAML-escaped U+0000 in the manifest
 // description, is the shared unstorable-text error and stores nothing.
 func TestUnstorableTextStoresNothing(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 45))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	bad := archive(t, "proof", `"before\0after"`, "unstorable")
@@ -516,7 +551,7 @@ func TestUnstorableTextStoresNothing(t *testing.T) {
 
 // A malformed tenant is invalid input, not a database error.
 func TestMalformedTenantIsInvalidInput(t *testing.T) {
-	f := newFixture(t, pgtest.Open(t), testCipher(t, 46))
+	f := newFixture(t, pgtest.Open(t), pgtest.CredentialKey(t))
 	if _, err := f.service.CreateSkill(t.Context(), skills.CreateSkill{TenantID: "not-a-tenant", Archive: proofArchive(t, "tenant")}); !errors.Is(err, skills.ErrInvalidInput) {
 		t.Fatal("create", err)
 	}

@@ -18,9 +18,9 @@ type sandboxCreationRecorder struct {
 	calls int
 }
 
-func (r *sandboxCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
+func (r *sandboxCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
-	return sessions.Session{}, sessions.ErrInvalidInput
+	return sessions.Creation{}, sessions.ErrInvalidInput
 }
 
 // Placement is automatic. A node selector is an unknown member wherever it appears.
@@ -33,7 +33,6 @@ func TestSessionCreationRejectsSandboxNodeSelector(t *testing.T) {
 	} {
 		recorder := &sandboxCreationRecorder{}
 		handler, _ := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
-			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
 			f.sessionAdmission.createSession = recorder.CreateSession
 		})
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))

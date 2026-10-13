@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: a93a477f3de39b2206702995821282404c29ee997ef6b782180d4972bada43f7
+source_hash: 9007be1099cf50f5ba376d2de4a060d039b6ee0b1c13c78a94665c28c2fc3fc6
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -93,6 +93,8 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 ## 输入接纳 {#input-admission}
 
 Session 输入通过 `POST /agents/sessions/{id}/events` 以每次 1–64 个事件的有序批次提交。对于带 Environment 的 Session，Core 会将尚不能启动的输入预留，直到 Environment 完成连接和准备。
+
+有效的节点模式创建可以在提交后等待计算容量。初始输入在等待期间仍使用同一 reservation 和期限；无输入创建也会请求 Environment 准备。[Placement 与代次选择](./sandbox-deployment.md#generation-ownership-and-rollout) 定义调度规则。
 
 ### 初始输入 {#initial-input}
 
@@ -213,9 +215,11 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 - 设置命令使用 Bash 运行；在 Windows 上必须使用 Git Bash，且不能由其他 shell 替代。默认工作目录为 `/workspace`。
 - 在 Windows 上，npm 安装以及名为 `npm` 或 `npx` 的 stdio MCP 命令（包括其 `.cmd` shim）会通过 Node 调用 npm 的 JavaScript 入口点运行，而不经过额外的 shell。
 
-初始化目录和软件包目录默认分别是 Runtime 主目录（`OAC_RUNTIME_HOME`）下的 `initialization` 和 `packages`，也可通过 `OAC_RUNTIME_INITIALIZATION_DIRECTORY` 和 `OAC_RUNTIME_PACKAGE_DIRECTORY` 设置；打包的 Linux 镜像使用 `/environment/initialization` 和 `/environment/packages`。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
+[Runtime 资源目录](../../../docs/zh/configuration.md#runtime-resource-directories)定义初始化、软件包和私有状态的位置。这些是资源路径，在 Core 中绝不是 Environment 源或操作系统开关。
 
 每条命令都使用启动用户的权限和主机网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
+
+使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[Sandbox Provider 生命周期](../../../docs/zh/sandbox-provider.md#suspension)定义何时可以替换计算。
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 
@@ -227,7 +231,7 @@ Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed
 
 - Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于 Provider 维护。
 - 缺少套接字不会消耗一次 pending 尝试。Harness 不可用时，会在安装前失败。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
-- 每个文件传输、configure、Skill、Plugin、软件包和设置步骤都有两分钟的预算；整个初始化过程有 30 分钟。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
+- 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
 
@@ -273,7 +277,7 @@ session = client.beta.agents.sessions.create(
 - 响应会携带安全元数据，绝不会包含 `env`、`setup_commands` 正文或内联文件数据。
 - 列表操作使用 `after`、`limit`（默认 20；0 按 1 处理，超过 100 的值按 100 处理）和 `order`（默认 `desc`），并按创建时间和 ID 排序。不存在和属于外部 Project 的 Template ID 及游标都会返回相同的 404。
 - 更新时，省略字段会保留原值，提供字段则会替换原值。Null 会清除 `name` 和每个列表，并将 `network` 重置为启用。
-- 封装或解封机密内容（文件、env、设置命令、Skills、Plugins）的写入操作和 Session 解析需要 Core 的 [credential key](../../../docs/zh/configuration.md#installation-directory)；元数据读取则不需要。
+- 封装或解封机密内容（文件、env、设置命令、Skills、Plugins）的写入操作和 Session 解析需要 Core 的 [credential key](../../../docs/zh/configuration.md#compose-installations)；元数据读取则不需要。
 - Session 会在创建时于其 Project 内解析一次 `environment_template_id`，冻结有效配置，并且绝不将 Template ID 传递给 Provider 或 Runtime。更新或删除 Template 绝不会改变现有 Session。创建重试会在读取 Template 之前恢复已记录的调用方意图，即使 Template 已删除也是如此；意图发生变化时会产生冲突。
 
 ### 继承 {#inheritance}

@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: ba7de54c4533b7aa4dc66e3e04aa3687d964faef7c2158740b930e4758567fc1
+source_hash: f7e9275feee79ac1fb1299227e148b85c26efc8b8af5ca0e8f498126c563d182
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动托管 Runtime。本文负责 Provider 到 Runtime 的启动输入。类型与验证器位于 [`internal/runtimebootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/runtimebootstrap/bootstrap.go)；Go provider 使用 [`runtime_bootstrap.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/runtime_bootstrap.go) 中的 `sandbox.Bootstrap.RuntimeConnection()` 构造输入，SDK helper 原样转发序列化对象。provider 不读取或写入 Runtime 的私有认证存储。
@@ -23,7 +23,7 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 
 解码器拒绝未知、重复、缺失和大小写别名字段，拒绝其他版本及超过 `runtimebootstrap.MaxBytes`（16 KiB）的文档。错误不包含提交的值。文件缺失或格式错误时，daemon 在连接前失败。
 
-该文件是此次启动唯一的认证输入：daemon 拒绝将其与配对或自托管注册选项组合使用，并将凭据读入内存而不保存到存储的 profile。凭据不进入命令参数、环境变量或回执。provider 为进程重启保留该文件，仅在明确清理自己拥有的资源时删除。
+该文件是此次启动唯一的认证输入：daemon 拒绝将其与自托管注册选项组合使用，并将凭据读入内存而不保存到存储的 profile。凭据不进入命令参数、环境变量或回执。provider 为进程重启保留该文件，仅在明确清理自己拥有的资源时删除。
 
 ## 职责与就绪状态 {#responsibilities-and-readiness}
 

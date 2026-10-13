@@ -95,17 +95,6 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	return nil
 }
 
-// Neither selecting private state nor selecting its parent grants workspace access.
-func environmentPathsOverlap(first, second string) bool {
-	for _, pair := range [][2]string{{first, second}, {second, first}} {
-		relative, err := filepath.Rel(pair[0], pair[1])
-		if err == nil && (relative == "." || filepath.IsLocal(relative)) {
-			return true
-		}
-	}
-	return false
-}
-
 func saveEnvironmentBinding(root string, want environmentBinding) error {
 	// Store the binding with the other daemon state.
 	dir := filepath.Join(root, "daemon")

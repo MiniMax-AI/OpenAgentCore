@@ -25,7 +25,7 @@ func TestClassifiedBridgeFailurePreservesTerminalEvidence(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
-			s, err := NewFactory(config)(ctx, req, out)
+			s, err := startSingleTurn(ctx, config, req, out)
 			if err != nil {
 				t.Fatal(err)
 			}

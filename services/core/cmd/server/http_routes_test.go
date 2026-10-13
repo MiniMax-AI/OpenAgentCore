@@ -97,6 +97,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
 		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
 		Sessions:        struct{ api.Sessions }{},
+		SessionsReader:  struct{ api.SessionsReader }{},
 		SessionCreation: struct{ api.SessionCreation }{},
 		SessionEvents:   struct{ api.SessionEvents }{},
 		Turns:           struct{ api.Turns }{},
@@ -106,15 +107,15 @@ func daemonComposition(t testing.TB) http.Handler {
 		ArtifactsReader: struct{ api.ArtifactsReader }{},
 		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
-		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
-		Execution: &api.Execution{
+		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{}, WorkspaceStorage: struct{ api.WorkspaceStorage }{},
+		Execution: api.Execution{
 			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
 			SessionAdmission: struct{ api.SessionAdmission }{},
 			InputAdmission:   struct{ api.InputAdmission }{},
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 		},
-		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: unusedNodeAllocations{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
+		Sandboxes: api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: unusedNodeAllocations{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
 			DeploymentReset: struct{ api.DeploymentReset }{}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {

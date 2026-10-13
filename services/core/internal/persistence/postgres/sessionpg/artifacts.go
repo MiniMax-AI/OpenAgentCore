@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -138,7 +138,7 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 		if err := objects.Unlink(ctx, oid.Uint32); err != nil {
 			return err
 		}
-		return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "artifact", uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
+		return auditpg.RecordWriteAudit(ctx, q, tenantID, writeaudit.ActionDelete, writeaudit.ResourceArtifact, uuid.UUID(lookup.ID.Bytes).String(), uuid.UUID(lookup.SessionID.Bytes).String())
 	})
 }
 
@@ -173,7 +173,7 @@ type artifactStaging struct {
 
 func (t *artifactStaging) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
 	row, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.turn.TenantID, ID: t.turn.SessionID})
-	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, row.ExternalWorkspace, err)
 }
 
 func (t *artifactStaging) PutArtifactContent(ctx context.Context, path string, size int64, content io.Reader) error {

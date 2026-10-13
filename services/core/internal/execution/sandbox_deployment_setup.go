@@ -22,14 +22,11 @@ type PreparedRuntimeDeployment struct {
 type RuntimeDeploymentPreparer func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error)
 
 // NewDeferredRuntimeProvider enables Web setup for one fixed installation. The
-// loader returns nil until selection, then the committed immutable generation.
-// Replacement is serialized by the deployment mutation gate and drain flow.
-func NewDeferredRuntimeProvider(installationID string, load func(context.Context) (*RuntimeProvider, error), prepare ...RuntimeDeploymentPreparer) *RuntimeProvider {
-	config := &RuntimeProvider{InstallationID: installationID, loadDeployment: load}
-	if len(prepare) == 1 {
-		config.prepareDeployment = prepare[0]
-	}
-	return config
+// loader returns nil until selection, then the committed immutable generation;
+// prepare validates each new selection before it is stored. Replacement is
+// serialized by the deployment mutation gate and drain flow.
+func NewDeferredRuntimeProvider(installationID string, load func(context.Context) (*RuntimeProvider, error), prepare RuntimeDeploymentPreparer) *RuntimeProvider {
+	return &RuntimeProvider{InstallationID: installationID, loadDeployment: load, prepareDeployment: prepare}
 }
 
 func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input sandbox.Selection) (deployment.View, error) {
@@ -39,6 +36,10 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input sandbox.
 	}
 	defer unlock()
 	m := w.runtimes
+	input, err = m.workspaceSelection(ctx, input)
+	if err != nil {
+		return deployment.View{}, err
+	}
 	if err := m.deployment.CheckSetup(ctx, m.setupInstallationID, input); err != nil {
 		return deployment.View{}, err
 	}
@@ -67,9 +68,6 @@ func (w *Worker) InitializeSandboxDeployment(ctx context.Context, input sandbox.
 // ensureDeployment serializes the first configuration read without holding the
 // node map lock across database access. All node workers copy this same snapshot.
 func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) {
-	if m.loadDeployment == nil {
-		return true, nil
-	}
 	ctx, finish, err := m.enter(parent)
 	if err != nil {
 		return false, err
@@ -97,7 +95,7 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 	if err != nil || config == nil {
 		return false, err
 	}
-	if config.InstallationID != m.setupInstallationID || config.LocalNodeID != "" || config.loadDeployment != nil || config.ProviderKind == "" {
+	if config.InstallationID != m.setupInstallationID || config.loadDeployment != nil {
 		return false, sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)
@@ -119,9 +117,7 @@ func (m *runtimeManager) ensureDeployment(parent context.Context) (bool, error) 
 // Preparation is outside the manager mutex and all database transactions. A
 // rejected candidate cannot retire the current generation or its node lanes.
 func (m *runtimeManager) prepareCandidate(ctx context.Context, input sandbox.Selection) (PreparedRuntimeDeployment, error) {
-	if m.prepareDeployment == nil {
-		return PreparedRuntimeDeployment{}, ErrExecutionUnavailable
-	}
+
 	setup, err := m.deploymentService.SetupForSelection(m.setupInstallationID, input)
 	if err != nil {
 		return PreparedRuntimeDeployment{}, err
@@ -131,7 +127,7 @@ func (m *runtimeManager) prepareCandidate(ctx context.Context, input sandbox.Sel
 		return PreparedRuntimeDeployment{}, err
 	}
 	config := candidate.Config
-	if config == nil || config.InstallationID != setup.InstallationID || config.ProviderKind != setup.Provider || config.Mode != setup.Mode || config.CoreURL == "" || config.BackendFingerprint != setup.BackendFingerprint || config.LocalNodeID != "" || config.loadDeployment != nil || config.prepareDeployment != nil {
+	if config == nil || config.InstallationID != setup.InstallationID || config.ProviderKind != setup.Provider || config.Mode != setup.Mode || config.CoreURL == "" || config.BackendFingerprint != setup.BackendFingerprint || config.loadDeployment != nil || config.prepareDeployment != nil {
 		return PreparedRuntimeDeployment{}, sandbox.ErrInvalid
 	}
 	copied, err := validatedRuntimeProvider(config, m.registry)
@@ -158,13 +154,13 @@ func (m *runtimeManager) prepareCandidate(ctx context.Context, input sandbox.Sel
 	return candidate, nil
 }
 
-// The store commit is the point of no return. Publishing a validated candidate
+// The deployment commit is the point of no return. Publishing a validated candidate
 // is infallible, including when shutdown or request cancellation follows commit.
 func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, committed deployment.View) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	config := *candidate.Config
-	config.Generation, config.AdmissionPaused = committed.Generation, committed.Reset != nil
+	config.Generation = committed.Generation
 	if m.switching {
 		m.nodes = make(map[string]*runtimeNode)
 	}
@@ -174,4 +170,22 @@ func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, 
 	}
 	m.switching = false
 	m.switchDrained = nil
+}
+
+// workspaceSelection derives the external declaration before generation preflight
+// and equality checks; callers hold the deployment mutation gate.
+func (m *runtimeManager) workspaceSelection(ctx context.Context, input sandbox.Selection) (sandbox.Selection, error) {
+	if m.workspaces != nil {
+		declaration, err := m.workspaces.Declaration(ctx)
+		if err != nil {
+			return sandbox.Selection{}, err
+		}
+		if input.Workspace != nil && (declaration == nil || *input.Workspace != *declaration) {
+			return sandbox.Selection{}, sandbox.ErrInvalid
+		}
+		input.Workspace = declaration
+	} else if input.Workspace != nil {
+		return sandbox.Selection{}, sandbox.ErrInvalid
+	}
+	return input, nil
 }

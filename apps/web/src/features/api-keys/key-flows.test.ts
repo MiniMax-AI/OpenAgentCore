@@ -1,6 +1,5 @@
-import { AgentCoreError } from "@oac/agents-client";
+import { type AdminAPIKey, type AdminIssuedAPIKey, type AdminProject, AgentCoreError } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
-import { type AdminIssuedKey, type AdminKey, type Project } from "../../lib/admin-view";
 
 import {
   activeKeyNames,
@@ -19,10 +18,11 @@ import {
   type KeyFlowEvent,
 } from "./key-flows";
 
-const project: Project = { id: "proj_7f3a91c2", name: "Production", status: "active", created_at: 100, archived_at: null, active_key_count: 1 };
-const archived: Project = { ...project, id: "proj_0b533e99", name: "Legacy", status: "archived", archived_at: 200, active_key_count: 0 };
+const at = (seconds: number) => new Date(seconds * 1000).toISOString();
+const project: AdminProject = { id: "proj_7f3a91c2", name: "Production", created_at: at(100), archived_at: null, active_key_count: 1 };
+const archived: AdminProject = { ...project, id: "proj_0b533e99", name: "Legacy", archived_at: at(200), active_key_count: 0 };
 const secret = "pc_live_" + "x".repeat(40);
-const issued: AdminIssuedKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", project_id: "proj_7f3a91c2", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: 300, revoked_at: null, key: secret };
+const issued: AdminIssuedAPIKey = { id: "9f0e1d2c-3b4a-4c5d-8e6f-7a8b9c0d1e2f", project_id: "proj_7f3a91c2", name: "bob-laptop", prefix: "pc_live_Zq8", created_at: at(300), revoked_at: null, key: secret };
 
 const run = (events: KeyFlowEvent[], from: KeyFlow = idleFlow) => events.reduce(keyFlowReducer, from);
 
@@ -47,7 +47,7 @@ describe("project and key names", () => {
     expect(keyNameProblem("tab\there")).toBe("invalid");
     expect(projectNameProblem(" Production", ["Production", "Data team"])).toBe("taken");
     expect(keyNameProblem("alice", activeKeyNames([
-      { id: "a", project_id: "proj_7f3a91c2", name: "alice", prefix: "pc_a", created_at: 1, revoked_at: 2 },
+      { id: "a", project_id: "proj_7f3a91c2", name: "alice", prefix: "pc_a", created_at: at(1), revoked_at: at(2) },
     ]))).toBeNull();
     expect(isUsableName("Production", projectNameProblem("Production", ["Production"]))).toBe(false);
   });
@@ -109,7 +109,7 @@ describe("issuing a key", () => {
 
 describe("helpers", () => {
   it("lists active keys first, newest first", () => {
-    const key = (id: string, created: number, revoked: number | null = null): AdminKey => ({ id, project_id: "proj_7f3a91c2", name: id, prefix: `pc_${id}`, created_at: created, revoked_at: revoked });
+    const key = (id: string, created: number, revoked: number | null = null): AdminAPIKey => ({ id, project_id: "proj_7f3a91c2", name: id, prefix: `pc_${id}`, created_at: at(created), revoked_at: revoked === null ? null : at(revoked) });
     expect(sortKeys([key("old", 1), key("gone", 5, 6), key("new", 3)]).map((entry) => entry.id)).toEqual(["new", "old", "gone"]);
   });
 
@@ -120,10 +120,10 @@ describe("helpers", () => {
   });
 
   it("counts the keys archiving revokes from the project read, or from its key list when that shows more", () => {
-    const key = (id: string, projectId = project.id, revoked: number | null = null): AdminKey => ({ id, project_id: projectId, name: id, prefix: `pc_${id}`, created_at: 1, revoked_at: revoked });
+    const key = (id: string, projectId = project.id, revoked: string | null = null): AdminAPIKey => ({ id, project_id: projectId, name: id, prefix: `pc_${id}`, created_at: at(1), revoked_at: revoked });
     const stale = { ...project, active_key_count: 0 };
     expect(archiveKeyCount(stale, undefined)).toBe(0);
-    expect(archiveKeyCount(stale, [key("new"), key("old", project.id, 5), key("other", "proj_other")])).toBe(1);
+    expect(archiveKeyCount(stale, [key("new"), key("old", project.id, at(5)), key("other", "proj_other")])).toBe(1);
     expect(archiveKeyCount({ ...project, active_key_count: 3 }, [key("new")])).toBe(3);
   });
 

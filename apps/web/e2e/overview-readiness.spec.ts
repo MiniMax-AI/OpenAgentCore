@@ -87,7 +87,8 @@ test("local-only address links to System on other pages and blocks Add node", as
   await expect(notice).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();
   await expect(page.getByText("Add node is unavailable while the public address is local only.")).toBeVisible();
-  await page.getByRole("button", { name: "System", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Service and deployment", exact: true }).click();
   await expect(notice).toBeVisible();
   await expect(notice.getByRole("button", { name: "Review the public address" })).toHaveCount(0);
   expect(await writes(request)).toEqual([]);
@@ -164,7 +165,7 @@ test("failed summary and Session refreshes preserve their previous evidence unti
 });
 
 test("installation failure cannot complete onboarding and its retry reveals local-only blockage", async ({ page, request }) => {
-  await page.addInitScript(() => window.localStorage.setItem("agents-core-web.getting-started.7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", "open"));
+  await page.addInitScript(() => window.localStorage.setItem("oac-web.getting-started.7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", "open"));
   await page.route("**/core/v1/installation", (route) => route.fulfill(reject));
   await openConsole(page, request, "overview", { installation: "local" });
   const step = page.locator(".getting-started-step").first();

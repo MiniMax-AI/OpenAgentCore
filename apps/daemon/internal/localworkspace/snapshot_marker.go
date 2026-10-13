@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"github.com/google/uuid"
@@ -30,8 +29,11 @@ func (b *Binding) openSnapshotMarker() (*snapshotMarker, error) {
 			return nil, agentcapabilities.ErrInvalid
 		}
 	}
-	private, err := paths.Root()
-	if err != nil || agentcapabilities.ValidateLocalDirectories([]string{private}) != nil {
+	private := b.stateRoot
+	if agentcapabilities.ValidateLocalDirectories([]string{private}) != nil {
+		return nil, agentcapabilities.ErrInvalid
+	}
+	if err := os.MkdirAll(private, 0700); err != nil {
 		return nil, agentcapabilities.ErrInvalid
 	}
 	current, err := os.OpenRoot(private)

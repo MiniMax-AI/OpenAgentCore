@@ -10,7 +10,7 @@
 | `cmd/device` | `oac-core-device` | Provisions or revokes an [operator device profile](../../contracts/agents-api/machine-api.md#operator-device-profile) for `environment: none` engine hosts |
 | `cmd/environment-key` | `oac-core-environment-key` | The [break-glass executor credential command](../../contracts/agents-api/environment-executor-credentials.md#break-glass-command) |
 | `cmd/sandbox-node` | `oac-node` | The sandbox node program; see the [nodes guide](../../docs/getting-started/nodes.md) |
-| `cmd/specification-contract` | None | Regenerates the installer's node specification projection |
+| `cmd/specification-contract` | None | Regenerates the deployment contract projections of the node installer and the TypeScript client |
 
 `make build-core` builds the four executables into `~/.oac/build/oac-core`; [Standalone Core builds](../../docs/maintainers.md#standalone-core-builds) describes the build and its options. `make build-daemon` builds `oac-daemon`.
 
@@ -22,19 +22,23 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
 
 1. Create a development database. Core applies the migrations when it starts.
 
-2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`:
+2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`, the credential key that seals stored credentials, and the installation ID. Keep the credential key and the ID with the database:
 
    ```sh
    umask 077; mkdir -p ~/.oac/dev
    openssl rand -hex 32 > ~/.oac/dev/core.key
    printf '["%s"]\n' "$(tr -d '\n' < ~/.oac/dev/core.key | sha256sum | cut -d' ' -f1)" > ~/.oac/dev/core-key-digests.json
+   openssl rand -base64 32 > ~/.oac/dev/credential.key
+   uuidgen | tr '[:upper:]' '[:lower:]' > ~/.oac/dev/installation.id
    ```
 
-3. Start Core. `OAC_PUBLIC_URL` enables the Runtime gateway and the Worker; without it Core executes nothing. The [Core environment table](../../docs/configuration.md#appendix-core-environment-without-the-installer) lists every variable.
+3. Start Core. The [Core environment table](../../docs/configuration.md#appendix-core-environment-without-the-installer) lists every variable.
 
    ```sh
    OAC_DATABASE_URL='postgres://oac:…@127.0.0.1:5432/oac_dev' \
    OAC_CORE_KEY_DIGESTS_FILE="$HOME/.oac/dev/core-key-digests.json" \
+   OAC_CREDENTIAL_KEY_FILE="$HOME/.oac/dev/credential.key" \
+   OAC_INSTALLATION_ID_FILE="$HOME/.oac/dev/installation.id" \
    OAC_PUBLIC_URL=http://127.0.0.1:8091 \
    go run ./services/core/cmd/server
    ```
@@ -44,7 +48,7 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
 
 ## Tests
 
-`make check-core` builds Core and runs the Go tests of `services/core` and `packages/agents-client`. Point `OAC_TEST_DATABASE_URL` at a dedicated database named `oac_*_tests` that holds no other tables; the tests apply only Core's migrations and use fresh tenants without truncating anything. Without it, database tests skip locally; CI provides its own PostgreSQL. Set `OAC_TEST_OFFICIAL_SDK_PYTHON` to the interpreter with the pinned SDK for the store's client fixtures. [Validate a change](../../docs/development.md#validate-a-change) lists the focused checks for other areas.
+`make check-core` builds Core and runs the Go tests of `services/core` and `packages/agents-client`. Point `OAC_TEST_DATABASE_URL` at a dedicated database named `oac_*_tests` that holds no other tables; the tests apply only Core's migrations and use fresh tenants without truncating anything. Without it, database tests skip locally; CI provides its own PostgreSQL. Set `OAC_TEST_OFFICIAL_SDK_PYTHON` to the interpreter with the pinned SDK for the official-client tests in `tests/integration`. [Validate a change](../../docs/development.md#validate-a-change) lists the focused checks for other areas.
 
 ### Official client verification
 
@@ -62,4 +66,4 @@ It checks the upstream and generated response schemas, retries, ordering, tenant
 
 ## Generated contracts
 
-Handler annotations generate the OpenAPI documents. Run `make openapi` after changing them: it runs the pinned swaggo generator and splits the result by namespace into [`openapi.yaml`](../../contracts/agents-api/openapi.yaml) (`/v1`), [`core.openapi.yaml`](../../contracts/agents-api/core.openapi.yaml) (`/core/v1`) and [`runtime.openapi.yaml`](../../contracts/agents-api/runtime.openapi.yaml) (`/api/v1`), each with only the security schemes its operations use. Review and commit the three diffs. Contract tests hold `openapi.yaml` to the pinned routes and fields, and hold all three to exactly the routes the server registers.
+Run `make openapi` after changing the pinned public schema, Go bindings, Core extensions or internal handler annotations. The [contract generation guide](../../contracts/agents-api/index.md#pinned-baseline) owns the inputs, generated files and checks. Review and commit the generated diffs. `make check-openapi` verifies freshness; contract tests check all three documents against registered routes.

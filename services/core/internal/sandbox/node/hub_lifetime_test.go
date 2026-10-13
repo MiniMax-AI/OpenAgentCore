@@ -46,7 +46,7 @@ func assertInfoResponsive(t *testing.T, hub *Hub, id Identity) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	info, err := hub.Proxy(id.NodeID, id.Provider, docker.Operations(), 1).GetInfo(ctx, reference())
+	info, err := hub.Proxy(id.NodeID, docker.Operations(), 1).GetInfo(ctx, reference())
 	if err != nil || info.ProviderID != "retained" {
 		t.Fatalf("unrelated node RPC blocked: info=%+v err=%v", info, err)
 	}
@@ -287,7 +287,7 @@ func TestHubSendQueueRespectsCallerCancellation(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, err := hub.Proxy(id.NodeID, id.Provider, docker.Operations(), 1).GetInfo(ctx, reference())
+		_, err := hub.Proxy(id.NodeID, docker.Operations(), 1).GetInfo(ctx, reference())
 		done <- err
 	}()
 	select {

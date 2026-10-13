@@ -8,11 +8,11 @@ import (
 
 // Project is a Core Project as administrators see it.
 type Project struct {
-	ID             string     `json:"id"`
-	Name           string     `json:"name"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ArchivedAt     *time.Time `json:"archived_at"`
-	ActiveKeyCount int64      `json:"active_key_count"`
+	ID             string     `json:"id" binding:"required"`
+	Name           string     `json:"name" binding:"required"`
+	CreatedAt      time.Time  `json:"created_at" binding:"required"`
+	ArchivedAt     *time.Time `json:"archived_at" extensions:"x-nullable" binding:"required"`
+	ActiveKeyCount int64      `json:"active_key_count" binding:"required"`
 	TenantID       string     `json:"-"`
 }
 
@@ -24,8 +24,8 @@ type Binding struct {
 
 // Page is one page of Projects ordered by ID.
 type Page struct {
-	Data    []Project `json:"data"`
-	HasMore bool      `json:"has_more"`
+	Data    []Project `json:"data" binding:"required"`
+	HasMore bool      `json:"has_more" binding:"required"`
 }
 
 // MaxListLimit bounds one page of Projects or API keys.

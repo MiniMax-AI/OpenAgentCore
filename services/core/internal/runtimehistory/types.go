@@ -10,13 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type CollectionMode string
-
-const (
-	CollectionOnRead   CollectionMode = "on_read"
-	CollectionPeriodic CollectionMode = "periodic"
-)
-
 type Metric string
 
 const (
@@ -54,7 +47,6 @@ func validCount(value int) bool {
 // future public capability response. Backend names, endpoints, credentials and
 // tenant identity are deliberately absent.
 type Capabilities struct {
-	CollectionMode     CollectionMode
 	SampleInterval     time.Duration
 	Retention          time.Duration
 	MinimumStep        time.Duration
@@ -65,22 +57,9 @@ type Capabilities struct {
 	Metrics            []Metric
 }
 
-func (c Capabilities) Durable() bool {
-	return c.CollectionMode == CollectionPeriodic && c.SampleInterval > 0
-}
-
 func (c Capabilities) Validate() error {
-	switch c.CollectionMode {
-	case CollectionOnRead:
-		if c.SampleInterval != 0 {
-			return errors.New("on-read Runtime history cannot declare a sampling interval")
-		}
-	case CollectionPeriodic:
-		if c.SampleInterval <= 0 {
-			return errors.New("periodic Runtime history requires a sampling interval")
-		}
-	default:
-		return errors.New("invalid Runtime history collection mode")
+	if c.SampleInterval <= 0 {
+		return errors.New("Runtime history requires a sampling interval")
 	}
 	if c.Retention <= 0 || c.MinimumStep <= 0 || c.MaximumRange <= 0 || c.MaximumRange > c.Retention {
 		return errors.New("invalid Runtime history time bounds")

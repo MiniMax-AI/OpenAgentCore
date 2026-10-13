@@ -6,7 +6,7 @@ import type { AgentTurn, SessionItem } from "@oac/agents-client";
 import { SessionTurnsTable } from "./SessionTurnsTable";
 
 function turn(id: string, overrides: Partial<AgentTurn> = {}): AgentTurn {
-  return { id, agent_id: "agent", session_id: "session", object: "agent.session.turn", status: "completed", created_at: 1, started_at: 10, completed_at: 14, error: null, usage: null, ...overrides };
+  return { id, agent_id: "agent", subagent_id: null, session_id: "session", object: "agent.session.turn", status: "completed", created_at: 1, started_at: 10, completed_at: 14, error: null, usage: null, ...overrides };
 }
 
 const item = (id: string, turnId: string) => ({ id, turn_id: turnId, type: "message", status: "completed", role: "user", content: [] }) as SessionItem;

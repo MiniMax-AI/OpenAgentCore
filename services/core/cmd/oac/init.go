@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
@@ -45,7 +44,6 @@ func initCommand() error {
 		log.Bg().Error("Initialization failed", "step", "validate_revision", "revision", revision, "error", err)
 		return err
 	}
-	syscall.Umask(0o077)
 	release := releaseIdentity{revision}
 	return initialize("/data", release, func() (map[string][]byte, error) {
 		return readRelease("/opt/oac/node-payload", release)
@@ -140,7 +138,7 @@ type installReceipt struct {
 }
 
 func initialize(root string, release releaseIdentity, fetch func() (map[string][]byte, error)) (err error) {
-	ctx, _ := log.StartBackgroundTrace(context.Background(), "installation.init")
+	ctx, _ := log.StartBackgroundTrace(context.Background())
 	logger := log.With("component", "oac-init", "revision", release.revision)
 	started := time.Now()
 	step, stepStarted := "prepare_directories", started
@@ -173,131 +171,129 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 		}
 	}
 	nextStep("acquire_lock")
-	lock, err := os.OpenFile(filepath.Join(root, "secrets", ".init.lock"), os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return err
-	}
-	nextStep("verify_existing_installation")
-	marker := filepath.Join(root, "installation.json")
-	if raw, err := os.ReadFile(marker); err == nil {
-		var receipt installReceipt
-		if err := json.Unmarshal(raw, &receipt); err != nil {
+	return withLock(filepath.Join(root, "secrets", "init"), func() error {
+
+		nextStep("verify_existing_installation")
+		marker := filepath.Join(root, "installation.json")
+		if raw, err := os.ReadFile(marker); err == nil {
+			var receipt installReceipt
+			if err := json.Unmarshal(raw, &receipt); err != nil {
+				return err
+			}
+			if receipt.SourceCommit != release.revision {
+				return errors.New("this data directory belongs to another release; create a new installation")
+			}
+			for name, checksum := range receipt.Files {
+				actual, err := fileDigest(filepath.Join(root, name))
+				if err != nil {
+					return err
+				}
+				if actual != checksum {
+					return errors.New("installation files changed; restore the matching data directory")
+				}
+			}
+			if err := syncCoreKeyDigest(root); err != nil {
+				return err
+			}
+			logger.InfoContext(ctx, "Existing installation verified", "file_count", len(receipt.Files))
+			return nil
+		} else if !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		if receipt.SourceCommit != release.revision {
-			return errors.New("this data directory belongs to another release; create a new installation")
-		}
-		for name, checksum := range receipt.Files {
-			actual, err := fileDigest(filepath.Join(root, name))
+		nextStep("verify_empty_data")
+		for _, name := range []string{"database", "state"} {
+			entries, err := os.ReadDir(filepath.Join(root, name))
 			if err != nil {
 				return err
 			}
-			if actual != checksum {
-				return errors.New("installation files changed; restore the matching data directory")
+			if len(entries) > 0 {
+				return errors.New("existing data requires its original installation files")
 			}
 		}
-		logger.InfoContext(ctx, "Existing installation verified", "file_count", len(receipt.Files))
-		return nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	nextStep("verify_empty_data")
-	for _, name := range []string{"database", "state"} {
-		entries, err := os.ReadDir(filepath.Join(root, name))
+		nextStep("verify_bundled_metadata")
+		files, err := fetch()
 		if err != nil {
 			return err
 		}
-		if len(entries) > 0 {
-			return errors.New("existing data requires its original installation files")
-		}
-	}
-	nextStep("verify_bundled_metadata")
-	files, err := fetch()
-	if err != nil {
-		return err
-	}
-	logger.InfoContext(ctx, "Bundled node installation metadata verified", "file_count", len(files))
-	nextStep("publish_node_metadata")
-	prefix := "node-payload/releases/" + release.revision + "/"
-	names := []string{}
-	for _, name := range releaseMembers {
-		if err := writeOwned(filepath.Join(root, prefix+name), files[name]); err != nil {
-			return err
-		}
-		logger.InfoContext(ctx, "Node metadata file copied", "file", name)
-		names = append(names, prefix+name)
-	}
-	active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
-	if err := writeOwned(filepath.Join(root, "node-payload", "active.json"), active); err != nil {
-		return err
-	}
-	if err := filepath.WalkDir(filepath.Join(root, "node-payload"), func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || !entry.IsDir() {
-			return err
-		}
-		if err := os.Chmod(path, 0o755); err != nil {
-			return err
-		}
-		return chown(path, 65532, 65532)
-	}); err != nil {
-		return err
-	}
-	nextStep("prepare_credentials")
-	generators := []struct {
-		name     string
-		generate func() string
-	}{
-		{"secrets/web/core.key", func() string {
-			key, err := generateCoreKey()
-			if err != nil {
-				panic(err)
-			}
-			return key
-		}},
-		{"secrets/database/password", func() string { return randomHex(32) }},
-		{"secrets/core/credential.key", func() string { return base64.StdEncoding.EncodeToString(randomBytes(32)) }},
-		{"secrets/core/installation.id", func() string { return uuid.NewString() }},
-	}
-	for _, secret := range generators {
-		path := filepath.Join(root, secret.name)
-		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-			if err := writeOwned(path, []byte(secret.generate()+"\n")); err != nil {
+		logger.InfoContext(ctx, "Bundled node installation metadata verified", "file_count", len(files))
+		nextStep("publish_node_metadata")
+		prefix := "node-payload/releases/" + release.revision + "/"
+		names := []string{}
+		for _, name := range releaseMembers {
+			if err := writeOwned(filepath.Join(root, prefix+name), files[name]); err != nil {
 				return err
 			}
-			logger.InfoContext(ctx, "Credential file generated", "file", secret.name)
-		} else if err != nil {
-			return err
-		} else {
-			logger.InfoContext(ctx, "Credential file retained", "file", secret.name)
+			logger.InfoContext(ctx, "Node metadata file copied", "file", name)
+			names = append(names, prefix+name)
 		}
-		names = append(names, secret.name)
-	}
-	key, err := coreKey(root)
-	if err != nil {
-		return err
-	}
-	digests, _ := json.Marshal([]string{keyDigest(key)})
-	if err := writeOwned(filepath.Join(root, "secrets", "core", "core-key-digests.json"), digests); err != nil {
-		return err
-	}
-	names = append(names, "secrets/core/core-key-digests.json", "node-payload/active.json")
-	nextStep("write_installation_receipt")
-	receipt := installReceipt{SourceCommit: release.revision, Files: map[string]string{}}
-	for _, name := range names {
-		if receipt.Files[name], err = fileDigest(filepath.Join(root, name)); err != nil {
+		active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
+		if err := writeOwned(filepath.Join(root, "node-payload", "active.json"), active); err != nil {
 			return err
 		}
-	}
-	raw, _ := json.Marshal(receipt)
-	if err := writeOwned(marker, raw); err != nil {
-		return err
-	}
-	logger.InfoContext(ctx, "Installation initialized", "sign_in_key_command", "docker compose exec web oac-web core-key")
-	return nil
+		if err := filepath.WalkDir(filepath.Join(root, "node-payload"), func(path string, entry fs.DirEntry, err error) error {
+			if err != nil || !entry.IsDir() {
+				return err
+			}
+			if err := os.Chmod(path, 0o755); err != nil {
+				return err
+			}
+			return chown(path, 65532, 65532)
+		}); err != nil {
+			return err
+		}
+		nextStep("prepare_credentials")
+		generators := []struct {
+			name     string
+			generate func() string
+		}{
+			{"secrets/web/core.key", func() string {
+				key, err := generateCoreKey()
+				if err != nil {
+					panic(err)
+				}
+				return key
+			}},
+			{"secrets/database/password", func() string { return randomHex(32) }},
+			{"secrets/core/credential.key", func() string { return base64.StdEncoding.EncodeToString(randomBytes(32)) }},
+			{"secrets/core/installation.id", func() string { return uuid.NewString() }},
+		}
+		for _, secret := range generators {
+			path := filepath.Join(root, secret.name)
+			if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+				if err := writeOwned(path, []byte(secret.generate()+"\n")); err != nil {
+					return err
+				}
+				logger.InfoContext(ctx, "Credential file generated", "file", secret.name)
+			} else if err != nil {
+				return err
+			} else {
+				logger.InfoContext(ctx, "Credential file retained", "file", secret.name)
+			}
+			if secret.name != "secrets/web/core.key" {
+				names = append(names, secret.name)
+			}
+		}
+		if err := syncCoreKeyDigest(root); err != nil {
+			return err
+		}
+
+		names = append(names, "node-payload/active.json")
+		nextStep("write_installation_receipt")
+		receipt := installReceipt{SourceCommit: release.revision, Files: map[string]string{}}
+		for _, name := range names {
+			checksum, err := fileDigest(filepath.Join(root, name))
+			if err != nil {
+				return err
+			}
+			receipt.Files[name] = checksum
+		}
+		raw, _ := json.Marshal(receipt)
+		if err := writeOwned(marker, raw); err != nil {
+			return err
+		}
+		logger.InfoContext(ctx, "Installation initialized", "sign_in_key_command", "docker compose exec web oac-web core-key")
+		return nil
+	})
 }
 
 func randomBytes(n int) []byte {

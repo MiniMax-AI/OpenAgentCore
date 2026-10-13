@@ -62,8 +62,14 @@ func generationRecords(raw []byte, required, optional string) error {
 		return sandbox.ErrInvalid
 	}
 	for _, entry := range entries {
-		if _, err := generationObject(entry, required, optional, ""); err != nil {
+		fields, err := generationObject(entry, required, optional, "")
+		if err != nil {
 			return err
+		}
+		if checkpoint := fields["checkpoint"]; checkpoint != nil {
+			if _, err := generationObject(checkpoint, "artifact_domain execution_class", "", ""); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -110,7 +116,7 @@ func validateGenerationJSON(raw []byte, kind string) error {
 		if err != nil {
 			return err
 		}
-		if err := generationRecords(health["generations"], "generation specification_digest state", "diagnostic"); err != nil {
+		if err := generationRecords(health["generations"], "generation specification_digest state", "diagnostic checkpoint"); err != nil {
 			return err
 		}
 	}
@@ -135,7 +141,7 @@ func validateGenerationJSON(raw []byte, kind string) error {
 		}
 	}
 	if value := values["response"]; value != nil {
-		if _, err := generationObject(value, "id connection_id", "error_code info compute state command sample", ""); err != nil {
+		if _, err := generationObject(value, "id connection_id", "error_code unsupported info compute state command sample", ""); err != nil {
 			return err
 		}
 	}

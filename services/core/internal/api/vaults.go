@@ -33,17 +33,6 @@ type VaultsReader interface {
 	ListCredentials(ctx context.Context, tenantID, vaultID string, query vaults.PageQuery) (vaults.CredentialPage, error)
 }
 
-// @Summary Create a Vault
-// @Description Creates a project-owned Vault independently of execution. Omitted name stays null; a supplied string is trimmed and must contain 1–256 UTF-8 bytes. Explicit null name is invalid. Omitted/null metadata becomes an empty object; non-string values return invalid_request_error with a metadata.<key> param. Metadata has a local 64 KiB encoded storage bound. U+0000 in stored strings is rejected as a local storage limit. Credentials, Session binding and hosted error/retry parity remain incomplete.
-// @Tags Vaults
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param body body v1.CreateVaultRequest true "Vault name and metadata"
-// @Success 201 {object} v1.Vault
-// @Failure 400,401,413,500 {object} v1.ErrorResponse
-// @Router /vaults [post]
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
 	if !ok {
@@ -94,16 +83,6 @@ func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, vaultResponse(vault))
 }
 
-// @Summary Retrieve a Vault
-// @Description Reads a Vault owned by the authenticated project without resolving credentials, Sessions or execution devices. Missing and foreign IDs share the same not-found response; exact hosted error semantics remain unverified.
-// @Tags Vaults
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param vault_id path string true "Vault ID"
-// @Success 200 {object} v1.Vault
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /vaults/{vault_id} [get]
 func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
 	id, ok := credentialResourceID(w, r, "vault_id")
 	if !ok {

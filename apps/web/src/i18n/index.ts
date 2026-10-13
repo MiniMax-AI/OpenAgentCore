@@ -6,12 +6,10 @@ import { defaultNamespace, resources } from "./resources";
 export const supportedLanguages = ["en", "zh-CN"] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
 
-const LANGUAGE_STORAGE_KEY = "agents-core-web.language";
-const LEGACY_LANGUAGE_STORAGE_KEY = "agents-core-web.locale";
+const LANGUAGE_STORAGE_KEY = "oac-web.language";
 
 export function resolveLanguage(stored: string | null, languages: readonly string[]): SupportedLanguage {
   if (stored === "en" || stored === "zh-CN") return stored;
-  if (stored === "zh") return "zh-CN";
   for (const language of languages) {
     const normalized = language.toLowerCase();
     if (normalized.startsWith("zh")) return "zh-CN";
@@ -24,7 +22,7 @@ function browserLanguage(): SupportedLanguage {
   if (typeof window === "undefined") return "en";
   let stored: string | null = null;
   try {
-    stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
+    stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
   } catch {
     // Storage can be unavailable in privacy-restricted browser contexts.
   }
@@ -49,7 +47,6 @@ export function setLanguage(language: SupportedLanguage): Promise<unknown> {
   if (typeof window !== "undefined") {
     try {
       window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-      window.localStorage.removeItem(LEGACY_LANGUAGE_STORAGE_KEY);
     } catch {
       // Keep the in-memory choice when persistence is unavailable.
     }

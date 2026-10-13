@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -143,4 +144,33 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 		return fail("device must advertise environment_none")
 	}
 	return caps, nil
+}
+
+// sessionCapabilities shares storage-specific validation between device selection
+// and the final preparation gate. The immutable binding, not today's deployment,
+// determines whether this Session requires native history outside compute.
+func (d *Dispatcher) sessionCapabilities(ctx context.Context, peer *runtimegateway.Session, session sessions.Session, snapshot Snapshot) (runtimedevice.KindCapabilities, error) {
+	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
+	if err != nil {
+		return caps, err
+	}
+	if snapshot.Environment == nil || snapshot.Environment.Type != "openai_hosted" {
+		return caps, nil
+	}
+	environment, err := d.SessionsReader.GetSessionEnvironment(ctx, session.TenantID, session.ID)
+	if err != nil {
+		return runtimedevice.KindCapabilities{}, err
+	}
+	if err := d.validateEnvironmentHistory(session.Engine, environment, caps.RetainedNativeHistory); err != nil {
+		return runtimedevice.KindCapabilities{}, err
+	}
+	return caps, nil
+}
+
+func (p Policy) validateEnvironmentHistory(engine string, environment sessions.Environment, supported bool) error {
+	profile, found := p.Engines.Lookup(engine)
+	if !found {
+		return sessions.ErrInvalidInput
+	}
+	return sessions.ValidateRetainedHistory(environment.ExternalWorkspace, supported && profile.RetainedNativeHistory.IsSupported())
 }

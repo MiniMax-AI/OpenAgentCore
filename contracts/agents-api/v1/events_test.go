@@ -44,8 +44,9 @@ func TestSessionEventUsageOnlyOnTerminalTurnEvents(t *testing.T) {
 }
 
 // Error events carry the pinned SessionError, whose param is present and null
-// when unset; Environment state errors keep their observed three fields (HI-01/02).
-func TestSessionErrorEventCarriesNullableParam(t *testing.T) {
+// when unset; Environment state errors keep their observed three fields (HI-01/02)
+// and Environment events carry a null turn_id. Subagent events carry no session_id.
+func TestSessionEventWireFields(t *testing.T) {
 	failure := &StreamError{Type: "environment_error", Code: "sandbox_error", Message: "Failed to provision environment"}
 	param := "input"
 	for _, test := range []struct {
@@ -58,7 +59,9 @@ func TestSessionErrorEventCarriesNullableParam(t *testing.T) {
 			`{"type":"error","event_id":"event","session_id":"session","error":{"code":"invalid","type":"invalid_request_error","message":"m","param":"input"}}`},
 		{SessionEvent{Type: "agent.session.environment.failed", EventID: "event", Environment: &SessionEnvironmentState{ID: "environment", Type: "openai_hosted", Status: "failed",
 			Error: &StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}}},
-			`{"type":"agent.session.environment.failed","event_id":"event","environment":{"id":"environment","type":"openai_hosted","status":"failed","error":{"code":"environment_connection_failed","type":"environment_error","message":"The environment failed to connect."}}}`},
+			`{"type":"agent.session.environment.failed","event_id":"event","environment":{"id":"environment","type":"openai_hosted","status":"failed","error":{"code":"environment_connection_failed","type":"environment_error","message":"The environment failed to connect."}},"turn_id":null}`},
+		{SessionEvent{Type: "agent.session.subagent.closed", EventID: "event", SessionID: "session", Subagent: &Subagent{ID: "subagent", Object: "agent.session.subagent", SessionID: "session", ParentAgentID: "root", Status: "closed"}},
+			`{"subagent":{"id":"subagent","object":"agent.session.subagent","session_id":"session","parent_agent_id":"root","opened_at":0,"closed_at":null,"name":null,"instructions":null,"status":"closed"},"type":"agent.session.subagent.closed","event_id":"event"}`},
 	} {
 		raw, err := json.Marshal(test.event)
 		if err != nil || string(raw) != test.want {

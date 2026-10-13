@@ -97,7 +97,6 @@ func routingFixture(t *testing.T) (http.Handler, *chi.Mux, *routingStore) {
 		return files.File{}, files.ErrNotFound
 	}
 	deps.CoreKeys = coreKeys(t, routingAdminKey)
-	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
 	return newTestHandler(t, deps), (&Handler{Dependencies: deps}).routes(), s
 }
 

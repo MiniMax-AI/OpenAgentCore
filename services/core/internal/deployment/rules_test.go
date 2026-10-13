@@ -7,16 +7,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
 )
 
-func TestValidateCoreURL(t *testing.T) {
+func TestPublicOrigin(t *testing.T) {
 	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]", "http://core.example", "http://core:8091", "http://10.0.0.5:8080"} {
-		if err := ValidateCoreURL(value); err != nil {
+		if origin, err := NewPublicOrigin(value); err != nil || origin.String() != value {
 			t.Errorf("valid Core URL %q rejected: %v", value, err)
+		}
+	}
+	for value, socket := range map[string]string{"https://core.example": "wss://core.example/api/v1/agent-daemon/ws", "http://[::1]:8091": "ws://[::1]:8091/api/v1/agent-daemon/ws"} {
+		origin, err := NewPublicOrigin(value)
+		if err != nil || origin.DaemonWebSocket() != socket || origin.API() != value+"/v1" || origin.RuntimeAPI() != value+"/api/v1" || origin.InstallerBase() != value+"/api/v1/agent-daemon/install/" {
+			t.Errorf("addresses derived from %q: %+v %v", value, origin, err)
 		}
 	}
 	for _, value := range []string{
@@ -26,7 +31,7 @@ func TestValidateCoreURL(t *testing.T) {
 		"https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example",
 		"https://core.example.", "https://bücher.example", "https://core.example:0443",
 	} {
-		if err := ValidateCoreURL(value); !errors.Is(err, ErrInvalidInput) {
+		if _, err := NewPublicOrigin(value); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("invalid Core URL %q accepted: %v", value, err)
 		}
 	}
@@ -115,7 +120,7 @@ func TestValidateNode(t *testing.T) {
 
 func TestCheckGeneration(t *testing.T) {
 	installation := uuid.NewString()
-	current := Record{InstallationID: installation, WebManaged: true, Generation: 3}
+	current := Record{InstallationID: installation, Generation: 3}
 	if err := checkGeneration(current, installation, 3); err != nil {
 		t.Fatal(err)
 	}
@@ -123,12 +128,12 @@ func TestCheckGeneration(t *testing.T) {
 	if err := checkGeneration(current, installation, 2); !errors.As(err, &stale) || stale.CurrentGeneration != 3 || !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale generation: %v", err)
 	}
-	process := current
-	process.WebManaged = false
+	unclaimed := current
+	unclaimed.InstallationID = ""
 	for _, c := range []struct {
 		d            Record
 		installation string
-	}{{process, installation}, {current, uuid.NewString()}} {
+	}{{unclaimed, installation}, {current, uuid.NewString()}} {
 		if err := checkGeneration(c.d, c.installation, 3); !errors.Is(err, ErrConflict) || errors.As(err, &stale) {
 			t.Errorf("checkGeneration(%+v, %s) = %v, want a plain conflict", c.d, c.installation, err)
 		}
@@ -164,7 +169,7 @@ func TestNormalizeHealth(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		in         NodeHealth
-		diagnostic string
+		diagnostic sandbox.NodeDiagnosticCode
 		invalid    bool
 	}{
 		{"ready clears the diagnostic", NodeHealth{ProviderReady: true, Diagnostic: sandbox.NodeProviderUnavailable}, "", false},
@@ -246,8 +251,8 @@ func TestNodeRollout(t *testing.T) {
 	for _, c := range []struct {
 		name       string
 		n          NodeRecord
-		state      string
-		diagnostic string
+		state      NodeRolloutState
+		diagnostic sandbox.NodeDiagnosticCode
 	}{
 		{"offline", NodeRecord{TargetState: "ready", ReadyGeneration: &ready}, "unknown", ""},
 		{"protocol 1 on another generation", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 1, TargetGeneration: 2, TargetState: "ready", ReadyGeneration: &ready}, "update_required", ""},
@@ -257,7 +262,7 @@ func TestNodeRollout(t *testing.T) {
 		{"failed without diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "failed", ReadyGeneration: &ready}, "failed", ""},
 		{"ready ignores a diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "ready", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "ready", ""},
 		{"unknown target state", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "other", ReadyGeneration: &ready}, "unknown", ""},
-		{"protocol 1 failed on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "failed", TargetDiagnostic: "kvm_unavailable", ReadyGeneration: &ready}, "failed", "kvm_unavailable"},
+		{"protocol 1 failed on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "failed", TargetDiagnostic: "host_unsupported", ReadyGeneration: &ready}, "failed", "host_unsupported"},
 		{"protocol 1 without a target state", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, ReadyGeneration: &ready}, "unknown", ""},
 	} {
 		got := nodeRollout(c.n)

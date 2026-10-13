@@ -55,7 +55,7 @@ func (s *Store) ListAdminAudit(ctx context.Context, filter adminaudit.Filter) (a
 		rows = rows[:filter.Limit]
 	}
 	for _, row := range rows {
-		page.Data = append(page.Data, adminaudit.Operation{ID: uuid.UUID(row.ID.Bytes).String(), CreatedAt: row.CreatedAt.Time, AdminCredentialID: row.AdminCredentialID, ActorLabel: row.ActorLabel, Action: row.Action, ProjectID: projectID(row.ProjectID), ResourceType: row.ResourceType, ResourceID: row.ResourceID, ResultIDs: row.ResultIds, RequestID: row.RequestID, TraceID: row.TraceID})
+		page.Data = append(page.Data, adminaudit.Operation{ID: uuid.UUID(row.ID.Bytes).String(), CreatedAt: row.CreatedAt.Time, AdminCredentialID: row.AdminCredentialID, ActorLabel: row.ActorLabel, Action: row.Action, ProjectID: projectID(row.ProjectID), ResourceType: row.ResourceType, ResourceID: row.ResourceID, RequestID: row.RequestID, TraceID: row.TraceID})
 	}
 	if page.HasMore {
 		page.NextCursor = encodeCursor(page.Data[len(page.Data)-1].ID, scope)

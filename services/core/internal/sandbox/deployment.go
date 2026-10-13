@@ -7,6 +7,16 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
+)
+
+type DeploymentMode string
+
+const (
+	DeploymentUnconfigured DeploymentMode = ""
+	DeploymentNodes        DeploymentMode = "nodes"
+	DeploymentDirect       DeploymentMode = "direct"
 )
 
 // ValidationError preserves the sandbox error text and identity while identifying
@@ -24,13 +34,17 @@ func validationBound(value uint32) *uint32 { return &value }
 // Resources describes one managed sandbox, independently of node concurrency.
 // Disk bounds are available only where the native provider enforces them.
 type Resources struct {
-	CPUs               uint32 `json:"cpus"`
-	MemoryMiB          uint32 `json:"memory_mib"`
+	CPUs               uint32 `json:"cpus" binding:"required"`
+	MemoryMiB          uint32 `json:"memory_mib" binding:"required"`
 	RootDiskMiB        uint32 `json:"root_disk_mib,omitempty"`
 	EnvironmentDiskMiB uint32 `json:"environment_disk_mib,omitempty"`
 }
 
 func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error {
+	return r.ValidateWorkspacePolicy(provider, rules, nil)
+}
+
+func (r Resources) validatePolicy(provider string, rules DeploymentPolicy) error {
 	values := reflect.ValueOf(r)
 	for i, rule := range resourceContract {
 		min, max := rule.Min, rule.Max
@@ -59,17 +73,12 @@ func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error
 // may address the same archive by config ID or OCI manifest digest; microsandbox
 // has its own imported OCI identity. These are not interchangeable hashes.
 type RuntimeRelease struct {
-	SourceCommit        string `json:"source_commit"`
-	ImageID             string `json:"image_id"`
-	ImageManifestDigest string `json:"image_manifest_digest"`
-	MicrosandboxRef     string `json:"microsandbox_ref"`
-	RuntimeSHA256       string `json:"runtime_sha256"`
-	FirmwareSHA256      string `json:"firmware_sha256"`
-}
-
-func lowerHex(v string, bytes int) bool {
-	x, err := hex.DecodeString(v)
-	return err == nil && len(x) == bytes && hex.EncodeToString(x) == v
+	SourceCommit        string `json:"source_commit" binding:"required"`
+	ImageID             string `json:"image_id" binding:"required"`
+	ImageManifestDigest string `json:"image_manifest_digest" binding:"required"`
+	MicrosandboxRef     string `json:"microsandbox_ref" binding:"required"`
+	RuntimeSHA256       string `json:"runtime_sha256" binding:"required"`
+	FirmwareSHA256      string `json:"firmware_sha256" binding:"required"`
 }
 
 func (r RuntimeRelease) Validate() error {
@@ -83,25 +92,15 @@ func (r RuntimeRelease) Validate() error {
 }
 
 type DeploymentSpec struct {
-	Resources Resources       `json:"resources"`
+	Resources Resources       `json:"resources" binding:"required"`
 	Runtime   *RuntimeRelease `json:"runtime,omitempty"`
+	// Workspace is a derived immutable capability receipt, never filesystem configuration.
+	Workspace *workspacefs.Declaration `json:"workspace,omitempty" readonly:"true"`
 }
 
 // ValidatePolicy applies a registered adapter's rules without knowing its kind.
 func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy) error {
-	if err := s.Resources.ValidatePolicy(provider, policy); err != nil {
-		return err
-	}
-	if !policy.Runtime {
-		if s.Runtime != nil {
-			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
-		}
-		return nil
-	}
-	if s.Runtime == nil {
-		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
-	}
-	return s.Runtime.Validate()
+	return s.ValidateWorkspacePolicy(provider, policy, s.Workspace)
 }
 
 func (s DeploymentSpec) Digest(provider string) string {
@@ -114,8 +113,47 @@ func (s DeploymentSpec) Digest(provider string) string {
 }
 
 // Description is what a provider registration says about a deployment of it:
-// its mode, its backend namespace fingerprint and its checkpoint timing.
+// its mode and its backend namespace fingerprint.
 type Description struct {
-	Mode, BackendFingerprint      string
-	IdleSeconds, RetentionSeconds int64
+	Mode               DeploymentMode
+	BackendFingerprint string
+}
+
+func BackendFingerprint(kind, namespace string) string {
+	digest := sha256.Sum256([]byte(kind + "\x00" + namespace))
+	return hex.EncodeToString(digest[:])
+}
+
+// ValidateWorkspacePolicy validates explicit external storage without weakening root disk limits.
+func (r Resources) ValidateWorkspacePolicy(provider string, rules DeploymentPolicy, declaration *workspacefs.Declaration) error {
+	if declaration == nil {
+		return r.validatePolicy(provider, rules)
+	}
+	if rules.Workspace == nil {
+		return workspacefs.ErrUnsupported
+	}
+	if err := workspacefs.ValidateCombination(*rules.Workspace, *declaration, r.EnvironmentDiskMiB); err != nil {
+		return err
+	}
+	checked := r
+	if checked.EnvironmentDiskMiB == 0 && rules.Disk {
+		checked.EnvironmentDiskMiB = minimumDiskMiB
+	}
+	return checked.validatePolicy(provider, rules)
+}
+func (s DeploymentSpec) ValidateWorkspacePolicy(provider string, policy DeploymentPolicy, declaration *workspacefs.Declaration) error {
+	if err := s.Resources.ValidateWorkspacePolicy(provider, policy, declaration); err != nil {
+		return err
+	}
+
+	if !policy.Runtime {
+		if s.Runtime != nil {
+			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
+		}
+		return nil
+	}
+	if s.Runtime == nil {
+		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
+	}
+	return s.Runtime.Validate()
 }

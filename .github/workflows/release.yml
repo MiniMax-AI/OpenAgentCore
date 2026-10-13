@@ -114,6 +114,9 @@ jobs:
           path: ${{ runner.temp }}/native-artifacts
       - name: Assemble the native installation catalog
         run: node scripts/build-native-catalog.mjs "$RUNNER_TEMP/native-artifacts" "$RUNNER_TEMP/native-installers"
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
       - uses: ./.github/actions/e2b-provider
       - name: Build matched artifacts
         env:
@@ -124,17 +127,17 @@ jobs:
           CORE_DISTRIBUTION_OFFLINE: ${{ (github.event_name == 'push' || inputs.offline) && '1' || '0' }}
         run: |
           inputs="$HOME/.oac/build/release-inputs/inputs.json"
-          AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+          CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
           MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
-          export AGENTS_RUNTIME_CODEX_PACKAGE MCODE_HARNESS_BUILD_DIR
+          export CODEX_CLI_DIR MCODE_HARNESS_BUILD_DIR
           export CORE_DISTRIBUTION_RELEASE_BASE_URL="https://github.com/$RELEASE_REPOSITORY/releases/download/$RELEASE_TAG"
           bash scripts/build-core-distribution.sh
           mkdir -p "$HOME/.oac/build/release-upload"
           for asset in "$HOME/.oac/build/core-distribution/"*; do
             if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.oac/build/release-upload/"; fi
           done
-          cp deploy/install.sh "$HOME/.oac/build/release-upload/install.sh"
-          (cd "$HOME/.oac/build/release-upload" && sha256sum install.sh > install.sh.sha256)
+          cp deploy/install.sh deploy/install.ps1 "$HOME/.oac/build/release-upload/"
+          (cd "$HOME/.oac/build/release-upload" && sha256sum install.sh > install.sh.sha256 && sha256sum install.ps1 > install.ps1.sha256)
       - name: Sign in to GHCR
         if: github.event_name == 'push' || inputs.draft_release
         env:

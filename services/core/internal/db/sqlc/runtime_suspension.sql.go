@@ -27,33 +27,9 @@ func (q *Queries) ClearRuntimeWake(ctx context.Context, arg ClearRuntimeWakePara
 	return err
 }
 
-const countRuntimeComputeReservations = `-- name: CountRuntimeComputeReservations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released' AND compute_phase <> 'suspended'
-`
-
-func (q *Queries) CountRuntimeComputeReservations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRuntimeComputeReservations, providerKey)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const countRuntimeRetainedAllocations = `-- name: CountRuntimeRetainedAllocations :one
-SELECT count(*) FROM runtime_allocations
-WHERE provider_key = $1 AND state <> 'released'
-`
-
-func (q *Queries) CountRuntimeRetainedAllocations(ctx context.Context, providerKey pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countRuntimeRetainedAllocations, providerKey)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const getRuntimeActivity = `-- name: GetRuntimeActivity :one
 SELECT clock_timestamp()::timestamptz AS observed_at,
-    GREATEST(a.compute_activity_at,
+    GREATEST(a.compute_activity_at, a.compute_phase_changed_at,
     CASE WHEN a.node_id IS NULL THEN COALESCE((SELECT max(t.completed_at) FROM turns t WHERE t.session_id = e.session_id), a.created_at) END,
     CASE WHEN a.node_id IS NULL THEN (SELECT max(t.completed_at) FROM subagent_turns t WHERE t.session_id = e.session_id) END,
     (SELECT max(f.settled_at) FROM environment_file_writes f WHERE f.environment_id = e.id))::timestamptz AS last_activity,
@@ -61,8 +37,7 @@ SELECT clock_timestamp()::timestamptz AS observed_at,
      OR EXISTS (SELECT 1 FROM subagent_turns t WHERE t.session_id = e.session_id AND t.status IN ('queued','in_progress','waiting'))
      OR EXISTS (SELECT 1 FROM environment_input_reservations r WHERE r.session_id = e.session_id AND r.state = 'pending')
      OR EXISTS (SELECT 1 FROM environment_file_writes f WHERE f.environment_id = e.id AND f.state = 'pending'))::boolean AS busy,
-    a.compute_wake_requested,
-    EXISTS (SELECT 1 FROM turns t WHERE t.session_id = e.session_id AND t.completed_at IS NOT NULL)::boolean AS has_completed_turn
+    a.compute_wake_requested
 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
 WHERE a.id = $1
 `
@@ -72,7 +47,6 @@ type GetRuntimeActivityRow struct {
 	LastActivity         pgtype.Timestamptz `json:"last_activity"`
 	Busy                 bool               `json:"busy"`
 	ComputeWakeRequested bool               `json:"compute_wake_requested"`
-	HasCompletedTurn     bool               `json:"has_completed_turn"`
 }
 
 func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRuntimeActivityRow, error) {
@@ -83,7 +57,70 @@ func (q *Queries) GetRuntimeActivity(ctx context.Context, id pgtype.UUID) (GetRu
 		&i.LastActivity,
 		&i.Busy,
 		&i.ComputeWakeRequested,
-		&i.HasCompletedTurn,
+	)
+	return i, err
+}
+
+const moveSuspendedRuntimeCompute = `-- name: MoveSuspendedRuntimeCompute :one
+WITH moved AS (
+    UPDATE runtime_placements p SET node_id=$1::uuid
+    FROM runtime_allocations a
+    WHERE a.id=$4 AND a.environment_id=p.environment_id
+      AND p.node_id=$5::uuid AND p.released_at IS NULL
+      AND p.deployment_generation=a.deployment_generation
+      AND a.node_id=p.node_id AND a.compute_revision=$6
+      AND a.compute_phase='suspended'
+      AND ((a.state='running' AND $2::text='restoring'
+            AND a.compute_retained_until>clock_timestamp()
+            AND EXISTS(SELECT 1 FROM environments e WHERE e.id=a.environment_id AND e.initialization='complete'))
+           OR (a.state='cleanup_pending' AND $2::text='suspended'))
+    RETURNING a.id
+)
+UPDATE runtime_allocations a
+SET node_id=$1::uuid, compute_phase=$2,
+    compute_state=$3::jsonb, compute_revision=a.compute_revision+1,
+    compute_phase_changed_at=CASE WHEN a.compute_phase=$2::text THEN a.compute_phase_changed_at ELSE clock_timestamp() END
+FROM moved WHERE a.id=moved.id RETURNING a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation
+`
+
+type MoveSuspendedRuntimeComputeParams struct {
+	Destination pgtype.UUID `json:"destination"`
+	Phase       string      `json:"phase"`
+	State       []byte      `json:"state"`
+	ID          pgtype.UUID `json:"id"`
+	Source      pgtype.UUID `json:"source"`
+	Revision    int64       `json:"revision"`
+}
+
+func (q *Queries) MoveSuspendedRuntimeCompute(ctx context.Context, arg MoveSuspendedRuntimeComputeParams) (RuntimeAllocation, error) {
+	row := q.db.QueryRow(ctx, moveSuspendedRuntimeCompute,
+		arg.Destination,
+		arg.Phase,
+		arg.State,
+		arg.ID,
+		arg.Source,
+		arg.Revision,
+	)
+	var i RuntimeAllocation
+	err := row.Scan(
+		&i.ID,
+		&i.EnvironmentID,
+		&i.DeviceID,
+		&i.ProviderKey,
+		&i.State,
+		&i.CreateSettled,
+		&i.CreatedAt,
+		&i.ReleasedAt,
+		&i.ComputePhase,
+		&i.ComputeRevision,
+		&i.ComputeState,
+		&i.ComputeActivityAt,
+		&i.ComputeWakeRequested,
+		&i.ComputeRetainedUntil,
+		&i.NodeID,
+		&i.ObservationError,
+		&i.ComputePhaseChangedAt,
+		&i.DeploymentGeneration,
 	)
 	return i, err
 }
@@ -103,7 +140,7 @@ func (q *Queries) RecordRuntimeTerminalActivity(ctx context.Context, sessionID p
 const runtimeComputeBlocksAdmission = `-- name: RuntimeComputeBlocksAdmission :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    WHERE e.session_id = $1 AND a.compute_phase NOT IN ('disabled', 'running')
+    WHERE e.session_id = $1 AND a.state <> 'released' AND a.compute_phase NOT IN ('disabled', 'running')
 )::boolean
 `
 
@@ -117,7 +154,7 @@ func (q *Queries) RuntimeComputeBlocksAdmission(ctx context.Context, sessionID p
 const sessionHasRuntimeNode = `-- name: SessionHasRuntimeNode :one
 SELECT EXISTS (
     SELECT 1 FROM runtime_allocations a JOIN environments e ON e.id = a.environment_id
-    WHERE e.session_id = $1 AND a.node_id IS NOT NULL
+    WHERE e.session_id = $1 AND a.state <> 'released' AND a.node_id IS NOT NULL
 )::boolean
 `
 
@@ -133,13 +170,11 @@ UPDATE runtime_allocations
 SET compute_phase_changed_at = CASE WHEN compute_phase = $1::text THEN compute_phase_changed_at ELSE clock_timestamp() END,
     compute_phase = $1, compute_state = $2::jsonb,
     compute_revision = compute_revision + 1,
-    compute_retained_until = $3,
-    kept_at = CASE WHEN $1::text = 'running' THEN clock_timestamp() ELSE kept_at END
+    compute_retained_until = $3
 WHERE runtime_allocations.id = $4 AND compute_revision = $5
     AND state = 'running' AND EXISTS (SELECT 1 FROM environments e WHERE e.id = runtime_allocations.environment_id AND e.initialization = 'complete')
-    AND ((compute_phase IN ('disabled','running') AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour'))
-      OR (compute_phase NOT IN ('disabled','running') AND compute_retained_until > clock_timestamp()))
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+    AND (compute_phase IN ('disabled','running') OR compute_retained_until > clock_timestamp())
+RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 type SetRuntimeComputeParams struct {
@@ -167,7 +202,6 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,
@@ -185,19 +219,20 @@ func (q *Queries) SetRuntimeCompute(ctx context.Context, arg SetRuntimeComputePa
 
 const touchRuntimeActivity = `-- name: TouchRuntimeActivity :exec
 UPDATE runtime_allocations a
-SET compute_activity_at = clock_timestamp(), compute_wake_requested = true
+SET compute_activity_at = CASE WHEN a.state = 'released' AND a.compute_wake_requested THEN a.compute_activity_at ELSE clock_timestamp() END, compute_wake_requested = true
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE a.environment_id = e.id AND s.tenant_id = $1
     AND e.id = $2 AND s.deleted_at IS NULL
-    AND a.state = 'running' AND a.compute_phase <> 'disabled'
+    AND ((a.state = 'running' AND a.compute_phase <> 'disabled') OR a.id = $3::uuid)
 `
 
 type TouchRuntimeActivityParams struct {
 	TenantID      pgtype.UUID `json:"tenant_id"`
 	EnvironmentID pgtype.UUID `json:"environment_id"`
+	RetainedID    pgtype.UUID `json:"retained_id"`
 }
 
 func (q *Queries) TouchRuntimeActivity(ctx context.Context, arg TouchRuntimeActivityParams) error {
-	_, err := q.db.Exec(ctx, touchRuntimeActivity, arg.TenantID, arg.EnvironmentID)
+	_, err := q.db.Exec(ctx, touchRuntimeActivity, arg.TenantID, arg.EnvironmentID, arg.RetainedID)
 	return err
 }

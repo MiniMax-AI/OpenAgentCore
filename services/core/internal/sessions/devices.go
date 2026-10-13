@@ -65,9 +65,21 @@ type DeviceReader interface {
 	// authenticates a device with, and reports whether the device still has
 	// authority.
 	GetDeviceCredential(ctx context.Context, device string) (runtimedevice.Credential, bool, error)
+	// ArchivedCancellationReceipt reads the receipt window that archiving a
+	// Session leaves the device's exact authenticated delivery of one of
+	// runIDs; without one it is the zero receipt.
+	ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error)
 	// ListEnrolledRuntimeBindings lists the enrolled user-managed Runtimes of
 	// live Environments.
 	ListEnrolledRuntimeBindings(ctx context.Context) ([]EnrolledRuntimeBinding, error)
+	// GetSessionExecutionBinding reads the Runtime device that executes the
+	// Session's Turns, with the native session that continues its history,
+	// once its Environment preparation completed; before that, and without an
+	// authorized bound device, it is ErrNotFound.
+	GetSessionExecutionBinding(ctx context.Context, tenant, session string) (ExecutionBinding, error)
+	// ListExecutionDevices lists the tenant's unrevoked devices that belong
+	// to no Environment, in ID order.
+	ListExecutionDevices(ctx context.Context, tenant string) ([]ExecutionDevice, error)
 }
 
 // DeviceStorage stores Runtime devices.
@@ -82,7 +94,7 @@ type DeviceStorage interface {
 	TouchDevice(ctx context.Context, device string) (bool, error)
 	// TouchAuthenticatedDevice records that the device was seen with the
 	// credential and reports whether that credential still has authority.
-	TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string) (bool, error)
+	TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error)
 	// WithEnrollment authenticates the executor credential for the
 	// Environment, then runs apply in the transaction of the Environment's
 	// Session, with the Environment and what the Session lock shows. A
@@ -136,7 +148,7 @@ func (s *Service) TouchRuntimeHeartbeat(ctx context.Context, device string) (run
 // credential the gateway authenticated. A credential that lost its authority
 // reports Deleted.
 func (s *Service) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat runtimedevice.Heartbeat) (runtimedevice.HeartbeatStatus, error) {
-	current, err := s.storage.TouchAuthenticatedDevice(ctx, heartbeat.RuntimeID, heartbeat.CredentialHash)
+	current, err := s.storage.TouchAuthenticatedDevice(ctx, heartbeat.RuntimeID, heartbeat.CredentialHash, heartbeat.SupportedAgentKinds)
 	if err != nil {
 		return runtimedevice.HeartbeatStatus{}, err
 	}
@@ -144,7 +156,8 @@ func (s *Service) TouchAgentDaemonHeartbeat(ctx context.Context, heartbeat runti
 }
 
 // heartbeatStatus is the liveness a heartbeat reports. Live connectivity
-// belongs to the gateway Registry; only the last-seen time is stored.
+// belongs to the gateway Registry. Stored declarations describe capabilities,
+// not current connectivity.
 func heartbeatStatus(current bool) runtimedevice.HeartbeatStatus {
 	return runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: !current}
 }

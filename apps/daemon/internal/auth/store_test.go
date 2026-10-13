@@ -1,16 +1,16 @@
 package auth_test
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
 func withTempHome(t *testing.T) string {
@@ -20,105 +20,62 @@ func withTempHome(t *testing.T) string {
 	return dir
 }
 
-func TestSaveLoadRoundTrip(t *testing.T) {
+func profileDir(t *testing.T, profile string) string {
+	t.Helper()
+	dir, err := paths.ProfileDir(profile)
+	if err != nil {
+		t.Fatalf("ProfileDir: %v", err)
+	}
+	if err := runtimefs.EnsurePrivateDir(dir); err != nil {
+		t.Fatalf("EnsurePrivateDir: %v", err)
+	}
+	return dir
+}
+
+func writeProfile(t *testing.T, profile string, p auth.Profile) {
+	t.Helper()
+	dir := profileDir(t, profile)
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "auth.json"), raw, 0o600); err != nil {
+		t.Fatalf("write auth.json: %v", err)
+	}
+}
+
+func TestLoadReadsProfile(t *testing.T) {
 	_ = withTempHome(t)
-	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
 	want := auth.Profile{
 		ServerURL:        "https://core.example.com",
 		RuntimeID:        "rt_abc123",
 		RunnerCredential: "secret-credential",
 		DeviceName:       "alice-mac",
-		Hostname:         "alice-mac.local",
-		PairedAt:         now,
 	}
-	if err := auth.Save("test", want); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	writeProfile(t, "test", want)
 	got, err := auth.Load("test")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got.ServerURL != want.ServerURL ||
-		got.RuntimeID != want.RuntimeID ||
-		got.RunnerCredential != want.RunnerCredential ||
-		got.DeviceName != want.DeviceName ||
-		got.Hostname != want.Hostname ||
-		!got.PairedAt.Equal(want.PairedAt) {
-		t.Fatalf("Load round-trip mismatch:\n got=%+v\nwant=%+v", got, want)
+	if got != want {
+		t.Fatalf("Load mismatch:\n got=%+v\nwant=%+v", got, want)
 	}
 }
 
-func TestSaveSetsRestrictivePerms(t *testing.T) {
+func TestLoadIgnoresLegacyProfileFields(t *testing.T) {
 	_ = withTempHome(t)
-	if err := auth.Save("default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt", RunnerCredential: "c"}); err != nil {
-		t.Fatalf("Save: %v", err)
+	raw := `{"server_url":"https://core.example.com/api/v1","runtime_id":"rt","runner_credential":"c","device_name":"d",` +
+		`"hostname":"h","paired_at":"2026-06-04T12:00:00Z","runner_public_key":"pub","runner_private_key":"priv"}`
+	if err := os.WriteFile(filepath.Join(profileDir(t, "legacy"), "auth.json"), []byte(raw), 0o600); err != nil {
+		t.Fatalf("write auth.json: %v", err)
 	}
-	authPath, err := paths.AuthFile("default")
-	if err != nil {
-		t.Fatalf("AuthFile: %v", err)
-	}
-	info, err := os.Stat(authPath)
-	if err != nil {
-		t.Fatalf("stat auth.json: %v", err)
-	}
-	// Unix stores credentials with 0600; Windows uses normal account ACLs,
-	// which are not represented by Go permission bits.
-	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode != 0o600 {
-		t.Errorf("auth.json perm = %o, want 0600", mode)
-	}
-}
-
-func TestSaveIsAtomicNoStrayTempFile(t *testing.T) {
-	_ = withTempHome(t)
-	if err := auth.Save("default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt", RunnerCredential: "c"}); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	authPath, err := paths.AuthFile("default")
-	if err != nil {
-		t.Fatalf("AuthFile: %v", err)
-	}
-	// Writes to auth.json.tmp then renames — no stray .tmp on success.
-	entries, err := os.ReadDir(filepath.Dir(authPath))
-	if err != nil {
-		t.Fatalf("ReadDir: %v", err)
-	}
-	for _, e := range entries {
-		if filepath.Ext(e.Name()) == ".tmp" {
-			t.Fatalf("found stray temp file after Save: %s", e.Name())
-		}
-	}
-}
-
-func TestSaveOverwritesAndHealsPerms(t *testing.T) {
-	_ = withTempHome(t)
-	if err := auth.Save("default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt1", RunnerCredential: "c1"}); err != nil {
-		t.Fatalf("Save first: %v", err)
-	}
-	authPath, err := paths.AuthFile("default")
-	if err != nil {
-		t.Fatalf("AuthFile: %v", err)
-	}
-	// Simulate a previously-world-readable file (user chmod'd it);
-	// atomic-rename Save must re-establish 0600 on the new inode.
-	if err := os.Chmod(authPath, 0o644); err != nil {
-		t.Fatalf("chmod loose perms: %v", err)
-	}
-	if err := auth.Save("default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt2", RunnerCredential: "c2"}); err != nil {
-		t.Fatalf("Save second: %v", err)
-	}
-	info, err := os.Stat(authPath)
-	if err != nil {
-		t.Fatalf("stat: %v", err)
-	}
-	if mode := info.Mode().Perm(); runtime.GOOS != "windows" && mode != 0o600 {
-		t.Errorf("perm after re-save = %o, want 0600 (healing failed)", mode)
-	}
-	got, err := auth.Load("default")
+	got, err := auth.Load("legacy")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got.RuntimeID != "rt2" || got.RunnerCredential != "c2" {
-		t.Errorf("overwrite did not take effect: %+v", got)
+	want := auth.Profile{ServerURL: "https://core.example.com/api/v1", RuntimeID: "rt", RunnerCredential: "c", DeviceName: "d"}
+	if got != want {
+		t.Fatalf("Load = %+v, want %+v", got, want)
 	}
 }
 
@@ -137,14 +94,11 @@ func TestLoadMissingReturnsErrNotPaired(t *testing.T) {
 
 func TestLoadCorruptJSONReturnsError(t *testing.T) {
 	_ = withTempHome(t)
-	dir, err := paths.EnsureProfileDir("default")
-	if err != nil {
-		t.Fatalf("EnsureProfileDir: %v", err)
-	}
+	dir := profileDir(t, "default")
 	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte("{not valid json"), 0o600); err != nil {
 		t.Fatalf("seed corrupt file: %v", err)
 	}
-	_, err = auth.Load("default")
+	_, err := auth.Load("default")
 	if err == nil {
 		t.Fatal("Load returned nil error on corrupt JSON")
 	}
@@ -158,9 +112,7 @@ func TestDeleteIsIdempotent(t *testing.T) {
 	if err := auth.Delete("default"); err != nil {
 		t.Fatalf("Delete on missing profile returned %v, want nil (idempotent)", err)
 	}
-	if err := auth.Save("default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt", RunnerCredential: "c"}); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
+	writeProfile(t, "default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt", RunnerCredential: "c"})
 	if err := auth.Delete("default"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -170,12 +122,5 @@ func TestDeleteIsIdempotent(t *testing.T) {
 	// Second Delete must still succeed.
 	if err := auth.Delete("default"); err != nil {
 		t.Fatalf("Delete second call = %v, want nil", err)
-	}
-}
-
-func TestSaveRejectsEmptyProfile(t *testing.T) {
-	_ = withTempHome(t)
-	if err := auth.Save("", auth.Profile{ServerURL: "https://x", RuntimeID: "rt", RunnerCredential: "c"}); err == nil {
-		t.Fatal("Save with empty profile should error")
 	}
 }

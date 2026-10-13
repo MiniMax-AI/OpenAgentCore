@@ -12,13 +12,6 @@ import { withTransition } from "../onboarding/view-transition";
 import { changeConsoleAuth, ConsoleAuthError, readConsoleAuth, type ConsoleAuth } from "./auth";
 import "./console-access.css";
 
-/**
- * Where the installer writes the Core key: its file inside the installation
- * directory, and that file under the default installation directory. The
- * visible sign-in instructions name both; the actual custom path is not public.
- */
-const CORE_KEY_LOCATION = { file: "secrets/core.key", defaultPath: "~/.oac/core/secrets/core.key" } as const;
-
 const ConsoleAccountContext = createContext<{ logout: () => Promise<void> } | null>(null);
 export const useConsoleAccount = () => useContext(ConsoleAccountContext);
 
@@ -146,8 +139,8 @@ function CoreKeyForm({ onAuthenticated }: {
         readOnly={busy} aria-invalid={error ? true : undefined} aria-describedby={`${id}-location${error ? ` ${id}-error` : ""}`} />
     </div>
     <div className="console-key-location" id={`${id}-location`}>
-      <p>{t("The installer saved the key in {{file}} inside the installation directory. On the Core host, read the default location with:", CORE_KEY_LOCATION)}</p>
-      <CopyableId id={`cat ${CORE_KEY_LOCATION.defaultPath}`} label={t("Copy key read command")} />
+      <p>{t("On the Core host, run this command to read the Core key:")}</p>
+      <CopyableId id={'docker compose -f "$HOME/.oac/core/compose.yaml" exec -T web oac-web core-key'} label={t("Copy key read command")} />
       <p>{t("For a custom installation directory, replace the path in this command.")}</p>
     </div>
     {error ? <p className="console-auth-error" id={`${id}-error`} role="alert">{error}</p> : null}

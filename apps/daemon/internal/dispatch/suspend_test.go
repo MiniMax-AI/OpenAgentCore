@@ -15,11 +15,22 @@ type suspendSender func(context.Context, proto.Envelope) error
 
 func (s suspendSender) Send(ctx context.Context, env proto.Envelope) error { return s(ctx, env) }
 
-type suspendedSession struct{ cancelled atomic.Int32 }
+type suspendedExecutor struct {
+	closed atomic.Int32
+	close  func(context.Context) error
+}
 
-func (s *suspendedSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
+func (e *suspendedExecutor) StartTurn(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Turn, error) {
+	return nil, errors.New("suspended executor must not start a Turn")
+}
 
-func (s *suspendedSession) Cancel(context.Context) error { s.cancelled.Add(1); return nil }
+func (e *suspendedExecutor) Close(ctx context.Context) error {
+	e.closed.Add(1)
+	if e.close != nil {
+		return e.close(ctx)
+	}
+	return nil
+}
 
 func suspensionRouter(t *testing.T, sender Sender) *Router {
 	t.Helper()
@@ -37,14 +48,19 @@ func suspensionRouter(t *testing.T, sender Sender) *Router {
 
 func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 	cases := map[string]func(*Router){
-		"active":     func(r *Router) { r.sessions["run"] = &sessionState{ctxCancel: func() {}} },
-		"preparing":  func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
-		"receipt":    func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
-		"read":       func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
-		"write":      func(r *Router) { r.workspaceWrite = &workspaceUpload{} },
-		"export":     func(r *Router) { r.workspaceExport = &workspaceExport{} },
-		"permission": func(r *Router) { r.permIndex["permission"] = "run" },
-		"choice":     func(r *Router) { r.askIndex["choice"] = "run" },
+		"active":             func(r *Router) { r.sessions["run"] = &sessionState{} },
+		"preparing":          func(r *Router) { r.preparations["p"] = &preparationState{owns: true} },
+		"receipt":            func(r *Router) { r.preparations["p"] = &preparationState{busy: true} },
+		"read":               func(r *Router) { r.workspaceReads = map[string]struct{}{"read": {}} },
+		"write":              func(r *Router) { r.workspaceWrite = &workspaceUpload{} },
+		"export":             func(r *Router) { r.workspaceExport = &workspaceExport{} },
+		"closing executor":   func(r *Router) { r.executors["s"] = &executorState{invalid: true, environmentID: "env"} },
+		"preparing executor": func(r *Router) { r.executors["s"] = &executorState{preparing: true, environmentID: "env"} },
+		"active executor":    func(r *Router) { r.executors["s"] = &executorState{run: &sessionState{}, environmentID: "env"} },
+		"admitted executor": func(r *Router) {
+			r.executors["s"] = &executorState{admission: &preparationState{}, environmentID: "env"}
+		},
+		"foreign executor": func(r *Router) { r.executors["s"] = &executorState{environmentID: "other"} },
 	}
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -60,6 +76,7 @@ func TestQuiesceRejectsEveryUnsettledResource(t *testing.T) {
 			r.workspaceReads = nil
 			r.workspaceWrite = nil
 			r.workspaceExport = nil
+			r.executors = map[string]*executorState{}
 		})
 	}
 }
@@ -90,7 +107,7 @@ func TestQuiesceDrainsPendingReceiptAndFencesConcurrentAdmission(t *testing.T) {
 	}
 	admitted := make(chan error, 1)
 	go func() {
-		admitted <- r.Handle(context.Background(), proto.Envelope{Type: proto.TypePromptRequest, ID: "late"})
+		admitted <- r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late"})
 	}()
 	select {
 	case err := <-quiet:
@@ -106,44 +123,89 @@ func TestQuiesceDrainsPendingReceiptAndFencesConcurrentAdmission(t *testing.T) {
 	}
 }
 
-func TestQuiescePreservesIdleOwnerAgainstExpiredTimerAndRequiresExactResume(t *testing.T) {
+func TestQuiesceRetainsIdleExecutorAndRequiresExactResume(t *testing.T) {
 	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
 	r := suspensionRouter(t, sender)
-	session := &suspendedSession{}
-	state := &sessionState{runID: "run", environmentID: "env", stateKey: "state", session: session, ctxCancel: func() {}, retain: true}
+	native := &suspendedExecutor{}
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
 	r.mu.Lock()
-	r.idle["state"] = map[*sessionState]struct{}{state: {}}
-	r.scheduleIdleLocked(state)
-	oldLease := state.idleLease
+	r.executors[owner.sessionID] = owner
+	r.scheduleExecutorIdleLocked(owner)
+	oldLease := owner.idleLease
 	r.mu.Unlock()
 	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
-	if err := r.Quiesce(context.Background(), request); err != nil {
+	if err := r.Quiesce(t.Context(), request); err != nil {
 		t.Fatal(err)
 	}
-	r.expireIdle(state, oldLease)
-	if session.cancelled.Load() != 0 {
-		t.Fatal("pre-snapshot timer killed retained owner")
+	r.expireIdleExecutor(owner, oldLease)
+	if native.closed.Load() != 0 {
+		t.Fatal("quiesce or stale timer closed the resident owner")
 	}
-	wrong := request
-	wrong.SuspendID = "obsolete"
-	if err := r.Resume(wrong, sender); err == nil {
-		t.Fatal("stale operation reopened admission")
+	for _, wrong := range []proto.EnvironmentSuspendPayload{
+		{EnvironmentID: "env", SuspendID: "obsolete"},
+		{EnvironmentID: "foreign", SuspendID: "attempt"},
+	} {
+		if err := r.Resume(wrong, sender); err == nil {
+			t.Fatal("wrong suspension reopened admission")
+		}
+	}
+	if err := r.Resume(request, nil); err == nil {
+		t.Fatal("resume accepted no sender")
 	}
 	if err := r.Resume(request, sender); err != nil {
 		t.Fatal(err)
 	}
+	// A callback queued before Stop may run after Resume. It must not close
+	// the same owner under its renewed idle lease.
+	r.expireIdleExecutor(owner, oldLease)
 	r.mu.Lock()
-	newLease := state.idleLease
+	retained := r.executors[owner.sessionID] == owner && !owner.invalid && owner.native == native && owner.idleLease > oldLease
+	lease := owner.idleLease
 	r.mu.Unlock()
-	r.expireIdle(state, newLease)
-	if session.cancelled.Load() != 1 {
-		t.Fatal("normal idle expiration was not restored")
+	if !retained || native.closed.Load() != 0 {
+		t.Fatal("resume replaced or retired the resident owner")
+	}
+	r.expireIdleExecutor(owner, lease)
+	if native.closed.Load() != 1 {
+		t.Fatal("resumed idle expiry did not close the exact owner")
+	}
+}
+
+func TestQuiesceStopsIdleTimerUntilResume(t *testing.T) {
+	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
+	r := suspensionRouter(t, sender)
+	closed := make(chan struct{})
+	native := &suspendedExecutor{close: func(context.Context) error { close(closed); return nil }}
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
+	r.mu.Lock()
+	r.idleTimeout = 40 * time.Millisecond
+	r.executors[owner.sessionID] = owner
+	r.scheduleExecutorIdleLocked(owner)
+	r.mu.Unlock()
+	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
+	if err := r.Quiesce(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-closed:
+		t.Fatal("parked owner's idle timer closed native resources")
+	case <-time.After(2 * r.idleTimeout):
+	}
+	if err := r.Resume(request, sender); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("resume did not restore idle expiry")
 	}
 }
 
 func TestShutdownDestroysQuiescedOwnerAndCannotResume(t *testing.T) {
 	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
 	r := suspensionRouter(t, sender)
+	native := &suspendedExecutor{}
+	r.executors["session"] = &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
 	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
 	if err := r.Quiesce(context.Background(), request); err != nil {
 		t.Fatal(err)
@@ -153,6 +215,9 @@ func TestShutdownDestroysQuiescedOwnerAndCannotResume(t *testing.T) {
 	}
 	if !errors.Is(r.Resume(request, sender), ErrRouterClosed) {
 		t.Fatal("closed Router resurrected")
+	}
+	if native.closed.Load() != 1 || len(r.executors) != 0 {
+		t.Fatal("shutdown did not retire the retained native owner")
 	}
 }
 
@@ -164,7 +229,7 @@ func TestQuiesceDrainDeadlineCannotReopenAdmission(t *testing.T) {
 	if err := r.Quiesce(ctx, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("quiesce=%v", err)
 	}
-	if err := r.Handle(context.Background(), proto.Envelope{Type: proto.TypePromptRequest, ID: "late"}); !errors.Is(err, ErrRouterQuiesced) {
+	if err := r.Handle(context.Background(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late"}); !errors.Is(err, ErrRouterQuiesced) {
 		t.Fatalf("deadline reopened admission: %v", err)
 	}
 	r.shutdownWG.Done()
@@ -172,5 +237,132 @@ func TestQuiesceDrainDeadlineCannotReopenAdmission(t *testing.T) {
 	// sync.WaitGroup while an abandoned waiter is still returning from Wait.
 	if err := r.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestQuiescedShutdownRetainsFailedCloseForRetry(t *testing.T) {
+	failure := errors.New("native cleanup failed")
+	native := &suspendedExecutor{close: func(context.Context) error { return failure }}
+	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { return nil }))
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
+	r.executors[owner.sessionID] = owner
+	if err := r.Quiesce(t.Context(), proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}); err != nil || native.closed.Load() != 0 {
+		t.Fatalf("quiesce retired owner: err=%v closes=%d", err, native.closed.Load())
+	}
+	if err := r.Shutdown(t.Context()); !errors.Is(err, failure) {
+		t.Fatalf("shutdown lost native close failure: %v", err)
+	}
+	r.mu.Lock()
+	retained := r.executors[owner.sessionID] == owner && owner.invalid && owner.closeErr == failure
+	r.mu.Unlock()
+	if !retained {
+		t.Fatal("failed close abandoned ownership")
+	}
+	native.close = nil
+	if err := r.Shutdown(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if native.closed.Load() != 2 {
+		t.Fatal("shutdown did not retry exactly the settled failure")
+	}
+}
+
+func TestQuiesceCancelledDrainRetainsOwnerUntilShutdownSettles(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	native := &suspendedExecutor{close: func(context.Context) error { close(entered); <-release; return nil }}
+	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { return nil }))
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
+	r.executors[owner.sessionID] = owner
+	r.shutdownWG.Add(1)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := r.Quiesce(ctx, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("quiesce=%v", err)
+	}
+	if native.closed.Load() != 0 {
+		t.Fatal("cancelled drain closed resident owner")
+	}
+	if err := r.Handle(t.Context(), proto.Envelope{Type: proto.TypeExecutionPrepare, ID: "late"}); !errors.Is(err, ErrRouterQuiesced) {
+		t.Fatalf("deadline reopened admission: %v", err)
+	}
+	r.shutdownWG.Done()
+	stopped := make(chan error, 1)
+	go func() { stopped <- r.Shutdown(t.Context()) }()
+	<-entered
+	select {
+	case err := <-stopped:
+		t.Fatalf("shutdown abandoned in-flight close: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	if err := <-stopped; err != nil {
+		t.Fatal(err)
+	}
+	if native.closed.Load() != 1 {
+		t.Fatal("shutdown duplicated in-flight Close")
+	}
+}
+
+func TestQuiesceRejectsAdmissionInProgress(t *testing.T) {
+	r := suspensionRouter(t, suspendSender(func(context.Context, proto.Envelope) error { return nil }))
+	r.admission.Lock()
+	err := r.Quiesce(t.Context(), proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
+	r.admission.Unlock()
+	if !errors.Is(err, ErrRouterBusy) {
+		t.Fatalf("quiesce=%v", err)
+	}
+	r.mu.Lock()
+	fenced := r.suspension != nil
+	r.mu.Unlock()
+	if fenced {
+		t.Fatal("busy rejection changed suspension")
+	}
+}
+
+func TestQuiesceFencesAlreadyRunningTimerAcrossResume(t *testing.T) {
+	sender := suspendSender(func(context.Context, proto.Envelope) error { return nil })
+	r := suspensionRouter(t, sender)
+	native := &suspendedExecutor{}
+	owner := &executorState{id: "executor", sessionID: "session", environmentID: "env", native: native, cancel: func() {}}
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+		<-done
+	})
+	r.mu.Lock()
+	r.executors[owner.sessionID] = owner
+	r.scheduleExecutorIdleLocked(owner)
+	owner.timer.Stop()
+	lease := owner.idleLease
+	owner.timer = time.AfterFunc(0, func() {
+		close(entered)
+		<-release
+		r.expireIdleExecutor(owner, lease)
+		close(done)
+	})
+	r.mu.Unlock()
+	<-entered
+	request := proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"}
+	if err := r.Quiesce(t.Context(), request); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Resume(request, sender); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	<-done
+	if native.closed.Load() != 0 {
+		t.Fatal("callback already running before suspension retired resumed owner")
 	}
 }

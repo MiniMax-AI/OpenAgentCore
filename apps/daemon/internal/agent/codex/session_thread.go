@@ -5,14 +5,20 @@ import (
 	"fmt"
 )
 
+// Harnesses run unattended with the launching user's permissions: Codex never
+// raises a native approval request and applies no inner sandbox.
+const (
+	approvalPolicyNever     = "never"
+	sandboxDangerFullAccess = "danger-full-access"
+)
+
 func (s *Session) startThread(plan SessionPlan) error {
 	params := ThreadStartParams{
 		Cwd:                   plan.Cwd,
 		Model:                 plan.Model,
 		ModelProvider:         plan.ModelProvider,
-		ApprovalPolicy:        plan.ApprovalPolicy,
-		Sandbox:               plan.Sandbox,
-		Permissions:           plan.Permissions,
+		ApprovalPolicy:        approvalPolicyNever,
+		Sandbox:               sandboxDangerFullAccess,
 		DeveloperInstructions: plan.SystemPrompt,
 	}
 	if s.observeSubagentIdentities {
@@ -26,8 +32,7 @@ func (s *Session) startThread(plan SessionPlan) error {
 		"cwd", params.Cwd,
 		"model", params.Model,
 		"model_provider", params.ModelProvider,
-		"sandbox", string(params.Sandbox),
-		"approval_silent", IsSilent(&params.ApprovalPolicy),
+		"sandbox", params.Sandbox,
 		"developer_instructions_len", len(params.DeveloperInstructions))
 	_, err := s.rpc.requestWithResult(s.cancelCtx, "thread/start", params, func(raw json.RawMessage) error {
 		return s.bindThreadResult(raw, "")
@@ -37,8 +42,7 @@ func (s *Session) startThread(plan SessionPlan) error {
 
 func (s *Session) resumeThread(threadID string, plan SessionPlan) error {
 	params := ThreadResumeParams{
-		ThreadID: threadID, ApprovalPolicy: plan.ApprovalPolicy, Sandbox: plan.Sandbox,
-		Permissions:           plan.Permissions,
+		ThreadID: threadID, ApprovalPolicy: approvalPolicyNever, Sandbox: sandboxDangerFullAccess,
 		DeveloperInstructions: plan.SystemPrompt,
 	}
 	if plan.mcpServers != nil {

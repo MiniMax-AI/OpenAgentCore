@@ -41,9 +41,8 @@ test("keeps English Session filters and actions visible at 1280 pixels", async (
 });
 
 test("names the E2B backend consistently and explains its two count sources", async ({ page, request }) => {
-  await openConsole(page, request, "system", { sandbox: "e2b" });
-  await page.getByRole("button", { name: "Manage sandbox configuration" }).click();
-  await expect(page.getByRole("heading", { name: "Sandbox configuration", exact: true })).toBeVisible();
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "e2b" });
+  await expect(page.getByRole("heading", { name: "Sandbox and scheduling", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sandbox metrics", exact: true }).click();
   await expect(page.getByText(/These sources have different coverage and refresh separately/)).toBeVisible();
 });

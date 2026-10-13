@@ -29,7 +29,7 @@ function item(id: string, status: SessionItem["status"]): SessionItem {
 }
 
 function turn(id: string, status: AgentTurn["status"]): AgentTurn {
-  return { id, agent_id: "agent", session_id: "session", object: "agent.session.turn", status, created_at: 1, started_at: null, completed_at: null, error: null, usage: null };
+  return { id, agent_id: "agent", subagent_id: null, session_id: "session", object: "agent.session.turn", status, created_at: 1, started_at: null, completed_at: null, error: null, usage: null };
 }
 
 function list<T extends { id: string }>(data: T[]): ListPage<T> {

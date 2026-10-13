@@ -13,10 +13,6 @@ import (
 	"github.com/moby/moby/client"
 )
 
-var _ runtimeobs.Source = (*Provider)(nil)
-
-func (*Provider) ObservationProviderType() string { return "docker" }
-
 // Observe is read-only. Inspect verifies allocation ownership before Docker
 // statistics are requested; it never renews or changes the container.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
@@ -90,8 +86,4 @@ func sampleFromDocker(inspected container.InspectResponse, stats dockerStatsResp
 		sample.MemoryLimitBytes = &limit
 	}
 	return sample, nil
-}
-
-func (p *Provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
-	return p, nil
 }

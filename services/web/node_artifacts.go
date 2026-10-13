@@ -33,7 +33,7 @@ func (h *console) readNodeManifest(prefix string) (nodeManifest, error) {
 	if err != nil || len(raw) > 1024*1024 || json.Unmarshal(raw, &manifest) != nil {
 		return manifest, errors.New("invalid node manifest")
 	}
-	if prefix != "" && prefix != "releases/"+manifest.SourceCommit+"/" {
+	if prefix != "releases/"+manifest.SourceCommit+"/" {
 		return manifest, errors.New("node manifest release mismatch")
 	}
 	return manifest, nil

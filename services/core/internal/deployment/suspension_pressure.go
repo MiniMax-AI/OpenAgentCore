@@ -1,0 +1,148 @@
+package deployment
+
+import (
+	"errors"
+	"slices"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+)
+
+// SuspensionDemand is a transaction-bound capacity observation. It is not a
+// reservation: only a confirmed suspension frees an active slot.
+type SuspensionDemand struct {
+	Deployment         placement.Deployment
+	Nodes              []placement.Node
+	InFlightNodes      []string
+	CheckpointRestores []CheckpointRestoreDemand
+}
+
+// CheckpointRestoreDemand carries one stopped owner and exact-generation target evidence.
+type CheckpointRestoreDemand struct {
+	SourceNode    string
+	Compatibility sandbox.CheckpointCompatibility
+	Nodes         []placement.CheckpointNode
+}
+
+func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocation) (bool, error) {
+	pressure, err := tx.LoadSuspensionDemand(owner)
+	if err != nil {
+		return false, err
+	}
+	if pressure.Deployment.Resetting || pressure.Deployment.Mode != string(sandbox.DeploymentNodes) || pressure.Deployment.InstallationID != owner.ProviderKey {
+		return false, nil
+	}
+	var source *placement.Node
+	for i := range pressure.Nodes {
+		if pressure.Nodes[i].ID == owner.NodeID {
+			source = &pressure.Nodes[i]
+			break
+		}
+	}
+	if source == nil || !source.Online || source.Active < int64(source.MaxActive) {
+		return false, nil
+	}
+	for _, demand := range pressure.CheckpointRestores {
+		if _, err := e.service.rules.ChooseCheckpoint(demand.Nodes, demand.SourceNode, demand.Compatibility, false); err == nil {
+			continue
+		} else if !errors.Is(err, placement.ErrNodeUnavailable) {
+			return false, err
+		}
+		candidates := slices.Clone(demand.Nodes)
+		for i := range candidates {
+			if candidates[i].Node.ID == owner.NodeID {
+				candidates[i].Node.Active--
+			}
+		}
+		chosen, err := e.service.rules.ChooseCheckpoint(candidates, demand.SourceNode, demand.Compatibility, false)
+		if err == nil && chosen == owner.NodeID {
+			eligible := make([]placement.Node, 0, len(candidates))
+			for _, candidate := range candidates {
+				if candidate.Checkpoint != nil && *candidate.Checkpoint == demand.Compatibility {
+					eligible = append(eligible, candidate.Node)
+				}
+			}
+			inFlight, err := e.reclamationInFlight(pressure, eligible)
+			if err != nil {
+				return false, err
+			}
+			if !inFlight {
+				return true, nil
+			}
+		} else if err != nil && !errors.Is(err, placement.ErrNodeUnavailable) {
+			return false, err
+		}
+	}
+	if source.Retained >= int64(source.MaxRetained) {
+		return false, nil
+	}
+	return e.placementNeedsCapacity(tx, pressure, owner.NodeID)
+}
+
+// placementNeedsCapacity scans bounded pages under the caller's deployment
+// lock and transaction deadline. Suspension must make active capacity usable
+// without releasing a retained slot; an ineligible receipt supplies no pressure.
+func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure SuspensionDemand, nodeID string) (bool, error) {
+	var after PlacementDemandCursor
+	for {
+		demands, next, err := tx.PlacementDemand(after)
+		if err != nil {
+			return false, err
+		}
+		for _, demand := range demands {
+			nodes, err := e.eligibleNodes(pressure.Deployment, pressure.Nodes, demand.Engine, demand.Retained, tx.LoadGenerationSpecification)
+			if err != nil {
+				return false, err
+			}
+			if _, err := e.service.rules.DecidePlacement(pressure.Deployment, nodes); err == nil {
+				// Let the demand scan consume real free capacity first.
+				return false, nil
+			} else if !errors.Is(err, placement.ErrNodeUnavailable) && !errors.Is(err, placement.ErrNodesPreparing) {
+				return false, err
+			}
+			inFlight, err := e.reclamationInFlight(pressure, nodes)
+			if err != nil {
+				return false, err
+			}
+			if inFlight {
+				continue
+			}
+			for i := range nodes {
+				if nodes[i].ID == nodeID {
+					nodes[i].Active--
+				}
+			}
+			chosen, err := e.service.rules.DecidePlacement(pressure.Deployment, nodes)
+			if err == nil && chosen != nil && chosen.NodeID == nodeID {
+				return true, nil
+			}
+			if err != nil && !errors.Is(err, placement.ErrNodeUnavailable) && !errors.Is(err, placement.ErrNodesPreparing) {
+				return false, err
+			}
+		}
+		if next.EnvironmentID == "" {
+			return false, nil
+		}
+		after = next
+	}
+}
+
+// reclamationInFlight coordinates only resources whose nodes can serve this
+// demand. Unavailable or incompatible nodes retain their receipts without
+// stopping pressure recovery on a healthy node.
+func (e *ExecutionOperations) reclamationInFlight(pressure SuspensionDemand, nodes []placement.Node) (bool, error) {
+	for _, node := range nodes {
+		if !slices.Contains(pressure.InFlightNodes, node.ID) {
+			continue
+		}
+		// Capacity is what the in-flight operation may release; all other
+		// placement requirements must hold now, using the normal admission rule.
+		node.Active, node.Retained = 0, 0
+		if chosen, err := e.service.rules.DecidePlacement(pressure.Deployment, []placement.Node{node}); err == nil && chosen != nil {
+			return true, nil
+		} else if err != nil && !errors.Is(err, placement.ErrNodeUnavailable) && !errors.Is(err, placement.ErrNodesPreparing) {
+			return false, err
+		}
+	}
+	return false, nil
+}

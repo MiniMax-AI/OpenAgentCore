@@ -15,14 +15,14 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_WEB_CORE_KEY_FILE", key)
-	t.Setenv("OAC_WEB_ORIGIN", testOrigin)
+	t.Setenv("OAC_PUBLIC_URL", testOrigin)
 	t.Setenv("OAC_WEB_UPSTREAM", "http://core:8091")
 	t.Setenv("OAC_WEB_DIST", directory)
 	c, err := loadConfig()
 	if err != nil || c.coreKey != valid {
 		t.Fatalf("valid configuration failed: %v", err)
 	}
-	for _, value := range []string{"http://user:secret@core:8091", "http://core:8091/v1", "http://core:8091?token=secret", "http://core:8091#", "file:///config/caller.key", ""} {
+	for _, value := range []string{"http://user:secret@core:8091", "http://core:8091/v1", "http://core:8091?token=secret", "http://core:8091#", "file:///config/caller.key"} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("OAC_WEB_UPSTREAM", value)
 			_, err := loadConfig()
@@ -31,6 +31,15 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 			}
 		})
 	}
+	t.Setenv("OAC_WEB_UPSTREAM", "")
+	if c, err := loadConfig(); err != nil || c.upstream.String() != "http://core:8091" {
+		t.Fatal("an empty upstream did not select the default", err)
+	}
+	t.Setenv("OAC_PUBLIC_URL", "")
+	if _, err := loadConfig(); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
+		t.Fatal("console configured without OAC_PUBLIC_URL", err)
+	}
+	t.Setenv("OAC_PUBLIC_URL", testOrigin)
 	for _, value := range []string{"", "token with spaces", strings.Repeat("x", 4097), "token\x00", strings.Repeat("s", 31)} {
 		if err := os.WriteFile(key, []byte(value), 0o600); err != nil {
 			t.Fatal(err)
@@ -58,7 +67,7 @@ func TestBootstrapFollowsManagedHTTPOrigin(t *testing.T) {
 	}
 	t.Setenv("OAC_WEB_CORE_KEY_FILE", key)
 	t.Setenv("OAC_WEB_DIST", directory)
-	t.Setenv("OAC_WEB_ORIGIN", "http://localhost:8080")
+	t.Setenv("OAC_PUBLIC_URL", "http://localhost:8080")
 	if _, err := loadConfig(); err != nil {
 		t.Fatal(err)
 	}

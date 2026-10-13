@@ -10,7 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -25,15 +24,6 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		return nil
 	}
 	if binding == nil {
-		return nil
-	}
-	if !runtime.Info.Available || !SupportsExecution(runtime.Info.Version) {
-		fail(fmt.Errorf("local execution requires the qualified native version"))
-		return nil
-	}
-	root, err := paths.Root()
-	if err != nil {
-		fail(err)
 		return nil
 	}
 	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
@@ -60,7 +50,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
 	if err == nil {
 		err = CheckWorkspace(parent, c)
 	}
@@ -71,7 +61,6 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 
 	caps := &runtime.Info.Capabilities
 	caps.EnvironmentNone = proto.CapabilityUnsupported
-	caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
-	caps.WorkspaceReadPreparation = proto.CapabilitySupported
+	caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
 	return &c
 }

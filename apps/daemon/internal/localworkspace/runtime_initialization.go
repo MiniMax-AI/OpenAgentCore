@@ -36,9 +36,6 @@ func (b *Binding) initializeRuntime(ctx context.Context, input proto.RuntimeInit
 	if input.Action != "setup" && input.Action != "npm" && input.Action != "python" {
 		return agentcapabilities.ErrInvalid
 	}
-	if input.Network != "enabled" && input.Network != "disabled" {
-		return agentcapabilities.ErrInvalid
-	}
 	directory, err := b.initializationCWD(input.CWD)
 	if err != nil {
 		return err

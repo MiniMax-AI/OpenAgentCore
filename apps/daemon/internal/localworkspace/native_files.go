@@ -115,12 +115,12 @@ func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte)
 	}
 	defer root.Close()
 	if err = root.MkdirAll(filepath.Dir(local), 0700); err != nil {
-		return result, agent.ErrWorkspaceWriteRejected
+		return result, unpublishedWriteError(err)
 	}
 	temporary := ".oac-write-" + uuid.NewString()
 	file, err := root.OpenFile(temporary, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
-		return result, agent.ErrWorkspaceWriteRejected
+		return result, unpublishedWriteError(err)
 	}
 	defer root.Remove(temporary)
 	_, err = file.Write(data)
@@ -129,7 +129,7 @@ func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte)
 	}
 	closeErr := file.Close()
 	if err != nil || closeErr != nil {
-		return result, agent.ErrWorkspaceWriteRejected
+		return result, unpublishedWriteError(errors.Join(err, closeErr))
 	}
 	// Link publishes complete bytes without replacing an existing destination.
 	if err = root.Link(temporary, local); err != nil {
@@ -138,10 +138,21 @@ func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte)
 				return result, agent.ErrWorkspaceWriteDirectory
 			}
 			return result, agent.ErrWorkspaceWriteUnsafe
+		} else if errors.Is(e, fs.ErrNotExist) {
+			return result, unpublishedWriteError(err)
 		}
 		return result, agent.ErrWorkspaceWriteRejected
 	}
 	return agent.WorkspaceWriteResult{SizeBytes: int64(len(data))}, nil
+}
+
+// unpublishedWriteError applies only before this operation publishes a file.
+// Parent directories or a temporary file may already have been created.
+func unpublishedWriteError(err error) error {
+	if storageExhausted(err) {
+		return agent.ErrWorkspaceWriteUnavailable
+	}
+	return agent.ErrWorkspaceWriteRejected
 }
 
 const artifactFileBytes int64 = 200 << 20

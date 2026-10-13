@@ -1,4 +1,4 @@
-import { AgentCoreError, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
+import { AgentCoreError, deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
@@ -13,11 +13,10 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreFieldError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
-import type { MessageKey } from "../../lib/locale-strings";
-import { sandboxConfigurationRejection } from "../../lib/sandbox-labels";
-import { defaultSandboxResources, distributionRuntime, savedSpecification, validSandboxResources } from "./deployment-specification";
+import type { ParseKeys } from "i18next";
+import { sandboxConfigurationRejection, sandboxProviderLabel } from "../../lib/sandbox-labels";
+import { defaultSandboxResources, distributionRuntime, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
-import { isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS } from "./runtime-release";
 import { sandboxAdmin } from "./sandbox-queries";
 import "./sandbox-wizard.css";
 
@@ -41,6 +40,8 @@ function e2bService(apiURL?: string): E2BService {
 }
 
 const MIB = 2 ** 20;
+const bounds = Object.fromEntries(deploymentContract.resources.map(({ name, min, max }) => [name, `${min}–${max}`]));
+const resourceBounds = { cpus: bounds.cpus, memory: bounds.memory_mib, disk: deploymentContract.minimum_disk };
 const EASE = [0.16, 1, 0.3, 1] as const;
 // Core accepts a template ID of up to 128 characters and a canonical, non-nil build UUID.
 const TEMPLATE = /^[a-zA-Z0-9_-]{1,128}:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -65,11 +66,13 @@ export function validEndpoint(apiURL: string, domain: string): boolean {
 }
 
 /**
- * Per-sandbox presets around the deployment default: half and double of it.
- * Disks apply to microsandbox only, the one provider that enforces them.
+ * Per-sandbox presets around the Provider's declared default size: half and
+ * double of it, disks included where the default declares them. A Provider
+ * whose configuration selects the size declares none and has no presets.
  */
-function presets(provider: SandboxProvider): Record<Preset, SandboxResources> {
-  const standard = defaultSandboxResources(provider);
+function presets(provider: SandboxProvider, workspace?: SandboxSpecification["workspace"]): Record<Preset, SandboxResources> | null {
+  const standard = defaultSandboxResources(provider, workspace);
+  if (!standard) return null;
   const scale = (factor: number): SandboxResources => ({
     cpus: Math.max(1, standard.cpus * factor),
     memory_mib: standard.memory_mib * factor,
@@ -78,7 +81,7 @@ function presets(provider: SandboxProvider): Record<Preset, SandboxResources> {
   return { small: scale(0.5), standard, large: scale(2) };
 }
 
-const releaseLabels: Record<keyof SandboxRuntimeRelease, MessageKey> = {
+const releaseLabels: Record<keyof SandboxRuntimeRelease, ParseKeys<"sandbox">> = {
   source_commit: "Source commit",
   image_id: "Image ID",
   image_manifest_digest: "Image manifest digest",
@@ -87,19 +90,21 @@ const releaseLabels: Record<keyof SandboxRuntimeRelease, MessageKey> = {
   firmware_sha256: "Firmware SHA-256",
 };
 
-function presetOf(provider: SandboxProvider, resources: SandboxResources): Preset | null {
+function presetOf(provider: SandboxProvider, resources: SandboxResources, workspace?: SandboxSpecification["workspace"]): Preset | null {
   const same = (a: SandboxResources, b: SandboxResources) => a.cpus === b.cpus && a.memory_mib === b.memory_mib
     && (a.root_disk_mib ?? 0) === (b.root_disk_mib ?? 0) && (a.environment_disk_mib ?? 0) === (b.environment_disk_mib ?? 0);
-  const all = presets(provider);
-  return (Object.keys(all) as Preset[]).find((key) => same(all[key], resources)) ?? null;
+  const all = presets(provider, workspace);
+  return all ? (Object.keys(all) as Preset[]).find((key) => same(all[key], resources)) ?? null : null;
 }
 
 /**
  * Hosted sandbox setup as pages, one decision each: where sandboxes run,
  * which backend (own machines, microsandbox preselected) or the E2B account,
- * how big each sandbox is (own machines only: E2B sandboxes take the template
- * build's size), then a review. Advanced settings hold the complete form. The Runtime
- * release comes from this console's distribution manifest when it serves one.
+ * how big each sandbox is (only for a Provider that declares a default size:
+ * E2B sandboxes take the template build's size), then a review. The Provider's
+ * declarations decide the size, disk and Runtime inputs. Advanced settings
+ * hold the complete form. The Runtime release comes from this console's
+ * distribution manifest when it serves one.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
  * the backend keeps its saved size and Runtime; another backend starts from its
  * defaults and this console's Runtime. E2B updates can retain the saved key.
@@ -120,12 +125,16 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const { t, i18n } = useTranslation("sandbox");
   const { t: tCommon } = useTranslation("common");
   const id = useId();
-  const [step, setStep] = useState<Step>(editing ? current?.provider === "e2b" ? "e2b" : "size" : "where");
-  const [where, setWhere] = useState<Where | null>(current ? (current.provider === "e2b" ? "direct" : "nodes") : null);
+  const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
+  const currentMode: Where | null = current ? deploymentContract.providers[current.provider].mode : null;
+  const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "e2b" : "size" : "where");
+  const [where, setWhere] = useState<Where | null>(currentMode);
   const [provider, setProvider] = useState<SandboxProvider | null>(current?.provider ?? null);
+  const policy = provider ? deploymentContract.providers[provider] : null;
   const saved = provider && current ? savedSpecification(provider, current.provider, current.specification) : null;
-  const [resources, setResources] = useState<SandboxResources>(current?.specification?.resources ?? defaultSandboxResources("docker"));
-  const [size, setSize] = useState<Size>(current?.specification ? presetOf(current.provider, current.specification.resources) ?? "current" : "standard");
+  // Choosing a Provider that declares a default size replaces this placeholder.
+  const [resources, setResources] = useState<SandboxResources>(current?.specification?.resources ?? { cpus: 0, memory_mib: 0 });
+  const [size, setSize] = useState<Size>(current?.specification ? presetOf(current.provider, current.specification.resources, current.specification.workspace) ?? "current" : "standard");
   const [apiKey, setApiKey] = useState("");
   const [replacementRequested, setReplacementRequested] = useState(false);
   const [template, setTemplate] = useState(current?.e2bTemplate ?? "");
@@ -189,28 +198,29 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const matched = useQuery({ queryKey: ["sandbox-runtime-release"], queryFn: ({ signal }) => distributionRuntime(signal).catch(() => null), staleTime: Infinity, retry: false });
   const release: Partial<SandboxRuntimeRelease> = Object.keys(runtime).length ? runtime : saved?.runtime ?? matched.data ?? {};
 
-  const needsRuntime = provider === "docker" || provider === "microsandbox";
+  const needsRuntime = policy?.runtime ?? false;
   const runtimeReady = !needsRuntime || isRuntimeRelease(release);
   // Initial setup requires a key; an update may retain the committed key.
   const keyReady = e2bKeyReady(Boolean(editing), replacementRequested, apiKey);
   const connectionChanged = Boolean(editing && (apiURL.trim() !== (current?.e2bAPIURL || E2B_PRESETS.official.apiURL) || domain.trim() !== (current?.e2bDomain || E2B_PRESETS.official.domain)));
   const e2bReady = provider !== "e2b" || (keyReady && validTemplate(template.trim()) && validEndpoint(apiURL.trim(), domain.trim()) && (!editing || !connectionChanged || apiKey.trim().length > 0));
-  // Core sizes E2B sandboxes from the template build, so E2B sends no resources.
-  const sized = provider !== null && provider !== "e2b";
-  const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources));
+  // A Provider without a declared default size takes it from its configuration, so the selection sends no resources.
+  const sized = Boolean(policy?.default_resources);
+  const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources, saved?.workspace));
   const ready = provider !== null && runtimeReady && e2bReady && sizeReady && !disabled && !busy;
 
   const order: Step[] = editing ? where === "direct" ? ["e2b", "review"] : ["size", "review"] : where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
   const index = Math.max(0, order.indexOf(step === "advanced" ? "review" : step));
   const back = () => setStep(step === "advanced" ? "review" : order[Math.max(0, index - 1)]!);
 
-  // The saved backend keeps its size and Runtime; another starts from its standard size and this console's Runtime.
+  // The saved backend keeps its size and Runtime; another starts from its declared default size and this console's Runtime.
   function choose(next: SandboxProvider) {
     if (next !== provider) {
       setRejection(null);
       const kept = current ? savedSpecification(next, current.provider, current.specification) : null;
-      setResources(kept?.resources ?? presets(next).standard);
-      setSize(kept ? presetOf(next, kept.resources) ?? "current" : "standard");
+      const proposed = kept?.resources ?? defaultSandboxResources(next);
+      if (proposed) setResources(proposed);
+      setSize(kept ? presetOf(next, kept.resources, kept.workspace) ?? "current" : "standard");
       setRuntime({});
     }
     setProvider(next);
@@ -237,7 +247,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       else await onSubmit({ ...selection, ...(provider === "e2b" ? { credential: { api_key: apiKey.trim() }, configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
     } catch (error) {
       // A configuration Core rejected is explained here; the page reports every other failure.
-      const reason = sandboxConfigurationRejection(error, i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en");
+      const reason = sandboxConfigurationRejection(error, locale);
       if (reason === null) throw error;
       setRejection(reason);
       setFieldRejection(error);
@@ -254,7 +264,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   }
 
   const sizeLabel = (value: SandboxResources) => t("{{cpus}} CPU · {{memory}}", { cpus: value.cpus, memory: formatBytes(value.memory_mib * MIB) });
-  const diskLabel = (value: SandboxResources) => t("Root disk {{root}} · data disk {{data}}", { root: formatBytes((value.root_disk_mib ?? 0) * MIB), data: formatBytes((value.environment_disk_mib ?? 0) * MIB) });
+  const diskLabel = (value: SandboxResources) => saved?.workspace ? t("Root disk {{root}} · external workspace", { root: formatBytes((value.root_disk_mib ?? 0) * MIB) }) : t("Root disk {{root}} · data disk {{data}}", { root: formatBytes((value.root_disk_mib ?? 0) * MIB), data: formatBytes((value.environment_disk_mib ?? 0) * MIB) });
 
   let page: ReactNode;
   if (step === "where") {
@@ -262,7 +272,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       <Question title={t("Where should sandboxes run?")} help={t("E2B runs sandboxes in its cloud: no machines to manage, billed by E2B. Own machines run them on hosts you add, with microsandbox (recommended) or Docker.")}>
         <div className="wizard-choices">
           <Choice icon={Cloud} title={t("E2B cloud")} selected={where === "direct"} onClick={() => { setWhere("direct"); choose("e2b"); setStep("e2b"); }} />
-          <Choice icon={Server} title={t("Own machines")} selected={where === "nodes"} onClick={() => { setWhere("nodes"); setApiKey(""); if (provider === null || provider === "e2b") choose("microsandbox"); setStep("backend"); }} />
+          <Choice icon={Server} title={t("Own machines")} selected={where === "nodes"} onClick={() => { setWhere("nodes"); setApiKey(""); if (policy?.mode !== "nodes") choose("microsandbox"); setStep("backend"); }} />
         </div>
       </Question>
     );
@@ -332,15 +342,15 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       </Question>
     );
   } else if (step === "size") {
-    const options = presets(provider ?? "docker");
+    const options = provider ? presets(provider, saved?.workspace) : null;
     // A saved size outside the presets stays on offer as the current one.
-    const kept = saved && provider && presetOf(provider, saved.resources) === null ? saved.resources : null;
-    const disks = (value: SandboxResources) => (provider === "microsandbox" ? diskLabel(value) : undefined);
+    const kept = saved && provider && presetOf(provider, saved.resources, saved.workspace) === null ? saved.resources : null;
+    const disks = (value: SandboxResources) => (policy?.disk ? diskLabel(value) : undefined);
     page = (
       <Question title={t("How big is each sandbox?")} help={t("These limits apply to the selected configuration generation. Existing sandboxes keep their limits. Concurrency is set per node.")}>
         <div className={kept ? "wizard-choices wizard-choices-4" : "wizard-choices wizard-choices-3"}>
           {kept ? <Choice title={t("Current")} value={sizeLabel(kept)} detail={disks(kept)} selected={size === "current"} onClick={() => { setSize("current"); setResources(kept); setStep("review"); }} /> : null}
-          {(Object.keys(options) as Preset[]).map((key) => (
+          {options && (Object.keys(options) as Preset[]).map((key) => (
             <Choice
               key={key}
               title={t(key === "small" ? "Small" : key === "standard" ? "Standard" : "Large")}
@@ -361,8 +371,8 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     page = (
       <Question title={t("Review and save")}>
         <dl className="wizard-review">
-          <div><dt>{t("Sandboxes run on")}</dt><dd>{where === "direct" ? t("E2B cloud") : `${t("Own machines")} · ${provider === "docker" ? "Docker" : "microsandbox"}`}</dd></div>
-          <div><dt>{t("Each sandbox")}</dt><dd>{sized ? sizeLabel(resources) : t("From the template build")}{provider === "microsandbox" ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
+          <div><dt>{t("Sandboxes run on")}</dt><dd>{where === "direct" ? t("E2B cloud") : `${t("Own machines")} · ${sandboxProviderLabel(provider ?? "", locale)}`}</dd></div>
+          <div><dt>{t("Each sandbox")}</dt><dd>{sized ? sizeLabel(resources) : t("From the template build")}{policy?.disk ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
           {provider === "e2b" ? <div><dt>{t("Template build")}</dt><dd><code>{template || "—"}</code></dd></div> : null}
           {provider === "e2b" ? <div><dt>{t("Sandbox API URL")}</dt><dd><code>{apiURL || "https://api.e2b.app"}</code></dd></div> : null}
           {provider === "e2b" ? <div><dt>{t("Sandbox data-plane domain")}</dt><dd><code>{domain || "e2b.app"}</code></dd></div> : null}
@@ -377,7 +387,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
             <dd>
               {address ? <code>{address}</code> : "—"}
-              <span className="wizard-review-sub">{t("Managed in System")}</span>
+              <span className="wizard-review-sub">{t("Managed in Settings")}</span>
               {installation.data?.local_only ? <span className="wizard-review-caution">{t("Set a public address before connecting remote nodes; E2B sandboxes need an HTTPS one.")}</span> : null}
             </dd>
           </div>
@@ -386,7 +396,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           <div className="wizard-rejection" role="alert">
             <p>{rejection}</p>
             {resetRequired ? <p>{t("Cancel editing to use Reset deployment. This change requires an explicit reset; the saved configuration is unchanged.")}</p> : null}
-            {addressRejected ? <button className="text-action" type="button" onClick={() => navigate("system")}>{t("Managed in System")}</button> : null}
+            {addressRejected ? <button className="text-action" type="button" onClick={() => navigate("settings", { id: "service" })}>{t("Managed in Settings")}</button> : null}
           </div>
         ) : null}
         {/* Initial setup needs the cleared key re-entered; updates may keep the saved key. */}
@@ -413,13 +423,13 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       <Question title={t("Advanced settings")}>
         <form className="wizard-fields" onSubmit={(event) => { event.preventDefault(); setStep("review"); }}>
           {sized ? <fieldset className="wizard-group">
-            <legend>{t("Each sandbox")}<HelpTip>{t("1–255 CPUs, 512–1048576 MiB of memory. microsandbox disks are at least 1024 MiB.")}</HelpTip></legend>
+            <legend>{t("Each sandbox")}<HelpTip>{t("{{cpus}} CPUs, {{memory}} MiB of memory. microsandbox disks are at least {{disk}} MiB.", resourceBounds)}</HelpTip></legend>
             <div className="wizard-grid">
               <NumberField error={fieldError("resources.cpus")} id={`${id}-cpus`} label={t("CPUs")} value={resources.cpus} onChange={(cpus) => { setSize("custom"); setResources({ ...resources, cpus }); setFieldRejection(null); }} />
               <NumberField error={fieldError("resources.memory_mib")} id={`${id}-memory`} label={t("Memory (MiB)")} value={resources.memory_mib} onChange={(memory_mib) => { setSize("custom"); setResources({ ...resources, memory_mib }); setFieldRejection(null); }} />
-              {provider === "microsandbox" ? <>
+              {policy?.disk ? <>
                 <NumberField error={fieldError("resources.root_disk_mib")} id={`${id}-root`} label={t("Root disk (MiB)")} value={resources.root_disk_mib ?? 0} onChange={(root_disk_mib) => { setResources({ ...resources, root_disk_mib }); setFieldRejection(null); }} />
-                <NumberField error={fieldError("resources.environment_disk_mib")} id={`${id}-data`} label={t("Data disk at /environment (MiB)")} value={resources.environment_disk_mib ?? 0} onChange={(environment_disk_mib) => { setResources({ ...resources, environment_disk_mib }); setFieldRejection(null); }} />
+                {saved?.workspace && !saved.workspace.capacity_quota ? <p>{t("Workspace storage is configured by the operator; no capacity quota is enforced.")}</p> : <NumberField error={fieldError("resources.environment_disk_mib")} id={`${id}-data`} label={t("Data disk at /environment (MiB)")} value={resources.environment_disk_mib ?? 0} onChange={(environment_disk_mib) => { setResources({ ...resources, environment_disk_mib }); setFieldRejection(null); }} />}
               </> : null}
             </div>
           </fieldset> : null}
@@ -532,7 +542,7 @@ function NumberField({ id, label, value, onChange, error }: { error?: string | n
   );
 }
 
-function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?: () => void; nextDisabled?: boolean; t: (key: MessageKey) => string }) {
+function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?: () => void; nextDisabled?: boolean; t: (key: ParseKeys<"sandbox">) => string }) {
   return (
     <div className="wizard-nav">
       <button className="button ghost" type="button" onClick={onBack}><ArrowLeft size={14} aria-hidden="true" />{t("Back")}</button>

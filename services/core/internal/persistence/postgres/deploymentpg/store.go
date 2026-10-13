@@ -25,8 +25,8 @@ type Store struct {
 	cipher *credentialcrypto.Cipher
 }
 
-// New returns the deployment store. cipher is nil when Core has no credential
-// key; a stored credential then reads as credentialcrypto.ErrUnavailable.
+// New returns the deployment store, which seals the provider credential with
+// cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -116,7 +116,7 @@ func (s *Store) Allocation(ctx context.Context, ref sandbox.Reference) (deployme
 	var result deployment.AllocationRecord
 	err = s.pool.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
-		row, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: tenant, EnvironmentID: environment})
+		row, err := q.GetLatestRuntimeAllocation(ctx, sqlc.GetLatestRuntimeAllocationParams{TenantID: tenant, EnvironmentID: environment})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return deployment.ErrNotFound
 		}

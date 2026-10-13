@@ -28,7 +28,7 @@ var _ agent.Executor = (*executor)(nil)
 var _ agent.Turn = (*Session)(nil)
 
 // NewExecutorFactory fixes the deployment workspace once; nil selects none.
-func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
+func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.ExecutorFactory {
 	var frozen *WorkspaceConfig
 	if config != nil {
 		value := *config
@@ -39,17 +39,17 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+		if req.RunID != "" || len(req.Input) != 0 {
 			return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
 		}
 		var err error
 		var opts launchOptions
 		binary := defaultBinary()
 		if frozen == nil {
-			opts, err = prepareOptions(ctx, req)
+			opts, err = prepareOptions(runtimeRoot, req)
 		} else {
 			binary = frozen.Binary
-			opts, err = prepareWorkspaceOptions(ctx, *frozen, req)
+			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
 		}
 		if err != nil {
 			return nil, err
@@ -63,7 +63,7 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 }
 
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*executor, error) {
-	bootstrap, err := launch(ctx, req, opts, binary, nil)
+	bootstrap, err := launch(ctx, req, opts, binary)
 	if err != nil {
 		return nil, err
 	}
@@ -126,14 +126,14 @@ func (e *executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	default:
 	}
 	req := e.req
-	req.RunID, req.Input = runID, proto.TextInput(text)
+	req.RunID = runID
 	s := newTurnSession(e.connection.process.Context(), req, e.opts, e.connection, out)
 	s.executor, s.sessionID, s.nativeModel = e, e.nativeSession, e.model
 	s.settled, s.inputDone = make(chan struct{}), make(chan struct{})
 	s.outputContext, s.outputCancel = context.WithCancel(context.Background())
 	e.active = s
 	e.connection.setCurrent(s)
-	go s.runExecutorTurn()
+	go s.runExecutorTurn(text)
 	go func() {
 		select {
 		case <-ctx.Done():

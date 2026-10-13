@@ -1,7 +1,6 @@
 package sessionpg
 
 import (
-	"bytes"
 	"errors"
 	"reflect"
 	"testing"
@@ -15,25 +14,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func frozenCipher(t *testing.T) *credentialcrypto.Cipher {
-	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{5}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return cipher
-}
-
 // corruptFrozenData reports whether err classifies frozen data as corrupt
-// stored data: an internal error, never the caller's input, a missing record
-// or a missing key.
+// stored data: an internal error, never the caller's input or a missing
+// record.
 func corruptFrozenData(err error) bool {
-	return err != nil && !errors.Is(err, sessions.ErrInvalidInput) && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, credentialcrypto.ErrUnavailable)
+	return err != nil && !errors.Is(err, sessions.ErrInvalidInput) && !errors.Is(err, sessions.ErrNotFound)
 }
 
 func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 	pool := pgtest.Open(t)
-	cipher := frozenCipher(t)
+	cipher := pgtest.CredentialKey(t)
 	adapter := New(pgunit.NewPool(pool), cipher)
 	tenantID, sessionID, _ := newEnvironment(t, pool, "self_hosted", "pending")
 	tenant, session := uuidText(tenantID), uuidText(sessionID)
@@ -60,9 +50,6 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 	setup, err := adapter.ReadEnvironmentSetup(t.Context(), tenant, session)
 	if err != nil || setup.Env["GREETING"] != "hello" || !reflect.DeepEqual(setup.Packages.NPM, []string{"left-pad"}) {
 		t.Fatalf("frozen setup %+v, %v", setup, err)
-	}
-	if _, err := New(pgunit.NewPool(pool), nil).ReadEnvironmentSetup(t.Context(), tenant, session); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatalf("without a credential key: %v", err)
 	}
 
 	otherSession := binding
@@ -91,7 +78,7 @@ func TestReadEnvironmentSetupClassifiesFrozenData(t *testing.T) {
 
 func TestReadInitialEnvironmentFileClassifiesFrozenData(t *testing.T) {
 	pool := pgtest.Open(t)
-	cipher := frozenCipher(t)
+	cipher := pgtest.CredentialKey(t)
 	adapter := New(pgunit.NewPool(pool), cipher)
 	tenantID, sessionID, _ := newEnvironment(t, pool, "self_hosted", "pending")
 	tenant, session := uuidText(tenantID), uuidText(sessionID)
@@ -116,9 +103,6 @@ func TestReadInitialEnvironmentFileClassifiesFrozenData(t *testing.T) {
 	}
 	if _, _, err := adapter.ReadInitialEnvironmentFile(t.Context(), uuid.NewString(), session, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("other tenant: %v", err)
-	}
-	if _, _, err := New(pgunit.NewPool(pool), nil).ReadInitialEnvironmentFile(t.Context(), tenant, session, 0); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatalf("without a credential key: %v", err)
 	}
 
 	otherFile := binding

@@ -14,8 +14,7 @@ const observedReset = (clear: "auto" | "force" = "auto"): SandboxReset => ({
 });
 const progress = (page: Page) => page.getByRole("region", { name: "Reset in progress" });
 async function openConfiguration(page: Page) {
-  await page.getByRole("button", { name: "System", exact: true }).click();
-  await page.getByRole("button", { name: "Manage sandbox configuration", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
 }
 async function expectEnrollmentBlocked(page: Page) {
   await page.getByRole("button", { name: "Nodes", exact: true }).click();
@@ -41,7 +40,7 @@ test.afterEach(async ({ request }) => {
 test("auto reset requires a bounded deadline, then preserves Core progress past that deadline", async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await setDeployment(request, { resources: { allocations: 3, pending: 1 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
   const dialog = await openReset(page);
@@ -83,7 +82,7 @@ test("auto reset requires a bounded deadline, then preserves Core progress past 
 });
 
 test("escalation and cancellation require explicit confirmation and never undo previous clearing", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await setDeployment(request, { resources: { allocations: 3, pending: 1 }, reset: observedReset() });
   await page.reload();
   await progress(page).getByRole("button", { name: "Force reset now" }).click();
@@ -110,7 +109,7 @@ test("escalation and cancellation require explicit confirmation and never undo p
 });
 
 test("force reset requires confirmation and reconfiguration uses the completed generation once", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await setDeployment(request, { resources: { allocations: 1, pending: 0 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
   const dialog = await openReset(page);
@@ -133,7 +132,7 @@ test("force reset requires confirmation and reconfiguration uses the completed g
 });
 
 test("an applied reset with a lost response stays blocked through failed reads and is never replayed", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(page.getByRole("button", { name: "Reset deployment", exact: true })).toBeEnabled();
   await setDeployment(request, { resources: { allocations: 1, pending: 0 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
@@ -164,7 +163,7 @@ test("an applied reset with a lost response stays blocked through failed reads a
 });
 
 test("a stale reset is refused until fresh state is reviewed, with no automatic resubmission", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(page.getByRole("button", { name: "Reset deployment", exact: true })).toBeEnabled();
   await setDeployment(request, { generation: 2, resources: { allocations: 3, pending: 1 } });
   const dialog = await openReset(page);
@@ -195,7 +194,7 @@ test("a stale reset is refused until fresh state is reviewed, with no automatic 
 test("reset progress survives failed node and deployment reads with visible qualifications in Chinese dark mode", async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.emulateMedia({ colorScheme: "dark" });
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await setDeployment(request, { resources: { allocations: 3, pending: 1 }, reset: observedReset() });
   await page.route("**/core/v1/sandbox/nodes", (route) => route.fulfill(unavailable));
   await page.reload();
@@ -218,7 +217,7 @@ test("reset progress survives failed node and deployment reads with visible qual
 });
 
 test("a pending reset survives navigation and a lost response cannot reopen stale write controls", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await expect(page.getByRole("button", { name: "Reset deployment", exact: true })).toBeEnabled();
   await setDeployment(request, { resources: { allocations: 1, pending: 0 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
@@ -303,7 +302,7 @@ test("Nodes and configuration adopt reset and completion learned on Overview bef
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Sandbox reset in progress" })).toHaveCount(0);
   await page.getByRole("button", { name: "Nodes", exact: true }).click();
-  await expect(page.getByText("Set up sandbox hosting in System before adding nodes.")).toBeVisible();
+  await expect(page.getByText("Set up sandbox hosting in Settings before adding nodes.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toHaveCount(0);
   await openConfiguration(page);
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
@@ -314,7 +313,7 @@ test("Nodes and configuration adopt reset and completion learned on Overview bef
 
 
 test("signing out clears pending reset ownership and a late response cannot overwrite the new login", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await setDeployment(request, { resources: { allocations: 1, pending: 0 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
   const dialog = await openReset(page);

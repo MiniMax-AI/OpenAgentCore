@@ -10,7 +10,7 @@ import (
 )
 
 func TestSetupReservesOpenAgentCoreNames(t *testing.T) {
-	for _, name := range []string{"OAC_ADDR", "OAC_RUNTIME_HOME", "OAC_WEB_ORIGIN", "OAC_LOG_LEVEL", "OAC_DEV_HOME", "OAC_TEST_DATABASE_URL"} {
+	for _, name := range []string{"OAC_ADDR", "OAC_RUNTIME_HOME", "OAC_PUBLIC_URL", "OAC_LOG_LEVEL", "OAC_DEV_HOME", "OAC_TEST_DATABASE_URL"} {
 		if err := (Setup{Env: map[string]string{name: "value"}}).Validate(); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("reserved name %s accepted: %v", name, err)
 		}

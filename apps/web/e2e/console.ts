@@ -12,17 +12,15 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
  * `sandbox` the sandbox deployment, `nodes: "none"` a deployment no node has joined, and
  * `installation` how config.json's public_url is set: "public" (HTTPS, the default), "local"
  * (loopback: only the Core machine reaches the API, and E2B is rejected) or "stale" (public,
- * with a node enrolled with an earlier address), `credentials: "none"` a Core without a
- * credential encryption key, which cannot store a model provider's key, and
- * `installers: "none"` a console without its node installation payload, so it serves neither
+ * with a node enrolled with an earlier address), and `installers: "none"` a console without its node installation payload, so it serves neither
  * the node nor the self-hosted installer. `nodeArtifacts` lists the providers the console has
  * node files for, both by default; as in the console, microsandbox needs Docker's files too.
  */
-export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; credentials?: "none"; installers?: "none"; nodeArtifacts?: ("docker" | "microsandbox")[] }
+export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; installers?: "none"; nodeArtifacts?: ("docker" | "microsandbox")[] }
 
 /** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
 export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: FixtureOptions = {}) {
-  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.credentials ? `&credentials=${options.credentials}` : ""}${options.installers ? `&installers=${options.installers}` : ""}${options.nodeArtifacts ? `&artifacts=${options.nodeArtifacts.join(",")}` : ""}`);
+  await request.post(`${fixture}/__fixture/reset?auth=${auth}${options.fresh ? "&projects=none" : ""}&sandbox=${options.sandbox ?? "configured"}${options.nodes ? `&nodes=${options.nodes}` : ""}&installation=${options.installation ?? "public"}${options.installers ? `&installers=${options.installers}` : ""}${options.nodeArtifacts ? `&artifacts=${options.nodeArtifacts.join(",")}` : ""}`);
 }
 
 const v1Requests: string[] = [];
@@ -40,7 +38,7 @@ export async function openConsole(page: Page, request: APIRequestContext, hash =
   await resetFixture(request, "authenticated", options);
   await recordV1Requests(page);
   await page.context().addCookies([{ name: "core_console", value: "fixture-session", url: web }]);
-  await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
+  await page.addInitScript(() => window.localStorage.setItem("oac-web.language", "en"));
   await page.goto(`/#${hash}`);
 }
 

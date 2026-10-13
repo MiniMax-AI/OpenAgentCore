@@ -8,9 +8,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -86,19 +83,11 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-// writeStoreError reports a failure of an operation that can meet a sandbox
-// reset or the sandbox deployment, then the Session errors.
-func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
-	// Admission paused by a reset is Session admission's.
-	if errors.Is(err, placement.ErrResetAdmission) {
-		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
-		return
-	}
-	if errors.Is(err, placement.ErrAdmissionClosed) {
-		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
-		return
-	}
-	if writeSandboxError(w, err) {
+// writeOperationError reports a failure of a Session operation that also
+// meets the sandbox deployment: creation, input admission, archive and Runtime
+// observation.
+func writeOperationError(w http.ResponseWriter, r *http.Request, err error) {
+	if writeWorkspaceError(w, err) || writeSandboxError(w, err) {
 		return
 	}
 	writeSessionsError(w, r, err)
@@ -115,26 +104,37 @@ func writeInternalError(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
 }
 
+// storedDataError carries a failure of Core's own stored or resolved
+// configuration on the Agent and Session paths: a saved configuration or tool
+// that Core resolved or stored and that does not decode, or a storage or
+// decryption failure while reading the deployment default model provider. It
+// is never the client's input, so it is never echoed in a response.
+type storedDataError struct{ err error }
+
+func (e *storedDataError) Error() string { return e.err.Error() }
+func (e *storedDataError) Unwrap() error { return e.err }
+
+// writeStoredDataError reports a storedDataError as a service error and returns
+// false for any other error. The underlying failure is logged for diagnosis.
+func writeStoredDataError(w http.ResponseWriter, r *http.Request, err error) bool {
+	var stored *storedDataError
+	if !errors.As(err, &stored) {
+		return false
+	}
+	log.Ctx(r.Context()).Error("oac-core stored data failed", "error", stored.err)
+	writeModelConfigurationError(w, r, stored.err)
+	return true
+}
+
 // writeTextValueError reports request text that PostgreSQL cannot store and
 // returns false for any other error. It is a documented local limit: text and
 // jsonb cannot store U+0000, and text parameters, including query filters,
 // reject invalid UTF-8.
 func writeTextValueError(w http.ResponseWriter, r *http.Request, err error) bool {
-	if !errors.Is(err, textvalue.ErrUnstorable) && !store.UnstorableText(err) {
+	if !errors.Is(err, textvalue.ErrUnstorable) {
 		return false
 	}
 	writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)
-	return true
-}
-
-// writeCredentialUnavailableError reports a request that needs credential
-// encryption on a service without a credential key, and returns false for any
-// other error.
-func writeCredentialUnavailableError(w http.ResponseWriter, r *http.Request, err error) bool {
-	if !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		return false
-	}
-	writeError(w, http.StatusServiceUnavailable, "credential_storage_unavailable", "Credential encryption is not configured on this service.")
 	return true
 }
 

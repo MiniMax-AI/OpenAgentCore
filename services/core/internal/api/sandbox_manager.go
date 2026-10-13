@@ -12,19 +12,19 @@ import (
 )
 
 type SandboxNodeList struct {
-	Data []deployment.Node `json:"data"`
+	Data []deployment.Node `json:"data" binding:"required"`
 }
 type SandboxAllocationList struct {
-	Data []deployment.NodeAllocation `json:"data"`
+	Data []deployment.NodeAllocation `json:"data" binding:"required"`
 }
 type SandboxEnrollmentToken struct {
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Token     string    `json:"token" binding:"required"`
+	ExpiresAt time.Time `json:"expires_at" binding:"required"`
 	// Public, non-secret handle of this command; never a credential. The node it registers reports the same value as enrollment_id.
-	EnrollmentID string `json:"enrollment_id"`
+	EnrollmentID string `json:"enrollment_id" binding:"required"`
 }
 type SandboxMutationResponse struct {
-	ID      string `json:"id"`
+	ID      string `json:"id" binding:"required"`
 	Deleted bool   `json:"deleted,omitempty"`
 	Updated bool   `json:"updated,omitempty"`
 }
@@ -38,6 +38,7 @@ type SandboxEnrollmentTokenRequest struct {
 // identity, generation configuration, capacity and removal.
 type Deployment interface {
 	View(ctx context.Context) (deployment.View, error)
+	UpdateIdleSeconds(context.Context, int64) (deployment.View, error)
 	ListNodes(ctx context.Context) ([]deployment.Node, error)
 	NodeDetail(ctx context.Context, id, window string) (deployment.NodeDetail, error)
 	UpdateNode(ctx context.Context, id string, update deployment.NodeUpdate) error
@@ -59,9 +60,6 @@ type NodeAllocations interface {
 // registerSandboxNodeRoutes serves node machine connections. They authenticate
 // with an enrollment token or node credential, never the Core key.
 func (h *Handler) registerSandboxNodeRoutes(r chi.Router) {
-	if h.Sandboxes == nil {
-		return
-	}
 	r.Post("/api/v1/sandbox-node/enroll", h.enrollSandboxNode)
 	r.Get("/api/v1/sandbox-node/identity", h.sandboxNodeIdentity)
 	r.Get("/api/v1/sandbox-node/configuration", h.sandboxNodeConfiguration)
@@ -70,12 +68,10 @@ func (h *Handler) registerSandboxNodeRoutes(r chi.Router) {
 // registerSandboxManagerRoutes adds sandbox deployment and node administration
 // to the Core-key-authenticated /core/v1 router.
 func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
-	if h.Sandboxes == nil {
-		return
-	}
 	r.Get("/sandbox/deployment", h.sandboxDeployment)
 	r.Post("/sandbox/providers/{provider}/discovery", h.discoverSandboxConfiguration)
 	r.Post("/sandbox/deployment", h.initializeSandboxDeployment)
+	r.Patch("/sandbox/deployment", h.updateSandboxIdlePolicy)
 	r.Put("/sandbox/deployment", h.updateSandboxDeployment)
 	r.Post("/sandbox/deployment/reset", h.startSandboxReset)
 	r.Delete("/sandbox/deployment/reset", h.cancelSandboxReset)

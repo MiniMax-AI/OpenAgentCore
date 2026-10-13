@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: a158d22b6c42b10baa3867b56611f281dc13fd98b676765bf4b36a7684d0795a
+source_hash: 842e0f7a2685950efaad106244a101e11f213030387426759206ba0bfd44ab61
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -11,10 +11,19 @@ Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[publi
 | 文件 | 内容 |
 | --- | --- |
 | [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) | 固定版本：提交 `d7c41ef` 时的 [openai-python](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents) 3.13.0；资源位于 `beta/agents` 下；Beta 标头为 `agents=v1` |
-| [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json)、[upstream-fields.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-fields.json) | 58 组方法与路径及其官方字段：`beta/agents` 下的 42 个操作、5 个 Files 操作和 11 个 Skills 操作。`scripts/extract-agents-api-upstream.py` 从固定版本的 SDK 中提取这些内容；安装该 SDK 后运行此脚本 |
-| [openapi.yaml](../openapi.yaml) | Core 的公共架构，由 `make openapi` 根据 `services/core/internal/api/` 中的路由注解以及 [`v1/`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/contracts/agents-api/v1) 中的传输类型生成 |
+| [upstream/openapi.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream/openapi.json) | 未修改的官方 OpenAPI 3.1，固定提交为 `046a2a0f325bf11f97966f2729219f27281ba71e`，发布于 2026-09-10。其中 58 个 Agents、Vaults、Files 和 Skills 操作与固定 SDK 的路由集合一致。`upstream.json` 记录 SHA-256 校验和 |
+| [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json) | 从官方 schema 生成的标准化方法和路径清单 |
+| [openapi.yaml](../openapi.yaml) | 官方公共契约，并在 Agent 和 Session 请求及响应对象上加入 Core 的 `x_agents_core` 扩展 |
+| [go-bindings.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/go-bindings.json) | Go 名称、字段表示、编码顺序和存储投影；不定义官方字段集合、枚举或约束 |
 
-契约测试确保 Core 符合固定版本：路由器和 `openapi.yaml` 提供的路由与固定版本完全一致（`services/core/internal/api/routing_test.go`、`v1/upstream_contract_test.go`），每个查询参数和字段都采用官方定义，而 Core 专有字段仅位于 Agents 和 Sessions 内部的 `x_agents_core` 中。Swagger 2.0 无法表达字符串或数组联合类型，因此 `openapi.yaml` 不对 Session 的 `input` 和函数结果的 `output` 施加约束；这些类型由固定版本的类型定义和 Core 的校验逻辑确定。晚于该固定版本的操作和字段需等待协议升级。
+运行 `make openapi` 重新生成公共 Go 类型、Agent 请求结构、路由清单和三个 OpenAPI 文档。`scripts/generate-public-api.py` 读取仓库内经过校验和验证的官方源文件，无需网络。它选择 Agents、Vaults、Files 和 Skills，并跟随 schema 引用，保留联合类型、可空性、必填字段和约束。`services/core/internal/api/official_shapes.gen.go` 中的请求结构投影 `CreateAgentParams`、`UpdateAgentParams` 和 `SessionAgentConfigParam`；Core 在读取 Agent 配置前先按它们检查请求体。Core 在 `v1/` 中的扩展类型继续由 Go 定义，在生成时加入公共 schema。TypeScript 客户端在 `packages/agents-client/src/generated/public-api.ts` 中的类型、枚举值和字段名由生成后的公共 schema 生成。内部 `/core/v1` 和 `/api/v1` 文档由处理函数注解生成；同一生成器把 `/core/v1` 文档投影为 `packages/agents-client/src/generated/core-api.ts`，其中引用的公共类型从 `public-api.ts` 导入。在这些注解里，Core 总会发送的响应字段带 `binding:"required"`，可以为 null 的字段带 `extensions:"x-nullable"`，Core 拥有的封闭集合使用生产方包中的具名 Go 类型和带类型的常量。Swag 从该类型生成一个枚举定义，供所有线上字段共享。单值判别字段保留 `enums:` 标签；映射官方或 Runtime 所有集合的字段保留标签，并通过契约测试与其所有者核对。这些注解只影响文档，客户端会拒绝不符合它们的响应。`make check-openapi` 检查生成结果是否最新并测试生成器；`make check-go` 也会运行此检查。
+
+公共契约是官方 API 加上 Core 扩展。标准字段生成到 `v1/official.gen.go`；`go-bindings.json` 只列出 Core 使用的类型，仅在已有存储或自定义 JSON 编码需要时覆盖 Go 表示或字段顺序。未覆盖的字段遵循官方 schema，相同结构复用同一个 Go 类型。部分带判别字段的联合类型也从 schema 生成 JSON 序列化代码，保留每个分支必需的可空字段。其他联合类型序列化、Core 的本地限制、执行准入和状态转换仍由实现代码负责。契约测试验证公共 schema 保留官方定义、扩展位于 `x_agents_core` 中，且所有文档与注册路由一致。官方客户端和原始 HTTP 测试验证行为。生成 schema 不代表某个尚未实现的功能已经得到验证；下方缺口仍然适用。升级上游时，在比对和兼容性测试后一起更新 OpenAPI 和 SDK 固定版本。
+
+官方源文件与已有服务存在以下已记录的差异：Agents 鉴权错误的 `code` 可以为 null；Files 空页的 `first_id` 和 `last_id` 为 null；File 资源的 `expires_at` 和 `status_details` 可以为 null。源文件将这些字段声明为非空。官方客户端响应验证器只对这些指定字段允许 null，其余部分按 OpenAPI 3.1 响应 schema 验证。源文件中的 Files 和 Skills 操作未声明错误响应，因此这些错误体使用上游共享的 `ErrorResponse` schema。[传输语义](wire-semantics.md)和原始 HTTP 测试验证服务行为；发布的 schema 保留官方定义。
+
+Go 输入投影排除 `packages.system`，保留下方记录的明确拒绝行为。生成过程不会启用尚未支持的操作，也不会改变已存储安装配置的验证。
+
 
 各项状态的证据必须来自固定版本的官方 SDK，以及针对运行中服务发出的原始 HTTP 请求，正如 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#compatibility-evidence) 所要求。
 
@@ -31,7 +40,7 @@ Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[publi
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | 部分实现：只读子级工作；不支持实时子级进度或可选原生操作 | [Subagents](subagents.md) |
-| Environments | retrieve | 已实现 | [Environments](environments.md) |
+| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[Project 拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment Templates](environments.md#templates) |
 | Vaults | create, retrieve, list, delete | 已实现；没有归档操作 | [Vaults and Credentials](vaults.md) |
@@ -105,6 +114,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 显式指定推理强度或摘要、使用 `auto` 之外的服务层级、启用 `web_search` 或启用程序化工具调用，这些设置都会被保存，但在 Session 准入时会被拒绝。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions、没有服务源 MCP，也不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
+- MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
 **执行和历史**
 
@@ -118,8 +128,10 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Environments 和 Templates**
 
+- Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - Runtime 不会实施 `disabled` 或 `restricted` 网络，因此需要这些网络的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
 - `packages.system` 会被拒绝；系统软件包必须预先安装。
+- 冷续接不恢复进程内存、后台进程或临时系统盘修改；已完成的 setup 不会重放。参见 [Environment 持久化](environments.md#runtime-capability-preparation)。Codex 与 Claude Code 已在使用保留 NFS 存储的兼容 microsandbox 节点间通过跨节点内存恢复验证，适用[检查点转移要求](../../../docs/zh/sandbox-provider.md#checkpoint-transfer)。接管未确认停止的旧写入者仍未通过资格验证。在使用保留 NFS 存储的 microsandbox 上，Codex 与 Claude Code 已通过空闲 Turn 后、Turn 中断时以及完成确认后两秒内发生[已确认的计算资源丢失](../../../docs/zh/sandbox-provider.md#confirmed-compute-loss)的续接检查。历史缺失检查保留了原生身份，并以通用 `engine_failed` 或 `environment_unavailable` 结果明确失败。主机崩溃时的持久性及任意崩溃受损历史的完整性仍未通过资格验证。
 
 **Files 和 Environment files**
 

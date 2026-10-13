@@ -97,7 +97,9 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 		case <-ctx.Done():
 			return pending, ctx.Err()
 		case <-tick.C:
-			current, err := d.Store.ExpireEnvironmentInput(ctx, tenant, session, pending.ID)
+			expire, cancel := context.WithTimeout(ctx, 5*time.Second)
+			current, err := d.Sessions.ExpireEnvironmentInput(expire, tenant, session, pending.ID)
+			cancel()
 			if err != nil || current.State != sessions.EnvironmentInputPending {
 				return current, err
 			}
@@ -126,9 +128,9 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 	}
 }
 
-func (p *preparedStart) start(ctx context.Context, request proto.PromptRequestPayload) error {
+func (p *preparedStart) start(ctx context.Context, runID string, input proto.MessageInput) error {
 	p.startSentAt = time.Now()
-	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: request.RunID, Input: request.Input})
+	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: runID, Input: input})
 }
 
 func (p *preparedStart) started(env proto.Envelope, runID string) (bool, error) {

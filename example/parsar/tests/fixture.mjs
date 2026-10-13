@@ -21,8 +21,13 @@ const message = (turn, role, text) => ({
 });
 
 const streams = new Map();
+// Snapshot events carry the Session itself instead of its ID.
 const emit = (session, event) => {
-  const data = { event_id: randomUUID(), session_id: session.id, ...event };
+  const data = {
+    event_id: randomUUID(),
+    ...("session" in event ? {} : { session_id: session.id }),
+    ...event,
+  };
   for (const stream of streams.get(session.id) || [])
     stream.write(`data: ${JSON.stringify(data)}\n\n`);
 };
@@ -224,7 +229,7 @@ createServer(async (req, res) => {
     const saved = {
       id: randomUUID(),
       name: null,
-      reasoning: {},
+      reasoning: { effort: null, summary: null },
       service_tier: "auto",
       ...body.agent,
       multi_agent: { enabled: false, max_concurrent_subagents: null },
@@ -374,20 +379,19 @@ createServer(async (req, res) => {
       .push(message(turn, "user", event.input[0].content[0].text));
     if (event.input[0].content[0].text === "Stream reply") {
       const item = { ...message(turn, "assistant", ""), status: "in_progress" };
-      const base = { turn_id: turn.id, item_id: item.id, output_index: 0 };
+      const base = { turn_id: turn.id, output_index: 0 };
+      const text = { ...base, item_id: item.id, content_index: 0 };
       setTimeout(() => {
         emit(session, { ...base, type: "agent.session.turn.item.added", item });
         emit(session, {
-          ...base,
-          content_index: 0,
+          ...text,
           type: "agent.session.turn.output_text.delta",
           delta: "流式第一段",
         });
       }, 250);
       setTimeout(() => {
         emit(session, {
-          ...base,
-          content_index: 0,
+          ...text,
           type: "agent.session.turn.output_text.delta",
           delta: "，第二段完成。",
         });

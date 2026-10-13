@@ -34,7 +34,7 @@ func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 	if err != nil || refreshed.Identity.MaxActive != 2 || refreshed.Identity.MaxRetained != 8 || refreshed.Credential != stored.Credential {
 		t.Fatal("approved capacity not refreshed", err)
 	}
-	persisted, err := LoadIdentity(dir)
+	persisted, err := readIdentity(dir)
 	if err != nil || persisted != refreshed {
 		t.Fatal("approved capacity not persisted", err)
 	}
@@ -42,7 +42,7 @@ func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 	if _, err = RefreshIdentity(t.Context(), dir); err == nil {
 		t.Fatal("foreign identity accepted")
 	}
-	after, _ := LoadIdentity(dir)
+	after, _ := readIdentity(dir)
 	if after != persisted {
 		t.Fatal("rejected response changed retained identity")
 	}

@@ -4,7 +4,6 @@ import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 
 import (
 	"context"
-	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/google/uuid"
@@ -59,9 +58,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			req.DisableExecutionEnvironment = false
 			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-				return nil, errors.New("ordinary Factory must not run")
-			})
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 			prepared := make(chan *Prepared, 1)
 			registry.RegisterExecutor("codex", func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 				e, err := newExecutor(ctx, req, cfg)

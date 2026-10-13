@@ -18,6 +18,7 @@ func TestCreatedConfigurationRejectionRequiresExactOwnedCompute(t *testing.T) {
 			ref := sandbox.Reference{TenantID: "tenant", EnvironmentID: "environment", AllocationID: "allocation"}
 			created := wire.Compute{Name: wire.Name(config, ref, 0), ID: "local:created"}
 			labels := wire.Labels(config, ref)
+			labels[workspaceModeLabel] = "owned"
 			labels[bootstrapLabel] = "pending"
 			actual["labels"] = labels
 			actualID, status := created.ID, "running"

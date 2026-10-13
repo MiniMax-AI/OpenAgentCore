@@ -84,27 +84,13 @@ func TestHTTPMiddlewareIgnoresMalformedHeader(t *testing.T) {
 }
 
 func TestStartBackgroundTraceMintsFresh(t *testing.T) {
-	ctx, c := StartBackgroundTrace(context.Background(), "test.op")
+	ctx, c := StartBackgroundTrace(context.Background())
 	if c.Trace.IsZero() {
 		t.Fatalf("StartBackgroundTrace returned zero carrier")
 	}
 	got, ok := TraceFromContext(ctx)
 	if !ok || got.Trace != c.Trace {
 		t.Fatalf("ctx carrier mismatch: %+v want %+v", got, c)
-	}
-}
-
-// TestChildSpanKeepsTraceRotatesSpan: child shares trace_id, has a
-// different span_id.
-func TestChildSpanKeepsTraceRotatesSpan(t *testing.T) {
-	parentCtx, parent := StartBackgroundTrace(context.Background(), "")
-	_, child := ChildSpan(parentCtx)
-	if child.Trace != parent.Trace {
-		t.Fatalf("child should keep trace; parent=%s child=%s",
-			parent.Trace.String(), child.Trace.String())
-	}
-	if child.Span == parent.Span {
-		t.Fatalf("child should rotate span; both=%s", child.Span.String())
 	}
 }
 

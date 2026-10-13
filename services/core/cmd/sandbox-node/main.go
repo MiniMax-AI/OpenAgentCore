@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	providerconfig "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	workspaceproviders "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs/providers"
 )
 
 func main() {
@@ -81,7 +82,7 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	built, closeProvider, err := registry.Build(config, providerconfig.LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true, Workspace: workspaceproviders.New()})
 	if err != nil {
 		return err
 	}
@@ -92,8 +93,12 @@ func run(ctx context.Context, args []string) error {
 	}
 	expected := node.Identity{SpecificationDigest: built.SpecificationDigest, DeploymentGeneration: config.Generation, InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint}
 	probe := func(ctx context.Context) (node.Health, error) {
-		err := built.Probe(ctx)
-		return node.Health{ProviderReady: err == nil}, err
+		checkpoint, err := built.Probe(ctx)
+		status := sandbox.GenerationStatus{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, State: "ready", Checkpoint: checkpoint}
+		if err != nil {
+			status.State, status.Diagnostic, status.Checkpoint = "failed", sandbox.NodeDiagnostic(err), nil
+		}
+		return node.Health{ProviderReady: err == nil, Generations: []sandbox.GenerationStatus{status}}, err
 	}
 	if args[0] == "register" {
 		if !filepath.IsAbs(*tokenFile) {

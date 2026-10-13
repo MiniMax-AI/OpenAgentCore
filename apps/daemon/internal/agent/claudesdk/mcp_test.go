@@ -72,7 +72,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 }
 
 func TestMCPObservationLifecycle(t *testing.T) {
-	start := startRequest{MCPHTTPServers: &[]mcpHTTPServer{{ServerLabel: "fixture"}}, observeFunctions: true}
+	start := startRequest{MCPHTTPServers: &[]mcpHTTPServer{{ServerLabel: "fixture"}}}
 	state := mcpState{calls: map[string]proto.ToolObservation{}}
 	var observations []proto.ToolCallPayload
 	emit := func(kind string, payload any) {
@@ -107,7 +107,7 @@ func TestMCPObservationLifecycle(t *testing.T) {
 	if err := state.receive(before, start, emit); err != nil {
 		t.Fatal(err)
 	}
-	state.close(start, emit)
+	state.close(emit)
 	if !state.complete() || observations[len(observations)-1].Observation.Status != "incomplete" {
 		t.Fatal("cancellation lost pending call")
 	}

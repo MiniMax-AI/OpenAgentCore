@@ -8,17 +8,14 @@ import (
 	"strings"
 )
 
-// mcpServerConfig is the daemon-internal MCP server config flattened
-// from agent_options["mcp_servers"] (rendered by render.TargetCodex /
-// the mcpServers JSON shape). Written into <CODEX_HOME>/config.toml
+// mcpServerConfig is the daemon-internal MCP server config resolved from
+// the request's MCP bindings. Written into <CODEX_HOME>/config.toml
 // before spawning the app-server child.
 type mcpServerConfig struct {
 	Name              string
 	URL               string
-	Headers           map[string]string
 	Command           string
 	Args              []string
-	Env               map[string]string
 	EnabledTools      *[]string
 	Required          bool
 	BearerTokenEnvVar string
@@ -76,7 +73,6 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 				}
 				b.WriteString("]\n")
 			}
-			writeMCPHeaderMap(&b, "http_headers", srv.Headers)
 			writeMCPHeaderMap(&b, "env_http_headers", srv.EnvHTTPHeaders)
 			b.WriteByte('\n')
 			continue
@@ -93,22 +89,6 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 				b.WriteString(tomlQuoteString(a))
 			}
 			b.WriteString("]\n")
-		}
-		if len(srv.Env) > 0 {
-			envKeys := make([]string, 0, len(srv.Env))
-			for k := range srv.Env {
-				envKeys = append(envKeys, k)
-			}
-			sort.Strings(envKeys)
-			b.WriteString("\n[mcp_servers.")
-			b.WriteString(tomlQuoteString(name))
-			b.WriteString(".env]\n")
-			for _, k := range envKeys {
-				b.WriteString(tomlQuoteString(k))
-				b.WriteString(" = ")
-				b.WriteString(tomlQuoteString(srv.Env[k]))
-				b.WriteByte('\n')
-			}
 		}
 		b.WriteByte('\n')
 	}

@@ -122,7 +122,7 @@ describe("Parsar dadf64a7 ordered Session input batch", () => {
       "agent.session.input.cancel",
       "agent.session.input.tool_result",
     ]);
-    expect(message.input.map((input) => input.content.map((part) => part.text).join(""))).toEqual([
+    expect(message.input.map((input) => input.content.map((part) => ("text" in part ? part.text : "")).join(""))).toEqual([
       "First message",
       "Second message",
     ]);
@@ -299,7 +299,7 @@ describe("Parsar 182d333d Vault Credentials and Session attachments", () => {
   });
 
   it("pins the owning Vault attachment on the public Session resource", () => {
-    const session = vaultCredentials182d.session as AgentSession;
+    const session = vaultCredentials182d.session as unknown as AgentSession;
     expect(session.vault_ids).toEqual([vaultCredentials182d.vault_list.data[0]?.id]);
     expect(session.environment).toEqual({ type: "none" });
   });

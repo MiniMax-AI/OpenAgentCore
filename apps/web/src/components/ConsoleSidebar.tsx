@@ -7,6 +7,7 @@ import {
   Layers3,
   LayoutDashboard,
   ListChecks,
+  ListFilter,
   ListTree,
   Network,
   Puzzle,
@@ -27,6 +28,7 @@ const viewIcons: Record<ConsoleView, LucideIcon> = {
   "core-metrics": Network,
   "agent-metrics": Activity,
   "sandbox-metrics": Cpu,
+  "request-log": ListFilter,
   sessions: ListTree,
   session: ListTree,
   agents: Bot,
@@ -36,7 +38,7 @@ const viewIcons: Record<ConsoleView, LucideIcon> = {
   vaults: Vault,
   projects: FolderKanban,
   nodes: Server,
-  system: Settings2,
+  settings: Settings2,
 };
 
 export function ConsoleSidebar({

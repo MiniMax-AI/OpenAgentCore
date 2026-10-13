@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-store docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-codex-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -32,21 +32,28 @@ sqlc-generate:
 
 SWAG ?= go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION)
 
-.PHONY: openapi
+.PHONY: openapi check-openapi
+OPENAPI_FLAGS ?=
+check-openapi:
+	$(MAKE) openapi OPENAPI_FLAGS=--check
+	python3 scripts/generate-public-api.test.py
+
 openapi:
 	@set -e; root="$${OAC_DEV_HOME:-$$HOME/.oac}/build"; mkdir -p "$$root"; \
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
+	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --swag-roots "$$output/roots.go"; \
 	$(SWAG) init \
-	    -g cmd/server/main.go --dir ./services/core,./contracts/agents-api/v1 \
+	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,./internal/modelprovider,$$output" \
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
-	go run ./scripts/openapi-split "$$output/swagger.yaml" contracts/agents-api/openapi.yaml contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml
+	go run ./scripts/openapi-split $(OPENAPI_FLAGS) "$$output/swagger.yaml" "$$output/extensions.json" "$$output/core.json" contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml; \
+	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --extensions "$$output/extensions.json" --core "$$output/core.json"
 
 check-sqlc:
 	python3 scripts/check-sqlc.py
 
-check-go:
+check-go: check-openapi
 	go test ./apps/daemon/... ./internal/... ./contracts/agents-api/... ./scripts/openapi-split -count=1
 
 .PHONY: check-runtime-contract
@@ -64,23 +71,24 @@ build-daemon:
 build-core:
 	./scripts/build-core.sh
 
-CORE_STORE_PACKAGE := github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store
+CORE_INTEGRATION_PACKAGE := github.com/MiniMax-AI/OpenAgentCore/services/core/tests/integration
 
-check-core: override OAC_CORE_STORE_SHARD :=
-check-core: build-core check-core-packages check-core-store
+check-core: override OAC_CORE_INTEGRATION_SHARD :=
+check-core: build-core check-core-packages check-core-integration
 
-# Core, service and client tests except the serial store integration package.
+# Core, service and client tests except the serial integration package.
 check-core-packages:
 	@set -euo pipefail; packages=$$(go list ./services/core/... ./packages/agents-client/...); \
-	packages=$$(printf '%s\n' "$$packages" | grep -vxF '$(CORE_STORE_PACKAGE)'); \
+	packages=$$(printf '%s\n' "$$packages" | grep -vxF '$(CORE_INTEGRATION_PACKAGE)'); \
 	go test $$packages -count=1 -timeout=20m
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/core/tests -p 'official_diagnostics_test.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/e2b/managed_init_test.py
+	PYTHONDONTWRITEBYTECODE=1 python3 services/core/internal/workspacefs/nfs/quota/helper_test.py
 
-# Store integration tests run serially and include bounded lifecycle waits that together exceed Go's 10m default.
-# OAC_CORE_STORE_SHARD=INDEX/TOTAL runs one deterministic partition; unset runs them all.
-check-core-store:
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/go-test-shard.py $(CORE_STORE_PACKAGE) $(or $(OAC_CORE_STORE_SHARD),1/1) -count=1 -timeout=20m
+# Integration tests run serially and include bounded lifecycle waits that together exceed Go's 10m default.
+# OAC_CORE_INTEGRATION_SHARD=INDEX/TOTAL runs one deterministic partition; unset runs them all.
+check-core-integration:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/go-test-shard.py $(CORE_INTEGRATION_PACKAGE) $(or $(OAC_CORE_INTEGRATION_SHARD),1/1) -count=1 -timeout=20m
 
 # The distribution's Core image, without the native installer catalog.
 docker-build-core:
@@ -145,8 +153,8 @@ check-mcode-harness:
 	@for script in packages/mcode-harness/*.mjs; do node --check "$$script"; done
 	bash -n scripts/build-mcode-harness.sh scripts/build-mcode-runtime.sh
 
-build-agents-runtime:
-	./scripts/build-agents-runtime.sh
+build-codex-runtime:
+	./scripts/build-codex-runtime.sh
 
 build-claude-runtime:
 	./scripts/build-claude-runtime.sh
@@ -159,29 +167,27 @@ build-mcode-runtime:
 
 .PHONY: build-microsandbox-provider check-microsandbox-provider
 build-microsandbox-provider:
-	@test "$$(go env GOOS)" = linux || { echo 'The microsandbox provider helper requires Linux' >&2; exit 1; }
-	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/microsandbox-provider"; \
-	[[ "$$output" == /* ]] || { echo 'Provider output directory must be absolute' >&2; exit 1; }; \
-	mkdir -p "$$output"; \
-	cd services/core/tools/microsandbox-provider; \
-	GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath -o "$$output/oac-microsandbox-provider" .
+	python3 scripts/build-microsandbox-provider.py build "$${OAC_DEV_HOME:-$$HOME/.oac}/build/microsandbox-provider/oac-microsandbox-provider"
 
 check-microsandbox-provider:
+	python3 scripts/build-microsandbox-provider.test.py
 	go test -mod=readonly ./services/core/internal/sandbox/microsandbox/... -count=1
 	@if [[ "$$(go env GOOS)" == linux ]]; then \
-	    cd services/core/tools/microsandbox-provider && GOWORK=off CGO_ENABLED=1 go test -mod=readonly ./... -count=1; \
+	    python3 scripts/build-microsandbox-provider.py test; \
 	else \
 	    printf 'Skipping the Linux-only microsandbox SDK helper tests; the full Linux gate is required before release.\n'; \
 	fi
 
 .PHONY: check-distribution build-core-distribution
 check-distribution:
+	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/runtime_profile_test.py
 	node --test scripts/build-native-catalog.test.mjs
-	go test ./services/web -count=1
+	go test ./services/web ./services/core/cmd/oac -count=1
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/node -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/compose -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/acceptance -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install.py
+	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install_source.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/publish-core-release.test.py
 	bash -n deploy/install.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh

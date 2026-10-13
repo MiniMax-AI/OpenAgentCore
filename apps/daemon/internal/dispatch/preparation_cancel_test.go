@@ -28,20 +28,6 @@ func (p *cancellationPreparation) Cancel(ctx context.Context) error {
 
 func (p *cancellationPreparation) CancellationOutcome() proto.DonePayload { return p.outcome }
 
-type nonCancellablePreparation struct {
-	closed chan struct{}
-	once   sync.Once
-}
-
-func (*nonCancellablePreparation) Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error) {
-	return nil, errors.New("must not start")
-}
-
-func (p *nonCancellablePreparation) Close() error {
-	p.once.Do(func() { close(p.closed) })
-	return nil
-}
-
 func startCancellationPreparation(t *testing.T, r *dispatch.Router, sender *recSender) proto.PreparationStatusPayload {
 	t.Helper()
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", preparationRequest())); err != nil {
@@ -100,8 +86,6 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 		session = &fakeSession{out: out, closeOutOnCancel: true,
 			postCancelEnvelopes: []proto.Envelope{mustEnv(t, proto.TypeDone, id, p.outcome)}}
 		out <- mustEnv(t, proto.TypeDelta, id, proto.DeltaPayload{Delta: "observed"})
-		out <- mustEnv(t, proto.TypePermissionRequest, id, proto.PermissionRequestPayload{RequestID: "permission"})
-		out <- mustEnv(t, proto.TypePromptForUserChoice, id, proto.PromptForUserChoicePayload{AskID: "ask"})
 		out <- mustEnv(t, proto.TypeUsage, id, proto.UsagePayload{Usage: p.outcome.Usage})
 		close(startEntered)
 		<-startReturn
@@ -116,7 +100,7 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 		<-cleanupReturn
 		return nil
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender.recSender)
 	<-startEntered
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"})); err != nil {
@@ -138,16 +122,6 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 	if len(cancellationAcks(sender.recSender)) != 0 || r.ActiveRuns() != 1 {
 		t.Fatal("cleanup released ownership early")
 	}
-	for _, decision := range []proto.Envelope{
-		mustEnv(t, proto.TypePermissionDecision, "permission", proto.PermissionDecisionPayload{DeliveryID: "permission-reply", Approved: true}),
-		mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "ask-reply", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}}),
-	} {
-		if err := r.Handle(t.Context(), decision); err != nil {
-			t.Fatal(err)
-		}
-	}
-	assertDecisionAck(t, sender.recSender, "permission-reply", false, "not_pending")
-	assertDecisionAck(t, sender.recSender, "ask-reply", false, "not_pending")
 	close(cleanupReturn)
 	waitFor(t, func() bool { return len(cancellationAcks(sender.recSender)) == 2 && r.ActiveRuns() == 0 }, "prepared cancellation receipts")
 	if p.calls.Load() != 1 || session.cancels() != 1 {
@@ -159,7 +133,7 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 		}
 	}
 	got := sender.typesFor("run")
-	want := []string{proto.TypeDelta, proto.TypePermissionRequest, proto.TypePromptForUserChoice, proto.TypeUsage, proto.TypeDone, proto.TypeInteractionDecisionAck, proto.TypeInteractionDecisionAck}
+	want := []string{proto.TypeDelta, proto.TypeUsage, proto.TypeDone, proto.TypeInteractionDecisionAck, proto.TypeInteractionDecisionAck}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("output/receipt order = %v", got)
 	}
@@ -186,7 +160,7 @@ func TestPreparedCancellationBeforeTransferPreservesUnknownOutcome(t *testing.T)
 			if boundary == "expiry" {
 				timeout = 100 * time.Millisecond
 			}
-			r := preparationRouter(t, sender, timeout, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+			r := preparationRouter(t, sender, timeout, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 			ready := startCancellationPreparation(t, r, sender)
 			<-entered
 			_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"}))
@@ -243,7 +217,7 @@ func TestPreparedCancellationFailuresRemainConservative(t *testing.T) {
 				}
 				return session.Cancel(ctx)
 			}
-			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 			startCancellationPreparation(t, r, sender.recSender)
 			<-entered
 			_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"}))
@@ -276,27 +250,6 @@ func TestPreparedCancellationFailuresRemainConservative(t *testing.T) {
 	}
 }
 
-func TestExecutablePreparationRequiresCrossTransferCancellation(t *testing.T) {
-	sender := &recSender{}
-	p := &nonCancellablePreparation{closed: make(chan struct{})}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
-	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", preparationRequest())); err != nil {
-		t.Fatal(err)
-	}
-	waitPreparationStatus(t, sender, "request", "failed", "")
-	select {
-	case <-p.closed:
-	case <-time.After(time.Second):
-		t.Fatal("unsupported executable preparation was not closed")
-	}
-	for _, frame := range sender.snapshot() {
-		var status proto.PreparationStatusPayload
-		if frame.Type == proto.TypePreparationStatus && frame.DecodePayload(&status) == nil && status.State == "ready" {
-			t.Fatal("unsupported executable preparation became ready")
-		}
-	}
-}
-
 func TestPreparedCancellationTimeoutKeepsCapacityUntilStartReturns(t *testing.T) {
 	sender := &recSender{}
 	entered, allowReturn := make(chan struct{}), make(chan struct{})
@@ -308,7 +261,7 @@ func TestPreparedCancellationTimeoutKeepsCapacityUntilStartReturns(t *testing.T)
 		return nil, ctx.Err()
 	}
 	var count atomic.Int32
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
 		if count.Add(1) == 1 {
 			return p, nil
 		}

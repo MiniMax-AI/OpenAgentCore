@@ -3,9 +3,12 @@ package api
 import (
 	"encoding/json"
 	"os"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -14,12 +17,13 @@ func TestDiagnosticFailureWhitelist(t *testing.T) {
 		"harness_error": {"engine_failed"}, "model_provider_required": {"model_provider_required"}, "runtime_unavailable": {"execution_device_unavailable", "execution_unavailable"}, "runtime_disconnected": {"device_disconnected", "event_stream_incomplete"}, "runtime_preparation_failed": {"preparation_start_failed", "preparation_interrupted"}, "execution_interrupted": {"execution_interrupted"},
 		"delivery_unconfirmed":    {"delivery_unknown", "input_outcome_unknown", "cancel_unconfirmed", "cancel_outcome_unavailable", "function_result_unconfirmed"},
 		"input_rejected":          {"invalid_input", "input_not_applied", "message_input_unsupported", "input_invalid_input", "input_run_inactive", "input_input_conflict", "input_input_limit", "input_unsupported", "input_rejected", "input_not_ready", "input_busy"},
-		"executor_protocol_error": {"invalid_executor_result", "interaction_not_supported", "execution_state_unavailable", "execution_state_changed", "function_call_invalid", "function_result_invalid"}, "core_storage_failed": {"event_persistence_failed", "artifact_capture_failed"}, "internal_error": {"secret-canary", "input_secret-canary", "execution_state_secret-canary", ""},
+		"executor_protocol_error": {"invalid_executor_result", "execution_state_unavailable", "execution_state_changed", "function_call_invalid", "function_result_invalid"}, "core_storage_failed": {"event_persistence_failed", "artifact_capture_failed"}, "internal_error": {"secret-canary", "input_secret-canary", "execution_state_secret-canary", ""},
 	}
 	catalog, err := os.ReadFile("../../../../contracts/agents-api/core-errors.md")
 	if err != nil {
 		t.Fatal(err)
 	}
+	produced := map[string]bool{}
 	for want, inputs := range cases {
 		if !strings.Contains(string(catalog), "`"+want+"`") {
 			t.Fatal("uncatalogued diagnostics code", want)
@@ -27,10 +31,57 @@ func TestDiagnosticFailureWhitelist(t *testing.T) {
 		for _, input := range inputs {
 			raw, _ := json.Marshal(map[string]string{"error_code": input, "error": "raw-secret-canary"})
 			got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: raw})
+			produced[got.Code] = true
 			encoded, _ := json.Marshal(got)
 			if got.Code != want || strings.Contains(string(encoded), "canary") {
 				t.Fatal(input, got)
 			}
+		}
+	}
+	// Runtime classifications share the observation fixture; Core mappings above
+	// and Environment failures below exercise the actual diagnostic producers.
+	raw, err := os.ReadFile("../modelconfiguration/testdata/observation_cases.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var observations []struct {
+		EngineErrorCode string `json:"engine_error_code"`
+	}
+	if err := json.Unmarshal(raw, &observations); err != nil {
+		t.Fatal(err)
+	}
+	for _, observation := range observations {
+		if code, _ := proto.NormalizeEngineFailure(observation.EngineErrorCode, nil); code != "" {
+			outcome, _ := json.Marshal(map[string]string{"error_code": "engine_failed", "engine_error_code": code})
+			produced[turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: outcome}).Code] = true
+		}
+	}
+	for _, failure := range []string{"", "environment_unavailable", "runtime_preparation_failed", "model_provider_required", "unknown", "provisioning"} {
+		session := hostedFailureSession()
+		if failure != "provisioning" {
+			session.EnvironmentFailure = nil
+			session.EnvironmentInputActivity = &sessions.EnvironmentInputActivity{Status: "failed", Failure: failure}
+		} else {
+			session.EnvironmentFailure = &sessions.EnvironmentFailure{}
+		}
+		h, _, _ := adminTestHandler(t, serveDiagnostics(diagnosticSnapshotStore{session: session}))
+		w := diagnosticRequest(h, adminSessionsPath+session.ID+"/diagnostics", "Bearer admin")
+		var response SessionDiagnostics
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Failure == nil {
+			t.Fatal(w.Code, w.Body)
+		}
+		produced[response.Failure.Code] = true
+	}
+	field, _ := reflect.TypeFor[DiagnosticFailure]().FieldByName("Code")
+	declared := strings.Split(field.Tag.Get("enums"), ",")
+	for code := range produced {
+		if !slices.Contains(declared, code) {
+			t.Errorf("diagnostic code %q missing from schema", code)
+		}
+	}
+	for _, code := range declared {
+		if !produced[code] {
+			t.Errorf("schema diagnostic code %q has no exercised producer", code)
 		}
 	}
 	if got := turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed",`)}); got.Code != "internal_error" {

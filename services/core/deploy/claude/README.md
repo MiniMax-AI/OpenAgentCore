@@ -14,7 +14,7 @@ Claude accepts only the `anthropic` model protocol ([`harnessconfig/claudesdk`](
 
 ## Native state and recovery
 
-With a workspace binding, the SDK's history, home and scratch directories are `history`, `home` and `scratch` under `$OAC_RUNTIME_HOME/runtime/claude-sdk/` (mode 0700; `OAC_RUNTIME_HOME` defaults to `~/.oac`). The daemon's authentication stays under `$OAC_RUNTIME_HOME/daemon/`. These locations keep Session state apart; they do not restrict the tools.
+With a workspace binding, the SDK stores retained history at `<StateRoot>/runtime/claude-sdk/history`, where the Runtime supplies `<StateRoot>` from the [state directory setting](../../../../docs/configuration.md#runtime-resource-directories). Without a workspace binding, native state uses `<StateRoot>/daemon/<profile>/runtime/claude-sdk`. Private launch home and scratch directories for workspace execution stay at `$OAC_RUNTIME_HOME/runtime/claude-sdk/home` and `$OAC_RUNTIME_HOME/runtime/claude-sdk/scratch` (mode 0700). The daemon's authentication stays under `$OAC_RUNTIME_HOME/daemon/`. These locations keep native history, temporary process state and device credentials separate; they do not restrict the tools.
 
 Recovery uses the SDK's history APIs ([`recovery.ts`](../../../../packages/claude-sdk-adapter/src/recovery.ts)). An explicitly supplied native Session ID must exist. When Core requires existing history but has no recorded ID, the adapter accepts only a single native Session whose recorded cwd equals the bound workspace and which has at least one message. Missing, foreign, ambiguous or empty history is rejected before any model input.
 
@@ -43,7 +43,7 @@ The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/na
 | Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
 | Programs | `/usr/local/bin/oac-daemon` and the SDK bundle at `/opt/claude-sdk` |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image. Sandboxes run the image with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

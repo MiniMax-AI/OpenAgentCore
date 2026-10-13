@@ -2,6 +2,7 @@ package templatepg
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -11,8 +12,7 @@ import (
 )
 
 // sealed is an Input's column values. Empty confidential fields are stored as
-// NULL without using the key, so Templates without them need none; any other
-// confidential field without a key fails with credentialcrypto.ErrUnavailable.
+// NULL without using the key.
 type sealed struct {
 	files, fileContents     []byte
 	packages, env, commands []byte
@@ -27,9 +27,6 @@ func (s *Store) seal(tenant, id pgtype.UUID, in environmenttemplates.Input) (sea
 		return out, err
 	}
 	if len(in.Files) > 0 {
-		if s.cipher == nil {
-			return out, credentialcrypto.ErrUnavailable
-		}
 		plaintext, err := json.Marshal(in.Files)
 		if err != nil {
 			return out, err
@@ -61,9 +58,6 @@ func (s *Store) seal(tenant, id pgtype.UUID, in environmenttemplates.Input) (sea
 		if field.empty {
 			continue
 		}
-		if s.cipher == nil {
-			return out, credentialcrypto.ErrUnavailable
-		}
 		plaintext, err := json.Marshal(field.value)
 		if err != nil {
 			return out, err
@@ -79,15 +73,12 @@ func (s *Store) openSetup(tenant, id pgtype.UUID, field string, ciphertext []byt
 	if len(ciphertext) == 0 {
 		return nil
 	}
-	if s.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	plaintext, err := s.cipher.OpenEnvironmentSetup(ciphertext, setupBinding(tenant, id, field))
 	if err != nil {
 		return err
 	}
 	if environmentconfig.Decode(plaintext, output) != nil {
-		return environmenttemplates.ErrInvalidInput
+		return errors.New("invalid stored environment template " + field)
 	}
 	return nil
 }

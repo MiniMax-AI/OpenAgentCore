@@ -22,6 +22,7 @@ node "$repo_root/scripts/check-claude-sdk-runtime.mjs" "$context/claude-sdk"
     -o "$context/oac-daemon" ./apps/daemon/cmd/oac-daemon
 )
 cp "$repo_root/services/core/deploy/claude/Dockerfile" "$context/Dockerfile"
+cp "$repo_root/services/core/deploy/runtime_profile.py" "$context/runtime_profile.py"
 mkdir -p "$output_dir"
 cp -R "$context/." "$output_dir/"
 printf 'Claude Runtime image context: %s\n' "$output_dir"

@@ -9,16 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary Delete a reusable Agent
-// @Description Deletes only the authenticated tenant's saved configuration. Existing Session snapshots, history and recorded creation retry identities remain independent. Missing and repeated deletion locally return404; exact hosted error and in-flight creation/deletion semantics remain unverified.
-// @Tags Agents
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param agent_id path string true "Agent ID"
-// @Success 200 {object} v1.AgentDeleted
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
-// @Router /agents/{agent_id} [delete]
 func (h *Handler) deleteAgent(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBody(w, r)
 	if !ok {

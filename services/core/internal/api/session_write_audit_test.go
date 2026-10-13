@@ -27,12 +27,12 @@ func (f *auditedSessionFixture) FindSessionCreation(context.Context, string, str
 	return sessions.Creation{Session: f.session}, nil
 }
 
-func (f *auditedSessionFixture) AuditSessionOperation(ctx context.Context, tenant, session, action string) error {
-	if tenant != f.session.TenantID || session != f.session.ID {
+func (f *auditedSessionFixture) AuditSessionOperation(ctx context.Context, command sessions.AuditSessionOperationCommand) error {
+	if command.TenantID != f.session.TenantID || command.SessionID != f.session.ID {
 		return sessions.ErrNotFound
 	}
 	f.source, _ = writeaudit.FromContext(ctx)
-	f.actions = append(f.actions, action)
+	f.actions = append(f.actions, command.Action)
 	return f.err
 }
 
@@ -48,7 +48,7 @@ func TestSessionAuditOnlyRoutesFailClosed(t *testing.T) {
 				deps, fakes := testDependencies(t)
 				fakes.sessions.auditSessionOperation = f.AuditSessionOperation
 				if route != "stream-replay" {
-					fakes.sessions.getSession = f.GetSession
+					fakes.sessionsReader.getSession = f.GetSession
 				}
 				if route != "empty-events" {
 					fakes.sessionCreation.findSessionCreation = f.FindSessionCreation

@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -54,17 +55,16 @@ func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {
 	for i, plugin := range setup.Plugins {
 		result = append(result, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "plugin", Slot: i, Plugin: &plugin.Metadata}, Data: plugin.Archive})
 	}
-	// Provisioning network policy is distinct from the policy enforced for Turns.
 	for _, packages := range []struct {
 		action string
 		values []string
 	}{{"npm", setup.Packages.NPM}, {"python", setup.Packages.Python}} {
 		if len(packages.values) > 0 {
-			result = append(result, initialize(proto.RuntimeInitialization{Action: packages.action, Network: "enabled", Packages: packages.values}))
+			result = append(result, initialize(proto.RuntimeInitialization{Action: packages.action, Packages: packages.values}))
 		}
 	}
 	for i, command := range setup.Commands {
-		operation := initialize(proto.RuntimeInitialization{Action: "setup", Network: "enabled", Command: command.Command, CWD: command.CWD})
+		operation := initialize(proto.RuntimeInitialization{Action: "setup", Command: command.Command, CWD: command.CWD})
 		operation.Index = i
 		result = append(result, operation)
 	}
@@ -86,7 +86,13 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentca
 	if peer == nil {
 		return errors.New("environment initialization request unavailable")
 	}
+	deadline, bounded := ctx.Deadline()
+	budget := time.Until(deadline).Milliseconds()
+	if !bounded || budget <= 0 || budget > proto.RuntimePrepareMaxBudgetMS || ctx.Err() != nil {
+		return errors.New("environment initialization budget unavailable")
+	}
 	request := operation.Request
+	request.BudgetMS = budget
 	request.EnvironmentID, request.SessionID = identity.EnvironmentID, identity.SessionID
 	result, err := peer.PrepareRuntime(ctx, uuid.NewString(), request, operation.Data)
 	if err == nil && result.Outcome == "completed" {

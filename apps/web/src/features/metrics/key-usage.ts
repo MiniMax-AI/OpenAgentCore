@@ -14,9 +14,9 @@ export interface KeyUsageRow {
 export function keyUsageRows(rows: readonly ProjectSummary[]): KeyUsageRow[] {
   return rows
     .filter((row) => row.agent_id === null && row.sessions.total > 0)
-    .map((summary) => ({ id: summary.key ? `${summary.project_id}:${summary.key.id}` : `${summary.project_id}:unknown`, summary }))
+    .map((summary) => ({ id: `${summary.project_id}:${summary.key_id ?? "unknown"}`, summary }))
     .sort((a, b) => (
-      Number(a.summary.key === null) - Number(b.summary.key === null)
+      Number(a.summary.key_id === null) - Number(b.summary.key_id === null)
       || (b.summary.usage?.total_tokens ?? -1) - (a.summary.usage?.total_tokens ?? -1)
       || b.summary.sessions.total - a.summary.sessions.total
       || a.id.localeCompare(b.id)

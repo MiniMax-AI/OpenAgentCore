@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: cbc3c6419e2d4991df82d5bbfe3b556d35cccb57d1e4e7437facca7487caabcc
+source_hash: 8349aca995e66669b7941b6aad5f28e6ae3259516d923a0494938a61fb3e711e
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -22,7 +22,7 @@ Runtime 按以下顺序连接：
 
 wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 heartbeat 报告的 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端。
 
-每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 隔离 owner lease，移除旧 Run 和 interaction 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
+每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 隔离 owner lease，移除旧 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
 
 ## 能力声明 {#capability-declarations}
 
@@ -43,6 +43,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | Environment 类型为 `openai_hosted` 或 `self_hosted` |
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
+| `retained_native_history` | Environment 使用外部工作区绑定；自带工作区存储不要求此能力 |
 | `web_search_control`, `text_verbosity` | Harness 的 engine profile 声明该控制 |
 | `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
@@ -53,22 +54,26 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
-`permissions` 控制 Runtime 内部权限决定，`workspace_authoring` 控制 daemon 的 authoring 命令。Core 对 `usage` 和 `resume` 没有准入规则。
+`retained_native_history` 表示 Runtime 与 Harness 组合可在确认原生进程关闭后，从私有持久状态重新打开同一个原生 Session。它不保证恢复进程内存、后台进程或外部连接。所选文件系统还必须独立提供持久存储。Core 根据旧设备已持久化的声明判断能否释放计算而不终结 Session，并在准入执行前验证新 Runtime。原生历史缺失或无效时明确失败，绝不授权新建原生会话或重放此前输入。
 
-prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core 为各 Run 设置的显式启用项：
+Core 对 `usage` 和 `resume` 没有准入规则。
+
+`execution_prepare` 的配置携带 Core 为各 Run 设置的显式启用项：
 
 | 字段 | Core 设置方式 |
 | --- | --- |
+| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了 model provider 时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
-| `observe_tool_observations` | 始终设置。tool-call frame 随后携带与 engine 无关的 `observation` |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
-| `strict_resume`, `require_existing_native_session` | 始终严格；需要恢复原生 Session 时设置第二项 |
+| `require_existing_native_session` | 需要恢复原生 Session 时设置 |
 | `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
 
-未携带显式启用项的请求保留未启用时的 frame 和字段。
+执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
+
+未携带显式启用项的请求保留未启用时的 frame 和字段。只要 adapter 映射了原生工具，`tool_call` frame 就携带与 engine 无关的 `observation`。
 
 ## Envelope 与身份 {#envelope-and-identity}
 
@@ -82,13 +87,10 @@ prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core
 | Preparation request ID | prepare、start、release 和 status 的 `Envelope.id`；与 Run 不同 |
 | Admission handle | Runtime 生成的预约，仅在接受它的连接上有效 |
 | Run ID | 一次执行尝试；输出、取消、活动输入和 function 的 `Envelope.id` |
-| Interaction ID | `permission_request.payload.request_id` 或 `prompt_for_user_choice.payload.ask_id`；这些请求 envelope 仍携带 Run ID |
 | Delivery ID / input ID / call ID | 分别标识 resolve 尝试、活动输入回执与原生 function；不能互换 |
 | Transfer ID / suspension ID | 连接本地传输关联 / 持久化 suspension 尝试的 fencing |
 
-Decision 和 permission-cancel envelope 使用 interaction ID。取消和 function-result 确认使用 Run ID。每个应用 decision 回执还要匹配 delivery ID。缺少必需关联的回复不能证明已接受。
-
-User-choice decision 携带 `question_answers`：每个已提供回答都有明确的 `question_id` 和 `answers` 数组。ID 必须属于已发出的问题且不能重复。问题顺序和显示 header 不标识回答；省略的问题仍未回答，空数组表示明确未作答。取消携带 `cancelled: true`，不包含回答。共享验证在原生提交前拒绝其他形式。
+取消和 function-result 确认使用 Run ID，并匹配 delivery ID。缺少必需关联的回复不能证明已接受。
 
 ## 消息族 {#message-families}
 
@@ -98,8 +100,7 @@ User-choice decision 携带 `question_answers`：每个已提供回答都有明�
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [初始化与能力传输](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
-| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[交互](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
@@ -111,7 +112,7 @@ Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替�
 
 ## 准备与执行顺序 {#preparation-and-execution-order}
 
-无论托管还是用户自有环境，每条连接都通过 `runtime_prepare` 初始化 Environment；[Environment 契约](../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)负责准备内容和时机。传输文件或 archive 时，发送 `begin`，等待 `ready`，发送有序 chunk 并等待每个匹配的 `received` offset，再发送 `commit` 并等待 `completed`。初始化和终结阶段使用不含文件数据的类型化 header。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
+无论托管还是用户自有环境，每条连接都通过 `runtime_prepare` 初始化 Environment；[Environment 契约](../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)负责准备内容和时机。传输文件或 archive 时，发送 `begin`，等待 `ready`，发送有序 chunk 并等待每个匹配的 `received` offset，再发送 `commit` 并等待 `completed`。初始化和终结阶段使用不含文件数据的类型化 header。每个 `begin` 必须携带 `budget_ms`，取值为 1 至 1800000 的整数，表示 Core 所拥有的初始化预算剩余毫秒数；chunk 和 commit 不携带该字段。Runtime 从收到 `begin` 起执行此相对预算，Core 的等待不超过原操作期限。完整的 `begin`–`commit` 暂存阶段另有两分钟限制；应用已提交操作及等待 `completed` 使用剩余初始化预算，不受暂存期限限制。应用前到期会拒绝传输；应用中到期则在本地变更停止后报告 `unknown`，绝不授权重放。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
 
 执行 Turn 分为五步：
 
@@ -125,9 +126,10 @@ preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明�
 
 preparation 和 start 在 receive loop 与 router lock 之外运行。admission 在授予五分钟后到期，重试不延长截止时间；到期不解除 Runtime 完成清理结算的义务。Runtime 分别限制活动 preparation、execution 和保留的空闲资源，关闭中或不确定资源持续计入限制，直到清理成功。明确的 `execution_prepare` 拒绝若为 `preparation_capacity`，会让排队 Turn 保持未领取，供 Worker 重试，包括清理占用容量的情况；其他错误或不确定交付都不授权重放。Runtime 最多保留 64 条 admission 记录，旧 handle 不会消耗替代项的 admission。这些记录仅属于连接，不是持久化输入重放。
 
-Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并发限制独立。关闭时 Runtime 关闭活动和空闲 Executor，保留关闭失败的目标，并允许稍后串行重试。普通断连会关闭失败的 transport 并保留原 router，直到 shutdown 成功；等待超时或清理失败不授权重连，进程 shutdown 继续等待，不丢弃自己拥有的原生资源。工作区操作在跨 Turn 和 Executor 关闭后仍保留绑定与结算规则。
+Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并发限制独立。关闭时 Runtime 关闭活动和空闲 Executor，保留关闭失败的目标，并允许稍后串行重试。普通断连会关闭失败的 transport 并保留原 router，直到 shutdown 成功；等待超时或清理失败不授权重连，进程 shutdown 继续等待，不丢弃自己拥有的原生资源。对于 Runtime 初始化，shutdown 会等待同步 apply 操作和回执发送结束后才释放连接；`unknown` 结果仍是不确定结果，并阻止该 Router 上的后续准备，但本地变更停止后不再阻止重连。Core 保留失败的初始化状态，绝不重放初始化。工作区操作在跨 Turn 和 Executor 关闭后仍保留绑定与结算规则。
 
-`prompt_request` 不经过 admission handle，直接启动 Run。它不是 prepared start 失败后的回退。
+
+挂起先关闭准入、排空已接纳工作与回执，同时保留已结算的空闲 Executor，随后才确认 `environment_quiesced`。活动、准备中、失效或其他未结算的所有者会阻止挂起。整个挂起期间停止空闲到期计时并隔离其回调；精确匹配且已认证的 `environment_resume` 为同一批所有者恢复一个新的空闲计时间隔。只有这种计划性重连跨 socket 保留 Router 与原生所有者；普通断连、shutdown 和连接生命周期取消仍要求确认清理完成。排空失败后，准入保持关闭直到 shutdown。恢复后的准备仍检查相同的原生身份与不可变配置，包括凭据冲突；绝不静默替换配置冲突的驻留 Executor。Sandbox Provider 仍负责其 checkpoint 实现的文件系统刷新和计算停止保证；Runtime 静止本身既不证明这些保证，也不证明原生 RAM 或外部网络连接已恢复。
 
 ## 活动输入回执 {#active-input-receipts}
 
@@ -139,7 +141,7 @@ Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`�
 | `written` 确认 | Core 从交付开始最多等待 30 秒取得 `written`；否则输入结果未知 |
 | 回执发送 | 每次发送回执都有独立的 5 秒预算，并感知 shutdown |
 | 原生接受 | `accepted` 在 Turn 生命周期内到达，不自动重新交付 |
-| Done | `done` 前，Runtime 最多等待 15 秒（写入与发送预算），等待正在处理的输入 |
+| Done | Runtime 在原生 Turn 结算完成、且正在处理的输入的回执发送结束后才发送 `done`；该输入受原生写入与回执发送预算限制 |
 
 `written` 和发送失败都不会推进 Core 的 input cursor。取消发出后，即使输入先变为未知，终结结果也由取消回执负责；15 秒内没有取消确认时，Core 记录 `cancel_unconfirmed`。未发出 `done` 时，取消回执携带已停止 Turn 的已确认 continuity snapshot。
 
@@ -160,7 +162,7 @@ Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`�
 
 ## 故障、重试与清理 {#failures-retries-and-cleanup}
 
-transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `SubscribeDurable`；事件 channel 关闭时检查 `Subscription.Err()`。断连与 subscriber overflow 以明确 observation error 关闭订阅，不虚构 `error` 或 `done`。Core 保留持久事实，并依据已确认事实协调。Runtime 保留清理所有权，直到原生工作、输入回执、交互和子任务工作都结算完成。
+transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `SubscribeDurable`；事件 channel 关闭时检查 `Subscription.Err()`。断连与 subscriber overflow 以明确 observation error 关闭订阅，不虚构 `error` 或 `done`。Core 保留持久事实，并依据已确认事实协调。Runtime 保留清理所有权，直到原生工作、输入回执、function 结果和子任务工作都结算完成。
 
 公开 Turn 状态是独立投影。[`execution/delivery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/delivery.go) 将不成功的编排尝试记录为 `failed`，包括未确认发送后的 `delivery_unknown` 和订阅失败后的 `event_stream_incomplete`；关闭的订阅可以用 `event_stream_incomplete` 替换发送原因。两者都表示原生效果未知：公开 `failed` 状态不证明 Harness 失败、没有产生副作用或清理已完成。应区分观测原因与原生证据。
 
@@ -187,7 +189,7 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 ## 工作区操作 {#workspace-operations}
 
-无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 可以从绑定的本地文件系统提供读取，不启动 Harness 进程。profile 仅在本地 close 成功后发布 `released`；清理错误保留所有权并报告 `cleanup_unconfirmed`。factory 失败且清理未确认时，将 resource 与 error 一起返回，wrapper 保留两者。清理重试成功后发布已确认释放；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认清理。
+无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 从绑定的本地工作区提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
 `workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果最多携带 1024 个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。
 
@@ -199,7 +201,7 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 ## MCP 连接权限 {#mcp-connection-authority}
 
-prompt request 中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
+`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
 
 ## 契约验证 {#contract-verification}
 

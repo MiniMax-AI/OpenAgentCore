@@ -17,24 +17,17 @@ import (
 type NativeInstaller struct {
 	// Version is the build revision executors install and claim.
 	Version string
+	// Base is the public URL prefix of the versioned installer downloads.
+	Base string
 	// Catalog holds the matching installation artifacts. It is nil when the
 	// operator installed none: installations then report unavailable and the
 	// grant routes answer 503 installation_unavailable.
 	Catalog *nativeinstaller.Catalog
 }
 
-// nativeInstaller returns this Core's native installer, or nil when it serves
-// none.
-func (h *Handler) nativeInstaller() *NativeInstaller {
-	if h.Execution == nil {
-		return nil
-	}
-	return h.Execution.NativeInstaller
-}
-
 func (h *Handler) installationFor(ctx context.Context, principal identity.Principal, environment string) (*v1.EnvironmentInstallation, error) {
-	installer := h.nativeInstaller()
-	result := &v1.EnvironmentInstallation{Status: "unavailable", Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
+	installer := h.Execution.NativeInstaller
+	result := &v1.EnvironmentInstallation{Status: v1.InstallationUnavailable, Message: "This Core has no matching native installation distribution. Ask its operator to install the qualified release artifacts."}
 	if installer == nil {
 		return result, nil
 	}
@@ -46,13 +39,11 @@ func (h *Handler) installationFor(ctx context.Context, principal identity.Princi
 	if err != nil {
 		return nil, err
 	}
-	origin := strings.TrimSuffix(h.Execution.ExecutorURL, "/api/v1/agent-daemon/ws")
-	origin = strings.Replace(strings.Replace(origin, "wss://", "https://", 1), "ws://", "http://", 1)
-	return &v1.EnvironmentInstallation{Status: "available", Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(origin, token)}, nil
+	return &v1.EnvironmentInstallation{Status: v1.InstallationAvailable, Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(installer.Base, token)}, nil
 }
 
 func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request, response *v1.Session) error {
-	if response.Environment.Type != "self_hosted" || h.nativeInstaller() == nil {
+	if response.Environment.Type != "self_hosted" || h.Execution.NativeInstaller == nil {
 		return nil
 	}
 	principal, ok := r.Context().Value(principalContextKey{}).(identity.Principal)
@@ -69,7 +60,7 @@ func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *Handler) registerNativeInstallationRoutes(r chi.Router) {
-	installer := h.nativeInstaller()
+	installer := h.Execution.NativeInstaller
 	if installer == nil {
 		return
 	}
@@ -118,14 +109,14 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 		writeSessionsError(w, r, err)
 		return
 	}
-	session, err := h.Sessions.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
+	session, err := h.SessionsReader.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
-	response, err := sessionResponse(session, h.executorURL())
+	response, err := sessionResponse(session, h.Execution.ExecutorURL)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.NativeInstallationContext{Version: h.Execution.NativeInstaller.Version, ProtocolVersion: proto.Version, EnvironmentID: claim.Environment, RemoteURL: h.Execution.ExecutorURL, Workspace: response.Environment.WorkspaceDirectory, Harness: session.Engine})

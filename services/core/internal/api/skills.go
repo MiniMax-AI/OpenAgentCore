@@ -47,14 +47,6 @@ func (h *Handler) registerSkillRoutes(r chi.Router) {
 	r.Head("/v1/skills/{skill_id}/versions/{version}/content", methodNotAllowed)
 }
 
-// @Summary Retrieve Skill metadata
-// @Description Returns tenant-owned metadata without decrypting contents or starting Runtime. No Beta header is required.
-// @Tags Skills
-// @Produce json
-// @Security BearerAuth
-// @Param skill_id path string true "Skill ID"
-// @Success 200 {object} v1.Skill
-// @Router /skills/{skill_id} [get]
 func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 	value, err := h.SkillsReader.Skill(r.Context(), tenantID(r), skills.PathID(chi.URLParam(r, "skill_id")))
 	if err != nil {
@@ -64,16 +56,6 @@ func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, skillResponseResource(value))
 }
 
-// @Summary Update the default Skill version
-// @Description Changes only the tenant-owned default pointer; immutable versions and existing Session snapshots remain unchanged.
-// @Tags Skills
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param skill_id path string true "Skill ID"
-// @Param body body v1.SkillUpdateRequest true "Default version"
-// @Success 200 {object} v1.Skill
-// @Router /skills/{skill_id} [post]
 func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBodyLimit(w, r, 64<<10, "Request exceeds 64 KiB.")
 	if !ok {
@@ -92,14 +74,6 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, skillResponseResource(value))
 }
 
-// @Summary Delete a Skill and its versions
-// @Description Deletes tenant-owned source bundles. Existing Session installation snapshots remain independent.
-// @Tags Skills
-// @Produce json
-// @Security BearerAuth
-// @Param skill_id path string true "Skill ID"
-// @Success 200 {object} v1.SkillDeleted
-// @Router /skills/{skill_id} [delete]
 func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "skill_id")
 	if err := h.Skills.DeleteSkill(r.Context(), skills.DeleteSkill{TenantID: tenantID(r), SkillID: skills.PathID(id)}); err != nil {
@@ -109,14 +83,6 @@ func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v1.SkillDeleted{ID: id, Object: "skill.deleted", Deleted: true})
 }
 
-// @Summary Retrieve Skill version metadata
-// @Tags Skills
-// @Produce json
-// @Security BearerAuth
-// @Param skill_id path string true "Skill ID"
-// @Param version path string true "Concrete version number"
-// @Success 200 {object} v1.SkillVersion
-// @Router /skills/{skill_id}/versions/{version} [get]
 func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 	value, err := h.SkillsReader.Version(r.Context(), tenantID(r), skills.PathID(chi.URLParam(r, "skill_id")), skills.PathVersion(chi.URLParam(r, "version")))
 	if err != nil {
@@ -126,15 +92,6 @@ func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, skillVersionResponse(value))
 }
 
-// @Summary Delete a Skill version
-// @Description Deleting the only remaining version also deletes the Skill; existing Session installation snapshots remain independent. The default version cannot be deleted while other versions remain. Version numbers are never reused.
-// @Tags Skills
-// @Produce json
-// @Security BearerAuth
-// @Param skill_id path string true "Skill ID"
-// @Param version path string true "Concrete version number"
-// @Success 200 {object} v1.SkillVersionDeleted
-// @Router /skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) deleteSkillVersion(w http.ResponseWriter, r *http.Request) {
 	value, err := h.Skills.DeleteVersion(r.Context(), skills.DeleteVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: skills.PathVersion(chi.URLParam(r, "version"))})
 	if err != nil {

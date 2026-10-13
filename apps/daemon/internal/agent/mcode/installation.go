@@ -12,7 +12,7 @@ import (
 func Installation() agent.Installation {
 	return agent.Installation{AgentKind: "mcode", Version: SupportedVersion, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" },
 		Environment: func(dir, node string) map[string]string {
-			return map[string]string{"OAC_RUNTIME_MCODE_BIN": filepath.Join(dir, "native", "cli.js"), "OAC_RUNTIME_MCODE_NODE": node, "OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE": filepath.Join(dir, "bridge.mjs"), "OAC_RUNTIME_MCODE_AGENTS_API": "1"}
+			return map[string]string{"OAC_RUNTIME_MCODE_BIN": filepath.Join(dir, "native", "cli.js"), "OAC_RUNTIME_MCODE_NODE": node, "OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE": filepath.Join(dir, "bridge.mjs")}
 		},
 		Check: func(ctx context.Context, dir, node string, env []string) error {
 			got, err := installroot.Probe(ctx, node, []string{filepath.Join(dir, "native", "cli.js"), "--version"}, env, dir)

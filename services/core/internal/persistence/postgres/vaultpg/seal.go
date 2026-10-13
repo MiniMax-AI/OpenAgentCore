@@ -32,9 +32,6 @@ type oauthPayload struct {
 
 // sealStatic seals a static_bearer token.
 func (s *Store) sealStatic(scope credentialcrypto.Binding, token string) ([]byte, error) {
-	if s.cipher == nil {
-		return nil, credentialcrypto.ErrUnavailable
-	}
 	ciphertext, err := s.cipher.Seal([]byte(token), scope)
 	if err != nil {
 		return nil, errors.New("credential encryption failed")
@@ -44,9 +41,6 @@ func (s *Store) sealStatic(scope credentialcrypto.Binding, token string) ([]byte
 
 // openStatic opens a static_bearer token.
 func (s *Store) openStatic(scope credentialcrypto.Binding, ciphertext []byte) (string, error) {
-	if s.cipher == nil {
-		return "", credentialcrypto.ErrUnavailable
-	}
 	plaintext, err := s.cipher.Open(ciphertext, scope)
 	if err != nil {
 		return "", errors.New("MCP credential decryption failed")
@@ -57,9 +51,6 @@ func (s *Store) openStatic(scope credentialcrypto.Binding, ciphertext []byte) (s
 // sealOAuth encodes the grant's metadata for its column and seals the whole
 // grant.
 func (s *Store) sealOAuth(scope credentialcrypto.Binding, grant vaults.OAuthGrant) (metadata, ciphertext []byte, err error) {
-	if s.cipher == nil {
-		return nil, nil, credentialcrypto.ErrUnavailable
-	}
 	metadata, err = json.Marshal(grant.Metadata)
 	if err != nil {
 		return nil, nil, errors.New("credential encoding failed")
@@ -79,9 +70,6 @@ func (s *Store) sealOAuth(scope credentialcrypto.Binding, grant vaults.OAuthGran
 // openOAuth opens a grant and authenticates the stored metadata against the
 // sealed copy.
 func (s *Store) openOAuth(scope credentialcrypto.Binding, stored *vaults.OAuthMetadata, ciphertext []byte) (vaults.OAuthGrant, error) {
-	if s.cipher == nil {
-		return vaults.OAuthGrant{}, credentialcrypto.ErrUnavailable
-	}
 	plaintext, err := s.cipher.Open(ciphertext, scope)
 	if err != nil {
 		return vaults.OAuthGrant{}, errors.New("OAuth credential decryption failed")

@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"debug/elf"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,9 @@ import (
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
+
+//go:embed go.mod
+var moduleDefinition string
 
 func main() {
 	// The inherited node generation lease covers this helper's actual lifetime.
@@ -54,16 +58,32 @@ func serve(input io.Reader) wire.Response {
 		out.ErrorCode = "unconfirmed"
 		return out
 	}
-	release, err := allocationLock(q)
+	if q.Workspace != nil {
+		real, err := filepath.EvalSymlinks(q.Workspace.Path)
+		if err != nil || real != q.Workspace.Path {
+			out.ErrorCode = "ownership"
+			return out
+		}
+	}
+	lock, err := allocationLock(q)
 	if err != nil {
 		out.ErrorCode = "unconfirmed"
 		return out
 	}
-	defer release()
+	defer lock.Close()
 	// Lifecycle calls deliberately retain the flock until the SDK has settled.
 	// Cancelling an FFI wait does not prove the underlying operation stopped.
 	b := backend{q: q}
+	if q.Operation == "create" {
+		if err := lock.admitCreate(); err != nil {
+			out.ErrorCode = code(err)
+			return out
+		}
+	}
 	out, err = b.run(context.Background())
+	if q.Operation == "initial_info" && sdk.IsKind(err, sdk.ErrSandboxNotFound) {
+		out, err = lock.settleInitialAbsence(q, err)
+	}
 	out.Version = wire.ProtocolVersion
 	if err != nil {
 		out.ErrorCode = code(err)
@@ -88,8 +108,82 @@ func code(err error) string {
 		return "unconfirmed"
 	}
 }
-func allocationLock(q wire.Request) (func(), error) {
-	dir := filepath.Join(q.Config.RuntimeHome, "oac-locks")
+
+type allocationGuard struct{ file *os.File }
+
+func (g *allocationGuard) Close() {
+	_ = syscall.Flock(int(g.file.Fd()), syscall.LOCK_UN)
+	_ = g.file.Close()
+}
+
+// Empty admits the initial Create. The terminal marker is never removed;
+// any other nonempty content also prevents creation after an incomplete write.
+func (g *allocationGuard) admissionClosed() (bool, error) {
+	if _, err := g.file.Seek(0, io.SeekStart); err != nil {
+		return false, err
+	}
+	data, err := io.ReadAll(io.LimitReader(g.file, 8))
+	if err != nil {
+		return false, err
+	}
+	switch string(data) {
+	case "":
+		return false, nil
+	case "closed\n":
+		return true, nil
+	default:
+		return false, sandbox.ErrOwnership
+	}
+}
+
+func (g *allocationGuard) admitCreate() error {
+	closed, err := g.admissionClosed()
+	if err != nil {
+		return err
+	}
+	if closed {
+		return sandbox.ErrInvalid
+	}
+	return nil
+}
+
+// Only the explicit initial observation can close admission. The caller holds
+// this allocation's flock and has just received typed native absence.
+func (g *allocationGuard) settleInitialAbsence(q wire.Request, nativeErr error) (wire.Response, error) {
+	if q.Operation != "initial_info" || wire.ValidateRequest(q) != nil || !sdk.IsKind(nativeErr, sdk.ErrSandboxNotFound) {
+		return wire.Response{}, sandbox.ErrInvalid
+	}
+	if _, err := g.admissionClosed(); err != nil {
+		return wire.Response{}, err
+	}
+	if _, err := g.file.WriteAt([]byte("closed\n"), 0); err != nil {
+		return wire.Response{}, err
+	}
+	if err := g.file.Sync(); err != nil {
+		return wire.Response{}, err
+	}
+	// The directory entry must survive restart even when this observation was
+	// the first helper to open the allocation lock.
+	lockDir := filepath.Dir(g.file.Name())
+	for _, path := range []string{lockDir, filepath.Dir(lockDir)} {
+		dir, err := os.Open(path)
+		if err != nil {
+			return wire.Response{}, err
+		}
+		err = dir.Sync()
+		_ = dir.Close()
+		if err != nil {
+			return wire.Response{}, err
+		}
+	}
+	return wire.Response{State: &wire.State{Compute: q.Compute, Status: "absent"}, CreateSettled: true}, nil
+}
+
+func allocationLock(q wire.Request) (*allocationGuard, error) {
+	if _, e := wire.CheckpointStore(q.Config); e != nil {
+		return nil, e
+	}
+	dir := filepath.Join(q.Config.CheckpointRoot, wire.Name(q.Config, q.Reference, 0))
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return nil, e
 	}
@@ -99,6 +193,9 @@ func allocationLock(q wire.Request) (func(), error) {
 	}
 	if !st.IsDir() || st.Mode().Perm() != 0700 {
 		return nil, sandbox.ErrOwnership
+	}
+	if e := syncDirectory(q.Config.CheckpointRoot); e != nil {
+		return nil, e
 	}
 	name := filepath.Join(dir, wire.Name(q.Config, q.Reference, 0)+".lock")
 	fd, e := syscall.Open(name, syscall.O_CREAT|syscall.O_RDWR|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0600)
@@ -113,7 +210,12 @@ func allocationLock(q wire.Request) (func(), error) {
 		}
 		e = syscall.Flock(fd, syscall.LOCK_EX|syscall.LOCK_NB)
 		if e == nil {
-			return func() { _ = syscall.Flock(fd, syscall.LOCK_UN); _ = f.Close() }, nil
+			guard := &allocationGuard{file: f}
+			if !time.Now().Before(q.Deadline) {
+				guard.Close()
+				return nil, context.DeadlineExceeded
+			}
+			return guard, nil
 		}
 		if e != syscall.EWOULDBLOCK && e != syscall.EAGAIN {
 			f.Close()
@@ -122,6 +224,16 @@ func allocationLock(q wire.Request) (func(), error) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+func sdkModuleVersion() string {
+	for _, line := range strings.Split(moduleDefinition, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == "github.com/superradcompany/microsandbox/sdk/go" {
+			return fields[1]
+		}
+	}
+	return ""
+}
+
 func checkInstallation(c wire.Config) error {
 	build, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -130,7 +242,7 @@ func checkInstallation(c wire.Config) error {
 	matched := false
 	for _, d := range build.Deps {
 		if d.Path == "github.com/superradcompany/microsandbox/sdk/go" {
-			matched = d.Version == wire.SDKVersion && d.Replace == nil
+			matched = d.Version == sdkModuleVersion() && d.Replace == nil
 		}
 	}
 	if !matched {
@@ -183,6 +295,13 @@ func checkInstallation(c wire.Config) error {
 	}
 	if runtime.MSBPath != c.RuntimePath || runtime.LibkrunfwPath != c.FirmwarePath {
 		return sandbox.ErrOwnership
+	}
+	nativeVersion, e := sdk.RuntimeVersion()
+	if e != nil {
+		return e
+	}
+	if sdk.SDKVersion() != strings.TrimPrefix(wire.SDKVersion, "v") || nativeVersion != sdk.SDKVersion() {
+		return sandbox.ErrInvalid
 	}
 	selected, e := sdk.DefaultBackendInfo()
 	if e != nil {

@@ -33,10 +33,10 @@ type Allocation struct {
 	// Replayed reports that ReserveAllocation returned an existing allocation,
 	// which never authorizes another Create.
 	Replayed bool
-	// Expired reports, by the database clock, that the allocation's lease or
-	// retention has passed.
-	Expired           bool
-	CreatedAt, KeptAt time.Time
+	// Expired reports, by the database clock, that the retention of the
+	// allocation's suspended compute has passed.
+	Expired   bool
+	CreatedAt time.Time
 }
 
 // Key names the allocation's Environment.
@@ -76,13 +76,13 @@ type SessionDevice struct{ ID, EnvironmentID string }
 // Activity separates real work from the connection keepalive. ObservedAt is
 // the database clock when it was read.
 type Activity struct {
-	LastActivity, ObservedAt              time.Time
-	Busy, WakeRequested, HasCompletedTurn bool
+	LastActivity, ObservedAt time.Time
+	Busy, WakeRequested      bool
 }
 
 // ReadyToSuspend evaluates the idle policy on one database-clock observation.
 func (a Activity) ReadyToSuspend(idleTimeout time.Duration) bool {
-	return idleTimeout > 0 && a.HasCompletedTurn && !a.Busy && !a.WakeRequested &&
+	return idleTimeout > 0 && !a.Busy && !a.WakeRequested &&
 		a.ObservedAt.Sub(a.LastActivity) >= idleTimeout
 }
 
@@ -112,34 +112,57 @@ type ObservationSessionPage struct {
 // an existing one.
 type UnallocatedEnvironment struct{ ID, TenantID string }
 
+// PlacementDemand is committed work awaiting a node reservation. Demand time
+// belongs to Session creation or its oldest pending input, not to a retry.
+type PlacementDemand struct {
+	UnallocatedEnvironment
+	Engine string
+	// Retained requires external storage because an allocation or filesystem identity already exists.
+	Retained bool
+	At       time.Time
+}
+
+// PlacementDemandCursor continues the bounded, oldest-demand-first scan.
+// An empty EnvironmentID ends a page scan; Until may still describe a
+// nonempty final page for callers that yield before processing every row.
+type PlacementDemandCursor struct {
+	// Until fixes the database-clock horizon of one sweep, so new arrivals cannot prevent wraparound.
+	Until         time.Time
+	At            time.Time
+	EnvironmentID string
+}
+
 // LifecyclePlacement is what routing a hosted Environment to its node
 // lifecycle reads: the deployment's provider and mode, the Environment's
 // allocation and the node placement its Session reserved.
 type LifecyclePlacement struct {
+	// Specification belongs to the current allocation or reserved generation.
+	Specification  json.RawMessage
 	Provider, Mode string
 	// AllocationID and AllocationNodeID are empty without an allocation or
 	// its node.
 	AllocationID, AllocationNodeID string
 	// PlacementNodeID is empty without a placement.
-	PlacementNodeID   string
-	PlacementReleased bool
+	PlacementNodeID     string
+	PlacementReleased   bool
+	PlacementGeneration uint64
 }
 
 // NodeAllocation is an unreleased allocation a node serves.
 type NodeAllocation struct {
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	Diagnostic           string `json:"diagnostic"`
-	ID                   string `json:"id"`
-	NodeID               string `json:"node_id"`
-	TenantID             string `json:"tenant_id"`
-	SessionID            string `json:"session_id"`
-	EnvironmentID        string `json:"environment_id"`
-	State                string `json:"state"`
-	ComputePhase         string `json:"compute_phase"`
+	DeploymentGeneration uint64 `json:"deployment_generation" binding:"required"`
+	Diagnostic           string `json:"diagnostic" enums:",node_unavailable,resource_missing,compute_unconfirmed,ownership_mismatch,provider_unavailable" binding:"required"`
+	ID                   string `json:"id" binding:"required"`
+	NodeID               string `json:"node_id" binding:"required"`
+	TenantID             string `json:"tenant_id" binding:"required"`
+	SessionID            string `json:"session_id" binding:"required"`
+	EnvironmentID        string `json:"environment_id" binding:"required"`
+	State                string `json:"state" binding:"required"`
+	ComputePhase         string `json:"compute_phase" binding:"required"`
 	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
-	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable"`
-	Initialization        string     `json:"initialization"`
-	CreatedAt             time.Time  `json:"created_at"`
+	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable" binding:"required"`
+	Initialization        string     `json:"initialization" binding:"required"`
+	CreatedAt             time.Time  `json:"created_at" binding:"required"`
 }
 
 // observationDiagnostics are the diagnostics an observation records; empty

@@ -13,7 +13,7 @@ import (
 )
 
 func capabilityBegin() RuntimePreparePayload {
-	return RuntimePreparePayload{Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(),
+	return RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(),
 		Action: "skill", Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 10, SHA256: strings.Repeat("a", 64)}
 }
 
@@ -23,6 +23,9 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 		t.Fatal("valid skill refused")
 	}
 	for name, mutate := range map[string]func(*RuntimePreparePayload){
+		"missing budget":        func(p *RuntimePreparePayload) { p.BudgetMS = 0 },
+		"negative budget":       func(p *RuntimePreparePayload) { p.BudgetMS = -1 },
+		"excessive budget":      func(p *RuntimePreparePayload) { p.BudgetMS = RuntimePrepareMaxBudgetMS + 1 },
 		"noncanonical identity": func(p *RuntimePreparePayload) { p.EnvironmentID = "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" },
 		"zero identity":         func(p *RuntimePreparePayload) { p.SessionID = uuid.Nil.String() },
 		"begin data":            func(p *RuntimePreparePayload) { p.Data = []byte("x") },
@@ -91,7 +94,7 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 }
 
 func TestCapabilitiesFinalizeRequiresExplicitBoundedSelection(t *testing.T) {
-	p := RuntimePreparePayload{Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{}}
+	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{}}
 	if !ValidRuntimePrepareRequest(p) {
 		t.Fatal("explicit empty finalization refused")
 	}
@@ -173,13 +176,13 @@ func TestLocalEnvironmentCarriesSelectionButNeverInstalledRoots(t *testing.T) {
 }
 
 func TestRuntimePreparationInitialActions(t *testing.T) {
-	base := RuntimePreparePayload{Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
+	base := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
 	for _, initialization := range []RuntimeInitialization{
 		{Action: "configure", Env: map[string]string{"EXAMPLE": "value"}},
-		{Action: "npm", Network: "disabled", Packages: []string{"typescript"}},
-		{Action: "python", Network: "enabled", Packages: []string{"requests"}},
-		{Action: "setup", Network: "enabled", Command: "echo done"},
-		{Action: "setup", Network: "disabled", Command: "echo done", CWD: "/workspace/project"},
+		{Action: "npm", Packages: []string{"typescript"}},
+		{Action: "python", Packages: []string{"requests"}},
+		{Action: "setup", Command: "echo done"},
+		{Action: "setup", Command: "echo done", CWD: "/workspace/project"},
 	} {
 		p := base
 		p.Action, p.Initialization = "initialize", &initialization
@@ -203,13 +206,12 @@ func TestRuntimePreparationInitialActions(t *testing.T) {
 		{Action: "exec", Command: "echo done"},
 		{Action: "configure", Packages: []string{"git"}},
 		{Action: "configure", Env: map[string]string{"A=B": "value"}},
-		{Action: "system", Network: "enabled", Packages: []string{"git"}},
-		{Action: "npm", Network: "invalid", Packages: []string{"a"}},
-		{Action: "python", Network: "enabled", Packages: []string{"--help"}},
-		{Action: "setup", Network: "enabled", Command: "x", CWD: "/environment"},
-		{Action: "setup", Network: "enabled", Command: "x", CWD: "/workspace/../private"},
-		{Action: "setup", Network: "enabled", Command: "x", Env: map[string]string{}},
-		{Action: "setup", Network: "enabled", Command: "x", Packages: []string{}},
+		{Action: "system", Packages: []string{"git"}},
+		{Action: "python", Packages: []string{"--help"}},
+		{Action: "setup", Command: "x", CWD: "/environment"},
+		{Action: "setup", Command: "x", CWD: "/workspace/../private"},
+		{Action: "setup", Command: "x", Env: map[string]string{}},
+		{Action: "setup", Command: "x", Packages: []string{}},
 	} {
 		p := base
 		p.Action, p.Initialization = "initialize", &initialization
@@ -264,11 +266,26 @@ func TestRuntimePreparationExitCodes(t *testing.T) {
 }
 
 func TestRuntimePreparationPortableSources(t *testing.T) {
-	p := RuntimePreparePayload{Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{Directories: []string{`C:\Users\operator\skills`, `\\host\share\skills`}}}
+	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{Directories: []string{`C:\Users\operator\skills`, `\\host\share\skills`}}}
 	if !ValidRuntimePrepareRequest(p) {
 		t.Fatal("portable sources rejected by wire")
 	}
 	if agentcapabilities.ValidateLocalDirectories(p.Sources.Directories) == nil {
 		t.Fatal("Windows sources accepted by Linux resolver")
+	}
+}
+
+func TestRuntimePreparationBudgetOnlyOnBegin(t *testing.T) {
+	for _, p := range []RuntimePreparePayload{{Step: "commit", BudgetMS: 1}, {Step: "chunk", Data: []byte("a"), BudgetMS: 1}} {
+		if ValidRuntimePrepareRequest(p) {
+			t.Fatal("budget admitted outside begin")
+		}
+	}
+	for _, budget := range []int64{1, RuntimePrepareMaxBudgetMS} {
+		p := capabilityBegin()
+		p.BudgetMS = budget
+		if !ValidRuntimePrepareRequest(p) {
+			t.Fatal("valid budget boundary rejected", budget)
+		}
 	}
 }

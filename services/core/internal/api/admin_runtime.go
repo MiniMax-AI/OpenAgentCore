@@ -10,8 +10,8 @@ import (
 )
 
 type AdminRuntimeObservation struct {
-	ProjectID   string                        `json:"project_id"`
-	Observation AdminRuntimeObservationDetail `json:"observation"`
+	ProjectID   string                        `json:"project_id" binding:"required"`
+	Observation AdminRuntimeObservationDetail `json:"observation" binding:"required"`
 }
 
 // AdminRuntimeObservationDetail adds administrator-only measurements to the
@@ -29,15 +29,15 @@ type RuntimeDiskObservation struct {
 	LimitBytes *uint64 `json:"limit_bytes" extensions:"x-nullable" binding:"required" minimum:"1"`
 }
 type AdminRuntimeObservationList struct {
-	Object  string                    `json:"object"`
-	Data    []AdminRuntimeObservation `json:"data"`
-	HasMore bool                      `json:"has_more"`
-	FirstID *string                   `json:"first_id"`
-	LastID  *string                   `json:"last_id"`
+	Object  string                    `json:"object" enums:"list" binding:"required"`
+	Data    []AdminRuntimeObservation `json:"data" binding:"required"`
+	HasMore bool                      `json:"has_more" binding:"required"`
+	FirstID *string                   `json:"first_id" extensions:"x-nullable" binding:"required"`
+	LastID  *string                   `json:"last_id" extensions:"x-nullable" binding:"required"`
 }
 
 // @Summary List Runtime observations across managed Projects
-// @Description Core key only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning. A provider with a batch metrics read, such as E2B, samples the page's running sandboxes in one bounded request.
+// @Description Core key only. Each observation is labelled with its owning Project ID. Uses the existing read-only Runtime sampler, with bounded concurrency and no execution or provisioning.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -74,7 +74,7 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 	}
 	page, err := h.Admin.ListAdminRuntimeTargets(ctx, tenants, options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	sessions := make([]runtimeobs.SessionIdentity, len(page.Data))
@@ -87,14 +87,14 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := firstRuntimeObservationError(errs); err != nil {
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 		return
 	}
 	response := AdminRuntimeObservationList{Object: "list", Data: make([]AdminRuntimeObservation, len(page.Data)), HasMore: page.HasMore}
 	for index, observation := range observations {
 		detail, err := adminRuntimeObservationResponse(observation)
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeOperationError(w, r, err)
 			return
 		}
 		response.Data[index] = AdminRuntimeObservation{ProjectID: projectByTenant[page.Data[index].TenantID], Observation: detail}

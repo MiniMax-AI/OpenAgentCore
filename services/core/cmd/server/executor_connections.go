@@ -9,7 +9,6 @@ import (
 )
 
 // executorConnections observes enrolled executors through the Runtime gateway.
-// registry is nil when this Core has no gateway; no executor is then connected.
 type executorConnections struct {
 	sessions sessions.Reader
 	registry *runtimegateway.Registry

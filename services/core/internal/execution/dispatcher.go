@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
@@ -33,7 +32,6 @@ type Dispatcher struct {
 	// Bind sets it from Owner.Sessions.
 	sessionExecution *sessions.ExecutionOperations
 	Policy
-	Store    *store.Store
 	Registry *runtimegateway.Registry
 	// Credentials opens the bearer tokens of authenticated MCP servers.
 	Credentials Credentials
@@ -51,7 +49,8 @@ type Dispatcher struct {
 	Sessions *sessions.Service
 	// SessionsReader serves the plain Session reads. It is required.
 	SessionsReader sessions.Reader
-	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
+	// ManagedRuntimes provisions hosted Environments on the sandbox deployment.
+	// It is required.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.
 	// Zero uses DefaultExecutionConcurrency. It is independent of sandbox capacity.
@@ -75,11 +74,11 @@ type Result struct {
 
 // Run claims once before subscribing or sending. Uncertain deliveries are not replayed.
 func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string) (sessions.Turn, error) {
-	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := d.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
+	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -115,16 +114,15 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 		return sessions.Turn{}, err
 	}
 	defer prepared.close()
-	if _, err := d.Store.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := d.sessionExecution.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		return sessions.Turn{}, err
 	}
-	req.ConversationID, req.RunID, req.Input = sessionID, turnID, text
-	release, err := peer.TrackExecutionDelivery(req.RunID)
+	release, err := peer.TrackExecutionDelivery(turnID)
 	if err != nil {
 		return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 	}
 	defer release()
-	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, through, prepared)
+	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, turnID, text, through, prepared)
 	return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
 }
 
@@ -141,11 +139,11 @@ func (d *Dispatcher) finishRun(tenantID, sessionID, turnID, model string, result
 		encoded, _ = json.Marshal(result)
 		status, nativeID = sessions.TurnFailed, ""
 	}
-	turn, err := d.Store.CompleteExecution(finishCtx, tenantID, sessionID, turnID, status, encoded, nativeID, result.AppliedThrough)
+	turn, err := d.sessionExecution.CompleteExecution(finishCtx, tenantID, sessionID, turnID, status, encoded, nativeID, result.AppliedThrough)
 	if errors.Is(err, sessions.ErrUnappliedInputs) {
 		result.ErrorCode = "input_not_applied"
 		encoded, _ = json.Marshal(result)
-		turn, err = d.Store.CompleteExecution(finishCtx, tenantID, sessionID, turnID, sessions.TurnFailed, encoded, nativeID, result.AppliedThrough)
+		turn, err = d.sessionExecution.CompleteExecution(finishCtx, tenantID, sessionID, turnID, sessions.TurnFailed, encoded, nativeID, result.AppliedThrough)
 	}
 	if err == nil {
 		d.observeDeploymentProvider(tenantID, sessionID, turn)

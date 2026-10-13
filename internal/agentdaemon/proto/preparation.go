@@ -9,9 +9,9 @@ const (
 	TypePreparationStatus = "preparation_status"
 )
 
-// ExecutionPreparePayload reuses execution configuration without accepting input
-// or product authoring. SessionID identifies the immutable configuration owner;
-// each request reserves a separate Turn admission on its Runtime Executor.
+// ExecutionPreparePayload reuses execution configuration without accepting
+// input. SessionID identifies the immutable configuration owner; each request
+// reserves a separate Turn admission on its Runtime Executor.
 type ExecutionPreparePayload struct {
 	SessionID     string               `json:"session_id"`
 	Configuration PromptRequestPayload `json:"configuration"`

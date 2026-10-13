@@ -57,7 +57,7 @@ func TestObserveDecidesItemChanges(t *testing.T) {
 		},
 		{
 			name: "an input message takes no output index", kind: "message",
-			update: project("message", `{"text":"hello"}`),
+			update: project("message", `{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}]}`),
 			check:  func(c Change) bool { return !c.Output && c.Item.Role == "user" },
 		},
 	} {

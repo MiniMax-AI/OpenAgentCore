@@ -1,7 +1,8 @@
-import { coreErrors } from "./core-errors";
+import { coreErrorDetails, coreErrors } from "./core-errors";
 
 export const common = {
   coreErrors,
+  coreErrorDetails,
   readFailure: {
     title: "无法读取数据",
     partial: "部分读取失败。当前数字和列表仅来自已读取的数据，可能不完整或已过期。",
@@ -47,10 +48,8 @@ export const common = {
     column: "创建者",
     help: "创建这个资产的 API key，由 Core 在每次写入时记录。",
     unknown: "未知",
-    unknownHelp: "Core 没有创建记录：资产创建于开始记录之前，或由管理员复制而来。",
+    unknownHelp: "Core 没有创建记录：资产创建于开始记录之前。",
     revoked: "已撤销",
-    adminCopy: "管理员复制",
-    adminCopyHelp: "管理员从其他项目复制而来。",
   },
   list: {
     search: "搜索",

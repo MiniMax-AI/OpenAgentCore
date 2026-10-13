@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
@@ -26,7 +25,6 @@ func TestEnvironmentTemplatesErrors(t *testing.T) {
 		{environmenttemplates.ErrNotFound, 404, "not_found_error"},
 		{fmt.Errorf("create: %w", environmenttemplates.ErrInvalidInput), 400, invalidInputMessage},
 		{textvalue.ErrUnstorable, 400, unstorableTextMessage},
-		{credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
 		{errors.New("template-canary"), 500, "internal_error"},
 	} {
 		response := httptest.NewRecorder()
@@ -74,24 +72,34 @@ func (l *templateLookup) resolved() environmenttemplates.Resolved {
 	return environmenttemplates.Resolved{Template: environmenttemplates.Template{ID: "saved", NetworkAccess: l.network, AllowedDomains: l.domains}, Setup: environmentconfig.Setup{Skills: l.skills, Plugins: l.plugins, CapabilityDirectories: l.directories}}
 }
 
-// Session creation resolves the Template for the caller's tenant, and a
-// Template it cannot resolve answers with the Template's error.
+// Session creation resolves the Template for the caller's tenant and answers
+// with the error of a Template it cannot resolve or cannot apply.
 func TestSessionCreationResolvesTemplateForTenant(t *testing.T) {
-	var resolved []string
-	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
-		f.environmentTemplatesReader.resolve = func(_ context.Context, tenant, id string) (environmenttemplates.Resolved, error) {
-			resolved = append(resolved, tenant, id)
-			return environmenttemplates.Resolved{}, environmenttemplates.ErrNotFound
+	for _, test := range []struct {
+		body   string
+		err    error
+		status int
+		want   string
+	}{
+		{`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"saved"},"input":"Start."}`, environmenttemplates.ErrNotFound, http.StatusNotFound, `"not_found_error"`},
+		{`{"agent":{"model":"test"},"environment":{"type":"self_hosted","workspace_directory":"/work"},"x_agents_core":{"environment":{"environment_template_id":"saved"}}}`, nil, http.StatusBadRequest, `"type":"invalid_request_error","code":"invalid_request_error","param":"x_agents_core.environment.environment_template_id"`},
+	} {
+		var resolved []string
+		h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
+			f.environmentTemplatesReader.resolve = func(_ context.Context, tenant, id string) (environmenttemplates.Resolved, error) {
+				resolved = append(resolved, tenant, id)
+				return (&templateLookup{network: "disabled"}).resolved(), test.err
+			}
+		})
+		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(test.body))
+		req.Header.Set("Authorization", "Bearer test-api-key")
+		req.Header.Set("OpenAI-Beta", "agents=v1")
+		req.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, req)
+		if response.Code != test.status || !strings.Contains(response.Body.String(), test.want) || !reflect.DeepEqual(resolved, []string{tenant, "saved"}) {
+			t.Fatal("Template error", response.Code, response.Body.String(), resolved)
 		}
-	})
-	req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"saved"},"input":"Start."}`))
-	req.Header.Set("Authorization", "Bearer test-api-key")
-	req.Header.Set("OpenAI-Beta", "agents=v1")
-	req.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-	h.ServeHTTP(response, req)
-	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), `"not_found_error"`) || !reflect.DeepEqual(resolved, []string{tenant, "saved"}) {
-		t.Fatal("missing Template", response.Code, response.Body.String(), resolved)
 	}
 }
 

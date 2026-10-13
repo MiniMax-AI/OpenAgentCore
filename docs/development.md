@@ -46,6 +46,48 @@ Set `OAC_TEST_DATABASE_URL` privately to a dedicated PostgreSQL test database. N
 
 For native package pin changes, follow the [live acceptance rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#live-acceptance).
 
+## Install a checkout without publishing a release
+
+Use this path to try the complete Core, Web and managed sandbox nodes from a committed checkout. It uses the same distribution builders, Compose services, initialization and node installer as a release. Building requires network access for pinned upstream dependencies; the resulting offline bundle needs no OpenAgentCore release or image registry. Build and install on Linux amd64 with the [distribution prerequisites](./maintainers.md#build-a-distribution). Docker Engine 26+ and Compose 2.26+ are required. The source must be committed, including your local changes.
+
+From the repository root, prepare the pinned Runtime inputs once, then build and install. If `~/.oac/build/release-inputs/inputs.json` already exists, skip the first command and reuse it:
+
+```sh
+bash scripts/prepare-release-runtimes.sh
+inputs="$HOME/.oac/build/release-inputs/inputs.json"
+export CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
+revision="$(git rev-parse HEAD)"
+export CORE_DISTRIBUTION_BUILD_DIR="$HOME/.oac/build/source-$revision"
+export CORE_DISTRIBUTION_OFFLINE=1
+export CORE_DISTRIBUTION_PLATFORMS=linux/amd64
+unset CORE_DISTRIBUTION_RELEASE_BASE_URL
+make build-core-distribution
+bundle="$CORE_DISTRIBUTION_BUILD_DIR/oac-$revision-linux-amd64"
+python3 "$bundle/install.py" \
+  --install-dir "$HOME/.oac/local" \
+  --host 0.0.0.0 --web-port 8080 \
+  --public-url http://YOUR_CORE_HOST:8080
+```
+
+Replace `YOUR_CORE_HOST` with an address reachable by your browser and sandbox nodes. Use your HTTPS origin behind a reverse proxy when needed; [installation options](./getting-started/install-options.md) owns ingress configuration. The installer prints the Core key for signing in. It creates the standard Compose installation plus a read-only `node-payload` directory containing the bundle's public node artifacts. Allow disk space for both the extracted bundle and this installed copy. No Docker socket is passed to Core or Web.
+
+The build also creates `oac-<commit>-linux-amd64-offline.tar.gz`. Copy and extract that archive on another Linux amd64 Docker host, then run its `install.py`; no checkout, Go, Node or pnpm is needed on that host, only Python 3.9+ and Docker. Keep the extracted bundle until installation completes. The installed services and node downloads do not depend on its original location afterward.
+
+In Web, configure a model provider, create a sandbox deployment and add nodes with the command shown in [Nodes](./getting-started/nodes.md). Node prerequisites still apply, including KVM for microsandbox. The command downloads the matching execution artifacts directly from this installation. This path builds all three managed Harnesses; optional self-hosted native installers are unavailable unless you supply their [native installer catalog](./maintainers.md#native-installers). It does not create a placeholder catalog.
+
+For a startup failure or a stopped installation, use the saved configuration instead of reinstalling:
+
+```sh
+cd "$HOME/.oac/local"
+docker compose logs --tail 100
+# Retry without downloading release images or replacing saved configuration.
+docker compose up -d --wait --pull never
+./oac core-key --show
+```
+
+`install.py` requires an empty installation directory. Configuration preparation failures before `compose.yaml`, `.env` and `oac` exist require removing that incomplete directory and retrying. After those files exist, use Compose to retry. Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services. A different source commit is a fresh installation, not an in-place upgrade: delete managed resources and uninstall nodes first, then remove the old Compose containers and data volume with `docker compose down --volumes`, and remove its installation directory. This permanently deletes that test installation's data. Alternatively choose another installation directory and Web port.
+
 ## Build and run components
 
 From the repository root:
@@ -66,7 +108,8 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | Location | Responsibility | Read next |
 | --- | --- | --- |
 | `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API index](./api/index.md) |
-| `services/core/internal/store` and `services/core/internal/db` | Core persistence, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
+| `services/core/internal/persistence`, `services/core/internal/db` and `services/core/migrations` | Core's PostgreSQL adapters, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
+| `services/core/tests/integration` | Tests that drive the HTTP boundaries, the execution Worker and the PostgreSQL adapters together | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](./runtime-protocol.md) |
 | `services/core/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](./runtime-protocol.md) |
@@ -91,7 +134,7 @@ Choose focused checks for the current diff and its directly affected behavior us
 | --- | --- |
 | Core handlers, persistence or clients | `make check-core` |
 | SQL queries | `make sqlc-generate`, inspect generated files, then `make check-sqlc` |
-| Handler annotations or API contract | `make openapi`, inspect all three namespace schemas |
+| Public schema, Core extensions or internal handler annotations | `make openapi`, `make check-openapi`; inspect generated types and all three namespace schemas |
 | Shared Runtime protocol | `make check-runtime-contract` |
 | Provider integration | `make check-sandbox-provider-contract` and the provider's native checks |
 | Claude SDK bridge and artifact | `make check-claude-sdk` |

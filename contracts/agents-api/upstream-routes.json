@@ -1,12 +1,6 @@
 {
-  "sdk_version": "3.13.0",
-  "commit": "d7c41efee1b0802b79f3f88a678ef2052b06e9ce",
-  "generator": "scripts/extract-agents-api-upstream.py",
-  "resources": [
-    "openai.resources.beta.agents",
-    "openai.resources.files",
-    "openai.resources.skills"
-  ],
+  "openapi_commit": "046a2a0f325bf11f97966f2729219f27281ba71e",
+  "generator": "scripts/generate-public-api.py",
   "routes": [
     "DELETE /agents/environments/templates/{}",
     "DELETE /agents/sessions/{}",

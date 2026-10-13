@@ -39,15 +39,6 @@ func TestCoreDirectRoutesPassThroughWithCallerCredential(t *testing.T) {
 			}
 		}
 	}
-	r := httptest.NewRequest("GET", "/console/api-keys", nil)
-	r.Host = h.host
-	r.Header.Set("Origin", h.origin)
-	r.AddCookie(cookie)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	if w.Code != 404 {
-		t.Errorf("/console/api-keys = %d", w.Code)
-	}
 }
 
 // Encoded or doubled separators and dot segments cannot turn a /core/v1

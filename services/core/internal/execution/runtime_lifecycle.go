@@ -4,45 +4,46 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
+	"github.com/google/uuid"
 )
 
 // RuntimeProvider binds one deployment to one sandbox installation.
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
 	// PublishUnconfigured updates the shared observation cache after reset commit.
-	PublishUnconfigured              func(uint64)
-	Generation                       uint64
-	Mode                             string
-	loadDeployment                   func(context.Context) (*RuntimeProvider, error)
-	prepareDeployment                RuntimeDeploymentPreparer
-	ProviderKind                     string
-	LocalNodeID                      string
-	LocalCredentialSHA256            string
-	LocalMaxActive, LocalMaxRetained int
-	CoreURL                          string
-	InstallationID                   string
-	BackendFingerprint               string
-	Provider                         sandbox.SandboxProvider
-	AdmissionPaused                  bool
-	Suspension                       *RuntimeSuspensionPolicy
+	PublishUnconfigured   func(uint64)
+	Generation            uint64
+	Mode                  string
+	loadDeployment        func(context.Context) (*RuntimeProvider, error)
+	prepareDeployment     RuntimeDeploymentPreparer
+	ProviderKind          string
+	CoreURL               string
+	InstallationID        string
+	BackendFingerprint    string
+	Provider              sandbox.SandboxProvider
+	Suspension            *RuntimeSuspensionPolicy
+	Resources             sandbox.Resources
+	WorkspaceRequirements *workspacefs.Requirements
+	Workspace             *workspacefs.Declaration
 }
 
 type runtimeLifecycle struct {
-	store            *store.Store
+	workspaces       *workspaces.ExecutionOperations
 	sessions         sessions.Reader
 	sessionExecution *sessions.ExecutionOperations
 	// deployment runs the allocation mutations on the lease; deployments and
@@ -62,28 +63,23 @@ type runtimeLifecycle struct {
 	cursor          string
 	pendingCursor   string
 	connections     map[string]*runtimeConnection
+	awaiting        map[string]deployment.AllocationKey
+	connectionWake  chan *runtimegateway.Session
 	wakeHints       chan struct{}
+	pendingWake     chan struct{}
+	hintDestination func(string)
 }
 
 func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
-		return nil, nil
+		return nil, sandbox.ErrInvalid
 	}
-	var copied RuntimeProvider
-	if config.loadDeployment != nil {
-		id, err := uuid.Parse(config.InstallationID)
-		if err != nil || id == uuid.Nil || id.String() != config.InstallationID || registry == nil {
-			return nil, sandbox.ErrInvalid
-		}
-	} else {
-		var err error
-		copied, err = validatedRuntimeProvider(config, registry)
-		if err != nil {
-			return nil, err
-		}
+	id, err := uuid.Parse(config.InstallationID)
+	if err != nil || id == uuid.Nil || id.String() != config.InstallationID || config.loadDeployment == nil || config.prepareDeployment == nil || registry == nil {
+		return nil, sandbox.ErrInvalid
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: owner.Store, sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{workspaces: owner.Workspaces, workspaceGate: make(chan struct{}, 1), sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1), placementWake: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -100,18 +96,23 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 		return RuntimeProvider{}, err
 	}
 	copied := *config
-	if copied.Mode == "" && copied.ProviderKind != "" {
-		copied.Mode = "nodes"
+	if config.Workspace != nil {
+		workspace := *config.Workspace
+		copied.Workspace = &workspace
 	}
-	if copied.Mode != "" && copied.Mode != "nodes" && copied.Mode != "direct" {
+	if config.WorkspaceRequirements != nil {
+		requirements := *config.WorkspaceRequirements
+		copied.WorkspaceRequirements = &requirements
+	}
+	if copied.ProviderKind == "" || (copied.Mode != string(sandbox.DeploymentNodes) && copied.Mode != string(sandbox.DeploymentDirect)) {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == "direct" && (copied.ProviderKind == "" || copied.LocalNodeID != "" || copied.Suspension != nil) {
+	if copied.Mode == string(sandbox.DeploymentDirect) && copied.Suspension != nil {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+		if !sandbox.SupportsCheckpoint(config.Provider) || policy.Retention < time.Second {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy
@@ -141,9 +142,6 @@ func (r *runtimeLifecycle) lock(ctx context.Context) error {
 // ProvisionEnvironment is an internal bootstrap operation for an already
 // authorized hosted Environment. It does not enable public hosted admission.
 func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, providerKey string) (deployment.Allocation, error) {
-	if w.runtimes == nil {
-		return deployment.Allocation{}, ErrExecutionUnavailable
-	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	ctx, finish, err := w.runtimes.enter(ctx)
@@ -157,6 +155,17 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 	}
 	if !ready {
 		return deployment.Allocation{}, ErrExecutionUnavailable
+	}
+	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
+	existing, lookupErr := w.runtimes.deploymentReader.EnvironmentAllocation(ctx, key)
+	if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
+		return deployment.Allocation{}, lookupErr
+	}
+	if errors.Is(lookupErr, deployment.ErrNotFound) || existing.State == "released" {
+		// The common ordered inventory is the only placement entry point.
+		if _, err := w.runtimes.syncNodes(ctx); err != nil {
+			return deployment.Allocation{}, err
+		}
 	}
 	nodeID, err := w.runtimes.deploymentService.LifecycleNode(ctx, tenant, environment)
 	if err != nil {
@@ -175,10 +184,35 @@ func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, 
 }
 
 // provision runs under the lifecycle gate and uses the durable one-shot receipt.
-func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (deployment.Allocation, error) {
+func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (result deployment.Allocation, resultErr error) {
 	provider := r.config.Provider
 	if providerKey != r.config.InstallationID {
 		return deployment.Allocation{}, sandbox.ErrInvalid
+	}
+
+	if r.nodeID != "" {
+		key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
+		target, err := r.reader.LifecyclePlacement(ctx, key)
+		if err != nil {
+			return deployment.Allocation{}, err
+		}
+		if target.PlacementNodeID != r.nodeID {
+			return deployment.Allocation{}, sandbox.ErrOwnership
+		}
+		if target.PlacementReleased && target.AllocationID == "" {
+			return deployment.Allocation{}, deployment.ErrAllocationConflict
+		}
+		if !target.PlacementReleased {
+			expected := placement.Reserved{NodeID: target.PlacementNodeID, Generation: target.PlacementGeneration}
+			defer func() {
+				if resultErr == nil || result.ID != "" {
+					return
+				}
+				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				resultErr = errors.Join(resultErr, r.deployment.ReleaseFailedPlacement(cleanup, key, expected))
+			}()
+		}
 	}
 	environmentValue, err := r.sessions.GetEnvironment(ctx, tenant, environment)
 	if err != nil {
@@ -188,26 +222,40 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err != nil || placement.Type != "openai_hosted" {
 		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
-	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
-	if _, err := r.reader.EnvironmentAllocation(ctx, key); errors.Is(err, deployment.ErrNotFound) {
-		if r.config.AdmissionPaused && r.config.Generation == 0 {
-			return deployment.Allocation{}, ErrExecutionUnavailable
+	spec, err := r.workspaceSpecification(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}, "")
+	if err != nil {
+		return deployment.Allocation{}, err
+	}
+	if environmentValue.ExternalWorkspace && spec.Workspace == nil {
+		return deployment.Allocation{}, workspacefs.ErrUnsupported
+	}
+	var workspace *workspacefs.Binding
+	if spec.Workspace != nil {
+		existing, lookupErr := r.reader.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+		if lookupErr != nil && !errors.Is(lookupErr, deployment.ErrNotFound) {
+			return deployment.Allocation{}, lookupErr
 		}
-		if err := r.computeFreshCapacity(ctx, providerKey); err != nil {
-			return deployment.Allocation{}, err
-		}
-		if policy := r.config.Suspension; policy != nil && r.config.ProviderKind == "" {
-			count, err := r.reader.CountRetainedAllocations(ctx, providerKey)
+		if errors.Is(lookupErr, deployment.ErrNotFound) {
+			workspace, err = r.workspaces.Ensure(ctx, tenant, environment, r.config.WorkspaceRequirements, spec.Resources.EnvironmentDiskMiB)
+			if err == nil && workspace == nil {
+				err = workspacefs.ErrUnavailable
+			}
 			if err != nil {
 				return deployment.Allocation{}, err
 			}
-			if count >= int64(policy.MaxRetained) {
-				return deployment.Allocation{}, ErrExecutionUnavailable
+		} else if existing.State == "released" {
+			workspace, err = r.workspaces.GetReady(ctx, tenant, environment, r.config.WorkspaceRequirements)
+			if err != nil {
+				return deployment.Allocation{}, err
 			}
+			if workspace == nil {
+				return deployment.Allocation{}, workspacefs.ErrNotFound
+			}
+		} else if existing.NodeID != r.nodeID {
+			return existing, sandbox.ErrOwnership
 		}
-	} else if err != nil {
-		return deployment.Allocation{}, err
 	}
+	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		return deployment.Allocation{}, err
@@ -226,10 +274,12 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
+	started := time.Now()
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
-		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
+		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
 	})
+	logComputeStep(ctx, owner, "create", started, err)
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
 		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		released, releaseErr := r.deployment.ReleaseAbsentCreation(record, owner)
@@ -263,16 +313,19 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if info.Reference != runtimeReference(owner) || info.ProviderID == "" || info.State != "running" || !info.BootstrapComplete {
 		return owner, sandbox.ErrOwnership
 	}
-	return r.deployment.ObserveRunning(ctx, owner)
+	owner, err = r.deployment.ObserveRunning(ctx, owner)
+	if err != nil {
+		return owner, err
+	}
+	// Bootstrap may already have established its authenticated Runtime connection.
+	// Publish it now rather than waiting for the next maintenance observation.
+	return owner, r.observeConnection(ctx, owner)
 }
 
 // ReconcileManagedRuntimes is also callable before serving admission. One scan
 // observes existing allocations and bootstraps committed resources without an
 // allocation. It never retries an existing Create or native work.
 func (w *Worker) ReconcileManagedRuntimes(ctx context.Context) error {
-	if w.runtimes == nil {
-		return nil
-	}
 	return w.runtimes.reconcile(ctx)
 }
 
@@ -421,13 +474,14 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if renewed.Reference != runtimeReference(owner) || renewed.State != "running" || !renewed.BootstrapComplete {
 		return sandbox.ErrOwnership
 	}
-	_, err = r.deployment.KeepAllocation(ctx, owner)
+	_, err = r.deployment.CheckRunning(ctx, owner)
 	return err
 }
 
 // Environment identity owns connectivity; preparation has an independent owner.
 func (r *runtimeLifecycle) clearRuntimeState(owner deployment.Allocation) {
 	delete(r.connections, owner.EnvironmentID)
+	r.forgetAwaitingConnection(owner.DeviceID)
 }
 
 func runtimeReference(owner deployment.Allocation) sandbox.Reference {
@@ -438,10 +492,27 @@ func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 	return w.runtimes.run(ctx)
 }
 
-// Manager deployments reserve capacity with Session placement before provisioning.
-func (r *runtimeLifecycle) computeFreshCapacity(ctx context.Context, key string) error {
-	if r.config.ProviderKind != "" {
-		return nil
+// workspaceSpecification reads the immutable generation selected for this
+// Environment. A restore also fences the exact allocation before native I/O.
+func (r *runtimeLifecycle) workspaceSpecification(ctx context.Context, key deployment.AllocationKey, allocationID string) (sandbox.DeploymentSpec, error) {
+	target, err := r.reader.LifecyclePlacement(ctx, key)
+	if err != nil {
+		return sandbox.DeploymentSpec{}, err
 	}
-	return r.computeCapacity(ctx, key)
+	if allocationID != "" && target.AllocationID != allocationID {
+		return sandbox.DeploymentSpec{}, sandbox.ErrOwnership
+	}
+	var spec sandbox.DeploymentSpec
+	if err := json.Unmarshal(target.Specification, &spec); err != nil {
+		return sandbox.DeploymentSpec{}, sandbox.ErrInvalid
+	}
+	if spec.Workspace != nil {
+		if r.workspaces == nil || r.config.WorkspaceRequirements == nil {
+			return sandbox.DeploymentSpec{}, workspacefs.ErrUnavailable
+		}
+		if err := workspacefs.ValidateCombination(*r.config.WorkspaceRequirements, *spec.Workspace, spec.Resources.EnvironmentDiskMiB); err != nil {
+			return sandbox.DeploymentSpec{}, err
+		}
+	}
+	return spec, nil
 }

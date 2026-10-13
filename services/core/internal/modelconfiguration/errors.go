@@ -3,8 +3,7 @@ package modelconfiguration
 import "errors"
 
 // Replace and Resolve report a configuration the Harness declaration rejects
-// with the contract's *v1.ModelProviderError, which names the field, and a
-// missing credential key with credentialcrypto.ErrUnavailable. A bundle that
+// with the contract's *v1.ModelProviderError, which names the field. A bundle that
 // fails to open is an internal error. Storage passes textvalue.ErrUnstorable
 // and adminaudit.ErrInvalidSource through unchanged.
 var (

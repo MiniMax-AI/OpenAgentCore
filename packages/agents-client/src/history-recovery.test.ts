@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { OpenAIAgentsClient } from "./client";
-import type { AgentTurn, PageOptions, SessionEvent } from "./types";
+import type { AgentTurn, SessionEvent } from "./types";
 
 const usage = {
   input_tokens: 7226, output_tokens: 7, total_tokens: 7233,
@@ -22,7 +22,7 @@ function session() {
     environment: { type: "none" },
     agent: {
       id: "root", model: "model", name: null, instructions: null,
-      multi_agent: { enabled: true, max_concurrent_subagents: null }, reasoning: {},
+      multi_agent: { enabled: true, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null },
       service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [],
     },
   };
@@ -32,6 +32,12 @@ function json(value: unknown) {
   return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
 }
 
+function page(data: Record<string, unknown>[], fields: Record<string, unknown> = {}) {
+  return {
+    object: "list", data, first_id: data[0]?.id ?? null, last_id: data[data.length - 1]?.id ?? null, has_more: false, ...fields,
+  };
+}
+
 function sse(events: unknown[]) {
   return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
     headers: { "Content-Type": "text/event-stream" },
@@ -39,7 +45,8 @@ function sse(events: unknown[]) {
 }
 
 function turnEvent(value = turn(), type = "agent.session.turn.completed") {
-  return { type, event_id: "event", session_id: "session", turn_id: value.id, turn: value };
+  const terminal = /\.(completed|failed|cancelled)$/.test(type) ? { usage: value.usage } : {};
+  return { type, event_id: "event", session_id: "session", turn_id: value.id, turn: value, ...terminal };
 }
 
 function itemEvent(item: Record<string, unknown>) {
@@ -70,43 +77,13 @@ describe("history and live event projections", () => {
     const value = turn({ agent_id: "root", subagent_id: subagentId, usage });
     const client = new OpenAIAgentsClient({ fetch: vi.fn()
       .mockResolvedValueOnce(json(value))
-      .mockResolvedValueOnce(json({ data: [value], has_more: false }))
+      .mockResolvedValueOnce(json(page([value])))
       .mockResolvedValueOnce(sse([turnEvent(value)])) });
     expect(await client.retrieveTurn("session", "turn")).toEqual(value);
     expect((await client.listTurns("session")).data).toEqual([value]);
     const received: SessionEvent[] = [];
     await client.streamEvents("session", { onEvent: (event) => received.push(event) });
     expect(received[0]?.turn).toEqual(value);
-  });
-
-  it("accepts the pinned optional subagent_id omission without inventing an identity", async () => {
-    const { subagent_id: _omitted, ...value } = turn();
-    const client = new OpenAIAgentsClient({ fetch: async () => json(value) });
-    expect(await client.retrieveTurn("session", "turn")).toEqual(value);
-  });
-
-  it("accepts the official child Turn shape and the earlier child-owned agent_id", async () => {
-    for (const value of [turn({ agent_id: "root", subagent_id: "child" }), turn({ agent_id: "child", subagent_id: "child" })]) {
-      const client = new OpenAIAgentsClient({ fetch: vi.fn()
-        .mockResolvedValueOnce(json(value))
-        .mockResolvedValueOnce(json({ object: "list", data: [value], first_id: "turn", last_id: "turn", has_more: false })) });
-      expect(await client.retrieveTurn("session", "turn")).toEqual(value);
-      expect((await client.listTurns("session")).data).toEqual([value]);
-    }
-  });
-
-  // Earlier Core releases streamed child Turns; current Core streams root work only.
-  it("retains completed child snapshots first observed in an earlier creation stream", async () => {
-    const value = turn({ agent_id: "root", subagent_id: "child" });
-    const created = { type: "agent.session.created", event_id: "created", session: session() };
-    const client = new OpenAIAgentsClient({ fetch: async () => sse([
-      created, turnEvent(value, "agent.session.turn.created"), turnEvent(value),
-    ]) });
-    const received: SessionEvent[] = [];
-    await client.createSessionStream({ environment: { type: "none" } }, "key", {
-      onSession: () => undefined, onEvent: (event) => received.push(event),
-    });
-    expect(received.map((event) => event.turn).filter(Boolean)).toEqual([value, value]);
   });
 
   it("does not weaken root creation snapshots or immutable root identity", async () => {
@@ -123,7 +100,7 @@ describe("history and live event projections", () => {
 
   it("projects supported coordination/reasoning Items identically through history and SSE", async () => {
     const client = new OpenAIAgentsClient({ fetch: vi.fn()
-      .mockResolvedValueOnce(json({ data: items, has_more: false }))
+      .mockResolvedValueOnce(json(page(items)))
       .mockResolvedValueOnce(sse(items.map(itemEvent))) });
     const saved = (await client.listItems("session")).data;
     const live: SessionEvent[] = [];
@@ -145,7 +122,7 @@ describe("history and live event projections", () => {
   ])("rejects malformed or private Item fields in both paths: $type", async (item) => {
     const onEvent = vi.fn();
     const client = new OpenAIAgentsClient({ fetch: vi.fn()
-      .mockResolvedValueOnce(json({ data: [item], has_more: false }))
+      .mockResolvedValueOnce(json(page([item])))
       .mockResolvedValueOnce(sse([itemEvent(item)])) });
     await expect(client.listItems("session")).rejects.toMatchObject({ code: "invalid_history_resource" });
     await expect(client.streamEvents("session", { onEvent })).rejects.toMatchObject({ code: "invalid_stream_event" });
@@ -156,6 +133,7 @@ describe("history and live event projections", () => {
     turn({ session_id: "foreign" }), turn({ id: "other" }),
     turn({ agent_id: "", subagent_id: "child" }), turn({ subagent_id: "" }), turn({ subagent_id: 1 }),
     turn({ usage: { input_tokens: 1 } }), turn({ native_session_id: "private" }),
+    (({ subagent_id: _omitted, ...value }) => value)(turn()),
   ])("rejects malformed or mismatched Turn retrieval", async (value) => {
     const client = new OpenAIAgentsClient({ fetch: async () => json(value) });
     await expect(client.retrieveTurn("session", "turn")).rejects.toMatchObject({ code: "invalid_history_resource" });
@@ -173,7 +151,7 @@ describe("history and live event projections", () => {
     const completed = turn();
     const measured = turn({ usage });
     const requests: string[] = [];
-    const responses = [sse([turnEvent(completed)]), sse([turnEvent(measured)]), json(measured), json({ data: [measured], has_more: false })];
+    const responses = [sse([turnEvent(completed)]), sse([turnEvent(measured)]), json(measured), json(page([measured]))];
     const client = new OpenAIAgentsClient({ fetch: async (input, init) => {
       requests.push(String(input));
       expect(new Headers(init?.headers).has("Last-Event-ID")).toBe(false);
@@ -197,9 +175,9 @@ describe("history and live event projections", () => {
 describe("history pagination", () => {
   it.each(["asc", "desc"] as const)("recovers every saved Item across %s pages without changing snapshots", async (order) => {
     const snapshots = [
-      { id: "input", turn_id: "turn", type: "message", status: "completed", role: "user", content: [{ type: "input_text", text: "Question" }] },
+      { id: "input", turn_id: "turn", type: "message", status: "completed", role: "user", phase: null, content: [{ type: "input_text", text: "Question" }] },
       { id: "answer", turn_id: "turn", type: "message", status: "incomplete", role: "assistant", phase: "commentary", content: [{ type: "output_text", text: "Retained partial answer" }] },
-      { id: "command", turn_id: "turn", type: "command_execution", status: "incomplete", command: "work", output: "Retained output", exit_code: null },
+      { id: "command", turn_id: "turn", type: "command_execution", status: "incomplete", command: "work", cwd: null, output: "Retained output", exit_code: null, duration_ms: null },
     ];
     const expected = order === "asc" ? snapshots : [...snapshots].reverse();
     const client = new OpenAIAgentsClient({ fetch: async (input) => {
@@ -207,7 +185,7 @@ describe("history pagination", () => {
       expect(query.get("order")).toBe(order);
       const after = query.get("after");
       const index = after === null ? 0 : expected.findIndex((item) => item.id === after) + 1;
-      return json({ data: expected.slice(index, index + 1), has_more: index + 1 < expected.length });
+      return json(page(expected.slice(index, index + 1), { has_more: index + 1 < expected.length }));
     } });
     const recovered = [];
     let after: string | undefined;
@@ -220,7 +198,7 @@ describe("history pagination", () => {
     expect(recovered).toEqual(expected);
   });
 
-  it.each(["asc", "desc"] as const)("keeps the %s cursor and optional page metadata", async (order) => {
+  it.each(["asc", "desc"] as const)("keeps the %s cursor and page metadata", async (order) => {
     const calls: string[] = [];
     const client = new OpenAIAgentsClient({ fetch: async (input) => {
       calls.push(String(input));
@@ -233,13 +211,13 @@ describe("history pagination", () => {
   });
 
   it.each([
-    {}, { data: [], has_more: true }, { data: [], has_more: "false" },
-    { data: [turn(), turn()], has_more: false },
-    { data: [turn()], has_more: false, first_id: "wrong" },
-    { data: [turn()], has_more: false, last_id: null },
-    { data: [], has_more: false, object: "turn.list" },
-    { data: [turn({ session_id: "foreign" })], has_more: false },
-    { data: [turn()], has_more: false, internal_cursor: "private" },
+    {}, page([], { has_more: true }), page([], { has_more: "false" }),
+    page([turn(), turn()]),
+    page([turn()], { first_id: "wrong" }),
+    page([turn()], { last_id: null }),
+    page([], { object: "turn.list" }),
+    page([turn({ session_id: "foreign" })]),
+    page([turn()], { internal_cursor: "private" }),
   ])("rejects malformed Turn pages", async (page) => {
     const client = new OpenAIAgentsClient({ fetch: async () => json(page) });
     await expect(client.listTurns("session")).rejects.toMatchObject({ code: "invalid_history_resource" });
@@ -247,19 +225,11 @@ describe("history pagination", () => {
 
   it("rejects cursor repetition, overfull pages and invalid Item envelopes", async () => {
     const client = new OpenAIAgentsClient({ fetch: vi.fn()
-      .mockResolvedValueOnce(json({ data: [turn()], has_more: true }))
-      .mockResolvedValueOnce(json({ data: [turn(), turn({ id: "turn-2" })], has_more: false }))
-      .mockResolvedValueOnce(json({ data: [items[0]], has_more: false, last_id: "other" })) });
+      .mockResolvedValueOnce(json(page([turn()], { has_more: true })))
+      .mockResolvedValueOnce(json(page([turn(), turn({ id: "turn-2" })])))
+      .mockResolvedValueOnce(json(page([items[0]!], { last_id: "other" }))) });
     await expect(client.listTurns("session", { after: "turn" })).rejects.toMatchObject({ code: "invalid_history_resource" });
     await expect(client.listTurns("session", { limit: 1 })).rejects.toMatchObject({ code: "invalid_history_resource" });
     await expect(client.listItems("session")).rejects.toMatchObject({ code: "invalid_history_resource" });
-  });
-
-  it.each([{ limit: 0 }, { limit: 101 }, { limit: 1.5 }, { order: "newest" }, { after: "" }])("rejects invalid options before HTTP", async (options) => {
-    const fetch = vi.fn();
-    const client = new OpenAIAgentsClient({ fetch });
-    await expect(client.listItems("session", options as PageOptions)).rejects.toBeInstanceOf(TypeError);
-    await expect(client.listTurns("session", options as PageOptions)).rejects.toBeInstanceOf(TypeError);
-    expect(fetch).not.toHaveBeenCalled();
   });
 });

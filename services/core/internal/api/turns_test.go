@@ -37,7 +37,7 @@ func (s *turnReadStore) ListTurns(_ context.Context, tenant, session, cursor str
 func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
 	s := &turnReadStore{session: sessions.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: sessions.Turn{ID: "turn", SessionID: "session", Status: sessions.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
 	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
-		f.sessions.getSession, f.turns.getTurn, f.turns.listTurns = s.GetSession, s.GetTurn, s.ListTurns
+		f.sessionsReader.getSession, f.turns.getTurn, f.turns.listTurns = s.GetSession, s.GetTurn, s.ListTurns
 	})
 	request := func(path string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, path, nil)

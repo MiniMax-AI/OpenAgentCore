@@ -42,7 +42,7 @@ func (q *Queries) GetEnvironmentSetup(ctx context.Context, arg GetEnvironmentSet
 	return contents, err
 }
 
-const setSessionSetupMetadata = `-- name: SetSessionSetupMetadata :one
+const setSessionSetupMetadata = `-- name: SetSessionSetupMetadata :exec
 UPDATE sessions SET configuration = jsonb_set(configuration, '{environment}',
     (configuration->'environment') || jsonb_build_object(
         'packages', $2::jsonb,
@@ -50,7 +50,7 @@ UPDATE sessions SET configuration = jsonb_set(configuration, '{environment}',
         'plugins', $4::jsonb,
         'capability_directories', $5::jsonb,
         'initialization', true))
-WHERE id = $1 RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
+WHERE id = $1
 `
 
 type SetSessionSetupMetadataParams struct {
@@ -61,29 +61,13 @@ type SetSessionSetupMetadataParams struct {
 	CapabilityDirectories []byte      `json:"capability_directories"`
 }
 
-func (q *Queries) SetSessionSetupMetadata(ctx context.Context, arg SetSessionSetupMetadataParams) (Session, error) {
-	row := q.db.QueryRow(ctx, setSessionSetupMetadata,
+func (q *Queries) SetSessionSetupMetadata(ctx context.Context, arg SetSessionSetupMetadataParams) error {
+	_, err := q.db.Exec(ctx, setSessionSetupMetadata,
 		arg.ID,
 		arg.Packages,
 		arg.Skills,
 		arg.Plugins,
 		arg.CapabilityDirectories,
 	)
-	var i Session
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Engine,
-		&i.Metadata,
-		&i.IdempotencyKey,
-		&i.RequestHash,
-		&i.CreatedAt,
-		&i.Configuration,
-		&i.EventSequence,
-		&i.CreationRequestHash,
-		&i.DeletedAt,
-		&i.CreatorKind,
-		&i.CreatorID,
-	)
-	return i, err
+	return err
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 const managementProjectID = "22222222-2222-4222-8222-222222222222"
@@ -117,10 +116,10 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 
 type summaryFixture struct {
 	tenant string
-	filter store.AdminSummaryFilter
+	filter sessions.AdminSummaryFilter
 }
 
-func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filter store.AdminSummaryFilter, visit func(sessions.Session, *string) error) (store.AdminAssetCounts, error) {
+func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filter sessions.AdminSummaryFilter, visit func(sessions.Session, *string) error) (sessions.AdminAssetCounts, error) {
 	s.tenant, s.filter = tenant, filter
 	for i, usage := range []json.RawMessage{nil, json.RawMessage(`{"input_tokens":3,"output_tokens":5,"total_tokens":8,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}`)} {
 		session := sessions.Session{ID: "session", TenantID: tenant, Configuration: json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[]},"environment":{"type":"none"}}`), CreatedAt: time.Unix(100+int64(i), 0), Usage: usage}
@@ -128,10 +127,10 @@ func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filt
 			session.LastTurn = &sessions.Turn{Status: sessions.TurnInProgress, CreatedAt: time.Unix(110, 0)}
 		}
 		if err := visit(session, nil); err != nil {
-			return store.AdminAssetCounts{}, err
+			return sessions.AdminAssetCounts{}, err
 		}
 	}
-	return store.AdminAssetCounts{Agents: 4, Skills: 2}, nil
+	return sessions.AdminAssetCounts{Agents: 4, Skills: 2}, nil
 }
 func TestAdminSummaryUsesPublicStateAndNullUsageCoverage(t *testing.T) {
 	key := callerBinding()

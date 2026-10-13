@@ -18,11 +18,11 @@ import (
 )
 
 // openStore opens the shared test database, as a restarted Core would. The
-// Store has no credential key, which reads never need.
+// Store has the shared test key, which reads never need.
 func openStore(t *testing.T) (*vaultpg.Store, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.Open(t)
-	return vaultpg.New(pgunit.NewPool(pool), nil), pool
+	return vaultpg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), pool
 }
 
 // readOnlyPool fails every write with a real PostgreSQL error.
@@ -54,8 +54,7 @@ func newCipher(t *testing.T, key []byte) *credentialcrypto.Cipher {
 	return cipher
 }
 
-// keyedStore is a new Store on pool; a nil cipher is a Core without a
-// credential key.
+// keyedStore is a new Store on pool under cipher.
 func keyedStore(pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) *vaultpg.Store {
 	return vaultpg.New(pgunit.NewPool(pool), cipher)
 }

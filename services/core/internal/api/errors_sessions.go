@@ -20,7 +20,7 @@ func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, sessions.ErrTurnConflict):
 		writeError(w, http.StatusConflict, "conflict_error", "The Turn cannot accept this input in its current state.")
 	default:
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 	}
 }
 
@@ -38,8 +38,6 @@ func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusUnauthorized, "installation_authorization_invalid", sessions.ErrInstallationAuthorization.Error())
 	case errors.Is(err, sessions.ErrExecutorCredentialExists):
 		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
-	case errors.Is(err, execution.ErrModelProviderRequired):
-		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
 	case errors.Is(err, sessions.ErrHostedEnvironmentFailed):
 		// Observed official status, type, code, null param and message.
 		writeError(w, http.StatusConflict, "conflict_error", "the hosted environment failed to provision")
@@ -74,7 +72,7 @@ func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, sessions.ErrInvalidInput), errors.Is(err, environmentconfig.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 			return
 		}
 		writeInternalError(w, r)

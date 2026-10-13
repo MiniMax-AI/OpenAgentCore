@@ -1,3 +1,4 @@
+import { projectRequestLog, type RequestLogOptions } from "./request-log";
 import { projectEnvironmentInstallation } from "./installation-projection";
 import type { EnvironmentInstallation } from "./types";
 import { projectSessionDiagnostics, projectTurnDiagnostics } from "./session-diagnostics";
@@ -7,13 +8,15 @@ import {
   projectVaultCredential, projectVaultCredentialList, projectSourceFile, projectSourceFileDeleted,
 } from "./client";
 import { projectExecutionConfiguration } from "./execution-configuration-projection";
-import { projectAgentTurn, projectSessionItem, projectHistoryPage, validateHistoryPageOptions } from "./history-projection";
+import { projectAgentTurn, projectSessionItem, projectHistoryPage } from "./history-projection";
 import { projectRuntimeHistory } from "./runtime-history-projection";
-import { canonicalUuid, isNonnegativeInteger, isRecord } from "./response-projection";
+import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord } from "./response-projection";
 import { CoreRequester } from "./core-request";
+import { projectSkill, projectSkillDeleted, projectSkillVersion, projectSkillVersionDeleted } from "./skill-projection";
+import { keyPageFields, projectsPageFields, selectionFields } from "./generated/core-api";
 import {
   invalidAdminResponse, projectAdminProject, projectAdminKey, projectIssuedAdminKey, projectAdminPage, projectAdminDeleted, projectAdminSessionArchive,
-  projectResourcePage, projectSavedAgent, projectSkill, projectSkillVersion, projectArtifact, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
+  projectResourcePage, projectSavedAgent, projectArtifact, projectSummary, projectAdminRuntimePage, projectResourceOwners, projectWriteOperations, projectAdminAudit,
   projectExecutorCredentials, projectIssuedExecutorCredential, projectCoreHarnessList, projectHarnessModelConfiguration, projectInstallation,
 } from "./admin-projection";
 import type {
@@ -25,6 +28,15 @@ import type {
   IssueAdminAPIKeyInput, AdminSummaryOptions, AdminResourceType, AdminResourceOwner, AdminWriteOperationOptions, AdminWriteOperationPage,
   ExecutorCredentialList, IssueExecutorCredentialInput, IssuedExecutorCredential, CoreInstallation,
 } from "./admin-types";
+
+import type { Selection, WorkspaceStorageInput } from "./generated/core-api";
+
+function projectWorkspaceStorage(value: unknown): Selection {
+  if (!isRecord(value) || !exactFields(value, selectionFields) || typeof value.id !== "string" || canonicalUuid(value.id) !== value.id ||
+      typeof value.adapter !== "string" || !value.adapter || !isRecord(value.parameters) ||
+      !isNonnegativeInteger(value.tenant_capacity_mib) || value.tenant_capacity_mib > 4_294_967_295) return invalidAdminResponse();
+  return { id: value.id as string, adapter: value.adapter, parameters: value.parameters, tenant_capacity_mib: value.tenant_capacity_mib };
+}
 
 function segment(value: string): string {
   // Dot segments are normalized by fetch before the server sees the request.
@@ -73,12 +85,25 @@ export class AdminClient {
     return { blob: await response.blob(), contentType: response.headers.get("Content-Type"), contentDisposition: response.headers.get("Content-Disposition") };
   }
 
+  async listRequestLogs(options: RequestLogOptions = {}) {
+    const path = pageQuery("/request-logs", { limit: options.limit }, { request_id: options.request_id, outcome: options.outcome, surface: options.surface, method: options.method });
+    return projectRequestLog(await this.#json(path, options));
+  }
+
+  async retrieveWorkspaceStorage(options?: ReadOptions): Promise<Selection> {
+    return projectWorkspaceStorage(await this.#json("/workspace-storage", options));
+  }
+  async configureWorkspaceStorage(input: WorkspaceStorageInput, options?: ReadOptions): Promise<Selection> {
+    const { id, adapter, parameters, tenant_capacity_mib, credential } = input;
+    return projectWorkspaceStorage(await this.#json("/workspace-storage", options, "PUT", { id, adapter, parameters, tenant_capacity_mib, ...(credential === undefined ? {} : { credential }) }));
+  }
+
   /** Installation facts and process settings; readable before any sandbox deployment exists. */
   async retrieveInstallation(options?: ReadOptions): Promise<CoreInstallation> {
     return projectInstallation(await this.#json("/installation", options));
   }
   async listProjects(options?: PageOptions) {
-    return projectAdminPage(await this.#json(pageQuery("/projects", options), options), (value) => projectAdminProject(value));
+    return projectAdminPage(await this.#json(pageQuery("/projects", options), options), projectsPageFields, (value) => projectAdminProject(value));
   }
   async createProject(input: CreateAdminProjectInput, options?: ReadOptions) {
     return projectAdminProject(await this.#json("/projects", options, "POST", { name: input.name }));
@@ -90,7 +115,7 @@ export class AdminClient {
     return projectAdminProject(await this.#json(`${scope(projectId)}/archive`, options, "POST"), projectId);
   }
   async listAPIKeys(projectId: string, options?: PageOptions) {
-    return projectAdminPage(await this.#json(pageQuery(`${scope(projectId)}/keys`, options), options), (value) => projectAdminKey(value, projectId));
+    return projectAdminPage(await this.#json(pageQuery(`${scope(projectId)}/keys`, options), options), keyPageFields, (value) => projectAdminKey(value, projectId));
   }
   async issueAPIKey(projectId: string, input: IssueAdminAPIKeyInput, options?: ReadOptions) {
     return projectIssuedAdminKey(await this.#json(`${scope(projectId)}/keys`, options, "POST", { name: input.name }), projectId);
@@ -121,25 +146,22 @@ export class AdminClient {
     return this.#delete(`${scope(projectId)}/agents/${segment(agentId)}`, agentId, "agent.deleted", options);
   }
   async listSkills(projectId: string, options?: PageOptions): Promise<SkillList> {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills`, options), options), (value) => projectSkill(value));
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills`, options), options), (value) => projectSkill(value, invalidAdminResponse));
   }
   async retrieveSkill(projectId: string, skillId: string, options?: ReadOptions) {
-    return projectSkill(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}`, options), skillId);
+    return projectSkill(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}`, options), invalidAdminResponse, skillId);
   }
-  deleteSkill(projectId: string, skillId: string, options?: ReadOptions) {
-    return this.#delete(`${scope(projectId)}/skills/${segment(skillId)}`, skillId, "skill.deleted", options);
+  async deleteSkill(projectId: string, skillId: string, options?: ReadOptions) {
+    return projectSkillDeleted(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}`, options, "DELETE"), invalidAdminResponse, skillId);
   }
   async listSkillVersions(projectId: string, skillId: string, options?: PageOptions): Promise<SkillVersionList> {
-    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills/${segment(skillId)}/versions`, options), options), (value) => projectSkillVersion(value, skillId));
+    return projectResourcePage(await this.#json(pageQuery(`${scope(projectId)}/skills/${segment(skillId)}/versions`, options), options), (value) => projectSkillVersion(value, invalidAdminResponse, skillId));
   }
   async retrieveSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions) {
-    return projectSkillVersion(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options), skillId, version);
+    return projectSkillVersion(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options), invalidAdminResponse, skillId, version);
   }
   async deleteSkillVersion(projectId: string, skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted> {
-    const value = await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options, "DELETE");
-    if (!isRecord(value) || value.version !== version || typeof value.id !== "string") return invalidAdminResponse();
-    const { version: _, ...receipt } = value;
-    return { ...projectAdminDeleted(receipt, value.id, "skill.version.deleted"), version };
+    return projectSkillVersionDeleted(await this.#json(`${scope(projectId)}/skills/${segment(skillId)}/versions/${segment(version)}`, options, "DELETE"), invalidAdminResponse, version);
   }
   downloadSkill(projectId: string, skillId: string, options?: ReadOptions) {
     return this.#content(`${scope(projectId)}/skills/${segment(skillId)}/content`, options);
@@ -204,7 +226,6 @@ export class AdminClient {
     return projectAdminSessionArchive(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/archive`, options), sessionId);
   }
   async listTurns(projectId: string, sessionId: string, options?: PageOptions) {
-    validateHistoryPageOptions(options);
     const value = await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/turns`, options), options);
     return projectHistoryPage(value, options, (entry) => projectAgentTurn(entry, sessionId, invalidAdminResponse), invalidAdminResponse);
   }
@@ -212,7 +233,6 @@ export class AdminClient {
     return projectAgentTurn(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/turns/${segment(turnId)}`, options), sessionId, invalidAdminResponse, turnId);
   }
   async listItems(projectId: string, sessionId: string, options?: PageOptions) {
-    validateHistoryPageOptions(options);
     const value = await this.#json(pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/items`, options), options);
     return projectHistoryPage(value, options, (entry) => projectSessionItem(entry, invalidAdminResponse), invalidAdminResponse);
   }

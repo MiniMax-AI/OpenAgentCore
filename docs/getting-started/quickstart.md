@@ -17,7 +17,7 @@ Core serves the OpenAI Agents API, so the official OpenAI SDK works unchanged. I
 
 | Variable | Value |
 | --- | --- |
-| `OPENAI_BASE_URL` | The API base URL: the public URL plus `/v1`, such as `https://core.example/v1`. Web's **System** page shows it |
+| `OPENAI_BASE_URL` | The API base URL: the public URL plus `/v1`, such as `https://core.example/v1`. Web's **Settings → Service and deployment** page shows it |
 | `OPENAI_API_KEY` | Your Project API key |
 
 ```sh

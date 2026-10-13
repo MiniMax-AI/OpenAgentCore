@@ -35,7 +35,9 @@ class HarnessCatalogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "catalog.json"
             path.write_text(json.dumps(entries))
-            generated = catalog.render(catalog.load_catalog(path))
+            loaded = catalog.load_catalog(path)
+            generated = catalog.render(loaded)
+        generated["client"] = catalog.render_client(loaded, ["responses"])
         for content in generated.values():
             self.assertIn("example", content)
             for old in ("codex", "claude_sdk", "mcode"):
@@ -55,6 +57,10 @@ class HarnessCatalogTests(unittest.TestCase):
             text = (catalog.ROOT / "contracts/agents-api" / surface).read_text()
             for definition, member in fields:
                 with self.subTest(surface=surface, definition=definition):
+                    if surface == "openapi.yaml":
+                        actual = json.loads(text)["components"]["schemas"][definition]["properties"][member]["enum"]
+                        self.assertEqual(actual, expected)
+                        continue
                     body = re.search(r"^  " + re.escape(definition) + r":\n(.*?)(?=^  [^ ]|\Z)", text, re.M | re.S)
                     self.assertIsNotNone(body, "missing schema; run make openapi")
                     field = re.search(r"^      " + member + r":\n(.*?)(?=^      [^ ]|^    [^ ]|\Z)", body.group(1), re.M | re.S)

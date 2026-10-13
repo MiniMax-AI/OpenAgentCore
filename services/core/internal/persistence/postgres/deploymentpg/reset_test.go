@@ -125,8 +125,8 @@ func TestResetDeadlineAndCancel(t *testing.T) {
 	if err := changes.CancelReset(admin(t), installation, view.Generation); err != nil {
 		t.Fatal(err)
 	}
-	if paused := resetCount(t, f, "SELECT count(*) FROM runtime_deployment WHERE admission_paused OR reset_clear IS NOT NULL OR reset_audit IS NOT NULL"); paused != 0 {
-		t.Fatal("cancellation left the reset or paused admission")
+	if paused := resetCount(t, f, "SELECT count(*) FROM runtime_deployment WHERE reset_clear IS NOT NULL OR reset_audit IS NOT NULL"); paused != 0 {
+		t.Fatal("cancellation left the reset")
 	}
 	if got, want := resetAudit(t, f), []string{"reset_start fixture-admin", "reset_deadline fixture-admin", "reset_cancel fixture-admin"}; !slices.Equal(got, want) {
 		t.Fatalf("audit = %q, want %q", got, want)
@@ -146,7 +146,7 @@ func TestResetWritesNothingWithoutAuditOrLease(t *testing.T) {
 	if err := closed.StartReset(admin(t), installation, request); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatalf("StartReset on a closed lease = %v", err)
 	}
-	if paused := resetCount(t, f, "SELECT count(*) FROM runtime_deployment WHERE admission_paused OR reset_clear IS NOT NULL"); paused != 0 {
+	if paused := resetCount(t, f, "SELECT count(*) FROM runtime_deployment WHERE reset_clear IS NOT NULL"); paused != 0 {
 		t.Fatal("a rejected reset paused admission")
 	}
 }

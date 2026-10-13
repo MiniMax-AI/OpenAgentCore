@@ -22,18 +22,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary Create an Environment file from inline bytes or a source file
-// @Description Uploads standard Base64 bytes to a file beneath /workspace in a qualified local Environment and returns 201. Accepts inline bytes or a project-owned source file_id through the same write path. Unknown body fields are rejected with their name as param. Basic public hosted creation requires explicit managed Runtime configuration; an openai_hosted Environment that has not connected yet returns 400. Inline data is limited to 5 MiB decoded and a file_id copy to 50 MiB. Missing parent directories are created with mode 0700 and the file with mode 0600. An existing destination is never replaced; a directory, an existing file or a path through a symlink or non-directory returns 400. Idle writes exclude execution. Missing receipts return unavailable and retain a durable mutation gate without automatic replay. Error/timing parity with upstream remains unverified.
-// @Tags Environments
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_id path string true "Environment ID"
-// @Param request body v1.EnvironmentFileCreateRequest true "Inline bytes or source file ID and absolute workspace path"
-// @Success 201 {object} v1.EnvironmentFile
-// @Failure 400,401,404,409,413,500,503 {object} v1.ErrorResponse
-// @Router /agents/environments/{environment_id}/files [post]
 func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) {
 	const maxJSON = int64(((proto.WorkspaceWriteMaxBytes+2)/3)*4 + (16 << 10))
 	raw, ok := readJSONObjectLimit(w, r, maxJSON, "Inline upload exceeds this service's bounded file limit.")
@@ -42,7 +30,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	}
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	var request v1.EnvironmentFileCreateRequest
@@ -56,28 +44,28 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := decodeInputObject(raw, &request, fields...); err != nil || request.Path == nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	switch request.Type {
 	case "inline":
 		fields = []string{"type", "path", "data"}
 		if request.Data == nil {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 	case "file_id":
 		fields = []string{"type", "path", "file_id"}
 		if request.FileID == nil || *request.FileID == "" {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 	default:
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if decodeInputObject(raw, &request, fields...) != nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if err := environmentFileCreatePathError(*request.Path); err != nil {
@@ -88,7 +76,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	if request.Type == "inline" {
 		data, err = base64.StdEncoding.Strict().DecodeString(*request.Data)
 		if err != nil {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 		if len(data) > maxInlineEnvironmentFileBytes {
@@ -117,23 +105,23 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+	if !execution.LocalWorkspaceConfiguration(environment.Configuration) {
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(215 * time.Second)); err != nil {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	size, err := h.Execution.Workspaces.WriteEnvironmentFile(r.Context(), environment, strings.TrimPrefix(*request.Path, "/workspace/"), data)
 	if err != nil {
 		if !writeFieldError(w, environmentFileWriteError(err)) {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 		}
 		return
 	}
 	if size != int64(len(data)) {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	writeJSON(w, http.StatusCreated, v1.EnvironmentFile{EnvironmentID: environment.ID, Object: "agent.environment.file", Path: *request.Path, SizeBytes: size})

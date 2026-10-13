@@ -83,7 +83,7 @@ describe("sandbox reset reads", () => {
     const nodes = vi.spyOn(sandboxAdmin, "listNodes");
     const client = cache();
     for (const generation of [0, 3]) {
-      read.mockResolvedValueOnce(deployment({ provider: "", reset: null, generation }));
+      read.mockResolvedValueOnce(deployment({ provider: "", mode: "", reset: null, generation }));
       expect((await client.fetchQuery(sandboxSnapshotQuery)).deployment.generation).toBe(generation);
     }
     expect(nodes).not.toHaveBeenCalled();

@@ -28,12 +28,10 @@ type Storage interface {
 	// DeleteVault deletes a Vault with all of its Credentials and returns its ID.
 	DeleteVault(ctx context.Context, tenantID, vaultID string) (string, error)
 	// CreateCredential seals the Credential's secret and stores it in a Vault
-	// of the tenant. A missing credential key is
-	// credentialcrypto.ErrUnavailable, checked after the new Credential ID and
-	// before the Vault.
+	// of the tenant.
 	CreateCredential(ctx context.Context, credential NewCredential) (Credential, error)
 	// ReplaceStaticToken seals and replaces a static_bearer Credential's
-	// token. Without a credential key it is credentialcrypto.ErrUnavailable.
+	// token.
 	ReplaceStaticToken(ctx context.Context, replacement StaticTokenReplacement) (Credential, error)
 	// DeleteCredential deletes a Credential and its sealed secret and returns its ID.
 	DeleteCredential(ctx context.Context, key CredentialKey) (string, error)
@@ -48,8 +46,7 @@ type Storage interface {
 	// Vaults that the query selects, ordered by ID.
 	FindMCPCredentials(ctx context.Context, query MCPCredentialQuery) ([]MCPCredentialMatch, error)
 	// StaticToken opens a static_bearer Credential's token when the complete
-	// frozen scope still names it. A scope that names none is ErrNotFound,
-	// then a missing credential key is credentialcrypto.ErrUnavailable.
+	// frozen scope still names it. A scope that names none is ErrNotFound.
 	StaticToken(ctx context.Context, query StaticTokenQuery) (string, error)
 }
 
@@ -59,9 +56,8 @@ type OAuthTx interface {
 	// LoadOAuthGrant locks the Credential until the transaction ends, so
 	// competing refreshes, replacements and deletions, including the parent
 	// Vault's, wait. A non-empty destination must match the stored one, or
-	// the Credential is ErrNotFound. Only then is the grant opened: a missing
-	// credential key is credentialcrypto.ErrUnavailable, and stored metadata
-	// that differs from the sealed copy fails authentication.
+	// the Credential is ErrNotFound. Only then is the grant opened: stored
+	// metadata that differs from the sealed copy fails authentication.
 	LoadOAuthGrant(ctx context.Context, destination string) (OAuthGrant, error)
 	// ApplyOAuthRefresh seals and stores a refreshed grant for the loaded
 	// Credential. Execution refreshes are not caller writes and record no

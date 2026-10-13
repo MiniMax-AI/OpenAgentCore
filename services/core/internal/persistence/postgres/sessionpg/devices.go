@@ -2,6 +2,7 @@ package sessionpg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -16,22 +17,68 @@ import (
 )
 
 func (s *Store) GetSessionDevice(ctx context.Context, tenant, session string) (sessions.ExecutionDevice, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
-	ready, err := s.units.Queries().GetSessionInitializationReady(ctx, sqlc.GetSessionInitializationReadyParams(lookup))
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !ready) {
-		return sessions.ExecutionDevice{}, sessions.ErrNotFound
-	}
-	if err != nil {
+	if err := requireInitialized(ctx, s.units.Queries(), lookup); err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
 	return s.GetSessionRuntimeDevice(ctx, tenant, session)
 }
 
+func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session string) (sessions.ExecutionBinding, error) {
+	lookup, err := ResourceLookup(tenant, session)
+	if err != nil {
+		return sessions.ExecutionBinding{}, err
+	}
+	q := s.units.Queries()
+	if err := requireInitialized(ctx, q, lookup); err != nil {
+		return sessions.ExecutionBinding{}, err
+	}
+	row, err := q.GetSessionExecutionBinding(ctx, sqlc.GetSessionExecutionBindingParams(lookup))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ExecutionBinding{}, sessions.ErrNotFound
+	}
+	if err != nil {
+		return sessions.ExecutionBinding{}, err
+	}
+	return sessions.ExecutionBinding{
+		Device:          sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID)},
+		NativeSessionID: row.NativeSessionID,
+		HasStartedTurn:  row.HasStartedTurn,
+	}, nil
+}
+
+// requireInitialized requires that the tenant's Session completed its
+// Environment preparation; before that, and for a missing Session, it is
+// sessions.ErrNotFound.
+func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup sqlc.GetDeviceParams) error {
+	ready, err := q.GetSessionInitializationReady(ctx, sqlc.GetSessionInitializationReadyParams(lookup))
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !ready) {
+		return sessions.ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) ListExecutionDevices(ctx context.Context, tenant string) ([]sessions.ExecutionDevice, error) {
+	id, err := parseID(tenant)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.units.Queries().ListExecutionDevices(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	devices := make([]sessions.ExecutionDevice, 0, len(rows))
+	for _, row := range rows {
+		devices = append(devices, sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name})
+	}
+	return devices, nil
+}
+
 func (s *Store) GetSessionRuntimeDevice(ctx context.Context, tenant, session string) (sessions.ExecutionDevice, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
@@ -76,6 +123,29 @@ func (s *Store) GetDeviceCredential(ctx context.Context, device string) (runtime
 	}, true, nil
 }
 
+// ArchivedCancellationReceipt is a read-only exception for the exact already
+// authenticated delivery. The ordinary credential view remains revoked; this
+// cannot authorize bootstrap, reconnect, dispatch, workspace access or renewal.
+// A marker records that archive caused the first revocation; timestamps alone
+// cannot distinguish an earlier ordinary cancel/revoke followed by archive.
+func (s *Store) ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error) {
+	if len(runIDs) == 0 || credentialHash == "" {
+		return runtimedevice.ArchivedCancellationReceipt{}, nil
+	}
+	id, err := parseID(device)
+	if err != nil {
+		return runtimedevice.ArchivedCancellationReceipt{}, err
+	}
+	row, err := s.units.Queries().GetArchivedCancellationReceipt(ctx, sqlc.GetArchivedCancellationReceiptParams{DeviceID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}, RunIds: runIDs, LimitSeconds: int32(runtimedevice.ArchivedCancellationReceiptLimit.Seconds())})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return runtimedevice.ArchivedCancellationReceipt{}, nil
+	}
+	if err != nil {
+		return runtimedevice.ArchivedCancellationReceipt{}, err
+	}
+	return runtimedevice.ArchivedCancellationReceipt{RunID: uuid.UUID(row.ID.Bytes).String(), Deadline: row.CancelRequestedAt.Time.Add(runtimedevice.ArchivedCancellationReceiptLimit)}, nil
+}
+
 func (s *Store) ListEnrolledRuntimeBindings(ctx context.Context) ([]sessions.EnrolledRuntimeBinding, error) {
 	rows, err := s.units.Queries().ListEnrolledRuntimeBindings(ctx)
 	if err != nil {
@@ -107,7 +177,7 @@ func (s *Store) CreateDevice(ctx context.Context, tenant string, registration se
 }
 
 func (s *Store) RevokeDevice(ctx context.Context, tenant, device string) error {
-	lookup, err := DeviceLookup(tenant, device)
+	lookup, err := ResourceLookup(tenant, device)
 	if err != nil {
 		return err
 	}
@@ -127,12 +197,19 @@ func (s *Store) TouchDevice(ctx context.Context, device string) (bool, error) {
 	return n > 0, err
 }
 
-func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string) (bool, error) {
+func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error) {
 	id, err := parseID(device)
 	if err != nil {
 		return false, err
 	}
-	n, err := s.units.Queries().TouchAuthenticatedDevice(ctx, sqlc.TouchAuthenticatedDeviceParams{ID: id, CredentialHash: credentialHash})
+	if kinds == nil {
+		kinds = []runtimedevice.SupportedAgentKind{}
+	}
+	raw, err := json.Marshal(kinds)
+	if err != nil {
+		return false, err
+	}
+	n, err := s.units.Queries().TouchAuthenticatedDevice(ctx, sqlc.TouchAuthenticatedDeviceParams{ID: id, CredentialHash: credentialHash, SupportedAgentKinds: raw})
 	return n > 0, err
 }
 
@@ -148,7 +225,7 @@ func (s *Store) WithEnrollment(ctx context.Context, environment, credentialHash 
 	if err != nil {
 		return err
 	}
-	lookup, err := DeviceLookup(tenant, current.ID)
+	lookup, err := ResourceLookup(tenant, current.ID)
 	if err != nil {
 		return err
 	}

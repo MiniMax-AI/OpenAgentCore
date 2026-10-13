@@ -8,12 +8,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+// ErrRouterQuiesced also wraps failed quiesce attempts that have fenced admission.
 var ErrRouterQuiesced = errors.New("dispatch: router quiesced")
 var ErrRouterBusy = errors.New("dispatch: router has unsettled work")
 
 // Quiesce serializes against admission, then drains every admitted output and
-// receipt before acknowledging suspension. Busy rejection leaves admission open;
-// a drain timeout keeps it closed until the caller shuts the connection down.
+// receipt while retaining settled idle Executors for suspension. Busy rejection
+// leaves admission open; a drain timeout keeps it closed until the caller shuts
+// the connection down.
 func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPayload) error {
 	if strings.TrimSpace(request.EnvironmentID) == "" || strings.TrimSpace(request.SuspendID) == "" || len(request.SuspendID) > 128 {
 		return errors.New("dispatch: invalid suspension identity")
@@ -31,7 +33,7 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 		r.mu.Unlock()
 		return ErrRouterQuiesced
 	}
-	if r.runtimePreparation != nil || len(r.sessions) != 0 || len(r.workspaceReads) != 0 || r.workspaceWrite != nil || r.workspaceExport != nil || len(r.permIndex) != 0 || len(r.askIndex) != 0 {
+	if r.runtimePreparation != nil || len(r.sessions) != 0 || len(r.workspaceReads) != 0 || r.workspaceWrite != nil || r.workspaceExport != nil {
 		r.mu.Unlock()
 		return ErrRouterBusy
 	}
@@ -39,14 +41,6 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 		if p.owns || p.busy {
 			r.mu.Unlock()
 			return ErrRouterBusy
-		}
-	}
-	for _, states := range r.idle {
-		for state := range states {
-			if state.environmentID != request.EnvironmentID || state.steerBusy || len(state.pendingIDs) != 0 || len(state.pendingAsks) != 0 {
-				r.mu.Unlock()
-				return ErrRouterBusy
-			}
 		}
 	}
 	for _, owner := range r.executors {
@@ -61,19 +55,13 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 			p.timer.Stop()
 		}
 	}
-	for _, states := range r.idle {
-		for state := range states {
-			state.idleLease++
-			if state.idleTimer != nil {
-				state.idleTimer.Stop()
-			}
-		}
-	}
 	for _, owner := range r.executors {
-		owner.idleLease++
 		if owner.timer != nil {
 			owner.timer.Stop()
 		}
+		// Stop cannot retract a callback already waiting for the lock. Fence its
+		// lease before releasing the lock, including after an eventual Resume.
+		owner.idleLease++
 	}
 	r.mu.Unlock()
 	err := r.shutdownWG.waitContext(ctx)
@@ -81,9 +69,11 @@ func (r *Router) Quiesce(ctx context.Context, request proto.EnvironmentSuspendPa
 	if r.closed {
 		err = ErrRouterClosed
 	}
-
 	r.mu.Unlock()
-	return err
+	if err != nil {
+		return errors.Join(ErrRouterQuiesced, err)
+	}
+	return nil
 }
 
 // Resume opens admission only after the caller authenticated a new connection
@@ -103,11 +93,6 @@ func (r *Router) Resume(request proto.EnvironmentSuspendPayload, sender Sender) 
 	r.suspension = nil
 	for _, owner := range r.executors {
 		r.scheduleExecutorIdleLocked(owner)
-	}
-	for _, states := range r.idle {
-		for state := range states {
-			r.scheduleIdleLocked(state)
-		}
 	}
 	return nil
 }

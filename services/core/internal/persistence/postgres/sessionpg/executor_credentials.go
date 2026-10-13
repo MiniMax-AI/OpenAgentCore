@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
@@ -176,11 +175,8 @@ func (s *Store) VerifyInstallation(_ context.Context, payload, signature string)
 }
 
 // installationSignature is the keyed digest of an installation authorization
-// payload. A service without the credential key cannot sign or verify one.
+// payload.
 func (s *Store) installationSignature(payload string) (string, error) {
-	if s.cipher == nil {
-		return "", credentialcrypto.ErrUnavailable
-	}
 	return s.cipher.Fingerprint(installationPurpose, payload)
 }
 

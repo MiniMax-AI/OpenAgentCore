@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -17,7 +16,7 @@ import (
 )
 
 func TestInstallationSignaturesUseTheCredentialKey(t *testing.T) {
-	keyed := New(nil, frozenCipher(t))
+	keyed := New(nil, pgtest.CredentialKey(t))
 	signature, err := keyed.SignInstallation(t.Context(), "payload")
 	if err != nil {
 		t.Fatal(err)
@@ -28,18 +27,11 @@ func TestInstallationSignaturesUseTheCredentialKey(t *testing.T) {
 	if err := keyed.VerifyInstallation(t.Context(), "other", signature); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 		t.Fatalf("another payload: %v", err)
 	}
-	keyless := New(nil, nil)
-	if _, err := keyless.SignInstallation(t.Context(), "payload"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatalf("keyless signature: %v", err)
-	}
-	if err := keyless.VerifyInstallation(t.Context(), "payload", signature); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatalf("keyless verification: %v", err)
-	}
 }
 
 func TestExecutorCredentialTxTranslatesOutcomes(t *testing.T) {
 	pool := pgtest.Open(t)
-	store := New(pgunit.NewPool(pool), nil)
+	store := New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
 	tenantID, sessionID, environmentID := newEnvironment(t, pool, "self_hosted", "pending")
 	tenant, environment := uuidText(tenantID), uuidText(environmentID)
 	exec(t, pool, `INSERT INTO execution_project_scopes(tenant_id, organization_id, project_id) VALUES ($1, 'org', $2)`, tenantID, tenant)

@@ -1,11 +1,12 @@
+import type { AdminProject } from "@oac/agents-client";
 import { queryOptions } from "@tanstack/react-query";
 
-import { loadSummary, type Project } from "../../lib/admin-view";
+import { loadSummary } from "../../lib/admin-view";
 import { projectClient } from "../../lib/projects";
 import { loadOverview, type OverviewData } from "./overview-loader";
 
 /** The Overview's summary and Session reads for the listed projects, keyed by their IDs. */
-export function overviewQuery(projects: readonly Project[]) {
+export function overviewQuery(projects: readonly AdminProject[]) {
   const queryKey = ["overview", projects.map((project) => project.id)];
   return queryOptions({
     queryKey,

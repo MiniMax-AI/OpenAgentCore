@@ -48,12 +48,12 @@ func (h *Handler) getRuntimeObservation(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	observation, err := h.RuntimeObservations.ObserveSession(ctx, tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 		return
 	}
 	response, err := runtimeObservationResponse(observation)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)

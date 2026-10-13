@@ -116,13 +116,6 @@ func TestRetentionReplyMustMatchWholePendingExchange(t *testing.T) {
 	}
 }
 
-type helperOwnedProvider struct {
-	*fakeProvider
-	caller *microsandbox.ProcessCaller
-}
-
-func (p *helperOwnedProvider) Quiescent() bool { return p.caller.Quiescent() }
-
 func TestGrantedDropWaitsForReferencesAndActualHelperExit(t *testing.T) {
 	root := t.TempDir()
 	helper := filepath.Join(root, "helper")
@@ -142,7 +135,7 @@ func TestGrantedDropWaitsForReferencesAndActualHelperExit(t *testing.T) {
 	defer func() { _ = os.WriteFile(release, nil, 0600); wait(t, caller.Quiescent) }()
 	m := generationFixture(3)
 	m.target.ServingGeneration = nil
-	m.values[1].value.Provider = &helperOwnedProvider{fakeProvider: &fakeProvider{}, caller: caller}
+	m.values[1].value.Provider, m.values[1].value.Quiescent = &fakeProvider{}, caller.Quiescent
 	m.options.Remove = func(context.Context, GenerationProvider) error { return os.Remove(artifact) }
 	_, _, unref, err := m.Acquire(1)
 	if err != nil {
@@ -214,7 +207,7 @@ func TestRestartRecoversExactOlderGenerationBeforeAdvertisingReadiness(t *testin
 	probe := make(chan struct{}, 1)
 	qualify := make(chan struct{})
 	m, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
-		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) error { return nil }}},
+		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) (*sandbox.CheckpointCompatibility, error) { return nil, nil }}},
 		Recover: []sandbox.GenerationReference{{Generation: 1, SpecificationDigest: digest}},
 		Prepare: func(ctx context.Context, generation uint64, got string) (GenerationProvider, error) {
 			if got != digest {
@@ -226,16 +219,16 @@ func TestRestartRecoversExactOlderGenerationBeforeAdvertisingReadiness(t *testin
 			case <-ctx.Done():
 				return GenerationProvider{}, ctx.Err()
 			}
-			return GenerationProvider{Generation: generation, SpecificationDigest: got, Provider: &fakeProvider{}, Probe: func(ctx context.Context) error {
+			return GenerationProvider{Generation: generation, SpecificationDigest: got, Provider: &fakeProvider{}, Probe: func(ctx context.Context) (*sandbox.CheckpointCompatibility, error) {
 				select {
 				case probe <- struct{}{}:
 				default:
 				}
 				select {
 				case <-qualify:
-					return nil
+					return nil, nil
 				case <-ctx.Done():
-					return ctx.Err()
+					return nil, ctx.Err()
 				}
 			}}, nil
 		},
@@ -303,12 +296,12 @@ func TestInterruptedCollectionNeverPreparesOrServesAfterRestart(t *testing.T) {
 	probed := make(chan struct{}, 1)
 	removes := 0
 	manager, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
-		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) error {
+		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) (*sandbox.CheckpointCompatibility, error) {
 			select {
 			case probed <- struct{}{}:
 			default:
 			}
-			return nil
+			return nil, nil
 		}}},
 		Collect: []sandbox.GenerationReference{ref},
 		Prepare: func(context.Context, uint64, string) (GenerationProvider, error) {
@@ -371,7 +364,7 @@ func TestInterruptedCollectionNeverPreparesOrServesAfterRestart(t *testing.T) {
 }
 
 func TestPreparationDiagnosticPreservesTypedCause(t *testing.T) {
-	for _, cause := range []error{sandbox.ErrRuntimeDownloadFailed, sandbox.ErrDockerUnavailable, sandbox.ErrKVMUnavailable, sandbox.ErrOwnership, context.Canceled, errors.New("raw secret provider text")} {
+	for _, cause := range []error{sandbox.ErrRuntimeDownloadFailed, sandbox.ErrProviderUnavailable, sandbox.ErrHostUnsupported, sandbox.ErrOwnership, context.Canceled, errors.New("raw secret provider text")} {
 		t.Run(sandbox.NodeDiagnostic(cause)+cause.Error(), func(t *testing.T) {
 			m, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
 				Prepare: func(context.Context, uint64, string) (GenerationProvider, error) { return GenerationProvider{}, cause },

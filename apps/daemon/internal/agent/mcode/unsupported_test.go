@@ -27,21 +27,21 @@ func TestUnsupportedExtensionsHaveNoNativeEffects(t *testing.T) {
 	}
 	var turn *Session
 	check(turn.SubmitFunctionResult(ctx, proto.FunctionResultPayload{CallID: secret, DeliveryID: secret}))
-	for _, owner := range []agent.WorkspaceReader{(*executor)(nil), (*Session)(nil), (*prepared)(nil)} {
+	for _, owner := range []agent.WorkspaceReader{(*executor)(nil), (*Session)(nil)} {
 		result, err := owner.ReadWorkspaceFile(ctx, secret, 1)
 		check(err)
 		if len(result.Data) != 0 || result.Truncated {
 			t.Fatal("unsupported read fabricated data")
 		}
 	}
-	for _, owner := range []agent.WorkspaceDirectoryLister{(*executor)(nil), (*Session)(nil), (*prepared)(nil)} {
+	for _, owner := range []agent.WorkspaceDirectoryLister{(*executor)(nil), (*Session)(nil)} {
 		result, err := owner.ListWorkspaceDirectory(ctx, secret, 1)
 		check(err)
 		if len(result.Entries) != 0 || result.Truncated {
 			t.Fatal("unsupported listing fabricated entries")
 		}
 	}
-	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*Session)(nil), (*prepared)(nil)} {
+	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*Session)(nil)} {
 		result, err := owner.WriteWorkspaceFile(ctx, secret, []byte(secret))
 		check(err)
 		if result.SizeBytes != 0 {

@@ -7,7 +7,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
 )
 
@@ -31,10 +30,10 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 	}
 	saved := &v1.SavedAgent{ID: resource.ID}
 	if err := json.Unmarshal(resource.Configuration, &saved.SavedAgentConfiguration); err != nil {
-		return nil, nil, err
+		return nil, nil, &storedDataError{err}
 	}
 	if inherit && saved.XAgentsCore != nil && saved.XAgentsCore.ModelProvider != nil && provider == nil {
-		return nil, nil, credentialcrypto.ErrUnavailable
+		return nil, nil, errors.New("saved agent model provider bundle is missing")
 	}
 	return saved, provider, nil
 }
@@ -44,13 +43,6 @@ func (h *Handler) sessionAgentDefaults(ctx context.Context, tenant string, input
 type modelProviderRequiredError struct{ message string }
 
 func (e *modelProviderRequiredError) Error() string { return e.message }
-
-// modelProviderDefaultsError carries a storage or decryption failure while
-// reading the deployment default; it is reported as a service error.
-type modelProviderDefaultsError struct{ err error }
-
-func (e *modelProviderDefaultsError) Error() string { return e.err.Error() }
-func (e *modelProviderDefaultsError) Unwrap() error { return e.err }
 
 func modelProviderRequired(environment, engine string) error {
 	if environment == "self_hosted" {
@@ -62,28 +54,28 @@ func modelProviderRequired(environment, engine string) error {
 // resolveSessionExecution applies provider precedence: the Session bundle, the
 // saved Agent bundle, then the deployment default where the environment allows
 // it. Bundles are never merged.
-func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, string, uuid.UUID, error) {
+func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequest, inherited *v1.ModelProviderInput, raw json.RawMessage) (string, *v1.ModelProviderInput, v1.ExecutionSource, uuid.UUID, error) {
 	engine, err := h.sessionHarness(raw)
 	if err != nil {
 		return "", nil, "", uuid.Nil, err
 	}
 	var revision uuid.UUID
-	provider, source := inherited, v1.ModelProviderSourceAgent
+	provider, source := inherited, v1.ExecutionSourceAgent
 	if extension := input.XAgentsCore; extension != nil {
 		if extension.ModelProvider == nil && !input.modelProviderNull && len(extension.HarnessConfig) == 0 && len(extension.Environment) == 0 {
 			return "", nil, "", uuid.Nil, errors.New("x_agents_core requires an execution option")
 		}
 		if extension.ModelProvider != nil {
-			provider, source = extension.ModelProvider, v1.ModelProviderSourceSession
+			provider, source = extension.ModelProvider, v1.ExecutionSourceSession
 		}
 	}
 	environment := input.Environment.Type
-	if provider == nil && v1.ModelProviderAllowed(environment, v1.ModelProviderSourceDeployment) {
+	if provider == nil && v1.ModelProviderAllowed(environment, v1.ExecutionSourceDeployment) {
 		snapshot := input.deploymentDefaults
 		if snapshot != nil {
 			provider, revision = snapshot.Provider, snapshot.Revision
 		}
-		source = v1.ModelProviderSourceDeployment
+		source = v1.ExecutionSourceDeployment
 	}
 	if provider == nil {
 		if v1.ModelProviderRequired(environment) {

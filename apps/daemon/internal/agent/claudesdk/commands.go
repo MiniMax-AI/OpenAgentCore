@@ -33,9 +33,7 @@ func (c *commandState) receive(event bridgeEvent, start startRequest, sessionID 
 		return fmt.Errorf("claudesdk: inconsistent command observation")
 	}
 	c.calls[event.ID] = *n
-	if start.observeFunctions {
-		emit(proto.TypeToolCall, proto.ToolCallPayload{ID: event.ID, Name: "Bash", Stage: event.Stage, Observation: n})
-	}
+	emit(proto.TypeToolCall, proto.ToolCallPayload{ID: event.ID, Name: "Bash", Stage: event.Stage, Observation: n})
 	return nil
 }
 
@@ -48,15 +46,13 @@ func (c *commandState) complete() bool {
 	return true
 }
 
-func (c *commandState) close(start startRequest, emit func(string, any)) {
+func (c *commandState) close(emit func(string, any)) {
 	for id, call := range c.calls {
 		if call.Status != "in_progress" {
 			continue
 		}
 		call.Status = "incomplete"
 		c.calls[id] = call
-		if start.observeFunctions {
-			emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: "Bash", Stage: "after", Observation: &call})
-		}
+		emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: "Bash", Stage: "after", Observation: &call})
 	}
 }

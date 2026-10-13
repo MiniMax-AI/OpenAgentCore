@@ -3,8 +3,7 @@ package modelconfiguration
 import "context"
 
 // Storage keeps one deployment default per Harness and seals and opens its
-// bundle; without a credential key, Replace and LoadBundle return
-// credentialcrypto.ErrUnavailable. Replace and Delete record the administrator
+// bundle. Replace and Delete record the administrator
 // mutation in the same transaction, from the provenance the context carries;
 // an audit failure aborts the change.
 type Storage interface {

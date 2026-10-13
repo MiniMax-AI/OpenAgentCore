@@ -11,14 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary Download source file bytes
-// @Description Resolves project-owned File metadata before enforcing download policy. Public download of user_data Files returns 400; missing and foreign Files return the same 404. Internal initial-file and workspace copies remain available. No Beta header is required.
-// @Tags Files
-// @Produce json
-// @Security BearerAuth
-// @Param file_id path string true "Source file ID"
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /files/{file_id}/content [get]
 func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()

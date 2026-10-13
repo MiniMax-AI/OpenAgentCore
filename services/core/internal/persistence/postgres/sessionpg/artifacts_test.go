@@ -67,8 +67,8 @@ func stagedRows(t *testing.T, pool *pgxpool.Pool, turn string) int {
 
 func stagingService(t *testing.T, pool *pgxpool.Pool) (*Store, *sessions.Service) {
 	t.Helper()
-	store := New(pgunit.NewPool(pool), nil)
-	service, err := sessions.NewService(store)
+	store := New(pgunit.NewPool(pool), pgtest.CredentialKey(t))
+	service, err := sessions.NewService(store, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

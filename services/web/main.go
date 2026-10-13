@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -38,22 +40,33 @@ func main() {
 // printCoreKey writes the sign-in key for `docker compose exec web oac-web
 // core-key`. Exec output never enters the container log.
 func printCoreKey() error {
-	key, err := readSecret(envDefault("OAC_WEB_CORE_KEY_FILE", "/admin/core.key"))
+	c, err := loadConfig()
 	if err != nil {
-		return errors.New("cannot read the Core key from OAC_WEB_CORE_KEY_FILE")
+		return err
 	}
-	fmt.Println(key)
+	fmt.Println(c.coreKey)
 	return nil
 }
 
 // healthcheck reports the installation healthy once Core and Web's own listener
 // answer. Compose runs it inside the web container.
 func healthcheck() error {
+	c, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	host, port, err := net.SplitHostPort(c.addr)
+	if err != nil {
+		return errors.New("OAC_WEB_ADDR must be a host:port listen address")
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "127.0.0.1"
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	for _, host := range []string{"core:8091", "127.0.0.1:8080"} {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+host+"/healthz", nil)
+	for _, server := range []*url.URL{c.upstream, {Scheme: "http", Host: net.JoinHostPort(host, port)}} {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.JoinPath("healthz").String(), nil)
 		if err != nil {
 			return err
 		}
@@ -63,18 +76,18 @@ func healthcheck() error {
 		}
 		response.Body.Close()
 		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("%s returned HTTP %d", host, response.StatusCode)
+			return fmt.Errorf("%s returned HTTP %d", server.Host, response.StatusCode)
 		}
 	}
 	return nil
 }
 
 func run() error {
-	log.Init(log.ConfigFromEnv())
 	c, err := loadConfig()
 	if err != nil {
 		return err
 	}
+	log.Init(c.log)
 	handler, err := newConsole(c)
 	if err != nil {
 		return err

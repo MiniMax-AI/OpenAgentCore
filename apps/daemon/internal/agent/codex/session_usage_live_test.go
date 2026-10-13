@@ -15,7 +15,7 @@ const activeUsageNotification = `{"method":"thread/tokenUsage/updated","params":
 
 func TestUsagePublishedBeforeCompletion(t *testing.T) {
 	out := make(chan proto.Envelope, 8)
-	s := &Session{runID: "run", out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+	s := &Session{runID: "run", out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 	s.setThreadID("thread")
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"old","tokenUsage":{"total":{"inputTokens":10,"cachedInputTokens":1,"outputTokens":3,"reasoningOutputTokens":1,"totalTokens":13}}}`))
 	if len(s.out) != 0 {
@@ -159,7 +159,7 @@ func TestLiveUsageRequiresConsistentCompleteBreakdown(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			out := make(chan proto.Envelope, 1)
-			s := &Session{out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+			s := &Session{out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 			s.setThreadID("thread")
 			s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn"}}`))
 			s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"turn","tokenUsage":{"total":` + counters + `}}`))
@@ -177,7 +177,7 @@ func TestLiveUsageRequiresConsistentCompleteBreakdown(t *testing.T) {
 
 func TestLiveUsageRejectsInconsistentResumeDelta(t *testing.T) {
 	out := make(chan proto.Envelope, 2)
-	s := &Session{out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig()}
+	s := &Session{out: out, cancelCtx: t.Context(), cfg: defaultSessionConfig(testStateRoot(t))}
 	s.setThreadID("thread")
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"old","tokenUsage":{"total":{"inputTokens":100,"cachedInputTokens":90,"outputTokens":50,"reasoningOutputTokens":10,"totalTokens":150}}}`))
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn"}}`))

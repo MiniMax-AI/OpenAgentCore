@@ -12,6 +12,7 @@ import (
 // with "Local message content or attachments are required.".
 func mcodeProfile() Profile {
 	return Profile{
+		RetainedNativeHistory:          proto.CapabilityUnsupported,
 		MCPOrigins:                     []string{"environment"},
 		Placements:                     []string{"none", "openai_hosted", "self_hosted"},
 		MCPBearer:                      proto.CapabilitySupported,

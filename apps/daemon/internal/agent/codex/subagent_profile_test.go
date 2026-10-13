@@ -10,7 +10,7 @@ import (
 
 func TestSubagentProfileOverridesUnsafeNativeFeatures(t *testing.T) {
 	limit := 6
-	plan := SessionPlan{EnableFeatures: []string{"hooks", "code_mode", "plugins", "multi_agent_v2"}, DisableFeatures: []string{"multi_agent"}}
+	plan := SessionPlan{}
 	if err := configureSubagentObservations(&plan, proto.PromptRequestPayload{ObserveSubagentIdentities: true, MaxConcurrentSubagents: &limit}); err != nil {
 		t.Fatal(err)
 	}

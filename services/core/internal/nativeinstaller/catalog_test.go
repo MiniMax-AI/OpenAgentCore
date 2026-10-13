@@ -108,3 +108,9 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 		t.Fatal("corruption must not fall back to online download")
 	}
 }
+
+func TestMissingCatalogServesNoInstallers(t *testing.T) {
+	if catalog, err := Load(t.TempDir(), "build"); catalog != nil || err != nil {
+		t.Fatal(catalog, err)
+	}
+}

@@ -31,11 +31,17 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 		t.Fatal(err)
 	}
 	var document struct {
+		Servers []struct {
+			URL string `yaml:"url"`
+		} `yaml:"servers"`
 		BasePath string                    `yaml:"basePath"`
 		Paths    map[string]map[string]any `yaml:"paths"`
 	}
 	if err := yaml.Unmarshal(raw, &document); err != nil {
 		t.Fatal(file, err)
+	}
+	if document.BasePath == "" && len(document.Servers) > 0 {
+		document.BasePath = document.Servers[0].URL
 	}
 	operations := map[string]bool{}
 	for path, item := range document.Paths {
@@ -55,15 +61,14 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 	return operations
 }
 
-// The contracts are generated from handler annotations, so they must publish
+// The official public contract and generated internal contracts must publish
 // exactly the routes the server registers, with the same path parameter names.
 // The pinned upstream /v1 set is checked by TestEveryRouteAuthenticatesItsCanonicalPath
 // and the contract tests.
 func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) {
-	// Every optional group that gates a route registration, as the server enables them.
-	deps, fakes := testDependencies(t)
-	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
-	deps.Execution.NativeInstaller = &NativeInstaller{Version: "contract-test", Catalog: &nativeinstaller.Catalog{}}
+	// The native installer gates its routes, as a release build enables them.
+	deps, _ := testDependencies(t)
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "contract-test", Base: "https://core.example/api/v1/agent-daemon/install/", Catalog: &nativeinstaller.Catalog{}}
 	h := &Handler{Dependencies: deps}
 	contracts := map[string]string{"/v1": "openapi.yaml", "/core/v1": "core.openapi.yaml", "/api/v1": "runtime.openapi.yaml"}
 	published := map[string]map[string]bool{}

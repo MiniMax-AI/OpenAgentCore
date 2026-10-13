@@ -1,3 +1,7 @@
+import { requestLog as enRequestLog } from "./locales/en/request-log";
+import { requestLog as zhRequestLog } from "./locales/zh-CN/request-log";
+import { workspaceStorage as enWorkspaceStorage } from "./locales/en/workspace-storage";
+import { workspaceStorage as zhWorkspaceStorage } from "./locales/zh-CN/workspace-storage";
 import { sandboxNavigation as enSandboxNavigation } from "./locales/en/sandbox-navigation";
 import { sandboxNavigation as zhSandboxNavigation } from "./locales/zh-CN/sandbox-navigation";
 import { diagnostics as enDiagnostics } from "./locales/en/diagnostics";
@@ -32,16 +36,12 @@ import { skills as zhCNSkills } from "./locales/zh-CN/skills";
 import { keys as zhCNKeys } from "./locales/zh-CN/keys";
 import { system as zhCNSystem } from "./locales/zh-CN/system";
 import { onboarding as zhCNOnboarding } from "./locales/zh-CN/onboarding";
-import { consoleAuthChinese } from "../lib/console-auth-strings";
-import { chinese as zhCNSandbox } from "../lib/locale-strings";
+import { firstRun as zhCNFirstRun } from "./locales/zh-CN/first-run";
+import { sandbox as zhCNSandbox } from "./locales/zh-CN/sandbox";
 
 const enSandbox = Object.fromEntries(
   Object.keys(zhCNSandbox).map((key) => [key, key]),
 ) as { [K in keyof typeof zhCNSandbox]: K };
-
-const zhCNFirstRun = {
-  ...consoleAuthChinese,
-} as const;
 
 const enFirstRun = Object.fromEntries(
   Object.keys(zhCNFirstRun).map((key) => [key, key]),
@@ -51,6 +51,8 @@ export const defaultNamespace = "common";
 
 export const resources = {
   en: {
+    requestLog: enRequestLog,
+    workspaceStorage: enWorkspaceStorage,
     common: enCommon,
     navigation: enNavigation,
     pages: enPages,
@@ -72,6 +74,8 @@ export const resources = {
     onboarding: enOnboarding,
   },
   "zh-CN": {
+    requestLog: zhRequestLog,
+    workspaceStorage: zhWorkspaceStorage,
     common: zhCNCommon,
     navigation: zhCNNavigation,
     pages: zhCNPages,

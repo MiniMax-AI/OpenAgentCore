@@ -56,6 +56,13 @@ export function formatCores(value: number | null | undefined, locale?: string): 
   return value.toLocaleString(locale, { maximumFractionDigits: value < 10 ? 2 : 1 });
 }
 
+/** Unix seconds of an RFC 3339 timestamp, for the formatters below; null when absent or unparseable. */
+export function epochSeconds(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : Math.floor(parsed / 1000);
+}
+
 /** Date and time; the year is left out for dates in the current year. */
 export function formatDateTime(epochSeconds: number | null | undefined, locale?: string, now: Date = new Date()): string {
   if (epochSeconds === null || epochSeconds === undefined || !Number.isFinite(epochSeconds)) return MISSING;

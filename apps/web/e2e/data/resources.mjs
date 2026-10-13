@@ -3,22 +3,9 @@ let seed = 7;
 const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
 const hex = (n) => Array.from({ length: n }, () => Math.floor(rand() * 16).toString(16)).join("");
 const uuid = () => `${hex(8)}-${hex(4)}-4${hex(3)}-8${hex(3)}-${hex(12)}`;
-const iso = (seconds) => new Date(seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
 
-export function buildResources(now, agents, sessions) {
+export function buildResources(now) {
   seed = 7;
-  const keys = [
-    { id: "fb533e99-524f-4e44-94bc-8f6e571646a7", name: "Production app", prefix: "pc_live_7Hq", created_at: iso(now - 86400 * 21), revoked_at: null },
-    { id: "3c1d9e20-7a41-4b8e-9f02-5d6e7f8a9b10", name: "CI pipeline", prefix: "pc_live_Qm4", created_at: iso(now - 86400 * 16), revoked_at: null },
-    { id: "a47e2b19-0c3d-4e5f-8a6b-7c8d9e0f1a2b", name: "Data team notebook", prefix: "pc_live_k9T", created_at: iso(now - 86400 * 9), revoked_at: null },
-    { id: "0b533e99-524f-4e44-94bc-8f6e571646a7", name: "Staging", prefix: "pc_live_2Xa", created_at: iso(now - 86400 * 30), revoked_at: iso(now - 86400 * 6) },
-  ];
-  const refOf = (key) => ({ type: "project_api_key", id: key.id, name: key.name, prefix: key.prefix, revoked_at: key.revoked_at });
-  const consoleRef = { type: "console", id: null, name: null, prefix: null, revoked_at: null };
-  // Weighted owner choice: most traffic from production, some unknown (created before recording).
-  const owners = [refOf(keys[0]), refOf(keys[0]), refOf(keys[0]), refOf(keys[1]), refOf(keys[1]), refOf(keys[2]), refOf(keys[3]), consoleRef, null];
-  const ownerOf = () => owners[Math.floor(rand() * owners.length)];
-
   const skills = [
     ["report", "Create quarterly and incident reports from structured notes.", 3, 2],
     ["triage", "Sort incoming issues by severity and owner.", 2, 2],
@@ -72,41 +59,8 @@ export function buildResources(now, agents, sessions) {
       created_at: created, updated_at: created + (index % 2 ? 86400 : 0) };
   }).reverse()]));
 
-  const ownership = new Map();
-  const own = (type, id, created) => { const owner = ownerOf(); ownership.set(`${type}:${id}`, { resource_type: type, resource_id: id, owner, created_at: owner ? iso(created) : null }); return owner; };
-  const activity = [];
-  const record = (owner, action, type, id, at, parent = null) => {
-    if (!owner) return;
-    activity.push({ id: `act_${uuid()}`, object: "api_key.activity", created_at: iso(at), actor: owner, action, resource_type: type, resource_id: id, parent_resource_id: parent, trace_id: hex(32) });
-  };
-  for (const agent of agents) { const owner = own("agent", agent.id, agent.created_at); record(owner, "create", "agent", agent.id, agent.created_at); if (agent.updated_at > agent.created_at) record(owner, "update", "agent", agent.id, agent.updated_at); }
-  for (const session of sessions) { const owner = own("session", session.id, session.created_at); record(owner, "create", "session", session.id, session.created_at); if (session.last_active_at > session.created_at + 60) record(owner, "send", "session", session.id, session.last_active_at); }
-  for (const skill of skills) {
-    const owner = own("skill", skill.id, skill.created_at);
-    record(owner, "create", "skill", skill.id, skill.created_at);
-    for (const version of skillVersions.get(skill.id).slice(0, -1)) record(owner, "create", "skill_version", version.id, version.created_at, skill.id);
-    if (skill.default_version !== skill.latest_version) record(owner, "update", "skill", skill.id, skill.created_at + 86400);
-  }
-  for (const file of files) record(own("file", file.id, file.created_at), "create", "file", file.id, file.created_at);
-  for (const template of templates) { const owner = own("environment_template", template.id, template.created_at); record(owner, "create", "environment_template", template.id, template.created_at); record(owner, "update", "environment_template", template.id, template.updated_at); }
-  for (const { vault } of vaults) {
-    const owner = own("vault", vault.id, vault.created_at);
-    record(owner, "create", "vault", vault.id, vault.created_at);
-    for (const credential of credentials.get(vault.id)) {
-      own("vault_credential", credential.id, credential.created_at);
-      record(owner, "create", "vault_credential", credential.id, credential.created_at, vault.id);
-      if (credential.updated_at > credential.created_at) record(owner, "update", "vault_credential", credential.id, credential.updated_at, vault.id);
-    }
-  }
-  // Deleted resources still appear in the log.
-  record(refOf(keys[3]), "delete", "agent", `agent_${hex(8)}`, now - 86400 * 7);
-  record(refOf(keys[1]), "delete", "file", `file-${uuid()}`, now - 86400 * 2 - 600);
-  record(refOf(keys[1]), "delete", "skill_version", `skillver_${uuid()}`, now - 86400 * 3, skills[1].id);
-  activity.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-
   return {
-    keys, skills, skillVersions, files, templates,
+    skills, skillVersions, files, templates,
     vaults: vaults.map(({ vault }) => vault), credentials,
-    ownership, activity,
   };
 }

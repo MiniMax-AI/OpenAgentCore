@@ -31,7 +31,7 @@ describe("node enrollment", () => {
     const connected = { ...fresh, online: true };
     expect(enrollmentProgress(connected, 0, 1_000)).toEqual({ stage: "connected", problem: "" });
     expect(enrollmentProgress(connected, 0, NODE_READY_WAIT_MS)).toEqual({ stage: "connected", problem: "provider_unavailable" });
-    expect(enrollmentProgress({ ...connected, diagnostic: "kvm_unavailable" }, 0, 1_000)).toEqual({ stage: "connected", problem: "kvm_unavailable" });
+    expect(enrollmentProgress({ ...connected, diagnostic: "host_unsupported" }, 0, 1_000)).toEqual({ stage: "connected", problem: "host_unsupported" });
     expect(enrollmentProgress({ ...connected, provider_ready: true }, 0, NODE_READY_WAIT_MS * 2)).toEqual({ stage: "ready", problem: "" });
   });
 

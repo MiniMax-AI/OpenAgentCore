@@ -14,19 +14,6 @@ type Items interface {
 	ListItems(context.Context, string, string, string, int, bool) (sessions.ItemPage, error)
 }
 
-// @Summary List persisted execution Items
-// @Description Returns supported message and tool Items in first-observation order. Native engine fields are projected explicitly; unfinished Items on terminal Turns are incomplete. Cursors are Items of the same tenant and Session. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid session item ID in `after`".
-// @Tags Items
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param after query string false "Last Item ID from the previous page"
-// @Param limit query int false "Page size; 0 is treated as 1 and values above 100 as 100" minimum(0) default(20)
-// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
-// @Success 200 {object} v1.ItemList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/items [get]
 func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 	options, ok := readClampedPage(w, r)
 	if !ok {

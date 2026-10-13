@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
 )
 
@@ -77,12 +76,6 @@ func TestReplacePassesTheCompleteBundleWithItsSafeColumns(t *testing.T) {
 	if !reflect.DeepEqual(record.Configuration, validConfiguration()) {
 		t.Fatalf("bundle: %+v", record.Configuration)
 	}
-	storage.replace = func(context.Context, Record) (Configuration, error) {
-		return Configuration{}, credentialcrypto.ErrUnavailable
-	}
-	if _, err := newService(t, storage).Replace(t.Context(), Replacement{Harness: "codex", Configuration: validConfiguration()}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("missing credential key", err)
-	}
 }
 
 func TestReplaceRejectsBeforeStorage(t *testing.T) {
@@ -124,10 +117,9 @@ func TestResolveValidatesTheOpenedBundle(t *testing.T) {
 	if snapshot, err := newService(t, loaded(v1.ModelConfigurationInput{}, ErrNotFound)).Resolve(t.Context(), "codex"); snapshot != nil || err != nil {
 		t.Fatal("missing default", snapshot, err)
 	}
-	for _, failure := range []error{errors.New("storage failed"), credentialcrypto.ErrUnavailable} {
-		if _, err := newService(t, loaded(v1.ModelConfigurationInput{}, failure)).Resolve(t.Context(), "codex"); !errors.Is(err, failure) {
-			t.Fatal("storage failure", err)
-		}
+	failure := errors.New("storage failed")
+	if _, err := newService(t, loaded(v1.ModelConfigurationInput{}, failure)).Resolve(t.Context(), "codex"); !errors.Is(err, failure) {
+		t.Fatal("storage failure", err)
 	}
 	invalid := validConfiguration()
 	invalid.Model = ""

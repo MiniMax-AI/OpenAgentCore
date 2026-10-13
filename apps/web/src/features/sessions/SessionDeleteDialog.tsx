@@ -1,4 +1,4 @@
-import { AgentCoreError, isSessionDeletionConflict } from "@oac/agents-client";
+import { type AdminProject, AgentCoreError, isSessionDeletionConflict } from "@oac/agents-client";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,10 +6,9 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/Toast";
 import { projectClient } from "../../lib/projects";
 import { shortId } from "../../lib/format";
-import { type Project } from "../../lib/admin-view";
 
 export interface SessionDeleteTarget {
-  project: Project;
+  project: AdminProject;
   sessionId: string;
 }
 

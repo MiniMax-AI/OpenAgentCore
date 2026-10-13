@@ -33,27 +33,6 @@ type session struct {
 	outcome     proto.DonePayload
 }
 
-func NewFactory(config Config) agent.Factory {
-	prepareExecutor := NewExecutorFactory(config)
-	return func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-		run, input := req.RunID, req.Input
-		req.RunID, req.ConversationID, req.Input = "", "", nil
-		resource, err := prepareExecutor(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		turn, err := resource.StartTurn(ctx, run, input, out)
-		if turn == nil {
-			_ = resource.Close(context.Background())
-			return nil, err
-		}
-		// Factory callers own one execution. Both entrypoints use the same
-		// Executor implementation; Runtime pooling uses NewExecutorFactory.
-		go func() { _, _ = turn.AwaitSettlement(context.Background()); _ = resource.Close(context.Background()) }()
-		return turn, err
-	}
-}
-
 type bridgeEvent struct {
 	EngineErrorCode json.RawMessage `json:"engine_error_code"`
 	TurnID          string          `json:"turn_id"`
@@ -86,28 +65,11 @@ func launch(ctx context.Context, config Config, start startRequest, env []string
 	if binary == "" {
 		binary = "node"
 	}
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true, OwnProcessGroup: true})
+	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true})
 	if err != nil {
 		return nil, err
 	}
 	return &session{process: process, writeMu: &sync.Mutex{}, functions: functionState{calls: map[string]*pendingFunction{}}, settled: make(chan struct{})}, nil
-}
-
-func (s *session) drain(scanner *bridgeOutput, stderrDone <-chan struct{}, failure error) (error, bool) {
-	for scanner.Scan() {
-	}
-	if scanner.Err() != nil {
-		failure = fmt.Errorf("claudesdk: SDK bridge output read failed")
-		s.process.Cancel()
-	}
-	<-stderrDone
-	s.stopWorkspaceReads()
-	s.stopWorkspaceDirectories()
-	waitErr := s.process.Wait()
-	if waitErr != nil && failure == nil {
-		failure = fmt.Errorf("claudesdk: SDK process failed")
-	}
-	return failure, scanner.Err() == nil && waitErr == nil
 }
 
 func bridgeFailure(code string) error {

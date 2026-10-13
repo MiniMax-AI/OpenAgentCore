@@ -33,14 +33,13 @@ func TestWriteCodexMCPConfig_DeterministicOrdering(t *testing.T) {
 	}
 }
 
-func TestWriteCodexMCPConfig_EmitsCommandArgsEnv(t *testing.T) {
+func TestWriteCodexMCPConfig_EmitsCommandArgs(t *testing.T) {
 	dir := t.TempDir()
 	servers := map[string]mcpServerConfig{
 		"docs": {
 			Name:    "docs",
 			Command: "docs-server",
 			Args:    []string{"--port", "8080"},
-			Env:     map[string]string{"DOCS_TOKEN": "secret"},
 		},
 	}
 	if err := writeCodexMCPConfig(dir, servers); err != nil {
@@ -53,21 +52,14 @@ func TestWriteCodexMCPConfig_EmitsCommandArgsEnv(t *testing.T) {
 	if !strings.Contains(string(body), `args = ["--port", "8080"]`) {
 		t.Fatalf("missing args: %s", body)
 	}
-	if !strings.Contains(string(body), `[mcp_servers."docs".env]`) {
-		t.Fatalf("missing env table: %s", body)
-	}
-	if !strings.Contains(string(body), `"DOCS_TOKEN" = "secret"`) {
-		t.Fatalf("missing env entry: %s", body)
-	}
 }
 
 func TestWriteCodexMCPConfig_EmitsStreamableHTTPURL(t *testing.T) {
 	dir := t.TempDir()
 	servers := map[string]mcpServerConfig{
 		"docs": {
-			Name:    "docs",
-			URL:     "https://docs.example.com/mcp",
-			Headers: map[string]string{"Authorization": "Bearer token"},
+			Name: "docs",
+			URL:  "https://docs.example.com/mcp",
 		},
 	}
 	if err := writeCodexMCPConfig(dir, servers); err != nil {
@@ -76,9 +68,6 @@ func TestWriteCodexMCPConfig_EmitsStreamableHTTPURL(t *testing.T) {
 	body, _ := os.ReadFile(filepath.Join(dir, "config.toml"))
 	if !strings.Contains(string(body), `url = "https://docs.example.com/mcp"`) || strings.Contains(string(body), "command =") {
 		t.Fatalf("remote config: %s", body)
-	}
-	if !strings.Contains(string(body), `http_headers = {"Authorization" = "Bearer token"}`) {
-		t.Fatalf("remote headers: %s", body)
 	}
 }
 

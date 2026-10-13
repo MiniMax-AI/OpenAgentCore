@@ -20,24 +20,16 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
 		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
 	}
-	original := map[string]any{
-		"mcp_servers":     map[string]any{"operator": map[string]any{"command": "operator-mcp"}},
-		"enable_features": []any{"apps", "plugins", "unrelated"},
-	}
-	req := proto.PromptRequestPayload{AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: original}
-	req.AgentOptions = executionOptions(req)
-	plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
+	req := proto.PromptRequestPayload{AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
+	plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if original["mcp_servers"] == nil || req.AgentOptions["mcp_servers"] != nil {
-		t.Fatal("declaration failed to replace operator MCP without mutation")
-	}
-	if !slices.Equal(plan.EnableFeatures, []string{"unrelated"}) || !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
+	if !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
 		t.Fatal("native profile was not pinned")
 	}
-	home, err := allocCodexHome(req.AgentStateKey)
+	home, err := allocCodexHome(testStateRoot(t), req.AgentStateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,9 +45,6 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 			t.Fatalf("missing native config %q", expected)
 		}
 	}
-	if strings.Contains(string(config), "operator") {
-		t.Fatal("operator MCP was rendered")
-	}
 	tools[0] = "mutated"
 	if (*plan.mcpServers["docs.server"].EnabledTools)[0] != "lookup.docs" {
 		t.Fatal("prepared allowlist retained caller-owned memory")
@@ -65,7 +54,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	servers = []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "replacement", ServerURL: "https://new.example/mcp"}}
-	second, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
+	second, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +90,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		}
 	}
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	home, err := allocCodexHome("credentials")
+	home, err := allocCodexHome(testStateRoot(t), "credentials")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +100,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := proto.PromptRequestPayload{AgentStateKey: "credentials", DisableExecutionEnvironment: true, MCPHTTPServers: &valid}
-	if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil {
+	if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t))); err == nil {
 		t.Fatal("existing MCP credentials accepted")
 	}
 	if after, err := os.ReadFile(path); err != nil || !reflect.DeepEqual(after, stored) {

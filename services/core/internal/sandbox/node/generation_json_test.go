@@ -2,6 +2,7 @@ package node
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func TestGenerationHealthRejectsUnboundedOrAmbiguousNumbers(t *testing.T) {
 }
 
 func TestNodeProtocolRejectsHistoricalVersions(t *testing.T) {
-	for _, version := range []int{1, 2} {
+	for _, version := range []int{1, 2, 3, 4, 5} {
 		raw, _ := json.Marshal(frame{Version: version, Type: "hello", Identity: new(Identity), Health: &Health{ObservedAt: time.Now().UTC()}})
 		if _, err := decodeFrame(raw); err == nil {
 			t.Fatalf("accepted historical protocol %d", version)
@@ -84,9 +85,66 @@ func TestNodeGenerationManagementIsAnExplicitCurrentCapability(t *testing.T) {
 		if managed {
 			f.GenerationManagement = false
 			raw, _ = json.Marshal(f)
-			if _, err := decodeFrame(raw); err == nil {
-				t.Fatal("generation management accepted without declaration")
+			decoded, err := decodeFrame(raw)
+			if err != nil || decoded.GenerationManagement || len(decoded.Health.Generations) != 1 {
+				t.Fatal("static qualification implicitly enabled generation management", err)
 			}
+		}
+	}
+}
+
+func TestCheckpointGenerationHealthJSONRoundTrip(t *testing.T) {
+	for _, managed := range []bool{false, true} {
+		for _, kind := range []string{"hello", "heartbeat"} {
+			t.Run(fmt.Sprintf("managed=%t/%s", managed, kind), func(t *testing.T) {
+				compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: "private-store", ExecutionClass: "native-class"}
+				f := frame{Version: ProtocolVersion, Type: kind, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC(), Generations: []sandbox.GenerationStatus{{Generation: 5, SpecificationDigest: strings.Repeat("a", 64), State: "ready", Checkpoint: &compatibility}}}}
+				if kind == "hello" {
+					f.Identity = new(Identity)
+					f.GenerationManagement = managed
+				} else {
+					f.ConnectionID = uuid.NewString()
+					f.OwnerEpoch = 1
+				}
+				raw, err := json.Marshal(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := validateVersionFrame(f, len(raw)); err != nil {
+					t.Fatal("writer rejected valid status", err)
+				}
+				decoded, err := decodeFrame(raw)
+				if err != nil {
+					t.Fatal("decoder rejected valid status", err)
+				}
+				if decoded.Health == nil || len(decoded.Health.Generations) != 1 || decoded.Health.Generations[0].Checkpoint == nil || *decoded.Health.Generations[0].Checkpoint != compatibility {
+					t.Fatal("checkpoint qualification lost", decoded)
+				}
+				original := string(raw)
+				for name, replacement := range map[string]string{
+					"unknown nested field":     strings.Replace(original, `"artifact_domain":"private-store"`, `"artifact_domain":"private-store","extra":"value"`, 1),
+					"unknown generation field": strings.Replace(original, `"checkpoint":`, `"extra":true,"checkpoint":`, 1),
+					"duplicate token":          strings.Replace(original, `"artifact_domain":"private-store"`, `"artifact_domain":"private-store","artifact_domain":"other"`, 1),
+					"case alias":               strings.Replace(original, `"artifact_domain":`, `"Artifact_Domain":`, 1),
+					"missing token":            strings.Replace(original, `"artifact_domain":"private-store",`, "", 1),
+					"null token":               strings.Replace(original, `"artifact_domain":"private-store"`, `"artifact_domain":null`, 1),
+					"null checkpoint":          strings.Replace(original, `{"artifact_domain":"private-store","execution_class":"native-class"}`, `null`, 1),
+					"empty domain":             strings.Replace(original, `"private-store"`, `""`, 1),
+					"empty execution":          strings.Replace(original, `"native-class"`, `""`, 1),
+					"oversized domain":         strings.Replace(original, `"private-store"`, `"`+strings.Repeat("x", 257)+`"`, 1),
+					"oversized execution":      strings.Replace(original, `"native-class"`, `"`+strings.Repeat("x", 257)+`"`, 1),
+					"nonready checkpoint":      strings.Replace(original, `"state":"ready"`, `"state":"preparing"`, 1),
+				} {
+					t.Run(name, func(t *testing.T) {
+						if replacement == original {
+							t.Fatal("fixture unchanged")
+						}
+						if _, err := decodeFrame([]byte(replacement)); err == nil {
+							t.Fatal("invalid checkpoint accepted")
+						}
+					})
+				}
+			})
 		}
 	}
 }

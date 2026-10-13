@@ -3,6 +3,7 @@
 package claudesdk
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 			req.ObserveMessages = true
 			schema := `{"type":"object","properties":{"n":{"const":9007199254740992}}}`
 			req.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(schema)}}
-			p, err := NewPreparationFactory(config)(t.Context(), req)
+			e, err := NewExecutorFactory(config)(t.Context(), req)
 			if mode == "structured-missing" {
 				if err == nil || !strings.Contains(err.Error(), "workspace structured output") {
 					t.Fatal("unqualified bundle admitted", err)
@@ -33,7 +34,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer p.Close()
+			defer e.Close(context.Background())
 			req.ExecutionControls.OutputFormat.Schema[0] = ' '
 			var frozen startRequest
 			if err := json.Unmarshal(waitPreparationFile(t, filepath.Join(config.StateDir, "prepare.json")), &frozen); err != nil {
@@ -43,7 +44,7 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 				t.Fatal("prepared native schema changed with caller memory")
 			}
 			out := make(chan proto.Envelope, 16)
-			if _, err := p.Start(t.Context(), "run", proto.TextInput("hello"), out); err != nil {
+			if _, err := e.StartTurn(t.Context(), "run", proto.TextInput("hello"), out); err != nil {
 				t.Fatal(err)
 			}
 			for event := range out {

@@ -176,7 +176,7 @@ describe("AdminClient transport boundary", () => {
   });
 
   it("accepts deployment-wide audit entries without a Project", async () => {
-    const entry = { id: "audit", created_at: "2026-09-26T08:00:00Z", admin_credential_id: "digest", actor_label: "console", action: "set", project_id: null, resource_type: "deployment_model_provider", resource_id: "codex", result_ids: [], request_id: "request", trace_id: "trace" };
+    const entry = { id: "audit", created_at: "2026-09-26T08:00:00Z", admin_credential_id: "digest", actor_label: "console", action: "set", project_id: null, resource_type: "deployment_model_provider", resource_id: "codex", request_id: "request", trace_id: "trace" };
     const audit = { data: [entry], has_more: false, next_cursor: "" };
     expect(await clientWith(audit).client.listAuditLog()).toEqual(audit);
     await expect(clientWith({ ...audit, data: [{ ...entry, project_id: 1 }] }).client.listAuditLog()).rejects.toMatchObject({ code: "invalid_admin_response" });
@@ -211,7 +211,7 @@ describe("AdminClient response contracts", () => {
   });
 
   it("reuses Session identity and state validation", async () => {
-    const agent = { id: "a", model: "model", name: null, instructions: null, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: {}, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [] };
+    const agent = { id: "a", model: "model", name: null, instructions: null, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [] };
     const session = { id: sessionId, object: "agent.session", agent, environment: { type: "none" }, status: "idle", error: null, metadata: {}, required_actions: [], vault_ids: [], usage: null, created_at: 1, last_active_at: 1 };
     expect(await clientWith(session).client.retrieveSession(projectId, sessionId)).toEqual(session);
     await expect(clientWith(session).client.retrieveSession(projectId, resourceId)).rejects.toBeInstanceOf(AgentCoreError);
@@ -236,10 +236,10 @@ describe("AdminClient response contracts", () => {
     }
   });
 
-  it("reads any provider base URL an earlier Core stored but still rejects unsafe ones", async () => {
+  it("reads any provider base URL Core's write rule allows but still rejects unsafe ones", async () => {
     const saved = { id: resourceId, object: "agent", model: "model", name: null, instructions: null, metadata: {}, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: { effort: null, summary: null }, service_tier: "auto", text: { format: { type: "text" }, verbosity: "medium" }, tools: [], created_at: 1, updated_at: 1 };
     const withURL = (base_url: string, id = resourceId) => ({ ...saved, id, x_agents_core: { model_provider: { protocol: "responses", base_url, api_key_configured: true } } });
-    // Core once accepted hosts and ports that URL parsing rejects; one must not fail the list.
+    // The client is never stricter than Core's write rule: a host or port that URL parsing rejects must not fail the list.
     const stored = ["https://p.test:99999/v1", "https://xn--.test", "https://[::1]:8443/v1", "HTTPS://p.test/v1?"].map((url, index) => withURL(url, `agent-${index}`));
     expect((await clientWith(page(stored)).client.listAgents(projectId)).data).toEqual(stored);
     for (const url of ["http://p.test", "https://user:pw@p.test", "https://p.test/?key=secret", "https://p.test/#secret", "https://:443/v1"]) {
@@ -248,10 +248,12 @@ describe("AdminClient response contracts", () => {
   });
 
   it("binds Skills, versions and Artifacts to requested resources", async () => {
-    const skill = { id: "skill", object: "skill", created_at: 1, name: "helper", description: "help", default_version: "1", latest_version: "2" };
-    expect(await clientWith(skill).client.retrieveSkill(projectId, "skill")).toEqual(skill);
-    const version = { id: "version", object: "skill.version", created_at: 1, skill_id: "skill", version: "2", name: "helper", description: "help" };
-    await expect(clientWith(version).client.retrieveSkillVersion(projectId, "other", "2")).rejects.toBeInstanceOf(AgentCoreError);
+    const skill = { id: "skill_helper", object: "skill", created_at: 1, name: "helper", description: "help", default_version: "1", latest_version: "2" };
+    expect(await clientWith(skill).client.retrieveSkill(projectId, "skill_helper")).toEqual(skill);
+    await expect(clientWith(skill).client.retrieveSkill(projectId, "skill_other")).rejects.toBeInstanceOf(AgentCoreError);
+    const version = { id: "skillver_helper2", object: "skill.version", created_at: 1, skill_id: "skill_helper", version: "2", name: "helper", description: "help" };
+    expect(await clientWith(version).client.retrieveSkillVersion(projectId, "skill_helper", "2")).toEqual(version);
+    await expect(clientWith(version).client.retrieveSkillVersion(projectId, "skill_other", "2")).rejects.toBeInstanceOf(AgentCoreError);
     const artifact = { id: "artifact", object: "agent.session.artifact", created_at: 1, session_id: sessionId, environment_id: resourceId, path: "/result.txt", size_bytes: 2, turn_id: "turn" };
     expect((await clientWith(page([artifact])).client.listArtifacts(projectId, sessionId)).data).toEqual([artifact]);
     await expect(clientWith(artifact).client.retrieveArtifact(projectId, resourceId, "artifact")).rejects.toBeInstanceOf(AgentCoreError);
@@ -266,7 +268,7 @@ describe("AdminClient response contracts", () => {
   });
 
   it("retains owner ordering and strips no unexpected secret fields", async () => {
-    const owners = { data: [{ resource_id: "a", api_key: null, source: null, admin_audit_id: null }] };
+    const owners = { data: [{ resource_id: "a", api_key: null }] };
     expect(await clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["a"])).toEqual(owners);
     await expect(clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["b"])).rejects.toBeInstanceOf(AgentCoreError);
     await expect(clientWith({ data: [{ resource_id: "a", api_key: { id: projectId, name: "SDK", prefix: "p", kind: "issued", revoked_at: null, key: "leak" } }] }).client.retrieveResourceOwners(projectId, "agent", ["a"])).rejects.toBeInstanceOf(AgentCoreError);
@@ -294,14 +296,21 @@ describe("AdminClient deployment read models", () => {
     await expect(clientWith({ ...summary, data: [{ ...summary.data[0], coverage: { measured_sessions: 3, total_sessions: 2, ratio: 1.5 } }] }).client.retrieveSummary()).rejects.toBeInstanceOf(AgentCoreError);
   });
 
-  it("validates historical copy provenance and safe audit mappings", async () => {
-    const owners = { data: [{ resource_id: "a", api_key: null, source: "admin_copy", admin_audit_id: "audit" }] };
-    expect(await clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["a"])).toEqual(owners);
-    const audit = { data: [{ id: "audit", created_at: "2026-09-24T00:00:00Z", admin_credential_id: "digest", actor_label: "admin", action: "copy", project_id: projectId, resource_type: "agent", resource_id: "a", result_ids: [{ type: "agent", source_id: "a", target_id: "b" }], request_id: "request", trace_id: "trace" }], has_more: false, next_cursor: "" };
+  it("passes audit filters and rejects audit entries with unexpected fields", async () => {
+    const audit = { data: [{ id: "audit", created_at: "2026-09-24T00:00:00Z", admin_credential_id: "digest", actor_label: "admin", action: "delete", project_id: projectId, resource_type: "agent", resource_id: "a", request_id: "request", trace_id: "trace" }], has_more: false, next_cursor: "" };
     const { client, fetch } = clientWith(audit);
-    expect(await client.listAuditLog({ action: "copy", resource_type: "agent", project_id: projectId, after: "cursor" })).toEqual(audit);
-    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/audit-log?after=cursor&project_id=${projectId}&resource_type=agent&action=copy`);
+    expect(await client.listAuditLog({ action: "delete", resource_type: "agent", project_id: projectId, after: "cursor" })).toEqual(audit);
+    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/audit-log?after=cursor&project_id=${projectId}&resource_type=agent&action=delete`);
     await expect(clientWith({ ...audit, data: [{ ...audit.data[0], request_body: { token: "leak" } }] }).client.listAuditLog()).rejects.toBeInstanceOf(AgentCoreError);
+  });
+
+  it("requires each write operation's key and a recorded action and resource type", async () => {
+    const operation = { id: "op", created_at: "2026-09-24T00:00:00Z", api_key: { id: keyId, name: "SDK", prefix: "p", kind: "issued", revoked_at: null }, action: "create", resource_type: "agent", resource_id: "a", parent_id: "", request_id: "request", trace_id: "trace" };
+    const operations = { data: [operation], has_more: false, next_cursor: "" };
+    expect(await clientWith(operations).client.listWriteOperations(projectId)).toEqual(operations);
+    for (const invalid of [{ ...operation, api_key: null }, { ...operation, action: "archive" }, { ...operation, resource_type: "deployment" }]) {
+      await expect(clientWith({ ...operations, data: [invalid] }).client.listWriteOperations(projectId)).rejects.toBeInstanceOf(AgentCoreError);
+    }
   });
 
   it("passes provenance filters without a binding digest and preserves Vault status arrays", async () => {
@@ -328,19 +337,22 @@ describe("AdminClient installation", () => {
   const installation = {
     object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
     local_only: false, source_commit: "a".repeat(40),
-    configuration: { path: "/home/alice/.oac/core/config.json", apply_command: "/home/alice/.oac/core/oac apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
+    configuration: { settings: [port, headers] },
     address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },
   };
   it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {
     expect(await clientWith(installation).client.retrieveInstallation()).toEqual(installation);
-    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null, configuration: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
-    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { ...installation.configuration, settings } });
+    expect(await clientWith({ ...installation, source_commit: null }).client.retrieveInstallation()).toMatchObject({ source_commit: null });
+    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { settings } });
     for (const invalid of [
       configuration([port, { ...headers, value: { authorization: "leak" } }]),
       configuration([port, { key: headers.key, value: null, default: null, changeable: true, sensitive: true, restarts: ["core"] }]),
       configuration([port, port]),
       { ...installation, address_bindings: { ...installation.address_bindings, nodes_on_other_address: 3 } },
       { ...installation, token: "leak" },
+      { ...installation, configuration: null },
+      { ...installation, installation_id: null },
+      { ...installation, public_url: null, api_base_url: null },
       configuration([{ ...port, configured: true }]),
     ]) {
       await expect(clientWith(invalid).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
@@ -455,8 +467,8 @@ describe("AdminClient project monitoring", () => {
     };
     const value = { object: "list", data: [{ project_id: projectId, observation }], has_more: false, first_id: sessionId, last_id: sessionId };
     expect(await clientWith(value).client.listRuntimeObservations()).toEqual(value);
-    const { disk: _, ...older } = observation;
-    expect((await clientWith({ ...value, data: [{ project_id: projectId, observation: older }] }).client.listRuntimeObservations()).data[0]!.observation.disk).toBeNull();
+    const { disk: _, ...withoutDisk } = observation;
+    await expect(clientWith({ ...value, data: [{ project_id: projectId, observation: withoutDisk }] }).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
     const invalid = { ...observation, disk: { usage_bytes: 1, limit_bytes: 0 } };
     await expect(clientWith({ ...value, data: [{ project_id: projectId, observation: invalid }] }).client.listRuntimeObservations()).rejects.toMatchObject({ code: "invalid_admin_response" });
   });
@@ -475,8 +487,10 @@ describe("AdminClient database-owned identities", () => {
     expect(await client.listSkillVersions(projectId, "skill", { limit: 0 })).toEqual(page);
   });
 
-  it.each(["issued", "static", "console"])("preserves %s key provenance in historical ownership records", async (kind) => {
-    const owner = { resource_id: resourceId, api_key: { id: keyId, name: "Original key", prefix: "p", kind, revoked_at: null }, source: "api_key", admin_audit_id: null };
+  it("preserves issued key provenance and rejects other key kinds", async () => {
+    const owner = { resource_id: resourceId, api_key: { id: keyId, name: "Original key", prefix: "p", kind: "issued", revoked_at: null } };
     expect(await clientWith({ data: [owner] }).client.retrieveResourceOwners(projectId, "agent", [resourceId])).toEqual({ data: [owner] });
+    const other = { ...owner, api_key: { ...owner.api_key, kind: "static" } };
+    await expect(clientWith({ data: [other] }).client.retrieveResourceOwners(projectId, "agent", [resourceId])).rejects.toMatchObject({ code: "invalid_admin_response" });
   });
 });

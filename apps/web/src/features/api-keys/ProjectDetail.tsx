@@ -1,3 +1,4 @@
+import type { AdminAPIKey, AdminProject } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -5,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { EmptyState, HelpTip, Kpi, KpiStrip, Section, StatusDot } from "../../components/console-ui";
 import { CopyableId, RowActions } from "../../components/list-ui";
-import { formatCompact, formatDateTime, formatInteger, formatRelative } from "../../lib/format";
+import { epochSeconds, formatCompact, formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import type { ConsoleView } from "../../lib/console-routes";
 import { admin } from "../../lib/projects";
@@ -14,11 +15,11 @@ import { prefixLabel } from "./key-flows";
 import { loadedFrom, projectKeysQuery, projectSummaryQuery, type Loaded } from "./project-queries";
 import { ProjectStatus } from "./ProjectStatus";
 import { WriteOperations } from "./WriteOperations";
-import { type AdminKey, type Project, type ProjectSummary } from "../../lib/admin-view";
+import { type ProjectSummary } from "../../lib/admin-view";
 import { TableSkeleton } from "../../components/Skeleton";
 
 /** A project's keys, active first, from the query cache. */
-export function useProjectKeys(projectId: string | null): Loaded<AdminKey[]> & { retry: () => void } {
+export function useProjectKeys(projectId: string | null): Loaded<AdminAPIKey[]> & { retry: () => void } {
   const query = useQuery({ ...projectKeysQuery(projectId ?? ""), enabled: projectId !== null });
   const { refetch } = query;
   return { ...loadedFrom(query), retry: () => { void refetch(); } };
@@ -38,11 +39,11 @@ const assetLinks: ReadonlyArray<{ key: "agents" | "environment_templates" | "ski
  * write-operation history.
  */
 export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
-  project: Project;
+  project: AdminProject;
   keys: ReturnType<typeof useProjectKeys>;
   busy: boolean;
   onIssue: () => void;
-  onRevoke: (key: AdminKey, activeCount: number) => void;
+  onRevoke: (key: AdminAPIKey, activeCount: number) => void;
 }) {
   const { t, i18n } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
@@ -73,8 +74,8 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
       <dl className="resource-facts" aria-label={t("detail.facts")}>
         <div><dt>{t("detail.id")}</dt><dd><CopyableId id={project.id} /></dd></div>
         <div><dt>{t("detail.status")}</dt><dd><ProjectStatus project={project} /></dd></div>
-        <div><dt>{t("detail.created")}</dt><dd>{formatDateTime(project.created_at, locale)}</dd></div>
-        {project.archived_at !== null ? <div><dt>{t("detail.archived")}</dt><dd>{formatDateTime(project.archived_at, locale)}</dd></div> : null}
+        <div><dt>{t("detail.created")}</dt><dd>{formatDateTime(epochSeconds(project.created_at), locale)}</dd></div>
+        {project.archived_at !== null ? <div><dt>{t("detail.archived")}</dt><dd>{formatDateTime(epochSeconds(project.archived_at), locale)}</dd></div> : null}
         <div>
           <dt>{t("detail.lastActive")}</dt>
           <dd title={summary?.last_active_at != null ? formatDateTime(summary.last_active_at, locale) : undefined}>{formatRelative(summary?.last_active_at, now, locale)}</dd>
@@ -117,7 +118,7 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
           <Kpi
             label={t("detail.usageFigures.coverage")}
             help={t("detail.usageFigures.coverageHelp")}
-            value={summary && !pending ? t("detail.coverageValue", { reported: formatInteger(summary.coverage.reported, locale), total: formatInteger(summary.coverage.sessions, locale) }) : "—"}
+            value={summary && !pending ? t("detail.coverageValue", { reported: formatInteger(summary.coverage.measured_sessions, locale), total: formatInteger(summary.coverage.total_sessions, locale) }) : "—"}
           />
         </KpiStrip>
       </Section>
@@ -132,7 +133,7 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
           </span>
         ) : null}</>}
         help={t("detail.keysHelp")}
-        actions={project.status === "active" ? (
+        actions={project.archived_at === null ? (
           <button className="button outline" type="button" onClick={onIssue} disabled={busy}>
             <Plus size={14} aria-hidden="true" />{t("actions.issue")}
           </button>
@@ -145,7 +146,7 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
         ) : !keys.value.length && !unknownUsage ? (
           <EmptyState
             title={t("detail.noKeys")}
-            action={project.status === "active" ? <button className="button outline" type="button" onClick={onIssue} disabled={busy}>{t("actions.issue")}</button> : undefined}
+            action={project.archived_at === null ? <button className="button outline" type="button" onClick={onIssue} disabled={busy}>{t("actions.issue")}</button> : undefined}
           />
         ) : (
           <div className="table-frame">
@@ -177,13 +178,13 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
                       <td>
                         <span className="key-status">
                           <StatusDot tone={revoked ? "neutral" : "ok"} label={revoked ? t("detail.keyStatus.revoked") : t("detail.keyStatus.active")} />
-                          {revoked ? <span className="key-status-date">{formatDateTime(key.revoked_at, locale)}</span> : null}
+                          {revoked ? <span className="key-status-date">{formatDateTime(epochSeconds(key.revoked_at), locale)}</span> : null}
                         </span>
                       </td>
-                      <td className="key-nowrap">{formatDateTime(key.created_at, locale)}</td>
+                      <td className="key-nowrap">{formatDateTime(epochSeconds(key.created_at), locale)}</td>
                       {keyUsage(byKey?.get(key.id))}
                       <td className="actions-cell">
-                        {!revoked && project.status === "active" ? (
+                        {!revoked && project.archived_at === null ? (
                           <RowActions>
                             <button className="text-action danger" type="button" aria-label={t("actions.revokeLabel", { name: key.name })} disabled={busy} onClick={() => onRevoke(key, activeCount)}>
                               {t("actions.revoke")}
@@ -210,7 +211,7 @@ export function ProjectDetail({ project, keys, busy, onIssue, onRevoke }: {
         )}
       </Section>
 
-      {project.status === "active" ? <ProjectHowToCall /> : null}
+      {project.archived_at === null ? <ProjectHowToCall /> : null}
 
       <WriteOperations projectId={project.id} keys={keys.value} />
     </>

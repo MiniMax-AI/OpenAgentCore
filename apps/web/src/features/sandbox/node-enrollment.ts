@@ -1,6 +1,6 @@
 import type { SandboxEnrollment, SandboxNode } from "@oac/agents-client";
 
-import type { MessageKey } from "../../lib/locale-strings";
+import type { ParseKeys } from "i18next";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 
 /**
@@ -11,26 +11,21 @@ import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
 export const NODE_READY_WAIT_MS = 60_000;
 
 export interface HostPrerequisite {
-  label: MessageKey;
+  label: ParseKeys<"sandbox">;
 }
 
 /**
  * What a host needs for the default command, which runs the installer as root
  * and the node as the `oac-node` system service (sudo mode), as the command
  * and deploy/node/node_install.py check it:
- * - the command runs curl, sha256sum and python3 (enrollment-command.ts), and
+ * - the command runs curl, sha256sum, flock and python3 (enrollment-command.ts), and
  *   `sudo` unless the shell is root; `host_checks` needs Python 3.9+, Linux amd64,
  *   systemd as the init system, and SELinux not enforcing; `other_node` refuses a
  *   host that already runs a sudo-mode node for another installation, since
  *   sudo-mode nodes share the oac-node account;
- * - Docker: `provider_group` needs rootful Docker Engine running, its socket
- *   group-accessible (0660) and, through `device_group`, owned by the docker
- *   group, which the service user joins; and CPU and memory limits enforced (the
- *   node is ready only then: services/core/internal/sandbox/providers/probe.go).
- *   It installs nothing;
- * - microsandbox: `provider_group` needs /dev/kvm, readable and writable by all or
- *   group-accessible in the kvm group, and `prepare_runtime` the libraries its
- *   binaries link (the ldd check);
+ * - the sandbox backend: `provider_group`, `device_group` and `prepare_runtime`
+ *   check what the deployment's Provider needs on the host, name what is missing
+ *   and install nothing;
  * - `host_capacity`: the host's CPUs and memory hold one sandbox of the
  *   deployment's size (else the node reports capacity_insufficient); the Runtime
  *   image needs about 2 GB of disk;
@@ -40,14 +35,12 @@ export interface HostPrerequisite {
  *   (`provider_config`).
  * `sized` says whether the deployment's sandbox size is known for the capacity item.
  */
-export function hostRequirements(provider: "docker" | "microsandbox", sized: boolean): HostPrerequisite[] {
+export function hostRequirements(sized: boolean): HostPrerequisite[] {
   return [
-    { label: "Linux amd64 with systemd; Python 3.9+, curl and sha256sum; root or sudo" },
+    { label: "Linux amd64 with systemd; Python 3.9+, curl, sha256sum and flock; root or sudo" },
     { label: "SELinux is not enforcing" },
     { label: "In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused." },
-    provider === "docker"
-      ? { label: "Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)" }
-      : { label: "/dev/kvm in the kvm group (hardware or nested virtualization) and the libraries microsandbox links (glibc)" },
+    { label: "What the sandbox backend needs on the host; the installer checks it and names anything missing" },
     { label: sized ? "CPUs and memory for at least one sandbox: {{size}}; about 2 GB of disk for the Runtime image" : "CPUs and memory for at least one sandbox; about 2 GB of disk for the Runtime image" },
     { label: "Reaches {{core}}, as do its sandboxes" },
   ];

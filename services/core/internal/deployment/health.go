@@ -12,7 +12,7 @@ import (
 // unreadiness only: unknown values, including arbitrary text, become
 // provider_unavailable, a ready provider has none and empty stays empty.
 func normalizeHealth(health NodeHealth) (NodeHealth, error) {
-	health.Diagnostic = sandbox.NormalizeNodeDiagnostic(health.Diagnostic)
+	health.Diagnostic = sandbox.NodeDiagnosticCode(sandbox.NormalizeNodeDiagnostic(string(health.Diagnostic)))
 	if health.ProviderReady {
 		health.Diagnostic = ""
 	}
@@ -75,20 +75,20 @@ func historyPoints(window coremetrics.Range, samples []HostHistoryPoint) []HostH
 
 // nodeRollout reports a node's preparation of the target generation.
 func nodeRollout(n NodeRecord) NodeRollout {
-	out := NodeRollout{State: "unknown", ReadyGeneration: n.ReadyGeneration}
+	out := NodeRollout{State: NodeRolloutUnknown, ReadyGeneration: n.ReadyGeneration}
 	if !n.Online {
 		return out
 	}
 	if n.ProtocolVersion == 1 && n.DeploymentGeneration != n.TargetGeneration {
-		out.State = "update_required"
+		out.State = NodeRolloutUpdateRequired
 		return out
 	}
-	switch n.TargetState {
-	case "ready", "preparing", "failed":
-		out.State = n.TargetState
+	switch NodeRolloutState(n.TargetState) {
+	case NodeRolloutReady, NodeRolloutPreparing, NodeRolloutFailed:
+		out.State = NodeRolloutState(n.TargetState)
 	}
-	if out.State == "failed" && n.TargetDiagnostic != "" {
-		out.Diagnostic = sandbox.NormalizeNodeDiagnostic(n.TargetDiagnostic)
+	if out.State == NodeRolloutFailed && n.TargetDiagnostic != "" {
+		out.Diagnostic = sandbox.NodeDiagnosticCode(sandbox.NormalizeNodeDiagnostic(n.TargetDiagnostic))
 	}
 	return out
 }

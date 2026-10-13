@@ -4,9 +4,31 @@ package claudesdk
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"os"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
+
+// startSingleTurn prepares an Executor for one Turn and closes it once that
+// Turn settles, so each test observes the complete native lifecycle.
+func startSingleTurn(ctx context.Context, config Config, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Turn, error) {
+	run, input := req.RunID, req.Input
+	req.RunID, req.Input = "", nil
+	resource, err := NewExecutorFactory(config)(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	turn, err := resource.StartTurn(ctx, run, input, out)
+	if turn == nil {
+		_ = resource.Close(context.Background())
+		return nil, err
+	}
+	go func() { _, _ = turn.AwaitSettlement(context.Background()); _ = resource.Close(context.Background()) }()
+	return turn, err
+}
 
 func helperTurn(scanner *bufio.Scanner, request *startRequest) (func(bridgeEvent), func()) {
 	_ = json.NewEncoder(os.Stdout).Encode(bridgeEvent{Type: "executor_ready", Protocol: 3})

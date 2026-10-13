@@ -140,10 +140,6 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.direct.ServeHTTP(w, r)
 		return
 	}
-	if r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") {
-		http.NotFound(w, r)
-		return
-	}
 	if h.nodePayload != nil && strings.HasPrefix(r.URL.Path, "/node-install/") {
 		if h.requestOrigin(r) == "" || !safePath(r.URL.Path) || r.URL.IsAbs() {
 			http.NotFound(w, r)

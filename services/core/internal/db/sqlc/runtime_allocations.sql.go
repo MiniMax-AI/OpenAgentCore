@@ -11,9 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const canReplaceRuntimeAllocation = `-- name: CanReplaceRuntimeAllocation :one
+SELECT EXISTS (
+    SELECT 1 FROM runtime_allocations a JOIN devices d ON d.id = a.device_id AND d.environment_id = a.environment_id
+    WHERE a.id = $1 AND a.state = 'released' AND a.create_settled
+      AND d.revoked_at IS NOT NULL AND d.executor_key_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM runtime_allocations current WHERE current.environment_id = a.environment_id AND current.state <> 'released')
+      AND NOT EXISTS (SELECT 1 FROM devices current WHERE current.environment_id = a.environment_id AND current.revoked_at IS NULL)
+)::boolean
+`
+
+func (q *Queries) CanReplaceRuntimeAllocation(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, canReplaceRuntimeAllocation, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const canRetainRuntimeEnvironment = `-- name: CanRetainRuntimeEnvironment :one
+SELECT EXISTS (
+    SELECT 1 FROM runtime_allocations a
+    JOIN devices d ON d.id = a.device_id AND d.environment_id = a.environment_id
+    JOIN environments e ON e.id = a.environment_id
+    JOIN sessions s ON s.id = e.session_id
+    JOIN environment_workspaces w ON w.environment_id = e.id AND w.state = 'ready'
+    WHERE a.id = $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed','expired')
+      AND e.initialization = 'complete'
+      AND s.configuration->'environment'->>'type' = 'openai_hosted'
+      AND d.supported_agent_kinds @> jsonb_build_array(jsonb_build_object(
+        'kind', s.engine, 'available', true, 'capabilities', jsonb_build_object('retained_native_history', true)))
+)::boolean
+`
+
+func (q *Queries) CanRetainRuntimeEnvironment(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, canRetainRuntimeEnvironment, id)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createRuntimeAllocation = `-- name: CreateRuntimeAllocation :one
 INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, node_id, deployment_generation)
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 type CreateRuntimeAllocationParams struct {
@@ -43,7 +82,6 @@ func (q *Queries) CreateRuntimeAllocation(ctx context.Context, arg CreateRuntime
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,
@@ -59,20 +97,21 @@ func (q *Queries) CreateRuntimeAllocation(ctx context.Context, arg CreateRuntime
 	return i, err
 }
 
-const getRuntimeAllocation = `-- name: GetRuntimeAllocation :one
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.node_id IS NULL AND (SELECT mode FROM runtime_deployment) <> 'direct' AND a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
+const getLatestRuntimeAllocation = `-- name: GetLatestRuntimeAllocation :one
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
 JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = $1 AND a.environment_id = $2
+ORDER BY a.created_at DESC, a.id DESC LIMIT 1
 `
 
-type GetRuntimeAllocationParams struct {
+type GetLatestRuntimeAllocationParams struct {
 	TenantID      pgtype.UUID `json:"tenant_id"`
 	EnvironmentID pgtype.UUID `json:"environment_id"`
 }
 
-type GetRuntimeAllocationRow struct {
+type GetLatestRuntimeAllocationRow struct {
 	RuntimeAllocation RuntimeAllocation  `json:"runtime_allocation"`
 	SessionID         pgtype.UUID        `json:"session_id"`
 	TenantID          pgtype.UUID        `json:"tenant_id"`
@@ -80,9 +119,9 @@ type GetRuntimeAllocationRow struct {
 	Expired           bool               `json:"expired"`
 }
 
-func (q *Queries) GetRuntimeAllocation(ctx context.Context, arg GetRuntimeAllocationParams) (GetRuntimeAllocationRow, error) {
-	row := q.db.QueryRow(ctx, getRuntimeAllocation, arg.TenantID, arg.EnvironmentID)
-	var i GetRuntimeAllocationRow
+func (q *Queries) GetLatestRuntimeAllocation(ctx context.Context, arg GetLatestRuntimeAllocationParams) (GetLatestRuntimeAllocationRow, error) {
+	row := q.db.QueryRow(ctx, getLatestRuntimeAllocation, arg.TenantID, arg.EnvironmentID)
+	var i GetLatestRuntimeAllocationRow
 	err := row.Scan(
 		&i.RuntimeAllocation.ID,
 		&i.RuntimeAllocation.EnvironmentID,
@@ -91,7 +130,6 @@ func (q *Queries) GetRuntimeAllocation(ctx context.Context, arg GetRuntimeAlloca
 		&i.RuntimeAllocation.State,
 		&i.RuntimeAllocation.CreateSettled,
 		&i.RuntimeAllocation.CreatedAt,
-		&i.RuntimeAllocation.KeptAt,
 		&i.RuntimeAllocation.ReleasedAt,
 		&i.RuntimeAllocation.ComputePhase,
 		&i.RuntimeAllocation.ComputeRevision,
@@ -111,42 +149,8 @@ func (q *Queries) GetRuntimeAllocation(ctx context.Context, arg GetRuntimeAlloca
 	return i, err
 }
 
-const keepRuntimeAllocation = `-- name: KeepRuntimeAllocation :one
-UPDATE runtime_allocations SET kept_at = clock_timestamp()
-WHERE id = $1 AND state = 'running'
-AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour')
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
-`
-
-func (q *Queries) KeepRuntimeAllocation(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
-	row := q.db.QueryRow(ctx, keepRuntimeAllocation, id)
-	var i RuntimeAllocation
-	err := row.Scan(
-		&i.ID,
-		&i.EnvironmentID,
-		&i.DeviceID,
-		&i.ProviderKey,
-		&i.State,
-		&i.CreateSettled,
-		&i.CreatedAt,
-		&i.KeptAt,
-		&i.ReleasedAt,
-		&i.ComputePhase,
-		&i.ComputeRevision,
-		&i.ComputeState,
-		&i.ComputeActivityAt,
-		&i.ComputeWakeRequested,
-		&i.ComputeRetainedUntil,
-		&i.NodeID,
-		&i.ObservationError,
-		&i.ComputePhaseChangedAt,
-		&i.DeploymentGeneration,
-	)
-	return i, err
-}
-
 const listRuntimeAllocations = `-- name: ListRuntimeAllocations :many
-SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.kept_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (CASE WHEN a.compute_phase NOT IN ('disabled', 'running') THEN a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp() ELSE a.node_id IS NULL AND (SELECT mode FROM runtime_deployment) <> 'direct' AND a.kept_at <= clock_timestamp() - interval '1 hour' END)::boolean AS expired
+SELECT a.id, a.environment_id, a.device_id, a.provider_key, a.state, a.create_settled, a.created_at, a.released_at, a.compute_phase, a.compute_revision, a.compute_state, a.compute_activity_at, a.compute_wake_requested, a.compute_retained_until, a.node_id, a.observation_error, a.compute_phase_changed_at, a.deployment_generation, e.session_id, s.tenant_id, s.deleted_at, (a.compute_phase NOT IN ('disabled', 'running') AND a.compute_retained_until IS NOT NULL AND a.compute_retained_until <= clock_timestamp())::boolean AS expired
 FROM runtime_allocations a
 JOIN environments e ON e.id = a.environment_id
 JOIN sessions s ON s.id = e.session_id
@@ -179,7 +183,6 @@ func (q *Queries) ListRuntimeAllocations(ctx context.Context, id pgtype.UUID) ([
 			&i.RuntimeAllocation.State,
 			&i.RuntimeAllocation.CreateSettled,
 			&i.RuntimeAllocation.CreatedAt,
-			&i.RuntimeAllocation.KeptAt,
 			&i.RuntimeAllocation.ReleasedAt,
 			&i.RuntimeAllocation.ComputePhase,
 			&i.RuntimeAllocation.ComputeRevision,
@@ -210,7 +213,7 @@ const listRuntimeObservationSessions = `-- name: ListRuntimeObservationSessions 
 SELECT s.id, s.tenant_id
 FROM sessions s
 LEFT JOIN environments e ON e.session_id = s.id
-LEFT JOIN runtime_allocations a ON a.environment_id = e.id
+LEFT JOIN runtime_allocations a ON a.environment_id = e.id AND a.state <> 'released'
 WHERE s.id > $1
   AND s.deleted_at IS NULL
   AND s.configuration->'environment'->>'type' = 'openai_hosted'
@@ -252,8 +255,7 @@ func (q *Queries) ListRuntimeObservationSessions(ctx context.Context, arg ListRu
 const observeRuntimeRunning = `-- name: ObserveRuntimeRunning :one
 UPDATE runtime_allocations SET state = 'running', create_settled = true
 WHERE id = $1 AND state IN ('creating', 'running')
-AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour')
-RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 func (q *Queries) ObserveRuntimeRunning(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
@@ -267,7 +269,6 @@ func (q *Queries) ObserveRuntimeRunning(ctx context.Context, id pgtype.UUID) (Ru
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,
@@ -285,7 +286,7 @@ func (q *Queries) ObserveRuntimeRunning(ctx context.Context, id pgtype.UUID) (Ru
 
 const releaseRuntimeAllocation = `-- name: ReleaseRuntimeAllocation :one
 UPDATE runtime_allocations SET state = 'released', released_at = clock_timestamp()
-WHERE id = $1 AND state = 'cleanup_pending' AND create_settled RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+WHERE id = $1 AND state = 'cleanup_pending' AND create_settled RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 func (q *Queries) ReleaseRuntimeAllocation(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
@@ -299,7 +300,6 @@ func (q *Queries) ReleaseRuntimeAllocation(ctx context.Context, id pgtype.UUID) 
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,
@@ -317,7 +317,7 @@ func (q *Queries) ReleaseRuntimeAllocation(ctx context.Context, id pgtype.UUID) 
 
 const requestRuntimeCleanup = `-- name: RequestRuntimeCleanup :one
 UPDATE runtime_allocations SET state = 'cleanup_pending'
-WHERE id = $1 AND state <> 'released' RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+WHERE id = $1 AND state <> 'released' RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 func (q *Queries) RequestRuntimeCleanup(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
@@ -331,7 +331,6 @@ func (q *Queries) RequestRuntimeCleanup(ctx context.Context, id pgtype.UUID) (Ru
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,
@@ -349,7 +348,7 @@ func (q *Queries) RequestRuntimeCleanup(ctx context.Context, id pgtype.UUID) (Ru
 
 const settleRuntimeCreation = `-- name: SettleRuntimeCreation :one
 UPDATE runtime_allocations SET create_settled = true
-WHERE id = $1 AND state <> 'released' RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+WHERE id = $1 AND state <> 'released' RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 func (q *Queries) SettleRuntimeCreation(ctx context.Context, id pgtype.UUID) (RuntimeAllocation, error) {
@@ -363,7 +362,6 @@ func (q *Queries) SettleRuntimeCreation(ctx context.Context, id pgtype.UUID) (Ru
 		&i.State,
 		&i.CreateSettled,
 		&i.CreatedAt,
-		&i.KeptAt,
 		&i.ReleasedAt,
 		&i.ComputePhase,
 		&i.ComputeRevision,

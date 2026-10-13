@@ -1,6 +1,11 @@
+import type { ListPage } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
 
 import { appendCollectionPage, listAllCollectionPages, listStableCollectionPages } from "./collection-pagination";
+
+function page<T extends { id: string }>(data: T[], hasMore: boolean, lastId: string | null = null): ListPage<T> {
+  return { object: "list", data, first_id: data[0]?.id ?? null, last_id: lastId, has_more: hasMore };
+}
 
 describe("top-level collection pagination", () => {
   it("loads every page in stable descending order and forwards cancellation", async () => {
@@ -9,8 +14,8 @@ describe("top-level collection pagination", () => {
     const result = await listAllCollectionPages(async (options) => {
       calls.push({ after: options.after, signal: options.signal });
       return options.after
-        ? { data: [{ id: "agent-1" }], has_more: false }
-        : { data: [{ id: "agent-3" }, { id: "agent-2" }], has_more: true, last_id: "agent-2" };
+        ? page([{ id: "agent-1" }], false)
+        : page([{ id: "agent-3" }, { id: "agent-2" }], true, "agent-2");
     }, controller.signal);
 
     expect(result.map((value) => value.id)).toEqual(["agent-3", "agent-2", "agent-1"]);
@@ -22,18 +27,14 @@ describe("top-level collection pagination", () => {
 
   it("fails closed for duplicate identities, empty continuation pages, and cyclic cursors", async () => {
     await expect(listAllCollectionPages(async (options) => options.after
-      ? { data: [{ id: "duplicate" }], has_more: false }
-      : { data: [{ id: "duplicate" }], has_more: true, last_id: "next" }))
+      ? page([{ id: "duplicate" }], false)
+      : page([{ id: "duplicate" }], true, "next")))
       .rejects.toThrow("duplicate or invalid collection identities");
 
-    await expect(listAllCollectionPages(async () => ({ data: [], has_more: true })))
+    await expect(listAllCollectionPages(async () => (page([], true))))
       .rejects.toThrow("invalid collection pagination cursor");
 
-    await expect(listAllCollectionPages(async (options) => ({
-      data: [{ id: options.after ? "second" : "first" }],
-      has_more: true,
-      last_id: "same-cursor",
-    }))).rejects.toThrow("invalid collection pagination cursor");
+    await expect(listAllCollectionPages(async (options) => page([{ id: options.after ? "second" : "first" }], true, "same-cursor"))).rejects.toThrow("invalid collection pagination cursor");
   });
 
   it("stops before another page read when cancellation is requested", async () => {
@@ -43,7 +44,7 @@ describe("top-level collection pagination", () => {
     await expect(listAllCollectionPages(async () => {
       calls += 1;
       controller.abort();
-      return { data: [{ id: "first" }], has_more: true, last_id: "first" };
+      return page([{ id: "first" }], true, "first");
     }, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
 
     expect(calls).toBe(1);
@@ -53,11 +54,7 @@ describe("top-level collection pagination", () => {
     let completeCalls = 0;
     const complete = await listAllCollectionPages(async () => {
       completeCalls += 1;
-      return {
-        data: [{ id: `complete-${completeCalls}` }],
-        has_more: completeCalls < 100,
-        last_id: `complete-${completeCalls}`,
-      };
+      return page([{ id: `complete-${completeCalls}` }], completeCalls < 100, `complete-${completeCalls}`);
     });
 
     expect(complete).toHaveLength(100);
@@ -66,11 +63,7 @@ describe("top-level collection pagination", () => {
     let incompleteCalls = 0;
     await expect(listAllCollectionPages(async () => {
       incompleteCalls += 1;
-      return {
-        data: [{ id: `incomplete-${incompleteCalls}` }],
-        has_more: true,
-        last_id: `incomplete-${incompleteCalls}`,
-      };
+      return page([{ id: `incomplete-${incompleteCalls}` }], true, `incomplete-${incompleteCalls}`);
     })).rejects.toThrow("pagination exceeded the Web safety limit");
     expect(incompleteCalls).toBe(100);
   });
@@ -81,7 +74,7 @@ describe("top-level collection pagination", () => {
     const result = await listStableCollectionPages(async () => {
       reads += 1;
       if (reads === 1) revision += 1;
-      return { data: [{ id: `snapshot-${reads}` }], has_more: false };
+      return page([{ id: `snapshot-${reads}` }], false);
     }, () => revision);
 
     expect(result).toEqual([{ id: "snapshot-2" }]);
@@ -94,7 +87,7 @@ describe("top-level collection pagination", () => {
     const result = await listStableCollectionPages(async () => {
       reads += 1;
       revision += 1;
-      return { data: [{ id: `unstable-${reads}` }], has_more: false };
+      return page([{ id: `unstable-${reads}` }], false);
     }, () => revision);
 
     expect(result).toBeNull();
@@ -104,18 +97,18 @@ describe("top-level collection pagination", () => {
 
 describe("load-more collection pages", () => {
   it("appends a page and returns the next cursor until Core reports the end", () => {
-    const first = appendCollectionPage([], { data: [{ id: "skill_3" }, { id: "skill_2" }], has_more: true, last_id: "skill_2" });
+    const first = appendCollectionPage([], page([{ id: "skill_3" }, { id: "skill_2" }], true, "skill_2"));
     expect(first).toEqual({ values: [{ id: "skill_3" }, { id: "skill_2" }], nextAfter: "skill_2" });
-    const second = appendCollectionPage(first.values, { data: [{ id: "skill_1" }], has_more: false }, "skill_2");
+    const second = appendCollectionPage(first.values, page([{ id: "skill_1" }], false), "skill_2");
     expect(second).toEqual({ values: [{ id: "skill_3" }, { id: "skill_2" }, { id: "skill_1" }], nextAfter: null });
   });
 
   it("falls back to the last entry and rejects repeated identities or cursors that do not advance", () => {
-    expect(appendCollectionPage([], { data: [{ id: "a" }], has_more: true }).nextAfter).toBe("a");
-    expect(() => appendCollectionPage([{ id: "a" }], { data: [{ id: "a" }], has_more: false }))
+    expect(appendCollectionPage([], page([{ id: "a" }], true)).nextAfter).toBe("a");
+    expect(() => appendCollectionPage([{ id: "a" }], page([{ id: "a" }], false)))
       .toThrow("duplicate or invalid collection identities");
-    expect(() => appendCollectionPage([], { data: [], has_more: true })).toThrow("invalid collection pagination cursor");
-    expect(() => appendCollectionPage([{ id: "a" }], { data: [{ id: "b" }], has_more: true, last_id: "a" }, "a"))
+    expect(() => appendCollectionPage([], page([], true))).toThrow("invalid collection pagination cursor");
+    expect(() => appendCollectionPage([{ id: "a" }], page([{ id: "b" }], true, "a"), "a"))
       .toThrow("invalid collection pagination cursor");
   });
 });

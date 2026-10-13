@@ -3,22 +3,20 @@
 
 import os
 
-# Match ownership of the suite's private Core key digest file without granting root access.
+# Match ownership of the suite's private installation files without granting root access.
 # The image's default UID is separately exercised by deployment acceptance.
 assert os.getuid() != 0, "Run container acceptance as an unprivileged host user"
-core_key_digests = os.environ["OAC_CORE_KEY_DIGESTS_FILE"]
 args = [
     "docker", "run", "--rm", "--read-only", "--network=host",
     "--cap-drop=ALL", "--security-opt=no-new-privileges",
     "--user", f"{os.getuid()}:{os.getgid()}",
-    "--mount", f"type=bind,source={core_key_digests},target=/run/core-key-digests.json,readonly",
-    "--env", "OAC_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json",
 ]
-credential_key = os.environ.get("OAC_CREDENTIAL_KEY_FILE")
-if credential_key:
+for name, target in (("OAC_CORE_KEY_DIGESTS_FILE", "/run/core-key-digests.json"),
+                     ("OAC_CREDENTIAL_KEY_FILE", "/run/credential.key"),
+                     ("OAC_INSTALLATION_ID_FILE", "/run/installation.id")):
     args.extend([
-        "--mount", f"type=bind,source={credential_key},target=/run/credential.key,readonly",
-        "--env", "OAC_CREDENTIAL_KEY_FILE=/run/credential.key",
+        "--mount", f"type=bind,source={os.environ[name]},target={target},readonly",
+        "--env", f"{name}={target}",
     ])
 for name in ("OAC_DATABASE_URL", "OAC_ADDR", "OAC_DEFAULT_HARNESS", "OAC_PUBLIC_URL"):
     args.extend(["--env", name])

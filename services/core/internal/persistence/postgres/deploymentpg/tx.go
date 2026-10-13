@@ -45,6 +45,23 @@ func (u unit) loadDeployment() (sqlc.RuntimeDeployment, error) {
 	return u.q.GetRuntimeDeployment(u.ctx)
 }
 
+var errNoResetSource = errors.New("sandbox reset has no stored administrator source")
+
+// LoadResetSource decodes the administrator source that started the running
+// reset from the stored deployment. Audit entries the reset records later
+// carry that source.
+func (u unit) LoadResetSource() (adminaudit.Source, error) {
+	d, err := u.loadDeployment()
+	if err != nil {
+		return adminaudit.Source{}, err
+	}
+	var source adminaudit.Source
+	if !d.ResetClear.Valid || json.Unmarshal(d.ResetAudit, &source) != nil {
+		return adminaudit.Source{}, errNoResetSource
+	}
+	return source, nil
+}
+
 func (u unit) LoadNode(id string) (deployment.StoredNode, error) {
 	nodeID, err := parseID(id)
 	if err != nil {
@@ -220,7 +237,14 @@ func (t *nodeTx) UpsertGenerationStatus(status deployment.GenerationStatusRecord
 	if err != nil {
 		return err
 	}
-	return t.q.UpsertNodeGenerationStatus(t.ctx, sqlc.UpsertNodeGenerationStatusParams{NodeID: id, Generation: int64(status.Generation), SpecificationDigest: status.SpecificationDigest, ConnectionID: connection, OwnerEpoch: int64(status.OwnerEpoch), State: status.State, Diagnostic: status.Diagnostic})
+	var checkpoint []byte
+	if status.Checkpoint != nil {
+		checkpoint, err = json.Marshal(status.Checkpoint)
+		if err != nil {
+			return err
+		}
+	}
+	return t.q.UpsertNodeGenerationStatus(t.ctx, sqlc.UpsertNodeGenerationStatusParams{NodeID: id, Generation: int64(status.Generation), SpecificationDigest: status.SpecificationDigest, ConnectionID: connection, OwnerEpoch: int64(status.OwnerEpoch), State: status.State, Diagnostic: status.Diagnostic, Checkpoint: checkpoint})
 }
 
 func (t *nodeTx) PromoteServingGeneration(nodeID string, generation uint64) error {
@@ -280,34 +304,12 @@ func (t *deploymentTx) ClaimInstallation(installationID string) error {
 	return t.q.ClaimWebSandboxDeployment(t.ctx, id)
 }
 
-func (t *deploymentTx) SetProcessDeployment(installationID, backendFingerprint string, admissionPaused bool) error {
-	id, err := parseID(installationID)
-	if err != nil {
-		return err
-	}
-	return t.q.SetRuntimeDeployment(t.ctx, sqlc.SetRuntimeDeploymentParams{InstallationID: id, BackendFingerprint: backendFingerprint, AdmissionPaused: admissionPaused})
-}
-
-func (t *deploymentTx) SetManagerDeployment(provider, localNodeID string) error {
-	var local pgtype.UUID
-	if localNodeID != "" {
-		var err error
-		if local, err = parseID(localNodeID); err != nil {
-			return err
-		}
-	}
-	return t.q.SetRuntimeManagerDeployment(t.ctx, sqlc.SetRuntimeManagerDeploymentParams{ProviderKind: provider, LocalNodeID: local})
-}
-
 func (t *deploymentTx) SaveSelection(selection deployment.SelectionRecord) error {
 	if selection.Generation > math.MaxInt64 {
 		return deployment.ErrInvalidInput
 	}
-	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, IdleSeconds: selection.IdleSeconds, RetentionSeconds: selection.RetentionSeconds, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
+	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
 	if len(selection.Configuration.Secret) > 0 {
-		if t.cipher == nil {
-			return credentialcrypto.ErrUnavailable
-		}
 		sealed, err := t.cipher.SealSandboxDeployment(selection.Configuration.Secret, selection.InstallationID, selection.Generation)
 		if err != nil {
 			return errors.New("sandbox deployment credential encryption failed")
@@ -339,27 +341,6 @@ func (t *deploymentTx) ForceReset() error { return t.q.ForceSandboxReset(t.ctx) 
 
 func (t *deploymentTx) CancelReset() error { return t.q.CancelSandboxReset(t.ctx) }
 
-func (t *deploymentTx) LoadResetSource() (adminaudit.Source, error) {
-	d, err := t.loadDeployment()
-	if err != nil {
-		return adminaudit.Source{}, err
-	}
-	return ResetSource(d)
-}
-
-var errNoResetSource = errors.New("sandbox reset has no stored administrator source")
-
-// ResetSource decodes the administrator source that started the running reset
-// from the stored deployment row. Audit entries the reset records later carry
-// that source.
-func ResetSource(d sqlc.RuntimeDeployment) (adminaudit.Source, error) {
-	var source adminaudit.Source
-	if !d.ResetClear.Valid || json.Unmarshal(d.ResetAudit, &source) != nil {
-		return adminaudit.Source{}, errNoResetSource
-	}
-	return source, nil
-}
-
 func (t *deploymentTx) CompleteReset() error {
 	if err := t.q.CompleteSandboxReset(t.ctx); err != nil {
 		return err
@@ -379,4 +360,8 @@ func (t *deploymentTx) RecordAudit(action, installationID string) error {
 
 func (t *deploymentTx) RecordAuditAs(source adminaudit.Source, action, installationID string) error {
 	return auditpg.RecordDeploymentMutation(adminaudit.WithSource(t.ctx, source), t.q, action, "sandbox_deployment", installationID)
+}
+
+func (u unit) SaveIdleSeconds(seconds int64) error {
+	return u.q.UpdateSandboxIdleSeconds(u.ctx, seconds)
 }

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
@@ -39,7 +38,6 @@ type startRequest struct {
 	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
 	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
 	RequireHistory     bool                 `json:"require_history,omitempty"`
-	observeFunctions   bool
 }
 
 func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
@@ -55,7 +53,7 @@ func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []str
 }
 
 func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools, observeFunctions: req.ObserveToolObservations}
+	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
@@ -64,9 +62,6 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return startRequest{}, nil, err
 	}
 	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
-	if req.WorkspaceAuthoring {
-		return fail("requested capability is not available in the private SDK adapter")
-	}
 	if err := req.ValidateToolSearch(true); err != nil {
 		return startRequest{}, nil, err
 	}
@@ -135,8 +130,6 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 			start.Model = value
 		case "system_prompt":
 			start.SystemPrompt = value
-		default:
-			return fail("unsupported option: " + name)
 		}
 	}
 	if strings.TrimSpace(start.Model) == "" {
@@ -158,13 +151,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
 		return fail("local execution and history recovery require a dedicated workspace")
 	}
-	root, err := paths.Root()
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	relative, err := filepath.Rel(root, config.StateDir)
-	if err != nil || !filepath.IsAbs(root) || !filepath.IsAbs(config.StateDir) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return fail("SDK state must be in a managed runtime subdirectory")
+	if !filepath.IsAbs(config.StateDir) || filepath.Clean(config.StateDir) != config.StateDir || filepath.Dir(config.StateDir) == config.StateDir {
+		return fail("SDK state must be an explicit private absolute directory")
 	}
 	start.Cwd = filepath.Join(config.StateDir, "work")
 	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {

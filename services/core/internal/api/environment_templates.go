@@ -90,17 +90,6 @@ func readTemplateInput(w http.ResponseWriter, r *http.Request) (environmenttempl
 	return in, true
 }
 
-// @Summary Create an Environment Template
-// @Description Saves tenant-owned hosted configuration. Supports nullable name, enabled/disabled or exact-domain restricted network, initial inline/file_id files, confidential env, ordered setup_commands, npm/Python packages inline/referenced Skill ZIPs, Plugin ZIPs and workspace-contained capability directories. Omitted/null network defaults to enabled. Restricted network requires 1–100 exact ASCII hostnames; other host forms and populated unsupported installations are rejected before persistence without echoing input. Network policy rejections return invalid_request_error with a null param. System dependencies must be preinstalled in the sandbox image or template, or on the host machine; packages.system is rejected. No compute is allocated. Exact hosted error/retry semantics remain unverified.
-// @Tags Environment Templates
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param body body v1.EnvironmentTemplateRequest true "Reusable configuration"
-// @Success 201 {object} v1.EnvironmentTemplate
-// @Failure 400,401,413,500 {object} v1.ErrorResponse
-// @Router /agents/environments/templates [post]
 func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	in, ok := readTemplateInput(w, r)
 	if !ok {
@@ -114,16 +103,6 @@ func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusCreated, templateResponse(value))
 }
 
-// @Summary Retrieve an Environment Template
-// @Description Returns safe tenant-owned configuration metadata without allocating compute. Missing and foreign resources return the same not-found response.
-// @Tags Environment Templates
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_template_id path string true "Template ID"
-// @Success 200 {object} v1.EnvironmentTemplate
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/environments/templates/{environment_template_id} [get]
 func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	value, err := h.EnvironmentTemplatesReader.Get(r.Context(), tenantID(r), chi.URLParam(r, "environment_template_id"))
 	if err != nil {
@@ -133,18 +112,6 @@ func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, templateResponse(value))
 }
 
-// @Summary Update an Environment Template
-// @Description Supplied fields replace atomically; omitted fields remain unchanged. Null name clears and null network resets to the pinned enabled default. Existing Session snapshots and creation retries remain unchanged. Initial files replace as a list; null/empty clears. File data is encrypted separately and excluded from response metadata. Skills replace as a list; null/empty clears. Skill archives are encrypted separately and omitted from responses. Plugins and capability directories replace as lists; null/empty clears. Plugin archives are encrypted and omitted from responses. Capability directories are snapshotted after setup. Environment MCP execution requires a qualified native transport and runtime network policy. Empty updates advance updated_at without changing saved fields or confidential contents. Network policy rejections return invalid_request_error with a null param.
-// @Tags Environment Templates
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_template_id path string true "Template ID"
-// @Param body body v1.EnvironmentTemplateRequest true "Configuration replacements"
-// @Success 200 {object} v1.EnvironmentTemplate
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
-// @Router /agents/environments/templates/{environment_template_id} [post]
 func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	in, ok := readTemplateInput(w, r)
 	if !ok {
@@ -158,16 +125,6 @@ func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, templateResponse(value))
 }
 
-// @Summary Delete an Environment Template
-// @Description Deletes the tenant-owned reusable configuration without changing or deleting existing Sessions and their frozen configuration.
-// @Tags Environment Templates
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_template_id path string true "Template ID"
-// @Success 200 {object} v1.EnvironmentTemplateDeleted
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/environments/templates/{environment_template_id} [delete]
 func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := h.EnvironmentTemplates.Delete(r.Context(), environmenttemplates.DeleteCommand{TenantID: tenantID(r), TemplateID: chi.URLParam(r, "environment_template_id")})
 	if err != nil {
@@ -177,18 +134,6 @@ func (h *Handler) deleteEnvironmentTemplate(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, v1.EnvironmentTemplateDeleted{ID: id, Object: "agent.environment.template.deleted", Deleted: true})
 }
 
-// @Summary List Environment Templates
-// @Description Lists tenant-owned safe template metadata in creation order with ID tie-breaking. Defaults to limit 20 and descending order; limit 0 is treated as 1 and larger limits as 100. Foreign, missing and malformed cursors return the same not found error. Concurrent-page and exact hosted error behavior remain unverified.
-// @Tags Environment Templates
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param after query string false "Previous Template ID"
-// @Param limit query integer false "Page size; 0 is treated as 1 and values above 100 as 100" default(20) minimum(0)
-// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
-// @Success 200 {object} v1.EnvironmentTemplateList
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/environments/templates [get]
 func (h *Handler) listEnvironmentTemplates(w http.ResponseWriter, r *http.Request) {
 	options, ok := readClampedPage(w, r)
 	if !ok {

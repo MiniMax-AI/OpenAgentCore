@@ -34,9 +34,8 @@ var (
 	_ sessions.InputStartTx             = (*SessionTx)(nil)
 	_ sessions.ComputeAdmissionTx       = (*SessionTx)(nil)
 	_ sessions.EnvironmentDeviceTx      = (*SessionTx)(nil)
-	_ sessions.TurnJournalTx            = (*SessionTx)(nil)
-	_ sessions.TurnEventTx              = (*SessionTx)(nil)
 	_ sessions.InputProjectionTx        = (*SessionTx)(nil)
+	_ sessions.TurnTx                   = (*SessionTx)(nil)
 )
 
 // BindSession binds the tenant's Session to the caller's transaction-bound
@@ -70,6 +69,9 @@ func (t *SessionTx) LoadTurn(ctx context.Context, turn string) (sessions.Turn, e
 		return sessions.Turn{}, err
 	}
 	row, err := t.q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: t.session, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.Turn{}, sessions.ErrNotFound
+	}
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -114,7 +116,7 @@ func (t *SessionTx) LoadEnvironmentInput(ctx context.Context) (*sessions.Environ
 
 func (t *SessionTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
 	row, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.tenant, ID: t.session})
-	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, row.ExternalWorkspace, err)
 }
 
 // RecordEnvironmentFailure fails the Environment only while it is the
@@ -183,7 +185,10 @@ func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions
 	if err != nil {
 		return err
 	}
-	_, err = t.q.BindSessionDevice(ctx, sqlc.BindSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: inserted})
+	_, err = t.q.BindHostedSessionDevice(ctx, sqlc.BindHostedSessionDeviceParams{TenantID: t.tenant, ID: t.session, ID_2: inserted})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ErrDeviceBindingConflict
+	}
 	return err
 }
 
@@ -193,4 +198,10 @@ func (t *SessionTx) LoadComputeSuspension(ctx context.Context) (bool, error) {
 
 func (t *SessionTx) LoadPendingFileWrite(ctx context.Context) (bool, error) {
 	return t.q.EnvironmentFileWriteBlocksSession(ctx, t.session)
+}
+
+// LoadArchive reads the resource disposal of the Session's hosted
+// Environment, as GetManagedSessionArchive does.
+func (t *SessionTx) LoadArchive(ctx context.Context) (sessions.ManagedArchive, error) {
+	return loadManagedArchive(ctx, t.q, t.tenant, t.session)
 }

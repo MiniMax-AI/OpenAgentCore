@@ -7,18 +7,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
-// @Summary List source files
-// @Description Lists project-owned Files without reading their bodies. The limit defaults to 10000 and must be 1–10000. Equal creation times use ID ordering. Purpose validation precedes cursor lookup; current storage contains only user_data. An explicit empty purpose is treated as omitted. Repeated purpose values remain rejected. Hosted positive filtering, default order and concurrent-page behavior remain unverified. No Beta header is required.
-// @Tags Files
-// @Produce json
-// @Security BearerAuth
-// @Param after query string false "Last File ID from the previous page"
-// @Param limit query integer false "Maximum page size, 1–10000" default(10000) minimum(1) maximum(10000)
-// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
-// @Param purpose query string false "Only return Files with this purpose"
-// @Success 200 {object} v1.SourceFileList
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /files [get]
 func (h *Handler) listSourceFiles(w http.ResponseWriter, r *http.Request) {
 	options, purpose, ok := readSourceFilePage(w, r)
 	if !ok {

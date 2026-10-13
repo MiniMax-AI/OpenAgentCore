@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,7 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 	if tx != nil {
 		storage.withDeployment = func(_ context.Context, apply func(DeploymentTx) error) error { return apply(tx) }
 	}
-	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL), storage)
+	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL), storage, engine.Catalog{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func webDeployment(t *testing.T, installation, provider string, generation uint6
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Record{InstallationID: installation, WebManaged: true, Provider: provider, Generation: generation, Mode: "nodes", Specification: specification,
+	return Record{InstallationID: installation, Provider: provider, Generation: generation, Mode: "nodes", Specification: specification,
 		Configuration: sandbox.ConfigurationRecord{Public: json.RawMessage(`{}`), Metadata: json.RawMessage(`{}`)}}
 }
 
@@ -89,10 +90,10 @@ func TestNewServiceAndOperationsRejectNilDependencies(t *testing.T) {
 		}
 	}
 	service := newService(t, storage, reader, testPublicURL)
-	if result, err := NewExecutionOperations(nil, &fakeExecutionStorage{t: t}); result != nil || err == nil {
+	if result, err := NewExecutionOperations(nil, &fakeExecutionStorage{t: t}, engine.Catalog{}); result != nil || err == nil {
 		t.Errorf("NewExecutionOperations without the service = %v, %v", result, err)
 	}
-	if result, err := NewExecutionOperations(service, nil); result != nil || err == nil {
+	if result, err := NewExecutionOperations(service, nil, engine.Catalog{}); result != nil || err == nil {
 		t.Errorf("NewExecutionOperations without storage = %v, %v", result, err)
 	}
 }
@@ -177,15 +178,6 @@ func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	}
 	if _, err := service.ListNodes(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
 		t.Errorf("ListNodes = %v", err)
-	}
-	tx := &fakeDeploymentTx{t: t,
-		loadDeployment:       func() (Record, error) { return Record{}, nil },
-		countResources:       func() (Resources, error) { return Resources{}, nil },
-		setProcessDeployment: func(string, string, bool) error { return nil },
-	}
-	process := &ProcessDeployment{ProviderKind: "retired", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64)}
-	if err := operations(t, testPublicURL, tx).ConfigureProcess(t.Context(), process); !errors.Is(err, providers.ErrUnknownProvider) {
-		t.Errorf("ConfigureProcess = %v", err)
 	}
 }
 
@@ -280,8 +272,6 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: 1, MaxRetained: 1}
 	resetting := current
 	resetting.Reset = &ResetState{Clear: "sandboxes", RequestedAt: time.Now()}
-	paused := current
-	paused.AdmissionPaused = true
 	unselected := current
 	unselected.Provider = ""
 	consumed, expired, foreign := receipt, receipt, receipt
@@ -303,12 +293,11 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	}{
 		{"unknown token while resetting", resetting, EnrollmentRecord{}, ErrNotFound, valid, ErrNodeCredential},
 		{"consumed token before setup", Record{}, consumed, nil, valid, ErrNodeCredential},
-		{"expired token while paused", paused, expired, nil, valid, ErrNodeCredential},
+		{"expired token while resetting", resetting, expired, nil, valid, ErrNodeCredential},
 		{"token of another installation while resetting", resetting, foreign, nil, valid, ErrNodeCredential},
 		{"token store failure", current, EnrollmentRecord{}, errors.New("database down"), valid, placement.ErrNodeUnavailable},
 		{"no provider selected", unselected, receipt, nil, valid, placement.ErrNodeUnavailable},
 		{"reset in progress", resetting, receipt, nil, valid, ErrResetInProgress},
-		{"admission paused", paused, receipt, nil, valid, ErrInvalidInput},
 		{"stale generation", current, receipt, nil, stale, ErrSpecificationMismatch},
 		// The token stays unused: the fake allows no insert or consumption.
 		{"another Core address", current, receipt, nil, elsewhere, ErrNodeAddressMismatch},

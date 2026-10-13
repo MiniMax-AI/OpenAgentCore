@@ -8,30 +8,23 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
 
 // The Store seals the bundle to its Harness as Core always has, so a bundle
-// sealed before the Store owned the key still opens. A missing key is
-// credentialcrypto.ErrUnavailable, and a wrong binding is a decryption
-// failure, never a missing key or default.
+// sealed before the Store owned the key still opens. A bundle sealed under
+// another key or binding is a decryption failure, never a missing default.
 func TestBundlesKeepTheirSealedFormat(t *testing.T) {
 	f := newFixture(t)
-	keyless := modelconfigurationpg.New(pgunit.NewPool(f.pool), nil)
+	replaced := modelconfigurationpg.New(pgunit.NewPool(f.pool), pgtest.CredentialKey(t))
 	configuration := v1.ModelConfigurationInput{ModelProvider: fixtureProvider, Model: "fixture"}
-	if _, err := keyless.LoadBundle(t.Context(), "codex"); !errors.Is(err, modelconfiguration.ErrNotFound) {
-		t.Fatal("a missing default was not reported before the key", err)
+	if _, err := replaced.LoadBundle(t.Context(), "codex"); !errors.Is(err, modelconfiguration.ErrNotFound) {
+		t.Fatal("a missing default was not reported before decryption", err)
 	}
 	record := modelconfiguration.Record{Harness: "codex", Provider: *fixtureProvider.SafeView(), Model: "fixture", HarnessConfig: json.RawMessage(`{}`), Configuration: configuration}
-	if _, err := keyless.Replace(admin(t), record); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("a keyless Store sealed a bundle", err)
-	}
-	if listed := f.list(t); len(listed) != 0 {
-		t.Fatal("a keyless replacement was stored", listed)
-	}
 	if _, err := f.adapter.Replace(admin(t), record); err != nil {
 		t.Fatal(err)
 	}
@@ -39,8 +32,8 @@ func TestBundlesKeepTheirSealedFormat(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(loaded.Configuration, configuration) {
 		t.Fatal("the bundle did not round-trip", err)
 	}
-	if _, err := keyless.LoadBundle(t.Context(), "codex"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("a keyless Store opened a bundle", err)
+	if _, err := replaced.LoadBundle(t.Context(), "codex"); err == nil || err.Error() != "deployment model configuration decryption failed" {
+		t.Fatal("a replaced key opened a bundle", err)
 	}
 	// write stores a bundle sealed the way Core sealed it before this Store
 	// owned the key.

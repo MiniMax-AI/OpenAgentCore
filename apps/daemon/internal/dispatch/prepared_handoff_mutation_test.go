@@ -77,7 +77,7 @@ func (s *blockingPreparedReceiptSender) matches(env proto.Envelope) bool {
 }
 
 func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
-	for _, operation := range []string{"function", "permission", "choice", "steering"} {
+	for _, operation := range []string{"function", "steering"} {
 		t.Run(operation, func(t *testing.T) {
 			sender := &blockingPreparedReceiptSender{
 				recSender: &recSender{}, deliveryID: operation + "-delivery", inputID: operation + "-input",
@@ -89,7 +89,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 				session.out = out
 				return session, nil
 			}
-			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 			startCancellationPreparation(t, r, sender.recSender)
 			waitPreparationStatus(t, sender.recSender, "request", "started", "")
 
@@ -97,14 +97,6 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 			switch operation {
 			case "function":
 				mutation = mustEnv(t, proto.TypeFunctionResult, "run", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: sender.deliveryID})
-			case "permission":
-				session.out <- mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "permission"})
-				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePermissionRequest, "run") }, "permission request")
-				mutation = mustEnv(t, proto.TypePermissionDecision, "permission", proto.PermissionDecisionPayload{DeliveryID: sender.deliveryID, Approved: true})
-			case "choice":
-				session.out <- mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "ask"})
-				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run") }, "choice request")
-				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
 			case "steering":
 				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Input: proto.TextInput("continue")})
 			}
@@ -125,28 +117,6 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 					t.Fatal(err)
 				}
 				assertDecisionAck(t, sender.recSender, "late-function", false, "not_ready")
-			case "permission":
-				late := mustEnv(t, proto.TypePermissionDecision, "permission", proto.PermissionDecisionPayload{DeliveryID: "late-permission", Approved: true})
-				if err := r.Handle(t.Context(), late); err != nil {
-					t.Fatal(err)
-				}
-				assertDecisionAck(t, sender.recSender, "late-permission", true, "")
-				newRequest := mustEnv(t, proto.TypePermissionDecision, "new-permission", proto.PermissionDecisionPayload{DeliveryID: "new-permission", Approved: true})
-				if err := r.Handle(t.Context(), newRequest); err != nil {
-					t.Fatal(err)
-				}
-				assertDecisionAck(t, sender.recSender, "new-permission", false, "not_pending")
-			case "choice":
-				late := mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "late-choice", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
-				if err := r.Handle(t.Context(), late); err != nil {
-					t.Fatal(err)
-				}
-				assertDecisionAck(t, sender.recSender, "late-choice", true, "")
-				newRequest := mustEnv(t, proto.TypePromptForUserChoiceDecision, "new-choice", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "new-choice", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
-				if err := r.Handle(t.Context(), newRequest); err != nil {
-					t.Fatal(err)
-				}
-				assertDecisionAck(t, sender.recSender, "new-choice", false, "not_pending")
 			case "steering":
 				late := mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "late-steering", Input: proto.TextInput("late")})
 				if err := r.Handle(t.Context(), late); err != nil {
@@ -187,17 +157,6 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 				if session.functions.Load() != 1 {
 					t.Fatalf("function native calls = %d, want 1", session.functions.Load())
 				}
-			case "permission":
-				if len(session.submissions()) != 1 {
-					t.Fatalf("permission native calls = %d, want 1", len(session.submissions()))
-				}
-			case "choice":
-				session.askMu.Lock()
-				calls := len(session.askCalls)
-				session.askMu.Unlock()
-				if calls != 1 {
-					t.Fatalf("choice native calls = %d, want 1", calls)
-				}
 			case "steering":
 				if session.steers.Load() != 1 {
 					t.Fatalf("steering native calls = %d, want 1", session.steers.Load())
@@ -234,7 +193,7 @@ func assertReceiptBeforeDone(t *testing.T, sender *recSender, operation string) 
 }
 
 func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
-	for _, operation := range []string{"function", "permission", "choice", "steering"} {
+	for _, operation := range []string{"function", "steering"} {
 		t.Run(operation, func(t *testing.T) {
 			sender := &blockingPreparedReceiptSender{recSender: &recSender{}, deliveryID: operation + "-delivery", inputID: operation + "-input", entered: make(chan struct{}), release: make(chan struct{}), exited: make(chan struct{})}
 			defer close(sender.release)
@@ -244,7 +203,7 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 				session.out = out
 				return session, nil
 			}
-			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 			startCancellationPreparation(t, r, sender.recSender)
 			waitPreparationStatus(t, sender.recSender, "request", "started", "")
 
@@ -252,14 +211,6 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 			switch operation {
 			case "function":
 				mutation = mustEnv(t, proto.TypeFunctionResult, "run", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: sender.deliveryID})
-			case "permission":
-				session.out <- mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "permission"})
-				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePermissionRequest, "run") }, "permission request")
-				mutation = mustEnv(t, proto.TypePermissionDecision, "permission", proto.PermissionDecisionPayload{DeliveryID: sender.deliveryID, Approved: true})
-			case "choice":
-				session.out <- mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "ask"})
-				waitFor(t, func() bool { return hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run") }, "choice request")
-				mutation = mustEnv(t, proto.TypePromptForUserChoiceDecision, "ask", proto.PromptForUserChoiceDecisionPayload{DeliveryID: sender.deliveryID, QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}})
 			case "steering":
 				mutation = mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: sender.inputID, Input: proto.TextInput("continue")})
 			}
@@ -302,7 +253,7 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender)
 	<-emitted
 	if hasFrame(sender, proto.TypeDone, "run") || session.cancels() != 0 {

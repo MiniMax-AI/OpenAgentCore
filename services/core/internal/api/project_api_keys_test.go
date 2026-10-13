@@ -96,9 +96,6 @@ func (s *separationFixture) APIKeyDigestExists(_ context.Context, digest [sha256
 }
 func TestAdministratorCredentialSeparation(t *testing.T) {
 	s := &separationFixture{}
-	if err := ValidateCredentialSeparation(t.Context(), nil, s); err == nil {
-		t.Fatal("missing administrator accepted")
-	}
 	admin, _ := NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	if err := ValidateCredentialSeparation(t.Context(), admin, s); err != nil || len(s.checked) != 1 || s.checked[0] != sha256.Sum256([]byte("admin")) {
 		t.Fatal("administrator digest was not checked against persisted keys", err)

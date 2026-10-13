@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // ModelProviderError preserves the shared validation message while allowing Core
@@ -26,11 +27,11 @@ type SessionExecutionInput struct {
 }
 
 type ModelProviderInput struct {
-	Protocol        string `json:"protocol" enums:"anthropic,responses,chat_completions" binding:"required"`
-	BaseURL         string `json:"base_url" binding:"required"`
-	APIKey          string `json:"api_key" binding:"required"`
-	ContextWindow   int32  `json:"context_window,omitempty"`
-	MaxOutputTokens int32  `json:"max_output_tokens,omitempty"`
+	Protocol        modelprovider.Protocol `json:"protocol" binding:"required"`
+	BaseURL         string                 `json:"base_url" binding:"required"`
+	APIKey          string                 `json:"api_key" binding:"required"`
+	ContextWindow   int32                  `json:"context_window,omitempty"`
+	MaxOutputTokens int32                  `json:"max_output_tokens,omitempty"`
 }
 
 func (p *ModelProviderInput) Validate() error {
@@ -44,7 +45,7 @@ func (p *ModelProviderInput) validate(registry harnessconfig.Registry) error {
 	if !validModelProviderBaseURL(p.BaseURL) {
 		return &ModelProviderError{Code: "model_provider_base_url_invalid", Param: "base_url", message: "model provider requires an HTTPS base_url without credentials, query or fragment"}
 	}
-	if !registry.SupportsProtocol(p.Protocol) {
+	if !registry.SupportsProtocol(string(p.Protocol)) {
 		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: "unsupported model provider protocol"}
 	}
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
@@ -71,10 +72,10 @@ func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registr
 		return err
 	}
 	configuration, _ := registry.Lookup(harness)
-	if err := configuration.ValidateProtocol(p.Protocol); err != nil {
+	if err := configuration.ValidateProtocol(string(p.Protocol)); err != nil {
 		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: err.Error()}
 	}
-	if err := configuration.Validate(p.Protocol, p.ContextWindow, p.MaxOutputTokens); err != nil {
+	if err := configuration.Validate(string(p.Protocol), p.ContextWindow, p.MaxOutputTokens); err != nil {
 		param := "max_output_tokens"
 		if p.ContextWindow <= 0 {
 			param = "context_window"
@@ -82,8 +83,4 @@ func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registr
 		return &ModelProviderError{Code: "model_provider_token_limits_invalid", Param: param, message: err.Error()}
 	}
 	return nil
-}
-
-func ValidateModelProtocol(protocol, harness string) error {
-	return builtin.Registry().ValidateProtocol(harness, protocol)
 }

@@ -44,15 +44,15 @@ func (s *recordingStore) FindSessionCreation(context.Context, string, string, js
 	return sessions.Creation{}, sessions.ErrNotFound
 }
 
-func (s *recordingStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
+func (s *recordingStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	s.tenant, s.input = tenant, input
-	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, nil
+	return sessions.Creation{Session: sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, Created: true}, nil
 }
 
 // record answers Session creation, reads and listing from s.
 func (s *recordingStore) record(f *testFakes) {
 	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = s.CreateSession, s.FindSessionCreation
-	f.sessions.getSession, f.sessions.listSessions = s.GetSession, s.ListSessions
+	f.sessionsReader.getSession, f.sessionsReader.listSessions = s.GetSession, s.ListSessions
 }
 
 // testHandler serves strict fakes for a fresh tenant whose caller
@@ -75,10 +75,9 @@ func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (ht
 	return newTestHandler(t, deps), s, tenant
 }
 
-// admitSessions enables Execution whose Worker admits Session creation, as it
-// does for a Session with initial input, into the recording store.
+// admitSessions makes the Worker admit Session creation, as it does for a
+// Session with initial input, into the recording store.
 func admitSessions(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	f.sessionAdmission.createSession = f.sessionCreation.createSession
 }
 
@@ -144,11 +143,9 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"invalid auth", "Bearer wrong", "agents=v1", "/v1/agents/sessions", valid, 401},
 		{"missing beta", "Bearer test-api-key", "", "/v1/agents/sessions", valid, 400},
 		{"tenant body", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"tenant_id":"other","agent":`, 1), 400},
-		{"hosted environment without managed deployment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(strings.Replace(valid, `"none"`, `"openai_hosted"`, 1), `"input":`, fixtureSessionProvider+`,"input":`, 1), 503},
 		{"self-hosted environment", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"none"`, `"self_hosted"`, 1), 400},
-		{"initial input", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid, 503},
-		{"stream unavailable", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"stream":true,"agent":`, 1), 503},
 		{"unknown saved agent", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 404},
+		{"saved agent without its model provider bundle", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 500},
 		{"unknown agent option", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"model":`, `"tools":[{}],"model":`, 1), 400},
 		{"multiple objects", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid + `{}`, 400},
 		{"null body as empty object", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", `null`, 400},
@@ -158,9 +155,14 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 			unavailable := 0
 			h, s, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
 				f.metrics.recordUnavailable = func() { unavailable++ }
-				if test.name == "unknown saved agent" {
+				switch test.name {
+				case "unknown saved agent":
 					f.agentsReader.getAgentWithModelProvider = func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error) {
 						return agents.Agent{}, nil, agents.ErrNotFound
+					}
+				case "saved agent without its model provider bundle":
+					f.agentsReader.getAgentWithModelProvider = func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error) {
+						return agents.Agent{ID: "saved", Configuration: json.RawMessage(`{"model":"example","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://model.invalid"}}}`)}, nil, nil
 					}
 				}
 			})

@@ -51,7 +51,7 @@ describe("authoritative configuration rollout", () => {
   });
 
   it("allows same-provider online editing with held resources but keeps reset active as a boundary", () => {
-    const render = (value: SandboxDeployment) => renderToStaticMarkup(<SandboxDeploymentSettings deployment={value} fresh disabled={false} onReset={async () => true} onCancelReset={async () => true} onUpdate={async () => true} onRefresh={() => undefined} refreshing={false} pending={false} />);
+    const render = (value: SandboxDeployment) => renderToStaticMarkup(<SandboxDeploymentSettings deployment={value} fresh disabled={false} onUpdate={async () => true} onRefresh={() => undefined} refreshing={false} pending={false} />);
     const html = render(deployment);
     expect(html).toMatch(/<button[^>]*class="button outline"[^>]*>Change resources<\/button>/);
     expect(html).not.toMatch(/<button[^>]*disabled[^>]*>Change resources<\/button>/);

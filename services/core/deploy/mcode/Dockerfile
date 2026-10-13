@@ -5,17 +5,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /environment/workspace /workspace /home/runtime
+COPY runtime_profile.py /tmp/oac-runtime-profile.py
+RUN python3 /tmp/oac-runtime-profile.py && rm /tmp/oac-runtime-profile.py
 COPY --chmod=0555 oac-daemon /usr/local/bin/
 COPY mcode-harness /opt/mcode-harness
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_MCODE_NODE=/usr/local/bin/node \
     OAC_RUNTIME_MCODE_BIN=/opt/mcode-harness/native/cli.js \
     OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs \
-    OAC_RUNTIME_MCODE_AGENTS_API=1 \
-    OAC_RUNTIME_MCODE_WORKSPACE=managed \
     OAC_RUNTIME_WORKSPACE=/environment/workspace \
     OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization \
-    OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages
+    OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages \
+    OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state
 USER 1000:1000
 RUN node /opt/mcode-harness/check.mjs && /opt/mcode-harness/native/cli.js --version
 WORKDIR /environment/workspace

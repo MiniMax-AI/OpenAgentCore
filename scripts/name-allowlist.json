@@ -40,19 +40,9 @@
     "reason": "Guard regression fixtures intentionally contain retired identifiers, including rejected examples."
   },
   {
-    "path": "apps/daemon/internal/cli/skill_upload*.go",
-    "regex": "\\bPARSAR_(?:CAPABILITY_UPLOAD_TOKEN|SERVER_URL)\\b",
-    "reason": "These settings belong to the separate product capability upload integration; Core does not rename their protocol."
-  },
-  {
     "path": "services/core/migrations/000078_oac_runtime_names.sql",
     "regex": "parsar-core-runtime@",
     "reason": "The guarded up/down data migration must recognize and restore the historical stored Runtime reference prefix."
-  },
-  {
-    "path": "*",
-    "regex": "(?:scripts/)?extract-agents-api-upstream\\.py",
-    "reason": "The upstream contract extraction helper names the pinned OpenAI Agents API protocol, not an installed command."
   },
   {
     "path": "*",
@@ -65,7 +55,7 @@
     "reason": "These exact authenticated encryption domain/AAD strings must remain stable to decrypt existing stored credentials and assets."
   },
   {
-    "path": "services/core/internal/store/session_creation_identity.go",
+    "path": "services/core/internal/persistence/postgres/sessionpg/creation.go",
     "regex": "parsar\\.agents-api\\.model-provider-api-key\\.v1",
     "reason": "This persisted model-provider key fingerprint purpose remains stable across upgrade and request replay."
   },
@@ -120,27 +110,27 @@
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/dispatch_test.go",
+    "path": "services/core/tests/integration/dispatch_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/environment_directory_test.go",
+    "path": "services/core/tests/integration/environment_directory_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/environment_worker_helpers_test.go",
+    "path": "services/core/tests/integration/environment_worker_helpers_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/environment_worker_test.go",
+    "path": "services/core/tests/integration/environment_worker_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/oac_runtime_names_migration_test.go",
+    "path": "services/core/tests/integration/oac_runtime_names_migration_test.go",
     "regex": "parsar-core-runtime@sha256:|parsar_worker /home/runtime/\\.parsar",
     "reason": "Migration input and historical Session content assertions prove only the Runtime reference changes, never stored conversation data."
   },
@@ -148,26 +138,6 @@
     "path": "services/core/migrations/000075_public_url_binding.sql",
     "regex": "AGENTS_API_PUBLIC_URL",
     "reason": "Historical migration commentary records the environment name used when this migration was written."
-  },
-  {
-    "path": "apps/daemon/internal/cli/skill_upload.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
-  },
-  {
-    "path": "apps/daemon/internal/cli/skill_upload_test.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
-  },
-  {
-    "path": "apps/daemon/internal/cli/companion_path_test.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
-  },
-  {
-    "path": "apps/daemon/internal/cli/capability_downloads_test.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
     "path": "CONTRIBUTING.md",
@@ -240,6 +210,16 @@
     "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
   },
   {
+    "path": "apps/daemon/internal/cli/claude_sdk_live_linux_test.go",
+    "regex": "\"agents-api-registered-acceptance\"",
+    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
+  },
+  {
+    "path": "services/core/internal/runtimegateway/mcp_bearer_live_linux_test.go",
+    "regex": "\"agents-api-mcp-bearer-acceptance\"",
+    "reason": "Executor ownership validates the current Core and local-workspace AgentStateKey namespace; this change does not introduce an alternate identity or compatibility path."
+  },
+  {
     "path": "apps/daemon/internal/localworkspace/capabilities.go",
     "regex": "\"agents-api-\"",
     "reason": "AgentStateKey retains the existing daemon/native-session resume identity; capability snapshots bind to the Session UUID carried in that identity."
@@ -283,5 +263,10 @@
     "path": "scripts/ci_plan_test.py",
     "regex": "(?:example/parsar|@oac/parsar-example)",
     "reason": "The named Parsar example owns its dependency lock and component checks."
+  },
+  {
+    "path": "apps/daemon/internal/cli/connect_suspend_test.go",
+    "regex": "\"agents-api-\"",
+    "reason": "The cleanup regression uses the persisted Session state-key prefix required by Runtime executor ownership validation."
   }
 ]

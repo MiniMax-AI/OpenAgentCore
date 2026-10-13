@@ -1,10 +1,10 @@
 import {
   AgentCoreError,
-  type CoreProjectReader,
   type PageOrder,
   type SourceFileListEntry,
 } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import { appendCollectionPage } from "../../lib/collection-pagination";
 
 /** Core's single-upload bound for user_data Files. */
@@ -74,7 +74,7 @@ export function filterFiles(files: readonly SourceFileListEntry[], query: string
 
 /** Reads one page after the loaded rows and applies the shared identity and cursor checks. */
 export async function readFilesPage(
-  core: Pick<CoreProjectReader, "listSourceFiles">,
+  core: Pick<ProjectClient, "listSourceFiles">,
   loaded: readonly SourceFileListEntry[],
   order: PageOrder,
   after: string | undefined,

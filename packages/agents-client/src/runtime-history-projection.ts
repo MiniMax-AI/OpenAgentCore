@@ -1,33 +1,14 @@
-import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId } from "./response-projection";
-import type {
-  RuntimeHistory,
-  RuntimeHistoryCPU,
-  RuntimeHistoryCoveragePoint,
-  RuntimeHistoryMemory,
-  RuntimeHistoryPoint,
-  RuntimeHistoryQuery,
-  RuntimeHistorySeries,
-  RuntimeHistoryTokenUsagePoint,
-} from "./types";
+import {
+  runtimeHistoryCPUFields, runtimeHistoryCoverageFields, runtimeHistoryCoveragePointFields, runtimeHistoryFields, runtimeHistoryMemoryFields,
+  runtimeHistoryPointFields, runtimeHistoryRangeFields, runtimeHistorySeriesFields, runtimeHistoryTimeFields, runtimeHistoryTokenUsagePointFields,
+  type RuntimeHistoryCPU, type RuntimeHistoryCoveragePoint, type RuntimeHistoryMemory, type RuntimeHistoryPoint, type RuntimeHistorySeries,
+  type RuntimeHistoryTokenUsagePoint,
+} from "./generated/core-api";
+import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId, type FieldNames } from "./response-projection";
+import type { RuntimeHistory, RuntimeHistoryQuery } from "./types";
 
 type InvalidRuntimeHistory = (message?: string) => never;
 
-const historyFields = new Set([
-  "object", "source", "session_id", "requested_range", "resolution_seconds", "generated_at", "coverage", "series", "token_usage",
-]);
-const rangeFields = new Set(["start", "end"]);
-const coverageFields = new Set([
-  "retained_start", "first_sample_at", "last_sample_at", "sample_count", "expected_sample_count", "buckets",
-]);
-const coveragePointFields = new Set([
-  "start", "end", "first_observed_at", "last_observed_at", "observation_count", "observed_count", "unavailable_count",
-]);
-const seriesFields = new Set(["environment_id", "allocation_id", "started_at", "provider_type", "points"]);
-const timeFields = new Set(["seconds", "nanoseconds"]);
-const pointFields = new Set([...coveragePointFields, "cpu", "memory"]);
-const cpuFields = new Set(["contributor_count", "utilization_ratio", "capacity_cores"]);
-const memoryFields = new Set(["contributor_count", "usage_bytes", "limit_bytes"]);
-const tokenUsageFields = new Set(["start", "end", "sampled_at", "input_tokens", "output_tokens"]);
 const providerTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
 const maximumSeries = 1_000;
 const maximumTotalPoints = 100_000;
@@ -62,7 +43,7 @@ function nullablePositiveNumber(value: unknown, invalid: InvalidRuntimeHistory):
 
 function projectCoveragePoint(
   value: unknown,
-  fields: Set<string>,
+  fields: FieldNames,
   requestedStart: number,
   requestedEnd: number,
   resolution: number,
@@ -96,7 +77,7 @@ function projectCoveragePoint(
 
 function projectCPU(value: unknown, observedCount: number, invalid: InvalidRuntimeHistory): RuntimeHistoryCPU | null {
   if (value === null) return null;
-  if (!isRecord(value) || !exactFields(value, cpuFields) || !positiveInteger(value.contributor_count) || value.contributor_count > observedCount) return invalid();
+  if (!isRecord(value) || !exactFields(value, runtimeHistoryCPUFields) || !positiveInteger(value.contributor_count) || value.contributor_count > observedCount) return invalid();
   const utilization = nullableNonnegativeNumber(value.utilization_ratio, invalid);
   const capacity = nullablePositiveNumber(value.capacity_cores, invalid);
   if (utilization === null && capacity === null) return invalid();
@@ -105,7 +86,7 @@ function projectCPU(value: unknown, observedCount: number, invalid: InvalidRunti
 
 function projectMemory(value: unknown, observedCount: number, invalid: InvalidRuntimeHistory): RuntimeHistoryMemory | null {
   if (value === null) return null;
-  if (!isRecord(value) || !exactFields(value, memoryFields) || !positiveInteger(value.contributor_count) || value.contributor_count > observedCount) return invalid();
+  if (!isRecord(value) || !exactFields(value, runtimeHistoryMemoryFields) || !positiveInteger(value.contributor_count) || value.contributor_count > observedCount) return invalid();
   const usage = nullableNonnegativeInteger(value.usage_bytes, invalid);
   const limit = nullablePositiveInteger(value.limit_bytes, invalid);
   if (usage === null && limit === null) return invalid();
@@ -120,7 +101,7 @@ function projectPoint(
   startedAt: number,
   invalid: InvalidRuntimeHistory,
 ): RuntimeHistoryPoint {
-  const coverage = projectCoveragePoint(value, pointFields, requestedStart, requestedEnd, resolution, invalid);
+  const coverage = projectCoveragePoint(value, runtimeHistoryPointFields, requestedStart, requestedEnd, resolution, invalid);
   if (!isRecord(value) || coverage.end <= startedAt || (coverage.first_observed_at !== null && coverage.first_observed_at < startedAt)) return invalid();
   const cpu = projectCPU(value.cpu, coverage.observed_count, invalid);
   const memory = projectMemory(value.memory, coverage.observed_count, invalid);
@@ -141,7 +122,7 @@ function projectTokenUsagePoint(
   invalid: InvalidRuntimeHistory,
 ): RuntimeHistoryTokenUsagePoint {
   if (
-    !isRecord(value) || !exactFields(value, tokenUsageFields) ||
+    !isRecord(value) || !exactFields(value, runtimeHistoryTokenUsagePointFields) ||
     !isNonnegativeInteger(value.start) || !positiveInteger(value.end) ||
     value.start < requestedStart || value.end <= value.start || value.end > requestedEnd || value.end - value.start > resolution ||
     !isNonnegativeInteger(value.sampled_at) || value.sampled_at < value.start || value.sampled_at >= value.end || value.sampled_at > generatedAt ||
@@ -165,10 +146,10 @@ function projectSeries(
   maximumPoints: number,
   invalid: InvalidRuntimeHistory,
 ): RuntimeHistorySeries {
-  if (!isRecord(value) || !exactFields(value, seriesFields) || !Array.isArray(value.points)) return invalid();
+  if (!isRecord(value) || !exactFields(value, runtimeHistorySeriesFields) || !Array.isArray(value.points)) return invalid();
   const environmentId = canonicalUuid(value.environment_id);
   const allocationId = canonicalUuid(value.allocation_id);
-  if (!isRecord(value.started_at) || !exactFields(value.started_at, timeFields)) return invalid();
+  if (!isRecord(value.started_at) || !exactFields(value.started_at, runtimeHistoryTimeFields)) return invalid();
   const startedAtSeconds = value.started_at.seconds;
   const startedAtNanoseconds = value.started_at.nanoseconds;
   if (
@@ -197,12 +178,12 @@ export function projectRuntimeHistory(
   invalid: InvalidRuntimeHistory,
 ): RuntimeHistory {
   if (
-    !isRecord(value) || !exactFields(value, historyFields) || value.object !== "agent.runtime_history" || value.source !== "durable" ||
+    !isRecord(value) || !exactFields(value, runtimeHistoryFields) || value.object !== "agent.runtime_history" || value.source !== "durable" ||
     typeof value.session_id !== "string" || !sameResourceId(value.session_id, expectedSessionId) ||
-    !isRecord(value.requested_range) || !exactFields(value.requested_range, rangeFields) ||
+    !isRecord(value.requested_range) || !exactFields(value.requested_range, runtimeHistoryRangeFields) ||
     value.requested_range.start !== requested.start || value.requested_range.end !== requested.end ||
     !positiveInteger(value.resolution_seconds) || !isNonnegativeInteger(value.generated_at) ||
-    !isRecord(value.coverage) || !exactFields(value.coverage, coverageFields) || !Array.isArray(value.coverage.buckets) ||
+    !isRecord(value.coverage) || !exactFields(value.coverage, runtimeHistoryCoverageFields) || !Array.isArray(value.coverage.buckets) ||
     !Array.isArray(value.series) || !Array.isArray(value.token_usage)
   ) return invalid();
   const sessionId = canonicalUuid(value.session_id);
@@ -221,7 +202,7 @@ export function projectRuntimeHistory(
     (firstSample !== null && (firstSample < retainedStart || lastSample! < firstSample || lastSample! >= requested.end || lastSample! > generatedAt))
   ) return invalid();
   const buckets = value.coverage.buckets.map((point) => projectCoveragePoint(
-    point, coveragePointFields, requested.start, requested.end, value.resolution_seconds as number, invalid,
+    point, runtimeHistoryCoveragePointFields, requested.start, requested.end, value.resolution_seconds as number, invalid,
   ));
   if (!ordered(buckets)) return invalid();
   const sampleCount = buckets.reduce((sum, point) => sum + point.observation_count, 0);

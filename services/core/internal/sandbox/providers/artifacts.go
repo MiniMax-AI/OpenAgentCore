@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 var nodeProgram = providerassets.Artifact{Path: "native/bin/oac-node", Suffix: "sandbox-node", Role: "node"}
@@ -23,7 +24,7 @@ func (r *Registry) ArtifactCatalog() (map[string][]providerassets.Artifact, erro
 		if err != nil {
 			return nil, err
 		}
-		if a.Mode == "nodes" {
+		if a.Mode == sandbox.DeploymentNodes {
 			for _, item := range a.NodeArtifacts {
 				previous, exists := paths[item.Path]
 				if exists && previous != item || suffixes[item.Suffix] != "" && suffixes[item.Suffix] != item.Path {

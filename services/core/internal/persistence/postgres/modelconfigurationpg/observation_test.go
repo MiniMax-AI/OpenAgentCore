@@ -12,13 +12,12 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 )
 
 // The statement and ShouldObserveProvider classify the shared cases the same
@@ -79,21 +78,22 @@ func TestObservationExcludesOtherSourcesAndHistoricalSessions(t *testing.T) {
 		input.IdempotencyKey = uuid.NewString()
 		projection := *input.ExecutionConfiguration
 		input.ExecutionConfiguration = &projection
-		input.ModelProviderSource = source
+		input.ModelProviderSource = v1.ExecutionSource(source)
 		// Historical metadata may name deployment but has no frozen private UUID.
 		if source == "deployment" {
 			input.DeploymentProviderRevision = uuid.Nil
 		} else {
-			input.Configuration = json.RawMessage(`{"agent":{"model":"frozen-model"},"environment":{"type":"openai_hosted"}}`)
+			input.Configuration = json.RawMessage(`{"agent":{"model":"frozen-model"},"environment":{"type":"self_hosted"}}`)
 			if source == "unknown" {
 				input.ModelProviderSource = "session"
 			}
 		}
-		projection.ModelProvider = v1.ExecutionProviderSelection{Source: source, Status: "available", Configuration: input.ModelProvider.SafeView()}
-		session, err := o.sessions.CreateSession(t.Context(), o.tenant, input)
+		projection.ModelProvider = v1.ExecutionProviderSelection{Source: v1.ExecutionSource(source), Status: "available", Configuration: input.ModelProvider.SafeView()}
+		created, err := o.sessions.CreateSession(t.Context(), o.tenant, input)
 		if err != nil {
 			t.Fatal(source, err)
 		}
+		session := created.Session
 		var revision pgtype.UUID
 		if err = o.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision.Valid {
 			t.Fatal("non-deployment or historical revision persisted", source, err)

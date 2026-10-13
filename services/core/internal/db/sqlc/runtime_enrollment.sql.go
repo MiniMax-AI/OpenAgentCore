@@ -48,7 +48,7 @@ func (q *Queries) AuthorizeRuntimeEnrollment(ctx context.Context, arg AuthorizeR
 const enrollRuntimeDevice = `-- name: EnrollRuntimeDevice :one
 INSERT INTO devices (id, tenant_id, name, environment_id, executor_key_id)
 VALUES ($1, $2, 'User-managed Runtime', $3, $4)
-ON CONFLICT (environment_id) DO UPDATE SET name = devices.name
+ON CONFLICT (environment_id) WHERE revoked_at IS NULL OR executor_key_id IS NOT NULL DO UPDATE SET name = devices.name
 WHERE devices.executor_key_id = EXCLUDED.executor_key_id AND devices.revoked_at IS NULL
 RETURNING id, name, environment_id
 `
@@ -121,20 +121,21 @@ func (q *Queries) ListEnrolledRuntimeBindings(ctx context.Context) ([]ListEnroll
 }
 
 const touchAuthenticatedDevice = `-- name: TouchAuthenticatedDevice :execrows
-UPDATE devices SET last_seen_at = clock_timestamp()
-WHERE devices.id = $1 AND EXISTS (
+UPDATE devices SET last_seen_at = clock_timestamp(), supported_agent_kinds = $1::jsonb
+WHERE devices.id = $2 AND EXISTS (
     SELECT 1 FROM runtime_device_authority a
-    WHERE a.id = devices.id AND a.credential_hash = $2
+    WHERE a.id = devices.id AND a.credential_hash = $3
 )
 `
 
 type TouchAuthenticatedDeviceParams struct {
-	ID             pgtype.UUID `json:"id"`
-	CredentialHash string      `json:"credential_hash"`
+	SupportedAgentKinds []byte      `json:"supported_agent_kinds"`
+	ID                  pgtype.UUID `json:"id"`
+	CredentialHash      string      `json:"credential_hash"`
 }
 
 func (q *Queries) TouchAuthenticatedDevice(ctx context.Context, arg TouchAuthenticatedDeviceParams) (int64, error) {
-	result, err := q.db.Exec(ctx, touchAuthenticatedDevice, arg.ID, arg.CredentialHash)
+	result, err := q.db.Exec(ctx, touchAuthenticatedDevice, arg.SupportedAgentKinds, arg.ID, arg.CredentialHash)
 	if err != nil {
 		return 0, err
 	}

@@ -64,7 +64,7 @@ describe("loadOverview", () => {
     const good = sessionLister(hourly("g", 30));
     const data = await loadOverview([project("good"), project("broken")], {
       summary: async () => { throw new Error("HTTP 500"); },
-      sessions: (target) => (target.id === "good" ? good : { listSessionsTolerant: async () => { throw new Error("boom"); } }),
+      sessions: (target) => (target.id === "good" ? good : { listSessions: async () => { throw new Error("boom"); } }),
     }, NOW, new AbortController().signal);
     expect(data.summary.status).toBe("failed");
     expect(data.sessions.sessions).toHaveLength(30);
@@ -88,7 +88,7 @@ describe("Overview refresh retention", () => {
     summary: async () => projects.map(({ id }) => summary(id, { sessions: { total: 1, idle: 0, in_progress: 0, failed: 1, requires_action: 0 }, last_active_at: NOW })),
     sessions: ({ id }) => sessionLister([session(id, { status: "failed", created_at: NOW, last_active_at: NOW })]),
   }, NOW, controller.signal);
-  const unavailable = { listSessionsTolerant: async () => { throw new Error("unavailable"); } };
+  const unavailable = { listSessions: async () => { throw new Error("unavailable"); } };
 
   it("retains a failed summary and failed project's rows while replacing successful project reads", async () => {
     const prior = await original();

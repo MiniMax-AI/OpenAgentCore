@@ -21,8 +21,7 @@ import { useAgentDetail } from "../resources/detail-queries";
 
 
 function coverage(summary: ProjectSummary | undefined, locale?: string): string {
-  if (!summary || summary.coverage.sessions === 0) return MISSING;
-  return formatPercent(summary.coverage.reported / summary.coverage.sessions, locale);
+  return summary ? formatPercent(summary.coverage.ratio, locale) : MISSING;
 }
 
 /**

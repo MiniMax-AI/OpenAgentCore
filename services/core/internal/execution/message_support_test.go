@@ -33,7 +33,7 @@ func TestMessageImageQualificationIsOperationSpecific(t *testing.T) {
 	}
 	// Message validation applies even when no function-result validator exists.
 	raw, _ := json.Marshal(map[string]any{"input": []any{map[string]any{"role": "user", "content": input[0].Content}}})
-	batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"valid first"}`)}, {Kind: "message", Payload: raw}}
+	batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"valid first"}]}]}`)}, {Kind: "message", Payload: raw}}
 	if err := validateProfileInputs(enginetest.Profile(nil), "none", batch); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("image escaped profile validation", err)
 	}
@@ -73,10 +73,6 @@ func TestWhitespaceOnlyTextQualificationUsesEngineProfiles(t *testing.T) {
 		}
 	}
 	claude, _ := (engine.Catalog{}).Lookup("claude_sdk")
-	// Legacy text payloads use the same rule.
-	if err := validateProfileInputs(claude, "none", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":" \t"}`)}}); !errors.Is(err, ErrWhitespaceOnlyText) {
-		t.Fatal(err)
-	}
 	mixed, _ := json.Marshal(map[string]any{"input": []any{map[string]any{"role": "user", "content": []any{
 		map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_text", "text": "text"}}},
 		map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_image", "image_url": url}}}}})

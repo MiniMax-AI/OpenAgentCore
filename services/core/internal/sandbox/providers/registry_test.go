@@ -2,11 +2,12 @@ package providers
 
 import (
 	"errors"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/google/uuid"
-	"testing"
 )
 
 func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
@@ -14,23 +15,21 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 	installation := uuid.NewString()
 	for _, tc := range []struct {
 		kind, mode, namespace string
-		idle, retention       int64
 		checkpoint            bool
 	}{
-		{"docker", "nodes", "nodes", 0, 0, false},
-		{"microsandbox", "nodes", "nodes", 300, 86400, true},
-		{"e2b", "direct", "e2b", 0, 0, false},
+		{"docker", "nodes", "nodes", false},
+		{"microsandbox", "nodes", "nodes", true},
+		{"e2b", "direct", "e2b", false},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			d, err := registry.Describe(tc.kind, installation)
-			if err != nil || d.Mode != tc.mode || d.IdleSeconds != tc.idle || d.RetentionSeconds != tc.retention || d.BackendFingerprint != BackendFingerprint(tc.kind, tc.namespace+":"+installation) {
-				t.Fatalf("wrong namespace or defaults: %+v %v", d, err)
+			if err != nil || string(d.Mode) != tc.mode || d.BackendFingerprint != sandbox.BackendFingerprint(tc.kind, tc.namespace+":"+installation) {
+				t.Fatalf("wrong mode or namespace: %+v %v", d, err)
 			}
 			a, err := registry.Lookup(tc.kind)
 			checkpoint, checkpointErr := registry.SupportsCheckpoint(tc.kind)
-			isNode, nodeErr := registry.IsNode(tc.kind)
-			if err != nil || checkpointErr != nil || nodeErr != nil || checkpoint != tc.checkpoint || isNode != (tc.mode == "nodes") || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
-				t.Fatal("inconsistent construction/capability registration", err, checkpointErr, nodeErr)
+			if err != nil || checkpointErr != nil || checkpoint != tc.checkpoint || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
+				t.Fatal("inconsistent construction/capability registration", err, checkpointErr)
 			}
 		})
 	}
@@ -71,13 +70,12 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	// Registration is test-local: production registrations are fixed, never plugins.
 	registry.adapters[kind] = registry.adapters["docker"]
 	s, err := registry.Normalize(sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()})
-	isNode, nodeErr := registry.IsNode(kind)
 	checkpoint, checkpointErr := registry.SupportsCheckpoint(kind)
-	if err != nil || nodeErr != nil || checkpointErr != nil || s.Provider != kind || !isNode || checkpoint {
-		t.Fatal("new entry did not follow shared boundary", err, nodeErr, checkpointErr)
+	if err != nil || checkpointErr != nil || s.Provider != kind || checkpoint {
+		t.Fatal("new entry did not follow shared boundary", err, checkpointErr)
 	}
 	d, err := registry.Describe(kind, uuid.NewString())
-	if err != nil || d.Mode != "nodes" || d.IdleSeconds != 0 {
+	if err != nil || d.Mode != "nodes" {
 		t.Fatal(d, err)
 	}
 	if _, err := registry.Normalize(sandbox.Selection{Provider: kind, Configuration: &e2b.DeploymentConfiguration{APIKey: "wrong-provider"}}); !errors.Is(err, sandbox.ErrInvalid) {
@@ -113,9 +111,6 @@ func TestCapabilityLookupsReportFailures(t *testing.T) {
 	invalid.Operations = nil
 	registry.adapters["invalid-registration"] = invalid
 	for kind, want := range map[string]error{"unregistered": ErrUnknownProvider, "invalid-registration": providercontract.ErrContract} {
-		if _, err := registry.IsNode(kind); !errors.Is(err, want) {
-			t.Fatal(kind, "IsNode", err)
-		}
 		if _, err := registry.SupportsCheckpoint(kind); !errors.Is(err, want) {
 			t.Fatal(kind, "SupportsCheckpoint", err)
 		}

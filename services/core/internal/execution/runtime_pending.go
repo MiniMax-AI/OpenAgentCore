@@ -2,24 +2,28 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // provisionPending shares the existing lifecycle owner and serial gate. This
 // also recovers idle Session creation interrupted after its database commit.
 func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
-	if r.config.AdmissionPaused && r.config.Generation == 0 {
-		return nil
-	}
 	rows, err := r.reader.UnallocatedEnvironments(ctx, r.nodeID, r.pendingCursor)
 	if err != nil {
 		return err
 	}
-	if len(rows) == 0 {
+	if len(rows) == 0 && r.pendingCursor != "" {
+		// Refill once at EOF: newly committed IDs may precede the old cursor.
 		r.pendingCursor = ""
-		return nil
+		rows, err = r.reader.UnallocatedEnvironments(ctx, r.nodeID, "")
+		if err != nil {
+			return err
+		}
 	}
 	for _, environment := range rows {
 		r.pendingCursor = environment.ID
@@ -35,4 +39,101 @@ func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// reservePlacements runs under the inventory gate before node scans. Committed
+// Sessions and inputs supply demand; a placement survives a disconnected caller.
+// No native operation runs here or consumes a reservation for retained idle files.
+func (m *runtimeManager) reservePlacements(ctx context.Context) error {
+	m.mu.Lock()
+	configuration := m.config
+	m.mu.Unlock()
+	if configuration.Mode == string(sandbox.DeploymentDirect) {
+		// Direct deployments own one lifecycle lane and need no placement row.
+		node, err := m.node("")
+		if err != nil {
+			return err
+		}
+		select {
+		case node.lifecycle.pendingWake <- struct{}{}:
+		default:
+		}
+		return nil
+	}
+	if configuration.Mode != string(sandbox.DeploymentNodes) {
+		return nil
+	}
+	operation, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	rows, next, err := m.deploymentReader.PlacementDemand(operation, m.placementCursor)
+	if err != nil {
+		// A bounded inventory read may time out while the execution owner is
+		// still healthy. Keep its cursor for the next hint or maintenance tick.
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			return m.lease.CheckOwnership(ctx)
+		}
+		return err
+	}
+	if len(rows) == 0 {
+		m.placementCursor = deployment.PlacementDemandCursor{}
+		return nil
+	}
+	for _, environment := range rows {
+		if operation.Err() != nil {
+			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
+				return ownership
+			}
+			return ctx.Err()
+		}
+		reserved, err := m.deployment.EnsurePlacement(operation, deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}, configuration.InstallationID)
+		// A timed-out attempt yields its position, but later rows have not
+		// been attempted and must receive a fresh budget on the next scan.
+		m.placementCursor = deployment.PlacementDemandCursor{At: environment.At, EnvironmentID: environment.ID, Until: next.Until}
+		if err != nil {
+			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
+				return ownership
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if operation.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
+			log.Ctx(ctx).Warn("managed Runtime placement incomplete", "environment_id", environment.ID)
+			continue
+		}
+		node, err := m.node(reserved.NodeID)
+		if err != nil {
+			return err
+		}
+		select {
+		case node.lifecycle.pendingWake <- struct{}{}:
+		default:
+		}
+		if operation.Err() != nil {
+			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
+				return ownership
+			}
+			return ctx.Err()
+		}
+	}
+	m.placementCursor = next
+	if next.EnvironmentID == "" {
+		m.placementCursor = deployment.PlacementDemandCursor{}
+	}
+	return nil
+}
+
+// New placements need only a pending page, not a scan of every retained resource.
+// The same lifecycle gate and cancellation fence own both kinds of work.
+func (r *runtimeLifecycle) provisionCommitted(ctx context.Context) error {
+	ctx, finish, err := r.beginReconcile(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
+	// A fresh placement may sort on either side of the maintenance cursor.
+	// Successful allocations disappear from this query; start demand at its head.
+	r.pendingCursor = ""
+	return r.provisionPending(ctx)
 }

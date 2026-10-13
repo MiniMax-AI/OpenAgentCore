@@ -1,5 +1,12 @@
 package v1
 
+type InstallationStatus string
+
+const (
+	InstallationAvailable   InstallationStatus = "available"
+	InstallationUnavailable InstallationStatus = "unavailable"
+)
+
 // SessionCore exposes optional Core additions without changing official fields.
 type SessionCore struct {
 	Installation *EnvironmentInstallation `json:"installation,omitempty"`
@@ -8,11 +15,11 @@ type SessionCore struct {
 // EnvironmentInstallation contains short-lived, Environment-scoped commands.
 // Only authenticated creation and detail responses include this authorization.
 type EnvironmentInstallation struct {
-	Status    string            `json:"status" enums:"available,unavailable"`
-	Version   string            `json:"version"`
-	ExpiresAt int64             `json:"expires_at,omitempty"`
-	Commands  map[string]string `json:"commands,omitempty"`
-	Message   string            `json:"message,omitempty"`
+	Status    InstallationStatus `json:"status"`
+	Version   string             `json:"version"`
+	ExpiresAt int64              `json:"expires_at,omitempty"`
+	Commands  map[string]string  `json:"commands,omitempty"`
+	Message   string             `json:"message,omitempty"`
 }
 
 // NativeInstallationContext is bootstrap metadata, not an execution protocol.

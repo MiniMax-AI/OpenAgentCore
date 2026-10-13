@@ -90,4 +90,13 @@ space "$unpacked"
 printf 'Extracting the installer...\n'
 mkdir "$work/bundle"
 run tar -xzf "$work/bundle.tar.gz" -C "$work/bundle" || fail 'Installer extraction failed. Check disk space, quota and filesystem permissions.'
-run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" --authorization "$authorization" "$@"
+[ -x "$work/bundle/oac-daemon" ] || fail 'Cannot start the native installer. Check executable permissions and use a Runtime home that permits execution.'
+if run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" --authorization "$authorization" "$@"; then
+  exit 0
+else
+  code=$?
+  case "$code" in
+    126|127) fail 'Cannot start the native installer. Check that the Runtime home permits execution (not a noexec mount) and that this host has the required native libraries.';;
+    *) exit "$code";;
+  esac
+fi

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
@@ -39,6 +40,26 @@ func TestHostedEnvironmentDefaultsAndExplicitGaps(t *testing.T) {
 		if _, err := decodeSessionEnvironment(json.RawMessage(`{"type":"openai_hosted",` + field + `}`)); err == nil {
 			t.Fatal("unsupported installation or invalid input accepted", field)
 		}
+	}
+}
+
+// The pinned openai_hosted input has no environment_id, so a request naming an
+// existing Environment gets the route's existing error instead of a new
+// Environment, with or without a Template.
+func TestSessionCreationRejectsExistingEnvironmentReference(t *testing.T) {
+	h, s := validationHandler(t)
+	rejected := `{"error":{"message":"Request fields have invalid types or null values.","type":"invalid_request_error","code":"invalid_request","param":null}}` + "\n"
+	for _, environment := range []string{
+		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `"}`,
+		`{"type":"openai_hosted","environment_id":"` + uuid.NewString() + `","environment_template_id":"` + uuid.NewString() + `"}`,
+	} {
+		body := `{"agent":{"model":"m"},"environment":` + environment + `,"input":"hi"}`
+		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest || w.Body.String() != rejected {
+			t.Errorf("%s: %d %s", environment, w.Code, w.Body)
+		}
+	}
+	if s.writes != 0 {
+		t.Fatalf("an Environment reference reached storage: %d writes", s.writes)
 	}
 }
 
@@ -89,8 +110,7 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		recorder := &hostedCreationRecorder{}
 		handler, fixture := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
-			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
-			f.sessionAdmission.createSession, f.sessionAdmission.createSessionStream = recorder.CreateSession, recorder.CreateSessionStream
+			f.sessionAdmission.createSession = recorder.CreateSession
 		})
 		input := ""
 		if stream {
@@ -103,8 +123,8 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
-		// The recorder deliberately rejects both creation methods. Its rejection
-		// proves admission was used; the resource fixture must remain untouched.
+		// The recorder deliberately rejects creation. Its rejection proves
+		// admission was used; the resource fixture must remain untouched.
 		if recorder.calls != 1 || fixture.input.Engine != "" || fixture.session.ID != "" || response.Code != http.StatusBadRequest {
 			t.Fatal("hosted creation bypassed execution admission", stream, response.Code, response.Body.String())
 		}
@@ -117,11 +137,7 @@ type hostedCreationRecorder struct {
 	calls int
 }
 
-func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
-	r.calls++
-	return sessions.Session{}, sessions.ErrInvalidInput
-}
-func (r *hostedCreationRecorder) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
+func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
 	return sessions.Creation{}, sessions.ErrInvalidInput
 }

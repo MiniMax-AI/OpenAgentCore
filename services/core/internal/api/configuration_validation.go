@@ -11,24 +11,22 @@ import (
 // Agent configuration protocol validation is owned by Core. It covers saved
 // Agent create and update bodies and the inline Session agent, and runs before
 // the configuration parsers (which keep Core's local limits and codes) and
-// before harness admission. It walks the raw JSON along the pinned SDK shapes
-// (PersistedAgentToolParam/AgentToolParam, AgentTextParam, AgentReasoningParam,
-// MultiAgentConfigParam and the service_tier literal) and reports the first
-// violation as a fieldError with the JSON path as param and the official
-// message forms. Values the pinned types leave open, such as JSON Schemas,
-// request metadata, MCP transport members, metadata and x_agents_core, are
-// left to their existing parsers.
+// before harness admission. It walks the raw JSON along the request shapes that
+// scripts/generate-public-api.py projects from the pinned schema
+// (official_shapes.gen.go) and reports the first violation as a fieldError with
+// the JSON path as param and the official message forms. x_agents_core keeps
+// its own parser.
 
 type valueKind uint8
 
 const (
-	anyValue     valueKind = iota // validated by the existing parsers
+	anyValue     valueKind = iota // validated by its own parser
 	stringValue                   // str
 	booleanValue                  // bool
 	integerValue                  // int with an inclusive minimum
 	enumValue                     // Literal[...] of strings
 	arrayValue                    // Iterable/SequenceNotStr of items
-	mapValue                      // Dict[str, object]
+	mapValue                      // Dict[str, object], or Dict[str, str] with items
 	openObject                    // an object whose members are validated elsewhere
 	objectValue                   // TypedDict members
 	unionValue                    // TypedDicts selected by their "type" member
@@ -42,7 +40,7 @@ type shape struct {
 	values   []string            // enum values, or union types in the pinned order
 	members  []member            // objectValue members
 	variants map[string][]member // unionValue members other than "type"
-	items    *shape              // arrayValue items
+	items    *shape              // arrayValue items, or mapValue string values
 }
 
 type member struct {
@@ -50,73 +48,7 @@ type member struct {
 	shape
 }
 
-var (
-	requiredString = shape{kind: stringValue, required: true}
-	nullableString = shape{kind: stringValue, nullable: true}
-	stringList     = shape{kind: arrayValue, nullable: true, items: &shape{kind: stringValue}}
-
-	agentTools = shape{kind: arrayValue, nullable: true, items: &shape{kind: unionValue,
-		values: []string{"function", "tool_search", "programmatic_tool_calling", "mcp", "web_search"},
-		variants: map[string][]member{
-			"function": {
-				{"description", requiredString}, {"name", requiredString},
-				{"parameters", shape{kind: mapValue, required: true}}, {"defer_loading", shape{kind: booleanValue}},
-			},
-			"tool_search":               nil,
-			"programmatic_tool_calling": {{"enabled", shape{kind: booleanValue}}},
-			"mcp": {
-				{"server_label", requiredString}, {"transport", shape{kind: openObject, required: true}},
-				{"allowed_tools", stringList},
-				{"connection_origin", shape{kind: enumValue, nullable: true, values: []string{"service", "environment"}}},
-				{"credential_id", nullableString}, {"request_metadata", shape{kind: mapValue, nullable: true}},
-				{"required", shape{kind: booleanValue}},
-			},
-			"web_search": {
-				{"allowed_domains", stringList},
-				{"context_size", shape{kind: enumValue, nullable: true, values: []string{"low", "medium", "high"}}},
-				{"location", shape{kind: objectValue, nullable: true, members: []member{
-					{"city", nullableString}, {"country", nullableString}, {"region", nullableString}, {"timezone", nullableString},
-				}}},
-				{"mode", shape{kind: enumValue, nullable: true, values: []string{"disabled", "cached", "live"}}},
-			},
-		}}}
-	agentText = shape{kind: objectValue, nullable: true, members: []member{
-		{"format", shape{kind: unionValue, nullable: true, values: []string{"text", "json_schema"},
-			variants: map[string][]member{"text": nil, "json_schema": {{"schema", shape{kind: mapValue, required: true}}}}}},
-		{"verbosity", shape{kind: enumValue, nullable: true, values: []string{"low", "medium", "high"}}},
-	}}
-	agentReasoning = shape{kind: objectValue, nullable: true, members: []member{
-		{"effort", shape{kind: enumValue, nullable: true, values: []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}}},
-		{"summary", shape{kind: enumValue, nullable: true, values: []string{"concise", "detailed", "auto"}}},
-	}}
-	agentMultiAgent = shape{kind: objectValue, nullable: true, members: []member{
-		{"enabled", shape{kind: booleanValue, required: true}},
-		{"max_concurrent_subagents", shape{kind: integerValue, minimum: 1}},
-	}}
-
-	savedAgentCreate = agentShape(true, true)
-	savedAgentUpdate = agentShape(true, false)
-	sessionAgent     = agentShape(false, false)
-)
-
-// agentShape returns AgentCreateParams, AgentUpdateParams or the Session Agent.
-// Saved Agents additionally carry name and metadata; only creation requires a model.
-func agentShape(saved, create bool) shape {
-	members := []member{
-		{"model", shape{kind: stringValue, required: create}},
-		{"instructions", nullableString},
-		{"multi_agent", agentMultiAgent},
-		{"reasoning", agentReasoning},
-		{"service_tier", shape{kind: enumValue, nullable: true, values: []string{"auto", "default", "flex", "priority", "fast"}}},
-		{"text", agentText},
-		{"tools", agentTools},
-		{"x_agents_core", shape{}},
-	}
-	if saved {
-		members = append(members, member{"name", nullableString}, member{"metadata", shape{}})
-	}
-	return shape{kind: objectValue, members: members}
-}
+var requiredString = shape{kind: stringValue, required: true}
 
 // validateSavedAgentBody checks a saved Agent create or update body. Malformed
 // and non-object bodies keep the existing whole-body error.
@@ -129,7 +61,7 @@ func validateSavedAgentBody(raw []byte, root shape) error {
 
 // validateSessionAgent checks the inline Session agent, whose paths start with agent.
 func validateSessionAgent(raw json.RawMessage) error {
-	return validateAgentConfiguration("agent", raw, sessionAgent)
+	return validateAgentConfiguration("agent", raw, sessionAgentConfigParam)
 }
 
 func validateAgentConfiguration(path string, raw json.RawMessage, root shape) error {
@@ -196,7 +128,19 @@ func checkValue(path string, raw json.RawMessage, s shape) error {
 		}
 	case mapValue:
 		if got != "an object" {
-			return invalidType(path, "an object with string keys and unknown value values", got)
+			values := "unknown value"
+			if s.items != nil {
+				values = "string"
+			}
+			return invalidType(path, "an object with string keys and "+values+" values", got)
+		}
+		if s.items != nil {
+			keys, fields := orderedMembers(raw)
+			for _, key := range keys {
+				if err := checkValue(joinPath(path, key), fields[key], *s.items); err != nil {
+					return err
+				}
+			}
 		}
 	case openObject:
 		if got != "an object" {

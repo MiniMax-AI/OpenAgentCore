@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"io"
 	"net/url"
@@ -9,32 +10,41 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 type config struct {
 	addr, origin, dist      string
 	coreKey, nodePayloadDir string
 	upstream                *url.URL
+	log                     log.Config
 }
 
+// loadConfig reads Web's settings. An unset or empty variable selects its
+// default; OAC_PUBLIC_URL and OAC_WEB_CORE_KEY_FILE have none.
 func loadConfig() (config, error) {
 	c := config{
-		addr:   envDefault("OAC_WEB_ADDR", ":8080"),
-		origin: envDefault("OAC_WEB_ORIGIN", "http://127.0.0.1:8080"),
-		dist:   envDefault("OAC_WEB_DIST", "/www"),
+		addr:   cmp.Or(os.Getenv("OAC_WEB_ADDR"), ":8080"),
+		origin: os.Getenv("OAC_PUBLIC_URL"),
+		dist:   cmp.Or(os.Getenv("OAC_WEB_DIST"), "/www"),
+	}
+	var err error
+	if c.log, err = log.LoadConfig(); err != nil {
+		return config{}, err
 	}
 	origin, err := serverURL(c.origin)
 	if err != nil || origin.Path != "" {
-		return config{}, errors.New("OAC_WEB_ORIGIN must be an HTTP(S) origin without a path")
+		return config{}, errors.New("OAC_PUBLIC_URL must be an HTTP(S) origin without a path")
 	}
-	c.upstream, err = serverURL(envDefault("OAC_WEB_UPSTREAM", "http://core:8091"))
+	c.upstream, err = serverURL(cmp.Or(os.Getenv("OAC_WEB_UPSTREAM"), "http://core:8091"))
 	if err != nil {
 		return config{}, errors.New("OAC_WEB_UPSTREAM must be an HTTP(S) server URL without credentials, query or path")
 	}
 	if !filepath.IsAbs(c.dist) {
 		return config{}, errors.New("OAC_WEB_DIST must be absolute")
 	}
-	c.coreKey, err = readSecret(envDefault("OAC_WEB_CORE_KEY_FILE", "/admin/core.key"))
+	c.coreKey, err = readSecret(os.Getenv("OAC_WEB_CORE_KEY_FILE"))
 	if err != nil {
 		return config{}, errors.New("OAC_WEB_CORE_KEY_FILE must name a private regular file containing the Core key")
 	}
@@ -46,13 +56,6 @@ func loadConfig() (config, error) {
 		return config{}, errors.New("OAC_WEB_NODE_PAYLOAD_DIR must be absolute")
 	}
 	return c, nil
-}
-
-func envDefault(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return fallback
 }
 
 func serverURL(value string) (*url.URL, error) {

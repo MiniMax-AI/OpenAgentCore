@@ -1,7 +1,7 @@
 ---
-title: "概念与所有权"
+title: "概念"
 source: docs/concepts.md
-source_hash: f15758cc223f104393f3eca822dbc585c8c41bb5c7bdbe787e8af4e7bf1a0d95
+source_hash: 2d65b520ffc8ccce8836d6196fb9daa217a438e4f79ae2aee70d4cb77da4c606
 ---
 
 Project 是 OpenAgentCore 的执行租户。应用使用其 API key；运维人员使用独立的 Core key 管理安装实例。[API 索引](api/index.md) 将每类调用方映射到对应命名空间和凭据。

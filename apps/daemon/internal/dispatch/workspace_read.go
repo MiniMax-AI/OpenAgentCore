@@ -67,7 +67,6 @@ func (r *Router) workspaceResourceLocked(request proto.WorkspaceReadPayload) (an
 			!p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) {
 			return nil, "resource_unavailable"
 		}
-		resource = p.prepared
 		if p.executor != nil {
 			resource = p.executor.native
 		}

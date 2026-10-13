@@ -7,21 +7,19 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 )
 
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
-	var d Dispatcher
-	if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); err == nil {
-		t.Fatal("missing Session credentials fell back")
-	}
-	// Hosted and self-hosted Runtimes have no model configuration of their own.
-	for _, environment := range []string{"openai_hosted", "self_hosted"} {
-		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
-			t.Fatal("provider-free Session dispatched", environment, err)
-		}
+	reader, _ := testSessions(t, pgtest.Open(t), nil)
+	d := Dispatcher{SessionsReader: reader}
+	session := sessions.Session{TenantID: uuid.NewString(), ID: uuid.NewString(), Engine: "codex"}
+	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatal("missing Session credentials fell back", err)
 	}
 	// A none device without a frozen provider uses its own provider environment:
 	// Core sends only the Agent's model and instructions.
@@ -37,7 +35,7 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 	for _, engine := range []string{"codex", "claude_sdk", "mcode"} {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(engine+"/"+protocol, func(t *testing.T) {
-				provider := &v1.ModelProviderInput{Protocol: protocol, BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000, MaxOutputTokens: 8000}
+				provider := &v1.ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000, MaxOutputTokens: 8000}
 				got, err := resolvedSessionModelOptions(provider, engine)
 				native := engine == "mcode" || engine == "codex" && protocol == "responses" || engine == "claude_sdk" && protocol == "anthropic"
 				if !native {
@@ -45,7 +43,7 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 					if got != nil || !errors.As(err, &protocolError) || strings.Contains(err.Error(), provider.APIKey) {
 						t.Fatal("non-native provider was not safely rejected")
 					}
-					if provider.Protocol != protocol {
+					if string(provider.Protocol) != protocol {
 						t.Fatal("rejection rewrote the frozen provider protocol")
 					}
 					return

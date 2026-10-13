@@ -9,15 +9,12 @@ import type {
   SkillVersionDeleted,
   SkillVersionList,
 } from "./types";
-import { exactFields, hasOwn, isNonnegativeInteger, isRecord, onlyFields } from "./response-projection";
+import { exactFields, isNonnegativeInteger, isRecord } from "./response-projection";
+import {
+  deletedSkillResourceFields, deletedSkillVersionResourceFields, skillListResourceFields, skillResourceFields, skillVersionResourceFields,
+} from "./generated/public-api";
 
 type Invalid = (message: string) => never;
-
-const skillFields = new Set(["id", "object", "created_at", "name", "description", "default_version", "latest_version"]);
-const skillVersionFields = new Set(["id", "object", "created_at", "skill_id", "version", "name", "description"]);
-const skillListFields = new Set(["object", "data", "has_more", "first_id", "last_id"]);
-const skillDeletedFields = new Set(["id", "object", "deleted"]);
-const skillVersionDeletedFields = new Set(["id", "object", "deleted", "version"]);
 
 const skillIdPattern = /^skill_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const skillVersionIdPattern = /^skillver_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
@@ -27,17 +24,9 @@ const skillVersionNumberPattern = /^[1-9][0-9]{0,18}$/;
 const controlCharacterPattern = /[\u0000-\u001f\u007f-\u009f]/;
 const loneSurrogatePattern = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 
-/** Core accepts at most 500 folder files per upload. */
-export const maxSkillUploadFiles = 500;
-/** A generous bound for one downloaded bundle; Core stores at most 5 MiB per version. */
+/** Bounds the download buffer a Content-Length header can make the client allocate; Core stores at most 5 MiB per version. */
 export const maxSkillContentBytes = 64 * 1024 * 1024;
 const defaultSkillPageLimit = 20;
-const maxUploadFilenameBytes = 1024;
-const maxUploadPathBytes = 4096;
-
-function utf8Length(value: string): number {
-  return new TextEncoder().encode(value).length;
-}
 
 export function isSkillId(value: unknown): value is string {
   return typeof value === "string" && skillIdPattern.test(value);
@@ -64,7 +53,7 @@ export function compareSkillVersionNumbers(left: string, right: string): number 
  */
 export function isSkillUploadPath(value: unknown): value is string {
   if (typeof value !== "string" || value.length === 0) return false;
-  if (utf8Length(value) > maxUploadPathBytes || loneSurrogatePattern.test(value)) return false;
+  if (loneSurrogatePattern.test(value)) return false;
   if (value.includes("\\") || controlCharacterPattern.test(value)) return false;
   const segments = value.split("/");
   if (segments.length < 2) return false;
@@ -72,7 +61,7 @@ export function isSkillUploadPath(value: unknown): value is string {
 }
 
 function validZipFilename(value: unknown): value is string {
-  if (typeof value !== "string" || value.length === 0 || utf8Length(value) > maxUploadFilenameBytes) return false;
+  if (typeof value !== "string" || value.length === 0) return false;
   return !loneSurrogatePattern.test(value) && !controlCharacterPattern.test(value) && !/[\\/]/.test(value);
 }
 
@@ -93,12 +82,6 @@ export function validateSkillListOptions(
   if (options?.after !== undefined && !validCursor(options.after)) {
     throw new TypeError(`${label} list cursor is not a valid resource ID.`);
   }
-  if (options?.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 0 || options.limit > 100)) {
-    throw new TypeError(`${label} list limit must be an integer from 0 through 100.`);
-  }
-  if (options?.order !== undefined && options.order !== "asc" && options.order !== "desc") {
-    throw new TypeError(`${label} list order must be asc or desc.`);
-  }
 }
 
 /**
@@ -116,8 +99,8 @@ export function skillUploadBody(input: SkillUploadInput, setDefault?: boolean): 
     }
     body.append("files", input.file, input.filename);
   } else if (isRecord(input) && input.kind === "directory") {
-    if (!Array.isArray(input.files) || input.files.length === 0 || input.files.length > maxSkillUploadFiles) {
-      throw new TypeError(`A Skill folder upload requires 1 through ${maxSkillUploadFiles} files.`);
+    if (!Array.isArray(input.files) || input.files.length === 0) {
+      throw new TypeError("A Skill folder upload requires at least one file.");
     }
     const paths = new Set<string>();
     for (const entry of input.files) {
@@ -137,7 +120,7 @@ export function skillUploadBody(input: SkillUploadInput, setDefault?: boolean): 
 
 export function projectSkill(value: unknown, invalid: Invalid, expectedId?: string): Skill {
   const message = "OpenAgentCore returned an invalid Skill.";
-  if (!isRecord(value) || !exactFields(value, skillFields)) return invalid(message);
+  if (!isRecord(value) || !exactFields(value, skillResourceFields)) return invalid(message);
   if (
     !isSkillId(value.id) || (expectedId !== undefined && value.id !== expectedId) ||
     value.object !== "skill" ||
@@ -165,7 +148,7 @@ export function projectSkillVersion(
   expectedVersion?: string,
 ): SkillVersion {
   const message = "OpenAgentCore returned an invalid Skill version.";
-  if (!isRecord(value) || !exactFields(value, skillVersionFields)) return invalid(message);
+  if (!isRecord(value) || !exactFields(value, skillVersionResourceFields)) return invalid(message);
   if (
     !isSkillVersionId(value.id) ||
     value.object !== "skill.version" ||
@@ -195,7 +178,7 @@ function projectSkillPage<T extends { id: string }>(
   message: string,
 ): { object: "list"; data: T[]; has_more: boolean; first_id: string | null; last_id: string | null } {
   if (
-    !isRecord(value) || !onlyFields(value, skillListFields) ||
+    !isRecord(value) || !exactFields(value, skillListResourceFields) ||
     value.object !== "list" || !Array.isArray(value.data) || typeof value.has_more !== "boolean"
   ) return invalid(message);
   const limit = options?.limit ?? defaultSkillPageLimit;
@@ -206,8 +189,7 @@ function projectSkillPage<T extends { id: string }>(
   const lastId = data[data.length - 1]?.id ?? null;
   if (
     new Set(data.map((entry) => entry.id)).size !== data.length ||
-    (hasOwn(value, "first_id") && value.first_id !== firstId) ||
-    (hasOwn(value, "last_id") && value.last_id !== lastId) ||
+    value.first_id !== firstId || value.last_id !== lastId ||
     // Limit 0 returns an empty page whose has_more reports whether entries follow.
     (value.has_more && data.length === 0 && limit !== 0) ||
     data.some((entry, index) => index > 0 && !inOrder(data[index - 1]!, entry, order))
@@ -248,7 +230,7 @@ export function projectSkillVersionList(
 
 export function projectSkillDeleted(value: unknown, invalid: Invalid, skillId: string): SkillDeleted {
   if (
-    !isRecord(value) || !exactFields(value, skillDeletedFields) ||
+    !isRecord(value) || !exactFields(value, deletedSkillResourceFields) ||
     value.id !== skillId || value.object !== "skill.deleted" || value.deleted !== true
   ) return invalid("OpenAgentCore returned an invalid Skill deletion receipt.");
   return { id: skillId, object: "skill.deleted", deleted: true };
@@ -256,7 +238,7 @@ export function projectSkillDeleted(value: unknown, invalid: Invalid, skillId: s
 
 export function projectSkillVersionDeleted(value: unknown, invalid: Invalid, version: string): SkillVersionDeleted {
   if (
-    !isRecord(value) || !exactFields(value, skillVersionDeletedFields) ||
+    !isRecord(value) || !exactFields(value, deletedSkillVersionResourceFields) ||
     !isSkillVersionId(value.id) || value.object !== "skill.version.deleted" ||
     value.deleted !== true || value.version !== version
   ) return invalid("OpenAgentCore returned an invalid Skill version deletion receipt.");

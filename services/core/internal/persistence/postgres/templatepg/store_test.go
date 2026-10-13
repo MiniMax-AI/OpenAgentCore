@@ -22,13 +22,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// fixture is a Template adapter with the credential key and one without it,
-// on the same database, plus the service that validates writes.
+// fixture is a Template adapter under the credential key and one under a
+// replaced key, on the same database, plus the service that validates writes.
 type fixture struct {
-	pool    *pgxpool.Pool
-	keyed   *templatepg.Store
-	keyless *templatepg.Store
-	service *environmenttemplates.Service
+	pool     *pgxpool.Pool
+	keyed    *templatepg.Store
+	replaced *templatepg.Store
+	service  *environmenttemplates.Service
 }
 
 func newFixture(t *testing.T, pool *pgxpool.Pool) fixture {
@@ -42,7 +42,7 @@ func newFixture(t *testing.T, pool *pgxpool.Pool) fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fixture{pool: pool, keyed: keyed, keyless: templatepg.New(pgunit.NewPool(pool), nil), service: service}
+	return fixture{pool: pool, keyed: keyed, replaced: templatepg.New(pgunit.NewPool(pool), pgtest.CredentialKey(t)), service: service}
 }
 
 func (f fixture) create(t *testing.T, tenant string, in environmenttemplates.Input) environmenttemplates.Template {
@@ -172,12 +172,12 @@ func TestEmptyUpdateTouchesTimeWithoutKeyOrContents(t *testing.T) {
 		return contents
 	}
 	before := row()
-	if _, err := f.keyless.Update(t.Context(), uuid.NewString(), original.ID, environmenttemplates.Input{}); !errors.Is(err, environmenttemplates.ErrNotFound) {
+	if _, err := f.replaced.Update(t.Context(), uuid.NewString(), original.ID, environmenttemplates.Input{}); !errors.Is(err, environmenttemplates.ErrNotFound) {
 		t.Fatal("foreign empty update was admitted", err)
 	}
-	updated, err := f.keyless.Update(t.Context(), tenant, original.ID, environmenttemplates.Input{})
+	updated, err := f.replaced.Update(t.Context(), tenant, original.ID, environmenttemplates.Input{})
 	if err != nil || !updated.UpdatedAt.After(original.UpdatedAt) {
-		t.Fatal("empty update did not advance the timestamp without a key", err)
+		t.Fatal("empty update did not advance the timestamp under a replaced key", err)
 	}
 	original.UpdatedAt = updated.UpdatedAt
 	if !reflect.DeepEqual(updated, original) || !bytes.Equal(before, row()) {
@@ -201,9 +201,9 @@ func TestNetworkPolicyRoundTripAndReplacement(t *testing.T) {
 	}
 	created := f.create(t, tenant, environmenttemplates.Input{SetNetwork: true, NetworkAccess: "restricted", AllowedDomains: domains})
 	check(created, nil)
-	check(f.keyless.Get(ctx, tenant, created.ID))
+	check(f.replaced.Get(ctx, tenant, created.ID))
 	check(f.resolve(t, tenant, created.ID).Template, nil)
-	page, err := f.keyless.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1, Ascending: true})
+	page, err := f.replaced.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1, Ascending: true})
 	if err != nil || len(page.Templates) != 1 {
 		t.Fatal(page, err)
 	}
@@ -220,7 +220,7 @@ func TestNetworkPolicyRoundTripAndReplacement(t *testing.T) {
 		if _, err := f.service.Update(ctx, environmenttemplates.UpdateCommand{TenantID: tenant, TemplateID: created.ID, Input: in}); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
 			t.Fatal("invalid policy replacement", err)
 		}
-		check(f.keyless.Get(ctx, tenant, created.ID))
+		check(f.replaced.Get(ctx, tenant, created.ID))
 	}
 	domains = []string{"other.example.com"}
 	check(f.update(t, tenant, created.ID, environmenttemplates.Input{SetNetwork: true, NetworkAccess: "restricted", AllowedDomains: domains}), nil)
@@ -237,7 +237,7 @@ func TestSetupSealedAndReplacedPerField(t *testing.T) {
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	setup := environmentconfig.Setup{Env: map[string]string{"SECRET": "template-env-canary"}, Commands: []environmentconfig.SetupCommand{{Command: "printf template-command-canary > result"}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}}
 	template := f.create(t, tenant, environmenttemplates.Input{Setup: setup, SetEnv: true, SetCommands: true, SetPackages: true})
-	public, err := f.keyless.Get(t.Context(), tenant, template.ID)
+	public, err := f.replaced.Get(t.Context(), tenant, template.ID)
 	if err != nil || !reflect.DeepEqual(public.Packages.NPM, setup.Packages.NPM) {
 		t.Fatal("public metadata requires plaintext or key", err)
 	}
@@ -266,7 +266,7 @@ func TestInitialFilesSealedWithNoncanonicalIDs(t *testing.T) {
 	canary := []byte("private-initial-file-canary\x00\xff")
 	files := []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: "file-" + uuid.NewString()}}
 	template := f.create(t, tenant, environmenttemplates.Input{SetFiles: true, Files: files})
-	public, err := f.keyless.Get(t.Context(), tenant, template.ID)
+	public, err := f.replaced.Get(t.Context(), tenant, template.ID)
 	if err != nil || len(public.Files) != 2 || *public.Files[0].SizeBytes != int64(len(canary)) {
 		t.Fatal("public read depends on the key", err)
 	}
@@ -294,11 +294,11 @@ func TestSkillsAndPluginsSealedAndPreserved(t *testing.T) {
 	}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	template := f.create(t, tenant, environmenttemplates.Input{SetSkills: true, SetPlugins: true, SetDirectories: true, Setup: setup})
-	public, err := f.keyless.Get(ctx, tenant, template.ID)
+	public, err := f.replaced.Get(ctx, tenant, template.ID)
 	if err != nil || len(public.Skills) != 1 || len(public.Plugins) != 1 || !reflect.DeepEqual(public.CapabilityDirectories, setup.CapabilityDirectories) {
 		t.Fatal("safe metadata without the key", err)
 	}
-	if page, err := f.keyless.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 20}); err != nil || len(page.Templates) != 1 || len(page.Templates[0].Plugins) != 1 {
+	if page, err := f.replaced.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 20}); err != nil || len(page.Templates) != 1 || len(page.Templates[0].Plugins) != 1 {
 		t.Fatal("list", err)
 	}
 	f.requireSealed(t, template.ID, "skill_contents", "skill-private-canary")
@@ -354,25 +354,23 @@ func TestUnstorableTextIsRejected(t *testing.T) {
 	}
 }
 
-func TestMissingKeyIsUnavailable(t *testing.T) {
+func TestReplacedKeyCannotResolve(t *testing.T) {
 	f := newFixture(t, pgtest.Open(t))
 	tenant := uuid.NewString()
 	setup := environmenttemplates.Input{Setup: environmentconfig.Setup{Env: map[string]string{"PRIVATE_SETUP": "env-canary"}}}
 	files := environmenttemplates.Input{SetFiles: true, Files: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input.txt", Data: []byte("file-canary")}}}
 	for _, in := range []environmenttemplates.Input{setup, files} {
-		if _, err := f.keyless.Create(t.Context(), tenant, in); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-			t.Fatal("confidential create without a key", err)
-		}
 		template := f.create(t, tenant, in)
-		if _, err := f.keyless.Resolve(t.Context(), tenant, template.ID); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-			t.Fatal("confidential resolve without a key", err)
+		if _, err := f.replaced.Resolve(t.Context(), tenant, template.ID); err == nil || errors.Is(err, environmenttemplates.ErrNotFound) || strings.Contains(err.Error(), "canary") {
+			t.Fatal("confidential resolve under a replaced key", err)
 		}
 	}
 }
 
-// Stored package metadata naming the removed system manager is rejected on
-// every read instead of being silently dropped.
-func TestStoredSystemPackagesRejected(t *testing.T) {
+// Stored package metadata naming the removed system manager no longer decodes,
+// so every read fails with an internal error instead of dropping it. Packages
+// that decode but fail current validation are an invalid Template.
+func TestStoredPackagesRejected(t *testing.T) {
 	f := newFixture(t, pgtest.Open(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
@@ -383,20 +381,25 @@ func TestStoredSystemPackagesRejected(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	internal := func(err error) bool { return err != nil && !errors.Is(err, environmenttemplates.ErrInvalidInput) }
 	for _, value := range []string{`null`, `[]`, `["jq"]`} {
 		store(`{"npm":[],"python":[],"system":` + value + `}`)
-		if _, err := f.keyless.Get(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
-			t.Fatal("get silently ignored removed system packages", value, err)
+		if _, err := f.replaced.Get(ctx, tenant, template.ID); !internal(err) {
+			t.Fatal("get did not fail internally on removed system packages", value, err)
 		}
-		if _, err := f.keyless.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1}); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
-			t.Fatal("list silently ignored removed system packages", value, err)
+		if _, err := f.replaced.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1}); !internal(err) {
+			t.Fatal("list did not fail internally on removed system packages", value, err)
 		}
-		if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
-			t.Fatal("resolve silently ignored removed system packages", value, err)
+		if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !internal(err) {
+			t.Fatal("resolve did not fail internally on removed system packages", value, err)
 		}
 	}
+	store(`{"npm":["-x"],"python":[]}`)
+	if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
+		t.Fatal("resolve accepted packages that fail validation", err)
+	}
 	store(`{"npm":["semver"],"python":["packaging"]}`)
-	if got, err := f.keyless.Get(ctx, tenant, template.ID); err != nil || !reflect.DeepEqual(got.Packages, v1.EnvironmentPackages{NPM: []string{"semver"}, Python: []string{"packaging"}}) {
+	if got, err := f.replaced.Get(ctx, tenant, template.ID); err != nil || !reflect.DeepEqual(got.Packages, v1.EnvironmentPackages{NPM: []string{"semver"}, Python: []string{"packaging"}}) {
 		t.Fatal("supported stored package managers rejected", got.Packages, err)
 	}
 }

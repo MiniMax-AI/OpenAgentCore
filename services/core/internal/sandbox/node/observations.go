@@ -3,15 +3,10 @@ package node
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
-
-var _ runtimeobs.Source = (*provider)(nil)
-
-func (p *provider) ObservationProviderType() string { return p.kind }
 
 func observationReference(target runtimeobs.Target) sandbox.Reference {
 	return sandbox.Reference{TenantID: target.TenantID, EnvironmentID: target.EnvironmentID, AllocationID: target.Instance.AllocationID}
@@ -38,19 +33,4 @@ func (p *provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
 	}
 	return *out.Sample, nil
-}
-
-func observeProvider(ctx context.Context, provider sandbox.SandboxProvider, target runtimeobs.Target) (runtimeobs.Sample, error) {
-	if err := providercontract.Require(provider, "Observe"); err != nil {
-		return runtimeobs.Sample{}, err
-	}
-	source, ok := provider.(runtimeobs.Source)
-	if !ok {
-		return runtimeobs.Sample{}, providercontract.ErrContract
-	}
-	return source.Observe(ctx, target)
-}
-
-func (p *provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
-	return p, nil
 }

@@ -9,35 +9,34 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type AdminSessionCounts struct {
-	Total          int64 `json:"total"`
-	Idle           int64 `json:"idle"`
-	InProgress     int64 `json:"in_progress"`
-	RequiresAction int64 `json:"requires_action"`
-	Failed         int64 `json:"failed"`
+	Total          int64 `json:"total" binding:"required"`
+	Idle           int64 `json:"idle" binding:"required"`
+	InProgress     int64 `json:"in_progress" binding:"required"`
+	RequiresAction int64 `json:"requires_action" binding:"required"`
+	Failed         int64 `json:"failed" binding:"required"`
 }
 type AdminUsageCoverage struct {
-	MeasuredSessions int64    `json:"measured_sessions"`
-	TotalSessions    int64    `json:"total_sessions"`
-	Ratio            *float64 `json:"ratio"`
+	MeasuredSessions int64    `json:"measured_sessions" binding:"required"`
+	TotalSessions    int64    `json:"total_sessions" binding:"required"`
+	Ratio            *float64 `json:"ratio" extensions:"x-nullable" binding:"required"`
 }
 type AdminSummaryRow struct {
-	ProjectID    string                  `json:"project_id"`
-	KeyID        *string                 `json:"key_id"`
-	AgentID      *string                 `json:"agent_id"`
-	Assets       *store.AdminAssetCounts `json:"assets"`
-	Sessions     AdminSessionCounts      `json:"sessions"`
-	Usage        v1.TokenUsage           `json:"usage"`
-	Coverage     AdminUsageCoverage      `json:"coverage"`
-	LastActiveAt *int64                  `json:"last_active_at"`
+	ProjectID    string                     `json:"project_id" binding:"required"`
+	KeyID        *string                    `json:"key_id" extensions:"x-nullable" binding:"required"`
+	AgentID      *string                    `json:"agent_id" extensions:"x-nullable" binding:"required"`
+	Assets       *sessions.AdminAssetCounts `json:"assets" extensions:"x-nullable" binding:"required"`
+	Sessions     AdminSessionCounts         `json:"sessions" binding:"required"`
+	Usage        v1.TokenUsage              `json:"usage" binding:"required"`
+	Coverage     AdminUsageCoverage         `json:"coverage" binding:"required"`
+	LastActiveAt *int64                     `json:"last_active_at" extensions:"x-nullable" binding:"required"`
 }
 type AdminSummaryResponse struct {
-	Data       []AdminSummaryRow `json:"data"`
-	HasMore    bool              `json:"has_more"`
-	NextCursor string            `json:"next_cursor"`
+	Data       []AdminSummaryRow `json:"data" binding:"required"`
+	HasMore    bool              `json:"has_more" binding:"required"`
+	NextCursor string            `json:"next_cursor" binding:"required"`
 }
 
 func adminSummaryTime(r *http.Request, name string) (*time.Time, error) {
@@ -80,33 +79,33 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		group = "project"
 	}
 	if group != "project" && group != "agent" && group != "key" {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	after, err := adminSummaryTime(r, "created_after")
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	before, err := adminSummaryTime(r, "created_before")
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if after != nil && before != nil && !after.Before(*before) {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	if group == "agent" && r.URL.Query().Get("project_id") == "" {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	var page projects.Page
 	if projectID := r.URL.Query().Get("project_id"); projectID != "" {
 		if options.after != "" {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 		var binding projects.Binding
@@ -125,8 +124,8 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		if group == "project" {
 			groups[""] = &AdminSummaryRow{ProjectID: project.ID}
 		}
-		counts, err := h.Admin.ReadAdminSummary(ctx, project.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session sessions.Session, creationKeyID *string) error {
-			projected, err := sessionResponse(session, h.executorURL())
+		counts, err := h.Admin.ReadAdminSummary(ctx, project.TenantID, sessions.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session sessions.Session, creationKeyID *string) error {
+			projected, err := sessionResponse(session, h.Execution.ExecutorURL)
 			if err != nil {
 				return err
 			}
@@ -174,7 +173,7 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 			return
 		}
 		if group == "project" {

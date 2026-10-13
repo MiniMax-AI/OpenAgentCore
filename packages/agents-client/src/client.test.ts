@@ -52,7 +52,7 @@ function agentSnapshot(): Record<string, unknown> {
     name: null,
     instructions: null,
     multi_agent: { enabled: false, max_concurrent_subagents: null },
-    reasoning: {},
+    reasoning: { effort: null, summary: null },
     service_tier: "auto",
     text: { format: { type: "text" }, verbosity: "medium" },
     tools: [],
@@ -80,6 +80,7 @@ function turnResource(overrides: Record<string, unknown> = {}): Record<string, u
   return {
     id: "turn_1",
     agent_id: "agent",
+    subagent_id: null,
     session_id: "session",
     object: "agent.session.turn",
     status: "queued",
@@ -99,6 +100,7 @@ function messageItem(overrides: Record<string, unknown> = {}): Record<string, un
     type: "message",
     status: "in_progress",
     role: "assistant",
+    phase: null,
     content: [{ type: "output_text", text: "" }],
     ...overrides,
   };
@@ -163,7 +165,7 @@ describe("OpenAIAgentsClient", () => {
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example/v1/",
       token: () => "tenant-key",
-      fetch: recordingFetch(jsonResponse({ data: [], has_more: false }), calls),
+      fetch: recordingFetch(jsonResponse({ object: "list", data: [], first_id: null, last_id: null, has_more: false }), calls),
     });
 
     await client.listSessions({ after: "sess/one", limit: 10, order: "asc", agentId: "agent one" });
@@ -299,7 +301,7 @@ describe("OpenAIAgentsClient", () => {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(
-          'event: error\ndata: {"type":"error","event_id":"evt_error","session_id":"session","error":{"code":"stream_interrupted","type":"server_error","message":"safe"}}\n\n',
+          'event: error\ndata: {"type":"error","event_id":"evt_error","session_id":"session","error":{"code":"stream_interrupted","type":"server_error","message":"safe","param":null}}\n\n',
         ));
       },
       cancel() {
@@ -325,7 +327,7 @@ describe("OpenAIAgentsClient", () => {
     const failed = { ...sessionResource(), environment, status: "failed", error: reason, last_active_at: 25 };
     const frames = [
       {
-        type: "agent.session.environment.failed", event_id: "evt_environment", session_id: "session",
+        type: "agent.session.environment.failed", event_id: "evt_environment", session_id: "session", turn_id: null,
         environment: {
           id: "environment", type: "openai_hosted", status: "failed",
           error: { type: "environment_error", code: "environment_connection_failed", message: "The environment failed to connect." },
@@ -370,7 +372,6 @@ describe("OpenAIAgentsClient", () => {
     const created = JSON.stringify({
       type: "agent.session.created",
       event_id: "evt_created",
-      session_id: "session/created",
       session,
     });
     const later = JSON.stringify({
@@ -444,7 +445,7 @@ describe("OpenAIAgentsClient", () => {
       { type: "agent.session.created", event_id: "created", session: admitted },
       { type: "agent.session.turn.created", event_id: "turn", session_id: "session", turn_id: "turn_1", turn: turnResource() },
       {
-        type: "agent.session.turn.item.added", event_id: "input", session_id: "session", turn_id: "turn_1",
+        type: "agent.session.turn.item.added", event_id: "input", session_id: "session", turn_id: "turn_1", output_index: null,
         item: messageItem({ status: "completed", role: "user", content: [{ type: "input_text", text: "First" }] }),
       },
       { type: "agent.session.in_progress", event_id: "progress", session: admitted },
@@ -864,7 +865,6 @@ describe("OpenAIAgentsClient", () => {
     const created = {
       type: "agent.session.created",
       event_id: "evt_created",
-      session_id: "session",
       session: sessionResource(),
     };
     const client = new OpenAIAgentsClient({
@@ -887,7 +887,7 @@ describe("OpenAIAgentsClient", () => {
     const onEvent = vi.fn();
     const client = new OpenAIAgentsClient({
       fetch: recordingFetch(streamResponse([
-        'event: error\ndata: {"type":"error","event_id":"evt_error","session_id":"session","error":{"code":"stream_interrupted","type":"server_error","message":"private"}}\n\n',
+        'event: error\ndata: {"type":"error","event_id":"evt_error","session_id":"session","error":{"code":"stream_interrupted","type":"server_error","message":"private","param":null}}\n\n',
       ]), []),
     });
 
@@ -1021,7 +1021,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("projects the dadf64a7 known SSE payload families with exact cross references", async () => {
     const events = [
-      { type: "agent.session.idle", event_id: "session", session_id: "session", session: sessionResource() },
+      { type: "agent.session.idle", event_id: "session", session: sessionResource() },
       {
         type: "agent.session.turn.created",
         event_id: "turn",
@@ -1034,7 +1034,6 @@ describe("OpenAIAgentsClient", () => {
         event_id: "item",
         session_id: "session",
         turn_id: "turn_1",
-        item_id: "item_1",
         output_index: 0,
         item: messageItem(),
       },
@@ -1049,6 +1048,7 @@ describe("OpenAIAgentsClient", () => {
           turn_id: "turn_1",
           type: "web_search_call",
           status: "in_progress",
+          action: null,
         },
       },
       {
@@ -1094,6 +1094,7 @@ describe("OpenAIAgentsClient", () => {
         type: "agent.session.environment.connected",
         event_id: "environment",
         session_id: "session",
+        turn_id: null,
         environment: { id: "environment", type: "self_hosted", status: "connected", error: null },
       },
     ];
@@ -1106,10 +1107,10 @@ describe("OpenAIAgentsClient", () => {
 
     expect(onEvent).toHaveBeenCalledTimes(events.length);
     expect(onEvent.mock.calls.map((call) => call[0]?.type)).toEqual(events.map((event) => event.type));
-    expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ item_id: "item_1", item: { id: "item_1", turn_id: "turn_1" } });
+    expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ output_index: 0, item: { id: "item_1", turn_id: "turn_1" } });
   });
 
-  it("projects explicit wire nulls and accepts older Cores that omit them", async () => {
+  it("projects explicit wire nulls", async () => {
     const user = {
       id: "user_1", turn_id: "turn_1", type: "message", status: "completed", role: "user",
       phase: null, content: [{ type: "input_text", text: "question" }],
@@ -1119,12 +1120,10 @@ describe("OpenAIAgentsClient", () => {
       call_id: "call_1", output: null, error: null,
     };
     const session = { ...sessionResource(), agent: { ...agentSnapshot(), reasoning: { effort: null, summary: null } } };
-    const { phase: _omitted, ...legacyUser } = user;
     const events = [
-      { type: "agent.session.idle", event_id: "idle", session_id: "session", session },
+      { type: "agent.session.idle", event_id: "idle", session },
       { type: "agent.session.turn.item.added", event_id: "user", session_id: "session", turn_id: "turn_1", output_index: null, item: user },
       { type: "agent.session.turn.item.added", event_id: "result", session_id: "session", turn_id: "turn_1", output_index: null, item: result },
-      { type: "agent.session.turn.item.added", event_id: "legacy", session_id: "session", turn_id: "turn_1", item: { ...legacyUser, id: "user_2" } },
       {
         type: "agent.session.turn.item.added", event_id: "answer", session_id: "session", turn_id: "turn_1",
         output_index: 0, item: messageItem({ content: [], phase: "final_answer" }),
@@ -1143,9 +1142,7 @@ describe("OpenAIAgentsClient", () => {
     expect(projected[1]).toMatchObject({ output_index: null, item: { role: "user", phase: null } });
     expect(projected[2]).toMatchObject({ output_index: null, item: { output: null, error: null } });
     expect(Object.prototype.hasOwnProperty.call(projected[2]?.item, "output")).toBe(true);
-    expect(Object.prototype.hasOwnProperty.call(projected[3], "output_index")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(projected[3]?.item, "phase")).toBe(false);
-    expect(projected[4]).toMatchObject({ output_index: 0, item: { status: "in_progress", content: [], phase: "final_answer" } });
+    expect(projected[3]).toMatchObject({ output_index: 0, item: { status: "in_progress", content: [], phase: "final_answer" } });
 
     for (const invalid of [{ ...events[1], output_index: "0" }, { ...events[1], output_index: -1 }, { ...events[1], item: { ...user, phase: "draft" } }]) {
       const rejected = new OpenAIAgentsClient({
@@ -1204,18 +1201,6 @@ describe("OpenAIAgentsClient", () => {
     expect(projected).toMatchObject({ type: event.type, turn_id: "turn_1", turn: { status, usage } });
     expect(Object.prototype.hasOwnProperty.call(projected, "usage")).toBe(true);
     expect(projected.usage).toEqual(usage);
-  });
-
-  it("accepts a terminal Turn event without top-level usage", async () => {
-    const onEvent = vi.fn();
-    const client = new OpenAIAgentsClient({
-      fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(terminalTurnEvent("completed"))}\n\n`]), []),
-    });
-
-    await client.streamEvents("session", { onEvent });
-
-    expect(onEvent).toHaveBeenCalledTimes(1);
-    expect(Object.prototype.hasOwnProperty.call(onEvent.mock.calls[0]?.[0], "usage")).toBe(false);
   });
 
   it.each([
@@ -1385,7 +1370,7 @@ describe("OpenAIAgentsClient", () => {
             last_active_at: 1,
           });
         }
-        return jsonResponse({ data: [], has_more: false });
+        return jsonResponse({ object: "list", data: [], first_id: null, last_id: null, has_more: false });
       }) as typeof fetch,
     });
 
@@ -1943,7 +1928,7 @@ describe("OpenAIAgentsClient", () => {
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(jsonResponse({}), calls) });
 
     await expect(client.retrieveSourceFile("notes.txt")).rejects.toThrow("Invalid Source File ID");
-    await expect(client.uploadSourceFile({ file: new Blob(["x"]), filename: "" })).rejects.toThrow("valid filename");
+    await expect(client.uploadSourceFile({ file: new Blob(["x"]), filename: "" })).rejects.toThrow("nonempty filename");
     await expect(client.listEnvironmentFiles("environment", { path: "relative" }))
       .rejects.toThrow("absolute directory without parent traversal");
     await expect(client.listEnvironmentFiles("environment", { path: "/executor/../secret" }))
@@ -1953,11 +1938,6 @@ describe("OpenAIAgentsClient", () => {
       data: "YR==",
       path: "/workspace/file.txt",
     })).rejects.toThrow("strict standard Base64");
-    await expect(client.createEnvironmentFile("environment", {
-      type: "inline",
-      data: btoa("a".repeat(5 * 1024 * 1024 + 1)),
-      path: "/workspace/file.txt",
-    })).rejects.toThrow("at most 5 MiB");
     await expect(client.createEnvironmentFile("environment", {
       type: "file_id",
       file_id: "file-16e1f26e-8cf6-4272-9c31-d470b08d31af",
@@ -2040,7 +2020,7 @@ describe("OpenAIAgentsClient", () => {
     const controller = new AbortController();
     const client = new OpenAIAgentsClient({
       baseUrl: "https://core.example.test/v1/",
-      fetch: recordingFetch(jsonResponse({ data: [], has_more: false }), calls),
+      fetch: recordingFetch(jsonResponse({ object: "list", data: [], first_id: null, last_id: null, has_more: false }), calls),
     });
 
     await client.listTurns("session/one", {
@@ -2115,7 +2095,7 @@ describe("OpenAIAgentsClient", () => {
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
     const message: SessionInputEvent = {
       type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }],
+      input: [{ role: "user", content: [{ type: "input_text", text: "hello" }, { type: "input_image", image_url: "https://example.test/a.png" }] }],
     };
     const cancel: SessionInputEvent = { type: "agent.session.input.cancel" };
 
@@ -2173,21 +2153,11 @@ describe("OpenAIAgentsClient", () => {
   it.each([
     { label: "non-array", events: {} },
     { label: "sparse", events: Array(1) },
-    { label: "65 events", events: Array.from({ length: 65 }, () => ({ type: "agent.session.input.cancel" })) },
     { label: "unknown variant", events: [{ type: "agent.session.input.future" }] },
     { label: "extra event field", events: [{ type: "agent.session.input.cancel", input: null }] },
-    { label: "empty message input", events: [{ type: "agent.session.input.message", input: [] }] },
     { label: "non-user message", events: [{
       type: "agent.session.input.message",
       input: [{ role: "assistant", content: [{ type: "input_text", text: "hello" }] }],
-    }] },
-    { label: "empty text message", events: [{
-      type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_text", text: "" }] }],
-    }] },
-    { label: "all-empty text parts", events: [{
-      type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_text", text: "" }, { type: "input_text", text: "" }] }],
     }] },
     { label: "sparse message content", events: [{
       type: "agent.session.input.message",
@@ -2196,16 +2166,6 @@ describe("OpenAIAgentsClient", () => {
     { label: "extra message field", events: [{
       type: "agent.session.input.message",
       input: [{ role: "user", content: [{ type: "input_text", text: "hello" }], name: "extra" }],
-    }] },
-    { label: "message image", events: [{
-      type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_image", image_url: "https://example.test/a.png" }] }],
-    }] },
-    { label: "empty call id", events: [{
-      type: "agent.session.input.tool_result", call_id: "", turn_id: "turn", success: true,
-    }] },
-    { label: "empty turn id", events: [{
-      type: "agent.session.input.tool_result", call_id: "call", turn_id: "", success: true,
     }] },
     { label: "non-boolean success", events: [{
       type: "agent.session.input.tool_result", call_id: "call", turn_id: "turn", success: "true",
@@ -2230,33 +2190,6 @@ describe("OpenAIAgentsClient", () => {
     expect(() => client.submitEvents("session", events as unknown as SessionInputEvent[], "invalid"))
       .toThrow(TypeError);
     expect(calls).toHaveLength(0);
-  });
-
-  it("enforces only Core's 1 MiB HTTP wire limit and leaves canonical internal sizing to Core", async () => {
-    const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
-    const makeEvent = (text: string): SessionInputEvent => ({
-      type: "agent.session.input.message",
-      input: [{ role: "user", content: [{ type: "input_text", text }] }],
-    });
-    const emptyWireBytes = new TextEncoder().encode(JSON.stringify({ events: [makeEvent("")] })).length;
-    const exact = makeEvent("x".repeat(1024 * 1024 - emptyWireBytes));
-
-    await client.submitEvents("session", [exact], "exact-boundary");
-
-    expect(new TextEncoder().encode(String(calls[0]?.init?.body))).toHaveLength(1024 * 1024);
-    expect(() => client.submitEvents("session", [makeEvent(`${"x".repeat(1024 * 1024 - emptyWireBytes)}x`)], "over"))
-      .toThrow("Session input event request exceeds 1 MiB.");
-
-    const canonicalDifference = makeEvent("<>&/\u2028".repeat(80_000));
-    expect(new TextEncoder().encode(JSON.stringify({ events: [canonicalDifference] })).length).toBeGreaterThan(512 * 1024);
-    await client.submitEvents("session", [canonicalDifference], "core-canonicalizes");
-
-    const unicodeOversize = makeEvent("🙂".repeat(262_150));
-    expect(JSON.stringify({ events: [unicodeOversize] }).length).toBeLessThan(1024 * 1024);
-    expect(() => client.submitEvents("session", [unicodeOversize], "utf8-over"))
-      .toThrow("Session input event request exceeds 1 MiB.");
-    expect(calls).toHaveLength(2);
   });
 
   it("sends whitespace-only message text verbatim, as Core admits it", async () => {
@@ -2332,24 +2265,6 @@ describe("OpenAIAgentsClient", () => {
     expect(calls).toHaveLength(2);
     expect(calls.map((call) => new Headers(call.init?.headers).get("Idempotency-Key")))
       .toEqual([key, key]);
-  });
-
-  it.each([
-    undefined,
-    "",
-    " \u0085 ",
-    "x".repeat(129),
-    "🙂".repeat(33),
-  ])("rejects invalid event-write idempotency key %j before fetch", (key) => {
-    const calls: FetchCall[] = [];
-    const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
-
-    expect(() => client.submitEvents(
-      "session",
-      [{ type: "agent.session.input.cancel" }],
-      key as unknown as string,
-    )).toThrow("Idempotency key must be non-blank and at most 128 UTF-8 bytes.");
-    expect(calls).toHaveLength(0);
   });
 
   it("surfaces function result conflicts and target errors with their official fields", async () => {

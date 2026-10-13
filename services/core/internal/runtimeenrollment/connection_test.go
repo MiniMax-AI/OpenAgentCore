@@ -111,7 +111,7 @@ func (s *liveConnectionStore) GetDeviceCredential(context.Context, string) (runt
 	return runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: runtimedevice.RuntimeTypeAgentDaemon, CredentialHash: s.digest}, true, nil
 }
 func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
-	for _, name := range []string{"connected", "rotated before read", "revoked after peer", "device revoked after peer", "retired after peer", "store error after peer", "device store error after peer", "closed", "no registry"} {
+	for _, name := range []string{"connected", "rotated before read", "revoked after peer", "device revoked after peer", "retired after peer", "store error after peer", "device store error after peer", "closed"} {
 		t.Run(name, func(t *testing.T) {
 			digest := runtimedevice.HashCredential("fixture-key")
 			s := &liveConnectionStore{digest: digest}
@@ -153,8 +153,6 @@ func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
 				wantErr = s.credentialRecheckError
 			case "closed":
 				peer.Close("closed before observation")
-			case "no registry":
-				registry = nil
 			}
 			connected, err := RuntimeConnected(t.Context(), s, registry, "environment", digest)
 			if connected != want || !errors.Is(err, wantErr) {

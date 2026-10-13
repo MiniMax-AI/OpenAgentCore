@@ -234,5 +234,205 @@
       }
     },
     "valid": false
+  },
+  {
+    "name": "microsandbox-external",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": false
+      }
+    },
+    "valid": true,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "ea1aa3cb9bd74682f5fb1a727dc43c63df193f71c7946c395da30451ee5ee3b0"
+  },
+  {
+    "name": "microsandbox-external-requires-root",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 0
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": false
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "microsandbox-external-no-false-quota",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024,
+        "environment_disk_mib": 4096
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": false
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "microsandbox-external-xattr-required",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": false,
+        "capacity_quota": false
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "microsandbox-owned-zero-environment-rejected",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "docker-external-rejected",
+    "provider": "docker",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": false
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "microsandbox-external-omitted-false-quota",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
+      }
+    },
+    "valid": true,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "ea1aa3cb9bd74682f5fb1a727dc43c63df193f71c7946c395da30451ee5ee3b0"
+  },
+  {
+    "name": "microsandbox-external-null-false-quota",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024
+      },
+      "runtime": {
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": null
+      }
+    },
+    "valid": true,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "ea1aa3cb9bd74682f5fb1a727dc43c63df193f71c7946c395da30451ee5ee3b0"
   }
 ]

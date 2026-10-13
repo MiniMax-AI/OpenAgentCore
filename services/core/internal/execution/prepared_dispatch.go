@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -17,16 +17,19 @@ type EnvironmentRun struct {
 }
 
 // RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor. It
-// checks lease, the lease d.Store was built on, before any Runtime preparation.
+// checks lease, the lease the Dispatcher's execution operations hold, before
+// any Runtime preparation.
 func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
 	if err = lease.CheckOwnership(ctx); err != nil {
 		return run, err
 	}
-	run.Reservation, err = d.Store.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
+	expire, cancel := context.WithTimeout(ctx, 5*time.Second)
+	run.Reservation, err = d.Sessions.ExpireEnvironmentInput(expire, tenantID, sessionID, reservationID)
+	cancel()
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
-	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := d.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}
@@ -38,11 +41,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
 		return run, sessions.ErrInvalidInput
 	}
-	if !snapshot.ModelProviderConfigured && snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
-		// Reserved before providers were required; the caller settles it as failed.
-		return run, ErrModelProviderRequired
-	}
-	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
+	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}
@@ -50,7 +49,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil {
 		return run, err
 	}
-	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
+	caps, err := d.sessionCapabilities(ctx, peer, session, snapshot)
 	if err != nil {
 		return run, err
 	}
@@ -92,7 +91,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
-	promoted, err := d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	promoted, err := d.sessionExecution.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
 	if errors.Is(err, sessions.ErrTurnConflict) {
 		// A rejected claim leaves the reservation pending for a later attempt.
 		return run, err
@@ -107,17 +106,16 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if run.Reservation.Receipts[0].Replayed {
 		return run, nil
 	}
-	req.RunID = run.Reservation.Receipts[0].TurnID
-	req.Input = messages
+	turnID := run.Reservation.Receipts[0].TurnID
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
-	releaseDelivery, err := peer.TrackExecutionDelivery(req.RunID)
+	releaseDelivery, err := peer.TrackExecutionDelivery(turnID)
 	if err != nil {
-		run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
+		run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 		return run, err
 	}
 	defer releaseDelivery()
-	result, status := d.deliver(owner, tenantID, sessionID, peer, req, through, prepared)
-	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, req.RunID, result, status)
-	run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, result, status)
+	result, status := d.deliver(owner, tenantID, sessionID, peer, req, turnID, messages, through, prepared)
+	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, turnID, result, status)
+	run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
 	return run, err
 }

@@ -15,7 +15,7 @@ export function SandboxResetNotice({ deployment, failed, onRetry }: {
   const { navigate } = useConsoleNavigation();
   return <>
     {failed ? <ReadFailure partial={deployment !== undefined} onRetry={onRetry} /> : null}
-    {deployment?.reset ? <Section headingId="sandbox-reset-notice-heading" title={t("reset.title")} actions={<button className="button outline" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{t("reset.view")}</button>}>
+    {deployment?.reset ? <Section headingId="sandbox-reset-notice-heading" title={t("reset.title")} actions={<button className="button outline" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{t("reset.view")}</button>}>
       <div role="status"><StatusDot tone="warning" label={t(`reset.${deployment.reset.clear}`)} /></div>
       <p>{t("reset.body")}</p>
     </Section> : null}

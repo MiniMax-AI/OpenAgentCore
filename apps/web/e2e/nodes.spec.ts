@@ -15,14 +15,12 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
-  // What a Docker host needs for the default command, which installs the node with sudo.
-  await expect(add.getByText("Rootful Docker Engine running, its socket owned by the docker group with mode 0660, enforcing CPU and memory limits (cgroup v2)")).toBeVisible();
+  // What a host needs for the default command, which installs the node with sudo.
+  await expect(add.getByText("What the sandbox backend needs on the host; the installer checks it and names anything missing")).toBeVisible();
   await expect(add.getByText("SELinux is not enforcing")).toBeVisible();
   await expect(add.getByText("In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused.")).toBeVisible();
   await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
   await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
-  await expect(add.getByText("oac-node joins the docker group, which is equivalent to root on this host.")).toBeVisible();
-  await expect(add.getByText(/\/dev\/kvm/)).toHaveCount(0);
   // Node installation only offers a system service; there is no user-mode alternative.
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   await expect(add.getByLabel("One-time enrollment command without sudo", { exact: true })).toHaveCount(0);
@@ -35,12 +33,12 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   const field = add.getByLabel("One-time enrollment command", { exact: true });
   await expect(field).toHaveValue(/enroll_fixture_/);
   // The token goes on stdin to the checked installer, run with sudo unless the shell is root.
-  await expect(field).toHaveValue(/^ \(umask 077;.*\|\| s=sudo\n/);
-  await expect(field).toHaveValue(/\| \$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$d\/node-install\.pyz" \$\{NO_COLOR\+--no-color\} --enrollment-token-stdin /);
+  await expect(field).toHaveValue(/^ \(umask 077\n/);
+  await expect(field).toHaveValue(/\| \$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --enrollment-token-stdin /);
   // It downloads from, and names as its source, the public URL, not the loopback address this browser uses.
   await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
   await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
-  await expect(add.getByText("If the command is interrupted or the download stalls, run the same command again: the download resumes.")).toBeVisible();
+  await expect(add.getByText("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
@@ -93,9 +91,9 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(problem).toContainText("Not connected yet");
   await expect(problem).toContainText("sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
-  // Connected, it reports why Docker isn't ready; once ready, the node is connected.
-  await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
-  await expect(problem).toContainText("Docker limits unsupported");
+  // Connected, it reports why its provider isn't ready; once ready, the node is connected.
+  await setNode(request, { id: "node-new", online: true, diagnostic: "host_unsupported" });
+  await expect(problem).toContainText("Host unsupported");
   await expect(progress).toContainText("Waiting for Docker");
   await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
   await expect(progress).toHaveText("edge-04 · Connected");
@@ -114,7 +112,7 @@ test("issues no command before the installation is read, for a loopback public U
     await held;
     await route.fulfill({ status: 500, json: { error: { message: "Unavailable.", type: "server_error", code: null, param: null } } });
   });
-  await openConsole(page, request, "nodes", { installation: "local" });
+  await openConsole(page, request, "settings?id=sandbox", { installation: "local" });
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
   await expect(add.getByRole("status")).toHaveText("Checking this installation's public URL…");
@@ -155,7 +153,7 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).not.toContainText("edge-03");
   // Removing the Core record leaves the system service for root/sudo to uninstall on its host.
   const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
-  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nexport http_proxy=[^\n]+\nexport HTTP_PROXY=[^\n]+\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$d\/node-install\.pyz" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/\| s=sudo\nexport http_proxy=[^\n]+\nexport HTTP_PROXY=[^\n]+\nprintf '\\n==> Downloading node installer\.\.\.\\n' &&\ncurl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' [^]*\n\$s \$\{s:\+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY\} python3 "\$installer" \$\{NO_COLOR\+--no-color\} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
   await expect(cleanup.getByText("Installed without sudo?")).toHaveCount(0);
   await expect(cleanup.getByLabel("Uninstall command without sudo", { exact: true })).toHaveCount(0);
   // Nothing to force for a node on the current address; closing leaves focus on the page, as the row is gone.
@@ -188,7 +186,7 @@ test("gives the host's uninstall command even when the installation must be read
 });
 
 test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
   await page.getByRole("button", { name: "Own machines" }).click();
   await page.getByRole("button", { name: "microsandbox Recommended" }).click();
@@ -205,15 +203,14 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   expect(tokenRequested).toBe(false);
   expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
   await add.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "System", exact: true }).click();
-  await page.getByRole("button", { name: "Manage sandbox configuration", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   // The saved specification carries the Runtime read from the console's manifest.
   await page.getByRole("button", { name: "Configuration details", exact: true }).click();
   await expect(page.locator(".help-tip-popover").getByText("c0ffee000000", { exact: true })).toBeVisible();
 });
 
 test("preselects microsandbox and asks once before switching to Docker", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await page.getByRole("button", { name: "Own machines" }).click();
   const microsandbox = page.getByRole("button", { name: "microsandbox Recommended" });
   const docker = page.getByRole("button", { name: "Docker", exact: true });
@@ -245,7 +242,7 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   page.on("request", (sent) => {
     if (sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/deployment")) submitted = sent.postDataJSON() as Record<string, unknown>;
   });
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await page.getByRole("button", { name: "E2B cloud" }).click();
   await expect(page.getByLabel("E2B provider")).toHaveValue("sandbase");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://sandbox.sandbase.ai");
@@ -259,7 +256,7 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   await selectFixtureE2BBuild(page);
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect(page.getByRole("heading", { name: "Sandbox configuration", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sandbox and scheduling", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   expect(submitted).toMatchObject({ provider: "e2b", configuration: { template: "template:94be54a1-138c-4f30-bc87-b13686272dbe", api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" } , credential: { api_key: "fixture-private-key" } });
   expect(await writes(request)).toEqual([
@@ -270,7 +267,7 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
 });
 
 test("uses the official E2B preset and clears a selected build when the key changes", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await page.getByRole("button", { name: "E2B cloud" }).click();
   await page.getByLabel("E2B provider").selectOption("official");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://api.e2b.app");
@@ -291,7 +288,7 @@ test("uses the official E2B preset and clears a selected build when the key chan
 });
 
 test("shows the retained E2B build while a replacement key is checked", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "e2b" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "e2b" });
   await page.getByRole("button", { name: "Change resources" }).click();
   const edit = page.getByRole("dialog", { name: "Change resources" });
   const saved = "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b";
@@ -317,7 +314,7 @@ test("edits only the saved backend, preserving a custom size and Runtime", async
     await route.fulfill({ json: deployment });
   });
   await page.route("**/core/v1/sandbox/nodes", (route) => route.fulfill({ json: { data: [] } }));
-  await openConsole(page, request, "system?id=sandbox");
+  await openConsole(page, request, "settings?id=sandbox");
   await page.getByRole("button", { name: "Change resources" }).click();
   await expect(page.getByRole("button", { name: "Own machines" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "E2B cloud" })).toHaveCount(0);
@@ -328,7 +325,7 @@ test("edits only the saved backend, preserving a custom size and Runtime", async
 });
 
 test("keeps the page usable when Core refuses a sandbox change, and shows a safe refusal", async ({ page, request }) => {
-  await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 403, message: "This console is read-only." });
   await page.getByRole("button", { name: "Own machines" }).click();
   await page.getByRole("button", { name: "microsandbox Recommended" }).click();
@@ -347,25 +344,40 @@ test("keeps the page usable when Core refuses a sandbox change, and shows a safe
   const added = page.getByRole("dialog", { name: "Add node" });
   await expect(added).toBeVisible();
   await added.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "System", exact: true }).click();
-  await page.getByRole("button", { name: "Manage sandbox configuration", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Configuration details", exact: true }).click();
   await expect(page.locator(".help-tip-popover").getByText("c0ffee000000", { exact: true })).toBeVisible();
 });
 
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {
-  await openConsole(page, request, "nodes?id=node-local");
-  // A Docker node shows its limit too, and the edit shows what the host holds.
-  const capacity = page.getByRole("region", { name: "Capacity" });
+  await openConsole(page, request, "nodes");
+  // Nodes links to the sole capacity editor in Settings.
+  const capacity = page.getByRole("table", { name: "Sandbox nodes" });
   await expect(capacity).toContainText("Active / limit");
   await expect(capacity).toContainText("5 / 8");
-  await page.getByRole("button", { name: "Edit node" }).click();
+  await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
-  await expect(edit.getByText("Host: 16 CPU · 64 GiB. Each sandbox: 2 CPU · 4 GiB. Suggested: at most 8 at once.")).toBeVisible();
   await edit.getByLabel("Name").fill("core-01-large");
   await edit.getByLabel("Sandboxes at once").fill("6");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(edit).toBeHidden();
-  await expect(page.getByRole("heading", { name: "core-01-large", level: 1 })).toBeVisible();
-  await expect(capacity).toContainText("5 / 6");
+  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("core-01-large");
+  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("5 / 6");
+});
+
+
+test("node settings history follows the selected node URL", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Edit node", exact: true });
+  await expect(editor).toBeVisible();
+  await expect(page).toHaveURL(/#settings\?id=sandbox&node=/);
+  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await page.goBack();
+  await expect(editor).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(/#settings\?id=sandbox$/);
+  await expect(editor).toBeHidden();
+  expect(await writes(request)).toEqual([]);
 });

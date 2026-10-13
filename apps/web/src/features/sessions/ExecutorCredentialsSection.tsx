@@ -12,7 +12,7 @@ import { Modal } from "../../components/Modal";
 import { TableSkeleton } from "../../components/Skeleton";
 import { failedLast, useFailureToast, useToast } from "../../components/Toast";
 import { useDeleteFlow } from "../../lib/delete-flow";
-import { formatDateTime, shortId } from "../../lib/format";
+import { epochSeconds, formatDateTime, shortId } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
 import { ExecutorInstallPanel, useExecutorInstall } from "./ExecutorInstallPanel";
 import { CredentialFile } from "./executor-credential-file";
@@ -54,10 +54,6 @@ function sameKey(a: string, b: string): boolean {
   return a.toLowerCase() === b.toLowerCase();
 }
 
-function seconds(value: string | null): number | null {
-  return value === null ? null : Math.floor(Date.parse(value) / 1000);
-}
-
 /**
  * Executor credentials of a self-hosted Session's environment: Core issues,
  * rotates and revokes them with the deployment's Core key. An issued
@@ -78,7 +74,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const locale = i18n.resolvedLanguage;
   const toast = useToast();
   const { byId, refresh: refreshProjects } = useProjects();
-  const archived = byId.get(projectId)?.status === "archived";
+  const archived = Boolean(byId.get(projectId)?.archived_at);
   const install = useExecutorInstall(projectId, environmentId, archived);
   const query = useQuery(executorConnectionQuery(projectId, sessionId, environmentId));
   const credentials = query.data?.data ?? null;
@@ -253,11 +249,11 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
                       <HelpTip>{t(revoked ? "executor.connection.restore" : "executor.connection.bound", { id })}</HelpTip>
                     </span> : null}
                   </span></th>
-                  <td className="session-nowrap">{formatDateTime(seconds(credential.created_at), locale)}</td>
+                  <td className="session-nowrap">{formatDateTime(epochSeconds(credential.created_at), locale)}</td>
                   <td>
                     <span className="executor-credential-status">
                       <StatusDot tone={revoked ? "neutral" : "ok"} label={revoked ? t("executor.status.revoked") : t("executor.status.active")} />
-                      {revoked ? <span className="executor-credential-date">{formatDateTime(seconds(credential.revoked_at), locale)}</span> : null}
+                      {revoked ? <span className="executor-credential-date">{formatDateTime(epochSeconds(credential.revoked_at), locale)}</span> : null}
                     </span>
                   </td>
                   <td className="actions-cell">

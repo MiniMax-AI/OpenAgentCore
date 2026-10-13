@@ -10,13 +10,11 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // validationStore counts every persistence attempt so rejected requests can
@@ -40,14 +38,14 @@ func (s *validationStore) CreateVault(_ context.Context, input vaults.CreateVaul
 	return vaults.Vault{ID: uuid.NewString(), TenantID: input.TenantID, Name: input.Name, Metadata: input.Metadata}, nil
 }
 
-func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (sessions.Session, error) {
+func (s *validationStore) UpdateSessionMetadata(_ context.Context, command sessions.UpdateSessionMetadataCommand) (sessions.Session, error) {
 	s.writes++
-	return sessions.Session{ID: id, TenantID: tenant, Metadata: metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
+	return sessions.Session{ID: command.SessionID, TenantID: command.TenantID, Metadata: command.Metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
+func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	s.writes++
-	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
+	return sessions.Creation{Session: sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, Created: true}, nil
 }
 
 func (s *validationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
@@ -63,11 +61,10 @@ func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, command e
 // serve takes every write from the handler, and the Worker admits Sessions
 // with initial input into s. Session reads are unexpected.
 func (s *validationStore) serve(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	f.sessionAdmission.createSession = s.CreateSession
 	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault
-	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
+	f.sessionsReader.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
 	f.environmentTemplates.create, f.environmentTemplates.update = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate
 }
 
@@ -169,10 +166,15 @@ func TestMetadataValidationUsesOfficialFields(t *testing.T) {
 			if want := map[bool]int{true: 0, false: 3}[op.limited]; s.writes != want {
 				t.Fatalf("rejected metadata reached storage: %d writes", s.writes)
 			}
-			// Type errors precede the generic whole-body error.
+			// Type errors precede the generic whole-body error. Agent bodies follow
+			// the pinned shape walk, which reports unknown members first.
 			body := strings.Replace(fmt.Sprintf(op.body, `{"k":1}`), "{", `{"unsupported_field":true,`, 1)
+			want := "metadata.k"
+			if strings.HasPrefix(op.name, "agent") {
+				want = "unsupported_field"
+			}
 			w := credentialRequest(h, op.method, op.path, body)
-			if code, param, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "invalid_request_error" || param == nil || *param != "metadata.k" {
+			if code, param, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "invalid_request_error" || param == nil || *param != want {
 				t.Fatalf("metadata type did not precede generic error: %d %s", w.Code, w.Body)
 			}
 			for _, tc := range accepted {
@@ -261,27 +263,6 @@ func TestTemplateNetworkRejectionsUseOfficialCode(t *testing.T) {
 		w := credentialRequest(h, http.MethodPost, "/v1/agents/environments/templates/"+template, `{"network":`+network+`}`)
 		if w.Code != http.StatusOK || s.writes != before+1 {
 			t.Fatalf("%s rejected: %d %s", network, w.Code, w.Body)
-		}
-	}
-}
-
-func TestUnstorableTextMapsToInvalidRequest(t *testing.T) {
-	for _, tc := range []struct {
-		err    error
-		status int
-	}{
-		{fmt.Errorf("create agent: %w", &pgconn.PgError{Code: "22P05"}), http.StatusBadRequest},
-		{fmt.Errorf("create vault: %w", &pgconn.PgError{Code: "22021"}), http.StatusBadRequest},
-		{&pgconn.PgError{Code: "23505"}, http.StatusInternalServerError},
-	} {
-		w := httptest.NewRecorder()
-		writeStoreError(w, httptest.NewRequest(http.MethodPost, "/v1/agents", nil), tc.err)
-		var response v1.ErrorResponse
-		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Error.Param != nil {
-			t.Fatalf("%v: %d %s", tc.err, w.Code, w.Body)
-		}
-		if tc.status == http.StatusBadRequest && (response.Error.Code == nil || *response.Error.Code != "invalid_request_error" || response.Error.Type != "invalid_request_error" || response.Error.Message != unstorableTextMessage) {
-			t.Fatalf("%v: %s", tc.err, w.Body)
 		}
 	}
 }

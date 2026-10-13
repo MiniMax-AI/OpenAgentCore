@@ -8,12 +8,12 @@ import minimax from '../assets/logos/minimax.svg'
 const props = defineProps<{ lang: Lang }>()
 const copy = computed(() => props.lang === 'zh' ? {
   stages: ['原生 Agent', '统一执行', '自由组合'],
-  captions: ['Runtime 准备环境，原生 Harness 运行模型与工具循环。', '应用通过 Agents API 创建 Session，Core 管理执行与持久状态。', '不同 Session 选择不同的 Harness、模型与计算环境，共用一个 Core。'],
-  app: '你的应用', api: 'OpenAI SDK · Agents API', state: 'Session 与 Turn', orchestration: '调度 · 取消 · 交互', events: '事件 · 结果 · 持久状态', workspace: '工作目录 · Shell · 工具', loop: '原生 Agent 循环', runtime: '环境准备 · 执行管理', model: '模型服务', provider: 'Sandbox Provider', compute: '创建与回收计算资源', next: '下一步', back: '上一步', play: '播放', pause: '暂停', label: 'Session 架构演示', step: '演示阶段',
+  captions: ['Runtime 准备环境，原生 Harness 运行模型与工具循环。', '应用通过 Agents API 创建 Session，Core 管理执行与持久状态。', '不同 Session 使用不同 Harness 与模型；此示例中的托管 Session 共用 microsandbox 部署，独立工作区可跨计算生命周期保留。'],
+  app: '你的应用', api: 'OpenAI SDK · Agents API', state: 'Session 与 Turn', orchestration: '调度 · 取消 · 交互', events: '事件 · 结果 · 持久状态', workspace: '挂载工作区 · Shell · 工具', loop: '原生 Agent 循环', runtime: '环境准备 · 执行管理', model: '模型服务', provider: 'Sandbox Provider', compute: '创建与回收计算资源', next: '下一步', back: '上一步', play: '播放', pause: '暂停', label: 'Session 架构演示', step: '演示阶段',
 } : {
   stages: ['Native agent', 'Managed execution', 'Many combinations'],
-  captions: ['Runtime prepares the environment. The native harness owns the model and tool loop.', 'Your app creates a Session through the Agents API. Core manages execution and durable state.', 'Each Session chooses its harness, model and compute. They share one Core.'],
-  app: 'Your application', api: 'OpenAI SDK · Agents API', state: 'Sessions & Turns', orchestration: 'Schedule · cancel · interact', events: 'Events · results · durable state', workspace: 'Workspace · shell · tools', loop: 'Native agent loop', runtime: 'Prepare · execute · report', model: 'Model provider', provider: 'Sandbox Provider', compute: 'Provision & reclaim compute', next: 'Next', back: 'Back', play: 'Play', pause: 'Pause', label: 'Inside a Session', step: 'Architecture stage',
+  captions: ['Runtime prepares the environment. The native harness owns the model and tool loop.', 'Your app creates a Session through the Agents API. Core manages execution and durable state.', 'Sessions use different Harnesses and models. Managed Sessions here share one microsandbox deployment; independent workspaces outlive compute.'],
+  app: 'Your application', api: 'OpenAI SDK · Agents API', state: 'Sessions & Turns', orchestration: 'Schedule · cancel · interact', events: 'Events · results · durable state', workspace: 'Mounted workspace · shell · tools', loop: 'Native agent loop', runtime: 'Prepare · execute · report', model: 'Model provider', provider: 'Sandbox Provider', compute: 'Provision & reclaim compute', next: 'Next', back: 'Back', play: 'Play', pause: 'Pause', label: 'Inside a Session', step: 'Architecture stage',
 })
 const step = ref(0)
 const playing = ref(true)
@@ -70,9 +70,9 @@ onBeforeUnmount(() => { clearInterval(timer); observer?.disconnect(); media?.rem
           <header><strong>Environment</strong><small>Session A</small></header>
           <div class="runtime"><b>Runtime</b><small>{{ copy.runtime }}</small></div>
           <div class="harness hand-box"><strong><img :src="codex" alt="" />Codex</strong><div class="agent-loop"><small>{{ copy.loop }}</small><div class="cycle"><span>context</span><span>model</span><span>result</span><span>tools</span><svg viewBox="0 0 200 90" aria-hidden="true"><path d="M57 13 Q100 -2 147 13M172 26Q190 45 172 68M147 80Q100 96 57 80M30 68Q13 45 30 26" /></svg></div></div></div>
-          <small class="workspace">{{ copy.workspace }}</small><span class="compute-tag">Docker</span>
+          <small class="workspace">{{ copy.workspace }}</small><span class="compute-tag">microsandbox</span>
         </article>
-        <article v-for="(item, i) in [{name:'Claude Code', icon:claude, host:'E2B'}, {name:'MiniMax Code', icon:minimax, host:'Your machine'}]" :key="item.name" class="environment secondary hand-box" :class="'env-' + i">
+        <article v-for="(item, i) in [{name:'Claude Code', icon:claude, host:'microsandbox'}, {name:'MiniMax Code', icon:minimax, host:'Your machine'}]" :key="item.name" class="environment secondary hand-box" :class="'env-' + i">
           <header><strong>Environment</strong><small>Session {{ i === 0 ? 'B' : 'C' }}</small></header><div class="runtime"><b>Runtime</b></div><div class="harness hand-box"><strong><img :src="item.icon" alt="" />{{ item.name }}</strong></div><span class="compute-tag">{{ item.host }}</span>
         </article>
         <article class="model hand-box"><strong>{{ copy.model }}</strong><small>Responses API</small></article>

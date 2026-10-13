@@ -20,8 +20,7 @@ var (
 	// admission.
 	ErrResetAdmission = errors.New("hosted admission is paused for a sandbox reset")
 	// ErrAdmissionClosed rejects new hosted work that the deployment cannot
-	// admit: paused for maintenance, without a valid specification, or for
-	// another installation.
+	// admit: without a valid specification, or for another installation.
 	ErrAdmissionClosed = errors.New("environment is no longer available")
 	// ErrPublicURLUnreachable rejects selection and admission when the provider
 	// requires a reachable public origin and the installation is loopback.
@@ -30,8 +29,10 @@ var (
 	// generation and at least one is preparing it.
 	ErrNodesPreparing = errors.New("sandbox nodes are preparing the target generation")
 	// ErrNodeUnavailable reports a sandbox node that is offline, unready or
-	// full, or no node at all.
+	// full, no node at all, or a deployment without a provider.
 	ErrNodeUnavailable = errors.New("sandbox node unavailable")
+	// ErrPublicURLRequired rejects rules without the installation public URL.
+	ErrPublicURLRequired = errors.New("placement rules require the installation public URL")
 )
 
 // Declarations are the provider declarations placement reads.
@@ -52,10 +53,13 @@ type Rules struct {
 }
 
 // NewRules returns the rules for the provider declarations and the
-// installation public URL, which is empty when the installation has none.
+// installation public URL.
 func NewRules(declarations Declarations, publicURL string) (*Rules, error) {
 	if declarations == nil {
 		return nil, errors.New("placement rules require provider declarations")
+	}
+	if publicURL == "" {
+		return nil, ErrPublicURLRequired
 	}
 	return &Rules{declarations: declarations, publicURL: publicURL}, nil
 }
@@ -67,12 +71,11 @@ func (r *Rules) PublicURL() string { return r.publicURL }
 // Deployment is the deployment as placement reads it, loaded under the
 // deployment lock.
 type Deployment struct {
-	// InstallationID is empty until an installation is claimed or configured.
-	InstallationID  string
-	Provider, Mode  string
-	Generation      uint64
-	WebManaged      bool
-	AdmissionPaused bool
+	// InstallationID is empty until the execution owner claims the
+	// installation at startup.
+	InstallationID string
+	Provider, Mode string
+	Generation     uint64
 	// Resetting reports a sandbox reset in progress.
 	Resetting     bool
 	Specification json.RawMessage
@@ -106,14 +109,41 @@ type Reserved struct {
 	Available bool
 }
 
-// Restore is what restoring suspended compute on its node reads: the node,
-// nil when the installation no longer has it, and whether the node is ready
-// for the allocation's generation.
-type Restore struct {
-	Node *Node
-	// Generation is zero when the allocation has none.
-	Generation      uint64
-	GenerationReady bool
+// CheckpointNode is a fresh readiness declaration for one immutable generation.
+// Capacity is read under the same deployment lock as the allocation transfer.
+type CheckpointNode struct {
+	Node       Node
+	Checkpoint *sandbox.CheckpointCompatibility
+}
+
+// ChooseCheckpoint selects a compatible node without interpreting adapter tokens.
+// A retained allocation already owns its source slot. Cleanup needs no active
+// slot and compares only the artifact domain, but still reserves a retained slot.
+func (r *Rules) ChooseCheckpoint(nodes []CheckpointNode, source string, compatibility sandbox.CheckpointCompatibility, cleanup bool) (string, error) {
+	var chosen *Node
+	for i := range nodes {
+		candidate := &nodes[i]
+		n := &candidate.Node
+		if !n.Online || candidate.Checkpoint == nil || candidate.Checkpoint.ArtifactDomain != compatibility.ArtifactDomain {
+			continue
+		}
+		if !cleanup && (candidate.Checkpoint.ExecutionClass != compatibility.ExecutionClass || n.CoreURL != r.publicURL || n.Active >= int64(n.MaxActive)) {
+			continue
+		}
+		if n.ID != source && n.Retained >= int64(n.MaxRetained) {
+			continue
+		}
+		if n.ID == source {
+			return n.ID, nil
+		}
+		if chosen == nil || n.Active < chosen.Active || n.Active == chosen.Active && n.Retained < chosen.Retained {
+			chosen = n
+		}
+	}
+	if chosen == nil {
+		return "", ErrNodeUnavailable
+	}
+	return chosen.ID, nil
 }
 
 // CheckPublicOrigin rejects a provider that requires a reachable public
@@ -131,22 +161,17 @@ func (r *Rules) CheckPublicOrigin(provider string) error {
 
 // CheckAdmission admits new hosted work on the deployment. installation is
 // the canonical installation the work was provisioned for, or empty for a new
-// Session. An unclaimed deployment admits everything.
+// Session. Only a claimed deployment with a provider admits hosted work.
 func (r *Rules) CheckAdmission(d Deployment, installation string) error {
-	if d.InstallationID == "" {
-		return nil
+	if d.InstallationID == "" || d.Provider == "" {
+		return ErrNodeUnavailable
 	}
 	if d.Resetting {
 		return ErrResetAdmission
 	}
-	if d.AdmissionPaused {
-		return fmt.Errorf("%w: sandbox creation is paused for provider maintenance", ErrAdmissionClosed)
-	}
-	if d.Provider != "" {
-		var spec sandbox.DeploymentSpec
-		if json.Unmarshal(d.Specification, &spec) != nil || r.declarations.ValidateSpecification(d.Provider, spec) != nil {
-			return fmt.Errorf("%w: sandbox creation requires a deployment specification", ErrAdmissionClosed)
-		}
+	var spec sandbox.DeploymentSpec
+	if json.Unmarshal(d.Specification, &spec) != nil || r.declarations.ValidateSpecification(d.Provider, spec) != nil {
+		return fmt.Errorf("%w: sandbox creation requires a deployment specification", ErrAdmissionClosed)
 	}
 	if installation != "" && installation != d.InstallationID {
 		return fmt.Errorf("%w: sandbox installation does not match deployment", ErrAdmissionClosed)
@@ -155,42 +180,30 @@ func (r *Rules) CheckAdmission(d Deployment, installation string) error {
 }
 
 // DecidePlacement chooses the node a new Session's hosted Environment
-// reserves, or nil when the deployment places no node: in direct mode and
-// without a provider. It prefers the highest ready generation, then the
-// fewest active sandboxes. A Web-managed installation places only on nodes
-// enrolled with its public URL; restores still reach the others.
+// reserves, or nil in direct mode, which places no node. It prefers the
+// highest ready generation, then the fewest active sandboxes. It places only
+// on nodes enrolled with the public URL; restores still reach the others.
 func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) {
 	if d.Resetting {
 		return nil, ErrResetAdmission
 	}
+	if d.Provider == "" {
+		return nil, ErrNodeUnavailable
+	}
 	// A changed installation address cannot admit guests that require a
 	// public origin. Existing owned resources remain available for cleanup.
-	if d.Provider != "" {
-		if err := r.CheckPublicOrigin(d.Provider); err != nil {
-			return nil, err
-		}
+	if err := r.CheckPublicOrigin(d.Provider); err != nil {
+		return nil, err
 	}
-	if d.Mode == "direct" {
-		if d.AdmissionPaused {
-			return nil, ErrNodeUnavailable
-		}
+	if d.Mode == string(sandbox.DeploymentDirect) {
 		return nil, nil
-	}
-	if d.Provider == "" {
-		if d.WebManaged {
-			return nil, ErrNodeUnavailable
-		}
-		return nil, nil
-	}
-	if d.AdmissionPaused {
-		return nil, ErrNodeUnavailable
 	}
 	var chosen *Node
 	preparing := false
 	for i := range nodes {
 		n := &nodes[i]
 		free := n.Active < int64(n.MaxActive) && n.Retained < int64(n.MaxRetained)
-		reachable := !d.WebManaged || n.CoreURL == r.publicURL
+		reachable := n.CoreURL == r.publicURL
 		if n.Online && n.TargetState == "preparing" && free && reachable {
 			preparing = true
 		}
@@ -214,17 +227,6 @@ func (r *Rules) DecidePlacement(d Deployment, nodes []Node) (*Placement, error) 
 // reserved: the placement must be unreleased and its node available.
 func CheckReserved(reserved Reserved) error {
 	if reserved.Released || !reserved.Available {
-		return ErrNodeUnavailable
-	}
-	return nil
-}
-
-// CheckRestore admits restoring suspended compute on its original node: the
-// node must be online, ready for the allocation's generation and below its
-// active capacity. Restore never selects another node.
-func CheckRestore(restore Restore) error {
-	n := restore.Node
-	if n == nil || restore.Generation == 0 || !n.Online || !restore.GenerationReady || n.Active >= int64(n.MaxActive) {
 		return ErrNodeUnavailable
 	}
 	return nil

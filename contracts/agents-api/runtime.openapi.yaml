@@ -19,7 +19,9 @@ definitions:
       type:
         type: string
     required:
+      - code
       - message
+      - param
       - type
     type: object
   api.CoreErrorResponse:
@@ -117,6 +119,13 @@ definitions:
         $ref: '#/definitions/sandbox.Resources'
       runtime:
         $ref: '#/definitions/sandbox.RuntimeRelease'
+      workspace:
+        allOf:
+          - $ref: '#/definitions/workspacefs.Declaration'
+        description: Workspace is a derived immutable capability receipt, never filesystem configuration.
+        readOnly: true
+    required:
+      - resources
     type: object
   sandbox.Resources:
     properties:
@@ -128,6 +137,9 @@ definitions:
         type: integer
       root_disk_mib:
         type: integer
+    required:
+      - cpus
+      - memory_mib
     type: object
   sandbox.RuntimeRelease:
     properties:
@@ -143,6 +155,13 @@ definitions:
         type: string
       source_commit:
         type: string
+    required:
+      - firmware_sha256
+      - image_id
+      - image_manifest_digest
+      - microsandbox_ref
+      - runtime_sha256
+      - source_commit
     type: object
   v1.APIError:
     properties:
@@ -151,13 +170,17 @@ definitions:
         x-nullable: true
       message:
         type: string
+      misalignment:
+        type: object
       param:
         type: string
         x-nullable: true
       type:
         type: string
     required:
+      - code
       - message
+      - param
       - type
     type: object
   v1.ErrorResponse:
@@ -181,6 +204,25 @@ definitions:
         type: string
       workspace_directory:
         type: string
+    type: object
+  workspacefs.AttachmentKind:
+    enum:
+      - host_directory
+    type: string
+    x-enum-varnames:
+      - AttachmentHostDirectory
+  workspacefs.Declaration:
+    properties:
+      attachment:
+        $ref: '#/definitions/workspacefs.AttachmentKind'
+      capacity_quota:
+        type: boolean
+      user_xattr:
+        type: boolean
+    required:
+      - attachment
+      - capacity_quota
+      - user_xattr
     type: object
 info:
   contact: {}

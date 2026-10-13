@@ -30,11 +30,6 @@ func NewCarrier() Carrier {
 	}
 }
 
-// ChildSpan returns a Carrier sharing this Trace but with a fresh Span.
-func (c Carrier) ChildSpan() Carrier {
-	return Carrier{Trace: c.Trace, Span: NewSpanID(), Sampled: c.Sampled}
-}
-
 // String formats the Carrier as a W3C traceparent. Returns "" for a
 // zero-trace Carrier so callers can use it as a presence check.
 func (c Carrier) String() string {
