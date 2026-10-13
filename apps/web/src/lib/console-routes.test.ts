@@ -7,7 +7,7 @@ describe("console routes", () => {
   it("groups pages as Monitor, Resources and Platform with no playground", () => {
     expect(consoleNavGroups.map((group) => group.id)).toEqual(["monitor", "resources", "platform"]);
     expect(consoleNavGroups.flatMap((group) => group.views)).toEqual([
-      "overview", "core-metrics", "agent-metrics", "sandbox-metrics", "sessions",
+      "overview", "core-metrics", "agent-metrics", "sandbox-metrics", "sessions", "request-log",
       "agents", "templates", "skills", "files", "vaults",
       "projects", "nodes", "settings",
     ]);

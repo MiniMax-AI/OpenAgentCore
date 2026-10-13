@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 32b765dbeaaa6ed4329cef499a72432c41d2f0b944ee1bb14df2f17da72160e0
+source_hash: dbc53b9e7d6df095b7131238cddc5af0553504152ddae037c56f885174f30f77
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -40,7 +40,20 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 | `sandbox/enrollment-tokens`、`sandbox/nodes[/{node_id}[/allocations]]` | 节点注册令牌、节点及其分配和主机历史 | [节点指南](../../../docs/zh/getting-started/nodes.md)、[沙箱部署](sandbox-deployment.md)、[节点主机历史](runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | 按 Project、Agent 或密钥统计的 Session 数量和使用情况 | [汇总](#summary) |
 | `metrics` | Core 自身的进程、执行、数据库和作业指标 | [Core 指标](core-metrics.md) |
+| `request-logs` | 近期应用或管理 HTTP 请求及其响应元数据 | [请求日志](#request-log) |
 | `audit-log` | 管理员写入 | [审计日志](#audit-log) |
+
+## 请求日志 {#request-log}
+
+`GET /core/v1/request-logs` 是仅供 Core 密钥调用的诊断读取，由 Web 的 **Request log** 和运维脚本使用。它观察到达 Core `/v1` 与 `/core/v1` API 的 HTTP 请求，包括认证拒绝和失败响应。日志读取本身、健康检查与文档端点、到达 Core 前的 Web 登录或代理失败、机器传输和后台执行不在此视图中。它不是审计档案或分布式执行追踪。
+
+每个 API 实例按入口分别保留最近开始的 1,000 个请求：`public` 对应 `/v1`，`admin` 对应 `/core/v1`。管理页面轮询不会挤掉应用请求。各自容量用尽后覆盖较旧条目，包括长连接请求；重启清空记录。`instance_id` 和 `instance_started_at` 标识提供响应的 API 实例；负载均衡可能返回另一个实例的窗口。Core 同时通过现有结构化日志输出请求结束时的元数据，其保留由运维日志系统负责，不属于本端点。
+
+查询参数包括 `surface=public|admin`（默认 `public`）、`limit`（1–200，默认 100）、可选的精确 `request_id`、`outcome=all|errors|active`（默认 `all`）及可选 `method`。支持的方法值为 `GET`、`HEAD`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS`、`CONNECT`、`TRACE` 和 `OTHER`；其他入站方法记为 `OTHER`。不支持、重复或格式错误的查询参数返回 400。`errors` 包括 HTTP 状态为 400 及以上的请求和已中断的请求。筛选仅扫描保留窗口，按开始时间从新到旧返回。`retained_count` 表示该入口的保留条目数，`total_matching` 是保留条目中匹配的数量，`has_more` 表示响应条数限制省略了匹配项，不代表仍能读取已被覆盖的历史。
+
+响应包含 `object: "core.request_log.list"`、实例标识、`surface`、`capacity`、覆盖数量及 `data`。每条记录包含 `request_id`、`trace_id`、`started_at`、`method`、`route`、`state`、`status`、`duration_ms`、`response_bytes` 和可为空的 `error_code`。`route` 是注册路由模板、认证时部分匹配的前缀或 `(unmatched)`，不会包含原始资源路径或查询。最终响应头提交前，`status` 为 null。`state` 区分 `active`、`completed` 和 `aborted`；活跃请求的耗时和字节数是读取时的观测值。`response_bytes` 统计响应写入器接受的字节数，不包括响应头和传输封装，不是网络传输量测量。SSE 响应在处理函数结束前保持活跃。HTTP 状态及结束不代表异步 Agent Turn 的执行结果；执行结果以 [Session 诊断](./session-diagnostics.md)和该 Session 已记录的历史为准。
+
+不采集正文、请求头值、凭据、提示词、文件内容、原始路径、查询值或错误消息，只保留 API 的安全错误码。返回的请求 ID 对应 `X-Request-Id`，可用于查找已有进程日志的关联条目。Trace ID 仅供关联，不表示完整组件链路已经被追踪。
 
 ## 工作区存储 {#workspace-storage}
 

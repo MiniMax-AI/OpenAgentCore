@@ -54,7 +54,8 @@ type SessionsReader interface {
 // Beta group, has the JSON body and Allow header.
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
-	router.Use(h.responseHeaders, log.HTTPMiddleware, middleware.GetHead)
+	h.requestLogs = newRequestLogs(router)
+	router.Use(log.HTTPMiddleware, h.responseHeaders, middleware.GetHead)
 	router.MethodNotAllowed(methodNotAllowed)
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

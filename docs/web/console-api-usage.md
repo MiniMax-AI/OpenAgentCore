@@ -81,6 +81,10 @@ Wherever a new key is shown, and without any key on an active project's page, th
 
 Summary figures are cumulative per Session and are not billing records. Sessions without reported usage count toward coverage but not toward token sums, and the console shows missing values as missing, never as zero.
 
+## Request log
+
+**Request log** reads `GET /core/v1/request-logs` through `AdminClient`. It filters by application or administration surface, exact request ID and request outcome, and refreshes on demand. The list and local detail dialog share one response; opening a row makes no extra request. Read failures preserve the previous response with a visible stale warning. The [request log contract](../../contracts/agents-api/admin-api.md#request-log) owns capture, bounds and response semantics. Explanations live in help tips; missing status or error data is not invented.
+
 ## Default models
 
 | Operation | Route | Console use |

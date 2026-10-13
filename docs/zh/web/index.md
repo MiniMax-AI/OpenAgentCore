@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 5c8449387651e26ac24cc62008693fb71eafed3dc6e07a83d780da145865db91
+source_hash: d855a260ed8979564ee94e18e3261611baba479f0406e8ca9424d69fb754f2e8
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -22,6 +22,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | Monitor | Core metrics | Core 进程：CPU 与常驻内存及其限制、执行槽位与 Turn 队列、已连接守护进程、数据库延迟与连接池、后台任务 |
 | Monitor | Agent metrics | 1 小时、6 小时、24 小时或 7 天的请求、错误、耗时、token、模型、工具、Agent 和 API 密钥 |
 | Monitor | Sandbox metrics | 节点容量；支持时显示 **Automatic suspension**；**Recorded compute** 生命周期状态与各 Project 的托管 Runtime CPU、内存观测分开展示 |
+| Monitor | Request log | 到达 Core 的近期 HTTP 请求、状态、耗时和安全错误码；[范围及保留方式](../../../contracts/agents-api/zh/admin-api.md#request-log) |
 | Monitor | Session log | 全部 Session；各 Session 的只读对话、跟踪、Turn 和失败分类原因；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | Resources | Agents、Environment templates、Skills、Files、Vaults | 检查和允许的删除操作，显示各资源所属 Project 及创建密钥 |
 | Platform | Projects and keys | 创建、重命名和归档 Project；签发与撤销密钥；各 Project 的用量、写入历史和 API 调用方法 |

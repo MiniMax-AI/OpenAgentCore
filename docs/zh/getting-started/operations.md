@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 8ce67b66748a8414ac3ee954b07e379b7d3a0a37790bb162c000c9ae556842fc
+source_hash: f3f9b2f23898a4e39201ce12cf1f7a199aa39ecc0afd34fd964596a98d2b709a
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -49,6 +49,10 @@ docker compose -f "$HOME/.oac/core/compose.yaml" logs --timestamps init
 `init` 服务在初始化完成后退出。其步骤日志见[部署说明](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation)。
 
 不要将 `docker compose config`、`docker inspect` 或原始日志粘贴到公开问题报告。
+
+## 请求诊断 {#request-diagnosis}
+
+打开 **Monitor → Request log** 查看近期请求，并复制请求 ID 与 Core 服务日志关联。[请求日志](../../../contracts/agents-api/zh/admin-api.md#request-log)定义范围、隐私及有限的内存保留方式。请求接受了异步 Turn 时，请到 **Session log** 查看执行结果；HTTP 接受不等于任务成功。跨重启或 Core 实例的留存使用已有日志采集系统。
 
 ## 停止与重启 {#stop-and-restart}
 

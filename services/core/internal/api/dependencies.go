@@ -96,7 +96,8 @@ type Sandboxes struct {
 
 type Handler struct {
 	Dependencies
-	harnesses map[string]bool
+	harnesses   map[string]bool
+	requestLogs *requestLogs
 }
 
 // NewHandler builds the HTTP handler from complete dependencies.

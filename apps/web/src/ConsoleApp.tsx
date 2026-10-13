@@ -13,6 +13,7 @@ import { ConsoleTourContext, ConsoleTourScreen } from "./features/onboarding/Con
 import { withTransition } from "./features/onboarding/view-transition";
 import { OverviewPage } from "./features/overview/OverviewPage";
 import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
+import { RequestLogPage, requestLogQuery } from "./features/request-log/RequestLogPage";
 import { SessionLogPage } from "./features/sessions/SessionLogPage";
 import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
@@ -45,6 +46,7 @@ function ConsolePage({ view }: { view: ConsoleView }) {
     case "core-metrics": return <CoreMetricsPage />;
     case "agent-metrics": return <AgentMetricsPage />;
     case "sandbox-metrics": return <SandboxMetricsPage />;
+    case "request-log": return <RequestLogPage />;
     case "sessions": return <SessionLogPage />;
     case "session": return <SessionPage />;
     case "agents": return <AgentsPage />;
@@ -106,6 +108,7 @@ function ConsoleShell() {
   const navigation = useMemo(() => ({ ...location, navigate, back, clearIntent }), [location, navigate, back, clearIntent]);
 
   const prefetch = useCallback((view: ConsoleView) => {
+    if (view === "request-log") { void queryClient.prefetchQuery(requestLogQuery("", "all")); return; }
     const spec = prefetchable[view];
     if (!spec) return;
     for (const project of state.projects) void queryClient.prefetchQuery(collectionQuery(spec, project.id));

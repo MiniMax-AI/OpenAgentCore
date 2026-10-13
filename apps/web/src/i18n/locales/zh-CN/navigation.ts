@@ -7,6 +7,7 @@ export const navigation = {
     platform: "平台",
   },
   views: {
+    "request-log": "请求日志",
     overview: "概览",
     "core-metrics": "Core 监控",
     "agent-metrics": "Agent 监控",

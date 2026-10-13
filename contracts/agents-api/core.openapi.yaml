@@ -613,6 +613,82 @@ definitions:
     required:
       - name
     type: object
+  api.RequestLogEntry:
+    properties:
+      duration_ms:
+        type: number
+      error_code:
+        type: string
+        x-nullable: true
+      method:
+        type: string
+      request_id:
+        type: string
+      response_bytes:
+        type: integer
+      route:
+        type: string
+      started_at:
+        type: string
+      state:
+        enum:
+          - active
+          - completed
+          - aborted
+        type: string
+      status:
+        type: integer
+        x-nullable: true
+      trace_id:
+        type: string
+    required:
+      - duration_ms
+      - error_code
+      - method
+      - request_id
+      - response_bytes
+      - route
+      - started_at
+      - state
+      - status
+      - trace_id
+    type: object
+  api.RequestLogList:
+    properties:
+      capacity:
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/api.RequestLogEntry'
+        type: array
+      has_more:
+        type: boolean
+      instance_id:
+        type: string
+      instance_started_at:
+        type: string
+      object:
+        type: string
+      retained_count:
+        type: integer
+      surface:
+        enum:
+          - public
+          - admin
+        type: string
+      total_matching:
+        type: integer
+    required:
+      - capacity
+      - data
+      - has_more
+      - instance_id
+      - instance_started_at
+      - object
+      - retained_count
+      - surface
+      - total_matching
+    type: object
   api.ResourceOwnerList:
     properties:
       data:
@@ -6802,6 +6878,70 @@ paths:
       summary: Query API-key write operations
       tags:
         - Write Audit
+  /core/v1/request-logs:
+    get:
+      description: Core key only. Process-local bounded metadata for /v1 and /core/v1, newest started first. Polling this endpoint is excluded. HTTP status is not a Turn outcome.
+      parameters:
+        - description: API surface (default public)
+          enum:
+            - public
+            - admin
+          in: query
+          name: surface
+          type: string
+        - description: Maximum entries (default 100)
+          in: query
+          maximum: 200
+          minimum: 1
+          name: limit
+          type: integer
+        - description: Exact server-issued request ID
+          in: query
+          name: request_id
+          type: string
+        - description: HTTP outcome filter (default all)
+          enum:
+            - all
+            - errors
+            - active
+          in: query
+          name: outcome
+          type: string
+        - description: HTTP method
+          enum:
+            - GET
+            - HEAD
+            - POST
+            - PUT
+            - PATCH
+            - DELETE
+            - OPTIONS
+            - CONNECT
+            - TRACE
+            - OTHER
+          in: query
+          name: method
+          type: string
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.RequestLogList'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: List recent Core HTTP requests
+      tags:
+        - Core Administration
   /core/v1/sandbox/deployment:
     get:
       description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.

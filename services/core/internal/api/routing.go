@@ -124,6 +124,10 @@ func cleanPath(p string) string {
 // reported: Core's project scope is configured, not account-derived. report
 // observes each emitted API error code.
 func responseHeadersWithErrors(next http.Handler, report func(string)) http.Handler {
+	return responseHeadersWithLog(next, report, nil)
+}
+
+func responseHeadersWithLog(next http.Handler, report func(string), logs *requestLogs) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := newRequestID()
 		header := w.Header()
@@ -131,7 +135,42 @@ func responseHeadersWithErrors(next http.Handler, report func(string)) http.Hand
 		header.Set("Openai-Version", "2020-10-01")
 		header.Set("X-Content-Type-Options", "nosniff")
 		writer := &processingTimeWriter{ResponseWriter: w, started: time.Now(), report: report}
-		next.ServeHTTP(writer, r.WithContext(log.WithRequestID(r.Context(), id)))
+		r = r.WithContext(log.WithRequestID(r.Context(), id))
+		if logs != nil && recordRequest(r) {
+			surface := 0
+			if strings.HasPrefix(r.URL.Path, "/core/") {
+				surface = 1
+			}
+			seq, entry := logs.begin(r, id, writer.started, surface)
+			returned := false
+			writer.observe = func() {
+				entry.Status, entry.ResponseBytes, entry.ErrorCode = writer.status, writer.bytes, writer.errorCode
+				logs.update(seq, entry, surface)
+			}
+			defer func() {
+				entry.State = "completed"
+				if !returned || writer.failed || r.Context().Err() != nil {
+					entry.State = "aborted"
+				}
+				entry.DurationMS = float64(time.Since(writer.started)) / float64(time.Millisecond)
+				writer.observe()
+				var status, errorCode any
+				if entry.Status != nil {
+					status = *entry.Status
+				}
+				if entry.ErrorCode != nil {
+					errorCode = *entry.ErrorCode
+				}
+				log.Ctx(r.Context()).Info("http request finished", "state", entry.State, "method", entry.Method, "route", entry.Route, "status", status, "duration_ms", entry.DurationMS, "response_bytes", entry.ResponseBytes, "error_code", errorCode)
+			}()
+			next.ServeHTTP(writer, r)
+			if writer.status == nil && r.Context().Err() == nil {
+				writer.WriteHeader(http.StatusOK)
+			}
+			returned = true
+			return
+		}
+		next.ServeHTTP(writer, r)
 	})
 }
 
@@ -146,15 +185,26 @@ func newRequestID() string {
 // Unwrap keeps http.ResponseController deadlines and flushing available.
 type processingTimeWriter struct {
 	http.ResponseWriter
-	started time.Time
-	stamped bool
-	report  func(string)
+	started   time.Time
+	stamped   bool
+	report    func(string)
+	status    *int
+	bytes     int64
+	errorCode *string
+	observe   func()
+	failed    bool
 }
 
 // reportAPIError observes the emitted code without reading or retaining bodies.
 func (w *processingTimeWriter) reportAPIError(code string) {
 	if !w.stamped {
-		w.report(code)
+		if w.report != nil {
+			w.report(code)
+		}
+		// API error codes are fixed diagnostics owned by the API and provider contract.
+		if code != "" && len(code) <= 80 {
+			w.errorCode = &code
+		}
 	}
 }
 
@@ -167,19 +217,39 @@ func (w *processingTimeWriter) stamp() {
 
 func (w *processingTimeWriter) WriteHeader(status int) {
 	if status >= http.StatusOK {
+		if !w.stamped {
+			w.status = &status
+		}
 		w.stamp()
+		if w.observe != nil {
+			w.observe()
+		}
 	}
 	w.ResponseWriter.WriteHeader(status)
 }
 
 func (w *processingTimeWriter) Write(body []byte) (int, error) {
-	w.stamp()
-	return w.ResponseWriter.Write(body)
+	if !w.stamped {
+		status := http.StatusOK
+		w.status = &status
+		w.stamp()
+	}
+	n, err := w.ResponseWriter.Write(body)
+	w.bytes += int64(n)
+	w.failed = w.failed || err != nil
+	if w.observe != nil {
+		w.observe()
+	}
+	return n, err
 }
 
 func (w *processingTimeWriter) FlushError() error {
-	w.stamp()
-	return http.NewResponseController(w.ResponseWriter).Flush()
+	if !w.stamped {
+		w.WriteHeader(http.StatusOK)
+	}
+	err := http.NewResponseController(w.ResponseWriter).Flush()
+	w.failed = w.failed || err != nil
+	return err
 }
 
 func (w *processingTimeWriter) Flush() { _ = w.FlushError() }

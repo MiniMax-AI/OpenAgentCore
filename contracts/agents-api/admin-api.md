@@ -38,7 +38,20 @@ Paths are relative to `/core/v1`.
 | `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](./sandbox-deployment.md), [node host history](./runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
 | `metrics` | Core's own process, execution, database and job metrics | [Core metrics](./core-metrics.md) |
+| `request-logs` | Recent public or administration HTTP requests and their response metadata | [Request log](#request-log) |
 | `audit-log` | Administrator writes | [Audit log](#audit-log) |
+
+## Request log
+
+`GET /core/v1/request-logs` is a Core-key-only diagnostic read for Web's **Request log** and operator scripts. It observes HTTP requests that reach Core's `/v1` and `/core/v1` APIs, including rejected authentication and unsuccessful responses. The log read itself, health and documentation endpoints, Web sign-in/proxy failures before Core, machine transports and background execution are outside this view. It is not an audit archive or a distributed execution trace.
+
+Each API instance retains the most recent 1,000 started requests for each surface independently: `public` for `/v1`, `admin` for `/core/v1`. Administration polling cannot evict application requests. Older entries, including long-lived requests, are overwritten when their surface fills. Restart clears the rings. `instance_id` and `instance_started_at` identify the serving API instance; a load balancer can return another instance's window. Core also emits each request's completion metadata through its existing structured logger; retention of that output belongs to the operator's log system, not this endpoint.
+
+Query parameters are `surface=public|admin` (default `public`), `limit` (1–200, default 100), optional exact `request_id`, `outcome=all|errors|active` (default `all`) and optional `method`. Supported method values are `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `CONNECT`, `TRACE` and `OTHER`; other incoming methods are recorded as `OTHER`. Unsupported, repeated or malformed query parameters return 400. `errors` includes HTTP status 400 or above and aborted requests. Filtering scans only the retained window and returns newest-started first. `retained_count` describes that surface's retained window, `total_matching` counts retained matches, and `has_more` means the response limit omitted matches; it does not promise older evicted history is available.
+
+The response has `object: "core.request_log.list"`, instance identity, `surface`, `capacity`, coverage counts and `data`. Each entry contains `request_id`, `trace_id`, `started_at`, `method`, `route`, `state`, `status`, `duration_ms`, `response_bytes` and nullable `error_code`. `route` is a registered route template, a partially matched authentication prefix or `(unmatched)`, never the raw resource path or query. `status` is null until final response headers are committed. `state` distinguishes `active`, `completed` and `aborted`; duration and bytes describe the observation so far for active requests. `response_bytes` counts bytes accepted by the response writer, excluding headers and transport framing; it is not a network transfer measurement. An SSE response remains active until its handler ends. HTTP status and completion do not establish the outcome of an asynchronous Agent Turn; use [Session diagnostics](./session-diagnostics.md) and the Session's recorded history for that outcome.
+
+Bodies, header values, credentials, prompts, file contents, raw paths, query values and error messages are not captured. Only the API's safe error code is retained. The returned request ID corresponds to `X-Request-Id` and can be used to find related existing process log entries. Trace IDs are correlation metadata, not proof of a complete component trace.
 
 ## Workspace storage
 

@@ -9,6 +9,7 @@ export type ConsoleView =
   | "core-metrics"
   | "agent-metrics"
   | "sandbox-metrics"
+  | "request-log"
   | "sessions"
   | "session"
   | "agents"
@@ -23,7 +24,7 @@ export type ConsoleView =
 export type ConsoleNavGroup = "monitor" | "resources" | "platform";
 
 export const consoleNavGroups: ReadonlyArray<{ id: ConsoleNavGroup; views: readonly ConsoleView[] }> = [
-  { id: "monitor", views: ["overview", "core-metrics", "agent-metrics", "sandbox-metrics", "sessions"] },
+  { id: "monitor", views: ["overview", "core-metrics", "agent-metrics", "sandbox-metrics", "sessions", "request-log"] },
   { id: "resources", views: ["agents", "templates", "skills", "files", "vaults"] },
   { id: "platform", views: ["projects", "nodes", "settings"] },
 ];

@@ -19,3 +19,5 @@ export type { AdminClientOptions, AdminProject, CreateAdminProjectInput, RenameA
 export type { DiagnosticFailureCode, ConnectionFailureParams, ProvisioningFailureParams, DiagnosticFailure, SessionDiagnosticFailure, SessionDiagnostics, ItemDiagnosticTiming, TurnDiagnostics } from "./session-diagnostics";
 
 export type { Selection as WorkspaceStorageSelection, WorkspaceStorageInput } from "./generated/core-api";
+
+export type { RequestLogEntry, RequestLogList, RequestLogOptions } from "./request-log";

@@ -1,3 +1,4 @@
+import { requestLog } from "./data/request-log.mjs";
 // Browser acceptance fixture: the console service's routes (/console/**) and the
 // Core management tree it forwards (/core/v1/**: installation, projects, summary,
 // audit log, metrics, harness default models and /core/v1/sandbox/**), with synthetic, deterministic data and
@@ -259,6 +260,7 @@ function adminRead(response, path, url) {
   if (path === "/installation") return send(response, 200, installation());
   if (path === "/projects") return send(response, 200, { data: a.projects.map(a.publicProject), has_more: false });
   if (path === "/summary") return send(response, 200, a.summary(url));
+  if (path === "/request-logs") return send(response, 200, requestLog(url));
   if (path === "/metrics") return send(response, 200, coreMetrics(url.searchParams.get("range") ?? "1h"));
   const match = path.match(/^\/projects\/([^/]+)(\/.*)?$/);
   const project = match && a.projects.find((entry) => entry.id === match[1]);

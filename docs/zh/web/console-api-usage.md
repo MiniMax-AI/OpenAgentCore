@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 89d33fee39f736c42b68899fe12cdb0ff2402763b7074375be448be5e0d3600f
+source_hash: b5bc17e6fe3870240abf18f62dcaecc4f8ccc92b0828550e374011c17e8667dd
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -82,6 +82,10 @@ source_hash: 89d33fee39f736c42b68899fe12cdb0ff2402763b7074375be448be5e0d3600f
 无论是在显示新密钥时，还是在活动项目页面没有显示任何密钥时，控制台都会提供 `OPENAI_BASE_URL`（安装的 `api_base_url`）和 `OPENAI_API_KEY`（新密钥，或项目密钥的占位符）的 shell 导出变量，以及针对 `GET /v1/agents` 和 `POST /v1/agents/sessions` 的 `curl` 和 Python 示例，但不会发送其中任何调用。当安装为 `local_only` 时，控制台会说明 API 只能在 Core 所在计算机上访问；当缺少 `api_base_url` 时，则会提示设置 `public_url`。
 
 汇总数值按 Session 累计，并不是计费记录。未报告使用量的 Session 会计入覆盖率，但不会计入 token 总量；控制台会将缺失值显示为缺失，绝不会显示为零。
+
+## 请求日志 {#request-log}
+
+**Request log** 通过 `AdminClient` 读取 `GET /core/v1/request-logs`，按应用或管理入口、精确请求 ID 和请求结果筛选，并按需刷新。列表和本地详情对话框共用一次响应，打开条目不会发出额外请求。读取失败保留上一次响应并明确提示数据已过期。[请求日志契约](../../../contracts/agents-api/zh/admin-api.md#request-log)定义采集、容量限制及响应语义。说明放在问号提示中，不补造缺失的状态或错误数据。
 
 ## 默认模型 {#default-models}
 

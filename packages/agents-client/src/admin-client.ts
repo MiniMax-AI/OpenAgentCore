@@ -1,3 +1,4 @@
+import { projectRequestLog, type RequestLogOptions } from "./request-log";
 import { projectEnvironmentInstallation } from "./installation-projection";
 import type { EnvironmentInstallation } from "./types";
 import { projectSessionDiagnostics, projectTurnDiagnostics } from "./session-diagnostics";
@@ -82,6 +83,11 @@ export class AdminClient {
   async #content(path: string, options?: ReadOptions): Promise<AdminContent> {
     const response = await this.#response(path, options);
     return { blob: await response.blob(), contentType: response.headers.get("Content-Type"), contentDisposition: response.headers.get("Content-Disposition") };
+  }
+
+  async listRequestLogs(options: RequestLogOptions = {}) {
+    const path = pageQuery("/request-logs", { limit: options.limit }, { request_id: options.request_id, outcome: options.outcome, surface: options.surface, method: options.method });
+    return projectRequestLog(await this.#json(path, options));
   }
 
   async retrieveWorkspaceStorage(options?: ReadOptions): Promise<Selection> {

@@ -1,0 +1,6 @@
+.request-log-search { display: flex; align-items: center; gap: 8px; }
+.request-log-table { table-layout: fixed; }
+.request-log-table th:first-child { width: 110px; }
+.request-log-table th:nth-child(3) { width: 125px; }
+.request-log-table th:last-child { width: 100px; }
+.request-log-table .name-cell-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

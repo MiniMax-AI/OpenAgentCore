@@ -568,6 +568,35 @@ export interface Range {
   start: string;
 }
 export const rangeFields = ["end", "resolution_seconds", "start"] as const;
+export interface RequestLogEntry {
+  duration_ms: number;
+  error_code: string | null;
+  method: string;
+  request_id: string;
+  response_bytes: number;
+  route: string;
+  started_at: string;
+  state: RequestLogEntryState;
+  status: number | null;
+  trace_id: string;
+}
+export const requestLogEntryFields = ["duration_ms", "error_code", "method", "request_id", "response_bytes", "route", "started_at", "state", "status", "trace_id"] as const;
+export const requestLogEntryStateValues = ["active", "completed", "aborted"] as const;
+export type RequestLogEntryState = (typeof requestLogEntryStateValues)[number];
+export interface RequestLogList {
+  capacity: number;
+  data: RequestLogEntry[];
+  has_more: boolean;
+  instance_id: string;
+  instance_started_at: string;
+  object: string;
+  retained_count: number;
+  surface: RequestLogListSurface;
+  total_matching: number;
+}
+export const requestLogListFields = ["capacity", "data", "has_more", "instance_id", "instance_started_at", "object", "retained_count", "surface", "total_matching"] as const;
+export const requestLogListSurfaceValues = ["public", "admin"] as const;
+export type RequestLogListSurface = (typeof requestLogListSurfaceValues)[number];
 export interface Reset {
   clear: ResetMode;
   deadline_at: string | null;

@@ -48,6 +48,10 @@ The `init` service exits after initialization. Its step logs are described in [D
 
 Don't paste `docker compose config`, `docker inspect` or raw logs into public issue reports.
 
+## Request diagnosis
+
+Open **Monitor → Request log** to inspect recent requests and copy their request IDs for correlation with Core's service log. [Request log](../../contracts/agents-api/admin-api.md#request-log) defines its scope, privacy and limited in-memory retention. For a request that accepted an asynchronous Turn, inspect **Session log** for the execution result; HTTP acceptance alone is not task success. Use your existing log collector for retention across restarts or Core instances.
+
 ## Stop and restart
 
 Let active work settle before a planned restart:

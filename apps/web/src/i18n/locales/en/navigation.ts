@@ -7,6 +7,7 @@ export const navigation = {
     platform: "Platform",
   },
   views: {
+    "request-log": "Request log",
     overview: "Overview",
     "core-metrics": "Core metrics",
     "agent-metrics": "Agent metrics",
