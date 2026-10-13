@@ -24,12 +24,12 @@ export function ProviderObservations({ provider, name, stale }: { provider: Harn
       <button type="button" className="text-action" onClick={() => setOpen(true)}>{t("providerDetails")}</button>
     </div>
     <Modal open={open} title={t("providerTitle", { name })} onClose={() => setOpen(false)}>
-      <dl className="system-facts">
+      <div className="settings-rows">
         <Fact label={t("providerLastUsed")} help={t("providerHelp")}>{date(provider.last_used_at)}</Fact>
         <Fact label={t("providerLastError")}>
           {activeError && provider.last_error_code ? <>{diagnosticFailure({ code: provider.last_error_code, params: {}, failed_at: provider.last_error_at }, t)} <HelpTip>{date(provider.last_error_at)}</HelpTip></> : t("providerNoError")}
         </Fact>
-      </dl>
+      </div>
       {stale ? <p role="status">{t("providerStaleHelp")}</p> : null}
     </Modal>
   </>;

@@ -21,8 +21,7 @@ export function StartupSettings({ configuration }: { configuration: CoreInstalla
   const { t } = useTranslation("system");
   return (
     <Section headingId="system-startup-heading" title={t("startup.title")} help={t("startup.help")}>
-      <p className="system-note">{t("startup.effective")}</p>
-      <div className="table-frame">
+      <div className="settings-table">
         <table className="data-table system-settings" aria-label={t("startup.title")}>
           <thead>
             <tr>

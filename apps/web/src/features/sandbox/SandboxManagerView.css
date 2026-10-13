@@ -37,18 +37,8 @@
 .sandbox-manager-page { display: flex; padding: 0; overflow: hidden; }
 .sandbox-manager-page > .console-page-body { max-width: none; margin: 0; }
 .sandbox-manager-page .page-header h1 { margin: 0; }
-.sandbox-provider-settings { padding: 16px; background: var(--surface); border: 0; border-radius: var(--frame-radius); box-shadow: var(--card-shadow); gap: 16px; }
-.sandbox-provider-settings h2 { margin: 0 0 8px; }
-.sandbox-provider-settings p, .sandbox-enrollment > p { font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
-.sandbox-provider-settings > .button, .sandbox-enrollment > .button { align-self: flex-start; }
-.sandbox-cloud-summary { display: grid; gap: 16px; }
-.sandbox-provider-settings .sandbox-enrollment { max-width: none; }
-
-.sandbox-provider-title,
-.sandbox-provider-status,
-.sandbox-provider-actions { display: flex; align-items: center; gap: 6px; }
-.sandbox-provider-title h2 { margin: 0; }
-.sandbox-provider-actions { align-self: flex-start; }
+.sandbox-enrollment > p { font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
+.sandbox-enrollment > .button { align-self: flex-start; }
 
 /* Node list and node detail. */
 .nodes-nowrap { white-space: nowrap; }
@@ -96,9 +86,8 @@
   border-color: color-mix(in srgb, var(--warning) 32%, var(--line));
 }
 
-/* Reset stays in the provider panel; only irreversible decisions interrupt with a dialog. */
-.sandbox-reset { border-top: 1px solid var(--line); padding-top: 16px; }
-.sandbox-reset h3 { margin: 0; font-size: 15px; font-weight: 600; }
+/* Reset progress is Core's report; only irreversible decisions interrupt with a dialog. */
+.sandbox-reset { display: grid; gap: 12px; padding: 16px; }
 .sandbox-reset-offline { display: grid; gap: 6px; }
 .sandbox-reset-offline ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }
 .sandbox-reset-options { display: grid; gap: 10px; border: 0; padding: 0; margin: 0; }

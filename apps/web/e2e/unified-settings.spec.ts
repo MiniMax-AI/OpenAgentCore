@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expectManagementBoundary, openConsole } from "./console";
+import { expectManagementBoundary, openConsole, setDeployment } from "./console";
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
@@ -96,4 +96,44 @@ test("capacity editor refuses to select an old configuration after observing a r
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
   expect(saves[1].id).toBe(selected.id);
+});
+
+test("settings content width does not constrain reset and node dialog backdrops", async ({ page, request }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openConsole(page, request, "settings?id=sandbox");
+  for (const action of ["Reset deployment", "Edit node"]) {
+    await page.getByRole("button", { name: action, exact: true }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    const backdrop = page.locator(".modal-backdrop");
+    const bounds = await backdrop.boundingBox();
+    expect(bounds?.x).toBe(0);
+    expect(bounds?.y).toBe(0);
+    expect(bounds?.width).toBe(1440);
+    expect(bounds?.height).toBe(1000);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
+});
+
+
+test("reset progress actions stay inside settings on narrow screens", async ({ page, request }) => {
+  await page.setViewportSize({ width: 375, height: 844 });
+  await openConsole(page, request, "settings?id=sandbox");
+  await setDeployment(request, { resources: { allocations: 1, pending: 0 }, reset: { clear: "auto", requested_at: "2026-10-13T08:00:00Z", deadline_at: "2026-10-13T09:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } });
+  await page.getByRole("button", { name: "Refresh sandbox state" }).click();
+  const region = page.getByRole("region", { name: "Reset in progress" });
+  await expect(region).toBeVisible();
+  const bounds = (await region.boundingBox())!;
+  for (const name of ["Force reset now", "Cancel reset"]) {
+    const action = region.getByRole("button", { name, exact: true });
+    const box = (await action.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width + 1);
+    await action.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
 });

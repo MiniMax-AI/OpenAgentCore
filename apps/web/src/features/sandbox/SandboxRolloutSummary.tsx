@@ -19,10 +19,12 @@ export function SandboxRolloutSummary({ deployment, stale = false, onOpen }: { d
   const tone: Tone = stale || needsAttention || unknown ? "warning" : rollout.state === "preparing" ? "pending" : "neutral";
   const count = (value: number) => formatInteger(value, i18n.resolvedLanguage);
   return <>
-    <section className="sandbox-rollout-row" aria-labelledby={id}>
-      <h3 id={id}>{t("Configuration rollout")}</h3>
-      <span role={stale ? "alert" : "status"}><StatusDot tone={tone} label={t(label)} /></span>
-      <button type="button" className="text-action" onClick={() => setOpen(true)}>{t("View rollout details")}</button>
+    <section className="settings-row" aria-labelledby={id}>
+      <h3 id={id} className="settings-row-label">{t("Configuration rollout")}</h3>
+      <div className="settings-row-control">
+        <span role={stale ? "alert" : "status"}><StatusDot tone={tone} label={t(label)} /></span>
+        <button type="button" className="text-action settings-row-action" onClick={() => setOpen(true)}>{t("View rollout details")}</button>
+      </div>
     </section>
     <Modal open={open} title={t("Configuration rollout")} onClose={() => setOpen(false)} footer={onOpen ? <button type="button" className="button outline" onClick={() => { setOpen(false); onOpen(); }}>{t("Review nodes")}</button> : undefined}>
       <div className="sandbox-rollout-detail">

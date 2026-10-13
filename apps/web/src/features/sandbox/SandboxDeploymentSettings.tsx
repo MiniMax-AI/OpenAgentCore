@@ -1,25 +1,23 @@
 import { useState, type ReactNode } from "react";
-import type { UpdateSandboxDeployment, SandboxDeployment, StartSandboxReset } from "@oac/agents-client";
+import type { UpdateSandboxDeployment, SandboxDeployment } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../components/Modal";
 import { HelpTip, RefreshButton } from "../../components/console-ui";
 import { formatBytes, formatPeriod, MISSING } from "../../lib/format";
 import type { ParseKeys } from "i18next";
 import { sandboxProviderLabel } from "../../lib/sandbox-labels";
+import { Fact } from "../system/Fact";
 import { sandboxSize, templateBuildSize, templateBuildStatus } from "./deployment-specification";
 import { SandboxRolloutSummary } from "./SandboxRolloutSummary";
-import { SandboxResetControls } from "./SandboxResetControls";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 
 const MIB = 2 ** 20;
 const buildStatusLabel: Record<ReturnType<typeof templateBuildStatus>, ParseKeys<"sandbox">> = { ready: "Ready", notReady: "Not ready", unknown: "Unknown state" };
 
-export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset, onCancelReset, onUpdate, writeFailure, onRefresh, refreshing, pending }: {
+export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdate, writeFailure, onRefresh, refreshing, pending }: {
   deployment: SandboxDeployment;
   disabled: boolean;
   fresh: boolean;
-  onReset: (input: StartSandboxReset) => Promise<boolean>;
-  onCancelReset: (expectedGeneration: number) => Promise<boolean>;
   onUpdate: (input: UpdateSandboxDeployment) => Promise<boolean>;
   writeFailure?: ReactNode;
   onRefresh: () => void;
@@ -38,60 +36,52 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset
   const buildSize = templateBuildSize(deployment);
   const sizeLabel = (value: { cpus: number; memory_mib: number }) => t("{{cpus}} CPU · {{memory}}", { cpus: value.cpus, memory: formatBytes(value.memory_mib * MIB) });
   const canEdit = fresh && !deployment.reset;
-  return <section className="sandbox-provider-settings form-stack" aria-labelledby="sandbox-provider-heading">
-    <div className="sandbox-provider-title">
-      <h2 id="sandbox-provider-heading">{t("Deployment provider")}</h2>
-      <HelpTip label={tNavigation("details")}>
-        {t("One provider serves this deployment. Reset it before choosing a different backend.")}
-        {deployment.mode === "direct" ? ` ${t("Core creates E2B sandboxes directly. No node enrollment is needed.")} ${t("Saved configuration does not confirm execution readiness. Session and Environment state report actual execution.")}` : ""}
-        <dl className="sandbox-summary">
-      {spec?.runtime ? <div><dt>{t("Runtime")}</dt><dd><code title={spec.runtime.source_commit}>{spec.runtime.source_commit.slice(0, 12)}</code></dd></div> : null}
-      {deployment.suspension ? <div><dt>{t("Idle suspension")}</dt><dd>{t("After {{idle}} · kept {{retention}}", { idle: formatPeriod(deployment.suspension.idle_seconds, i18n.resolvedLanguage), retention: formatPeriod(deployment.suspension.retention_seconds, i18n.resolvedLanguage) })}</dd></div> : null}
-      <div><dt>{t("Allocated resources")}</dt><dd>{deployment.resources?.allocations ?? t("Unknown state")}</dd></div>
-      <div><dt>{t("Pending environments")}</dt><dd>{deployment.resources?.pending ?? t("Unknown state")}</dd></div>
-        </dl>
-      </HelpTip>
-    </div>
-    <dl className="sandbox-summary">
-      <div><dt>{t("Provider")}</dt><dd>{sandboxProviderLabel(deployment.provider, locale)}</dd></div>
-      <div><dt>{t("Each sandbox")}</dt><dd>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${spec?.workspace ? t("Root disk {{root}} · external workspace", { root: formatBytes(size.root_disk_mib * MIB) }) : t("Root disk {{root}} · data disk {{data}}", { root: formatBytes(size.root_disk_mib * MIB), data: formatBytes((size.environment_disk_mib ?? 0) * MIB) })}` : ""}` : MISSING}</dd></div>
-    </dl>
-    {spec?.workspace && !spec.workspace.capacity_quota ? <p>{t("Workspace storage is configured by the operator; no capacity quota is enforced.")}</p> : null}
-    {deployment.provider === "e2b" ? <div className="sandbox-cloud-summary">
-      <dl className="sandbox-summary">
-        <div><dt>{t("Sandbox API URL")}</dt><dd><code>{deployment.configuration?.api_url}</code></dd></div>
-        <div><dt>{t("Sandbox data-plane domain")}</dt><dd><code>{deployment.configuration?.domain}</code></dd></div>
-        <div>
-          <dt>{t("Template build")}<HelpTip>{deployment.configuration?.template || t("Unknown state")}</HelpTip></dt>
-          <dd>{[
-            t(buildStatusLabel[templateBuildStatus(build)]),
-            ...(buildSize ? [sizeLabel(buildSize)] : []),
-            ...(build?.resources.root_disk_mib != null ? [t("{{disk}} disk", { disk: formatBytes(build.resources.root_disk_mib * MIB) })] : []),
-          ].join(" · ")}</dd>
-        </div>
-        <div><dt>{t("E2B credential")}</dt><dd>{t(deployment.credential_configured ? "Configured" : "Not configured")}</dd></div>
-      </dl>
-    </div> : null}
-    <SandboxRolloutSummary deployment={deployment} stale={!fresh} />
-    {!deployment.reset ? <>
-      <div className="sandbox-actions">
-        <button type="button" className="button outline" disabled={disabled || !canEdit || changing} onClick={() => { setEditKey((key) => key + 1); setChanging(true); }}>{t("Change resources")}</button>
-        <HelpTip>{t("Changes keep this backend and existing Sessions and nodes. Core prepares the new target for future work; placement may continue on qualified earlier generations.")}</HelpTip>
+  return <section className="console-section" aria-labelledby="sandbox-provider-heading">
+    <header className="console-section-header">
+      <div className="console-section-title">
+        <h2 id="sandbox-provider-heading">{t("Deployment provider")}</h2>
+        <HelpTip label={tNavigation("details")}>
+          {t("One provider serves this deployment. Reset it before choosing a different backend.")}
+          {deployment.mode === "direct" ? ` ${t("Core creates E2B sandboxes directly. No node enrollment is needed.")} ${t("Saved configuration does not confirm execution readiness. Session and Environment state report actual execution.")}` : ""}
+          <dl className="sandbox-summary">
+            {spec?.runtime ? <div><dt>{t("Runtime")}</dt><dd><code title={spec.runtime.source_commit}>{spec.runtime.source_commit.slice(0, 12)}</code></dd></div> : null}
+            {deployment.suspension ? <div><dt>{t("Idle suspension")}</dt><dd>{t("After {{idle}} · kept {{retention}}", { idle: formatPeriod(deployment.suspension.idle_seconds, i18n.resolvedLanguage), retention: formatPeriod(deployment.suspension.retention_seconds, i18n.resolvedLanguage) })}</dd></div> : null}
+            <div><dt>{t("Allocated resources")}</dt><dd>{deployment.resources?.allocations ?? t("Unknown state")}</dd></div>
+            <div><dt>{t("Pending environments")}</dt><dd>{deployment.resources?.pending ?? t("Unknown state")}</dd></div>
+          </dl>
+        </HelpTip>
       </div>
-
-      <Modal open={changing} title={t("Change resources")} wide onClose={() => { if (!pending) setChanging(false); }} footer={<><RefreshButton onClick={onRefresh} refreshing={refreshing} disabled={pending} label={t("Refresh sandbox state")} /><button type="button" className="button outline" disabled={pending} onClick={() => setChanging(false)}>{t("Cancel editing")}</button></>}>
-        <SandboxSetupWizard
-          key={editKey}
-          coreUrl={deployment.core_url}
-          expectedGeneration={deployment.generation}
-          current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, e2bTemplate: deployment.configuration?.template, e2bAPIURL: deployment.configuration?.api_url, e2bDomain: deployment.configuration?.domain } : undefined}
-          disabled={disabled || !canEdit}
-          editing
-          onSubmit={async (input) => { if (await onUpdate(input)) setChanging(false); }}
-        />
-        {writeFailure}
-      </Modal>
-    </> : null}
-    <SandboxResetControls deployment={deployment} disabled={disabled || (changing && !deployment.reset)} stale={!fresh} onStart={onReset} onCancel={onCancelReset} />
+      {!deployment.reset ? <div className="console-section-actions">
+        <HelpTip>{t("Changes keep this backend and existing Sessions and nodes. Core prepares the new target for future work; placement may continue on qualified earlier generations.")}</HelpTip>
+        <button type="button" className="button outline" disabled={disabled || !canEdit || changing} onClick={() => { setEditKey((key) => key + 1); setChanging(true); }}>{t("Change resources")}</button>
+      </div> : null}
+    </header>
+    <div className="settings-rows">
+      <Fact label={t("Provider")}>{sandboxProviderLabel(deployment.provider, locale)}</Fact>
+      <Fact label={t("Each sandbox")} help={spec?.workspace && !spec.workspace.capacity_quota ? t("Workspace storage is configured by the operator; no capacity quota is enforced.") : undefined}>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${spec?.workspace ? t("Root disk {{root}} · external workspace", { root: formatBytes(size.root_disk_mib * MIB) }) : t("Root disk {{root}} · data disk {{data}}", { root: formatBytes(size.root_disk_mib * MIB), data: formatBytes((size.environment_disk_mib ?? 0) * MIB) })}` : ""}` : MISSING}</Fact>
+      {deployment.provider === "e2b" ? <>
+        <Fact label={t("Sandbox API URL")}><code className="system-code">{deployment.configuration?.api_url}</code></Fact>
+        <Fact label={t("Sandbox data-plane domain")}><code className="system-code">{deployment.configuration?.domain}</code></Fact>
+        <Fact label={t("Template build")} help={deployment.configuration?.template || t("Unknown state")}>{[
+          t(buildStatusLabel[templateBuildStatus(build)]),
+          ...(buildSize ? [sizeLabel(buildSize)] : []),
+          ...(build?.resources.root_disk_mib != null ? [t("{{disk}} disk", { disk: formatBytes(build.resources.root_disk_mib * MIB) })] : []),
+        ].join(" · ")}</Fact>
+        <Fact label={t("E2B credential")}>{t(deployment.credential_configured ? "Configured" : "Not configured")}</Fact>
+      </> : null}
+      <SandboxRolloutSummary deployment={deployment} stale={!fresh} />
+    </div>
+    {!deployment.reset ? <Modal open={changing} title={t("Change resources")} wide onClose={() => { if (!pending) setChanging(false); }} footer={<><RefreshButton onClick={onRefresh} refreshing={refreshing} disabled={pending} label={t("Refresh sandbox state")} /><button type="button" className="button outline" disabled={pending} onClick={() => setChanging(false)}>{t("Cancel editing")}</button></>}>
+      <SandboxSetupWizard
+        key={editKey}
+        coreUrl={deployment.core_url}
+        expectedGeneration={deployment.generation}
+        current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, e2bTemplate: deployment.configuration?.template, e2bAPIURL: deployment.configuration?.api_url, e2bDomain: deployment.configuration?.domain } : undefined}
+        disabled={disabled || !canEdit}
+        editing
+        onSubmit={async (input) => { if (await onUpdate(input)) setChanging(false); }}
+      />
+      {writeFailure}
+    </Modal> : null}
   </section>;
 }

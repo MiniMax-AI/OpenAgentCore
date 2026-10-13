@@ -16,6 +16,7 @@ import { sandboxWriteOwnershipQuery } from "./sandbox-write-ownership";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
+import { SandboxResetControls } from "./SandboxResetControls";
 import "./SandboxManagerView.css";
 import { SettingsTabs } from "../settings/SettingsTabs";
 import { SandboxCapacitySettings } from "./SandboxCapacitySettings";
@@ -91,6 +92,13 @@ function DeploymentConfiguration() {
     <p>{sandboxRequestError(writeFailure.error, locale)}</p>
     <p>{t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}</p>
   </div> : null;
+  const configured = snapshot?.deployment.provider || snapshot?.deployment.reset ? snapshot.deployment : null;
+  const disabled = busy || loading || !fresh || setupNeedsRefresh;
+  const reset = configured ? <SandboxResetControls key={`reset:${configurationKey}`} deployment={configured} disabled={disabled} stale={!confirmed} onStart={startReset} onCancel={cancelReset} /> : null;
+  const sections = [
+    configured ? <SandboxDeploymentSettings key={configurationKey} deployment={configured} fresh={confirmed} disabled={disabled} onUpdate={update} onRefresh={refreshByUser} refreshing={loading} pending={busy} writeFailure={writeFailure?.editing ? unknownWrite : null} /> : null,
+    <SandboxCapacitySettings key="capacity" />,
+  ];
 
   return <>
     <DeploymentHeader actions={<>
@@ -98,16 +106,15 @@ function DeploymentConfiguration() {
       <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy} label={t("Refresh sandbox state")} />
     </>} />
     <SettingsTabs active="sandbox" />
-    <div className="console-page-body sandbox-content">
+    <div className="console-page-body sandbox-content settings-body">
       <InstallationNotice installation={installation.data} />
       {!snapshot && (loading || deploymentQuery.isPending) ? <TableSkeleton label={t("Loading sandbox state…")} rows={3} columns={2} /> : null}
       {snapshot && deploymentQuery.isError ? <p role="alert" className="sandbox-error">{t("Refresh failed; showing the last loaded state.")}</p> : null}
       {setupNeedsRefresh ? <p role="alert" className="sandbox-error">{t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}</p> : null}
       {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
       {!snapshot && error !== null ? <ErrorState title={t("Sandbox state couldn't be read")} detail={sandboxRequestError(error, locale)} onRetry={refresh} /> : null}
-      {snapshot && !snapshot.deployment.provider && !snapshot.deployment.reset ? <SandboxSetupWizard key={configurationKey} coreUrl={snapshot.deployment.core_url} expectedGeneration={snapshot.deployment.generation} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
-      {snapshot?.deployment.provider || snapshot?.deployment.reset ? <SandboxDeploymentSettings key={configurationKey} deployment={snapshot.deployment} fresh={confirmed} disabled={busy || loading || !fresh || setupNeedsRefresh} onReset={startReset} onCancelReset={cancelReset} onUpdate={update} onRefresh={refreshByUser} refreshing={loading} pending={busy} writeFailure={writeFailure?.editing ? unknownWrite : null} /> : null}
-      <SandboxCapacitySettings />
+      {snapshot && !configured ? <SandboxSetupWizard key={configurationKey} coreUrl={snapshot.deployment.core_url} expectedGeneration={snapshot.deployment.generation} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
+      {configured?.reset ? [reset, ...sections] : [...sections, reset]}
     </div>
     <ErrorDialog action={{ label: t("Refresh sandbox state"), onClick: refreshByUser }} open={Boolean(writeFailure?.open && !writeFailure.editing)} title={t("Couldn't confirm the sandbox change")} onClose={() => setWriteFailure((failure) => failure && { ...failure, open: false })}>
       {unknownWrite}

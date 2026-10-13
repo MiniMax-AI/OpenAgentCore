@@ -8,6 +8,6 @@ export function SettingsTabs({ active }: { active: SettingsSection }) {
   const { t } = useTranslation("navigation");
   const { navigate } = useConsoleNavigation();
   return <nav className="settings-tabs" aria-label={t("views.settings")}>
-    {sections.map((section) => <button key={section} className="button ghost" type="button" aria-current={active === section ? "page" : undefined} onClick={() => navigate("settings", { id: section })}>{t(`settings.${section}`)}</button>)}
+    {sections.map((section) => <button key={section} className="settings-tab" type="button" aria-current={active === section ? "page" : undefined} onClick={() => navigate("settings", { id: section })}>{t(`settings.${section}`)}</button>)}
   </nav>;
 }

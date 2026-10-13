@@ -18,7 +18,6 @@ export const system = {
   startup: {
     title: "Startup settings",
     help: "Core reports the process settings it loaded. A sensitive setting shows only whether it is set.",
-    effective: "These are the settings this Core process loaded.",
     columns: {
       key: "Setting",
       value: "Value",
@@ -40,7 +39,6 @@ export const system = {
     disabled: "Disabled",
     default: "Default",
     startupHelp: "Which harnesses are enabled, and the default one, are managed in the installation configuration.",
-    harness: "Harness",
     provider: "Model provider",
     notSet: "Not set",
     model: "Default model ID",

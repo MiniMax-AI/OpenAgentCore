@@ -17,14 +17,14 @@ import "./system.css";
 /** A facts card before its first read; the page announces its loading once. */
 function FactsSkeleton({ facts }: { facts: number }) {
   return (
-    <dl className="system-facts" aria-hidden="true">
+    <div className="settings-rows" aria-hidden="true">
       {Array.from({ length: facts }, (_, index) => (
-        <div key={index} className="system-fact">
+        <dl key={index} className="settings-row">
           <dt><span className="skeleton-bar" style={{ width: `${40 + (index * 13) % 24}%` }} /></dt>
           <dd><span className="skeleton-bar" style={{ width: `${30 + (index * 17) % 30}%` }} /></dd>
-        </div>
+        </dl>
       ))}
-    </dl>
+    </div>
   );
 }
 
@@ -38,14 +38,14 @@ export function SystemPage() {
   const about = installation.data;
   const facts = about ? (
     <Section headingId="system-installation-heading" title={t("installation.title")}>
-      <dl className="system-facts">
+      <div className="settings-rows">
         <Fact label={t("installation.publicUrl")} help={t("installation.publicUrlHelp")}><code className="system-code">{about.public_url}</code></Fact>
         <Fact label={t("installation.apiBaseUrl")} help={t("installation.apiBaseUrlHelp")}>
           <CopyableId id={about.api_base_url} label={t("installation.copyApiBaseUrl")} />
         </Fact>
         <Fact label={t("installation.id")}><CopyableId id={about.installation_id} /></Fact>
         <Fact label={t("installation.sourceCommit")}>{about.source_commit ? <code className="system-code" title={about.source_commit}>{about.source_commit.slice(0, 12)}</code> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
-      </dl>
+      </div>
     </Section>
   ) : installation.isError && !installation.isFetching
     ? <ErrorState title={t("installation.failed")} onRetry={() => void installation.refetch()} />
@@ -62,7 +62,7 @@ export function SystemPage() {
         actions={<RefreshButton onClick={refresh} refreshing={installation.isFetching} label={t("refresh")} />}
       />
       <SettingsTabs active="service" />
-      <PageBody>
+      <PageBody className="settings-body">
         <InstallationNotice installation={about} />
         {reading ? <p className="visually-hidden" role="status">{t("loading")}</p> : null}
         {facts}

@@ -1,6 +1,3 @@
-.sandbox-rollout-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-width: 0; }
-.sandbox-rollout-row h3 { margin: 0; font-size: 13px; font-weight: 600; }
-.sandbox-rollout-row > .text-action { margin-left: auto; }
 .sandbox-rollout-detail { display: grid; gap: 16px; }
 .sandbox-rollout-detail-status { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .sandbox-rollout-facts { margin: 0; }

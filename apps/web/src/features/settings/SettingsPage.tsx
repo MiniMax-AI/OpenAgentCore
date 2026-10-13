@@ -20,6 +20,6 @@ export function SettingsPage() {
   return <section className="page-section console-page system-page">
     <PageHeader headingId="settings-heading" title={t(`settings.${section}`)} actions={section === "models" ? <RefreshButton refreshing={models.isFetching} onClick={() => void models.refetch()} label={tSystem("refresh")} /> : undefined} />
     <SettingsTabs active={section} />
-    <PageBody>{section === "models" ? <DefaultModelsSection /> : <WorkspaceStorageSettings />}</PageBody>
+    <PageBody className="settings-body">{section === "models" ? <DefaultModelsSection /> : <WorkspaceStorageSettings />}</PageBody>
   </section>;
 }

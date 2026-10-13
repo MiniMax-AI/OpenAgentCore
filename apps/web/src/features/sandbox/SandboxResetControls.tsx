@@ -1,7 +1,7 @@
 import type { SandboxDeployment, StartSandboxReset } from "@oac/agents-client";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { HelpTip } from "../../components/console-ui";
+import { HelpTip, Section } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { formatDateTime, formatInteger } from "../../lib/format";
 import "./reset-confirmation.css";
@@ -48,28 +48,33 @@ export function SandboxResetControls({ deployment, disabled, stale, onStart, onC
   const title = t(dialog?.action === "cancel" ? "Cancel reset?" : dialog?.action === "force" ? "Force reset now?" : "Reset sandbox deployment?");
   const label = t(dialog?.action === "cancel" ? "Cancel reset" : dialog?.action === "force" ? "Force reset now" : "Reset deployment");
   return <>
-    {reset ? <section className="sandbox-reset form-stack" aria-labelledby={`${id}-progress`}>
-      <div className="sandbox-provider-title"><h3 id={`${id}-progress`}>{t("Reset in progress")}</h3><HelpTip>{t("Progress comes from Core. Offline resources still need confirmed cleanup, even in force mode.")}</HelpTip></div>
-      <p role="status">{t(reset.clear === "auto" ? "Idle sandboxes are being archived. Busy work can finish until the deadline." : "Remaining hosted Sessions are being archived and their work cancelled.")}</p>
-      {stale ? <p className="sandbox-error" role="alert">{t("Reset progress could not be refreshed. These are the last confirmed counts.")}</p> : null}
-      <dl className="sandbox-summary">
-        <div><dt>{t("Busy")}</dt><dd>{formatInteger(reset.remaining.busy, i18n.resolvedLanguage)}</dd></div>
-        <div><dt>{t("Idle")}</dt><dd>{formatInteger(reset.remaining.idle, i18n.resolvedLanguage)}</dd></div>
-        <div><dt>{t("Awaiting cleanup")}</dt><dd>{formatInteger(reset.remaining.cleanup, i18n.resolvedLanguage)}</dd></div>
-        <div><dt>{t("On offline nodes")}</dt><dd>{formatInteger(reset.remaining.on_offline_nodes, i18n.resolvedLanguage)}</dd></div>
-        {reset.clear === "auto" && reset.deadline_at ? <div><dt>{t("Force deadline")}</dt><dd>{formatDateTime(Date.parse(reset.deadline_at) / 1000, i18n.resolvedLanguage)}</dd></div> : null}
-      </dl>
-      {reset.remaining.offline_nodes.length ? <div className="sandbox-reset-offline">
-        <p>{t("Bring these nodes back online so Core can confirm cleanup. Force reset does not bypass them.")}</p>
-        <ul>{reset.remaining.offline_nodes.map((node) => <li key={node.node_id}><span>{node.name || node.node_id}</span>{" · "}{t("{{count}} resources", { count: node.resources })}</li>)}</ul>
-        <p>{t("Remove a node only after Core confirms it holds no resources.")}</p>
-      </div> : null}
-      <p>{t("New hosted Sessions and node enrollment are paused. Setup becomes available only after Core completes the reset.")}</p>
-      <div className="sandbox-actions">
-        {reset.clear === "auto" ? <button type="button" className="button outline" disabled={disabled || submitting} onClick={() => open("force")}>{t("Force reset now")}</button> : null}
-        <button type="button" className="button outline" disabled={disabled || submitting} onClick={() => open("cancel")}>{t("Cancel reset")}</button>
+    {reset ? <Section headingId={`${id}-progress`} title={t("Reset in progress")} help={t("Progress comes from Core. Offline resources still need confirmed cleanup, even in force mode.")} actions={<>
+      {reset.clear === "auto" ? <button type="button" className="button outline danger" disabled={disabled || submitting} onClick={() => open("force")}>{t("Force reset now")}</button> : null}
+      <button type="button" className="button outline" disabled={disabled || submitting} onClick={() => open("cancel")}>{t("Cancel reset")}</button>
+    </>}>
+      <div className="settings-rows sandbox-reset">
+        <p role="status">{t(reset.clear === "auto" ? "Idle sandboxes are being archived. Busy work can finish until the deadline." : "Remaining hosted Sessions are being archived and their work cancelled.")}</p>
+        {stale ? <p className="sandbox-error" role="alert">{t("Reset progress could not be refreshed. These are the last confirmed counts.")}</p> : null}
+        <dl className="sandbox-summary">
+          <div><dt>{t("Busy")}</dt><dd>{formatInteger(reset.remaining.busy, i18n.resolvedLanguage)}</dd></div>
+          <div><dt>{t("Idle")}</dt><dd>{formatInteger(reset.remaining.idle, i18n.resolvedLanguage)}</dd></div>
+          <div><dt>{t("Awaiting cleanup")}</dt><dd>{formatInteger(reset.remaining.cleanup, i18n.resolvedLanguage)}</dd></div>
+          <div><dt>{t("On offline nodes")}</dt><dd>{formatInteger(reset.remaining.on_offline_nodes, i18n.resolvedLanguage)}</dd></div>
+          {reset.clear === "auto" && reset.deadline_at ? <div><dt>{t("Force deadline")}</dt><dd>{formatDateTime(Date.parse(reset.deadline_at) / 1000, i18n.resolvedLanguage)}</dd></div> : null}
+        </dl>
+        {reset.remaining.offline_nodes.length ? <div className="sandbox-reset-offline">
+          <p>{t("Bring these nodes back online so Core can confirm cleanup. Force reset does not bypass them.")}</p>
+          <ul>{reset.remaining.offline_nodes.map((node) => <li key={node.node_id}><span>{node.name || node.node_id}</span>{" · "}{t("{{count}} resources", { count: node.resources })}</li>)}</ul>
+          <p>{t("Remove a node only after Core confirms it holds no resources.")}</p>
+        </div> : null}
+        <p>{t("New hosted Sessions and node enrollment are paused. Setup becomes available only after Core completes the reset.")}</p>
       </div>
-    </section> : <button type="button" className="button outline" disabled={disabled || submitting} onClick={() => open("start")}>{t("Reset deployment")}</button>}
+    </Section> : <Section headingId={`${id}-reset`} title={t("Reset")}>
+      <div className="settings-danger">
+        <p>{t("Clear this configuration to choose a different backend. Hosted Sessions are archived permanently.")}</p>
+        <button type="button" className="button outline danger" disabled={disabled || submitting} onClick={() => open("start")}>{t("Reset deployment")}</button>
+      </div>
+    </Section>}
     <Modal open={dialog !== null} title={title} onClose={() => { if (!submitting) setDialog(null); }} footer={<>
       <button type="button" className="button outline" disabled={submitting} onClick={() => setDialog(null)}>{t("Back")}</button>
       <button type="button" className="button danger" disabled={blocked} onClick={() => void confirm()}>{submitting ? t("Saving sandbox change…") : label}</button>

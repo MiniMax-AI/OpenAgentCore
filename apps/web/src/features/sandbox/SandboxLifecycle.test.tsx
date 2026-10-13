@@ -2,7 +2,7 @@ import type { SandboxDeployment } from "@oac/agents-client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { node } from "../overview/test-fixtures";
-import { SandboxLifecycle } from "./SandboxLifecycle";
+import { SandboxLifecycle, SuspensionSettings } from "./SandboxLifecycle";
 
 const deployment = { suspension: { idle_seconds: 300, retention_seconds: 86400 } } as SandboxDeployment;
 describe("sandbox lifecycle evidence", () => {
@@ -16,17 +16,18 @@ describe("sandbox lifecycle evidence", () => {
     expect(html).toContain("5 minutes");
     expect(html).not.toContain("3 / 14");
   });
-  it("offers policy editing only when the owner supplies controls", () => {
+  it("offers policy editing only in the settings owner, without repeating the evidence strip", () => {
     const nodes = [node("online", { active: 2, max_active: 4, retained: 5, max_retained: 8 })];
-    const html = renderToStaticMarkup(<SandboxLifecycle deployment={deployment} nodes={nodes} stale={false} controls={{ disabled: false, onSave: async () => true }} />);
+    const html = renderToStaticMarkup(<SuspensionSettings deployment={deployment} disabled={false} onSave={async () => true} />);
     expect(html).toContain("Capacity and suspension");
     expect(html).toContain('id="sandbox-idle-seconds"');
     expect(html).toContain('value="300"');
+    expect(html).toContain("24 hours");
+    expect(html).not.toContain("kpi-strip");
     const readonly = renderToStaticMarkup(<SandboxLifecycle deployment={deployment} nodes={nodes} stale={false} />);
     expect(readonly).not.toContain("sandbox-idle-seconds");
     expect(readonly).not.toContain("Edit node");
-    const unsupported = renderToStaticMarkup(<SandboxLifecycle deployment={{ ...deployment, suspension: null }} nodes={nodes} stale={false} controls={{ disabled: true, onSave: async () => true }} />);
-    expect(unsupported).not.toContain("sandbox-idle-seconds");
+    expect(renderToStaticMarkup(<SuspensionSettings deployment={{ ...deployment, suspension: null }} disabled onSave={async () => true} />)).toBe("");
   });
   it("keeps node inventory visible when suspension is unsupported", () => {
     const html = renderToStaticMarkup(<SandboxLifecycle deployment={{ ...deployment, suspension: null }} nodes={[]} stale={false}><table><tbody><tr><td>node-inventory</td></tr></tbody></table></SandboxLifecycle>);

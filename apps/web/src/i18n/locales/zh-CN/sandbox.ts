@@ -2,6 +2,9 @@ import { firstRun } from "./first-run";
 export const sandbox = {
   "Current usage exceeds a saved limit. Existing sandboxes are preserved; new placements wait for capacity.": "当前用量超过已保存上限。已有沙箱保留；新的分配需等待容量。",
   "Capacity and suspension": "容量与挂起",
+  "The idle policy applies to the whole deployment. Active and retained limits are set for each node under Sandbox nodes.": "空闲策略对整个部署生效；活跃与保留上限在“沙箱节点”中按节点设置。",
+  "Reset": "重置",
+  "Clear this configuration to choose a different backend. Hosted Sessions are archived permanently.": "清除当前配置后才能选择其他后端。托管 Session 将被永久归档。",
   "Idle before suspension (seconds)": "空闲多久后挂起（秒）",
   "Deployment-wide: 30–86,400 seconds. Applies to existing and new running sandboxes without restarting them. Suspension already in progress and snapshot retention are unchanged. Capacity pressure may suspend an idle sandbox after 15 seconds.": "整个部署统一生效：30–86,400 秒。适用于现有和新建的运行中沙箱，无需重启。已经开始的挂起和快照保留期不变。容量紧张时，沙箱空闲 15 秒后可能提前挂起。",
   "Enter a whole number from 30 to 86,400.": "请输入 30 到 86,400 之间的整数。",

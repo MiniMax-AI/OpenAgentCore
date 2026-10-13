@@ -1,52 +1,4 @@
-/* Platform › System: read-only deployment facts, each ledger one card. */
-
-.system-facts {
-  margin: 0;
-  overflow: hidden;
-  background: var(--surface);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
-}
-
-.system-fact {
-  display: grid;
-  min-height: 44px;
-  grid-template-columns: 240px minmax(0, 1fr);
-  align-items: center;
-  font-size: 13px;
-  line-height: 18px;
-  border-bottom: 1px solid var(--grid-line);
-}
-
-.system-fact > dt,
-.system-fact > dd {
-  padding: 6px 12px;
-}
-
-.system-fact:last-child {
-  border-bottom: 0;
-}
-
-.system-fact dt {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-  color: var(--ink-2);
-}
-
-.system-fact dd {
-  min-width: 0;
-  margin: 0;
-  color: var(--fg);
-}
-
-/* A second line under a fact, such as microsandbox's disks. */
-.system-sub {
-  display: block;
-  color: var(--ink-2);
-  font-size: 12.5px;
-}
+/* Settings › Service and deployment, Models and credentials: values, code and harness cards. */
 
 .system-code {
   color: var(--fg);
@@ -65,12 +17,6 @@
   font-size: 12px;
 }
 
-.system-note {
-  margin: 0;
-  color: var(--ink-2);
-  font-size: 13px;
-}
-
 .system-setting-value {
   display: inline-flex;
   flex-wrap: wrap;
@@ -78,69 +24,55 @@
   gap: 4px 6px;
 }
 
-/* Default model: one card per harness, its startup state and provider facts. */
+/* Default model: one card per harness, stacked; its header carries the startup state and the actions. */
 .system-models {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  align-items: start;
   gap: 16px;
-}
-
-.system-model {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--surface);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card);
 }
 
 .system-model-header {
   display: flex;
-  min-height: 48px;
+  min-height: 56px;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 8px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--grid-line);
+}
+
+.system-model-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px 10px;
+  flex-wrap: wrap;
 }
 
 .system-model-header h3 {
   margin: 0;
-  color: var(--fg);
+  color: var(--ink);
   font-size: 13px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
 }
 
 .system-model-actions {
   display: flex;
   flex-shrink: 0;
-  gap: 6px;
+  gap: 8px;
 }
 
 .system-model-observations {
   display: flex;
+  min-height: 40px;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--grid-line);
+  padding: 4px 16px;
 }
 
-.system-model-facts {
-  margin: 0;
-}
-
-.system-model-facts .system-fact {
-  grid-template-columns: 136px minmax(0, 1fr);
-}
-
-.system-model-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+.system-model-observations > .text-action {
+  margin-left: auto;
 }
 
 /* The two token limits side by side in the provider form. */

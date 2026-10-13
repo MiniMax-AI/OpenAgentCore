@@ -3,7 +3,7 @@ export const workspaceStorage = {
   refresh: "Refresh current selection",
   observed: "Current selection: {{value}}",
   selectionChanged: "The selected storage configuration changed. Close this dialog and reopen Edit tenant capacity to edit the current selection.",
-  title: "Workspace storage",
+  title: "Storage configuration",
   help: "Storage selection and tenant admission policy have one home here. Existing workspaces retain their original storage binding and admitted capacity. Saving a selection does not migrate files or rebuild sandboxes.",
   id: "Configuration ID",
   adapter: "Adapter",

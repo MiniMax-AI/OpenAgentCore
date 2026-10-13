@@ -20,7 +20,6 @@ export const system: TranslationShape<typeof english> = {
   startup: {
     title: "启动设置",
     help: "Core 报告它加载的进程设置。敏感设置只显示是否已设置。",
-    effective: "这些是这个 Core 进程加载的设置。",
     columns: {
       key: "设置",
       value: "值",
@@ -42,7 +41,6 @@ export const system: TranslationShape<typeof english> = {
     disabled: "未启用",
     default: "默认",
     startupHelp: "启用哪些执行框架、默认用哪个，由安装配置管理。",
-    harness: "执行框架",
     provider: "模型服务",
     notSet: "未设置",
     model: "默认模型 ID",

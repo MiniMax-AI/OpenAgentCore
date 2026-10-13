@@ -9,7 +9,7 @@ import { sandboxAdmin, sandboxConsoleConfigQuery } from "./sandbox-queries";
 import { useSandboxPageState } from "./use-sandbox-page-state";
 import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeEditDialog } from "./NodeEditDialog";
-import { SandboxLifecycle } from "./SandboxLifecycle";
+import { SuspensionSettings } from "./SandboxLifecycle";
 import { sandboxSize } from "./deployment-specification";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
 
@@ -79,15 +79,14 @@ export function SandboxCapacitySettings() {
   if (!snapshot?.deployment.provider) return null;
   const nodes = snapshot.nodes;
   return <>
-    {hostedNodes || snapshot.deployment.suspension ? <SandboxLifecycle deployment={snapshot.deployment} nodes={nodesConfirmed ? nodes : null} stale={!nodesConfirmed} controls={{ disabled: busy || loading || !fresh || setupNeedsRefresh || Boolean(snapshot.deployment.reset), onSave: saveIdle }} /> : null}
-    {hostedNodes ? <Section headingId="settings-node-capacity" title={t("Sandbox nodes")}>
-      <div className="sandbox-actions"><button className="button outline" type="button" disabled={disabled || localOnly || !consoleConfig} onClick={() => setAdding(true)}>{t("Add node")}</button></div>
+    <SuspensionSettings deployment={snapshot.deployment} disabled={busy || loading || !fresh || setupNeedsRefresh || Boolean(snapshot.deployment.reset)} onSave={saveIdle} />
+    {hostedNodes ? <Section headingId="settings-node-capacity" title={t("Sandbox nodes")} actions={<button className="button outline" type="button" disabled={disabled || localOnly || !consoleConfig} aria-describedby={localOnly ? "settings-add-node-blocked" : undefined} onClick={() => setAdding(true)}>{t("Add node")}</button>}>
       {configQuery.isError ? <p role="alert">{t("The console configuration could not be read. Refresh to try again.")} <button type="button" className="text-action" onClick={() => void configQuery.refetch()}>{t("Try again")}</button></p> : null}
       {snapshot.nodesError ? <p role="alert">{sandboxRequestError(snapshot.nodesError, locale)}</p> : null}
-      {localOnly ? <p role="status">{tCommon("installationNotice.addBlocked")}</p> : null}
+      {localOnly ? <p role="status" id="settings-add-node-blocked">{tCommon("installationNotice.addBlocked")}</p> : null}
       {nodes.some((node) => node.active > node.max_active || node.retained > node.max_retained) ? <p role="status">{t("Current usage exceeds a saved limit. Existing sandboxes are preserved; new placements wait for capacity.")}</p> : null}
-      <div className="table-frame"><table className="data-table" aria-label={t("Sandbox nodes")}><thead><tr><th>{t("Node")}</th><th>{t("Active / limit")}</th>{suspends ? <th>{t("Retained / limit")}</th> : null}<th>{t("Actions")}</th></tr></thead><tbody>
-        {nodes.map((node) => <tr key={node.id} id={`capacity-${node.id}`}><th>{node.name || node.id}</th><td>{node.active} / {node.max_active}</td>{suspends ? <td>{node.retained} / {node.max_retained}</td> : null}<td><button type="button" className="text-action" disabled={disabled} onClick={() => navigate("settings", { id: "sandbox", node: node.id })}>{t("Edit node")}</button></td></tr>)}
+      <div className="settings-table"><table className="data-table" aria-label={t("Sandbox nodes")}><thead><tr><th scope="col">{t("Node")}</th><th scope="col" className="numeric">{t("Active / limit")}</th>{suspends ? <th scope="col" className="numeric">{t("Retained / limit")}</th> : null}<th scope="col" className="settings-table-action">{t("Actions")}</th></tr></thead><tbody>
+        {nodes.map((node) => <tr key={node.id} id={`capacity-${node.id}`}><th scope="row">{node.name || node.id}</th><td className="numeric">{node.active} / {node.max_active}</td>{suspends ? <td className="numeric">{node.retained} / {node.max_retained}</td> : null}<td className="settings-table-action"><button type="button" className="text-action" disabled={disabled} onClick={() => navigate("settings", { id: "sandbox", node: node.id })}>{t("Edit node")}</button></td></tr>)}
       </tbody></table></div>
     </Section> : null}
     {enrollment}{editDialog}

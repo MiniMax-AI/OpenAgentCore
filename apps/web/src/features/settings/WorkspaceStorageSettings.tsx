@@ -77,19 +77,16 @@ export function WorkspaceStorageSettings() {
   const query = useQuery(workspaceStorageQuery);
   const [editor, setEditor] = useState<"configuration" | "capacity" | null>(null);
   const current = query.data;
-  return <Section headingId="workspace-storage-heading" title={t("title")} help={t("help")}>
+  const blocked = query.isError || query.isFetching;
+  return <Section headingId="workspace-storage-heading" title={t("title")} help={t("help")} actions={current !== undefined ? <button className="button outline" disabled={blocked} onClick={() => setEditor("configuration")}>{t("configure")}</button> : undefined}>
     {query.isError ? <ErrorState title={t("readFailed")} onRetry={() => void query.refetch()} /> : null}
     {current === undefined && !query.isError ? <TableSkeleton rows={4} columns={2} /> : null}
-    {current ? <dl className="system-facts">
+    {current ? <div className="settings-rows">
       <Fact label={t("id")}><CopyableId id={current.id} /></Fact>
       <Fact label={t("adapter")}>{current.adapter}</Fact>
       <Fact label={t("parameters")} help={t("parametersHelp")}><pre className="system-code">{JSON.stringify(current.parameters, null, 2)}</pre></Fact>
-      <Fact label={t("capacity")} help={t("capacityHelp")}>{current.tenant_capacity_mib === 0 ? t("noQuota") : current.tenant_capacity_mib.toLocaleString()}</Fact>
-    </dl> : current === null ? <p>{t("notConfigured")}</p> : null}
-    {current !== undefined ? <div className="system-model-actions">
-      {current ? <button className="button outline" disabled={query.isError || query.isFetching} onClick={() => setEditor("capacity")}>{t("editCapacity")}</button> : null}
-      <button className="button outline" disabled={query.isError || query.isFetching} onClick={() => setEditor("configuration")}>{t("configure")}</button>
-    </div> : null}
+      <Fact label={t("capacity")} help={t("capacityHelp")} action={<button className="button outline" disabled={blocked} onClick={() => setEditor("capacity")}>{t("editCapacity")}</button>}>{current.tenant_capacity_mib === 0 ? t("noQuota") : current.tenant_capacity_mib.toLocaleString()}</Fact>
+    </div> : current === null ? <div className="settings-rows"><p className="settings-empty">{t("notConfigured")}</p></div> : null}
     {editor && current !== undefined ? <StorageEditor current={current} replacement={editor === "configuration"} onClose={() => setEditor(null)} /> : null}
   </Section>;
 }

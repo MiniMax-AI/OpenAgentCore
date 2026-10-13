@@ -3,7 +3,7 @@ export const workspaceStorage = {
   refresh: "刷新当前选择",
   observed: "当前选择：{{value}}",
   selectionChanged: "所选存储配置已变更。请关闭此对话框，再次打开“修改租户容量”，以编辑当前配置。",
-  title: "工作区存储",
+  title: "存储配置",
   help: "存储选择和租户容量准入策略只在这里配置。已有工作区保留原存储绑定和已分配容量。保存配置不会迁移文件或重建沙箱。",
   id: "配置 ID",
   adapter: "适配器",
