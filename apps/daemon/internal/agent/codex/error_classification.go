@@ -32,6 +32,10 @@ func classifyTurnError(failure *TurnError) proto.ErrorPayload {
 			code = "invalid_request"
 		case "cyberPolicy":
 			code = "cyber_policy"
+		case "other":
+			if isProviderErrorBody(failure.Message) {
+				code = "invalid_request"
+			}
 		}
 		return proto.ErrorPayload{Code: code}
 	}
@@ -57,4 +61,16 @@ func classifyTurnError(failure *TurnError) proto.ErrorPayload {
 		}
 	}
 	return proto.ErrorPayload{}
+}
+
+// Codex reports an HTTP 400 from the model provider as "other" and forwards the
+// response body verbatim; other "other" failures carry Codex's own text. A body
+// that is a JSON object with an object "error" member is the provider's
+// rejection. A plain-text 400 body stays unclassified.
+func isProviderErrorBody(message string) bool {
+	var body struct {
+		Error json.RawMessage `json:"error"`
+	}
+	var object map[string]json.RawMessage
+	return json.Unmarshal([]byte(message), &body) == nil && json.Unmarshal(body.Error, &object) == nil && object != nil
 }

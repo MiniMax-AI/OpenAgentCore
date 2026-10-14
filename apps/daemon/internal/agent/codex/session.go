@@ -210,12 +210,13 @@ func (s *Session) onTurnCompleted(raw json.RawMessage) {
 		//      operators can't see why a key was rejected.
 		//   3. buffered text from the "error" notification stream
 		//      (sandbox warnings, late stream packets) — last because
-		//      it's noisier than turn.error.
+		//      it's noisier than turn.error. Codex also reports the
+		//      terminal error on that stream, so identical text is
+		//      kept once.
 		body := finalText
-		if turnErrMsg := turnErrorMessage(p.Turn.Error); turnErrMsg != "" {
-			body = appendOnNewline(body, turnErrMsg)
-		}
-		if errText != "" {
+		turnErrMsg := turnErrorMessage(p.Turn.Error)
+		body = appendOnNewline(body, turnErrMsg)
+		if errText != turnErrMsg {
 			body = appendOnNewline(body, errText)
 		}
 		s.emitTerminalFailure(body, true, classifyTurnError(p.Turn.Error))

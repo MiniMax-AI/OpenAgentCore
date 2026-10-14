@@ -93,3 +93,33 @@ func TestClassificationOnlyFromRootTerminalError(t *testing.T) {
 		})
 	}
 }
+
+// Codex 0.153 reports a provider HTTP 400 as "other" with the verbatim body and
+// repeats it on the error notification stream.
+func TestProviderRejectionClassifiedOnce(t *testing.T) {
+	body := `{"error":{"message":"invalid params, unknown model","code":"invalid_prompt"}}`
+	for message, want := range map[string]string{body: "invalid_request", "plain text bad request": "", "unexpected status 404 Not Found: The model bogus does not exist": "", `{"error":"bad"}`: ""} {
+		if got := classifyTurnError(&TurnError{Message: message, CodexErrorInfo: json.RawMessage(`"other"`)}); got.Code != want {
+			t.Fatal(message, got)
+		}
+	}
+	out := make(chan proto.Envelope, 16)
+	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)), rpc: NewJSONRPCClient(JSONRPCConfig{})}
+	s.registerHandlers()
+	s.setThreadID("root")
+	turnError, _ := json.Marshal(TurnError{Message: body, CodexErrorInfo: json.RawMessage(`"other"`)})
+	scopeNotification(t, s, "turn/started", `{"threadId":"root","turn":{"id":"turn"}}`)
+	scopeNotification(t, s, "error", `{"threadId":"root","turnId":"turn","error":`+string(turnError)+`,"willRetry":false}`)
+	scopeNotification(t, s, "turn/completed", `{"threadId":"root","turn":{"id":"turn","status":"failed","error":`+string(turnError)+`}}`)
+	for env := range out {
+		if env.Type == proto.TypeError {
+			var p proto.ErrorPayload
+			_ = env.DecodePayload(&p)
+			if p.Code != "invalid_request" || p.Error != "invalid_prompt: invalid params, unknown model" {
+				t.Fatalf("%+v", p)
+			}
+			return
+		}
+	}
+	t.Fatal("terminal error lost")
+}

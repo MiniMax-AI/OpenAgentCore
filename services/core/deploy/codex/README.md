@@ -52,10 +52,11 @@ The adapter classifies a failed Turn only from the exact root terminal Turn's `c
 | `internalServerError` | `server_error` |
 | `badRequest` | `invalid_request` |
 | `cyberPolicy` | `cyber_policy` |
+| `other` whose message is a JSON object with an object `error` member | `invalid_request` |
 | `httpConnectionFailed`, `responseStreamConnectionFailed`, `responseStreamDisconnected` | `connection_failed`, with the upstream `httpStatusCode` |
 | `responseTooManyFailedAttempts` | `rate_limit_exceeded` when `httpStatusCode` is 429, otherwise `connection_failed` |
 
-Every other variant stays unclassified.
+Codex `0.153.4` reports a provider HTTP 400 as `other` and puts the response body in the message, so a JSON error body is the provider's rejection, such as an unknown model name. Every other variant stays unclassified, and so does `other` with any other message, including a plain-text 400 body and the `unexpected status` text Codex writes for provider 401 and 404 responses.
 
 ## Runtime image
 

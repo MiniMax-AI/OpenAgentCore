@@ -36,7 +36,7 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 - Continuation requires the exact recorded native Session ID and the same working directory. Recovery without a recorded ID is rejected.
 - MiniMax Code reports no usage: ACP context occupancy and cumulative cost are not per-Turn usage.
 - Workspace `workspace_bash` calls become command observations with the command text, output text and status; exit code and duration stay unknown. Native task and Skill utilities produce no public Items.
-- The adapter attaches no [native failure classification](../../../../docs/runtime-protocol.md#native-failure-classification) to its errors.
+- The adapter attaches no [native failure classification](../../../../docs/runtime-protocol.md#native-failure-classification) to its errors: MiniMax Code `0.4.12` reports a model provider rejection over ACP as JSON-RPC internal error `-32603` whose only detail is prose, so these failures stay unclassified.
 
 ## Runtime image
 
