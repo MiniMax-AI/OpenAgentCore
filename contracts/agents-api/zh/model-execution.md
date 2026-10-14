@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 92f743c0ada60d86a2a107eb6528a9c6d89e7db2e664f522a99ad3711a53f9e8
+source_hash: d26140f4fdaa6d0c68dbeff52a2318ed213799966b224302eb04b9ec718f5fc3
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -12,7 +12,7 @@ source_hash: 92f743c0ada60d86a2a107eb6528a9c6d89e7db2e664f522a99ad3711a53f9e8
 {"x_agents_core": {"harness": "claude_sdk"}}
 ```
 
-已保存 Agent 在创建、更新和读取时接受 `x_agents_core.harness`，Session 则在内联的 `agent.x_agents_core` 中接受它。标识符来自 [Harness catalog](harness-catalog.md)；未知标识符和未知嵌套字段均会被拒绝，空的内联 Session 扩展也会被拒绝。部署启用哪些 Harness 及其默认值由进程设置 `core.harnesses` 和 `core.default_harness` 决定（[configuration](../../../docs/zh/configuration.md#settings)）。
+已保存 Agent 在创建、更新和读取时接受 `x_agents_core.harness`，Session 则在内联的 `agent.x_agents_core` 中接受它。标识符来自 [Harness catalog](harness-catalog.md)；未知标识符和未知嵌套字段均会被拒绝，空的内联 Session 扩展也会被拒绝。部署启用哪些 Harness 及其默认值由进程设置 `OAC_HARNESSES` 和 `OAC_DEFAULT_HARNESS` 决定（[configuration](../../../docs/zh/configuration.md#settings)）。
 
 - 省略：Session 继承其已保存 Agent 的 Harness；内联 Agent 使用部署默认 Harness。
 - Session 的内联扩展显式为 null：重置为部署默认 Harness，同时保留继承的提供商配置包。对于已保存 Agent，null 扩展会清除其 Harness 和提供商。

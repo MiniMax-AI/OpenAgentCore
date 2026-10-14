@@ -335,7 +335,6 @@ export const installationConfigurationFields = ["settings"] as const;
 export const installationServiceValues = ["core", "web"] as const;
 export type InstallationService = (typeof installationServiceValues)[number];
 export interface InstallationSetting {
-  changeable: boolean;
   configured?: boolean;
   default: unknown | null;
   key: string;
@@ -343,8 +342,8 @@ export interface InstallationSetting {
   sensitive: boolean;
   value: unknown | null;
 }
-export const installationSettingFields = ["changeable", "configured", "default", "key", "restarts", "sensitive", "value"] as const;
-export const installationSettingRequired = ["changeable", "default", "key", "restarts", "sensitive", "value"] as const;
+export const installationSettingFields = ["configured", "default", "key", "restarts", "sensitive", "value"] as const;
+export const installationSettingRequired = ["default", "key", "restarts", "sensitive", "value"] as const;
 export interface IssuedAPIKey {
   created_at: string;
   id: string;

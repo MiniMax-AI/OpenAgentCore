@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: f3f9b2f23898a4e39201ce12cf1f7a199aa39ecc0afd34fd964596a98d2b709a
+source_hash: 71bb1b6be0c26e626f3b93e92ffb566482281f46dbee674beebb7bd345803de0
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -123,7 +123,7 @@ core() (  # core METHOD PATH [JSON body]
 
 **Archive** 禁用 Project 的所有密钥并保留资产。
 
-Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`core.write_audit_retention`](../configuration.md#settings)。
+Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`OAC_WRITE_AUDIT_RETENTION`](../configuration.md#settings)。
 
 ## 备份 {#back-up}
 

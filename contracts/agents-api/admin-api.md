@@ -162,7 +162,7 @@ Core writes this record in the same transaction that creates the Session. Later 
 | `configuration` | The process settings Core loaded from its environment, under `settings` |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |
 
-`configuration.settings` has one entry per setting Core loaded, with its dotted `key`, effective `value`, `default`, whether it is `changeable`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).
+`configuration.settings` has one entry per setting Core loaded: its `key`, the environment variable that sets it (such as `OAC_LOG_LEVEL`), its effective `value`, `default`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`).
 
 A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. `oac-core check-config` validates the same environment and exits without starting Core or printing a value. [Configuration](../../docs/configuration.md) describes each setting.
 
@@ -212,7 +212,7 @@ Both routes accept only the parameters listed; an unknown, repeated or empty par
 
 `GET /projects/{project_id}/write-operations` lists writes newest first by `(created_at, id)`. Filters: `key_id`, `resource_type`, `resource_id`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50. Pass the previous `next_cursor` as `after` with unchanged filters. The response is `{data, has_more, next_cursor}`; each entry has `id`, `created_at`, `api_key`, `action`, `resource_type`, `resource_id`, `parent_id` (empty when absent), `request_id` and `trace_id`.
 
-Creation records are kept for good, including after the resource is deleted. Other records are kept for [`core.write_audit_retention`](../../docs/configuration.md#settings), 90 days by default; every minute Core deletes up to 1,000 expired records, so a backlog drains over several passes. Revoking a key or deleting a resource never deletes records.
+Creation records are kept for good, including after the resource is deleted. Other records are kept for [`OAC_WRITE_AUDIT_RETENTION`](../../docs/configuration.md#settings), 90 days by default; every minute Core deletes up to 1,000 expired records, so a backlog drains over several passes. Revoking a key or deleting a resource never deletes records.
 
 ## Summary
 

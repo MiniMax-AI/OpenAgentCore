@@ -1,7 +1,7 @@
 ---
 title: "Vault 与 Credential"
 source: contracts/agents-api/vaults.md
-source_hash: 4191c4244c07a23c859d0051404ec3838ea6757a3789fefca4ecea98dbfa3859
+source_hash: b27509949dca26f064cda765ea97229e3325dee3ff650b17fa332a756409cf34
 ---
 
 Vault 是 Project 所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
@@ -135,7 +135,7 @@ Session 固定其关联和每次选择，包括匿名选择。后续 Vault 变�
 
 刷新只执行一次 `refresh_token` 交换，使用存储的端点认证方法、`scope` 和 `resource`；不跟随重定向、不探测方法、失败后不重试。服务方必须返回 `Bearer` token，其到期时间（若有）必须在未来。Core 先提交新 access token、新到期时间（或无到期时间）和轮换后的 refresh token，再使用 token；省略 refresh token 时保留旧值。PostgreSQL 行锁使刷新与手动替换、删除串行，避免过期刷新恢复已删除或替换的 grant。交换或提交失败时不返回任何内容，也不重试。服务方轮换 grant 后本地提交失败时，应用必须重新授权。服务方错误响应体不返回也不写日志；Harness 只收到 access token，不收到 refresh token 或 client secret。
 
-Token endpoint 必须为 HTTPS。Core 解析主机，拒绝回环、私有、链路本地和共享（`100.64.0.0/10`）地址，连接已检查地址以防第二次 DNS 响应改变目标；TLS 仍验证主机名。它忽略环境中的 HTTP proxy。对于私有 issuer，管理员在 [`core.oauth_trusted_origins`](../../../docs/zh/configuration.md#settings) 中列出确切 HTTPS origin；这只允许该主机与端口使用私有地址，不允许 HTTP、重定向或无效证书。issuer 的 CA 必须在 Core 信任库中。
+Token endpoint 必须为 HTTPS。Core 解析主机，拒绝回环、私有、链路本地和共享（`100.64.0.0/10`）地址，连接已检查地址以防第二次 DNS 响应改变目标；TLS 仍验证主机名。它忽略环境中的 HTTP proxy。对于私有 issuer，管理员在 [`OAC_OAUTH_TRUSTED_ORIGINS`](../../../docs/zh/configuration.md#settings) 中列出确切 HTTPS origin；这只允许该主机与端口使用私有地址，不允许 HTTP、重定向或无效证书。issuer 的 CA 必须在 Core 信任库中。
 
 ## 存储密钥 {#storage-key}
 

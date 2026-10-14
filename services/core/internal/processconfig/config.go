@@ -155,7 +155,8 @@ func Load() (Config, error) {
 }
 
 // Settings projects the configuration that GET /core/v1/installation
-// reports. Sensitive file settings report only whether they are configured.
+// reports, each setting under the environment variable that sets it.
+// Sensitive file settings report only whether they are configured.
 func (c Config) Settings() []api.InstallationSetting {
 	format := c.Log.Format
 	if format == "" {
@@ -166,16 +167,16 @@ func (c Config) Settings() []api.InstallationSetting {
 		origins = []string{}
 	}
 	return []api.InstallationSetting{
-		setting("public_url", c.PublicOrigin.String(), nil, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
-		setting("log.level", strings.ToLower(c.Log.Level.String()), "info", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
-		setting("log.format", format, "auto", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
-		setting("log.add_source", c.Log.AddSource, false, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
-		setting("core.execution_concurrency", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []api.InstallationService{api.InstallationCore}),
-		setting("core.harnesses", c.Harnesses, (engine.Catalog{}).Kinds(), []api.InstallationService{api.InstallationCore}),
-		setting("core.default_harness", c.DefaultHarness, defaultHarness, []api.InstallationService{api.InstallationCore}),
-		setting("core.write_audit_retention", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []api.InstallationService{api.InstallationCore}),
-		setting("core.oauth_trusted_origins", origins, []string{}, []api.InstallationService{api.InstallationCore}),
-		sensitive("core.runtime_history", c.RuntimeHistory.File != "", []api.InstallationService{api.InstallationCore}),
+		setting("OAC_PUBLIC_URL", c.PublicOrigin.String(), nil, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("OAC_LOG_LEVEL", strings.ToLower(c.Log.Level.String()), "info", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("OAC_LOG_FORMAT", format, "auto", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("OAC_LOG_ADD_SOURCE", c.Log.AddSource, false, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
+		setting("OAC_EXECUTION_CONCURRENCY", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []api.InstallationService{api.InstallationCore}),
+		setting("OAC_HARNESSES", c.Harnesses, (engine.Catalog{}).Kinds(), []api.InstallationService{api.InstallationCore}),
+		setting("OAC_DEFAULT_HARNESS", c.DefaultHarness, defaultHarness, []api.InstallationService{api.InstallationCore}),
+		setting("OAC_WRITE_AUDIT_RETENTION", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []api.InstallationService{api.InstallationCore}),
+		setting("OAC_OAUTH_TRUSTED_ORIGINS", origins, []string{}, []api.InstallationService{api.InstallationCore}),
+		sensitive("OAC_HISTORY_SETTINGS_FILE", c.RuntimeHistory.File != "", []api.InstallationService{api.InstallationCore}),
 	}
 }
 
@@ -193,11 +194,11 @@ func duration(d time.Duration) string {
 }
 
 func setting(key string, value, fallback any, restarts []api.InstallationService) api.InstallationSetting {
-	return api.InstallationSetting{Key: key, Value: value, Default: fallback, Changeable: true, Sensitive: false, Restarts: restarts}
+	return api.InstallationSetting{Key: key, Value: value, Default: fallback, Sensitive: false, Restarts: restarts}
 }
 
 func sensitive(key string, configured bool, restarts []api.InstallationService) api.InstallationSetting {
-	return api.InstallationSetting{Key: key, Configured: &configured, Changeable: true, Sensitive: true, Restarts: restarts}
+	return api.InstallationSetting{Key: key, Configured: &configured, Sensitive: true, Restarts: restarts}
 }
 
 func installationID() (string, error) {

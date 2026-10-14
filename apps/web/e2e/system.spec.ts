@@ -164,7 +164,7 @@ test("requires an explicit supported protocol choice for an older default config
   const dialog = page.getByRole("dialog", { name: "Replace default model configuration for Codex" });
   await dialog.getByLabel("API key").fill(KEY);
   await expect(dialog.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("Select protocol");
-  await expect(dialog.getByRole("alert")).toHaveText("This harness does not support OpenAI Chat Completions. Select a supported protocol.");
+  await expect(dialog.getByRole("alert")).toHaveText("This Harness does not support OpenAI Chat Completions. Select a supported protocol.");
   await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   await dialog.getByLabel("API key").press("Enter");
   expect(await writes(request)).toEqual([]);

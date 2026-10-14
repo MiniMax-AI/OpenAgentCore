@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: dbc53b9e7d6df095b7131238cddc5af0553504152ddae037c56f885174f30f77
+source_hash: 9c83e8b192408ea96e8614dfa5ffe4bdd65931954bc0359928c1985291b97962
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -164,7 +164,7 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
 | `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |
 
-`configuration.settings` 为 Core 加载的每项设置一条记录，包含以点分隔的 `key`、生效的 `value`、`default`、是否 `changeable`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`、`database`）。
+`configuration.settings` 为 Core 加载的每项设置一条记录，包含 `key`（设置它的环境变量，例如 `OAC_LOG_LEVEL`）、生效的 `value`、`default`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`）。
 
 敏感设置的 `value` 和 `default` 为 null，并改为包含一个布尔值 `configured`；只有敏感设置具有 `configured`。`oac-core check-config` 校验同一组环境变量，然后退出，不启动 Core，也不打印值。[配置](../../../docs/zh/configuration.md)会说明每个设置。
 
@@ -214,7 +214,7 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 `GET /projects/{project_id}/write-operations` 按 `(created_at, id)` 从新到旧列出写入记录。过滤条件包括：`key_id`、`resource_type`、`resource_id`、包含起始时间的 `created_after` 和不包含结束时间的 `created_before`（RFC 3339）。`limit` 为 1–100，默认值为 50。在过滤条件不变的情况下，将上一个 `next_cursor` 作为 `after` 传入。响应为 `{data, has_more, next_cursor}`；每个条目包含 `id`、`created_at`、`api_key`、`action`、`resource_type`、`resource_id`、`parent_id`（不存在时为空）、`request_id` 和 `trace_id`。
 
-创建记录会永久保留，即使资源已删除也一样。其他记录会按照 [`core.write_audit_retention`](../../../docs/zh/configuration.md#settings) 保留，默认期限为 90 天；Core 每分钟最多删除 1,000 条过期记录，因此积压记录需要经过多轮处理才能清空。吊销密钥或删除资源绝不会删除记录。
+创建记录会永久保留，即使资源已删除也一样。其他记录会按照 [`OAC_WRITE_AUDIT_RETENTION`](../../../docs/zh/configuration.md#settings) 保留，默认期限为 90 天；Core 每分钟最多删除 1,000 条过期记录，因此积压记录需要经过多轮处理才能清空。吊销密钥或删除资源绝不会删除记录。
 
 ## 汇总 {#summary}
 

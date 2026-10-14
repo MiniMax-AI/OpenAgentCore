@@ -220,14 +220,14 @@ func TestSettingsReportEffectiveValuesAndHideHistory(t *testing.T) {
 			t.Fatalf("sensitive setting %s leaked a value", setting.Key)
 		}
 		found[setting.Key] = setting.Value
-		if setting.Key == "core.write_audit_retention" && setting.Default != "2160h" {
+		if setting.Key == "OAC_WRITE_AUDIT_RETENTION" && setting.Default != "2160h" {
 			t.Fatal(setting.Default)
 		}
-		if setting.Key == "core.runtime_history" && (setting.Configured == nil || !*setting.Configured) {
+		if setting.Key == "OAC_HISTORY_SETTINGS_FILE" && (setting.Configured == nil || !*setting.Configured) {
 			t.Fatal("history file was not reported as configured")
 		}
 	}
-	if found["public_url"] != "https://core.example" || found["core.execution_concurrency"] != 8 || found["log.level"] != "warn" || found["log.format"] != "auto" || found["core.write_audit_retention"] != "24h" {
+	if found["OAC_PUBLIC_URL"] != "https://core.example" || found["OAC_EXECUTION_CONCURRENCY"] != 8 || found["OAC_LOG_LEVEL"] != "warn" || found["OAC_LOG_FORMAT"] != "auto" || found["OAC_WRITE_AUDIT_RETENTION"] != "24h" {
 		t.Fatal(found)
 	}
 }

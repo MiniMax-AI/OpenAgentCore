@@ -552,16 +552,13 @@ definitions:
       - InstallationWeb
   api.InstallationSetting:
     properties:
-      changeable:
-        description: False for settings fixed at installation.
-        type: boolean
       configured:
         description: 'Present only for a sensitive setting: whether it has a value.'
         type: boolean
       default:
         x-nullable: true
       key:
-        description: Dotted config.json key, such as ports.core.
+        description: The environment variable that sets it, such as OAC_LOG_LEVEL.
         type: string
       restarts:
         description: Services that restart when the setting changes.
@@ -574,7 +571,6 @@ definitions:
         description: Applied value; always null for a sensitive setting.
         x-nullable: true
     required:
-      - changeable
       - default
       - key
       - restarts

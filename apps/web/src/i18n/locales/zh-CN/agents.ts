@@ -35,7 +35,7 @@ export const agents: TranslationShape<typeof english> = {
       help: "保存在此 Agent 上。它的 Session 使用这里的模型服务，除非请求中另外指定。Core 从不返回 API 密钥。",
       protocol: "协议",
       baseUrl: "Base URL",
-      apiKey: "API key",
+      apiKey: "API 密钥",
       keyConfigured: "已配置",
       keyNotConfigured: "未配置",
       contextWindow: "上下文窗口",

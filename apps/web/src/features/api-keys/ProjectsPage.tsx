@@ -39,7 +39,7 @@ type ProjectView = "active" | "archived";
 
 /**
  * Platform › Projects and keys. A project owns the assets shared by all of
- * its named keys. The list shows every project; the detail shows its keys
+ * its named keys. The list shows the active or the archived projects; the detail shows its keys
  * (issue with a one-time plaintext, revoke), assets, usage by key and write
  * operations.
  */

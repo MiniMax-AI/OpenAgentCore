@@ -47,7 +47,7 @@ export const metrics = {
     unknownModel: "Unknown model",
     tokenSplit: "Input {{input}} · output {{output}}",
     failedCount: "{{count}} failed",
-    emptyTitle: "No Agent runs in this range",
+    emptyTitle: "No Agent runs yet",
     emptyDescription: "No Turn was created in the last {{range}}. Choose a longer range or another project.",
     refreshFailed: "Refresh failed; showing the previous result for the last {{range}}. {{reason}}",
     kpiLabel: "Agent run summary",

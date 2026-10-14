@@ -39,16 +39,14 @@ type InstallationConfiguration struct {
 }
 
 type InstallationSetting struct {
-	// Dotted config.json key, such as ports.core.
+	// The environment variable that sets it, such as OAC_LOG_LEVEL.
 	Key string `json:"key" binding:"required"`
 	// Applied value; always null for a sensitive setting.
 	Value   any `json:"value" extensions:"x-nullable" binding:"required"`
 	Default any `json:"default" extensions:"x-nullable" binding:"required"`
 	// Present only for a sensitive setting: whether it has a value.
 	Configured *bool `json:"configured,omitempty"`
-	// False for settings fixed at installation.
-	Changeable bool `json:"changeable" binding:"required"`
-	Sensitive  bool `json:"sensitive" binding:"required"`
+	Sensitive  bool  `json:"sensitive" binding:"required"`
 	// Services that restart when the setting changes.
 	Restarts []InstallationService `json:"restarts" binding:"required"`
 }

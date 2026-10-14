@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 2fe919ec4fd2285cc9e54fed58ef66aebe66d132fd8fb5adc272e26b2e673774
+source_hash: f943975ae46fd7919700890d4f405c9a9e15385c3ab2b2e742098dcc2a2a8c20
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -43,7 +43,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 3. **在适配器中声明 kind**，并将其声明添加到 `apps/daemon/internal/cli/agent_discovery.go` 中 Runtime 的静态列表（[register the adapter](#register-the-adapter)）。
 4. **添加服务 profile 和一个目录条目**（[add the engine to Core](#add-the-engine-to-core)）。
 5. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
-6. **启用并选择引擎**，通过 `core.harnesses` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
+6. **启用并选择引擎**，通过 `OAC_HARNESSES` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
 7. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将结果记录到 [Harness capabilities](harness-capabilities.md)。
 
 实现强制的文本生命周期，并明确处理每一种扩展。逐个认定受支持扩展的资格；未认定资格的扩展返回 `agent.ErrUnsupportedOperation`，且不会产生原生副作用。原生取消可能要求退役而非复用：`Reusable=false` 会携带原因，调用方必须确认 `Executor.Close`。不要为了适配测试辅助函数而强制复用，也不要将适配器的原生限制复制到共享 Core 协议中。

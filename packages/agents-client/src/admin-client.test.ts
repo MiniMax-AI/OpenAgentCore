@@ -332,8 +332,8 @@ describe("AdminClient deployment read models", () => {
 });
 
 describe("AdminClient installation", () => {
-  const port = { key: "ports.core", value: 8091, default: 8091, changeable: true, sensitive: false, restarts: ["core"] };
-  const headers = { key: "core.runtime_history.headers", value: null, default: null, configured: true, changeable: true, sensitive: true, restarts: ["core"] };
+  const port = { key: "OAC_EXECUTION_CONCURRENCY", value: 8, default: 4, sensitive: false, restarts: ["core"] };
+  const headers = { key: "OAC_HISTORY_SETTINGS_FILE", value: null, default: null, configured: true, sensitive: true, restarts: ["core"] };
   const installation = {
     object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
     local_only: false, source_commit: "a".repeat(40),
@@ -346,7 +346,8 @@ describe("AdminClient installation", () => {
     const configuration = (settings: unknown[]) => ({ ...installation, configuration: { settings } });
     for (const invalid of [
       configuration([port, { ...headers, value: { authorization: "leak" } }]),
-      configuration([port, { key: headers.key, value: null, default: null, changeable: true, sensitive: true, restarts: ["core"] }]),
+      configuration([port, { key: headers.key, value: null, default: null, sensitive: true, restarts: ["core"] }]),
+      configuration([{ ...port, key: "core.execution_concurrency" }]),
       configuration([port, port]),
       { ...installation, address_bindings: { ...installation.address_bindings, nodes_on_other_address: 3 } },
       { ...installation, token: "leak" },

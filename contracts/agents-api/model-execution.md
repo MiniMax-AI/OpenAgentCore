@@ -10,7 +10,7 @@ Each Session runs one Harness with one model provider. Core selects them through
 {"x_agents_core": {"harness": "claude_sdk"}}
 ```
 
-Saved Agents accept `x_agents_core.harness` on create, update and read, and Sessions accept it in the inline `agent.x_agents_core`. Identifiers come from the [Harness catalog](./harness-catalog.md); unknown identifiers and unknown nested fields are rejected, as is an empty inline Session extension. Which Harnesses a deployment enables, and its default, are the process settings `core.harnesses` and `core.default_harness` ([configuration](../../docs/configuration.md#settings)).
+Saved Agents accept `x_agents_core.harness` on create, update and read, and Sessions accept it in the inline `agent.x_agents_core`. Identifiers come from the [Harness catalog](./harness-catalog.md); unknown identifiers and unknown nested fields are rejected, as is an empty inline Session extension. Which Harnesses a deployment enables, and its default, are the process settings `OAC_HARNESSES` and `OAC_DEFAULT_HARNESS` ([configuration](../../docs/configuration.md#settings)).
 
 - Omitted: a Session inherits its saved Agent's Harness; an inline Agent uses the deployment default.
 - Explicit null on the Session's inline extension: resets to the deployment default Harness while keeping inherited provider bundles. On a saved Agent, a null extension clears its Harness and provider.

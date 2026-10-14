@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: f7906681af84df121337df42d45505f5d21f2a6ce5b3a1896e7fbc8fa5cf2754
+source_hash: e9eda521ab01e69a241cd788f872bbd3cd83098b9355df49c383c7e0efa9586c
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -95,7 +95,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 安装结束时输出节点日志命令（`Logs: …`）。节点报告问题，或注册约一分钟后仍未连接且就绪时，Add node 对话框也会展示它。
 
-运行 `sudo journalctl -u oac-node-<installation-id>.service`。root shell 中省略 `sudo`。安装 ID 位于命令的 `--installation-id` 参数和 **Settings → Service and deployment** 页面。
+运行 `sudo journalctl -u oac-node-<installation-id>.service`。root shell 中省略 `sudo`。安装 ID 位于命令的 `--installation-id` 参数，以及 **Settings → Service and deployment** 页面的 **Installation details** 中。
 
 ## 修改沙箱配置 {#change-the-sandbox-configuration}
 

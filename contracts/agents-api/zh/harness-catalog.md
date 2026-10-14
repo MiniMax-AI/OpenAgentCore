@@ -9,4 +9,4 @@
 | `codex` | Codex | `codex.Configuration` | `codexProfile` |
 | `mcode` | MiniMax Code | `mcode.Configuration` | `mcodeProfile` |
 
-配置声明位于 `internal/harnessconfig/<package>`，验收构造函数位于 `services/core/internal/engine`。这些注册描述当前构建。部署启用的 Harness 由 `core.harnesses` [进程设置](../../../docs/zh/configuration.md#settings)决定；[Harness 能力](./harness-capabilities.md)列出各 Harness 的支持范围，连接的 Runtime 报告自身可用性。[Harness 接入](./harness-onboarding.md)介绍适配器和打包步骤。
+配置声明位于 `internal/harnessconfig/<package>`，验收构造函数位于 `services/core/internal/engine`。这些注册描述当前构建。部署启用的 Harness 由 `OAC_HARNESSES` [进程设置](../../../docs/zh/configuration.md#settings)决定；[Harness 能力](./harness-capabilities.md)列出各 Harness 的支持范围，连接的 Runtime 报告自身可用性。[Harness 接入](./harness-onboarding.md)介绍适配器和打包步骤。

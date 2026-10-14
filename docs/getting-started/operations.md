@@ -121,7 +121,7 @@ To rotate an application key:
 
 **Archive** disables every key of a Project and keeps its assets.
 
-Core records which key made each public resource write; the retention of that history is [`core.write_audit_retention`](../configuration.md#settings).
+Core records which key made each public resource write; the retention of that history is [`OAC_WRITE_AUDIT_RETENTION`](../configuration.md#settings).
 
 ## Back up
 

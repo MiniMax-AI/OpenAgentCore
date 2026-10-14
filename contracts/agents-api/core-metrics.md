@@ -33,7 +33,7 @@ The response has `object: "core.metrics"`, `range`, `service`, `execution`, `dat
 | `service.revision` | The full source commit injected at build time; null for builds without one |
 | `service.started_at` | When the process initialized |
 | `service.execution_owner` | Whether this process holds the execution worker's database lease |
-| `execution.slots_in_use`, `execution.slots_total` | Active Session reservations of the execution worker, and its capacity: [`core.execution_concurrency`](../../docs/configuration.md#settings), 4 by default. Environment input, Turns and file work share the slots; native Harness subprocesses are not counted |
+| `execution.slots_in_use`, `execution.slots_total` | Active Session reservations of the execution worker, and its capacity: [`OAC_EXECUTION_CONCURRENCY`](../../docs/configuration.md#settings), 4 by default. Environment input, Turns and file work share the slots; native Harness subprocesses are not counted |
 | `execution.queued_turns`, `execution.in_progress_turns` | Root Turns in those states, including Turns of deleted Sessions. Subagent Turns and input reserved for a preparing Environment are not counted |
 | `execution.waiting_for_daemon` | Queued Turns whose Session's device is not connected |
 | `execution.oldest_queued_seconds` | Age of the oldest queued Turn, from its `created_at` |

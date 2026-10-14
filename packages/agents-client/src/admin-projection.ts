@@ -249,12 +249,13 @@ export function projectCoreHarnessList(value: unknown): { object: "list"; data: 
   if (new Set(data.map((entry) => entry.id)).size !== data.length || data.filter((entry) => entry.default).length > 1) return invalidAdminResponse();
   return { object: "list", data };
 }
-const settingKey = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/;
+/** A setting is named by the environment variable that sets it. */
+const settingKey = /^OAC_[A-Z0-9_]+$/;
 function projectInstallationSetting(value: unknown): CoreInstallationSetting {
   if (!isRecord(value) || typeof value.sensitive !== "boolean") return invalidAdminResponse();
   // `configured` is present exactly for a sensitive setting.
   const setting = record(value, value.sensitive ? installationSettingFields : installationSettingRequired);
-  if (typeof setting.key !== "string" || !settingKey.test(setting.key) || typeof setting.changeable !== "boolean" ||
+  if (typeof setting.key !== "string" || !settingKey.test(setting.key) ||
     !Array.isArray(setting.restarts) || !setting.restarts.every((service) => isOneOf(installationServiceValues, service)) ||
     (setting.sensitive && (setting.value !== null || setting.default !== null || typeof setting.configured !== "boolean"))) return invalidAdminResponse();
   return { ...setting } as unknown as CoreInstallationSetting;

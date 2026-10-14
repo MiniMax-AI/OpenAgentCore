@@ -93,7 +93,7 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 The installer prints the node's log command (`Logs: …`) when it finishes. The Add node dialog shows it too when something needs attention: when the node reports a problem, or when it hasn't become connected and ready about a minute after registering.
 
-Run `sudo journalctl -u oac-node-<installation-id>.service`. In a root shell, omit `sudo`. The installation ID is in the command (`--installation-id`) and on the **Settings → Service and deployment** page.
+Run `sudo journalctl -u oac-node-<installation-id>.service`. In a root shell, omit `sudo`. The installation ID is in the command (`--installation-id`) and under **Installation details** on the **Settings → Service and deployment** page.
 
 ## Change the sandbox configuration
 

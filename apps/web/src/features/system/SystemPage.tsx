@@ -43,13 +43,17 @@ export function SystemPage() {
         <Fact label={t("installation.apiBaseUrl")} help={t("installation.apiBaseUrlHelp")}>
           <CopyableId id={about.api_base_url} label={t("installation.copyApiBaseUrl")} />
         </Fact>
-        <Fact label={t("installation.id")}><CopyableId id={about.installation_id} /></Fact>
-        <Fact label={t("installation.sourceCommit")}>{about.source_commit ? <code className="system-code" title={about.source_commit}>{about.source_commit.slice(0, 12)}</code> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
+        {/* Support and node setup need these; first-session work does not. */}
+        <details className="settings-details">
+          <summary>{t("installation.details")}</summary>
+          <Fact label={t("installation.id")}><CopyableId id={about.installation_id} /></Fact>
+          <Fact label={t("installation.sourceCommit")}>{about.source_commit ? <code className="system-code" title={about.source_commit}>{about.source_commit.slice(0, 12)}</code> : <span className="system-muted">{t("installation.unknown")}</span>}</Fact>
+        </details>
       </div>
     </Section>
   ) : installation.isError && !installation.isFetching
     ? <ErrorState title={t("installation.failed")} onRetry={() => void installation.refetch()} />
-    : <FactsSkeleton facts={4} />;
+    : <FactsSkeleton facts={3} />;
   // Announce the initial installation read once.
   const reading = (!about && !(installation.isError && !installation.isFetching));
 

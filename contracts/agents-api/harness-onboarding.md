@@ -41,7 +41,7 @@ An Environment supplies execution resources. Managed E2B, Docker and microsandbo
 3. **Declare the kind in the adapter** and add its declaration to the Runtime’s static list in `apps/daemon/internal/cli/agent_discovery.go` ([register the adapter](#register-the-adapter)).
 4. **Add the service profile and one catalog entry** ([add the engine to Core](#add-the-engine-to-core)).
 5. **Package native prerequisites.** Add a Runtime image under `services/core/deploy/<kind>` and, optionally, [native installer participation](#native-installer-participation).
-6. **Enable and select the engine** with the `core.harnesses` setting and [Harness selection](./model-execution.md#harness-selection).
+6. **Enable and select the engine** with the `OAC_HARNESSES` setting and [Harness selection](./model-execution.md#harness-selection).
 7. **Qualify it** ([qualify the adapter](#qualify-the-adapter)) and record the result in [Harness capabilities](./harness-capabilities.md).
 
 Implement the mandatory text lifecycle and handle every extension explicitly. Qualify supported extensions one at a time; an unqualified extension returns `agent.ErrUnsupportedOperation` without native effects. A native cancellation may require retirement instead of reuse: `Reusable=false` carries a reason and the caller must confirm `Executor.Close`. Do not force reuse to fit a test helper, and do not copy an adapter's native limitations into the shared Core protocol.
