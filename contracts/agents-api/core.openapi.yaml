@@ -5961,7 +5961,7 @@ paths:
         - Items
   /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history:
     get:
-      description: Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session over the range ending at the last complete bucket on Core's clock; requested_range reports it. The server selects the resolution. Responses contain at most 120 buckets per array, 64 series and 10,000 coverage plus series points in total. It never reads or changes live compute.
+      description: Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session over the range ending at the last complete bucket on Core's clock; requested_range reports it. The server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
       parameters:
         - description: Session ID
           in: path

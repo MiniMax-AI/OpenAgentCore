@@ -188,7 +188,7 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 }
 
 // @Summary Retrieve Session Runtime history in a Project
-// @Description Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session over the range ending at the last complete bucket on Core's clock; requested_range reports it. The server selects the resolution. Responses contain at most 120 buckets per array, 64 series and 10,000 coverage plus series points in total. It never reads or changes live compute.
+// @Description Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session over the range ending at the last complete bucket on Core's clock; requested_range reports it. The server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
 // @Tags Runtime history
 // @Produce json
 // @Security DeploymentAdminAuth
